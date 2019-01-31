@@ -96,16 +96,6 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
-static inline void uct_dc_mlx5_iface_add_send_comp(uct_dc_mlx5_iface_t *iface,
-                                                   uct_dc_mlx5_ep_t *ep,
-                                                   uct_completion_t *comp)
-{
-    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
-
-    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
-    uct_rc_txqp_add_send_comp(&iface->super.super, txqp, comp, txwq->sig_pi, 0);
-}
-
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                               uint64_t value, uint64_t remote_addr, uct_rkey_t rkey)
@@ -517,6 +507,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     ucs_status_t        status;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
@@ -555,12 +546,12 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
     }
 
     ucs_assert(status == UCS_INPROGRESS);
-    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
-
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    uct_dc_mlx5_iface_add_send_comp(iface, ep, comp);
 
-    return status;
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+
+    return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
+                                      comp, txwq->sig_pi);
 }
 
 #if IBV_EXP_HW_TM_DC
@@ -987,7 +978,8 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                 return UCS_ERR_BUSY;
             }
         } else {
-            if (uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+            if (uct_dc_mlx5_iface_dci_ep_can_send(ep) &&
+                (iface->super.super.tx.ops_available > 0)) {
                 return UCS_ERR_BUSY;
             }
         }
@@ -1086,7 +1078,8 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
         }
     }
 
-    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
+    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super) ||
+                !iface->super.super.tx.ops_available,
                 "pending callback returned error but send resources are available");
     return UCS_ARBITER_CB_RESULT_STOP;
 }

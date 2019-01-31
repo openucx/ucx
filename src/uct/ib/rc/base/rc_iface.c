@@ -414,13 +414,13 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     }
 
     iface->tx.free_ops = &iface->tx.ops_buffer[0];
-    for (op = iface->tx.ops_buffer; op < iface->tx.ops_buffer + count - 1; ++op) {
+    for (op = iface->tx.ops_buffer; op < iface->tx.ops_buffer + count; ++op) {
         op->handler = uct_rc_ep_send_op_completion_handler;
         op->flags   = UCT_RC_IFACE_SEND_OP_FLAG_IFACE;
         op->iface   = iface;
-        op->next    = op + 1;
+        op->next    = (op == iface->tx.ops_buffer + count - 1) ? NULL : op + 1;
     }
-    iface->tx.ops_buffer[count - 1].next = NULL;
+
     return UCS_OK;
 }
 
@@ -484,6 +484,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                               &config->super, init_attr);
 
     self->tx.cq_available           = init_attr->tx_cq_len - 1;
+    self->tx.ops_available          = UCT_RC_IFACE_NUM_FLUSH_OPS;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -491,7 +492,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_min_inline      = config->super.tx.min_inline;
     self->config.tx_moderation      = ucs_min(config->super.tx.cq_moderation,
                                               config->super.tx.queue_len / 4);
-    self->config.tx_ops_count       = init_attr->tx_cq_len;
+
+    /* Number of zcopy ops is limited by CQ length, plus we allocate some
+     * ops for flush operations. */
+    self->config.tx_ops_count       = init_attr->tx_cq_len +
+                                      UCT_RC_IFACE_NUM_FLUSH_OPS;
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);

@@ -521,9 +521,8 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         sn = ep->tx.wq.sig_pi;
     }
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, sn, 0);
-    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
-    return UCS_INPROGRESS;
+    return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
+                                      &ep->super.txqp, comp, sn);
 }
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

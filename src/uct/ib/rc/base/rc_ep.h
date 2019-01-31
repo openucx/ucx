@@ -342,6 +342,25 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
+                           uct_rc_txqp_t *txqp, uct_completion_t *comp,
+                           uint16_t sn)
+{
+    if (comp != NULL) {
+        if (!iface->tx.ops_available) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+        --iface->tx.ops_available;
+        uct_rc_txqp_add_send_comp(iface, txqp, comp, sn,
+                                  UCT_RC_IFACE_SEND_OP_FLAG_FLUSH);
+    }
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ep);
+
+    return UCS_INPROGRESS;
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
 {

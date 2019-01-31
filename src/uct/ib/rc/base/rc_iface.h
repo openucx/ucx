@@ -23,6 +23,9 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
 
+/* Max number of outgoing flush operations with non NULL completions */
+#define UCT_RC_IFACE_NUM_FLUSH_OPS  256
+
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
      UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, 0, _max_inline, "am_short");
@@ -107,6 +110,7 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
+    UCT_RC_IFACE_SEND_OP_FLAG_FLUSH = UCS_BIT(0),  /* flush */
 #if ENABLE_ASSERT
     UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = UCS_BIT(13), /* zcopy */
     UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
@@ -195,6 +199,10 @@ struct uct_rc_iface {
          * In case of verbs TL we use QWE number, so 1 post always takes 1
          * credit */
         signed                  cq_available;
+        /* ops_buffer contains op completions for zcopy and flush operations.
+         * Number of outgoing zcopy operations is limited by CQ and QP resources,
+         * number of outgoing flush operations is limited by this value.  */
+        unsigned                ops_available;
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
@@ -385,9 +393,13 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 {
     uct_rc_iface_t *iface = op->iface;
-    ucs_assert(op->flags == UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
-    op->next = iface->tx.free_ops;
-    iface->tx.free_ops = op;
+
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
+
+    op->next                 = iface->tx.free_ops;
+    iface->tx.free_ops       = op;
+    iface->tx.ops_available += !!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_FLUSH);
+    op->flags               &= ~UCT_RC_IFACE_SEND_OP_FLAG_FLUSH;
 }
 
 static UCS_F_ALWAYS_INLINE void
