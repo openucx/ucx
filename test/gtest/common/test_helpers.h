@@ -79,7 +79,7 @@
 #define ASSERT_UCS_OK_OR_INPROGRESS(_expr) \
     do { \
         ucs_status_t _status = (_expr); \
-        if ((status) != UCS_OK && (_status) != UCS_INPROGRESS) { \
+        if ((_status) != UCS_OK && (_status) != UCS_INPROGRESS) { \
             UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
         } \
     } while (0)
