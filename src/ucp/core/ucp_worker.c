@@ -550,8 +550,11 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
+    ucs_error("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
               uct_ep, worker);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+
+    return UCS_ERR_NO_ELEM;
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)

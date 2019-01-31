@@ -58,7 +58,8 @@
     be64toh(*((__be64 *)(_p) + __uct_64_off(_typ, _fld)))
 
 enum {
-    UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP        = 0x100
+    UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP        = 0x100,
+    UCT_IB_MLX5_CMD_OP_CREATE_MKEY          = 0x200
 };
 
 enum {
@@ -432,6 +433,112 @@ struct uct_ib_mlx5_query_hca_cap_in_bits {
     uint8_t    op_mod[0x10];
 
     uint8_t    reserved_at_40[0x40];
+};
+
+enum {
+    UCT_IB_MLX5_MKC_ACCESS_MODE_PA    = 0x0,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_MTT   = 0x1,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_KLMS  = 0x2,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_KSM   = 0x3,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_MEMIC = 0x5
+};
+
+struct uct_ib_mlx5_mkc_bits {
+    uint8_t    reserved_at_0[0x1];
+    uint8_t    free[0x1];
+    uint8_t    reserved_at_2[0x1];
+    uint8_t    access_mode_4_2[0x3];
+    uint8_t    reserved_at_6[0x7];
+    uint8_t    relaxed_ordering_write[0x1];
+    uint8_t    reserved_at_e[0x1];
+    uint8_t    small_fence_on_rdma_read_response[0x1];
+    uint8_t    umr_en[0x1];
+    uint8_t    a[0x1];
+    uint8_t    rw[0x1];
+    uint8_t    rr[0x1];
+    uint8_t    lw[0x1];
+    uint8_t    lr[0x1];
+    uint8_t    access_mode_1_0[0x2];
+    uint8_t    reserved_at_18[0x8];
+
+    uint8_t    qpn[0x18];
+    uint8_t    mkey_7_0[0x8];
+
+    uint8_t    reserved_at_40[0x20];
+
+    uint8_t    length64[0x1];
+    uint8_t    bsf_en[0x1];
+    uint8_t    sync_umr[0x1];
+    uint8_t    reserved_at_63[0x2];
+    uint8_t    expected_sigerr_count[0x1];
+    uint8_t    reserved_at_66[0x1];
+    uint8_t    en_rinval[0x1];
+    uint8_t    pd[0x18];
+
+    uint8_t    start_addr[0x40];
+
+    uint8_t    len[0x40];
+
+    uint8_t    bsf_octword_size[0x20];
+
+    uint8_t    reserved_at_120[0x80];
+
+    uint8_t    translations_octword_size[0x20];
+
+    uint8_t    reserved_at_1c0[0x1b];
+    uint8_t    log_entity_size[0x5];
+
+    uint8_t    reserved_at_1e0[0x20];
+};
+
+struct uct_ib_mlx5_create_mkey_in_bits {
+    uint8_t    opcode[0x10];
+    uint8_t    uid[0x10];
+
+    uint8_t    reserved_at_20[0x10];
+    uint8_t    op_mod[0x10];
+
+    uint8_t    reserved_at_40[0x20];
+
+    uint8_t    pg_access[0x1];
+    uint8_t    mkey_umem_valid[0x1];
+    uint8_t    cmd_on_behalf[0x1];
+    uint8_t    reserved_at_63[0xd];
+    uint8_t    function_id[0x10];
+
+    struct uct_ib_mlx5_mkc_bits memory_key_mkey_entry;
+
+    uint8_t    reserved_at_280[0x80];
+
+    uint8_t    translations_octword_actual_size[0x20];
+
+    uint8_t    mkey_umem_id[0x20];
+
+    uint8_t    mkey_umem_offset[0x40];
+
+    uint8_t    reserved_at_380[0x500];
+
+    uint8_t    klm_pas_mtt[0][0x20];
+};
+
+struct uct_ib_mlx5_klm_bits {
+    uint8_t    byte_count[0x20];
+
+    uint8_t    mkey[0x20];
+
+    uint8_t    address[0x40];
+};
+
+struct uct_ib_mlx5_create_mkey_out_bits {
+    uint8_t    status[0x8];
+    uint8_t    reserved_at_8[0x18];
+
+    uint8_t    syndrome[0x20];
+
+    uint8_t    reserved_at_40[0x8];
+    uint8_t    mkey_index[0x18];
+
+    uint8_t    reserved_at_60[0x20];
 };
 
 #endif

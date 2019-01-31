@@ -822,8 +822,10 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         av.fl_mlid      = ib_iface->path_bits[0] & 0x7f;
 
         /* lid in dc_req is in BE already  */
-        av.rlid         = dc_req->lid | htons(ib_iface->path_bits[0]);
+        av.rlid         = uct_ib_iface_is_roce(ib_iface) ? 0 :
+                          (dc_req->lid | htons(ib_iface->path_bits[0]));
         av.dqp_dct      = htonl(dc_req->dct_num);
+        uct_dc_mlx5_iface_set_av_sport(iface, &av, dc_req->dct_num);
 
         if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
             av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
@@ -862,13 +864,18 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface, const uct_dc_mlx5_iface_addr_t *if_addr,
                     uct_ib_mlx5_base_av_t *av)
 {
+    uint32_t remote_dctn;
+
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
+    remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
+
     memcpy(&self->av, av, sizeof(*av));
-    self->av.dqp_dct |= htonl(uct_ib_unpack_uint24(if_addr->qp_num));
+    self->av.dqp_dct      |= htonl(remote_dctn);
+    uct_dc_mlx5_iface_set_av_sport(iface, &self->av, remote_dctn);
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
@@ -883,7 +890,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 
     ucs_assert_always(self->flags & UCT_DC_MLX5_EP_FLAG_VALID);
 
-    if (self->dci == UCT_DC_MLX5_EP_NO_DCI) {
+    if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
+        uct_dc_mlx5_iface_is_dci_rand(iface)) {
         return;
     }
 
@@ -992,7 +1000,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     /* no dci:
      *  Do not grab dci here. Instead put the group on dci allocation arbiter.
      *  This way we can assure fairness between all eps waiting for
-     *  dci allocation.
+     *  dci allocation. Relevant for dcs and dcs_quota policies.
      */
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
@@ -1005,6 +1013,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
 
 /**
  * dispatch requests waiting for dci allocation
+ * Relevant for dcs and dcs_quota policies only.
  */
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
@@ -1013,6 +1022,8 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
 {
     uct_dc_mlx5_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_mlx5_ep_t, arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
+
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
     if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
@@ -1049,9 +1060,9 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     ucs_trace_data("progress pending request %p returned: %s", req,
                    ucs_status_string(status));
     if (status == UCS_OK) {
-        /* Release dci if this is the last elem in the group and the dci has no
-         * outstanding operations. For example pending callback did not send
-         * anything. (uct_ep_flush or just return ok)
+        /* For dcs* policies release dci if this is the last elem in the group
+         * and the dci has no outstanding operations. For example pending
+         * callback did not send anything. (uct_ep_flush or just return ok)
          */
         if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
             uct_dc_mlx5_iface_dci_free(iface, ep);
@@ -1061,13 +1072,18 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     }
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep) ||
-        uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
-        /* Deschedule the group even if FC is the only resource, which
-         * is missing. It will be scheduled again when credits arrive. */
 
-        /* TODO: only good for dcs policy */
-        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+        /* Deschedule the group even if FC is the only resource, which
+         * is missing. It will be scheduled again when credits arrive.
+         * We can't desched group with rand policy if non FC resources are
+         * missing, since it's never scheduled again. */
+        if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
+            uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
+            return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+        } else {
+            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+        }
     }
 
     ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),

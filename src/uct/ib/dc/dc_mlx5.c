@@ -23,6 +23,7 @@
 static const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
+    [UCT_DC_TX_POLICY_RAND]          = "rand",
     [UCT_DC_TX_POLICY_LAST]          = NULL
 };
 
@@ -50,9 +51,16 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "dcs_quota  Same as \"dcs\" but in addition the DCI is scheduled for release\n"
      "           if it has sent more than quota, and there are endpoints waiting for a DCI.\n"
      "           The dci is released once it completes all outstanding operations.\n"
-     "           This policy ensures that there will be no starvation among endpoints.",
+     "           This policy ensures that there will be no starvation among endpoints.\n"
+     "\n"
+     "rand       Every endpoint is assigned with a randomly selected DCI.\n"
+     "           Multiple endpoints may share the same DCI.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
+
+    {"RAND_DCI_SEED", "0",
+     "Seed for DCI allocation when \"rand\" dci policy is used (0 - use default).",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, rand_seed), UCS_CONFIG_TYPE_UINT},
 
     {"QUOTA", "32",
      "When \"dcs_quota\" policy is selected, how much to send from a DCI when\n"
@@ -150,6 +158,15 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
                                    max_am_inline, UCT_IB_MLX5_AV_FULL_SIZE);
+
+    /* Error handling is not supported with random dci policy
+     * TODO: Fix */
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                   UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
+                                   UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
+    }
+
     return UCS_OK;
 }
 
@@ -927,6 +944,14 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     return UCS_OK;
 }
 
+void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
+                                    uct_ib_mlx5_base_av_t *av,
+                                    uint32_t remote_dctn)
+{
+    uct_ib_mlx5_iface_set_av_sport(&iface->super.super.super, av,
+                                   remote_dctn ^ uct_dc_mlx5_get_dct_num(iface));
+}
+
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status)
 {
@@ -955,20 +980,32 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_mlx5_iface_dci_put(iface, dci);
     ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
 
-    ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
-                                                      &ep->super.super, status);
-    if (ep_status == UCS_OK) {
-        status = uct_dc_mlx5_iface_reset_dci(iface, dci);
-        if (status != UCS_OK) {
-            ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                       iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    if (ep == iface->tx.fc_ep) {
+        /* Cannot handle errors on flow-control endpoint.
+         * Or shall we ignore them?
+         */
+        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
+                  ucs_status_string(status));
+        ep_status = UCS_OK;
+    } else {
+        ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
+                                                                &ep->super.super,
+                                                                status);
+        if (ep_status != UCS_OK) {
+            return ep_status;
         }
+    }
 
-        status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
-        if (status != UCS_OK) {
-            ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                      iface, dci, txqp->qp->qp_num, ucs_status_string(status));
-        }
+    status = uct_dc_mlx5_iface_reset_dci(iface, dci);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
+
+    status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
 
     return ep_status;
@@ -1074,6 +1111,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     self->tx.policy                        = config->tx_policy;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);
+
+    self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);

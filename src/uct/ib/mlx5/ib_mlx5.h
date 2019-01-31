@@ -119,6 +119,20 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
                                   sizeof(struct mlx5_wqe_data_seg))
 
+
+enum {
+    UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0)    /* Device supports KSM */
+};
+
+/**
+ * MLX5 IB memory domain.
+ */
+typedef struct uct_ib_mlx5_md {
+    uct_ib_md_t              super;
+    uint32_t                 flags;
+} uct_ib_mlx5_md_t;
+
+
 typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
                                          one thread */
@@ -216,6 +230,21 @@ typedef struct uct_ib_mlx5_base_av {
     uint8_t                     fl_mlid;
     uint16_t                    rlid;
 } UCS_S_PACKED uct_ib_mlx5_base_av_t;
+
+
+typedef struct uct_ib_mlx5_err_cqe {
+    uint8_t                     rsvd0[32];
+    uint32_t                    srqn;
+    uint8_t                     rsvd1[16];
+    uint8_t                     hw_err_synd;
+    uint8_t                     hw_synd_type;
+    uint8_t                     vendor_err_synd;
+    uint8_t                     syndrome;
+    uint32_t                    s_wqe_opcode_qpn;
+    uint16_t                    wqe_counter;
+    uint8_t                     signature;
+    uint8_t                     op_own;
+} UCS_S_PACKED uct_ib_mlx5_err_cqe_t;
 
 
 /**

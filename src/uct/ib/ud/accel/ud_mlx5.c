@@ -518,6 +518,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                          const uct_ud_iface_addr_t *if_addr)
 {
     ucs_status_t status;
+    uint32_t remote_qpn;
     int is_global;
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->ud_mlx5_common,
@@ -527,8 +528,11 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
         return status;
     }
 
+    remote_qpn      = uct_ib_unpack_uint24(if_addr->qp_num);
     ep->is_global   = is_global;
-    ep->av.dqp_dct |= htonl(uct_ib_unpack_uint24(if_addr->qp_num));
+    ep->av.dqp_dct |= htonl(remote_qpn);
+    uct_ib_mlx5_iface_set_av_sport(&iface->super.super, &ep->av,
+                                   remote_qpn ^ iface->super.qp->qp_num);
     return UCS_OK;
 }
 
