@@ -250,7 +250,6 @@ protected:
     int max_connections();
 
     ucs_status_t send_am_message(entity *e, int wnd, uint8_t am_id = 0, int ep_idx = 0);
-    static size_t pack_cb(void *dest, void *arg);
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
