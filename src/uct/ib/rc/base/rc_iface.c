@@ -501,9 +501,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);
     self->config.rnr_retry          = ucs_min(config->tx.rnr_retry_count,
-                                              UCR_RC_QP_MAX_RETRY_COUNT);
+                                              UCT_RC_QP_MAX_RETRY_COUNT);
     self->config.retry_cnt          = ucs_min(config->tx.retry_count,
-                                              UCR_RC_QP_MAX_RETRY_COUNT);
+                                              UCT_RC_QP_MAX_RETRY_COUNT);
     self->config.max_rd_atomic      = config->max_rd_atomic;
     self->config.ooo_rw             = config->ooo_rw;
 #if ENABLE_ASSERT

@@ -962,7 +962,7 @@ void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep)
    support hash/random policies
  */
 ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
-                                   unsigned flags)
+                                        unsigned flags)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
@@ -1035,8 +1035,8 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
  */
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
-                               ucs_arbiter_elem_t *elem,
-                               void *arg)
+                                    ucs_arbiter_elem_t *elem,
+                                    void *arg)
 {
 
     uct_dc_mlx5_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_mlx5_ep_t, arb_group);
@@ -1086,8 +1086,8 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
 
 
 static ucs_arbiter_cb_result_t uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
-                                                          ucs_arbiter_elem_t *elem,
-                                                          void *arg)
+                                                               ucs_arbiter_elem_t *elem,
+                                                               void *arg)
 {
     uct_purge_cb_args_t  *cb_args   = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;

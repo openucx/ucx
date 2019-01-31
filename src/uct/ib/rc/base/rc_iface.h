@@ -21,7 +21,7 @@
 #define UCT_RC_QP_TABLE_ORDER       12
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
-#define UCR_RC_QP_MAX_RETRY_COUNT   7
+#define UCT_RC_QP_MAX_RETRY_COUNT   7
 
 /* Max number of outgoing flush operations with non NULL completions */
 #define UCT_RC_IFACE_NUM_FLUSH_OPS  256
@@ -405,7 +405,7 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_am_hdr_fill(uct_rc_hdr_t *rch, uint8_t id)
 {
-    rch->am_id      = id;
+    rch->am_id = id;
 }
 
 static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
