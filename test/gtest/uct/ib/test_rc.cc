@@ -52,8 +52,6 @@ protected:
 /* Check that max_wr stops from sending */
 UCS_TEST_P(test_rc_max_wr, send_limit)
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     /* first 32 messages should be OK */
     send_am_messages(m_e1, 32, UCS_OK);
 
@@ -115,8 +113,6 @@ void test_rc_flow_control::validate_grant(entity *e)
 void test_rc_flow_control::test_general(int wnd, int soft_thresh,
                                         int hard_thresh, bool is_fc_enabled)
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     set_fc_attributes(m_e1, is_fc_enabled, wnd, soft_thresh, hard_thresh);
 
     send_am_messages(m_e1, wnd, UCS_OK);
@@ -134,8 +130,6 @@ void test_rc_flow_control::test_general(int wnd, int soft_thresh,
 
 void test_rc_flow_control::test_pending_grant(int wnd)
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     /* Block send capabilities of m_e2 for fc grant to be
      * added to the pending queue. */
     disable_entity(m_e2);
@@ -161,8 +155,6 @@ void test_rc_flow_control::test_pending_grant(int wnd)
 
 void test_rc_flow_control::test_flush_fc_disabled()
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     set_fc_disabled(m_e1);
     ucs_status_t status;
 
@@ -173,8 +165,7 @@ void test_rc_flow_control::test_flush_fc_disabled()
 
     /* send active message should be OK */
     get_fc_ptr(m_e1)->fc_wnd = 1;
-    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
-    EXPECT_EQ(UCS_OK, status);
+    send_am_message(m_e1, 1, UCS_OK);
     EXPECT_EQ(0, get_fc_ptr(m_e1)->fc_wnd);
 
     /* flush must have resources */
@@ -185,8 +176,6 @@ void test_rc_flow_control::test_flush_fc_disabled()
 void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
 {
     pending_send_request_t reqs[num_pend_sends];
-
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
     disable_entity(m_e2);
     set_fc_attributes(m_e1, true, wnd, wnd, 1);
@@ -225,8 +214,6 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
 {
     int wnd = 2;
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     disable_entity(m_e2);
     set_fc_attributes(m_e1, true, wnd, wnd, 1);
 
@@ -263,8 +250,6 @@ void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
 {
     uint64_t v;
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     set_fc_attributes(m_e1, true, wnd, soft_thresh, hard_thresh);
 
     send_am_messages(m_e1, wnd, UCS_OK);
@@ -296,8 +281,6 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
     int wnd = 8;
     int s_thresh = 4;
     int h_thresh = 1;
-
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
     set_fc_attributes(m_e1, true, wnd, s_thresh, h_thresh);
     send_am_and_flush(m_e1, wnd - (s_thresh - 1));

@@ -441,8 +441,6 @@ UCS_TEST_P(test_ud, crep_drop2) {
 UCS_TEST_P(test_ud, crep_ack_drop) {
     ucs_status_t status;
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
     connect_to_iface();
 
     /* drop ACK from CERQ/CREP */
@@ -463,7 +461,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     set_tx_win(m_e1, 10);
 
     do {
-        status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+        status = send_am_message(m_e1, 1, 0);
         progress();
     } while (status == UCS_ERR_NO_RESOURCE);
     ASSERT_UCS_OK(status);
@@ -479,7 +477,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     twait(500);
     short_progress_loop();
 
-    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    status = send_am_message(m_e1, 1, 0);
     ASSERT_UCS_OK(status);
 
     short_progress_loop();
