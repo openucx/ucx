@@ -66,6 +66,24 @@ if [ $opt_srcrpm -eq 1 ]; then
 fi
 
 if [ $opt_binrpm -eq 1 ]; then
-    echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines | bash -eEx
+	# read build configuration
+	source contrib/rpmdef.sh || exit 1
+
+	with_arg() {
+		module=$1
+		if echo ${build_modules} | tr ':' '\n' | grep -q ${module}
+		then
+			echo "--with ${module}"
+		else
+			echo "--without ${module}"
+		fi
+	}
+
+	with_args=""
+	with_args+=" $(with_arg cma)"
+	with_args+=" $(with_arg knem)"
+	with_args+=" $(with_arg xpmem)"
+
+	echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines $with_args | bash -eEx
 fi
 

@@ -286,6 +286,7 @@ DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 # Print which transports are built
 #
 AC_MSG_NOTICE([Supported transports: $transports])
+AC_SUBST([build_modules], [${uct_modules}])
 
 #
 # Final output
@@ -303,6 +304,7 @@ AC_CONFIG_LINKS([
 AC_CONFIG_FILES([
                  ucx.spec
                  ucx.pc
+                 contrib/rpmdef.sh
                  debian/rules
                  debian/control
                  debian/changelog

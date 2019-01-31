@@ -1,4 +1,7 @@
 %{!?configure_options: %global configure_options %{nil}}
+%bcond_with cma
+%bcond_without knem
+%bcond_without xpmem
 
 Name: ucx
 Version: @VERSION@
@@ -17,6 +20,15 @@ ExclusiveArch: aarch64 ppc64le x86_64
 
 BuildRequires: numactl-devel libibverbs-devel
 BuildRequires: automake autoconf libtool gcc-c++
+%if %{with cma}
+BuildRequires: glibc-devel >= 2.15
+%endif
+%if %{with knem}
+BuildRequires: knem
+%endif
+%if %{with xpmem}
+BuildRequires: xpmem-devel
+%endif
 
 %description
 UCX stands for Unified Communication X. It requires either RDMA-capable device
@@ -51,12 +63,19 @@ Provides static libraries required for development with UCX.
            --disable-debug \
            --disable-assertions \
            --disable-params-check \
+           %{?with_cma:--enable-cma} \
+           %{!?with_cma:--disable-cma} \
+           %{?_with_knem} \
+           %{?_with_xpmem} \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
 %install
 make DESTDIR=%{buildroot} install
 rm -f %{buildroot}%{_libdir}/*.la
+rm -f %{buildroot}%{_libdir}/ucx/*.la
+rm -f %{buildroot}%{_libdir}/ucx/lib*.so
+rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 
 %files
 %{_libdir}/lib*.so.*
@@ -79,7 +98,57 @@ rm -f %{buildroot}%{_libdir}/*.la
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
+# ucx-cma
+%if %{with cma}
+%package cma
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX CMA support
+Group: System Environment/Libraries
+
+%description cma
+Provides CMA (Linux cross-memory-attach) transport for UCX. It utilizes the
+system calls process_vm_readv/writev() for one-shot memory copy from another
+process.
+
+%files cma
+%{_libdir}/ucx/libuct_cma.so.*
+%endif
+
+# ucx-knem
+%if %{with knem}
+%package knem
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX KNEM transport support
+Group: System Environment/Libraries
+
+%description knem
+Provides KNEM (fast inter-process copy) transport for UCX. KNEM is a Linux
+kernel module enabling high-performance intra-node MPI communication for large
+messages.
+
+%files knem
+%{_libdir}/ucx/libuct_knem.so.*
+%endif
+
+# ucx-xpmem
+%if %{with xpmem}
+%package xpmem
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX XPMEM transport support.
+Group: System Environment/Libraries
+
+%description xpmem
+Provides XPMEM transport for UCX. XPMEM is a Linux kernel module that enables a
+process to map the memory of another process into its virtual address space.
+
+%files xpmem
+%{_libdir}/ucx/libuct_xpmem.so.*
+%endif
+
+
 %changelog
+* Thu Jan 24 2019 Yossi Itigin <yosefe@mellanox.com> 1.6.0-1
+- Add cma, knem, and xpmem sub-packages
 * Tue Nov 20 2018 Yossi Itigin <yosefe@mellanox.com> 1.6.0-1
 - Bump version to 1.6.0
 * Tue Nov 6 2018 Andrey Maslennikov <andreyma@mellanox.com> 1.5.0-1
