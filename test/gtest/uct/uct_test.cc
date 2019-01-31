@@ -995,3 +995,20 @@ void uct_test::entity::async_wrapper::check_miss()
 {
     ucs_async_check_miss(&m_async);
 }
+
+ucs_status_t uct_test::send_am_message(entity *e, int wnd, uint8_t am_id, int ep_idx)
+{
+    ssize_t res;
+
+    if (is_caps_supported(UCT_IFACE_FLAG_AM_SHORT)) {
+        return uct_ep_am_short(e->ep(ep_idx), am_id, 0, NULL, 0);
+    } else {
+        res = uct_ep_am_bcopy(e->ep(ep_idx), am_id, pack_cb, NULL, 0);
+        return (ucs_status_t)(res >= 0 ? UCS_OK : res);
+    }
+}
+
+size_t uct_test::pack_cb(void *dest, void *arg) {
+    return 0;
+}
+

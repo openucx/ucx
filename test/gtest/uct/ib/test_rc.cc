@@ -214,8 +214,7 @@ void test_rc_flow_control::test_flush_fc_disabled()
 
     /* send active message should be OK */
     get_fc_ptr(m_e1)->fc_wnd = 1;
-    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
-    EXPECT_EQ(UCS_OK, status);
+    send_am_message(m_e1, 1, UCS_OK);
     EXPECT_EQ(0, get_fc_ptr(m_e1)->fc_wnd);
 
     /* flush must have resources */
