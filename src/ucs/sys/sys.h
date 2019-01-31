@@ -360,6 +360,7 @@ ucs_status_t ucs_tcpip_socket_create(int *fd_p);
  */
 void ucs_empty_function();
 unsigned ucs_empty_function_return_zero();
+int64_t ucs_empty_function_return_zero_int64();
 ucs_status_t ucs_empty_function_return_success();
 ucs_status_t ucs_empty_function_return_unsupported();
 ucs_status_t ucs_empty_function_return_inprogress();
