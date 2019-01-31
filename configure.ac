@@ -16,7 +16,7 @@ define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 # This is the API version (see libtool library versioning)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 # current:rev:age
-define([libucx_so_version], 0:0:0)
+define([libucx_so_version], 1:0:1)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
 : ${CFLAGS=""}
