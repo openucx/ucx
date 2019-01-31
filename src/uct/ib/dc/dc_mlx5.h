@@ -40,11 +40,44 @@ typedef struct uct_dc_mlx5_iface_addr {
 } UCS_S_PACKED uct_dc_mlx5_iface_addr_t;
 
 
+/**
+ * dci policies:
+ * - fixed: all eps always use same dci no matter what
+ * - dcs:
+ *    - ep uses already assigned dci or
+ *    - free dci is assigned in LIFO (stack) order or
+ *    - ep has not resources to transmit
+ *    - on FULL completion (once there are no outstanding ops)
+ *      dci is pushed to the stack of free dcis
+ *    it is possible that ep will never release its dci:
+ *      ep send, gets some completion, sends more, repeat
+ * - dcs + quota:
+ *    - same as dcs with following addition:
+ *    - if dci can not tx, and there are eps waiting for dci
+ *      allocation ep goes into tx_wait state
+ *    - in tx_wait state:
+ *          - ep can not transmit while there are eps
+ *            waiting for dci allocation. This will break
+ *            starvation.
+ *          - if there are no eps that are waiting for dci allocation
+ *            ep goes back to normal state
+ * - random
+ *    - dci is choosen by random() % ndci
+ *    - ep keeps using dci as long as it has oustanding sends
+ *
+ * Not implemented policies:
+ *
+ * - hash:
+ *    - dci is allocated to ep by some hash function
+ *      for example dlid % ndci
+ *
+ */
 typedef enum {
     UCT_DC_TX_POLICY_DCS,
     UCT_DC_TX_POLICY_DCS_QUOTA,
+    UCT_DC_TX_POLICY_RAND,
     UCT_DC_TX_POLICY_LAST
-} uct_dc_tx_policty_t;
+} uct_dc_tx_policy_t;
 
 
 typedef struct uct_dc_mlx5_iface_config {
@@ -53,6 +86,7 @@ typedef struct uct_dc_mlx5_iface_config {
     int                                 ndci;
     int                                 tx_policy;
     unsigned                            quota;
+    unsigned                            rand_seed;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
 } uct_dc_mlx5_iface_config_t;
 
@@ -101,7 +135,7 @@ struct uct_dc_mlx5_iface {
         uct_ib_mlx5_txwq_t        dci_wqs[UCT_DC_MLX5_IFACE_MAX_DCIS];
 
         uint8_t                   ndci;                        /* Number of DCIs */
-        uct_dc_tx_policty_t       policy;                      /* dci selection algorithm */
+        uct_dc_tx_policy_t        policy;                      /* dci selection algorithm */
         int16_t                   available_quota;             /* if available tx is lower, let
                                                                   another endpoint use the dci */
 
@@ -116,6 +150,9 @@ struct uct_dc_mlx5_iface {
 
         /* List of destroyed endpoints waiting for credit grant */
         ucs_list_link_t           gc_list;
+
+        /* Seed used for random dci allocation */
+        unsigned                  rand_seed;
 
     } tx;
 
@@ -181,7 +218,6 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_mlx5_iface_config_t *config);
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
-
 
 #if IBV_EXP_HW_TM_DC
 void uct_dc_mlx5_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,

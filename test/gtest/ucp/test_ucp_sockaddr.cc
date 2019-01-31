@@ -73,6 +73,7 @@ public:
             if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
                 (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
                 (strstr(err_str.c_str(), "no peer failure handler")) ||
+                (strstr(err_str.c_str(), "connection request failed on listener")) ||
                 /* when the "peer failure" error happens, it is followed by: */
                 (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
                 UCS_TEST_MESSAGE << err_str;
