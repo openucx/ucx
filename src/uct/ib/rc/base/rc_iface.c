@@ -418,7 +418,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
         op->handler = uct_rc_ep_send_op_completion_handler;
         op->flags   = UCT_RC_IFACE_SEND_OP_FLAG_IFACE;
         op->iface   = iface;
-        op->next    = (op == iface->tx.ops_buffer + count - 1) ? NULL : op + 1;
+        op->next    = (op == iface->tx.ops_buffer + count - 1) ? NULL : (op + 1);
     }
 
     return UCS_OK;
