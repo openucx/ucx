@@ -10,7 +10,7 @@
 #include <string.h>
 
 
-static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
+static const char *uct_ib_mlx5_cqe_err_opcode(uct_ib_mlx5_err_cqe_t *ecqe)
 {
     uint8_t wqe_err_opcode = ntohl(ecqe->s_wqe_opcode_qpn) >> 24;
 
@@ -45,7 +45,7 @@ static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
 }
 
 ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
-                                             struct mlx5_err_cqe *ecqe,
+                                             uct_ib_mlx5_err_cqe_t *ecqe,
                                              ucs_log_level_t log_level)
 {
     uint16_t     wqe_counter;
@@ -110,9 +110,10 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     ucs_log(log_level, "Error on "UCT_IB_IFACE_FMT" QP 0x%x wqe[%03d]: "
-            "%s (synd 0x%x vend 0x%x) opcode %s",
+            "%s (synd 0x%x vend 0x%x hw_synd %d/%d) opcode %s",
             UCT_IB_IFACE_ARG(iface), qp_num, wqe_counter, info, ecqe->syndrome,
-            ecqe->vendor_err_synd, uct_ib_mlx5_cqe_err_opcode(ecqe));
+            ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
+            uct_ib_mlx5_cqe_err_opcode(ecqe));
     return status;
 }
 

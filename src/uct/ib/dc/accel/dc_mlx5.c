@@ -39,16 +39,30 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     ucs_trace_func("");
 }
 
+static void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
+                                           uct_ib_mlx5_base_av_t *av,
+                                           uint32_t remote_dctn)
+{
+    uct_ib_mlx5_iface_set_av_sport(&iface->super.super.super, av,
+                                   remote_dctn ^ uct_dc_get_dct_num(&iface->super));
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *dc_iface,
                            const uct_dc_iface_addr_t *if_addr,
                            const uct_ib_mlx5_base_av_t *av)
 {
+    uint32_t remote_dctn;
+
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &dc_iface->super, if_addr);
 
+    remote_dctn = uct_ib_unpack_uint24(if_addr->qp_num);
+
     memcpy(&self->av, av, sizeof(*av));
-    self->av.dqp_dct |= htonl(uct_ib_unpack_uint24(if_addr->qp_num));
+    self->av.dqp_dct |= htonl(remote_dctn);
+    uct_dc_mlx5_iface_set_av_sport(dc_iface, &self->av, remote_dctn);
+
     return UCS_OK;
 }
 
@@ -1025,8 +1039,10 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         av.fl_mlid      = ib_iface->path_bits[0] & 0x7f;
 
         /* lid in dc_req is in BE already  */
-        av.rlid         = dc_req->lid | htons(ib_iface->path_bits[0]);
+        av.rlid         = IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(ib_iface)) ?
+                          0 : (dc_req->lid | htons(ib_iface->path_bits[0]));
         av.dqp_dct      = htonl(dc_req->dct_num);
+        uct_dc_mlx5_iface_set_av_sport(iface, &av, dc_req->dct_num);
 
         if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
             av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
@@ -1061,7 +1077,6 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     return UCS_OK;
 }
-
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 

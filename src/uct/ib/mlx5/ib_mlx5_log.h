@@ -19,7 +19,7 @@ typedef struct uct_ib_log_sge {
 } uct_ib_log_sge_t;
 
 ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
-                                             struct mlx5_err_cqe *ecqe,
+                                             uct_ib_mlx5_err_cqe_t *ecqe,
                                              ucs_log_level_t log_level);
 
 
