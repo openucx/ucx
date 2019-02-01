@@ -619,7 +619,6 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 }
 
 #if IBV_HW_TM
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
                        uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int index,
@@ -1002,7 +1001,6 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_UNEXP);
     }
 }
-
 #endif /* IBV_HW_TM */
 
 static UCS_F_ALWAYS_INLINE unsigned

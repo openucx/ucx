@@ -18,7 +18,7 @@ public:
 
     void init()
     {
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_TM_ENABLE", "y"));
         test_ucp_tag::init();
         check_offload_support(true);
     }
@@ -301,6 +301,8 @@ public:
             params.transports.clear();
             params.transports.push_back(*i);
             create_entity(true, params);
+            sender().connect(&receiver(), get_ep_params());
+            check_offload_support(true);
         }
     }
 

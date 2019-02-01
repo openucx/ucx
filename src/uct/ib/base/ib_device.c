@@ -261,7 +261,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     case IBV_NODE_CA:
     default:
         dev->first_port = 1;
-        dev->num_ports  = dev->dev_attr.phys_port_cnt;
+        dev->num_ports  = IBV_DEV_ATTR(dev, phys_port_cnt);
         break;
     }
 
@@ -350,8 +350,8 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
                                            const uct_ib_device_spec_t *spec)
 {
-    return (spec->vendor_id == dev->dev_attr.vendor_id) &&
-           (spec->part_id   == dev->dev_attr.vendor_part_id);
+    return (spec->vendor_id == IBV_DEV_ATTR(dev, vendor_id)) &&
+           (spec->part_id   == IBV_DEV_ATTR(dev, vendor_part_id));
 }
 
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
@@ -837,10 +837,10 @@ uct_ib_device_parse_fw_ver_triplet(uct_ib_device_t *dev, unsigned *major,
 {
     int ret;
 
-    ret = sscanf(dev->dev_attr.fw_ver, "%u.%u.%u", major, minor, release);
+    ret = sscanf(IBV_DEV_ATTR(dev, fw_ver), "%u.%u.%u", major, minor, release);
     if (ret != 3) {
         ucs_debug("failed to parse firmware version string '%s'",
-                  dev->dev_attr.fw_ver);
+                  IBV_DEV_ATTR(dev, fw_ver));
         return UCS_ERR_INVALID_PARAM;
     }
 

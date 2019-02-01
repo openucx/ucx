@@ -221,7 +221,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->ibv_context = ctx;
 
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
-    ret = ibv_query_device(dev->ibv_context, &dev->dev_attr);
+    ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
     if (ret != 0) {
         ucs_error("ibv_query_device() returned %d: %m", ret);
         status = UCS_ERR_IO_ERROR;

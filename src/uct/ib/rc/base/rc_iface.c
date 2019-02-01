@@ -298,9 +298,9 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     /* MTU is set by user configuration */
     if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
         iface->config.path_mtu = config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512);
-    } else if ((port_mtu > IBV_MTU_2048) && (dev->dev_attr.vendor_id == 0x02c9) &&
-        ((dev->dev_attr.vendor_part_id == 4099) || (dev->dev_attr.vendor_part_id == 4100) ||
-         (dev->dev_attr.vendor_part_id == 4103) || (dev->dev_attr.vendor_part_id == 4104)))
+    } else if ((port_mtu > IBV_MTU_2048) && (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
+        ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
+         (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4104)))
     {
         /* On some devices optimal path_mtu is 2048 */
         iface->config.path_mtu = IBV_MTU_2048;
@@ -545,12 +545,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_tx_mp;
     }
 
-    /* Initialize RX resources (SRQ) */
-    status = ops->init_rx(self, config);
-    if (status != UCS_OK) {
-        goto err_free_tx_ops;
-    }
-
     /* Set atomic handlers according to atomic reply endianness */
     self->config.atomic64_handler = dev->atomic_arg_sizes_be & sizeof(uint64_t) ?
                                     uct_rc_ep_atomic_handler_64_be1 :
@@ -565,7 +559,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);
     if (status != UCS_OK) {
-        goto err_destroy_srq;
+        goto err_destroy_tx_mp;
+    }
+
+    /* Initialize RX resources (SRQ) */
+    status = ops->init_rx(self, config);
+    if (status != UCS_OK) {
+        goto err_destroy_stats;
     }
 
     self->config.fc_enabled      = config->fc.enable;
@@ -591,7 +591,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                 &uct_rc_fc_pending_mpool_ops,
                                 "pending-fc-grants-only");
         if (status != UCS_OK) {
-            goto err_destroy_stats;
+            goto err_destroy_srq;
         }
     } else {
         self->config.fc_wnd_size     = INT16_MAX;
@@ -600,13 +600,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     return UCS_OK;
 
-err_destroy_stats:
-    UCS_STATS_NODE_FREE(self->stats);
 err_destroy_srq:
     if (self->rx.srq.srq != NULL) {
         ibv_destroy_srq(self->rx.srq.srq);
     }
-err_free_tx_ops:
+err_destroy_stats:
+    UCS_STATS_NODE_FREE(self->stats);
     uct_rc_iface_tx_ops_cleanup(self);
 err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);

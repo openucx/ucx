@@ -16,18 +16,6 @@
 #include <infiniband/verbs_exp.h>
 #endif
 
-#if HAVE_INFINIBAND_TM_TYPES_H
-#  include <infiniband/tm_types.h>
-#else
-#  define ibv_tmh             ibv_exp_tmh
-#  define ibv_rvh             ibv_exp_tmh_rvh
-#  define ibv_ravh            ibv_exp_tmh_ravh
-#  define IBV_TMH_EAGER       IBV_EXP_TMH_EAGER
-#  define IBV_TMH_RNDV        IBV_EXP_TMH_RNDV
-#  define IBV_TMH_FIN         IBV_EXP_TMH_FIN
-#  define IBV_TMH_NO_TAG      IBV_EXP_TMH_NO_TAG
-#endif
-
 #include <errno.h>
 
 #ifndef HAVE_VERBS_EXP_H
@@ -49,8 +37,12 @@
 #  define IBV_EXP_ACCESS_REMOTE_ATOMIC     IBV_ACCESS_REMOTE_ATOMIC
 #  define ibv_exp_reg_shared_mr            ibv_reg_shared_mr_ex
 #  define ibv_exp_reg_shared_mr_in         ibv_reg_shared_mr_in
-#  define ibv_exp_query_device             ibv_query_device
-#  define ibv_exp_device_attr              ibv_device_attr
+#  if HAVE_DECL_IBV_QUERY_DEVICE_EX
+#    define ibv_exp_device_attr            ibv_device_attr_ex
+#    define IBV_DEV_ATTR(_dev, _attr)      ((_dev)->dev_attr.orig_attr._attr)
+#  else
+#    define ibv_exp_device_attr            ibv_device_attr
+#  endif
 #  define ibv_exp_send_wr                  ibv_send_wr
 #  define exp_opcode                       opcode
 #  define ibv_exp_post_send                ibv_post_send
@@ -82,6 +74,10 @@
 #endif /* HAVE_DECL_IBV_EXP_DEVICE_ATTR_RESERVED_2 */
 #  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)    (_attr)->comp_mask = 0
 #endif /* HAVE_VERBS_EXP_H */
+
+#ifndef IBV_DEV_ATTR
+#  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr._attr)
+#endif
 
 
 /*
@@ -179,6 +175,10 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_HCA)
 #  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_GLOB)
 #  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE)
+#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
+#  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_HCA)
+#  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_GLOB)
+#  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
 #else
 #  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->atomic_cap == IBV_ATOMIC_HCA)
 #  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->atomic_cap == IBV_ATOMIC_GLOB)
@@ -193,22 +193,33 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
 #endif
 
-
 /*
  * HW tag matching
  */
-#if IBV_EXP_HW_TM
-#  define IBV_HW_TM                         1
-   /* TM (eager) is supported if tm_caps.max_num_tags is not 0. */
+#if IBV_HW_TM
+#  if HAVE_INFINIBAND_TM_TYPES_H
+#    include <infiniband/tm_types.h>
+#  else
+#    define ibv_tmh                         ibv_exp_tmh
+#    define ibv_rvh                         ibv_exp_tmh_rvh
+#    define ibv_ravh                        ibv_exp_tmh_ravh
+#    define IBV_TMH_EAGER                   IBV_EXP_TMH_EAGER
+#    define IBV_TMH_RNDV                    IBV_EXP_TMH_RNDV
+#    define IBV_TMH_FIN                     IBV_EXP_TMH_FIN
+#    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
+#    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
+#    define IBV_TM_CAP_DC                   IBV_EXP_TM_CAP_DC
+#  endif
+#  if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+#    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.flags)
+#  else
+#    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.capability_flags)
+#  endif
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
-
-   /* If the gap between SW and HW counters is more than 32K, all messages will
-    * be dropped and RNR ACK will be returned. Set threshold to 16K to avoid
-    * hitting this gap at all. */
-
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
-#  define IBV_EXP_TM_CAP_RC                 0
+#  define IBV_TM_CAP_RC                     0
+#  define IBV_TM_CAP_DC                     0
 #endif
 
 #ifndef IBV_EXP_HW_TM_DC
@@ -219,7 +230,11 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #define IBV_DEVICE_MIN_UWQ_POST             33
 
 #if !HAVE_DECL_IBV_EXP_CREATE_SRQ
-#  define ibv_exp_create_srq_attr           ibv_srq_init_attr
+#  if HAVE_DECL_IBV_CREATE_SRQ_EX
+#    define ibv_exp_create_srq_attr         ibv_srq_init_attr_ex
+#  else
+#    define ibv_exp_create_srq_attr         ibv_srq_init_attr
+#  endif
 #endif
 
 typedef uint8_t uct_ib_uint24_t[3];
