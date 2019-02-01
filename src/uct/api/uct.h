@@ -721,17 +721,17 @@ struct uct_ep_params {
     void                              *user_data;
 
     /**
-     * The device address to connect to on the remote peer. Should be defined
+     * The device address to connect to on the remote peer. This must be defined
      * together with @ref uct_ep_params_t::iface_addr to create an endpoint
      * connected to a remote interface.
      */
     const uct_device_addr_t           *dev_addr;
 
     /**
-      * Create an endpoint which is connected to remote interface.
-      * The interface address to connect to on the remote peer.
-      * @note requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
-      */
+     * This specifies the remote address to use when creating an endpoint that
+     * is connected to a remote interface.
+     * @note This requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
+     */
     const uct_iface_addr_t            *iface_addr;
 
     /**
@@ -751,9 +751,9 @@ struct uct_ep_params {
     uint32_t                          sockaddr_cb_flags;
 
     /**
-     * Callback for filling the user's private data which will be delivered to
-     * server side by @ref uct_sockaddr_conn_request_callback_t . This field is
-     * valid only if @ref uct_ep_params_t::sockaddr is set.
+     * Callback that will be used for filling the user's private data to be
+     * delivered to the server by @ref uct_sockaddr_conn_request_callback_t.
+     * This field is only valid if @ref uct_ep_params_t::sockaddr is set.
      * @note It is never guaranteed that the callaback will be called. If, for
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
@@ -1398,16 +1398,23 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
- * Create a UCT endpoint in one form available modes:
- * -# not connected if no any type of address is present, to connect the
- *    endpoint to remote one need to call @ref uct_ep_connect_to_ep later,
- *    requires @ref UCT_IFACE_FLAG_CONNECT_TO_EP
- * -# connected to remote interface if @ref uct_ep_params_t::dev_addr and
- *    @ref uct_ep_params_t::iface_addr are set, requires iface flag
- *    @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE
- * -# connected to socket address if @ref uct_ep_params_t::sockaddr is set,
- *    requires iface flag @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR
- *
+ * Create a UCT endpoint in one of the available modes:
+ * -# Unconnected endpoint: If no any address is present in @ref uct_ep_params,
+ *    this creates an unconnected endpoint. To establish a connection to a
+ *    remote endpoint, @ref uct_ep_connect_to_ep will need to be called. Use of
+ *    this mode requires @ref uct_ep_params_t::iface has the
+ *    @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability flag. It may be obtained by
+ *    @ref uct_iface_query .
+ * -# Connect to a remote interface: If @ref uct_ep_params_t::dev_addr and
+ *    @ref uct_ep_params_t::iface_addr are set, this will establish an endpoint
+ *    that is connected to a remote interface. This requires that
+ *    @ref uct_ep_params_t::iface has the @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE
+ *    capability flag. It may be obtained by @ref uct_iface_query .
+ * -# Connect to a remote socket address: If @ref uct_ep_params_t::sockaddr is
+ *    set, this will create an endpoint that is conected to a remote socket.
+ *    This requires that @ref uct_ep_params_t::iface has the
+ *    @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability flag. It may be
+ *    obtained by @ref uct_iface_query .*
  * @param [in]  params  User defined @ref uct_ep_params_t configurations for the
  *                      @a ep_p.
  * @param [out] ep_p    Filled with handle to the new endpoint.
@@ -1418,7 +1425,7 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  *                      the error will be reported to the interface error
  *                      handler callback provided to @ref uct_iface_open
  *                      via @ref uct_iface_params_t.err_handler.
- * @return error code   In case of an error. (@ref ucs_status_t)
+ * @return              Error code as defined by @ref ucs_status_t
  */
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
