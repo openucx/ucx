@@ -20,11 +20,11 @@ BuildRequires: automake autoconf libtool gcc-c++
 
 %description
 UCX stands for Unified Communication X. UCX provides an optimized communication
-layer for Message Passing (MPI), PGAS/SHMEM libraries and RPC/data-centric
+layer for Message Passing (MPI), PGAS/OpenSHMEM libraries and RPC/data-centric
 applications. UCX utilizes high-speed networks, such as RDMA (InfiniBand, RoCE,
-etc), Cray Gemini or Aries, for inter-node communication. If such network is not
-available, TCP is used instead. UCX supports efficiet transfer of data in either
-main memory (RAM) or GPU memory (through CUDA and RoCM libraries).
+etc), Cray Gemini or Aries, for inter-node communication. If no such network is
+available, TCP is used instead. UCX supports efficient transfer of data in
+either main memory (RAM) or GPU memory (through CUDA and RoCM libraries).
 In addition, UCX provides efficient intra-node communication, by leveraging the
 following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
 
