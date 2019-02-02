@@ -367,6 +367,58 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
 ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_in)] = {};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_out)] = {};
+    struct mlx5dv_pd dvpd = {};
+    struct mlx5dv_cq dvcq = {};
+    struct mlx5dv_srq dvsrq = {};
+    struct mlx5dv_obj dv = {};
+    void *dctc;
+
+    dv.pd.in        = uct_ib_iface_md(&iface->super.super.super)->pd;
+    dv.cq.in        = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    dv.srq.in       = iface->super.super.rx.srq.srq;
+    dv.pd.out       = &dvpd;
+    dv.cq.out       = &dvcq;
+    dv.srq.out      = &dvsrq;
+    dvsrq.comp_mask = MLX5DV_SRQ_MASK_SRQN;
+    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ | MLX5DV_OBJ_SRQ);
+
+    UCT_IB_MLX5DV_SET(create_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_DCT);
+    dctc = UCT_IB_MLX5DV_ADDR_OF(create_dct_in, in, dct_context_entry);
+    UCT_IB_MLX5DV_SET(dctc, dctc, pd, dvpd.pdn);
+    UCT_IB_MLX5DV_SET(dctc, dctc, srqn_xrqn, dvsrq.srqn);
+    if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
+        UCT_IB_MLX5DV_SET(dctc, dctc, offload_type, UCT_IB_MLX5_QPC_OFFLOAD_TYPE_RNDV);
+    }
+    UCT_IB_MLX5DV_SET(dctc, dctc, cqn, dvcq.cqn);
+    UCT_IB_MLX5DV_SET64(dctc, dctc, dc_access_key, UCT_IB_KEY);
+
+    UCT_IB_MLX5DV_SET(dctc, dctc, rre, 1);
+    UCT_IB_MLX5DV_SET(dctc, dctc, rwe, 1);
+    UCT_IB_MLX5DV_SET(dctc, dctc, rae, 1);
+    UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, 3);
+    UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, iface->super.super.super.pkey_index);
+    UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->super.super.super.config.port_num);
+
+    UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
+    UCT_IB_MLX5DV_SET(dctc, dctc, tclass, iface->super.super.super.config.traffic_class);
+    UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, uct_ib_iface_md(&iface->super.super.super)->config.gid_index);
+    UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
+
+    iface->rx.dct = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
+                                                            out, sizeof(out));
+    if (iface->rx.dct == NULL) {
+        ucs_error("Failed to created DC target %m");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    iface->rx.dct_num = UCT_IB_MLX5DV_GET(create_dct_out, out, dctn);
+    return UCS_OK;
+#else
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
     struct mlx5dv_qp_init_attr dv_init_attr = {};
     struct ibv_qp_init_attr_ex init_attr = {};
     struct ibv_qp_attr attr = {};
@@ -432,12 +484,24 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
 err:
     ibv_destroy_qp(iface->rx.dct);
     return UCS_ERR_IO_ERROR;
+#endif
 }
 
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
 {
     if (iface->rx.dct != NULL) {
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+        uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(drain_dct_in)] = {};
+        uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(drain_dct_out)] = {};
+
+        UCT_IB_MLX5DV_SET(drain_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_DRAIN_DCT);
+        UCT_IB_MLX5DV_SET(drain_dct_in, in, dctn, iface->rx.dct_num);
+        mlx5dv_devx_obj_modify(iface->rx.dct, in, sizeof(in), out, sizeof(out));
+        while(mlx5dv_devx_obj_destroy(iface->rx.dct))
+            sleep(1);
+#else
         ibv_destroy_qp(iface->rx.dct);
+#endif
         iface->rx.dct = NULL;
     }
 }
