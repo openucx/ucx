@@ -23,8 +23,8 @@ BEGIN_C_DECLS
 #define ucs_assert_always(_expression) \
     do { \
         if (!ucs_likely(_expression)) { \
-            ucs_fatal_error("assertion failure", __FILE__, __LINE__, \
-                            __FUNCTION__, "Assertion `%s' failed", #_expression); \
+            ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+                                   "Assertion `%s' failed", #_expression); \
         } \
     } while (0)
 
@@ -35,9 +35,9 @@ BEGIN_C_DECLS
 #define ucs_assertv_always(_expression, _fmt, ...) \
     do { \
         if (!ucs_likely(_expression)) { \
-            ucs_fatal_error("assertion failure", __FILE__, __LINE__, __FUNCTION__, \
-                            "Assertion `%s' failed: " _fmt, #_expression, \
-                            ## __VA_ARGS__); \
+            ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+                                   "Assertion `%s' failed: " _fmt, \
+                                   #_expression, ## __VA_ARGS__); \
         } \
     } while (0)
 
@@ -46,8 +46,8 @@ BEGIN_C_DECLS
  * Generate a fatal error
  */
 #define ucs_fatal(_fmt, ...) \
-    ucs_fatal_error("fatal error", __FILE__, __LINE__, __FUNCTION__, \
-                    "Fatal: " _fmt, ## __VA_ARGS__)
+    ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+                           "Fatal: " _fmt, ## __VA_ARGS__)
 
 
 #if ENABLE_ASSERT
@@ -56,8 +56,8 @@ BEGIN_C_DECLS
  * Generate a program bug report if assertions are enabled
  */
 #define ucs_bug(_fmt, ...) \
-    ucs_fatal_error("bug", __FILE__, __LINE__, __FUNCTION__, \
-                    "Bug: " _fmt, ## __VA_ARGS__)
+    ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
+                           "Bug: " _fmt, ## __VA_ARGS__)
 
 #define ucs_assert(...)       ucs_assert_always(__VA_ARGS__)
 #define ucs_assertv(...)      ucs_assertv_always(__VA_ARGS__)
@@ -74,15 +74,31 @@ BEGIN_C_DECLS
 /**
  * Generate a fatal error and stop the program.
  *
- * @param [in] error_type  Fatal error type
  * @param [in] file        Source file name
  * @param [in] line        Source line number
  * @param [in] function    Calling function name
- * @param [in] format      Error message format string
+ * @param [in] format      Error message format string. Multi-line message is
+ *                         supported.
  */
-void ucs_fatal_error(const char *error_type, const char *file, unsigned line,
-                     const char *function, const char *format, ...)
-    UCS_F_NORETURN UCS_F_PRINTF(5, 6);
+void ucs_fatal_error_format(const char *file, unsigned line,
+                            const char *function, const char *format, ...)
+    UCS_F_NORETURN UCS_F_PRINTF(4, 5);
+
+
+/**
+ * Generate a fatal error and stop the program.
+ *
+ * @param [in] file        Source file name
+ * @param [in] line        Source line number
+ * @param [in] function    Calling function name
+ * @param [in] message_buf Error message buffer. Multi-line message is
+ *                         supported.
+ *
+ * IMPORTANT NOTE: message_buf could be overridden by this function
+ */
+void ucs_fatal_error_message(const char *file, unsigned line,
+                             const char *function, char *message_buf)
+    UCS_F_NORETURN;
 
 
 END_C_DECLS

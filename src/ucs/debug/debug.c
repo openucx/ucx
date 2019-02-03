@@ -760,7 +760,7 @@ static void ucs_debug_stop_other_threads()
     closedir(dir);
 }
 
-static void ucs_debug_send_mail(const char *error_type, const char *message)
+static void ucs_debug_send_mail(const char *message)
 {
     FILE *stream;
 
@@ -778,8 +778,8 @@ static void ucs_debug_send_mail(const char *error_type, const char *message)
 
     fprintf(stream, "To:           %s\n", ucs_global_opts.error_mail_to);
     fprintf(stream, "From:         %s\n", "ucx@openucx.org");
-    fprintf(stream, "Subject:      ucx error report - %s on %s\n",
-            error_type, ucs_get_host_name());
+    fprintf(stream, "Subject:      ucx error report on %s\n",
+            ucs_get_host_name());
     fprintf(stream, "Content-Type: text/plain\n");
     fprintf(stream, "\n");
 
@@ -804,7 +804,7 @@ static void ucs_debug_send_mail(const char *error_type, const char *message)
     pclose(stream);
 }
 
-static void ucs_error_freeze(const char *error_type, const char *message)
+static void ucs_error_freeze(const char *message)
 {
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     char response;
@@ -824,7 +824,7 @@ static void ucs_error_freeze(const char *error_type, const char *message)
                 ucs_debug_freeze();
             }
         } else {
-            ucs_debug_send_mail(error_type, message);
+            ucs_debug_send_mail(message);
             ucs_log_fatal_error("Process frozen...");
             ucs_debug_freeze();
         }
@@ -931,8 +931,10 @@ static void ucs_debug_handle_error_signal(int signo, const char *cause,
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
 
-    ucs_handle_error(cause, "Caught signal %d (%s: %s%s)", signo,
-                     strsignal(signo), cause, buf);
+    ucs_log_flush();
+    ucs_log_fatal_error(cause, "Caught signal %d (%s: %s%s)", signo,
+                        strsignal(signo), cause, buf);
+    ucs_handle_error(cause);
 }
 
 static void ucs_error_signal_handler(int signo, siginfo_t *info, void *context)
@@ -971,20 +973,9 @@ static void ucs_error_signal_handler(int signo, siginfo_t *info, void *context)
     raise(signo);
 }
 
-void ucs_handle_error(const char *error_type, const char *message, ...)
+void ucs_handle_error(const char *message)
 {
-    size_t buffer_size = ucs_log_get_buffer_size();
-    char *buffer;
-    va_list ap;
-
     ucs_debug_cleanup(1);
-    ucs_log_flush();
-
-    buffer = ucs_alloca(buffer_size + 1);
-    va_start(ap, message);
-    vsnprintf(buffer, buffer_size, message, ap);
-    va_end(ap);
-    ucs_log_fatal_error("%s", buffer);
 
     if (ucs_global_opts.handle_errors & UCS_BIT(UCS_HANDLE_ERROR_DEBUG)) {
         ucs_debugger_attach();
@@ -994,7 +985,7 @@ void ucs_handle_error(const char *error_type, const char *message, ...)
             ucs_debug_print_backtrace(stderr, 2);
         }
         if (ucs_global_opts.handle_errors & UCS_BIT(UCS_HANDLE_ERROR_FREEZE)) {
-            ucs_error_freeze(error_type, buffer);
+            ucs_error_freeze(message);
         }
     }
 }
