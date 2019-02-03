@@ -507,7 +507,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     init_attr->rx_cq_len = config->super.rx.queue_len;
     init_attr->seg_size  = config->super.super.max_bcopy;
-    init_attr->tx_cq_len  = config->tx.cq_len;
+    init_attr->tx_cq_len = config->tx.cq_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               &config->super, init_attr);

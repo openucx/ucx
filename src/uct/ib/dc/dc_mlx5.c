@@ -566,7 +566,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     iface->rx_dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super.super)->ibv_context,
                                        &init_attr);
     if (iface->rx_dct == NULL) {
-        ucs_error("Failed to created DC target %m");
+        ucs_error("failed to create DC target: %m");
         return UCS_ERR_INVALID_PARAM;
     }
 

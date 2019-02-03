@@ -204,7 +204,6 @@ enum {
 };
 
 typedef struct uct_ib_iface_init_attr {
-
     unsigned    rx_priv_len;     /* Length of transport private data to reserve */
     unsigned    rx_hdr_len;      /* Length of transport network header */
     unsigned    tx_cq_len;       /* Send CQ length */
