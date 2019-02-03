@@ -10,6 +10,11 @@
 #include <string.h>
 
 
+static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
+                                 void *qend, int max_sge, int dump_qp,
+                                 uct_log_data_dump_func_t packet_dump_cb,
+                                 char *buffer, size_t max, uct_ib_log_sge_t *log_sge);
+
 static const char *uct_ib_mlx5_cqe_err_opcode(uct_ib_mlx5_err_cqe_t *ecqe)
 {
     uint8_t wqe_err_opcode = ntohl(ecqe->s_wqe_opcode_qpn) >> 24;
@@ -46,74 +51,92 @@ static const char *uct_ib_mlx5_cqe_err_opcode(uct_ib_mlx5_err_cqe_t *ecqe)
 
 ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              uct_ib_mlx5_err_cqe_t *ecqe,
+                                             uct_ib_mlx5_txwq_t *txwq,
                                              ucs_log_level_t log_level)
 {
-    uint16_t     wqe_counter;
+    ucs_status_t status        = UCS_ERR_IO_ERROR;
+    char         err_info[256] = {};
+    char         wqe_info[256] = {};
+    uint16_t     wqe_index;
     uint32_t     qp_num;
-    char         info[200]  = {0};
-    ucs_status_t status     = UCS_ERR_IO_ERROR;
+    void         *wqe;
 
-    wqe_counter = ntohs(ecqe->wqe_counter);
-    qp_num      = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    wqe_index = ntohs(ecqe->wqe_counter);
+    qp_num    = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    if (txwq != NULL) {
+        wqe_index %= (txwq->qend - txwq->qstart) / MLX5_SEND_WQE_BB;
+    }
 
     if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
-        ucs_trace("QP 0x%x wqe[%d] is flushed", qp_num, wqe_counter);
+        ucs_trace("QP 0x%x wqe[%d] is flushed", qp_num, wqe_index);
         return status;
     }
 
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
-        snprintf(info, sizeof(info), "Local length");
+        snprintf(err_info, sizeof(err_info), "Local length");
         break;
     case MLX5_CQE_SYNDROME_LOCAL_QP_OP_ERR:
-        snprintf(info, sizeof(info), "Local QP operation");
+        snprintf(err_info, sizeof(err_info), "Local QP operation");
         break;
     case MLX5_CQE_SYNDROME_LOCAL_PROT_ERR:
-        snprintf(info, sizeof(info), "Local protection");
+        snprintf(err_info, sizeof(err_info), "Local protection");
         break;
     case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
-        snprintf(info, sizeof(info), "WR flushed because QP in error state");
+        snprintf(err_info, sizeof(err_info), "WR flushed because QP in error state");
         break;
     case MLX5_CQE_SYNDROME_MW_BIND_ERR:
-        snprintf(info, sizeof(info), "Memory window bind");
+        snprintf(err_info, sizeof(err_info), "Memory window bind");
         break;
     case MLX5_CQE_SYNDROME_BAD_RESP_ERR:
-        snprintf(info, sizeof(info), "Bad response");
+        snprintf(err_info, sizeof(err_info), "Bad response");
         break;
     case MLX5_CQE_SYNDROME_LOCAL_ACCESS_ERR:
-        snprintf(info, sizeof(info), "Local access");
+        snprintf(err_info, sizeof(err_info), "Local access");
         break;
     case MLX5_CQE_SYNDROME_REMOTE_INVAL_REQ_ERR:
-        snprintf(info, sizeof(info), "Invalid request");
+        snprintf(err_info, sizeof(err_info), "Invalid request");
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
-        snprintf(info, sizeof(info), "Remote access");
+        snprintf(err_info, sizeof(err_info), "Remote access");
         break;
     case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
-        snprintf(info, sizeof(info), "Remote QP");
+        snprintf(err_info, sizeof(err_info), "Remote QP");
         break;
     case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
-        snprintf(info, sizeof(info), "Transport retry count exceeded");
+        snprintf(err_info, sizeof(err_info), "Transport retry count exceeded");
         status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     case MLX5_CQE_SYNDROME_RNR_RETRY_EXC_ERR:
-        snprintf(info, sizeof(info), "Receive-no-ready retry count exceeded");
+        snprintf(err_info, sizeof(err_info), "Receive-no-ready retry count exceeded");
         status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR:
-        snprintf(info, sizeof(info), "Remote side aborted");
+        snprintf(err_info, sizeof(err_info), "Remote side aborted");
         status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     default:
-        snprintf(info, sizeof(info), "Generic");
+        snprintf(err_info, sizeof(err_info), "Generic");
         break;
     }
 
-    ucs_log(log_level, "Error on "UCT_IB_IFACE_FMT" QP 0x%x wqe[%03d]: "
-            "%s (synd 0x%x vend 0x%x hw_synd %d/%d) opcode %s",
-            UCT_IB_IFACE_ARG(iface), qp_num, wqe_counter, info, ecqe->syndrome,
-            ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
-            uct_ib_mlx5_cqe_err_opcode(ecqe));
+    if ((txwq != NULL) && ((ecqe->op_own >> 4) == MLX5_CQE_REQ_ERR)) {
+        wqe = txwq->qstart + (MLX5_SEND_WQE_BB * wqe_index);
+        uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
+                             NULL, wqe_info, sizeof(wqe_info) - 1, NULL);
+    } else {
+        snprintf(wqe_info, sizeof(wqe_info) - 1, "opcode %s",
+                 uct_ib_mlx5_cqe_err_opcode(ecqe));
+    }
+
+    ucs_log(log_level,
+            "%s on "UCT_IB_IFACE_FMT"/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
+            "%s QP 0x%x wqe[%d]: %s",
+            err_info, UCT_IB_IFACE_ARG(iface),
+            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB",
+            ecqe->syndrome, ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4,
+            ecqe->hw_err_synd, uct_ib_qp_type_str(iface->config.qp_type),
+            qp_num, wqe_index, wqe_info);
     return status;
 }
 
@@ -235,7 +258,7 @@ static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
 }
 
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
-                                 void *qend, int max_sge,
+                                 void *qend, int max_sge, int dump_qp,
                                  uct_log_data_dump_func_t packet_dump_cb,
                                  char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
 {
@@ -267,8 +290,15 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     size_t dg_size;
     void *seg;
 
-    /* QP number and opcode name */
-    uct_ib_log_dump_opcode(qp_num, (wqe - qstart) / MLX5_SEND_WQE_BB, op,
+    /* QP and WQE index */
+    if (dump_qp) {
+        snprintf(s, ends - s, "QP 0x%x [%03ld]", qp_num,
+                 (wqe - qstart) / MLX5_SEND_WQE_BB);
+        s += strlen(s);
+    }
+
+    /* Opcode and flags */
+    uct_ib_log_dump_opcode(op,
                            ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE,
                            ctrl->fm_ce_se & MLX5_WQE_CTRL_FENCE,
                            ctrl->fm_ce_se & (1 << 1),
@@ -389,7 +419,7 @@ void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
-    uct_ib_mlx5_wqe_dump(iface, wqe, qstart, qend, max_sge, packet_dump_cb,
+    uct_ib_mlx5_wqe_dump(iface, wqe, qstart, qend, max_sge, 1, packet_dump_cb,
                          buf, sizeof(buf) - 1, log_sge);
     uct_log_data(file, line, function, buf);
 }

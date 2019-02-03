@@ -9,11 +9,30 @@
 #include <ucs/sys/sys.h>
 
 
-void uct_ib_log_dump_opcode(uint32_t qp_num, unsigned idx, uct_ib_opcode_t *op,
-                            int signal, int fence, int se, char *buf, size_t max)
+const char *uct_ib_qp_type_str(int qp_type)
 {
-    snprintf(buf, max, "%s qp 0x%x %03d %c%c%c", op->name, qp_num, idx,
-             signal ? 's' : '-', fence ? 'f' : '-', se ? 'e' : '-');
+    switch (qp_type) {
+    case IBV_QPT_RC:
+        return "RC";
+    case IBV_QPT_UD:
+        return "UD";
+#if HAVE_TL_DC
+    case UCT_IB_QPT_DCI:
+        return "DCI";
+#endif
+    default:
+        ucs_bug("invalid qp type: %d", qp_type);
+        return "unknown";
+    }
+}
+
+void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int signal, int fence, int se,
+                            char *buf, size_t max)
+{
+    snprintf(buf, max, "%s %c%c%c", op->name,
+             signal ? 's' : '-',
+             fence  ? 'f' : '-',
+             se     ? 'e' : '-');
 }
 
 void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
@@ -116,11 +135,17 @@ static void uct_ib_dump_wr_opcode(struct ibv_qp *qp, uint64_t wr_id,
                                   uct_ib_opcode_t *op, int send_flags,
                                   char *buf, size_t max)
 {
-    uct_ib_log_dump_opcode(qp->qp_num, wr_id, op,
+    char *s    = buf;
+    char *ends = buf + max;
+
+    snprintf(s, ends - s, "QP 0x%x wrid 0x%"PRIx64, qp->qp_num, wr_id);
+    s += strlen(s);
+
+    uct_ib_log_dump_opcode(op,
                            send_flags & IBV_SEND_SIGNALED,
                            send_flags & IBV_SEND_FENCE,
                            send_flags & IBV_SEND_SOLICITED,
-                           buf, max);
+                           s, ends - s);
 }
 
 static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,

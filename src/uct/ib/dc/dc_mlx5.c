@@ -177,21 +177,6 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
-static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
-                                             void *arg, ucs_status_t status)
-{
-    struct mlx5_cqe64 *cqe    = arg;
-    uint32_t          qp_num  = ntohl(cqe->sop_drop_qpn) &
-                                UCS_MASK(UCT_IB_QPN_ORDER);
-    ucs_log_level_t   log_lvl = UCS_LOG_LEVEL_FATAL;
-
-    if (uct_dc_handle_failure(ib_iface, qp_num, status) == UCS_OK) {
-        log_lvl = ib_iface->super.config.failure_level;
-    }
-
-    uct_ib_mlx5_completion_with_err(ib_iface, arg, log_lvl);
-}
-
 static ucs_status_t uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface,
                                               uct_ep_h ep, ucs_status_t status)
 {
@@ -952,10 +937,13 @@ void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
                                    remote_dctn ^ uct_dc_mlx5_get_dct_num(iface));
 }
 
-ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
-                                   ucs_status_t status)
+static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+                                             void *arg, ucs_status_t status)
 {
     uct_dc_mlx5_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+    struct mlx5_cqe64    *cqe    = arg;
+    uint32_t             qp_num  = ntohl(cqe->sop_drop_qpn) &
+                                   UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     uct_rc_txqp_t        *txqp   = &iface->tx.dcis[dci].txqp;
     uct_dc_mlx5_ep_t     *ep     = iface->tx.dcis[dci].ep;
@@ -963,7 +951,9 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     int16_t              outstanding;
 
     if (!ep) {
-        return UCS_OK;
+        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
+                                        ib_iface->super.config.failure_level);
+        return;
     }
 
     uct_rc_txqp_purge_outstanding(txqp, status, 0);
@@ -992,14 +982,20 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                                                 &ep->super.super,
                                                                 status);
         if (ep_status != UCS_OK) {
-            return ep_status;
+            uct_ib_mlx5_completion_with_err(ib_iface, arg,
+                                            &iface->tx.dci_wqs[dci],
+                                            UCS_LOG_LEVEL_FATAL);
+            return;
         }
     }
+
+    uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
+                                    ib_iface->super.config.failure_level);
 
     status = uct_dc_mlx5_iface_reset_dci(iface, dci);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
 
     status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
@@ -1007,8 +1003,6 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
-
-    return ep_status;
 }
 
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
