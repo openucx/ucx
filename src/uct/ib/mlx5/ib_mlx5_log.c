@@ -234,8 +234,8 @@ static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
     return 0;
 }
 
-static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, int qp_type,
-                                 void *wqe, void *qstart, void *qend, int max_sge,
+static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
+                                 void *qend, int max_sge,
                                  uct_log_data_dump_func_t packet_dump_cb,
                                  char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
 {
@@ -282,7 +282,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, int qp_type,
         seg = qstart;
     }
 
-    if (uct_ib_mlx5_is_qp_require_av_seg(qp_type)) {
+    if (uct_ib_mlx5_is_qp_require_av_seg(iface->config.qp_type)) {
         is_eth = uct_ib_iface_is_roce(iface);
         dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg, is_eth);
         s += strlen(s);
@@ -384,13 +384,12 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, int qp_type,
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
-                          uct_ib_iface_t *iface, int qp_type,
-                          void *wqe, void *qstart, void *qend, int max_sge,
-                          uct_ib_log_sge_t *log_sge,
+                          uct_ib_iface_t *iface, void *wqe, void *qstart,
+                          void *qend, int max_sge, uct_ib_log_sge_t *log_sge,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
-    uct_ib_mlx5_wqe_dump(iface, qp_type, wqe, qstart, qend, max_sge, packet_dump_cb,
+    uct_ib_mlx5_wqe_dump(iface, wqe, qstart, qend, max_sge, packet_dump_cb,
                          buf, sizeof(buf) - 1, log_sge);
     uct_log_data(file, line, function, buf);
 }
@@ -412,19 +411,18 @@ void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function, stru
 }
 
 void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
-                          uct_ib_iface_t *iface, int qp_type,
-                          struct mlx5_cqe64 *cqe, void *data,
-                          uct_log_data_dump_func_t packet_dump_cb)
+                          uct_ib_iface_t *iface, struct mlx5_cqe64 *cqe,
+                          void *data, uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
     size_t length;
 
     length = ntohl(cqe->byte_cnt);
-    if (uct_ib_mlx5_is_qp_require_av_seg(qp_type)) {
+    if (iface->config.qp_type == IBV_QPT_UD) {
         length -= UCT_IB_GRH_LEN;
         data   += UCT_IB_GRH_LEN;
     }
-    uct_ib_log_dump_recv_completion(iface, qp_type,
+    uct_ib_log_dump_recv_completion(iface,
                                     ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER),
                                     ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER),
                                     ntohs(cqe->slid),
