@@ -973,7 +973,7 @@ static void ucs_error_signal_handler(int signo, siginfo_t *info, void *context)
 
 void ucs_handle_error(const char *error_type, const char *message, ...)
 {
-    size_t buffer_size = ucs_global_opts.log_buffer_size;
+    size_t buffer_size = ucs_log_get_buffer_size();
     char *buffer;
     va_list ap;
 
@@ -1075,7 +1075,7 @@ static void ucs_debug_set_signal_alt_stack()
     int ret;
 
     ucs_debug_signal_stack.ss_size = SIGSTKSZ +
-                                     (2 * ucs_global_opts.log_buffer_size) +
+                                     (2 * ucs_log_get_buffer_size()) +
                                      (sizeof(void*) * BACKTRACE_MAX) +
                                      (128 * UCS_KBYTE);
     ucs_debug_signal_stack.ss_sp =

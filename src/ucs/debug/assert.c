@@ -18,7 +18,7 @@
 void ucs_fatal_error(const char *error_type, const char *file, unsigned line,
                      const char *function, const char *format, ...)
 {
-    size_t buffer_size = ucs_global_opts.log_buffer_size;
+    size_t buffer_size = ucs_log_get_buffer_size();
     const char *short_file;
     char *buffer;
     va_list ap;
