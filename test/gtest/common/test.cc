@@ -189,9 +189,12 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
     /* Ignore warnings about empty memory pool */
     if (level == UCS_LOG_LEVEL_ERROR) {
         pthread_mutex_lock(&m_logger_mutex);
-        std::string text = format_message(message, ap);
-        m_errors.push_back(text);
-        UCS_TEST_MESSAGE << "< " << text << " >";
+        std::istringstream iss(format_message(message, ap));
+        std::string text;
+        while (getline(iss, text, '\n')) {
+            m_errors.push_back(text);
+            UCS_TEST_MESSAGE << "< " << text << " >";
+        }
         pthread_mutex_unlock(&m_logger_mutex);
         return UCS_LOG_FUNC_RC_STOP;
     }

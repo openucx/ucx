@@ -91,14 +91,41 @@ size_t ucs_log_get_buffer_size()
                                    256, 2048);
 }
 
+static void ucs_log_print(size_t buffer_size, const char *short_file, int line,
+                          ucs_log_level_t level, const struct timeval *tv,
+                          const char *message)
+{
+    char *valg_buf;
+
+    if (RUNNING_ON_VALGRIND) {
+        valg_buf = ucs_alloca(buffer_size + 1);
+        snprintf(valg_buf, buffer_size,
+                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv->tv_sec, tv->tv_usec,
+                 short_file, line, "UCX", ucs_log_level_names[level],
+                 message);
+        VALGRIND_PRINTF("%s", valg_buf);
+    } else if (ucs_log_initialized) {
+        fprintf(ucs_log_file,
+                "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
+                tv->tv_sec, tv->tv_usec, ucs_log_hostname, ucs_log_pid,
+                ucs_log_get_thread_num(), short_file, line, "UCX",
+                ucs_log_level_names[level], message);
+    } else {
+        fprintf(stdout,
+                "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
+                tv->tv_sec, tv->tv_usec, short_file, line,
+                "UCX", ucs_log_level_names[level], message);
+    }
+}
+
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
                         ucs_log_level_t level, const char *format, va_list ap)
 {
     size_t buffer_size = ucs_log_get_buffer_size();
+    char *log_line, *saveptr;
     const char *short_file;
     struct timeval tv;
-    char *valg_buf;
     char *buf;
 
     if (!ucs_log_is_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
@@ -107,33 +134,20 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 
     buf = ucs_alloca(buffer_size + 1);
     buf[buffer_size] = 0;
-
     vsnprintf(buf, buffer_size, format, ap);
 
-    short_file = strrchr(file, '/');
-    short_file = (short_file == NULL) ? file : short_file + 1;
-    gettimeofday(&tv, NULL);
-
     if (level <= ucs_global_opts.log_level_trigger) {
-        ucs_handle_error(ucs_log_level_names[level], "%13s:%-4u %s: %s",
-                         short_file, line, ucs_log_level_names[level], buf);
-    } else if (RUNNING_ON_VALGRIND) {
-        valg_buf = ucs_alloca(buffer_size + 1);
-        snprintf(valg_buf, buffer_size,
-                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv.tv_sec, tv.tv_usec,
-                 short_file, line, "UCX", ucs_log_level_names[level], buf);
-        VALGRIND_PRINTF("%s", valg_buf);
-    } else if (ucs_log_initialized) {
-        fprintf(ucs_log_file,
-                "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
-                tv.tv_sec, tv.tv_usec, ucs_log_hostname, ucs_log_pid,
-                ucs_log_get_thread_num(), short_file, line, "UCX",
-                ucs_log_level_names[level], buf);
+        ucs_fatal_error_message(file, line, function, buf);
     } else {
-        fprintf(stdout,
-                "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
-                tv.tv_sec, tv.tv_usec, short_file, line,
-                "UCX", ucs_log_level_names[level], buf);
+        short_file = strrchr(file, '/');
+        short_file = (short_file == NULL) ? file : short_file + 1;
+        gettimeofday(&tv, NULL);
+
+        log_line = strtok_r(buf, "\n", &saveptr);
+        while (log_line != NULL) {
+            ucs_log_print(buffer_size, short_file, line, level, &tv, log_line);
+            log_line = strtok_r(NULL, "\n", &saveptr);
+        }
     }
 
     /* flush the log file if the log_level of this message is fatal or error */
