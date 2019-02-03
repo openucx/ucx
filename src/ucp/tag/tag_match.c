@@ -53,7 +53,9 @@ void ucp_tag_match_cleanup(ucp_tag_match_t *tm)
 {
     kh_destroy_inplace(ucp_tag_offload_hash, &tm->offload.tag_hash);
     kh_destroy_inplace(ucp_tag_frag_hash, &tm->frag_hash);
+    ucs_debug("releasing unexpected hash: %p", tm->unexpected.hash);
     ucs_free(tm->unexpected.hash);
+    ucs_debug("releasing expected hash: %p", tm->expected.hash);
     ucs_free(tm->expected.hash);
 }
 

@@ -5,6 +5,7 @@
 */
 
 #include "ib_iface.h"
+#include "ib_log.h"
 
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
@@ -487,23 +488,6 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     }
 
     return UCS_OK;
-}
-
-static const char *uct_ib_qp_type_str(int qp_type)
-{
-    switch (qp_type) {
-    case IBV_QPT_RC:
-        return "rc";
-    case IBV_QPT_UD:
-        return "ud";
-#if HAVE_TL_DC
-    case UCT_IB_QPT_DCI:
-        return "dci";
-#endif
-    default:
-        ucs_bug("invalid qp type: %d", qp_type);
-        return "unknown";
-    }
 }
 
 void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
