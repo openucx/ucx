@@ -376,7 +376,7 @@ uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
         return uct_rc_mlx5_init_rx_tm(iface, config, &srq_init_attr,
-                                      sizeof(struct ibv_rvh), 0);
+                                      sizeof(struct ibv_rvh));
     }
 #endif
     iface->super.progress = uct_rc_mlx5_iface_progress;

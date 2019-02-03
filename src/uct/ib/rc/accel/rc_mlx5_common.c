@@ -498,11 +498,9 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 #endif
 
 #if IBV_HW_TM
-ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
-                                    const uct_rc_mlx5_iface_common_config_t *config,
-                                    struct ibv_exp_create_srq_attr *srq_init_attr,
-                                    unsigned rndv_hdr_len,
-                                    unsigned max_cancel_sync_ops)
+void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
+                                   const uct_rc_mlx5_iface_common_config_t *config,
+                                   unsigned rndv_hdr_len)
 {
     uct_ib_md_t *md       = uct_ib_iface_md(&iface->super.super);
     unsigned tmh_hdrs_len = sizeof(struct ibv_tmh) + rndv_hdr_len;
@@ -523,6 +521,17 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
      * ptr_array is used as operation ID and is passed in "app_context"
      * of TM header. */
     ucs_ptr_array_init(&iface->tm.rndv_comps, 0, "rm_rndv_completions");
+}
+
+ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                                    const uct_rc_mlx5_iface_common_config_t *config,
+                                    struct ibv_exp_create_srq_attr *srq_init_attr,
+                                    unsigned rndv_hdr_len)
+{
+    uct_ib_md_t *md              = uct_ib_iface_md(&iface->super.super);
+    unsigned max_cancel_sync_ops = 0;
+
+    uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
 
 #if HAVE_DECL_IBV_EXP_CREATE_SRQ
     /* Create TM-capable XRQ */

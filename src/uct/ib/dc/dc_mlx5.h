@@ -158,7 +158,11 @@ struct uct_dc_mlx5_iface {
 
     struct {
         uint32_t                  dct_num;
+        uint32_t                  srq_num;
 #if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+        uint32_t                  *srq_db;
+        struct mlx5dv_devx_umem   *srq_mem;
+        struct mlx5dv_devx_obj    *srq;
         struct mlx5dv_devx_obj    *dct;
 
         uint32_t                  *cmd_qp_db;

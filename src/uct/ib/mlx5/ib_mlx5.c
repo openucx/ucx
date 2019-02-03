@@ -353,6 +353,11 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
     ucs_status_t status;
     unsigned i;
 
+    if (verbs_srq == NULL) {
+        ucs_assert(srq->buf != NULL); /* already initialized via DEVX */
+        return UCS_OK;
+    }
+
     obj.dv.srq.in = verbs_srq;
     obj.dv.srq.out = &srq_info.dv;
 
