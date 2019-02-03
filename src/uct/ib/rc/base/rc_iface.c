@@ -651,14 +651,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
 
-ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
-                                    struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
-                                    unsigned max_send_wr)
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
+                                    struct ibv_qp_cap *cap, unsigned max_send_wr)
 {
     uct_ib_qp_attr_t qp_init_attr    = {};
     static ucs_status_t status;
 
-    if (qp_type == IBV_QPT_RC) {
+    if (iface->super.config.qp_type == IBV_QPT_RC) {
         qp_init_attr.srq             = iface->rx.srq.srq;
     }
     qp_init_attr.cap.max_send_wr     = max_send_wr;
@@ -666,7 +665,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
-    qp_init_attr.qp_type             = qp_type;
+    qp_init_attr.qp_type             = iface->super.config.qp_type;
     qp_init_attr.sq_sig_all          = !iface->config.tx_moderation;
     qp_init_attr.max_inl_recv        = iface->config.rx_inline;
 

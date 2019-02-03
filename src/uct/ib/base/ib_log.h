@@ -51,9 +51,9 @@ void uct_ib_log_dump_atomic_masked_cswap(int argsize, uint64_t compare, uint64_t
                                          uint64_t swap, uint64_t swap_mask,
                                          char *buf, size_t max);
 
-void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, int qp_type,
-                                     uint32_t local_qp, uint32_t sender_qp,
-                                     uint16_t sender_lid, void *data, size_t length,
+void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
+                                     uint32_t sender_qp, uint16_t sender_lid,
+                                     void *data, size_t length,
                                      uct_log_data_dump_func_t data_dump,
                                      char *buf, size_t max);
 
@@ -63,9 +63,10 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_log_data_dump_func_t packet_dump_cb);
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
-                                  uct_ib_iface_t *iface, int qp_type,
-                                  uint32_t l_qp, uint32_t r_qp, uint16_t slid, void *data,
-                                  size_t length, uct_log_data_dump_func_t packet_dump_cb);
+                                  uct_ib_iface_t *iface, uint32_t l_qp,
+                                  uint32_t r_qp, uint16_t slid, void *data,
+                                  size_t length,
+                                  uct_log_data_dump_func_t packet_dump_cb);
 
 #if HAVE_DECL_IBV_EXP_POST_SEND
 void __uct_ib_log_exp_post_send(const char *file, int line, const char *function,
@@ -82,10 +83,10 @@ void __uct_ib_log_exp_post_send(const char *file, int line, const char *function
     }
 
 /* Suitable for both: regular and exp wcs */
-#define uct_ib_log_recv_completion(_iface, _qp_type, _wc, _data, _length, _dump_cb, ...) \
+#define uct_ib_log_recv_completion(_iface, _wc, _data, _length, _dump_cb, ...) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_log_recv_completion(__FILE__, __LINE__, __FUNCTION__, \
-                                     _iface, _qp_type, (_wc)->qp_num, (_wc)->src_qp, (_wc)->slid, \
+                                     _iface, (_wc)->qp_num, (_wc)->src_qp, (_wc)->slid, \
                                      _data, _length, _dump_cb, ## __VA_ARGS__); \
     }
 

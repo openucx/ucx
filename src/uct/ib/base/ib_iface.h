@@ -192,7 +192,8 @@ struct uct_ib_iface {
         uint8_t             traffic_class;
         uint8_t             hop_limit;
         uint8_t             gid_index;           /* IB GID index to use  */
-        int                 enable_res_domain;   /* Disable multiple resource domains */
+        uint8_t             enable_res_domain;   /* Disable multiple resource domains */
+        uint8_t             qp_type;
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
 
@@ -213,6 +214,7 @@ typedef struct uct_ib_iface_init_attr {
     uint32_t    res_domain_key;  /* Resource domain key */
     int         tm_cap_bit;      /* Required HW tag-matching capabilities */
     unsigned    fc_req_size;     /* Flow control request size */
+    int         qp_type;         /* IB QP type */
     int         flags;           /* Various flags (see enum) */
 } uct_ib_iface_init_attr_t;
 

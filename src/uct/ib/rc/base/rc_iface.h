@@ -322,9 +322,8 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 /**
  * Creates an RC or DCI QP and fills 'cap' with QP capabilities;
  */
-ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
-                                    struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
-                                    unsigned max_send_wr);
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
+                                    struct ibv_qp_cap *cap, unsigned max_send_wr);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 
