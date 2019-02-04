@@ -1,7 +1,7 @@
 %{!?configure_options: %global configure_options %{nil}}
-%bcond_with cma
-%bcond_without knem
-%bcond_without xpmem
+%bcond_without cma
+%bcond_with knem
+%bcond_with xpmem
 
 Name: ucx
 Version: @VERSION@
