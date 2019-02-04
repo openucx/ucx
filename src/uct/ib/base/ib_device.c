@@ -414,6 +414,11 @@ static size_t uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
     }
 }
 
+static int uct_ib_device_is_iwarp(uct_ib_device_t *dev)
+{
+    return dev->ibv_context->device->transport_type == IBV_TRANSPORT_IWARP;
+}
+
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
@@ -431,6 +436,12 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         ucs_trace("%s:%d is not active (state: %d)", uct_ib_device_name(dev),
                   port_num, uct_ib_device_port_attr(dev, port_num)->state);
         return UCS_ERR_UNREACHABLE;
+    }
+
+    if (uct_ib_device_is_iwarp(dev)) {
+        /* TODO: enable it when support is ready */
+        ucs_debug("iWarp device %s is not supported", uct_ib_device_name(dev));
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (!uct_ib_device_is_port_ib(dev, port_num) && (flags & UCT_IB_DEVICE_FLAG_LINK_IB)) {
