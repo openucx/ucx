@@ -33,7 +33,7 @@ typedef struct {
 typedef struct {
     uct_iface_attr_t    attr;   /* Interface attributes: capabilities and limitations */
     uct_iface_h         iface;  /* Communication interface context */
-    uct_md_h            pd;     /* Memory domain */
+    uct_md_h            md;     /* Memory domain */
     uct_worker_h        worker; /* Workers represent allocated resources in a communication thread */
 } iface_info_t;
 
@@ -159,7 +159,7 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
     uct_iov_t iov;
     zcopy_comp_t comp;
 
-    ucs_status_t status = uct_md_mem_reg(if_info->pd, buf, cmd_args->test_strlen,
+    ucs_status_t status = uct_md_mem_reg(if_info->md, buf, cmd_args->test_strlen,
                                          UCT_MD_MEM_ACCESS_RMA, &memh);
     iov.buffer          = buf;
     iov.length          = cmd_args->test_strlen;
@@ -169,7 +169,7 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
 
     comp.uct_comp.func  = zcopy_completion_cb;
     comp.uct_comp.count = 1;
-    comp.md             = if_info->pd;
+    comp.md             = if_info->md;
     comp.memh           = memh;
 
     if (status == UCS_OK) {
@@ -222,7 +222,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length, unsigned f
     return UCS_OK;
 }
 
-/* init the transport  by its name */
+/* Init the transport by its name */
 static ucs_status_t init_iface(char *dev_name, char *tl_name,
                                func_am_t func_am_type,
                                iface_info_t *iface_p)
@@ -239,12 +239,12 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
 
     UCS_CPU_ZERO(&params.cpu_mask);
     /* Read transport-specific interface configuration */
-    status = uct_md_iface_config_read(iface_p->pd, tl_name, NULL, NULL, &config);
+    status = uct_md_iface_config_read(iface_p->md, tl_name, NULL, NULL, &config);
     CHKERR_JUMP(UCS_OK != status, "setup iface_config", error_ret);
 
     /* Open communication interface */
     assert(iface_p->iface == NULL);
-    status = uct_iface_open(iface_p->pd, iface_p->worker, &params, config,
+    status = uct_iface_open(iface_p->md, iface_p->worker, &params, config,
                             &iface_p->iface);
     uct_config_release(config);
     CHKERR_JUMP(UCS_OK != status, "open temporary interface", error_ret);
@@ -285,8 +285,8 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
                                   iface_info_t *iface_p)
 {
     uct_md_resource_desc_t  *md_resources; /* Memory domain resource descriptor */
-    uct_tl_resource_desc_t  *tl_resources; /*Communication resource descriptor */
-    unsigned                num_md_resources; /* Number of protected domain */
+    uct_tl_resource_desc_t  *tl_resources; /* Communication resource descriptor */
+    unsigned                num_md_resources; /* Number of memory domains */
     unsigned                num_tl_resources; /* Number of transport resources resource objects created */
     uct_md_config_t         *md_config;
     ucs_status_t            status;
@@ -298,17 +298,17 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
     iface_p->iface = NULL;
 
-    /* Iterate through protected domain resources */
+    /* Iterate through memory domain resources */
     for (i = 0; i < num_md_resources; ++i) {
         status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
-        CHKERR_JUMP(UCS_OK != status, "read PD config", release_pd);
+        CHKERR_JUMP(UCS_OK != status, "read PD config", release_md);
 
-        status = uct_md_open(md_resources[i].md_name, md_config, &iface_p->pd);
+        status = uct_md_open(md_resources[i].md_name, md_config, &iface_p->md);
         uct_config_release(md_config);
-        CHKERR_JUMP(UCS_OK != status, "open memory domains", release_pd);
+        CHKERR_JUMP(UCS_OK != status, "open memory domains", release_md);
 
-        status = uct_md_query_tl_resources(iface_p->pd, &tl_resources, &num_tl_resources);
-        CHKERR_JUMP(UCS_OK != status, "query transport resources", close_pd);
+        status = uct_md_query_tl_resources(iface_p->md, &tl_resources, &num_tl_resources);
+        CHKERR_JUMP(UCS_OK != status, "query transport resources", close_md);
 
         /* Go through each available transport and find the proper name */
         for (j = 0; j < num_tl_resources; ++j) {
@@ -323,25 +323,25 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
                             tl_resources[j].tl_name);
                     fflush(stdout);
                     uct_release_tl_resource_list(tl_resources);
-                    goto release_pd;
+                    goto release_md;
                 }
             }
         }
         uct_release_tl_resource_list(tl_resources);
-        uct_md_close(iface_p->pd);
+        uct_md_close(iface_p->md);
     }
 
     fprintf(stderr, "No supported (dev/tl) found (%s/%s)\n",
             cmd_args->dev_name, cmd_args->tl_name);
     status = UCS_ERR_UNSUPPORTED;
 
-release_pd:
+release_md:
     uct_release_md_resource_list(md_resources);
 error_ret:
     return status;
-close_pd:
-    uct_md_close(iface_p->pd);
-    goto release_pd;
+close_md:
+    uct_md_close(iface_p->md);
+    goto release_md;
 }
 
 int print_err_usage()
@@ -511,9 +511,8 @@ int main(int argc, char **argv)
     }
 
     /* Initialize context
-     * It is better to use different contexts for different workers
-     */
-    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD, &async);
+     * It is better to use different contexts for different workers */
+    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
     CHKERR_JUMP(UCS_OK != status, "init async context", out);
 
     /* Create a worker object */
@@ -604,7 +603,7 @@ int main(int argc, char **argv)
         goto out_free_ep;
     }
 
-    /*Set active message handler */
+    /* Set active message handler */
     status = uct_iface_set_am_handler(if_info.iface, id, hello_world,
                                       &cmd_args.func_am_type, 0);
     CHKERR_JUMP(UCS_OK != status, "set callback", out_free_ep);
@@ -661,7 +660,7 @@ out_free_dev_addrs:
     free(peer_dev);
 out_destroy_iface:
     uct_iface_close(if_info.iface);
-    uct_md_close(if_info.pd);
+    uct_md_close(if_info.md);
 out_destroy_worker:
     uct_worker_destroy(if_info.worker);
 out_cleanup_async:
