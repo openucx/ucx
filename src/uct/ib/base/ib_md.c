@@ -1161,7 +1161,7 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
     uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
-    int i, num_devices;
+    int i, num_devices, num_resources;
 
     /* Get device list from driver */
     device_list = ibv_get_device_list(&num_devices);
@@ -1177,12 +1177,16 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
         goto out_free_device_list;
     }
 
-    for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_md_name(resources[i].md_name, device_list[i]);
+    for (i = 0, num_resources = 0; i < num_devices; ++i) {
+        if (device_list[i]->transport_type != IBV_TRANSPORT_IWARP) {
+            uct_ib_make_md_name(resources[num_resources++].md_name, device_list[i]);
+        } else {
+            ucs_debug("iWarp device %s is not supported", ibv_get_device_name(device_list[i]));
+        }
     }
 
     *resources_p     = resources;
-    *num_resources_p = num_devices;
+    *num_resources_p = num_resources;
     status = UCS_OK;
 
 out_free_device_list:
