@@ -1,5 +1,11 @@
-UCX is a communication library implementing a high-performance messaging
-layer for MPI, PGAS, and RPC frameworks.
+UCX stands for Unified Communication X. UCX provides an optimized communication
+layer for Message Passing (MPI), PGAS/OpenSHMEM libraries and RPC/data-centric
+applications. UCX utilizes high-speed networks, such as RDMA (InfiniBand, RoCE,
+etc), Cray Gemini or Aries, for inter-node communication. If no such network is
+available, TCP is used instead. UCX supports efficient transfer of data in
+either main memory (RAM) or GPU memory (through CUDA and RoCM libraries).
+In addition, UCX provides efficient intra-node communication, by leveraging the
+following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
 
 ### Running internal unit tests
 ```sh
@@ -30,7 +36,7 @@ $ ./src/tools/perf/ucx_perftest <server-hostname> -t tag_lat -c 0
 ```
 
 ### UCX high-level layout
-- UCX - Unified Communication X
+UCX contains four main components:
 - UCP - UCX Protocol. Implements high-level abstractions such as tag-matching,
   streams, connection negotiation and establishment, multi-rail, and handling 
   different memory types.
