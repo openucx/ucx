@@ -18,5 +18,5 @@ UCX routines do not guarantee fairness. However, the routines
 enable UCX consumers to write efficient and fair programs.
 
 \section Interaction with Signal Handler Functions
-If UCX routines are invoked from signal a handler function,
+If UCX routines are invoked from a signal handler function,
 the behavior of the program is undefined.
