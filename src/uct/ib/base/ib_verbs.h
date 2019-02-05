@@ -216,11 +216,6 @@ struct ibv_ravh {
 #    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
 #    define IBV_TM_CAP_DC                   IBV_EXP_TM_CAP_DC
 #  endif
-#  if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
-#    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.flags)
-#  else
-#    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.capability_flags)
-#  endif
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0

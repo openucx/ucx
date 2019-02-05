@@ -58,4 +58,9 @@ struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq);
 
 void *uct_dv_get_info_uar0(void *uar);
 
+/**
+ * Portable DC TM wrappers
+ */
+uint32_t uct_ib_mlx5_tm_flags(uct_ib_device_t *dev);
+
 #endif

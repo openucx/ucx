@@ -244,6 +244,9 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
             md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
         }
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_DC_TM;
+        }
         if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
             atomic = 1;
         }
@@ -368,3 +371,17 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
 }
 #endif
 
+uint32_t uct_ib_mlx5_tm_flags(uct_ib_device_t *dev)
+{
+    uint32_t flags = 0;
+
+#if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+    flags = dev->dev_attr.tm_caps.flags;
+    if (dev->flags & UCT_IB_DEVICE_FLAG_DC_TM) {
+        flags |= IBV_TM_CAP_DC;
+    }
+#elif IBV_HW_TM
+    flags = dev->dev_attr.tm_caps.capability_flags;
+#endif
+    return flags;
+}

@@ -306,7 +306,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
 {
 #if IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    uint32_t cap_flags                = IBV_DEVICE_TM_FLAGS(dev);
+    uint32_t cap_flags                = uct_ib_mlx5_tm_flags(dev);
     struct ibv_tmh tmh;
 
     iface->tm.enabled = config->tm.enable &&

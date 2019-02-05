@@ -15,6 +15,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_verbs.h>
+#include <uct/ib/base/ib_device.h>
 #include <infiniband/mlx5_hw.h>
 #include <string.h>
 
