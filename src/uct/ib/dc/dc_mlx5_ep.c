@@ -978,8 +978,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                 return UCS_ERR_BUSY;
             }
         } else {
-            if (uct_dc_mlx5_iface_dci_ep_can_send(ep) &&
-                (iface->super.super.tx.ops_available > 0)) {
+            if (uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
                 return UCS_ERR_BUSY;
             }
         }
@@ -1078,8 +1077,7 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
         }
     }
 
-    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super) ||
-                !iface->super.super.tx.ops_available,
+    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
                 "pending callback returned error but send resources are available");
     return UCS_ARBITER_CB_RESULT_STOP;
 }

@@ -101,6 +101,24 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+static void
+uct_rc_iface_flush_comp_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    uct_rc_iface_t *iface      = ucs_container_of(mp, uct_rc_iface_t, tx.flush_mp);
+    uct_rc_iface_send_op_t *op = obj;
+
+    op->handler = uct_rc_ep_flush_op_completion_handler;
+    op->flags   = 0;
+    op->iface   = iface;
+}
+
+static ucs_mpool_ops_t uct_rc_flush_comp_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = uct_rc_iface_flush_comp_init,
+    .obj_cleanup   = NULL
+};
+
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
@@ -406,6 +424,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
 {
     const unsigned count = iface->config.tx_ops_count;
     uct_rc_iface_send_op_t *op;
+    ucs_status_t status;
 
     iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
                                       "rc_tx_ops");
@@ -418,10 +437,18 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
         op->handler = uct_rc_ep_send_op_completion_handler;
         op->flags   = UCT_RC_IFACE_SEND_OP_FLAG_IFACE;
         op->iface   = iface;
-        op->next    = (op == iface->tx.ops_buffer + count - 1) ? NULL : (op + 1);
+        op->next    = (op == (iface->tx.ops_buffer + count - 1)) ? NULL : (op + 1);
     }
 
-    return UCS_OK;
+    /* Create memory pool for flush completions. Can't just alloc a certain
+     * size buffer, because number of simultaneous flushes is not limited by
+     * CQ or QP resources. */
+    status = ucs_mpool_init(&iface->tx.flush_mp, 0, sizeof(*op), 0,
+                            UCS_SYS_CACHE_LINE_SIZE, 256,
+                            UINT_MAX, &uct_rc_flush_comp_mpool_ops,
+                            "flush-comps-only");
+
+    return status;
 }
 
 static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
@@ -484,7 +511,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                               &config->super, init_attr);
 
     self->tx.cq_available           = init_attr->tx_cq_len - 1;
-    self->tx.ops_available          = UCT_RC_IFACE_NUM_FLUSH_OPS;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -492,11 +518,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_min_inline      = config->super.tx.min_inline;
     self->config.tx_moderation      = ucs_min(config->super.tx.cq_moderation,
                                               config->super.tx.queue_len / 4);
-
-    /* Number of zcopy ops is limited by CQ length, plus we allocate some
-     * ops for flush operations. */
-    self->config.tx_ops_count       = init_attr->tx_cq_len +
-                                      UCT_RC_IFACE_NUM_FLUSH_OPS;
+    self->config.tx_ops_count       = init_attr->tx_cq_len;
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);
@@ -649,6 +671,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
+    ucs_mpool_cleanup(&self->tx.flush_mp, 1);
     if (self->config.fc_enabled) {
         ucs_mpool_cleanup(&self->tx.fc_mp, 1);
     }

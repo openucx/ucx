@@ -35,8 +35,8 @@ void test_rc::connect()
     uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
 }
 
-// Check that iface tx ops buffer is moderated properly when we have
-// communication ops + lots of flushes
+// Check that iface tx ops buffer and flush comp memory pool are moderated
+// properly when we have communication ops + lots of flushes
 void test_rc::test_iface_ops()
 {
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
@@ -63,15 +63,15 @@ void test_rc::test_iface_ops()
     // For _x transports several CQEs can be consumed per WQE, post less put zcopy
     // ops, so that flush would be sucessfull (otherwise flush will return
     // NO_RESOURCES and completion will not be added for it).
-    for (int i = 0; i < cq_len / 2; i++) {
+    for (int i = 0; i < cq_len / 3; i++) {
         ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
                                                      recvbuf.addr(),
                                                      recvbuf.rkey(), &comp));
 
-        // Create some stress on iface ops buffer (iface->tx.ops):
+        // Create some stress on iface (flush mp):
         // post 10 flushes per every put.
         for (int j = 0; j < 10; j++) {
-            uct_ep_flush(e->ep(0), 0, &comp);
+            ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_flush(e->ep(0), 0, &comp));
         }
     }
 
