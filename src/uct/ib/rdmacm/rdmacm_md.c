@@ -89,6 +89,12 @@ static int uct_rdmacm_is_addr_route_resolved(struct rdma_cm_id *cm_id,
         return 0;
     }
 
+    if (cm_id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
+        ucs_debug("%s: iWarp support is not implemented",
+                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+        return 0;
+    }
+
     if (rdma_resolve_route(cm_id, timeout_ms)) {
         ucs_debug("rdma_resolve_route(addr = %s) failed: %m",
                    ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
