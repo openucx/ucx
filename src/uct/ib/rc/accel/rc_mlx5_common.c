@@ -163,19 +163,18 @@ static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
 };
 #  endif
 
-static struct ibv_qp *
-uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+ucs_status_t uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
+    struct ibv_qp *qp;
 #if HAVE_STRUCT_MLX5_SRQ_CMD_QP
     iface->tm.cmd_qp = NULL;
-    return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
+    qp = uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
 #else
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     struct ibv_qp_init_attr qp_init_attr = {};
     struct ibv_qp_attr qp_attr = {};
     uct_ib_device_t *ibdev = &md->dev;
     struct ibv_port_attr *port_attr;
-    struct ibv_qp *qp;
     uint8_t port_num;
     int ret;
 
@@ -234,13 +233,18 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     }
 
     iface->tm.cmd_qp = qp;
-    return qp;
+    goto qp_ok;
 
 err_destroy_qp:
     ibv_destroy_qp(qp);
 err:
-    return NULL;
+    return UCS_ERR_NO_DEVICE;
+qp_ok:
 #endif
+    iface->tm.cmd_wq.qp_num = qp->qp_num;
+    return uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+                                 iface->tx.mmio_mode,
+                                 &iface->tm.cmd_wq.super, qp);
 }
 #endif
 
@@ -250,27 +254,19 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 {
     ucs_status_t status = UCS_OK;
 #if IBV_HW_TM
-    struct ibv_qp *cmd_qp;
+    uct_rc_mlx5_iface_common_ops_t *ops = ucs_derived_of(iface->super.super.ops,
+                                                         uct_rc_mlx5_iface_common_ops_t);
     int i;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return UCS_OK;
     }
 
-    cmd_qp = uct_rc_mlx5_get_cmd_qp(iface);
-    if (!cmd_qp) {
-        status = UCS_ERR_NO_DEVICE;
-        goto err_tag_cleanup;
-    }
-
-    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode,
-                                   &iface->tm.cmd_wq.super, cmd_qp);
+    status = ops->get_cmd_qp(iface);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
     }
 
-    iface->tm.cmd_wq.qp_num   = cmd_qp->qp_num;
     iface->tm.cmd_wq.ops_mask = iface->tm.cmd_qp_len - 1;
     iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
     iface->tm.cmd_wq.ops      = ucs_calloc(iface->tm.cmd_qp_len,

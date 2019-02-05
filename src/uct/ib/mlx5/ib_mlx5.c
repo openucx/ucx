@@ -202,16 +202,16 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
     }
 }
 
-static int uct_ib_mlx5_mmio_cmp(uct_ib_mlx5_mmio_reg_t *reg, uintptr_t addr,
-                                unsigned bf_size)
+int uct_ib_mlx5_mmio_cmp(uct_ib_mlx5_mmio_reg_t *reg, uintptr_t addr,
+                         unsigned bf_size)
 {
     return (reg->addr.uint & ~UCT_IB_MLX5_BF_REG_SIZE) ==
            (addr & ~UCT_IB_MLX5_BF_REG_SIZE);
 }
 
-static ucs_status_t uct_ib_mlx5_mmio_init(uct_ib_mlx5_mmio_reg_t *reg,
-                                          uintptr_t addr,
-                                          uct_ib_mlx5_mmio_mode_t mmio_mode)
+ucs_status_t uct_ib_mlx5_mmio_init(uct_ib_mlx5_mmio_reg_t *reg,
+                                   uintptr_t addr,
+                                   uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
     reg->addr.uint = addr;
     reg->mode      = mmio_mode;

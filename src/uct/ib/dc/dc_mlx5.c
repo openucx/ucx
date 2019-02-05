@@ -541,6 +541,177 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     }
 }
 
+static ucs_status_t uct_dc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *rc_iface)
+{
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super.super);
+    uct_ib_device_t *dev = &md->dev;
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_in)] = {};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_out)] = {};
+    uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
+    uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
+    uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
+    uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
+    uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
+    uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    ucs_status_t status = UCS_ERR_NO_MEMORY;
+    struct mlx5dv_pd dvpd = {};
+    struct mlx5dv_cq dvcq = {};
+    struct mlx5dv_srq dvsrq = {};
+    struct mlx5dv_obj dv = {};
+    struct ibv_port_attr *port_attr;
+    uint8_t port_num;
+    uint32_t db_id;
+    size_t db_off;
+    void *qpc;
+    int max = ucs_roundup_pow2(iface->super.tm.cmd_qp_len);
+    int len = max * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
+    int ret;
+
+    port_num  = dev->first_port;
+    port_attr = uct_ib_device_port_attr(dev, port_num);
+
+    ret = posix_memalign(&iface->super.tm.cmd_wq.super.qstart,
+                         ucs_get_page_size(), len);
+    if (ret) {
+        return status;
+    }
+    iface->super.tm.cmd_wq.super.qend = iface->super.tm.cmd_wq.super.qstart + len;
+    iface->rx.cmd_qp_mem = mlx5dv_devx_umem_reg(dev->ibv_context,
+                                                iface->super.tm.cmd_wq.super.qstart,
+                                                len, IBV_ACCESS_LOCAL_WRITE);
+    if (!iface->rx.cmd_qp_mem) {
+        goto err_free_buf;
+    }
+    iface->rx.cmd_qp_db = uct_ib_mlx5_alloc_dbrec(dev, &db_id, &db_off);
+    if (!iface->rx.cmd_qp_db) {
+        goto err_free_mem;
+    }
+    iface->super.tm.cmd_wq.super.dbrec = iface->rx.cmd_qp_db + MLX5_SND_DBR;
+    iface->rx.cmd_qp_uar = mlx5dv_devx_alloc_uar(dev->ibv_context, 0);
+    if (!iface->rx.cmd_qp_uar) {
+        goto err_free_db;
+    }
+
+    iface->super.tm.cmd_wq.super.reg  = uct_worker_tl_data_get(iface->super.super.super.super.worker,
+                                            UCT_IB_MLX5_WORKER_BF_KEY,
+                                            uct_ib_mlx5_mmio_reg_t,
+                                            uct_ib_mlx5_mmio_cmp,
+                                            uct_ib_mlx5_mmio_init,
+                                            (uintptr_t)iface->rx.cmd_qp_uar->reg_addr,
+                                            UCT_IB_MLX5_MMIO_MODE_DB);
+
+    if (UCS_PTR_IS_ERR(iface->super.tm.cmd_wq.super.reg)) {
+        goto err_free_uar;
+    }
+
+    iface->super.tm.cmd_wq.super.bb_max = max - 2 * UCT_IB_MLX5_MAX_BB;
+    uct_ib_mlx5_txwq_reset(&iface->super.tm.cmd_wq.super);
+
+    status          = UCS_ERR_IO_ERROR;
+    dv.pd.in        = uct_ib_iface_md(&iface->super.super.super)->pd;
+    dv.cq.in        = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    dv.srq.in       = iface->super.super.rx.srq.srq;
+    dv.pd.out       = &dvpd;
+    dv.cq.out       = &dvcq;
+    dv.srq.out      = &dvsrq;
+    dvsrq.comp_mask = MLX5DV_SRQ_MASK_SRQN;
+    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ | MLX5DV_OBJ_SRQ);
+
+    UCT_IB_MLX5DV_SET(create_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_QP);
+    qpc = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, in, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pd, dvpd.pdn);
+    UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, iface->rx.cmd_qp_uar->page_id);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, dvsrq.srqn);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, dvcq.cqn);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvcq.cqn);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sq_size, ucs_ilog2(max));
+    UCT_IB_MLX5DV_SET(qpc, qpc, cs_req, UCT_IB_MLX5_QPC_CS_REQ_UP_TO_32B);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cs_res, UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B);
+    UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, db_off);
+    UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, db_id);
+    UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, iface->rx.cmd_qp_mem->umem_id);
+
+    iface->rx.cmd_qp = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
+                                                               out, sizeof(out));
+    if (!iface->rx.cmd_qp) {
+        ucs_error("Failed to created CMD QP %m");
+        goto err_free;
+    }
+
+    iface->super.tm.cmd_wq.qp_num = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
+    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
+    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, iface->super.tm.cmd_wq.qp_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, md->dev.first_port);
+    ret = mlx5dv_devx_obj_modify(iface->rx.cmd_qp, in_2init, sizeof(in_2init),
+                                                  out_2init, sizeof(out_2init));
+    if (ret) {
+        goto err_free;
+    }
+
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, iface->super.tm.cmd_wq.qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2rtr, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, 2);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, 30);
+    UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, iface->super.tm.cmd_wq.qp_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, port_attr->lid);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, 1);
+    memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+           &iface->super.super.super.gid,
+           UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, port_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rre, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, 12);
+
+    ret = mlx5dv_devx_obj_modify(iface->rx.cmd_qp, in_2rtr, sizeof(in_2rtr),
+                                                  out_2rtr, sizeof(out_2rtr));
+    if (ret) {
+        goto err_free;
+    }
+
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, iface->super.tm.cmd_wq.qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2rts, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
+    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, 7);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, 7);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, 14);
+
+    ret = mlx5dv_devx_obj_modify(iface->rx.cmd_qp, in_2rts, sizeof(in_2rts),
+                                                  out_2rts, sizeof(out_2rts));
+    if (ret) {
+        goto err_free;
+    }
+
+    iface->super.tm.cmd_qp = NULL;
+    return UCS_OK;
+
+err_free:
+    free(iface->super.tm.cmd_wq.super.reg);
+err_free_uar:
+    mlx5dv_devx_free_uar(iface->rx.cmd_qp_uar);
+err_free_db:
+    uct_ib_mlx5_free_dbrec(dev, iface->rx.cmd_qp_db);
+err_free_mem:
+    mlx5dv_devx_umem_dereg(iface->rx.cmd_qp_mem);
+err_free_buf:
+    free(iface->super.tm.cmd_wq.super.qstart);
+    return status;
+#else
+    return uct_rc_mlx5_get_cmd_qp(rc_iface);
+#endif
+}
+
 ucs_status_t uct_ib_mlx5_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
 {
 #if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
@@ -1103,7 +1274,8 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
     }
 }
 
-static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
+static uct_rc_mlx5_iface_common_ops_t uct_dc_mlx5_iface_ops = {
+    {
     {
     {
     .ep_put_short             = uct_dc_mlx5_ep_put_short,
@@ -1163,6 +1335,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .init_rx                  = uct_dc_mlx5_init_rx,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_mlx5_iface_fc_handler,
+    },
+    .get_cmd_qp               = uct_dc_mlx5_get_cmd_qp,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
@@ -1280,6 +1454,17 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_dc_mlx5_iface_dcis_destroy(self, self->tx.ndci);
     uct_dc_mlx5_iface_cleanup_fc_ep(self);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
+
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+    if (UCT_RC_MLX5_TM_ENABLED(&self->super)) {
+        mlx5dv_devx_obj_destroy(self->rx.cmd_qp);
+        mlx5dv_devx_free_uar(self->rx.cmd_qp_uar);
+        uct_ib_mlx5_free_dbrec(uct_ib_iface_device(&self->super.super.super),
+                               self->rx.cmd_qp_db);
+        mlx5dv_devx_umem_dereg(self->rx.cmd_qp_mem);
+        free(self->super.tm.cmd_wq.super.qstart);
+    }
+#endif
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_iface_t, uct_rc_mlx5_iface_common_t);

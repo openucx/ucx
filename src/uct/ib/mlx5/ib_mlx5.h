@@ -366,4 +366,11 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
                                   size_t sg_byte_count);
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 
+int uct_ib_mlx5_mmio_cmp(uct_ib_mlx5_mmio_reg_t *reg, uintptr_t addr,
+                         unsigned bf_size);
+
+ucs_status_t uct_ib_mlx5_mmio_init(uct_ib_mlx5_mmio_reg_t *reg,
+                                   uintptr_t addr,
+                                   uct_ib_mlx5_mmio_mode_t mmio_mode);
+
 #endif
