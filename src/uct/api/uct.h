@@ -367,11 +367,11 @@ enum uct_iface_open_mode {
    UCT_IFACE_OPEN_MODE_DEVICE          = UCS_BIT(0),
 
    /** Interface is opened on a specific address on the server side. This mode
-        is going to be deprecated in near future for a better API. */
+       will be deprecated in the near future for a better API. */
    UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER = UCS_BIT(1),
 
    /** Interface is opened on a specific address on the client side This mode
-        is going to be deprecated in near future for a better API. */
+       will be deprecated in the near future for a better API. */
    UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2)
 };
 
