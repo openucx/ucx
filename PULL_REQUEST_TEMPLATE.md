@@ -7,4 +7,4 @@ bug fixes why and what can be merged in a single item._
 
 ## How ?
 _It is optional but for complex PRs please provide information about the design,
-architecture, approach, etc.
+architecture, approach, etc._

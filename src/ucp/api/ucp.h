@@ -2136,7 +2136,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *
  * This routine provides a convenient and efficient way to implement a
  * blocking send pattern. It also completes requests faster than
- * @ref ucp_tag_send_nbr() because:
+ * @ref ucp_tag_send_nb() because:
  * @li it always uses @ref uct_ep_am_bcopy() to send data up to the
  *     rendezvous threshold.
  * @li its rendezvous threshold is higher than the one used by
