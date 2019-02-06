@@ -13,6 +13,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
 #include <malloc.h>
@@ -54,10 +55,13 @@ typedef struct uct_config_bundle {
 ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
                                     unsigned *num_resources_p)
 {
+    UCS_MODULE_FRAMEWORK_DECLARE(uct);
     uct_md_resource_desc_t *resources, *md_resources, *tmp;
     unsigned i, num_resources, num_md_resources;
     uct_md_component_t *mdc;
     ucs_status_t status;
+
+    UCS_MODULE_FRAMEWORK_LOAD(uct);
 
     resources     = NULL;
     num_resources = 0;

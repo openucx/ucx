@@ -39,5 +39,6 @@ AS_IF([test -d "$with_xpmem"],
        ],
       [AC_MSG_WARN([XPMEM was disabled])])
 
-AS_IF([test "x$xpmem_happy" == "xyes"], [transports="${transports},xpmem"])
+AS_IF([test "x$xpmem_happy" == "xyes"], [uct_modules+=":xpmem"])
 AM_CONDITIONAL([HAVE_XPMEM], [test "x$xpmem_happy" != "xno"])
+AC_CONFIG_FILES([src/uct/sm/mm/xpmem/Makefile])
