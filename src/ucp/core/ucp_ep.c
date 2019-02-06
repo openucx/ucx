@@ -1290,7 +1290,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 }
 
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
-                                          size_t max_eager_short,
+                                          ssize_t max_eager_short,
                                           size_t zcopy_thresh,
                                           size_t rndv_rma_thresh,
                                           size_t rndv_am_thresh)
@@ -1299,12 +1299,15 @@ static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
 
     fprintf(stream, "# %23s: 0", name);
     if (max_eager_short > 0) {
-        fprintf(stream, "..<egr/short>..%zu" , max_eager_short + 1);
+        fprintf(stream, "..<egr/short>..%zd" , max_eager_short + 1);
     }
 
     min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
     max_bcopy = ucs_min(zcopy_thresh, min_rndv);
-    if (max_eager_short < max_bcopy) {
+
+    /* Check whether maximum Eager short attribute is negative or not
+     * before comparing it with maximum Bcopy attribute (unsigned) */
+    if ((max_eager_short < 0) || ((size_t)max_eager_short < max_bcopy)) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
