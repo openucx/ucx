@@ -359,8 +359,10 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
             return UCS_ERR_NO_MEMORY;
         }
 
+        op->flags     = 0;
         op->user_comp = comp;
         uct_rc_txqp_add_send_op_sn(txqp, op, sn);
+        VALGRIND_MAKE_MEM_DEFINED(op, sizeof(*op)); /* handler set by mpool init */
     }
     UCT_TL_EP_STAT_FLUSH_WAIT(ep);
 
