@@ -1,39 +1,77 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
-#include "worker.h"
 
-#include <new> // bad_alloc exception
+#include <ucp/api/ucp.h>
+#include "helper.h"
 
-worker::worker(context* ctx, uint32_t cap, ucp_worker_params_t params) :
-               jucx_context(ctx),  ucp_worker(nullptr),
-               queue_size(cap),    event_queue(nullptr) {
-    ucs_status_t status = jucx_context->ref_context();
-    if (status != UCS_OK) {
-        throw std::bad_alloc{};
+#include "org_ucx_jucx_Bridge.h"
+
+/**
+ * Bridge methods for creating ucp_worker from java
+ */
+JNIEXPORT jlong JNICALL
+Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls, jobject jucx_worker_params,
+                                            jlong context_ptr)
+{
+    ucp_worker_params_t worker_params = { 0 };
+    jfieldID field;
+    ucp_worker_h ucp_worker;
+    ucp_context_h ucp_context = (ucp_context_h)context_ptr;
+    jclass jucx_param_class = env->GetObjectClass(jucx_worker_params);
+
+    field = env->GetFieldID(jucx_param_class, "fieldMask", "J");
+    worker_params.field_mask = env->GetLongField(jucx_worker_params, field);
+
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
+        field = env->GetFieldID(jucx_param_class, "threadMode", "Lorg/ucx/jucx/UcxTools$UcsTreadMode;");
+        jobject thread_mode = env->GetObjectField(jucx_worker_params, field);
+        jclass thread_mode_class = env->GetObjectClass(thread_mode);
+        jmethodID ordinal_method_id = env->GetMethodID(thread_mode_class, "ordinal", "()I");
+        worker_params.thread_mode = static_cast<ucs_thread_mode_t>(env->CallIntMethod(jucx_worker_params, ordinal_method_id));
     }
 
-    status = ucp_worker_create(jucx_context->get_ucp_context(),
-                               &params, &ucp_worker);
-    if (status != UCS_OK) {
-        jucx_context->deref_context();
-        throw std::bad_alloc{};
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
+        ucs_cpu_set_t cpu_mask;
+        UCS_CPU_ZERO(&cpu_mask);
+        field = env->GetFieldID(jucx_param_class, "cpuMask", "Ljava/util/BitSet;");
+        jobject cpu_mask_bitset = env->GetObjectField(jucx_worker_params, field);
+        jclass bitset_class = env->FindClass("java/util/BitSet");
+        jmethodID next_set_bit = env->GetMethodID(bitset_class, "nextSetBit", "(I)I");
+        for (jint bit_index = env->CallIntMethod(cpu_mask_bitset, next_set_bit, 0); bit_index >=0;
+                  bit_index = env->CallIntMethod(cpu_mask_bitset, next_set_bit, bit_index + 1)) {
+            UCS_CPU_SET(bit_index, &cpu_mask);
+        }
+        worker_params.cpu_mask = cpu_mask;
     }
-    event_queue = new char[queue_size];
+
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_EVENTS) {
+        field = env->GetFieldID(jucx_param_class, "events", "J");
+        worker_params.events = env->GetLongField(jucx_worker_params, field);
+    }
+
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_USER_DATA) {
+        field = env->GetFieldID(jucx_param_class, "userData", "Ljava/nio/ByteBuffer;");
+        jobject user_data = env->GetObjectField(jucx_worker_params, field);
+        worker_params.user_data = env->GetDirectBufferAddress(user_data);
+    }
+
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_EVENT_FD) {
+        field = env->GetFieldID(jucx_param_class, "eventFD", "I");
+        worker_params.event_fd = env->GetIntField(jucx_worker_params, field);
+    }
+
+    ucs_status_t status = ucp_worker_create(ucp_context, &worker_params, &ucp_worker);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+    return (native_ptr)ucp_worker;
 }
 
-worker::~worker() {
-    delete[] event_queue;
-    ucp_worker_destroy(ucp_worker);
-    jucx_context->deref_context();
-}
 
-ucs_status_t worker::extract_worker_address(ucp_address_t** worker_address,
-                                            size_t& address_length) {
-    return ucp_worker_get_address(ucp_worker, worker_address, &address_length);
-}
-
-void worker::release_worker_address(ucp_address_t* worker_address) {
-    ucp_worker_release_address(ucp_worker, worker_address);
+JNIEXPORT void
+JNICALL Java_org_ucx_jucx_Bridge_releaseWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+{
+    ucp_worker_destroy((ucp_worker_h)ucp_worker_ptr);
 }
