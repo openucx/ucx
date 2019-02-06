@@ -467,6 +467,8 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
                  total_count- free_count, total_count);
     }
     ucs_free(iface->tx.ops_buffer);
+
+    ucs_mpool_cleanup(&iface->tx.flush_mp, 1);
 }
 
 unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
@@ -671,7 +673,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
-    ucs_mpool_cleanup(&self->tx.flush_mp, 1);
     if (self->config.fc_enabled) {
         ucs_mpool_cleanup(&self->tx.fc_mp, 1);
     }
