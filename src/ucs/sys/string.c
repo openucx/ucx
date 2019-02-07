@@ -108,7 +108,7 @@ uint64_t ucs_string_to_id(const char* str)
 
 void ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
-    static const char * suffixes[] = {"", "k", "m", "g", "t"};
+    static const char * suffixes[] = {"", "k", "m", "g", "t", NULL};
 
     const char **suffix;
 
@@ -116,7 +116,7 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
         strncpy(buf, "(inf)", max);
     } else {
         suffix = &suffixes[0];
-        while ((value >= 1024) && ((value % 1024) == 0)) {
+        while ((value >= 1024) && ((value % 1024) == 0) && *(suffix + 1)) {
             value /= 1024;
             ++suffix;
         }

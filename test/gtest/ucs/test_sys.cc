@@ -20,6 +20,13 @@ protected:
     static int get_mem_prot(void *address, size_t size) {
         return ucs_get_mem_prot((uintptr_t)address, (uintptr_t)address + size);
     }
+
+    void test_memunits(size_t size, const char *expected) {
+        char buf[256];
+
+        ucs_memunits_to_str(size, buf, sizeof(buf));
+        EXPECT_EQ(std::string(expected), buf);
+    }
 };
 
 UCS_TEST_F(test_sys, uuid) {
@@ -116,4 +123,15 @@ UCS_TEST_F(test_sys, module) {
     EXPECT_EQ(0, test_module_loaded);
     UCS_MODULE_FRAMEWORK_LOAD(test);
     EXPECT_EQ(1, test_module_loaded);
+}
+
+UCS_TEST_F(test_sys, memunits_to_str) {
+    test_memunits(256, "256");
+    test_memunits(1256, "1256");
+    test_memunits(UCS_KBYTE, "1k");
+    test_memunits(UCS_MBYTE + UCS_KBYTE, "1025k");
+    test_memunits(UCS_GBYTE, "1g");
+    test_memunits(2 * UCS_GBYTE, "2g");
+    test_memunits(UCS_TBYTE, "1t");
+    test_memunits(UCS_TBYTE * 1024, "1024t");
 }
