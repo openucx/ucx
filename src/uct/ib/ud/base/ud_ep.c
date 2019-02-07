@@ -1222,6 +1222,7 @@ add_req:
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     ucs_trace_data("ud ep %p: added pending req %p tx_psn %d acked_psn %d cwnd %d",
                    ep, req, ep->tx.psn, ep->tx.acked_psn, ep->ca.cwnd);
+    UCT_TL_EP_STAT_PEND(&ep->super);
 
     uct_ud_leave(iface);
     return UCS_OK;

@@ -57,6 +57,10 @@ public:
         return UCS_OK;
     }
 
+    static void purge_cb(uct_pending_req_t *r, void *arg)
+    {
+    }
+
     void check_tx_counters(int op, int type, size_t len) {
         uint64_t v;
 
@@ -514,6 +518,41 @@ UCS_TEST_P(test_uct_stats, tx_no_res)
     EXPECT_EQ(count, v);
     v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_AM);
     EXPECT_EQ(1024-count, v);
+}
+
+UCS_TEST_P(test_uct_stats, pending_add)
+{
+    const int num_reqs = 5;
+    uct_pending_req_t p_reqs[num_reqs];
+    uint64_t v;
+
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
+    EXPECT_UCS_OK(uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0,
+                                           UCT_CB_FLAG_ASYNC));
+
+    // Check that counter is not increased if pending_add returns NOT_OK
+    EXPECT_EQ(uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0),
+              UCS_ERR_BUSY);
+    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_PENDING);
+    EXPECT_EQ(0ul, v);
+
+    // Check that counter gets increased on every successfull pending_add returns NOT_OK
+    fill_tx_q(0);
+    size_t len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
+    if (len == lbuf->length()) {
+        UCS_TEST_SKIP_R("Can't add to pending");
+    }
+
+    for (int i = 0; i < num_reqs; ++i) {
+        p_reqs[i].func = NULL;
+        EXPECT_UCS_OK(uct_ep_pending_add(sender().ep(0), &p_reqs[i], 0));
+    }
+    uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
+
+    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_PENDING);
+    EXPECT_EQ(num_reqs, v);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_stats);

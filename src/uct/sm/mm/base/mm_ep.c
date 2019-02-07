@@ -350,6 +350,7 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_pending_req_arb_group_push(&ep->arb_group, n);
     /* add the ep's group to the arbiter */
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
+    UCT_TL_EP_STAT_PEND(&ep->super);
 
     return UCS_OK;
 }

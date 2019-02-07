@@ -301,6 +301,7 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
     }
 
     uct_pending_req_queue_push(&ep->pending_q, req);
+    UCT_TL_EP_STAT_PEND(&ep->super);
     return UCS_OK;
 }
 

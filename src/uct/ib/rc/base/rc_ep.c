@@ -281,6 +281,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_arb_t) <=
                       UCT_PENDING_REQ_PRIV_LEN);
     uct_pending_req_arb_group_push(&ep->arb_group, n);
+    UCT_TL_EP_STAT_PEND(&ep->super);
 
     if (uct_rc_ep_has_tx_resources(ep)) {
         /* If we have ep (but not iface) resources, we need to schedule the ep */

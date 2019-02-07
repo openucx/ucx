@@ -31,6 +31,7 @@ static ucs_stats_class_t uct_ep_stats_class = {
         [UCT_EP_STAT_NO_RES]      = "no_res",
         [UCT_EP_STAT_FLUSH]       = "flush",
         [UCT_EP_STAT_FLUSH_WAIT]  = "flush_wait",
+        [UCT_EP_STAT_PENDING]     = "pending",
         [UCT_EP_STAT_FENCE]       = "fence"
     }
 };
