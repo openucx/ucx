@@ -242,6 +242,9 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                              const void *resp);
 
+void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
+                                           const void *resp);
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
 
@@ -355,6 +358,28 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     op            = uct_rc_iface_get_send_op(iface);
     op->user_comp = comp;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                           uct_completion_t *comp, uint16_t sn)
+{
+    uct_rc_iface_send_op_t *op;
+
+    if (comp != NULL) {
+        op = (uct_rc_iface_send_op_t*)ucs_mpool_get(&iface->tx.flush_mp);
+        if (ucs_unlikely(op == NULL)) {
+            ucs_error("Failed to allocate flush completion");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        op->flags     = 0;
+        op->user_comp = comp;
+        uct_rc_txqp_add_send_op_sn(txqp, op, sn);
+        VALGRIND_MAKE_MEM_DEFINED(op, sizeof(*op)); /* handler set by mpool init */
+    }
+
+    return UCS_INPROGRESS;
 }
 
 static UCS_F_ALWAYS_INLINE void

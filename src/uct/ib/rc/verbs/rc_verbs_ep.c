@@ -521,9 +521,13 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         }
     }
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi);
-    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
-    return UCS_INPROGRESS;
+    status = uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.txqp, comp,
+                                        ep->txcnt.pi);
+    if (status == UCS_INPROGRESS) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
+    }
+
+    return status;
 }
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

@@ -567,6 +567,7 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
                                                  uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     ucs_status_t         status;
+    uint8_t              dci;
 
     status = uct_dc_ep_flush(tl_ep, flags, comp);
     if (status == UCS_OK) {
@@ -574,9 +575,13 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
     }
 
     if (status == UCS_INPROGRESS) {
-        ucs_assert(ep->super.dci != UCT_DC_EP_NO_DCI);
-        uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
+        dci = ep->super.dci;
+        ucs_assert(dci != UCT_DC_EP_NO_DCI);
+        status = uct_rc_txqp_add_flush_comp(&iface->super.super,
+                                            &iface->super.tx.dcis[dci].txqp,
+                                            comp, iface->dcis_txcnt[dci].pi);
     }
+
     return status;
 }
 
