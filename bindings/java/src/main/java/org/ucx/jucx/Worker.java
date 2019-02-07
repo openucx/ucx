@@ -2,6 +2,7 @@
  * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
+
 package org.ucx.jucx;
 
 import java.io.Closeable;
@@ -87,7 +88,7 @@ public class Worker implements Closeable {
     }
 
     /**
-     * Frees all resources associated with this Worker.</br>
+     * Frees all resources associated with this Worker.
      * Worker should not be used after calling this method.
      */
     @Override
@@ -122,7 +123,7 @@ public class Worker implements Closeable {
 
     /**
      * The Callback interface must be implemented in-order to create a
-     * Worker.</br>
+     * Worker.
      * Worker will invoke the implemented method whenever a request is
      * completed.
      */

@@ -1,7 +1,8 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
+
 package org.ucx.jucx;
 
 import java.io.Closeable;
@@ -21,9 +22,7 @@ public class LoadLibrary {
      * Tries to load the library, by extracting it from the current class jar.
      * If that fails, falls back on {@link System#loadLibrary(String)}.
      *
-     * @param String
-     *            to the library name to be extracted and loaded from the this
-     *            current jar
+     * @param resourceName - library name to be extracted and loaded from the this current jar.
      */
     public static void loadLibrary(String resourceName) {
         ClassLoader loader = LoadLibrary.class.getClassLoader();
@@ -54,11 +53,9 @@ public class LoadLibrary {
     /**
      * Extracts a resource into a temp directory.
      *
-     * @param resourceURL
-     *            the URL of the resource to extract
+     * @param resourceURL - the URL of the resource to extract
      * @return the File object representing the extracted file
-     * @throws IOException
-     *             if fails to extract resource properly
+     * @throws IOException if fails to extract resource properly
      */
     public static File extractResource(URL resourceURL) throws IOException {
         InputStream is = resourceURL.openStream();
@@ -87,7 +84,9 @@ public class LoadLibrary {
         return file;
     }
 
-    /** Temporary directory set and returned by {@link #createTempDir()}. */
+    /**
+     * Temporary directory set and returned by {@link #createTempDir()}.
+     */
     static File tempDir = null;
 
     /**
@@ -103,12 +102,13 @@ public class LoadLibrary {
     }
 
     /**
-     * Helper function to copy an InputStream into an OutputStream
+     * Helper function to copy an InputStream into an OutputStream.
      */
     public static void copy(InputStream is, OutputStream os)
             throws IOException {
-        if (is == null || os == null)
+        if (is == null || os == null) {
             return;
+        }
         byte[] buffer = new byte[1024];
         int length = 0;
         while ((length = is.read(buffer)) != -1) {
@@ -118,11 +118,12 @@ public class LoadLibrary {
 
     /**
      * Helper function to close InputStream or OutputStream in a quiet way
-     * which hides the exceptions
+     * which hides the exceptions.
      */
     public static void closeQuietly(Closeable c) {
-        if (c == null)
+        if (c == null) {
             return;
+        }
         try {
             c.close();
         } catch (IOException e) {
