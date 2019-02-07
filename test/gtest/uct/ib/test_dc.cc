@@ -22,7 +22,7 @@ extern "C" {
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 
-class test_dc : public uct_test {
+class test_dc : public test_rc {
 public:
     virtual void init() {
         uct_test::init();
@@ -71,7 +71,6 @@ public:
     }
 
 protected:
-    entity *m_e1, *m_e2;
 
     struct dcs_comp {
         uct_completion_t uct_comp;
@@ -402,6 +401,10 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
     flush();
     EXPECT_EQ(0, iface->tx.stack_top);
+}
+
+UCS_TEST_P(test_dc, stress_iface_ops) {
+    test_iface_ops();
 }
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)

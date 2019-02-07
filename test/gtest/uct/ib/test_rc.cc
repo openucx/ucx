@@ -35,6 +35,55 @@ void test_rc::connect()
     uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
 }
 
+// Check that iface tx ops buffer and flush comp memory pool are moderated
+// properly when we have communication ops + lots of flushes
+void test_rc::test_iface_ops()
+{
+    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
+    int cq_len = 16;
+
+    if (UCS_OK != uct_config_modify(m_iface_config, "RC_TX_CQ_LEN",
+                                    ucs::to_string(cq_len).c_str())) {
+        UCS_TEST_ABORT("Error: cannot enable random DCI policy");
+    }
+
+    entity *e = uct_test::create_entity(0);
+    m_entities.push_back(e);
+    e->connect(0, *m_e2, 0);
+
+    mapped_buffer sendbuf(1024, 0ul, *e);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    uct_completion_t comp;
+    comp.count = cq_len * 512; // some big value to avoid func invocation
+    comp.func  = NULL;
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.am.max_iov);
+    // For _x transports several CQEs can be consumed per WQE, post less put zcopy
+    // ops, so that flush would be sucessfull (otherwise flush will return
+    // NO_RESOURCES and completion will not be added for it).
+    for (int i = 0; i < cq_len / 3; i++) {
+        ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
+                                                     recvbuf.addr(),
+                                                     recvbuf.rkey(), &comp));
+
+        // Create some stress on iface (flush mp):
+        // post 10 flushes per every put.
+        for (int j = 0; j < 10; j++) {
+            ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_flush(e->ep(0), 0, &comp));
+        }
+    }
+
+    flush();
+}
+
+UCS_TEST_P(test_rc, stress_iface_ops) {
+    test_iface_ops();
+}
+
+UCT_RC_INSTANTIATE_TEST_CASE(test_rc)
+
 
 class test_rc_max_wr : public test_rc {
 protected:
