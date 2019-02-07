@@ -48,7 +48,8 @@ ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
     /* Check input values */
     if ((elem_size == 0) || (align_offset > elem_size) ||
         (alignment == 0) || !ucs_is_pow2(alignment) ||
-        (elems_per_chunk == 0) || (max_elems < elems_per_chunk))
+        (elems_per_chunk == 0) || (max_elems < elems_per_chunk) ||
+        (!ops) || (!ops->chunk_alloc) || (!ops->chunk_release))
     {
         ucs_error("Invalid memory pool parameter(s)");
         return UCS_ERR_INVALID_PARAM;
