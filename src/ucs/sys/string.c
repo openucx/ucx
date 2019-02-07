@@ -108,7 +108,7 @@ uint64_t ucs_string_to_id(const char* str)
 
 void ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
-    static const char * suffixes[] = {"", "k", "m", "g", "t", NULL};
+    static const char * suffixes[] = {"", "K", "M", "G", "T", NULL};
 
     const char **suffix;
 

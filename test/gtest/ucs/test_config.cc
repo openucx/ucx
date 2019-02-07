@@ -54,6 +54,19 @@ typedef struct {
     const char      *model;
     unsigned        color;
     unsigned long   vin;
+
+    double          bw_bytes;
+    double          bw_kbytes;
+    double          bw_mbytes;
+    double          bw_gbytes;
+    double          bw_tbytes;
+    double          bw_bits;
+    double          bw_kbits;
+    double          bw_mbits;
+    double          bw_gbits;
+    double          bw_tbits;
+
+    ucs_config_bw_spec_t can_pci_bw; /* CAN-bus */
 } car_opts_t;
 
 
@@ -108,6 +121,39 @@ ucs_config_field_t car_opts_table[] = {
 
   {"VIN", "auto", "Vehicle identification number",
    ucs_offsetof(car_opts_t, vin), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"BW_BYTES", "1024Bs", "Bandwidth in bytes",
+   ucs_offsetof(car_opts_t, bw_bytes), UCS_CONFIG_TYPE_BW},
+
+  {"BW_KBYTES", "1024KB/s", "Bandwidth in kbytes",
+   ucs_offsetof(car_opts_t, bw_kbytes), UCS_CONFIG_TYPE_BW},
+
+  {"BW_MBYTES", "1024MBs", "Bandwidth in mbytes",
+   ucs_offsetof(car_opts_t, bw_mbytes), UCS_CONFIG_TYPE_BW},
+
+  {"BW_GBYTES", "1024GBps", "Bandwidth in gbytes",
+   ucs_offsetof(car_opts_t, bw_gbytes), UCS_CONFIG_TYPE_BW},
+
+  {"BW_TBYTES", "1024TB/s", "Bandwidth in tbytes",
+   ucs_offsetof(car_opts_t, bw_tbytes), UCS_CONFIG_TYPE_BW},
+
+  {"BW_BITS", "1024bps", "Bandwidth in bits",
+   ucs_offsetof(car_opts_t, bw_bits), UCS_CONFIG_TYPE_BW},
+
+  {"BW_KBITS", "1024Kb/s", "Bandwidth in kbits",
+   ucs_offsetof(car_opts_t, bw_kbits), UCS_CONFIG_TYPE_BW},
+
+  {"BW_MBITS", "1024Mbs", "Bandwidth in mbits",
+   ucs_offsetof(car_opts_t, bw_mbits), UCS_CONFIG_TYPE_BW},
+
+  {"BW_GBITS", "1024Gbps", "Bandwidth in gbits",
+   ucs_offsetof(car_opts_t, bw_gbits), UCS_CONFIG_TYPE_BW},
+
+  {"BW_TBITS", "1024Tbs", "Bandwidth in tbits",
+   ucs_offsetof(car_opts_t, bw_tbits), UCS_CONFIG_TYPE_BW},
+
+  {"CAN_BUS_BW", "mlx5_0:1024Tbs", "Bandwidth in tbits of CAN-bus",
+   ucs_offsetof(car_opts_t, can_pci_bw), UCS_CONFIG_TYPE_BW_SPEC},
 
   {NULL}
 };
@@ -196,6 +242,21 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ((unsigned)COLOR_BLACK, opts->coach.rear_seat.color);
     EXPECT_EQ(UCS_CONFIG_ULUNITS_AUTO, opts->vin);
     EXPECT_EQ(200UL, opts->engine.power);
+
+    EXPECT_EQ(1024.0, opts->bw_bytes);
+    EXPECT_EQ(UCS_KBYTE * 1024.0, opts->bw_kbytes);
+    EXPECT_EQ(UCS_MBYTE * 1024.0, opts->bw_mbytes);
+    EXPECT_EQ(UCS_GBYTE * 1024.0, opts->bw_gbytes);
+    EXPECT_EQ(UCS_TBYTE * 1024.0, opts->bw_tbytes);
+
+    EXPECT_EQ(128.0, opts->bw_bits);
+    EXPECT_EQ(UCS_KBYTE * 128.0, opts->bw_kbits);
+    EXPECT_EQ(UCS_MBYTE * 128.0, opts->bw_mbits);
+    EXPECT_EQ(UCS_GBYTE * 128.0, opts->bw_gbits);
+    EXPECT_EQ(UCS_TBYTE * 128.0, opts->bw_tbits);
+
+    EXPECT_EQ(UCS_TBYTE * 128.0, opts->can_pci_bw.bw);
+    EXPECT_EQ(std::string("mlx5_0"), opts->can_pci_bw.name);
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -293,7 +354,7 @@ UCS_TEST_F(test_config, dump) {
         EXPECT_STREQ("UCX_", line_buf);
         ++num_lines;
     }
-    EXPECT_EQ(10u, num_lines);
+    EXPECT_EQ(21u, num_lines);
 
     fclose(file);
     free(dump_data);

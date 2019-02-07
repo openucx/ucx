@@ -227,6 +227,13 @@ char *ucs_strdup(const char *src, const char *name)
     return str;
 }
 
+char *ucs_strndup(const char *src, size_t n, const char *name)
+{
+    char *str = strndup(src, n);
+    ucs_memtrack_allocated(str, strlen(str) + 1, name);
+    return str;
+}
+
 void ucs_memtrack_total(ucs_memtrack_entry_t* total)
 {
     if (!ucs_memtrack_is_enabled()) {

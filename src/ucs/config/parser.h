@@ -79,6 +79,12 @@ typedef struct ucs_config_global_list_entry {
 } ucs_config_global_list_entry_t;
 
 
+typedef struct ucs_config_bw_spec {
+    char  *name;
+    double bw;
+} ucs_config_bw_spec_t;
+
+
 #define UCS_CONFIG_REGISTER_TABLE(_fields, _name, _prefix, _type) \
     UCS_STATIC_INIT { \
         extern ucs_list_link_t ucs_config_global_list; \
@@ -138,6 +144,14 @@ int ucs_config_sprintf_bitmask(char *buf, size_t max, void *src, const void *arg
 
 int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_time(char *buf, size_t max, void *src, const void *arg);
+
+int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_bw(char *buf, size_t max, void *src, const void *arg);
+
+int ucs_config_sscanf_bw_spec(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_bw_spec(char *buf, size_t max, void *src, const void *arg);
+ucs_status_t ucs_config_clone_bw_spec(void *src, void *dest, const void *arg);
+void ucs_config_release_bw_spec(void *ptr, const void *arg);
 
 int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_signo(char *buf, size_t max, void *src, const void *arg);
@@ -227,6 +241,16 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_TIME       {ucs_config_sscanf_time,      ucs_config_sprintf_time, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     "time value: <number>[s|us|ms|ns]"}
+
+#define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
+                                    ucs_config_clone_double,     ucs_config_release_nop, \
+                                    ucs_config_help_generic,     \
+                                    "bandwidth value: <number>[T|G|K]B|b[[p|/]s]"}
+
+#define UCS_CONFIG_TYPE_BW_SPEC    {ucs_config_sscanf_bw_spec,   ucs_config_sprintf_bw_spec, \
+                                    ucs_config_clone_bw_spec,    ucs_config_release_bw_spec, \
+                                    ucs_config_help_generic,     \
+                                    "device_name:<number>[T|G|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
