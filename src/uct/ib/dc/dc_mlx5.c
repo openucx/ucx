@@ -12,6 +12,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5_ifc.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
@@ -476,6 +477,39 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     }
 }
 
+ucs_status_t uct_ib_mlx5_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
+{
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_in)] = {};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_out)] = {};
+    struct mlx5dv_srq dvsrq = {};
+    struct mlx5dv_obj dv = {};
+    int ret;
+
+    dv.srq.in       = iface->super.super.rx.srq.srq;
+    dv.srq.out      = &dvsrq;
+    dvsrq.comp_mask = MLX5DV_SRQ_MASK_SRQN;
+    mlx5dv_init_obj(&dv, MLX5DV_OBJ_SRQ);
+
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index, iface->super.super.super.pkey_index);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu, iface->super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, sl, iface->super.super.super.config.sl);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, reverse_sl, iface->super.super.super.config.sl);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, cnak_reverse_sl, iface->super.super.super.config.sl);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, ack_timeout, iface->super.super.config.timeout);
+    UCT_IB_MLX5DV_SET64(set_xrq_dc_params_entry_in, in, dc_access_key, UCT_IB_KEY);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, xrqn, dvsrq.srqn);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, opcode,
+                      UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY);
+
+    ret = mlx5dv_devx_srq_modify(iface->super.super.rx.srq.srq, in, sizeof(in), out, sizeof(out));
+    if (ret) {
+        return UCS_ERR_IO_ERROR;
+    }
+#endif
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_config_t *rc_config)
@@ -501,6 +535,13 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 #endif
         status = uct_rc_mlx5_init_rx_tm(&iface->super, &config->super, &srq_attr, UCT_DC_RNDV_HDR_LEN, 0);
         if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_ib_mlx5_set_srq_dc_params(iface);
+        if (status != UCS_OK) {
+            ucs_error("mlx5_set_xrq_dc_params failed: %m");
+            ibv_destroy_srq(rc_iface->rx.srq.srq);
             return status;
         }
 
