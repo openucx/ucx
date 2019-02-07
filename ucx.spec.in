@@ -19,12 +19,14 @@ BuildRequires: numactl-devel libibverbs-devel
 BuildRequires: automake autoconf libtool gcc-c++
 
 %description
-UCX stands for Unified Communication X. It requires either RDMA-capable device
-(InfiniBand, RoCE, etc), Cray Gemini or Aries, for inter-node communication.
-Future versions will support also TCP for inter-node, to lift that hardware
-dependency.
-In addition, the library can be used for intra-node communication by leveraging
-the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
+UCX stands for Unified Communication X. UCX provides an optimized communication
+layer for Message Passing (MPI), PGAS/OpenSHMEM libraries and RPC/data-centric
+applications. UCX utilizes high-speed networks, such as RDMA (InfiniBand, RoCE,
+etc), Cray Gemini or Aries, for inter-node communication. If no such network is
+available, TCP is used instead. UCX supports efficient transfer of data in
+either main memory (RAM) or GPU memory (through CUDA and ROCm libraries).
+In addition, UCX provides efficient intra-node communication, by leveraging the
+following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
 
 %package devel
 Requires: %{name}%{?_isa} = %{version}-%{release}
