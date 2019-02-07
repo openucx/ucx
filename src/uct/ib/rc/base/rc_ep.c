@@ -260,6 +260,13 @@ void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
     uct_rc_iface_put_send_op(op);
 }
 
+void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
+                                           const void *resp)
+{
+    uct_invoke_completion(op->user_comp, UCS_OK);
+    ucs_mpool_put(op);
+}
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags)
 {
@@ -393,6 +400,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
         if (op->handler == uct_rc_ep_send_op_completion_handler) {
             uct_rc_iface_put_send_op(op);
+        } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
+            ucs_mpool_put(op);
         } else {
             desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
             ucs_mpool_put(desc);

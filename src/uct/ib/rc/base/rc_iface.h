@@ -21,7 +21,7 @@
 #define UCT_RC_QP_TABLE_ORDER       12
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
-#define UCR_RC_QP_MAX_RETRY_COUNT   7
+#define UCT_RC_QP_MAX_RETRY_COUNT   7
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
@@ -187,8 +187,9 @@ struct uct_rc_iface {
     uct_ib_iface_t              super;
 
     struct {
-        ucs_mpool_t             mp;      /* pool for send descriptors */
-        ucs_mpool_t             fc_mp;   /* pool for FC grant pending requests */
+        ucs_mpool_t             mp;       /* pool for send descriptors */
+        ucs_mpool_t             fc_mp;    /* pool for FC grant pending requests */
+        ucs_mpool_t             flush_mp; /* pool for flush completions */
         /* Credits for completions.
          * May be negative in case mlx5 because we take "num_bb" credits per
          * post to be able to calculate credits of outstanding ops on failure.
@@ -393,7 +394,7 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_am_hdr_fill(uct_rc_hdr_t *rch, uint8_t id)
 {
-    rch->am_id      = id;
+    rch->am_id = id;
 }
 
 static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
