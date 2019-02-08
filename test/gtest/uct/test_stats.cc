@@ -552,7 +552,7 @@ UCS_TEST_P(test_uct_stats, pending_add)
     uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
 
     v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_PENDING);
-    EXPECT_EQ(num_reqs, v);
+    EXPECT_EQ(static_cast<uint64_t>(num_reqs), v);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_stats);
