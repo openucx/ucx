@@ -20,7 +20,7 @@ UCS_TEST_F(test_time, time_calc) {
 
     EXPECT_NEAR(value * 1000, ucs_time_to_msec(ucs_time_from_sec (value)), 0.000001);
     EXPECT_NEAR(value * 1000, ucs_time_to_usec(ucs_time_from_msec(value)), 0.001);
-    EXPECT_NEAR(value * 1000, ucs_time_to_nsec(ucs_time_from_usec(value)), 1.0);
+    EXPECT_NEAR(value * 1000, ucs_time_to_nsec(ucs_time_from_usec(value)), 10.0);
 }
 
 /* This test is only useful when used with high-precision timers */
