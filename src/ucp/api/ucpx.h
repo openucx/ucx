@@ -19,8 +19,6 @@
 
 BEGIN_C_DECLS
 
-#define UCP_FEATURE_AM UCP_FEATURE_X
-
 /**
  * @ingroup UCP_ENDPOINT
  * @brief Callback to process incoming active message
@@ -55,6 +53,7 @@ BEGIN_C_DECLS
 typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
                                           ucp_ep_h reply_ep, unsigned flags);
 
+
 /**
  * @ingroup UCP_WORKER
  * @brief Flags for a UCP AM callback
@@ -68,9 +67,20 @@ enum ucp_am_cb_flags {
     UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
 };
 
+
+/** 
+ * @ingroup UCP_WORKER
+ * @brief Flags for sending a UCP AM
+ *
+ * Flags dictate the behavior of ucp_am_send_nb
+ * currently the only flag tells ucp to pass in
+ * the sending endpoint to the call
+ * back so a reply can be defined
+ */
 enum ucp_send_am_flags {
     UCP_AM_SEND_REPLY = UCS_BIT(0)
 };
+
 
 /**
  * @ingroup UCP_ENDPOINT
@@ -84,6 +94,7 @@ enum ucp_send_am_flags {
 enum ucp_cb_param_flags {
     UCP_CB_PARAM_FLAG_DATA = UCS_BIT(0)
 };
+
 
 /**
  * @ingroup UCP_WORKER
@@ -109,6 +120,7 @@ enum ucp_cb_param_flags {
 ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id, 
                                        ucp_am_callback_t cb, void *arg,
                                        uint32_t flags);
+
 
 /**
  * @ingroup UCP_COMM
@@ -138,6 +150,7 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
                                 ucp_datatype_t datatype,
                                 ucp_send_callback_t cb, unsigned flags);
 
+
 /**
  * @ingroup UCP_COMM
  * @brief Releases am data
@@ -152,6 +165,7 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  *                          UCP_CB_PARAM_FLAG_DATA
  */
 void ucp_am_data_release(ucp_worker_h worker, void *data);
+
 
 END_C_DECLS
 
