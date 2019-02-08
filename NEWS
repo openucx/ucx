@@ -7,16 +7,7 @@
 ##
 #
 
-## 1.5.0 rc3 (February 8, 2019)
-Bugfixes:
-- Fix overflow in RC/DC flush operations
-- Update description in SPEC file and README
-- Fix RoCE source port for dc_mlx5 flow control
-- Improve ucx_info help message
-- Fix segfault in UCP, due to int truncation in count_one_bits()
-
-## 1.5.0 rc2 (January 15, 2019)
-
+## 1.5.0 rc2 (February 8, 2019)
 Features:
 - New emulation mode enabling full UCX functionality (Atomic, Put, Get)
   over TCP and RDMA-CORE interconnects which don't implement full RDMA semantics
@@ -30,7 +21,12 @@ Features:
 - GPU-to-Infiniband HCA affinity support based on locality/distance (PCIe)
 
 Bugfixes:
-- Multiple bugfixes (full list on github)
+- Fix overflow in RC/DC flush operations
+- Update description in SPEC file and README
+- Fix RoCE source port for dc_mlx5 flow control
+- Improve ucx_info help message
+- Fix segfault in UCP, due to int truncation in count_one_bits()
+- Multiple other bugfixes (full list on github)
 
 Tested configurations:
 - InfiniBand: MLNX_OFED 4.4-4.5, distribution inbox drivers, rdma-core
