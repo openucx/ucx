@@ -135,6 +135,24 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+static void
+uct_rc_iface_flush_comp_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    uct_rc_iface_t *iface      = ucs_container_of(mp, uct_rc_iface_t, tx.flush_mp);
+    uct_rc_iface_send_op_t *op = obj;
+
+    op->handler = uct_rc_ep_flush_op_completion_handler;
+    op->flags   = 0;
+    op->iface   = iface;
+}
+
+static ucs_mpool_ops_t uct_rc_flush_comp_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = uct_rc_iface_flush_comp_init,
+    .obj_cleanup   = NULL
+};
+
 static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
                                    uct_iface_attr_t *iface_attr,
                                    size_t max_inline, size_t max_iov)
@@ -488,6 +506,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
 {
     const unsigned count = iface->config.tx_ops_count;
     uct_rc_iface_send_op_t *op;
+    ucs_status_t status;
 
     iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
                                       "rc_tx_ops");
@@ -496,14 +515,22 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     }
 
     iface->tx.free_ops = &iface->tx.ops_buffer[0];
-    for (op = iface->tx.ops_buffer; op < iface->tx.ops_buffer + count - 1; ++op) {
+    for (op = iface->tx.ops_buffer; op < iface->tx.ops_buffer + count; ++op) {
         op->handler = uct_rc_ep_send_op_completion_handler;
         op->flags   = UCT_RC_IFACE_SEND_OP_FLAG_IFACE;
         op->iface   = iface;
-        op->next    = op + 1;
+        op->next    = (op == (iface->tx.ops_buffer + count - 1)) ? NULL : (op + 1);
     }
-    iface->tx.ops_buffer[count - 1].next = NULL;
-    return UCS_OK;
+
+    /* Create memory pool for flush completions. Can't just alloc a certain
+     * size buffer, because number of simultaneous flushes is not limited by
+     * CQ or QP resources. */
+    status = ucs_mpool_init(&iface->tx.flush_mp, 0, sizeof(*op), 0,
+                            UCS_SYS_CACHE_LINE_SIZE, 256,
+                            UINT_MAX, &uct_rc_flush_comp_mpool_ops,
+                            "flush-comps-only");
+
+    return status;
 }
 
 static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
@@ -522,6 +549,8 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
                  total_count- free_count, total_count);
     }
     ucs_free(iface->tx.ops_buffer);
+
+    ucs_mpool_cleanup(&iface->tx.flush_mp, 1);
 }
 
 #if IBV_EXP_HW_TM
