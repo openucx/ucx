@@ -995,10 +995,12 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
      */
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
+        UCT_TL_EP_STAT_PEND(&ep->super);
         return UCS_OK;
     }
 
     uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
+    UCT_TL_EP_STAT_PEND(&ep->super);
     return UCS_OK;
 }
 

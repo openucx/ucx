@@ -21,6 +21,7 @@ ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_ugni_enter_async(iface);
     uct_pending_req_arb_group_push(&ep->arb_group, n);
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
+    UCT_TL_EP_STAT_PEND(&ep->super);
     uct_ugni_leave_async(iface);
     return UCS_OK;
 }

@@ -212,6 +212,7 @@ ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
         uct_cm_pending_req_priv(req)->ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
         uct_pending_req_queue_push(&iface->notify_q, req);
         status = UCS_OK;
+        UCT_TL_EP_STAT_PEND(ucs_derived_of(tl_ep, uct_base_ep_t));
     }
     uct_cm_leave(iface);
     return status;

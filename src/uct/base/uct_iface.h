@@ -36,6 +36,7 @@ enum {
     UCT_EP_STAT_NO_RES,
     UCT_EP_STAT_FLUSH,
     UCT_EP_STAT_FLUSH_WAIT,  /* number of times flush called while in progress */
+    UCT_EP_STAT_PENDING,
     UCT_EP_STAT_FENCE,
     UCT_EP_STAT_LAST
 };
@@ -69,6 +70,8 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH_WAIT, 1);
 #define UCT_TL_EP_STAT_FENCE(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FENCE, 1);
+#define UCT_TL_EP_STAT_PEND(_ep) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_PENDING, 1);
 
 #define UCT_TL_IFACE_STAT_FLUSH(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH, 1);
