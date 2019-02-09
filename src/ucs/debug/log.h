@@ -116,6 +116,12 @@ void ucs_log_flush();
 
 
 /**
+ * @return Configured log buffer size
+ */
+size_t ucs_log_get_buffer_size();
+
+
+/**
  * Default log handler, which prints the message to the output configured in
  * UCS global options. See @ref ucs_log_func_t.
  */

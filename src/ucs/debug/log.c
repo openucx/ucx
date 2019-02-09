@@ -85,12 +85,17 @@ void ucs_log_flush()
     }
 }
 
+size_t ucs_log_get_buffer_size()
+{
+    return ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
+                                   256, 2048);
+}
+
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
                         ucs_log_level_t level, const char *format, va_list ap)
 {
-    size_t buffer_size = ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
-                                                 256, 2048);
+    size_t buffer_size = ucs_log_get_buffer_size();
     const char *short_file;
     struct timeval tv;
     char *valg_buf;
@@ -178,7 +183,7 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
 
 void ucs_log_fatal_error(const char *format, ...)
 {
-    size_t buffer_size = ucs_global_opts.log_buffer_size;
+    size_t buffer_size = ucs_log_get_buffer_size();
     FILE *stream = stderr;
     char *buffer, *p;
     va_list ap;

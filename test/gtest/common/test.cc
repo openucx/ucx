@@ -140,8 +140,9 @@ test_base::count_warns_logger(const char *file, unsigned line, const char *funct
 
 std::string test_base::format_message(const char *message, va_list ap)
 {
-    char buf[ucs_global_opts.log_buffer_size];
-    vsnprintf(buf, ucs_global_opts.log_buffer_size, message, ap);
+    const size_t buffer_size = ucs_log_get_buffer_size();
+    char buf[buffer_size];
+    vsnprintf(buf, buffer_size, message, ap);
     return std::string(buf);
 }
 
