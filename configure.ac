@@ -19,6 +19,7 @@ define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 define([libucx_so_version], 0:0:0)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
+: ${CPPFLAGS=""}
 : ${CFLAGS=""}
 : ${CXXFLAGS=""}
 config_flags="$*"
