@@ -286,7 +286,7 @@ DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 # Print which transports are built
 #
 AC_MSG_NOTICE([Supported transports: $transports])
-AC_SUBST([build_modules], [${uct_modules}])
+AC_SUBST([build_modules], [${uct_modules}${uct_ib_modules}])
 
 #
 # Final output
@@ -341,5 +341,6 @@ AC_MSG_NOTICE([Building documents only])
 [
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      UCT modules:    <$(echo $uct_modules|tr ':' ' ') >])
+AC_MSG_NOTICE([        IB modules:   <$(echo $uct_ib_modules|tr ':' ' ') >])
 ])
 AC_MSG_NOTICE([=========================================================])

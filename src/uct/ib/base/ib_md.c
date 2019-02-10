@@ -12,6 +12,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <ucm/api/ucm.h>
 #include <pthread.h>
@@ -1158,10 +1159,13 @@ void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *devic
 static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p)
 {
+    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
+
+    UCS_MODULE_FRAMEWORK_LOAD(uct_ib);
 
     /* Get device list from driver */
     device_list = ibv_get_device_list(&num_devices);

@@ -71,17 +71,21 @@ if [ $opt_binrpm -eq 1 ]; then
 
 	with_arg() {
 		module=$1
-		if echo ${build_modules} | tr ':' '\n' | grep -q ${module}
+		with_arg=${2:-$module}
+		if echo ${build_modules} | tr ':' '\n' | grep -q "^${module}$"
 		then
-			echo "--with ${module}"
+			echo "--with ${with_arg}"
 		else
-			echo "--without ${module}"
+			echo "--without ${with_arg}"
 		fi
 	}
 
 	with_args=""
+	with_args+=" $(with_arg cm ib_cm)"
 	with_args+=" $(with_arg cma)"
+	with_args+=" $(with_arg ib)"
 	with_args+=" $(with_arg knem)"
+	with_args+=" $(with_arg rdmacm)"
 	with_args+=" $(with_arg xpmem)"
 
 	echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines $with_args | bash -eEx

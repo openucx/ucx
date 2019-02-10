@@ -181,7 +181,10 @@ if HAVE_RDMACM
 gtest_SOURCES += \
 	uct/ib/test_sockaddr.cc
 endif
-endif
+gtest_LDADD += \
+	$(top_builddir)/src/uct/ib/libuct_ib.la
+endif # HAVE_IB
+
 if HAVE_CUDA
 gtest_SOURCES += \
 	ucm/cuda_hooks.cc

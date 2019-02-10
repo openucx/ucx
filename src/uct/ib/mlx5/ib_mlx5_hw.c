@@ -27,7 +27,7 @@ static void UCS_F_MAYBE_UNUSED uct_ib_mlx5_obj_error(const char *obj_name)
 {
     ucs_error("Failed to get mlx5 %s information. Please make sure the installed "
               "libmlx5 version matches the one UCX was compiled with (%s)",
-              obj_name, LIB_MLX5_VER);
+              obj_name, UCT_IB_LIBMLX5_VER);
 }
 
 #if !HAVE_DECL_MLX5DV_INIT_OBJ
