@@ -305,6 +305,15 @@ size_t ucs_get_shmmax();
 
 
 /**
+ * Return effective capabilities of the current thread.
+ *
+ * @param effective  Filled with thread's effective capabilities.
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective);
+
+
+/**
  * Allocate or re-allocate memory from the operating system.
  *
  * @param [in]  old_ptr     Pointer to existing block, may be NULL. If non-NULL,

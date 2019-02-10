@@ -547,7 +547,7 @@ static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
     }
 }
 
-static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
+ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 {
 #if HAVE_SYS_CAPABILITY_H
     cap_user_header_t hdr = ucs_alloca(sizeof(*hdr));
@@ -557,17 +557,33 @@ static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
     hdr->pid     = 0; /* current thread */
     hdr->version = _LINUX_CAPABILITY_VERSION_3;
     ret = capget(hdr, data);
-    if (ret == 0) {
-        UCS_STATIC_ASSERT(CAP_IPC_LOCK < 32); /* we check this bit in data[0] */
-        if (!(data->effective & UCS_BIT(CAP_IPC_LOCK))) {
-            /* detected missing CAP_IPC_LOCK */
-            snprintf(buf, max, ", CAP_IPC_LOCK privilege is needed for SHM_HUGETLB");
-        }
-        return;
+    if (ret) {
+        ucs_debug("capget(pid=%d version=0x%x) failed: %m", hdr->pid,
+                  hdr->version);
+        return UCS_ERR_IO_ERROR;
+
     }
 
-    /* log error and fallback to speculative error message */
-    ucs_debug("capget(pid=%d version=0x%x) failed: %m", hdr->pid, hdr->version);
+    *effective = data->effective;
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
+{
+#if HAVE_SYS_CAPABILITY_H
+    ucs_status_t status;
+    uint32_t ecap;
+
+    UCS_STATIC_ASSERT(CAP_IPC_LOCK < 32);
+    status = ucs_sys_get_proc_cap(&ecap);
+    if ((status == UCS_OK) && !(ecap & UCS_BIT(CAP_IPC_LOCK))) {
+        /* detected missing CAP_IPC_LOCK */
+        snprintf(buf, max, ", CAP_IPC_LOCK privilege is needed for SHM_HUGETLB");
+        return;
+    }
 #endif
 
     snprintf(buf, max,
