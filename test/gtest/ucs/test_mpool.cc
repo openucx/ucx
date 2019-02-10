@@ -24,11 +24,28 @@ protected:
         free(chunk);
     }
 
+    static ucs_log_func_rc_t
+    mpool_log_handler(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level, const char *message, va_list ap)
+    {
+        // Ignore errors that invalid input parameters as it is expected
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            std::string exp_str = "Invalid memory pool parameter(s)";
+
+            if (err_str == exp_str) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
     static const size_t header_size = 30;
     static const size_t data_size = 152;
     static const size_t align = 128;
 };
-
 
 UCS_TEST_F(test_mpool, no_allocs) {
     ucs_mpool_t mp;
@@ -42,9 +59,20 @@ UCS_TEST_F(test_mpool, no_allocs) {
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                             6, 18, &ops, "test");
+                            6, 18, &ops, "test");
     ASSERT_UCS_OK(status);
     ucs_mpool_cleanup(&mp, 1);
+}
+
+UCS_TEST_F(test_mpool, wrong_ops) {
+    ucs_mpool_t mp;
+    ucs_status_t status;
+    ucs_mpool_ops_t ops = { 0 };
+    scoped_log_handler log_handler(mpool_log_handler);
+
+    status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
+                            6, 18, &ops, "test");
+    EXPECT_TRUE(status == UCS_ERR_INVALID_PARAM);
 }
 
 UCS_TEST_F(test_mpool, basic) {
@@ -69,7 +97,7 @@ UCS_TEST_F(test_mpool, basic) {
         }
 #endif
         status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                                 6, 18, &ops, "test");
+                                6, 18, &ops, "test");
         ASSERT_UCS_OK(status);
 
         for (unsigned loop = 0; loop < 10; ++loop) {
