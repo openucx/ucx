@@ -561,7 +561,13 @@ UCS_TEST_P(test_async, modify_event) {
     ucs_async_modify_handler(le.event_id(), POLLIN);
     count = le.count();
     le.push_event();
-    suspend_and_poll(&le, COUNT);
+    for (int i = 0; i < TIMER_RETRIES; ++i) {
+        suspend_and_poll(&le, 1);
+        if (le.count() > count) {
+            break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (i + 1);
+    }
     EXPECT_GT(le.count(), count);
 
     ucs_async_modify_handler(le.event_id(), 0);
