@@ -13,6 +13,7 @@
 #include "sys.h"
 
 #include <string.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -163,4 +164,24 @@ char* ucs_strncpy_safe(char *dst, const char *src, size_t len)
     return dst;
 }
 
+char *ucs_strtrim(char *str)
+{
+    char *start, *end;
 
+    /* point 'p' at first non-space character */
+    start = str;
+    while (isspace(*start)) {
+        ++start;
+    }
+
+    if (*start) {
+        /* write '\0' after the last non-space character */
+        end = start + strlen(start) - 1;
+        while (isspace(*end)) {
+            --end;
+        }
+        *(end + 1) = '\0';
+    }
+
+    return start;
+}
