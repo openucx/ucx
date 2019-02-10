@@ -53,19 +53,19 @@ following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
 
 %package devel
 Requires: %{name}%{?_isa} = %{version}-%{release}
-Summary: Header files required to develop with UCX
+Summary: Header files required for developing with UCX
 Group: Development/Libraries
 
 %package static
 Requires: %{name}-devel = %{version}-%{release}
-Summary: Static libraries required to develop with UCX
+Summary: Static libraries required for developing with UCX
 Group: Development/Libraries
 
 %description devel
 Provides header files and examples for developing with UCX.
 
 %description static
-Provides static libraries required for development with UCX.
+Provides static libraries required for developing with UCX.
 
 %prep
 %setup -q
@@ -169,8 +169,8 @@ Group: System Environment/Libraries
 
 %description knem
 Provides KNEM (fast inter-process copy) transport for UCX. KNEM is a Linux
-kernel module enabling high-performance intra-node MPI communication for large
-messages.
+kernel module that enables high-performance intra-node MPI communication
+for large messages.
 
 %files knem
 %{_libdir}/ucx/libuct_knem.so.*
