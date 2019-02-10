@@ -33,7 +33,6 @@ Tested configurations:
 - CUDA: gdrcopy 1.2, cuda 9.1.85
 - XPMEM: 2.6.2
 - KNEM: 1.1.2
-- Multiple bugfixes (full list on github)
 
 ## 1.4.0 (October 23, 2018)
 
