@@ -675,9 +675,9 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
+        ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
         status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super.super,
-                                  UCT_IB_QPT_DCI, &cap
-                                  UCS_STATS_ARG(iface->super.super.stats));
+                                  &cap UCS_STATS_ARG(iface->super.super.stats));
         if (status != UCS_OK) {
             goto err;
         }
@@ -1085,6 +1085,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     init_attr.res_domain_key = UCT_IB_MLX5_RES_DOMAIN_KEY;
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_DC;
+    init_attr.qp_type        = UCT_IB_QPT_DCI;
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.fc_req_size    = sizeof(uct_dc_fc_request_t);
     init_attr.rx_hdr_len     = sizeof(uct_rc_mlx5_hdr_t);

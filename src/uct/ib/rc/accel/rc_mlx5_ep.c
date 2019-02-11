@@ -821,7 +821,7 @@ static ucs_status_t uct_rc_mlx5_ep_tag_qp_create(uct_rc_mlx5_iface_common_t *ifa
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
-        status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp, &cap, 0);
+        status = uct_rc_iface_qp_create(&iface->super, &ep->tm_qp, &cap, 0);
         if (status != UCS_OK) {
             return status;
         }

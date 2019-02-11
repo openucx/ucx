@@ -192,7 +192,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
     wqe_ctr = ntohs(cqe->wqe_counter);
     seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
 
-    uct_ib_mlx5_log_rx(&iface->super.super, IBV_QPT_RC, cqe, hdr,
+    uct_ib_mlx5_log_rx(&iface->super.super, cqe, hdr,
                        uct_rc_mlx5_common_packet_dump);
 
     if (ucs_unlikely(hdr->rc_hdr.am_id & UCT_RC_EP_FC_MASK)) {
@@ -236,14 +236,16 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                                  txqp->qp->qp_num, fm_ce_se, wqe_size);
     }
 
+    ucs_assert(qp_type == iface->super.super.config.qp_type);
+
 #if HAVE_TL_DC
     if (qp_type == UCT_IB_QPT_DCI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
 #endif
 
-    uct_ib_mlx5_log_tx(&iface->super.super, qp_type, ctrl, txwq->qstart,
-                       txwq->qend, max_log_sge, log_sge,
+    uct_ib_mlx5_log_tx(&iface->super.super, ctrl, txwq->qstart, txwq->qend,
+                       max_log_sge, log_sge,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
 

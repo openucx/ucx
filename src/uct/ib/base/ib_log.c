@@ -86,9 +86,9 @@ void uct_ib_log_dump_atomic_masked_cswap(int argsize, uint64_t compare, uint64_t
              argsize * 8, compare, compare_mask, swap, swap_mask);
 }
 
-void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, int qp_type,
-                                     uint32_t local_qp, uint32_t sender_qp,
-                                     uint16_t sender_lid, void *data, size_t length,
+void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
+                                     uint32_t sender_qp, uint16_t sender_lid,
+                                     void *data, size_t length,
                                      uct_log_data_dump_func_t data_dump,
                                      char *buf, size_t max)
 {
@@ -98,7 +98,7 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, int qp_type,
     snprintf(s, ends - s, "RECV qp 0x%x", local_qp);
     s += strlen(s);
 
-    if (qp_type == IBV_QPT_UD) {
+    if (iface->config.qp_type == IBV_QPT_UD) {
         snprintf(s, ends - s, " [slid %d sqp 0x%x]", sender_lid, sender_qp);
         s += strlen(s);
     }
@@ -200,20 +200,20 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
 }
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
-                                  uct_ib_iface_t *iface, int qp_type,
-                                  uint32_t l_qp, uint32_t r_qp, uint16_t slid,
-                                  void *data, size_t length,
+                                  uct_ib_iface_t *iface, uint32_t l_qp,
+                                  uint32_t r_qp, uint16_t slid, void *data,
+                                  size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
     size_t len;
 
     len = length;
-    if (qp_type == IBV_QPT_UD) {
+    if (iface->config.qp_type == IBV_QPT_UD) {
         len  -= UCT_IB_GRH_LEN;
         data += UCT_IB_GRH_LEN;
     }
-    uct_ib_log_dump_recv_completion(iface, qp_type, l_qp, r_qp, slid, data, len,
+    uct_ib_log_dump_recv_completion(iface, l_qp, r_qp, slid, data, len,
                                     packet_dump_cb, buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }

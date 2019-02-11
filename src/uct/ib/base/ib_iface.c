@@ -884,8 +884,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.sl                 = config->sl;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
-
     self->config.enable_res_domain  = config->enable_res_domain;
+    self->config.qp_type            = init_attr->qp_type;
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");
