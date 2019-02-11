@@ -8,6 +8,9 @@
 #ifndef UCT_IB_MLX5_H_
 #define UCT_IB_MLX5_H_
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
@@ -124,12 +127,15 @@ enum {
     UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0)    /* Device supports KSM */
 };
 
+struct uct_ib_mlx5_db_page;
+
 /**
  * MLX5 IB memory domain.
  */
 typedef struct uct_ib_mlx5_md {
-    uct_ib_md_t              super;
-    uint32_t                 flags;
+    uct_ib_md_t                super;
+    uint32_t                   flags;
+    struct uct_ib_mlx5_db_page *db_list;
 } uct_ib_mlx5_md_t;
 
 
@@ -306,6 +312,13 @@ ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
                                    size_t *inl, struct ibv_cq **cq_p);
 
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
+
+/**
+ * Initialize srq structure.
+ */
+void *uct_ib_mlx5_alloc_dbrec(uct_ib_device_t *dev, uint32_t *mem_id, size_t *off);
+
+void uct_ib_mlx5_free_dbrec(uct_ib_device_t *dev, void *db);
 
 /**
  * Get internal CQ information.

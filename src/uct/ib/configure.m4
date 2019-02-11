@@ -402,6 +402,7 @@ AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])
+AM_CONDITIONAL([HAVE_DEVX],    [test "x$ac_cv_have_decl_MLX5DV_CONTEXT_FLAGS_DEVX" != xno])
 
 uct_ib_modules=""
 m4_include([src/uct/ib/cm/configure.m4])
