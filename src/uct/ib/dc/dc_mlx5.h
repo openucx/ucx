@@ -156,11 +156,14 @@ struct uct_dc_mlx5_iface {
 
     } tx;
 
-#if HAVE_DC_EXP
-    struct ibv_exp_dct            *rx_dct;
-#elif HAVE_DC_DV
-    struct ibv_qp                 *rx_dct;
+    struct {
+        uint32_t                  dct_num;
+#if HAVE_DC_DV
+        struct ibv_qp             *dct;
+#elif HAVE_DC_EXP
+        struct ibv_exp_dct        *dct;
 #endif
+    } rx;
 
     uint8_t                       version_flag;
 
@@ -203,8 +206,6 @@ void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
                                     uct_ib_mlx5_base_av_t *av,
                                     uint32_t remote_dctn);
 
-int uct_dc_mlx5_get_dct_num(uct_dc_mlx5_iface_t *iface);
-
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
@@ -216,13 +217,9 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 
-#if IBV_EXP_HW_TM_DC
-void uct_dc_mlx5_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
-                                           struct ibv_exp_create_srq_attr *srq_attr,
-                                           struct ibv_exp_srq_dc_offload_params *dc_op);
-
+#if IBV_HW_TM_DC
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
+uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 {
     ravh->sl_dct        = htobe32(dct_num);
     ravh->dc_access_key = htobe64(UCT_IB_KEY);

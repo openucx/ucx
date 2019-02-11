@@ -199,6 +199,12 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #if IBV_HW_TM
 #  if HAVE_INFINIBAND_TM_TYPES_H
 #    include <infiniband/tm_types.h>
+struct ibv_ravh {
+    uint32_t    sl_dct;
+    uint32_t    reserved;    /* must be zero */
+    uint64_t    dc_access_key;
+};
+#    define IBV_TM_CAP_DC                   UCS_BIT(16)
 #  else
 #    define ibv_tmh                         ibv_exp_tmh
 #    define ibv_rvh                         ibv_exp_tmh_rvh
@@ -222,7 +228,10 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_TM_CAP_DC                     0
 #endif
 
-#ifndef IBV_EXP_HW_TM_DC
+#if IBV_HW_TM_DC
+#  define UCT_DC_RNDV_HDR_LEN               (sizeof(struct ibv_rvh) + sizeof(struct ibv_ravh))
+#else
+#  define UCT_DC_RNDV_HDR_LEN               0
 #  define IBV_EXP_TM_CAP_DC                 0
 #endif
 
