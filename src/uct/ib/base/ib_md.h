@@ -78,6 +78,10 @@ typedef struct uct_ib_mem {
 struct uct_ib_md;
 
 typedef struct uct_ib_md_ops {
+    ucs_status_t            (*open)(struct ibv_device *ibv_device,
+                                    struct uct_ib_md **p_md);
+    void                    (*cleanup)(struct uct_ib_md *);
+
     size_t                  memh_struct_size;
     ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
                                               uct_ib_mem_t *memh,
@@ -154,22 +158,21 @@ typedef struct uct_ib_rcache_region {
  * - setup atomic MR ops
  * - determine device attributes and flags
  */
-typedef struct uct_ib_md_open_entry {
+typedef struct uct_ib_md_ops_entry {
     ucs_list_link_t             list;
-    ucs_status_t                (*md_open)(struct ibv_device *ibv_device,
-                                           uct_ib_md_t **p_md);
-} uct_ib_md_open_entry_t;
+    uct_ib_md_ops_t             *ops;
+} uct_ib_md_ops_entry_t;
 
-#define UCT_IB_MD_OPEN(_open_fn, _priority) \
+#define UCT_IB_MD_OPS(_md_ops, _priority) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_ib_md_open_list; \
-        static uct_ib_md_open_entry_t entry = { \
-            .md_open = _open_fn, \
+        extern ucs_list_link_t uct_ib_md_ops_list; \
+        static uct_ib_md_ops_entry_t entry = { \
+            .ops = &_md_ops, \
         }; \
         if (_priority) { \
-            ucs_list_add_head(&uct_ib_md_open_list, &entry.list); \
+            ucs_list_add_head(&uct_ib_md_ops_list, &entry.list); \
         } else { \
-            ucs_list_add_tail(&uct_ib_md_open_list, &entry.list); \
+            ucs_list_add_tail(&uct_ib_md_ops_list, &entry.list); \
         } \
     }
 

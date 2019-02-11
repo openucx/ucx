@@ -31,4 +31,13 @@ public:
     }
 };
 
+UCS_TEST_P(test_devx, dbrec)
+{
+    uct_ib_mlx5_dbrec_t *dbrec;
+
+    dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md()->dbrec_pool);
+    ASSERT_FALSE(dbrec == NULL);
+    ucs_mpool_put_inline(dbrec);
+}
+
 UCT_INSTANTIATE_IB_TEST_CASE(test_devx);

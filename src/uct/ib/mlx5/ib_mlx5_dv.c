@@ -14,6 +14,12 @@ typedef struct uct_ib_mlx5_mem {
     struct mlx5dv_devx_obj   *atomic_dvmr;
 } uct_ib_mlx5_mem_t;
 
+
+typedef struct uct_ib_mlx5_dbrec_page {
+    struct mlx5dv_devx_umem *mem;
+} uct_ib_mlx5_dbrec_page_t;
+
+
 #if HAVE_DECL_MLX5DV_INIT_OBJ
 ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 {
@@ -131,10 +137,54 @@ static ucs_status_t uct_ib_mlx5dv_memh_dereg(uct_ib_md_t *ibmd,
     return UCS_OK;
 }
 
-static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
-    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key   = uct_ib_mlx5dv_create_ksm,
-    .dereg_atomic_key = uct_ib_mlx5dv_memh_dereg,
+static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void **page_p)
+{
+    uct_ib_mlx5_md_t *md = ucs_container_of(mp, uct_ib_mlx5_md_t, dbrec_pool);
+    uintptr_t ps = ucs_get_page_size();
+    uct_ib_mlx5_dbrec_page_t *page;
+    size_t size = ucs_align_up(*size_p + sizeof(*page), ps);
+
+    page = ucs_memalign(ps, size, "devx dbrec page");
+    if (page == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    page->mem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, page, size,
+                                     IBV_ACCESS_LOCAL_WRITE);
+    if (page->mem == NULL) {
+        goto err;
+    }
+
+    *size_p = size;
+    *page_p = page + 1;
+    return UCS_OK;
+
+err:
+    ucs_free(page);
+    return UCS_ERR_IO_ERROR;
+}
+
+static void uct_ib_mlx5_init_dbrec(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    uct_ib_mlx5_dbrec_page_t *page = chunk - sizeof(*page);
+    uct_ib_mlx5_dbrec_t *dbrec     = obj;
+
+    dbrec->mem_id = page->mem->umem_id;
+    dbrec->offset = obj - chunk + sizeof(*page);
+}
+
+static void uct_ib_mlx5_free_page(ucs_mpool_t *mp, void *chunk)
+{
+    uct_ib_mlx5_dbrec_page_t *page = chunk - sizeof(*page);
+    mlx5dv_devx_umem_dereg(page->mem);
+    ucs_free(page);
+}
+
+static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
+    .chunk_alloc   = uct_ib_mlx5_add_page,
+    .chunk_release = uct_ib_mlx5_free_page,
+    .obj_init      = uct_ib_mlx5_init_dbrec,
+    .obj_cleanup   = NULL
 };
 
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
@@ -171,7 +221,6 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    md->super.ops    = &uct_ib_mlx5dv_md_ops;
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
 
@@ -209,6 +258,15 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     } else {
         status = UCS_ERR_UNSUPPORTED;
+        goto err_free;
+    }
+
+    status = ucs_mpool_init(&md->dbrec_pool, 0,
+                            sizeof(uct_ib_mlx5_dbrec_t), 0,
+                            UCS_SYS_CACHE_LINE_SIZE,
+                            ucs_get_page_size() / UCS_SYS_CACHE_LINE_SIZE - 1,
+                            UINT_MAX, &uct_ib_mlx5_dbrec_ops, "devx dbrec");
+    if (status != UCS_OK) {
         goto err_free;
     }
 
@@ -268,18 +326,30 @@ err:
     return status;
 }
 
+void uct_ib_mlx5dv_md_cleanup(uct_ib_md_t *ibmd)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
+
+    ucs_mpool_cleanup(&md->dbrec_pool, 1);
+}
+
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     *compact_av = !!(uct_ib_iface_device(iface)->flags & UCT_IB_DEVICE_FLAG_AV);
     return UCS_OK;
 }
 
-#elif HAVE_DC_DV
-
-static uct_ib_md_ops_t uct_ib_mlx5dv_md_no_ops = {
-    .memh_struct_size  = sizeof(uct_ib_mem_t),
-    .reg_atomic_key   = (void *)ucs_empty_function_return_unsupported
+static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
+    .open             = uct_ib_mlx5dv_md_open,
+    .cleanup          = uct_ib_mlx5dv_md_cleanup,
+    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key   = uct_ib_mlx5dv_create_ksm,
+    .dereg_atomic_key = uct_ib_mlx5dv_memh_dereg,
 };
+
+UCT_IB_MD_OPS(uct_ib_mlx5dv_md_ops, 1);
+
+#elif HAVE_DC_DV
 
 static ucs_status_t uct_ib_mlx5_check_dc(uct_ib_device_t *dev)
 {
@@ -393,7 +463,6 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    md->super.ops    = &uct_ib_mlx5dv_md_no_ops;
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
 
@@ -422,9 +491,16 @@ err:
     return status;
 }
 
-#endif
+static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
+    .open             = uct_ib_mlx5dv_md_open,
+    .cleanup          = (void*)ucs_empty_function,
+    .memh_struct_size = sizeof(uct_ib_mem_t),
+    .reg_atomic_key   = (void *)ucs_empty_function_return_unsupported,
+};
 
-UCT_IB_MD_OPEN(uct_ib_mlx5dv_md_open, 1);
+UCT_IB_MD_OPS(uct_ib_mlx5dv_md_ops, 1);
+
+#endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {

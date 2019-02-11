@@ -132,6 +132,7 @@ enum {
 typedef struct uct_ib_mlx5_md {
     uct_ib_md_t              super;
     uint32_t                 flags;
+    ucs_mpool_t              dbrec_pool;
 } uct_ib_mlx5_md_t;
 
 
@@ -156,6 +157,16 @@ typedef struct uct_ib_mlx5_iface_config {
 #endif
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
 } uct_ib_mlx5_iface_config_t;
+
+
+/**
+ * MLX5 DoorBell record
+ */
+typedef struct uct_ib_mlx5_dbrec {
+   volatile uint32_t  db[2];
+   uint32_t           mem_id;
+   size_t             offset;
+} uct_ib_mlx5_dbrec_t;
 
 
 /* Shared receive queue */
