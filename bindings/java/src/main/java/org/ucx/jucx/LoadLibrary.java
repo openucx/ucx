@@ -32,7 +32,7 @@ public class LoadLibrary {
         File file = null;
         try { // Extract shared object's content to a generated temp file
             file = extractResource(url);
-        } catch (IOException e) {
+        } catch (IOException ex) {
             errorMessage = "Native code library failed to extract URL: " + url;
             return;
         }
@@ -41,7 +41,7 @@ public class LoadLibrary {
             String filename = file.getAbsolutePath();
             try { // Load shared object to JVM
                 System.load(filename);
-            } catch (UnsatisfiedLinkError e) {
+            } catch (UnsatisfiedLinkError ex) {
                 errorMessage = "Native code library failed to load: "
                                + resourceName;
             }
@@ -66,7 +66,7 @@ public class LoadLibrary {
 
         try {
             createTempDir();
-        } catch (IOException e) {
+        } catch (IOException ex) {
             errorMessage = "Failed to create temp directory";
             return null;
         }
@@ -95,8 +95,8 @@ public class LoadLibrary {
      */
     public static void createTempDir() throws IOException {
         if (tempDir == null) {
-            Path p = Files.createTempDirectory("jucx");
-            tempDir = p.toFile();
+            Path tmp = Files.createTempDirectory("jucx");
+            tempDir = tmp.toFile();
             tempDir.deleteOnExit();
         }
     }
@@ -120,13 +120,13 @@ public class LoadLibrary {
      * Helper function to close InputStream or OutputStream in a quiet way
      * which hides the exceptions.
      */
-    public static void closeQuietly(Closeable c) {
-        if (c == null) {
+    public static void closeQuietly(Closeable closable) {
+        if (closable == null) {
             return;
         }
         try {
-            c.close();
-        } catch (IOException e) {
+            closable.close();
+        } catch (IOException ex) {
             // No logging in this 'Quiet Close' method
         }
     }
