@@ -6,32 +6,26 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = base ib sm
+SUBDIRS = base ib sm tcp
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_ladir       = $(includedir)/uct
+libuct_la_SOURCES  =
+noinst_HEADERS     =
 libuct_la_LIBADD   = \
 	../ucs/libucs.la \
 	base/libuct_base.la \
-	sm/libuct_sm.la
+	sm/libuct_sm.la \
+	tcp/libuct_tcp.la
 
 nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
 	api/version.h
-
-noinst_HEADERS = \
-	tcp/tcp.h
-
-libuct_la_SOURCES = \
-	tcp/tcp_ep.c \
-	tcp/tcp_iface.c \
-	tcp/tcp_md.c \
-	tcp/tcp_net.c
 
 if HAVE_CRAY_UGNI 
 libuct_la_CFLAGS   += $(CRAY_UGNI_CFLAGS)
