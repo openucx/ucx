@@ -648,3 +648,18 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
     ucs_assertv_always(srq->tail == srq_info.dv.tail, "srq->tail=%d srq_info.tail=%d",
                        srq->tail, srq_info.dv.tail);
 }
+
+uint32_t uct_ib_mlx5_tm_flags(uct_ib_device_t *dev)
+{
+    uint32_t flags = 0;
+
+#if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+    flags = dev->dev_attr.tm_caps.flags;
+    if (dev->flags & UCT_IB_DEVICE_FLAG_DC_TM) {
+        flags |= IBV_TM_CAP_DC;
+    }
+#elif IBV_HW_TM
+    flags = dev->dev_attr.tm_caps.capability_flags;
+#endif
+    return flags;
+}

@@ -122,6 +122,8 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
                                   sizeof(struct mlx5_wqe_data_seg))
 
+#define UCT_IB_MLX5_XRQ_MIN_UWQ_POST 33
+
 
 enum {
     UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0),   /* Device supports KSM */
@@ -257,7 +259,12 @@ typedef struct uct_ib_mlx5_qp {
     uint32_t                           qp_num;
     union {
         struct {
-            struct ibv_qp              *qp;
+            union {
+                struct ibv_qp          *qp;
+#if HAVE_DC_EXP
+                struct ibv_exp_dct     *dct;
+#endif
+            };
             uct_ib_mlx5_res_domain_t   *rd;
         } verbs;
 #if HAVE_DEVX
@@ -482,6 +489,11 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count);
 
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
+
+/**
+ * Portable DC TM wrapper
+ */
+uint32_t uct_ib_mlx5_tm_flags(uct_ib_device_t *dev);
 
 /**
  * DEVX UAR API

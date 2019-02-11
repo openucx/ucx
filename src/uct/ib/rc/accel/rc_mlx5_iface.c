@@ -331,7 +331,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
 {
 #if IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    uint32_t cap_flags                = IBV_DEVICE_TM_FLAGS(dev);
+    uint32_t cap_flags                = uct_ib_mlx5_tm_flags(dev);
     struct ibv_tmh tmh;
 
     iface->tm.enabled = mlx5_config->tm.enable && (cap_flags & init_attr->tm_cap_bit);
@@ -392,12 +392,13 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
-    struct ibv_exp_create_srq_attr srq_attr = {};
+    struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
-            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0);
+            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0,
+                                                 UCT_RC_RNDV_HDR_LEN);
         } else {
             status = uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_attr,
                                             UCT_RC_RNDV_HDR_LEN);

@@ -16,7 +16,7 @@
 ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
-                            int dc)
+                            int dc, unsigned rndv_hdr_len)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_ib_iface_md(&iface->super.super), uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = &md->super.dev;
@@ -29,9 +29,9 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     void *xrqc, *wq;
     int len, ret, max;
 
-    uct_rc_mlx5_init_rx_tm_common(iface, sizeof(struct ibv_rvh));
+    uct_rc_mlx5_init_rx_tm_common(iface, rndv_hdr_len);
 
-    max = ucs_max(config->super.rx.queue_len, IBV_DEVICE_MIN_UWQ_POST);
+    max = ucs_max(config->super.rx.queue_len, UCT_IB_MLX5_XRQ_MIN_UWQ_POST);
     max = ucs_roundup_pow2(max);
     len = max * UCT_IB_MLX5_SRQ_STRIDE;
     ret = posix_memalign(&iface->rx.srq.buf, ucs_get_page_size(), len);

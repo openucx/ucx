@@ -264,49 +264,23 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
 #endif
 
-/*
- * HW tag matching
- */
 #if IBV_HW_TM
 #  if HAVE_INFINIBAND_TM_TYPES_H
 #    include <infiniband/tm_types.h>
+#    define IBV_TM_CAP_DC                   UCS_BIT(16)
 #  else
-#    define ibv_tmh                         ibv_exp_tmh
-#    define ibv_rvh                         ibv_exp_tmh_rvh
-#    define ibv_ravh                        ibv_exp_tmh_ravh
-#    define IBV_TMH_EAGER                   IBV_EXP_TMH_EAGER
-#    define IBV_TMH_RNDV                    IBV_EXP_TMH_RNDV
-#    define IBV_TMH_FIN                     IBV_EXP_TMH_FIN
-#    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
 #    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
-#    define IBV_TM_CAP_DC                   IBV_EXP_TM_CAP_DC
+#    if IBV_HW_TM_DC
+#      define IBV_TM_CAP_DC                 IBV_EXP_TM_CAP_DC
+#    else
+#      define IBV_TM_CAP_DC                 0
+#    endif
 #  endif
-#  if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
-#    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.flags)
-#  else
-#    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.capability_flags)
-#  endif
-#  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
 #else
-#  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #  define IBV_TM_CAP_RC                     0
 #  define IBV_TM_CAP_DC                     0
 #endif
 
-#ifndef IBV_EXP_HW_TM_DC
-#  define IBV_EXP_TM_CAP_DC                 0
-#endif
-
-#define IBV_DEVICE_MAX_UNEXP_COUNT          UCS_BIT(14)
-#define IBV_DEVICE_MIN_UWQ_POST             33
-
-#if !HAVE_DECL_IBV_EXP_CREATE_SRQ
-#  if HAVE_DECL_IBV_CREATE_SRQ_EX
-#    define ibv_exp_create_srq_attr         ibv_srq_init_attr_ex
-#  else
-#    define ibv_exp_create_srq_attr         ibv_srq_init_attr
-#  endif
-#endif
 
 typedef uint8_t uct_ib_uint24_t[3];
 
