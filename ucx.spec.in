@@ -71,17 +71,19 @@ Provides static libraries required for developing with UCX.
 %setup -q
 
 %build
+%define _with_arg()   %{expand:%%{?with_%{1}:--with-%{2}}%%{!?with_%{1}:--without-%{2}}}
+%define _enable_arg() %{expand:%%{?with_%{1}:--enable-%{2}}%%{!?with_%{1}:--disable-%{2}}}
 %configure --disable-optimizations \
            --disable-logging \
            --disable-debug \
            --disable-assertions \
            --disable-params-check \
-           %{?with_cma:--enable-cma} %{!?with_cma:--disable-cma} \
-           %{?with_ib:--with-verbs} %{!?with_ib:--without-verbs} \
-           %{?with_ib_cm:--with-cm} %{!?with_ib_cm:--without-cm} \
-           %{?with_knem:--with-knem} %{!?with_knem:--without-knem} \
-           %{?with_rdmacm:--with-rdmacm} %{!?with_rdmacm:--without-rdmacm} \
-           %{?with_xpmem:--with-xpmem} %{!?with_xpmem:--without-xpmem} \
+           %_enable_arg cma cma \
+           %_with_arg ib verbs \
+           %_with_arg ib_cm cm \
+           %_with_arg knem knem \
+           %_with_arg rdmacm rdmacm \
+           %_with_arg xpmem xpmem \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
