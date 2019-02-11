@@ -15,11 +15,32 @@
 #include <string.h>
 
 
-void ucs_fatal_error(const char *error_type, const char *file, unsigned line,
-                     const char *function, const char *format, ...)
+void ucs_fatal_error_message(const char *file, unsigned line,
+                             const char *function, char *message_buf)
+{
+    char *message_line, *save_ptr = NULL;
+    const char *short_file;
+
+    ucs_log_flush();
+
+    short_file = strrchr(file, '/');
+    short_file = (short_file == NULL) ? file : short_file + 1;
+
+    message_line = (message_buf == NULL) ? NULL :
+                   strtok_r(message_buf, "\n", &save_ptr);
+    while (message_line != NULL) {
+        ucs_log_fatal_error("%13s:%-4u %s", short_file, line, message_line);
+        message_line = strtok_r(NULL, "\n", &save_ptr);
+    }
+
+    ucs_handle_error(message_buf);
+    abort();
+}
+
+void ucs_fatal_error_format(const char *file, unsigned line,
+                            const char *function, const char *format, ...)
 {
     size_t buffer_size = ucs_log_get_buffer_size();
-    const char *short_file;
     char *buffer;
     va_list ap;
 
@@ -28,10 +49,5 @@ void ucs_fatal_error(const char *error_type, const char *file, unsigned line,
     vsnprintf(buffer, buffer_size, format, ap);
     va_end(ap);
 
-    short_file = strrchr(file, '/');
-    short_file = (short_file == NULL) ? file : short_file + 1;
-    ucs_handle_error(error_type, "%13s:%-4u UCX %s", short_file, line, buffer);
-
-    abort();
+    ucs_fatal_error_message(file, line, function, buffer);
 }
-
