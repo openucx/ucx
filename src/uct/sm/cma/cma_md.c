@@ -54,7 +54,7 @@ static int uct_cma_test_ptrace_scope()
         int ret = prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
         if (!ret) {
             extra_info_str = ", enabled PR_SET_PTRACER_ANY";
-            cma_supported = 1;
+            cma_supported  = 1;
         } else {
             extra_info_str = " and prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY) failed";
         }
