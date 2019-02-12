@@ -47,6 +47,11 @@ typedef struct {
     struct mlx5_grh_av                  grh_av;
 } uct_dc_mlx5_grh_ep_t;
 
+typedef struct {
+    uct_pending_req_priv_arb_t arb;
+    uct_dc_mlx5_ep_t           *ep;
+} uct_dc_mlx5_pending_req_priv_t;
+
 
 UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *, const uct_dc_mlx5_iface_addr_t *,
                   uct_ib_mlx5_base_av_t *);
@@ -162,9 +167,14 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
                                       void *arg);
 
 ucs_arbiter_cb_result_t
-uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
-                                    ucs_arbiter_elem_t *elem,
-                                    void *arg);
+uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_elem_t *elem,
+                                        void *arg);
+
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_elem_t *elem,
+                                         void *arg);
 
 ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags);
@@ -174,17 +184,40 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
 
 void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep);
 
+static UCS_F_ALWAYS_INLINE uct_dc_mlx5_pending_req_priv_t *
+uct_dc_mlx5_pending_req_priv(uct_pending_req_t *req)
+{
+    return (uct_dc_mlx5_pending_req_priv_t *)&(req)->priv;
+}
+
 static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_iface_is_dci_rand(uct_dc_mlx5_iface_t *iface)
 {
     return iface->tx.policy == UCT_DC_TX_POLICY_RAND;
 }
 
-static UCS_F_ALWAYS_INLINE void uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface,
-                                                              uct_dc_mlx5_ep_t *ep)
+static UCS_F_ALWAYS_INLINE ucs_arbiter_group_t*
+uct_dc_mlx5_ep_rand_arb_group(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci) ||
-        uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
+    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface));
+    return &iface->tx.dcis[ep->dci].arb_group;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_arbiter_group_t*
+uct_dc_mlx5_ep_arb_group(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+{
+    return (uct_dc_mlx5_iface_is_dci_rand(iface)) ?
+            uct_dc_mlx5_ep_rand_arb_group(iface, ep) : &ep->arb_group;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+{
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
+                                   uct_dc_mlx5_ep_rand_arb_group(iface, ep));
+    } else if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
+        ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
+                                   &ep->arb_group);
     }
 }
 
@@ -246,7 +279,7 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface)
                                  uct_dc_mlx5_iface_dci_do_pending_wait, NULL);
         }
         ucs_arbiter_dispatch(uct_dc_mlx5_iface_tx_waitq(iface), 1,
-                             uct_dc_mlx5_iface_dci_do_pending_tx, NULL);
+                             iface->tx.pend_cb, NULL);
 
     } while (ucs_unlikely(!ucs_arbiter_is_empty(uct_dc_mlx5_iface_dci_waitq(iface)) &&
                            uct_dc_mlx5_iface_dci_can_alloc(iface)));

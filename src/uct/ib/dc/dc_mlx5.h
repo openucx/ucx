@@ -99,9 +99,16 @@ typedef enum {
 
 typedef struct uct_dc_dci {
     uct_rc_txqp_t                 txqp; /* DCI qp */
-    uct_dc_mlx5_ep_t              *ep;  /* points to an endpoint that currently
+    union {
+        uct_dc_mlx5_ep_t          *ep;  /* points to an endpoint that currently
                                            owns the dci. Relevant only for dcs
                                            and dcs quota policies. */
+        ucs_arbiter_group_t       arb_group; /* pending group, relevant for rand
+                                                policy. With rand, groups are not
+                                                descheduled until all elements
+                                                processed. Better have dci num
+                                                groups scheduled than ep num. */
+    };
 #if ENABLE_ASSERT
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
@@ -154,6 +161,7 @@ struct uct_dc_mlx5_iface {
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
 
+        ucs_arbiter_callback_t    pend_cb;
     } tx;
 
 #if HAVE_DC_EXP
