@@ -107,6 +107,7 @@ void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
                off_t offset, const char *name);
 int ucs_munmap(void *addr, size_t length);
 char *ucs_strdup(const char *src, const char *name);
+char *ucs_strndup(const char *src, size_t n, const char *name);
 
 #else
 
@@ -132,6 +133,7 @@ char *ucs_strdup(const char *src, const char *name);
 #define ucs_mmap(_a, _l, _p, _fl, _fd, _o, ...)    mmap(_a, _l, _p, _fl, _fd, _o)
 #define ucs_munmap(_a, _l)                         munmap(_a, _l)
 #define ucs_strdup(_src, ...)                      strdup(_src)
+#define ucs_strndup(_src, _n, ...)                 strndup(_src, _n)
 
 #endif /* ENABLE_MEMTRACK */
 

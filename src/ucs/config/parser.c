@@ -19,6 +19,7 @@
 #include <ucs/debug/debug.h>
 #include <ucs/time/time.h>
 #include <fnmatch.h>
+#include <ctype.h>
 
 
 /* configuration value which specifies "infinity" for a numeric variable */
@@ -78,6 +79,24 @@ static int __find_string_in_list(const char *str, const char **list)
         }
     }
     return -1;
+}
+
+static size_t ucs_config_parser_quantity_prefix_value(char prefix)
+{
+    switch (prefix) {
+    case 'B':
+        return 1;
+    case 'K':
+        return UCS_KBYTE;
+    case 'M':
+        return UCS_MBYTE;
+    case 'G':
+        return UCS_GBYTE;
+    case 'T':
+        return UCS_TBYTE;
+    default:
+        return 0;
+    }
 }
 
 int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg)
@@ -379,6 +398,112 @@ int ucs_config_sprintf_time(char *buf, size_t max, void *src, const void *arg)
     return 1;
 }
 
+int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
+{
+    double *dst     = (double*)dest;
+    char    str[16] = {0};
+    int     offset  = 0;
+    size_t  divider;
+    size_t  units;
+    double  value;
+    int     num_fields;
+
+    num_fields = sscanf(buf, "%lf%16s", &value, str);
+    if (num_fields < 2) {
+        return 0;
+    }
+
+    ucs_assert(num_fields == 2);
+
+    units = (str[0] == 'b') ? 1 : ucs_config_parser_quantity_prefix_value(str[0]);
+    if (!units) {
+        return 0;
+    }
+
+    offset = (units == 1) ? 0 : 1;
+
+    switch (str[offset]) {
+    case 'B':
+        divider = 1;
+        break;
+    case 'b':
+        divider = 8;
+        break;
+    default:
+        return 0;
+    }
+
+    offset++;
+    if (strcmp(str + offset, "ps") &&
+        strcmp(str + offset, "/s") &&
+        strcmp(str + offset, "s")) {
+        return 0;
+    }
+
+    ucs_assert((divider == 1) || (divider == 8)); /* bytes or bits */
+    *dst = value * units / divider;
+    return 1;
+}
+
+int ucs_config_sprintf_bw(char *buf, size_t max, void *src, const void *arg)
+{
+    double value = *(double*)src;
+    size_t len;
+
+    ucs_memunits_to_str((size_t)value, buf, max);
+    len = strlen(buf);
+    snprintf(buf + len, max - len, "Bps");
+    return 1;
+}
+
+int ucs_config_sscanf_bw_spec(const char *buf, void *dest, const void *arg)
+{
+    ucs_config_bw_spec_t *dst = (ucs_config_bw_spec_t*)dest;
+    char                 *delim;
+
+    delim = strchr(buf, ':');
+    if (!delim) {
+        return 0;
+    }
+
+    if (!ucs_config_sscanf_bw(delim + 1, &dst->bw, arg)) {
+        return 0;
+    }
+
+    dst->name = ucs_strndup(buf, delim - buf, __func__);
+    return dst->name != NULL;
+}
+
+int ucs_config_sprintf_bw_spec(char *buf, size_t max, void *src, const void *arg)
+{
+    ucs_config_bw_spec_t *bw  = (ucs_config_bw_spec_t*)src;
+    int                   len;
+
+    if (max) {
+        snprintf(buf, max, "%s:", bw->name);
+        len = strlen(buf);
+        ucs_config_sprintf_bw(buf + len, max - len, &bw->bw, arg);
+    }
+
+    return 1;
+}
+
+ucs_status_t ucs_config_clone_bw_spec(void *src, void *dest, const void *arg)
+{
+    ucs_config_bw_spec_t *s = (ucs_config_bw_spec_t*)src;
+    ucs_config_bw_spec_t *d = (ucs_config_bw_spec_t*)dest;
+
+    d->bw   = s->bw;
+    d->name = ucs_strdup(s->name, __func__);
+
+    return d->name ? UCS_OK : UCS_ERR_NO_MEMORY;
+}
+
+void ucs_config_release_bw_spec(void *ptr, const void *arg)
+{
+    ucs_free(((ucs_config_bw_spec_t*)ptr)->name);
+}
+
 int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg)
 {
     char *endptr;
@@ -426,17 +551,8 @@ int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
     if (num_fields == 1) {
         bytes = 1;
     } else if (num_fields == 2 || num_fields == 3) {
-        if (!strcasecmp(units, "b")) {
-            bytes = 1;
-        } else if (!strcasecmp(units, "kb") || !strcasecmp(units, "k")) {
-            bytes = UCS_KBYTE;
-        } else if (!strcasecmp(units, "mb") || !strcasecmp(units, "m")) {
-            bytes = UCS_MBYTE;
-        } else if (!strcasecmp(units, "gb") || !strcasecmp(units, "g")) {
-            bytes = UCS_GBYTE;
-        } else if (!strcasecmp(units, "tb") || !strcasecmp(units, "t")) {
-            bytes = UCS_TBYTE;
-        } else {
+        bytes = ucs_config_parser_quantity_prefix_value(toupper(units[0]));
+        if (!bytes || ((num_fields == 3) && tolower(units[1]) != 'b')) {
             return 0;
         }
     } else {

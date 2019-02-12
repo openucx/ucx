@@ -128,10 +128,10 @@ UCS_TEST_F(test_sys, module) {
 UCS_TEST_F(test_sys, memunits_to_str) {
     test_memunits(256, "256");
     test_memunits(1256, "1256");
-    test_memunits(UCS_KBYTE, "1k");
-    test_memunits(UCS_MBYTE + UCS_KBYTE, "1025k");
-    test_memunits(UCS_GBYTE, "1g");
-    test_memunits(2 * UCS_GBYTE, "2g");
-    test_memunits(UCS_TBYTE, "1t");
-    test_memunits(UCS_TBYTE * 1024, "1024t");
+    test_memunits(UCS_KBYTE, "1K");
+    test_memunits(UCS_MBYTE + UCS_KBYTE, "1025K");
+    test_memunits(UCS_GBYTE, "1G");
+    test_memunits(2 * UCS_GBYTE, "2G");
+    test_memunits(UCS_TBYTE, "1T");
+    test_memunits(UCS_TBYTE * 1024, "1024T");
 }
