@@ -535,7 +535,9 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
         }
     }
 
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+    if (!uct_dc_mlx5_iface_dci_ep_has_tx_resources(ep)) {
+        /* Do not check FC resources here. All dcis may be flushed,
+         * while FC resources are missing. */
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
