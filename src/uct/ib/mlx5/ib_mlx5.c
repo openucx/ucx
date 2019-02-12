@@ -184,7 +184,7 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
         /* update ci before invoking error callback, since it can poll on cq */
         UCS_STATIC_ASSERT(MLX5_CQE_REQ_ERR & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ++cq->cq_ci;
-        status = uct_ib_mlx5_completion_with_err(iface, (void*)cqe,
+        status = uct_ib_mlx5_completion_with_err(iface, (void*)cqe, NULL,
                                                  UCS_LOG_LEVEL_DEBUG);
         iface->ops->handle_failure(iface, cqe, status);
         return;
@@ -192,7 +192,8 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
         /* Local side failure - treat as fatal */
         UCS_STATIC_ASSERT(MLX5_CQE_RESP_ERR & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ++cq->cq_ci;
-        uct_ib_mlx5_completion_with_err(iface, (void*)cqe, UCS_LOG_LEVEL_FATAL);
+        uct_ib_mlx5_completion_with_err(iface, (void*)cqe, NULL,
+                                        UCS_LOG_LEVEL_FATAL);
         return;
     default:
         /* CQE might have been updated by HW. Skip it now, and it would be handled
