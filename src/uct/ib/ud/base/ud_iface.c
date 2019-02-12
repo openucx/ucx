@@ -387,9 +387,17 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     size_t data_size;
     int mtu;
 
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
+    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
+        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu",
                    params->mode.device.dev_name, self, ops, worker,
-                   params->rx_headroom);
+                   (params->field_mask & UCT_IFACE_PARAM_FIELD_RX_HEADROOM) ?
+                   params->rx_headroom : 0);
 
     if (config->super.tx.queue_len <= UCT_UD_TX_MODERATION) {
         ucs_error("%s ud iface tx queue is too short (%d <= %d)",

@@ -228,7 +228,8 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
             listener->arg       = params->conn_handler.arg;
         }
 
-        memset(&iface_params, 0, sizeof(iface_params));
+        iface_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                                                      UCT_IFACE_PARAM_FIELD_SOCKADDR;
         iface_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER;
         iface_params.mode.sockaddr.conn_request_cb  = ucp_listener_conn_request_callback;
         iface_params.mode.sockaddr.conn_request_arg = listener;
@@ -241,8 +242,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
             goto err_free;
         }
 
-        status = ucp_worker_iface_init(worker, tl_id, &iface_params,
-                                       &listener->wiface);
+        status = ucp_worker_iface_init(worker, tl_id, &listener->wiface);
         if ((status != UCS_OK) ||
             ((context->config.features & UCP_FEATURE_WAKEUP) &&
             !(listener->wiface.attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC))) {

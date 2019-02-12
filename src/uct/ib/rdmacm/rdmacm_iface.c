@@ -466,13 +466,22 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_rdmacm_md_t *rdmacm_md;
     ucs_status_t status;
 
-    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) &&
-        !(params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT)) {
-        ucs_fatal("Invalid open mode %zu", params->open_mode);
-    }
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
+
+    UCT_CHECK_PARAM((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) ||
+                    (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT),
+                    "Invalid open mode %zu", params->open_mode);
+
+    UCT_CHECK_PARAM(!(params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) ||
+                    (params->field_mask & UCT_IFACE_PARAM_FIELD_SOCKADDR),
+                    "UCT_IFACE_PARAM_FIELD_SOCKADDR is not defined for UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rdmacm_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              params, tl_config
+                              UCS_STATS_ARG((params->field_mask & 
+                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                                            params->stats_root : NULL)
                               UCS_STATS_ARG(UCT_RDMACM_TL_NAME));
 
     rdmacm_md = ucs_derived_of(self->super.md, uct_rdmacm_md_t);

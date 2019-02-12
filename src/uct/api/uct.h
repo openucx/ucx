@@ -363,13 +363,68 @@ enum uct_cb_flags {
  * @brief Mode in which to open the interface.
  */
 enum uct_iface_open_mode {
-   UCT_IFACE_OPEN_MODE_DEVICE          = UCS_BIT(0),  /**< Interface is opened on a specific device */
-   UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER = UCS_BIT(1),  /**< Interface is opened on a specific address
-                                                           on the server side */
-   UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2)   /**< Interface is opened on a specific address
-                                                           on the client side */
+   /** Interface is opened on a specific device */
+   UCT_IFACE_OPEN_MODE_DEVICE          = UCS_BIT(0),
+
+   /** Interface is opened on a specific address on the server side. This mode
+       will be deprecated in the near future for a better API. */
+   UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER = UCS_BIT(1),
+
+   /** Interface is opened on a specific address on the client side This mode
+       will be deprecated in the near future for a better API. */
+   UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2)
 };
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface created by @ref uct_iface_open parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_iface_params_t are
+ * present, for backward compatibility support.
+ */
+enum uct_iface_params_field {
+    /** Enables @ref uct_iface_params_t::cpu_mask */
+    UCT_IFACE_PARAM_FIELD_CPU_MASK          = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_params_t::open_mode */
+    UCT_IFACE_PARAM_FIELD_OPEN_MODE         = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_params_t_mode_device
+     *  "uct_iface_params_t::mode::device" */
+    UCT_IFACE_PARAM_FIELD_DEVICE            = UCS_BIT(2),
+
+    /** Enables @ref uct_iface_params_t_mode_sockaddr
+     *  "uct_iface_params_t::mode::sockaddr" */
+    UCT_IFACE_PARAM_FIELD_SOCKADDR          = UCS_BIT(3),
+
+    /** Enables @ref uct_iface_params_t::stats_root */
+    UCT_IFACE_PARAM_FIELD_STATS_ROOT        = UCS_BIT(4),
+
+    /** Enables @ref uct_iface_params_t::rx_headroom */
+    UCT_IFACE_PARAM_FIELD_RX_HEADROOM       = UCS_BIT(5),
+
+    /** Enables @ref uct_iface_params_t::err_handler_arg */
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   = UCS_BIT(6),
+
+    /** Enables @ref uct_iface_params_t::err_handler */
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(7),
+
+    /** Enables @ref uct_iface_params_t::err_handler_flags */
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS = UCS_BIT(8),
+
+    /** Enables @ref uct_iface_params_t::eager_arg */
+    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   = UCS_BIT(9),
+
+    /** Enables @ref uct_iface_params_t::eager_cb */
+    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    = UCS_BIT(10),
+
+    /** Enables @ref uct_iface_params_t::rndv_arg */
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    = UCS_BIT(11),
+
+    /** Enables @ref uct_iface_params_t::rndv_cb */
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     = UCS_BIT(12)
+};
 
 /**
  * @ingroup UCT_MD
@@ -641,13 +696,18 @@ struct uct_iface_attr {
  * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
+    /** Mask of valid fields in this structure, using bits from
+     *  @ref uct_iface_params_field. Fields not specified in this mask will be
+     *  ignored. */
+    uint64_t                                     field_mask;
     /** Mask of CPUs to use for resources */
     ucs_cpu_set_t                                cpu_mask;
     /** Interface open mode bitmap. @ref uct_iface_open_mode */
     uint64_t                                     open_mode;
     /** Mode-specific parameters */
     union {
-        /** The fields in this structure (tl_name and dev_name) need to be set only when
+        /** @anchor uct_iface_params_t_mode_device
+         *  The fields in this structure (tl_name and dev_name) need to be set only when
          *  the @ref UCT_IFACE_OPEN_MODE_DEVICE bit is set in @ref
          *  uct_iface_params_t.open_mode This will make @ref uct_iface_open
          *  open the interface on the specified device.
@@ -656,7 +716,8 @@ struct uct_iface_params {
             const char                           *tl_name;  /**< Transport name */
             const char                           *dev_name; /**< Device Name */
         } device;
-        /** These callbacks and address are only relevant for client-server
+        /** @anchor uct_iface_params_t_mode_sockaddr
+         *  These callbacks and address are only relevant for client-server
          *  connection establishment with sockaddr and are needed on the server side.
          *  The callbacks and address need to be set when the @ref
          *  UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER bit is set in @ref

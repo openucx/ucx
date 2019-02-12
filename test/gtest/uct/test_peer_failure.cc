@@ -37,8 +37,9 @@ public:
 
     inline uct_iface_params_t entity_params() {
         static uct_iface_params_t params;
-
-        memset(&params, 0, sizeof(params));
+        params.field_mask = UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
+                            UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG |
+                            UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS;
         params.err_handler       = get_err_handler();
         params.err_handler_arg   = reinterpret_cast<void*>(this);
         params.err_handler_flags = 0;
@@ -84,7 +85,8 @@ public:
     void new_receiver()
     {
         uct_iface_params_t p = entity_params();
-        p.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
+        p.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
+        p.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
         m_receivers.push_back(uct_test::create_entity(p));
         m_entities.push_back(m_receivers.back());
         m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
@@ -193,7 +195,8 @@ void test_uct_peer_failure::init()
     }
 
     uct_iface_params_t p = entity_params();
-    p.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
+    p.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
+    p.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
     m_sender = uct_test::create_entity(p);
     m_entities.push_back(m_sender);
 

@@ -297,7 +297,11 @@ uct_test::entity* uct_test::create_entity(size_t rx_headroom,
                                           uct_error_handler_t err_handler) {
     uct_iface_params_t iface_params;
 
-    memset(&iface_params, 0, sizeof(iface_params));
+    iface_params.field_mask        = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
+                                     UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS;
     iface_params.rx_headroom       = rx_headroom;
     iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.err_handler       = err_handler;
@@ -384,10 +388,13 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     ucs_status_t status;
 
     if (params->open_mode == UCT_IFACE_OPEN_MODE_DEVICE) {
+        params->field_mask          |= UCT_IFACE_PARAM_FIELD_DEVICE;
         params->mode.device.tl_name  = resource.tl_name.c_str();
         params->mode.device.dev_name = resource.dev_name.c_str();
     }
 
+    params->field_mask          |= UCT_IFACE_PARAM_FIELD_STATS_ROOT |
+                                   UCT_IFACE_PARAM_FIELD_CPU_MASK;
     params->stats_root = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 

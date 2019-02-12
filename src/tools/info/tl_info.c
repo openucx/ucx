@@ -130,6 +130,11 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     uct_iface_h iface;
     char buf[200] = {0};
     uct_iface_params_t iface_params = {
+        .field_mask            = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
+                                 UCT_IFACE_PARAM_FIELD_DEVICE      |
+                                 UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
+                                 UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
+                                 UCT_IFACE_PARAM_FIELD_CPU_MASK,
         .open_mode             = UCT_IFACE_OPEN_MODE_DEVICE,
         .mode.device.tl_name   = resource->tl_name,
         .mode.device.dev_name  = resource->dev_name,

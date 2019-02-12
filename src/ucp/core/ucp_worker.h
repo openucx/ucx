@@ -246,7 +246,6 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t *wiface);
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
-                                   uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t *wiface);
 
 void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface);

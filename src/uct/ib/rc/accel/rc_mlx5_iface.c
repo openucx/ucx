@@ -310,10 +310,18 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
 
     UCS_STATIC_ASSERT(sizeof(uct_rc_mlx5_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
 
-    iface->tm.eager_unexp.cb  = params->eager_cb;
-    iface->tm.eager_unexp.arg = params->eager_arg;
-    iface->tm.rndv_unexp.cb   = params->rndv_cb;
-    iface->tm.rndv_unexp.arg  = params->rndv_arg;
+    iface->tm.eager_unexp.cb  = (params->field_mask &
+                                 UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB) ?
+                                params->eager_cb : NULL;
+    iface->tm.eager_unexp.arg = (params->field_mask &
+                                 UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG) ?
+                                params->eager_arg : NULL;
+    iface->tm.rndv_unexp.cb   = (params->field_mask &
+                                 UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB) ?
+                                params->rndv_cb : NULL;
+    iface->tm.rndv_unexp.arg  = (params->field_mask &
+                                 UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG) ?
+                                params->rndv_arg : NULL;
     iface->tm.unexpected_cnt  = 0;
     iface->tm.num_outstanding = 0;
     iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),

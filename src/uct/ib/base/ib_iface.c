@@ -843,20 +843,37 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     const uct_ib_iface_config_t *config,
                     const uct_ib_iface_init_attr_t *init_attr)
 {
-    uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+    uct_ib_md_t *ib_md    = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
-    int preferred_cpu = ucs_cpu_set_find_lcs(&params->cpu_mask);
+    size_t rx_headroom   = (params->field_mask &
+                            UCT_IFACE_PARAM_FIELD_CPU_MASK) ?
+                           params->rx_headroom : 0;
+    ucs_cpu_set_t cpu_mask;
+    int preferred_cpu;
     ucs_status_t status;
     uint8_t port_num;
     int is_roce_v2;
     size_t inl;
 
-    ucs_assert(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE);
+    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_CPU_MASK) {
+        cpu_mask = params->cpu_mask;
+    } else {
+        memset(&cpu_mask, 0, sizeof(cpu_mask));
+    }
+
+    preferred_cpu = ucs_cpu_set_find_lcs(&cpu_mask);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
                               params, &config->super
-                              UCS_STATS_ARG((params->stats_root == NULL) ?
-                                            dev->stats : params->stats_root)
+                              UCS_STATS_ARG(((params->field_mask &
+                                              UCT_IFACE_PARAM_FIELD_STATS_ROOT) &&
+                                             (params->stats_root != NULL)) ?
+                                            params->stats_root :
+                                            dev->stats)
                               UCS_STATS_ARG(params->mode.device.dev_name));
 
     status = uct_ib_device_find_port(dev, params->mode.device.dev_name, &port_num);
@@ -868,13 +885,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
                                       ucs_max(sizeof(uct_recv_desc_t) +
-                                              params->rx_headroom,
+                                              rx_headroom,
                                               init_attr->rx_priv_len +
                                               init_attr->rx_hdr_len);
     self->config.rx_hdr_offset      = self->config.rx_payload_offset -
                                       init_attr->rx_hdr_len;
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
-                                      params->rx_headroom;
+                                      rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;

@@ -913,13 +913,14 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 
     iface_id = 0;
     ucs_for_each_bit(tl_id, tl_bitmap) {
-        memset(&iface_params, 0, sizeof(iface_params));
+        iface_params.field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE;
         resource = &context->tl_rscs[tl_id];
 
         if (resource->flags & UCP_TL_RSC_FLAG_SOCKADDR) {
             iface_params.open_mode            = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
         } else {
             iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+            iface_params.field_mask          |= UCT_IFACE_PARAM_FIELD_DEVICE;
             iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
             iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
         }
@@ -949,7 +950,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 
     iface_id = 0;
     ucs_for_each_bit(tl_id, tl_bitmap) {
-        status = ucp_worker_iface_init(worker, tl_id, &iface_params,
+        status = ucp_worker_iface_init(worker, tl_id,
                                        &worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
             return status;
@@ -1009,6 +1010,16 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
+    iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_STATS_ROOT        |
+                                      UCT_IFACE_PARAM_FIELD_RX_HEADROOM       |
+                                      UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
+                                      UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
+                                      UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    |
+                                      UCT_IFACE_PARAM_FIELD_CPU_MASK;
     iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
     iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg   = worker;
@@ -1038,7 +1049,6 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 }
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
-                                   uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t *wiface)
 {
     ucp_context_h context            = worker->context;
