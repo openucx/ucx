@@ -5,7 +5,8 @@
 
 package org.ucx.jucx;
 
-import org.ucx.jucx.Worker.CompletionQueue;
+import org.ucx.jucx.ucp.UcpContext;
+import org.ucx.jucx.ucp.UcpParams;
 
 public class Bridge {
     private static final String UCM  = "libucm.so";
@@ -19,22 +20,19 @@ public class Bridge {
         LoadLibrary.loadLibrary(UCS);   // UCS library
         LoadLibrary.loadLibrary(UCT);   // UCT library
         LoadLibrary.loadLibrary(UCP);   // UCP library
-        LoadLibrary.loadLibrary(JUCX);  // JUCP native library
+        LoadLibrary.loadLibrary(JUCX);  // JUCX native library
     }
 
-    private static native long createWorkerNative(int maxCompletions,
-                                                  CompletionQueue compQueue,
-                                                  Worker worker);
+    // UcpContext.
+    private static native long createContextNative(UcpParams params);
 
-    static long createWorker(final int maxCompletions,
-                             final CompletionQueue compQueue,
-                             final Worker worker) {
-        return createWorkerNative(maxCompletions, compQueue, worker);
+    private static native void cleanupContextNative(long contextId);
+
+    public static UcpContext createContext(UcpParams params) {
+        return new UcpContext(createContextNative(params));
     }
 
-    private static native void releaseWorkerNative(long workerNativeId);
-
-    static void releaseWorker(final Worker worker) {
-        releaseWorkerNative(worker.getNativeId());
+    public static void cleanupContext(UcpContext context) {
+        cleanupContextNative(context.getNativeId());
     }
 }
