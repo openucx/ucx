@@ -23,11 +23,6 @@
 #include <link.h>
 #include <dirent.h>
 #ifdef HAVE_DETAILED_BACKTRACE
-#  if HAVE_LIBIBERTY_H
-#    include <libiberty.h>
-#elif HAVE_LIBIBERTY_LIBIBERTY_H
-#    include <libiberty/libiberty.h>
-#  endif
 #  include <bfd.h>
 #endif /* HAVE_DETAILED_BACKTRACE */
 
