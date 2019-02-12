@@ -1143,7 +1143,7 @@ uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
 
     if (ucs_likely(req->func != uct_dc_mlx5_iface_fc_grant)){
         if (cb_args->cb != NULL) {
-            cb_args->cb(req, arg);
+            cb_args->cb(req, priv_args[1]);
         } else {
             ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
