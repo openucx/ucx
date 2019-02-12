@@ -197,6 +197,19 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg);
 
+/**
+ * Call the callback for each element from a group. If the callback returns
+ * UCS_ARBITER_CB_RESULT_REMOVE_ELEM, remove it from a group.
+ *
+ * @param [in]  arbiter  Arbiter object to remove the group from.
+ * @param [in]  group    Group to clean up.
+ * @param [in]  cb       Callback to be called for each element.
+ * @param [in]  cb_arg   Last argument for the callback.
+ */
+void ucs_arbiter_group_purge_cond(ucs_arbiter_t *arbiter,
+                                  ucs_arbiter_group_t *group,
+                                  ucs_arbiter_callback_t cb, void *cb_arg);
+
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
 
 

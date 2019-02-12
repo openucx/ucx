@@ -91,6 +91,55 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     group->tail = NULL;
 }
 
+void ucs_arbiter_group_purge_cond(ucs_arbiter_t *arbiter,
+                                  ucs_arbiter_group_t *group,
+                                  ucs_arbiter_callback_t cb, void *cb_arg)
+{
+    ucs_arbiter_elem_t *tail = group->tail;
+    ucs_arbiter_elem_t *ptr, *next, *prev;
+    ucs_arbiter_elem_t *head, *orig_head;
+    ucs_arbiter_cb_result_t result;
+    int is_scheduled;
+
+    if (tail == NULL) {
+        return; /* Empty group */
+    }
+
+    orig_head    = head = tail->next;
+    is_scheduled = (head->list.next != NULL);
+    next         = head;
+    prev         = tail;
+
+    do {
+        ptr    = next;
+        next   = ptr->next;
+        result = cb(arbiter, ptr, cb_arg);
+        if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
+            prev->next = next;
+            ptr->next  = NULL;
+            if (ptr == head) {
+                head = next;
+                if (ptr == tail) {
+                    /* Last element is being removed - mark group as empty */
+                    group->tail = NULL;
+                }
+            }
+        } else {
+            /* keep the element */
+            prev = ptr;
+        }
+    } while (ptr != tail);
+
+    if ((orig_head != head) || (group->tail == NULL)) {
+        ucs_arbiter_group_head_desched(arbiter, orig_head);
+        head->list.next = NULL;
+        if (is_scheduled && (group->tail != NULL)) {
+            /* keep the group scheduled, but with new head element */
+            ucs_arbiter_group_schedule(arbiter, group);
+        }
+    }
+}
+
 void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
                                          ucs_arbiter_group_t *group)
 {
