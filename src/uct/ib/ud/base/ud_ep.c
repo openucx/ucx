@@ -8,8 +8,8 @@
 #include "ud_iface.h"
 #include "ud_inl.h"
 #include "ud_def.h"
-#include "uct/api/uct_def.h"
 
+#include <uct/api/uct_def.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
