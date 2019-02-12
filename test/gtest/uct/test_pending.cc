@@ -13,8 +13,8 @@ extern "C" {
 #include "uct_test.h"
 
 class test_uct_pending : public uct_test {
-public:
-    void initialize() {
+    public:
+    virtual void init() {
         uct_test::init();
 
         m_e1 = uct_test::create_entity(0);
@@ -22,7 +22,9 @@ public:
 
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
+    }
 
+    void initialize() {
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
     }
@@ -36,6 +38,24 @@ public:
         int               id;
         mapped_buffer    *buf;
     } pending_send_request_t;
+
+    void send_am_fill_resources(uct_ep_h ep) {
+        uint64_t send_data = 0xdeadbeef;
+        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
+        ucs_status_t status;
+
+        do {
+            status = uct_ep_am_short(ep, 0, test_pending_hdr, &send_data,
+                                     sizeof(send_data));
+            if (status == UCS_ERR_NO_RESOURCE) {
+                break;
+            }
+        } while (ucs_get_time() < loop_end_limit);
+
+        if (status != UCS_ERR_NO_RESOURCE) {
+            UCS_TEST_SKIP_R("Can't fill UCT resources in the given time.");
+        }
+     }
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
                                    unsigned flags) {
@@ -87,7 +107,6 @@ public:
             req->countdown ++;
             n_pending--;
             req->active = 0;
-            //ucs_warn("dispatched %p idx %d total %d", req->ep, req->id, req->countdown);
         }
         return status;
     }
@@ -113,6 +132,11 @@ public:
         pending_delete(req);
         n_pending--;
         return UCS_OK;
+    }
+
+    static void purge_cb(uct_pending_req_t *uct_req, void *arg)
+    {
+        ++n_purge;
     }
 
     pending_send_request_t* pending_alloc(uint64_t send_data) {
@@ -154,9 +178,11 @@ protected:
     static const uint64_t test_pending_hdr = 0xabcd;
     entity *m_e1, *m_e2;
     static int n_pending;
+    static int n_purge;
 };
 
 int test_uct_pending::n_pending = 0;
+int test_uct_pending::n_purge   = 0;
 
 void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callback_t cb, void *arg)
 {
@@ -291,6 +317,29 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     unsigned exp_counter = send_data - 0xdeadbeefUL;
     wait_for_value(&counter, exp_counter, true);
     EXPECT_EQ(exp_counter, counter);
+}
+
+UCS_TEST_P(test_uct_pending, pending_purge)
+{
+    const int num_eps = 5;
+    uct_pending_req_t reqs[num_eps];
+
+    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
+
+    /* set a callback for the uct to invoke when receiving the data */
+    install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, NULL);
+
+    for (int i = 0; i < num_eps; ++i) {
+        m_e1->connect(i, *m_e2, i);
+        send_am_fill_resources(m_e1->ep(i));
+        EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(i), &reqs[i], 0));
+    }
+
+    for (int i = 0; i < num_eps; ++i) {
+        n_purge = 0;
+        uct_ep_pending_purge(m_e1->ep(i), purge_cb, NULL);
+        EXPECT_EQ(1, n_purge);
+    }
 }
 
 /*
