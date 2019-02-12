@@ -1,10 +1,11 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #include "uct_test.h"
+#include "uct/api/uct_def.h"
 
 #include <ucs/stats/stats.h>
 #include <ucs/sys/string.h>
@@ -629,6 +630,7 @@ void uct_test::entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
 
 void uct_test::entity::create_ep(unsigned index) {
     uct_ep_h ep = NULL;
+    uct_ep_params_t ep_params;
     ucs_status_t status;
 
     reserve_ep(index);
@@ -637,7 +639,9 @@ void uct_test::entity::create_ep(unsigned index) {
         UCS_TEST_ABORT("ep[" << index << "] already exists");
     }
 
-    status = uct_ep_create(m_iface, &ep);
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_iface;
+    status = uct_ep_create(&ep_params, &ep);
     ASSERT_UCS_OK(status);
     m_eps[index].reset(ep, uct_ep_destroy);
 }
@@ -686,9 +690,18 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     }
 
     /* Connect to the server */
-    status = uct_ep_create_sockaddr(iface(), remote_addr,
-                                    client_priv_data_cb, (void*)&client_cb_arg,
-                                    UCT_CB_FLAG_ASYNC, &ep);
+    uct_ep_params_t params;
+    params.field_mask        = UCT_EP_PARAM_FIELD_IFACE             |
+                               UCT_EP_PARAM_FIELD_USER_DATA         |
+                               UCT_EP_PARAM_FIELD_SOCKADDR          |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+    params.iface             = iface();
+    params.user_data         = &client_cb_arg;
+    params.sockaddr          = remote_addr;
+    params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
+    params.sockaddr_pack_cb  = client_priv_data_cb;
+    status = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);
@@ -699,6 +712,7 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
 {
     ucs_status_t status;
     uct_ep_h ep, remote_ep;
+    uct_ep_params_t ep_params;
 
     reserve_ep(index);
     if (m_eps[index]) {
@@ -706,14 +720,17 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 
     other.reserve_ep(other_index);
-    status = uct_ep_create(other.m_iface, &remote_ep);
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = other.m_iface;
+    status               = uct_ep_create(&ep_params, &remote_ep);
     ASSERT_UCS_OK(status);
     other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
 
     if (&other == this) {
         connect_p2p_ep(remote_ep, remote_ep);
     } else {
-        ucs_status_t status = uct_ep_create(m_iface, &ep);
+        ep_params.iface     = m_iface;
+        ucs_status_t status = uct_ep_create(&ep_params, &ep);
         ASSERT_UCS_OK(status);
 
         connect_p2p_ep(ep, remote_ep);
@@ -726,6 +743,7 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
 void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     uct_device_addr_t *dev_addr;
     uct_iface_addr_t *iface_addr;
+    uct_ep_params_t ep_params;
     ucs_status_t status;
     uct_ep_h ep;
 
@@ -743,7 +761,14 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     status = uct_iface_get_address(other.iface(), iface_addr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_create_connected(iface(), dev_addr, iface_addr, &ep);
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+                           UCT_EP_PARAM_FIELD_DEV_ADDR |
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
+    ep_params.iface      = iface();
+    ep_params.dev_addr   = dev_addr;
+    ep_params.iface_addr = iface_addr;
+
+    status = uct_ep_create(&ep_params, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);

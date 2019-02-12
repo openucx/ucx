@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -22,8 +22,7 @@ typedef struct uct_gdr_copy_ep {
 } uct_gdr_copy_ep_t;
 
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_gdr_copy_ep_t, uct_ep_t, uct_iface_t*,
-                           const uct_device_addr_t *, const uct_iface_addr_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_gdr_copy_ep_t, uct_ep_t, const uct_ep_params_t *);
 
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_gdr_copy_ep_t, uct_ep_t);
 

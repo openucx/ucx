@@ -1,5 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2015-2019.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -503,6 +504,7 @@ int main(int argc, char **argv)
                                                  times and fd notifications */
     cmd_args_t          cmd_args;
     iface_info_t        if_info;
+    uct_ep_params_t     ep_params;
 
     /* Parse the command line */
     if (parse_cmd(argc, argv, &cmd_args)) {
@@ -565,12 +567,14 @@ int main(int argc, char **argv)
         CHKERR_JUMP(0 != status, "ifaces exchange", out_free_if_addrs);
     }
 
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = if_info.iface;
     if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         own_ep = (uct_ep_addr_t*)calloc(1, if_info.attr.ep_addr_len);
         CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
 
         /* Create new endpoint */
-        status = uct_ep_create(if_info.iface, &ep);
+        status = uct_ep_create(&ep_params, &ep);
         CHKERR_JUMP(UCS_OK != status, "create endpoint", out_free_ep_addrs);
 
         /* Get endpoint address */
@@ -589,7 +593,11 @@ int main(int argc, char **argv)
         }
     } else if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         /* Create an endpoint which is connected to a remote interface */
-        status = uct_ep_create_connected(if_info.iface, peer_dev, peer_iface, &ep);
+        ep_params.field_mask |= UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                UCT_EP_PARAM_FIELD_IFACE_ADDR;
+        ep_params.dev_addr    = peer_dev;
+        ep_params.iface_addr  = peer_iface;
+        status = uct_ep_create(&ep_params, &ep);
     } else {
         status = UCS_ERR_UNSUPPORTED;
     }

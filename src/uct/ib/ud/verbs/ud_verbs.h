@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -29,6 +29,6 @@ typedef struct {
     } tx;
 } uct_ud_verbs_iface_t;
 
-UCS_CLASS_DECLARE(uct_ud_verbs_ep_t, uct_iface_h)
+UCS_CLASS_DECLARE(uct_ud_verbs_ep_t, const uct_ep_params_t *)
 
 #endif

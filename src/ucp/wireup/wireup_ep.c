@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -253,6 +253,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
 {
     ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
+    uct_ep_params_t uct_ep_params;
     const ucp_address_entry_t *aux_addr;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
@@ -274,8 +275,13 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     wiface   = ucp_worker_iface(worker, rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
-    status = uct_ep_create_connected(wiface->iface, aux_addr->dev_addr,
-                                     aux_addr->iface_addr, &wireup_ep->aux_ep);
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+                               UCT_EP_PARAM_FIELD_DEV_ADDR |
+                               UCT_EP_PARAM_FIELD_IFACE_ADDR;
+    uct_ep_params.iface      = wiface->iface;
+    uct_ep_params.dev_addr   = aux_addr->dev_addr;
+    uct_ep_params.iface_addr = aux_addr->iface_addr;
+    status = uct_ep_create(&uct_ep_params, &wireup_ep->aux_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -402,6 +408,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
                                    const ucp_address_entry_t *address_list)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    uct_ep_params_t uct_ep_params;
     ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucp_worker_h worker        = ucp_ep->worker;
     ucs_status_t status;
@@ -409,7 +416,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
 
     ucs_assert(ucp_wireup_ep_test(uct_ep));
 
-    status = uct_ep_create(ucp_worker_iface(worker, rsc_index)->iface, &next_ep);
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
+    status = uct_ep_create(&uct_ep_params, &next_ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -569,6 +578,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
     ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucp_worker_h worker        = ucp_ep->worker;
     char saddr_str[UCS_SOCKADDR_STRING_LEN];
+    uct_ep_params_t uct_ep_params;
     ucp_rsc_index_t sockaddr_rsc;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
@@ -584,11 +594,18 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
 
     wireup_ep->sockaddr_rsc_index = sockaddr_rsc;
 
-    /* send connection request using the transport */
-    status = uct_ep_create_sockaddr(wiface->iface, &params->sockaddr,
-                                    ucp_wireup_ep_sockaddr_fill_private_data,
-                                    wireup_ep, UCT_CB_FLAG_ASYNC,
-                                    &wireup_ep->sockaddr_ep);
+    /* Fill parameters and send connection request using the transport */
+    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE             |
+                                      UCT_EP_PARAM_FIELD_USER_DATA         |
+                                      UCT_EP_PARAM_FIELD_SOCKADDR          |
+                                      UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS |
+                                      UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+    uct_ep_params.iface             = wiface->iface;
+    uct_ep_params.sockaddr          = &params->sockaddr;
+    uct_ep_params.user_data         = wireup_ep;
+    uct_ep_params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
+    uct_ep_params.sockaddr_pack_cb  = ucp_wireup_ep_sockaddr_fill_private_data;
+    status = uct_ep_create(&uct_ep_params, &wireup_ep->sockaddr_ep);
     if (status != UCS_OK) {
         goto out;
     }

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2018-2019.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -21,8 +21,7 @@ typedef struct uct_cuda_ipc_ep {
     uct_cuda_ipc_cache_t            *remote_memh_cache;
 } uct_cuda_ipc_ep_t;
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, uct_iface_t*,
-                           const uct_device_addr_t *, const uct_iface_addr_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cuda_ipc_ep_t, uct_ep_t);
 
 ucs_status_t uct_cuda_ipc_ep_get_zcopy(uct_ep_h tl_ep,

@@ -1,6 +1,6 @@
 /**
  * @file        uct.h
- * @date        2014-2015
+ * @date        2014-2019
  * @copyright   Mellanox Technologies Ltd. All rights reserved.
  * @copyright   Oak Ridge National Laboratory. All rights received.
  * @brief       Unified Communication Transport
@@ -13,7 +13,6 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
-#include <ucs/config/types.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -341,8 +340,9 @@ enum uct_msg_flags {
  */
 enum uct_cb_flags {
     UCT_CB_FLAG_RESERVED = UCS_BIT(1), /**< Reserved for future use. */
-    UCT_CB_FLAG_ASYNC    = UCS_BIT(2)  /**< Callback may be invoked from any
-                                            context (thread, process). For
+    UCT_CB_FLAG_ASYNC    = UCS_BIT(2)  /**< Callback is allowed to be called
+                                            from any thread in the process, and
+                                            therefore should be thread-safe. For
                                             example, it may be called from a
                                             transport async progress thread. To
                                             guarantee async invocation, the
@@ -352,7 +352,7 @@ enum uct_cb_flags {
                                             interface which only supports sync
                                             callback (i.e., only the @ref
                                             UCT_IFACE_FLAG_CB_SYNC flag is set),
-                                            the callback may be invoked only
+                                            the callback will be invoked only
                                             from the context that called @ref
                                             uct_iface_progress). */
 };
@@ -468,6 +468,37 @@ typedef enum {
                                 memory mapping and to avoid page faults when
                                 the memory is accessed for the first time. */
 } uct_mem_advice_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT endpoint created by @ref uct_ep_create parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_ep_params_t are
+ * present, for backward compatibility support.
+ */
+enum uct_ep_params_field {
+    /** Enables @ref uct_ep_params::iface */
+    UCT_EP_PARAM_FIELD_IFACE             = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_params::user_data */
+    UCT_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_params::dev_addr */
+    UCT_EP_PARAM_FIELD_DEV_ADDR          = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_params::iface_addr */
+    UCT_EP_PARAM_FIELD_IFACE_ADDR        = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_params::sockaddr */
+    UCT_EP_PARAM_FIELD_SOCKADDR          = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_params::sockaddr_cb_flags */
+    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS = UCS_BIT(5),
+
+    /** Enables @ref uct_ep_params::sockaddr_pack_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB  = UCS_BIT(6)
+};
 
 
 /*
@@ -664,6 +695,70 @@ struct uct_iface_params {
     void                                         *rndv_arg;
     /** Callback for tag matching unexpected rndv messages */
     uct_tag_unexp_rndv_cb_t                      rndv_cb;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a UCT endpoint by @ref uct_ep_create
+ */
+struct uct_ep_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_params_field. Fields not specified by this mask will be
+     * ignored.
+     */
+    uint64_t                          field_mask;
+
+    /**
+     * Interface to create the endpoint on. This is a mandatory field.
+     */
+    uct_iface_h                       iface;
+
+    /**
+     * User data associated with the endpoint.
+     */
+    void                              *user_data;
+
+    /**
+     * The device address to connect to on the remote peer. This must be defined
+     * together with @ref uct_ep_params_t::iface_addr to create an endpoint
+     * connected to a remote interface.
+     */
+    const uct_device_addr_t           *dev_addr;
+
+    /**
+     * This specifies the remote address to use when creating an endpoint that
+     * is connected to a remote interface.
+     * @note This requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
+     */
+    const uct_iface_addr_t            *iface_addr;
+
+    /**
+     * The sockaddr to connect to on the remote peer. If set, @ref uct_ep_create
+     * will create an endpoint for a connection to the remote peer, specified by
+     * its socket address.
+     * @note The interface in this routine requires the
+     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
+     */
+    const ucs_sock_addr_t             *sockaddr;
+
+    /**
+     * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb
+     * behavior. If @ref uct_ep_params_t::sockaddr_pack_cb is not set, this
+     * field will be ignored.
+     */
+    uint32_t                          sockaddr_cb_flags;
+
+    /**
+     * Callback that will be used for filling the user's private data to be
+     * delivered to the server by @ref uct_sockaddr_conn_request_callback_t.
+     * This field is only valid if @ref uct_ep_params_t::sockaddr is set.
+     * @note It is never guaranteed that the callaback will be called. If, for
+     * example, the endpoint goes into error state before issuing the connection
+     * request, the callback will not be invoked.
+     */
+    uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
 };
 
 
@@ -1303,27 +1398,36 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
- * @param [in]  iface   Interface to create the endpoint on.
+ * Create a UCT endpoint in one of the available modes:
+ * -# Unconnected endpoint: If no any address is present in @ref uct_ep_params,
+ *    this creates an unconnected endpoint. To establish a connection to a
+ *    remote endpoint, @ref uct_ep_connect_to_ep will need to be called. Use of
+ *    this mode requires @ref uct_ep_params_t::iface has the
+ *    @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability flag. It may be obtained by
+ *    @ref uct_iface_query .
+ * -# Connect to a remote interface: If @ref uct_ep_params_t::dev_addr and
+ *    @ref uct_ep_params_t::iface_addr are set, this will establish an endpoint
+ *    that is connected to a remote interface. This requires that
+ *    @ref uct_ep_params_t::iface has the @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE
+ *    capability flag. It may be obtained by @ref uct_iface_query .
+ * -# Connect to a remote socket address: If @ref uct_ep_params_t::sockaddr is
+ *    set, this will create an endpoint that is conected to a remote socket.
+ *    This requires that @ref uct_ep_params_t::iface has the
+ *    @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability flag. It may be
+ *    obtained by @ref uct_iface_query .*
+ * @param [in]  params  User defined @ref uct_ep_params_t configurations for the
+ *                      @a ep_p.
  * @param [out] ep_p    Filled with handle to the new endpoint.
- */
-ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Create an endpoint which is connected to remote interface.
  *
- * requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
- *
- * @param [in]  iface       Interface to create the endpoint on.
- * @param [in]  dev_addr    Remote device address to connect to.
- * @param [in]  iface_addr  Remote interface address to connect to.
- * @param [out] ep_p        Filled with handle to the new endpoint.
+ * @return UCS_OK       The endpoint is created successfully. This does not
+ *                      guarantee that the endpoint has been connected to
+ *                      the destination defined in @a params; in case of failure,
+ *                      the error will be reported to the interface error
+ *                      handler callback provided to @ref uct_iface_open
+ *                      via @ref uct_iface_params_t.err_handler.
+ * @return              Error code as defined by @ref ucs_status_t
  */
-ucs_status_t uct_ep_create_connected(uct_iface_h iface,
-                                     const uct_device_addr_t *dev_addr,
-                                     const uct_iface_addr_t *iface_addr,
-                                     uct_ep_h *ep_p);
+ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
 
 /**
@@ -1358,47 +1462,6 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
  */
 ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
                                   const uct_ep_addr_t *ep_addr);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Initiate a client-server connection to a remote peer.
- *
- * This routine will create an endpoint for a connection to the remote peer,
- * specified by its socket address.
- * The user may provide a callback function which will be used to fill the
- * private data that will be sent on a connection request to the remote peer.
- *
- * @note It is never guaranteed that the callaback will be called.
- * If, for example, the endpoint goes into error state before issuing the
- * connection request, the callback will not be invoked.
- *
- * @note The interface in this routine requires the
- * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
- *
- * @param [in]  iface              Interface to create the endpoint on.
- * @param [in]  sockaddr           The sockaddr to connect to on the remote peer.
- * @param [in]  pack_cb            Callback for filling the user's private data.
- * @param [in]  arg                User defined argument for the callback.
- * @param [in]  cb_flags           Required @ref uct_cb_flags "callback flags" to
- *                                 indicate where the
- *                                 @ref uct_sockaddr_priv_pack_callback_t
- *                                 callback can be invoked from.
- * @param [out] ep_p               Handle to the created endpoint.
- *
- * @return UCS_OK                  Connection request was sent to the server.
- *                                 This does not guarantee that the server has
- *                                 received the message; in case of failure, the
- *                                 error will be reported to the interface error
- *                                 handler callback provided to @ref uct_iface_open
- *                                 via @ref uct_iface_params_t.err_handler.
- *
- * @return error code              In case of an error. (@ref ucs_status_t)
- */
-ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
-                                    const ucs_sock_addr_t *sockaddr,
-                                    uct_sockaddr_priv_pack_callback_t pack_cb,
-                                    void *arg, uint32_t cb_flags, uct_ep_h *ep_p);
 
 
 /**

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -839,12 +839,12 @@ static ucs_status_t uct_rc_mlx5_ep_tag_qp_create(uct_rc_mlx5_iface_common_t *ifa
     return UCS_OK;
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
+UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
-                                                       uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_common_t *iface;
     ucs_status_t status;
 
+    iface = ucs_derived_of(params->iface, uct_rc_mlx5_iface_common_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
     status = uct_rc_mlx5_ep_tag_qp_create(iface, self);
@@ -932,5 +932,5 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);

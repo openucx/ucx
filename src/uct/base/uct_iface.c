@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -469,25 +469,13 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 }
 
 
-ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
+ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
-    return iface->ops.ep_create(iface, ep_p);
-}
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_IFACE)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
-ucs_status_t
-uct_ep_create_connected(uct_iface_h iface, const uct_device_addr_t *dev_addr,
-                        const uct_iface_addr_t *iface_addr, uct_ep_h *ep_p)
-{
-    return iface->ops.ep_create_connected(iface, dev_addr, iface_addr, ep_p);
-}
-
-ucs_status_t
-uct_ep_create_sockaddr(uct_iface_h iface, const ucs_sock_addr_t *sockaddr,
-                       uct_sockaddr_priv_pack_callback_t pack_cb,
-                       void *arg, uint32_t cb_flags, uct_ep_h *ep_p)
-{
-    return iface->ops.ep_create_sockaddr(iface, sockaddr, pack_cb, arg,
-                                         cb_flags, ep_p);
+    return params->iface->ops.ep_create(params, ep_p);
 }
 
 void uct_ep_destroy(uct_ep_h ep)

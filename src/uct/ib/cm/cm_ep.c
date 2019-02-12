@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) 2007-2009 Cisco Systems, Inc.  All rights reserved.
 * Copyright (c) 2009      IBM Corporation.  All rights reserved.
 *
@@ -20,18 +20,17 @@ typedef struct uct_cm_iov {
 } uct_cm_iov_t;
 
 
-static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface,
-                           const uct_device_addr_t *dev_addr,
-                           const uct_iface_addr_t *iface_addr)
+static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, const uct_ep_params_t *params)
 
 {
-    uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
+    uct_cm_iface_t *iface = ucs_derived_of(params->iface, uct_cm_iface_t);
 
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    uct_ib_address_unpack((const uct_ib_address_t*)dev_addr, &self->dlid,
+    uct_ib_address_unpack((const uct_ib_address_t*)params->dev_addr, &self->dlid,
                           &self->dgid);
-    self->dest_service_id = *(const uint32_t*)iface_addr;
+    self->dest_service_id = *(const uint32_t*)params->iface_addr;
     return UCS_OK;
 }
 
@@ -41,8 +40,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_cm_ep_t, uct_base_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
-                          const uct_device_addr_t *, const uct_iface_addr_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 
 

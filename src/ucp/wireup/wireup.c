@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -584,6 +584,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
     ucp_lane_index_t proxy_lane  = ucp_ep_get_proxy_lane(ep, lane);
     ucp_worker_iface_t *wiface   = ucp_worker_iface(worker, rsc_index);
+    uct_ep_params_t uct_ep_params;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
@@ -600,10 +601,13 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             /* create an endpoint connected to the remote interface */
             ucs_trace("ep %p: connect uct_ep[%d] to addr[%d]", ep, lane,
                       addr_index);
-            status = uct_ep_create_connected(wiface->iface,
-                                             address_list[addr_index].dev_addr,
-                                             address_list[addr_index].iface_addr,
-                                             &uct_ep);
+            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+                                       UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                       UCT_EP_PARAM_FIELD_IFACE_ADDR;
+            uct_ep_params.iface      = wiface->iface;
+            uct_ep_params.dev_addr   = address_list[addr_index].dev_addr;
+            uct_ep_params.iface_addr = address_list[addr_index].iface_addr;
+            status = uct_ep_create(&uct_ep_params, &uct_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
                 return status;

@@ -1,6 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -15,14 +15,15 @@
 #include <ucs/debug/log.h>
 
 
-static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, uct_iface_t *tl_iface,
-                           const uct_device_addr_t *dev_addr,
-                           const uct_iface_addr_t *iface_addr)
+static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
 {
-    uct_cma_iface_t *iface = ucs_derived_of(tl_iface, uct_cma_iface_t);
+    uct_cma_iface_t *iface = ucs_derived_of(params->iface, uct_cma_iface_t);
+
+    UCT_CHECK_PARAM(params->field_mask & UCT_EP_PARAM_FIELD_IFACE_ADDR,
+                    "UCT_EP_PARAM_FIELD_IFACE_ADDR and UCT_EP_PARAM_FIELD_DEV_ADDR are not defined");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
-    self->remote_pid = *(const pid_t*)iface_addr;
+    self->remote_pid = *(const pid_t*)params->iface_addr;
     return UCS_OK;
 }
 
@@ -32,8 +33,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cma_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_cma_ep_t, uct_base_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, uct_iface_t*,
-                          const uct_device_addr_t *, const uct_iface_addr_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
 
 

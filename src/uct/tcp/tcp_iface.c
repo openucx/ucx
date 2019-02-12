@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -241,7 +241,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create_connected      = uct_tcp_ep_create_connected,
+    .ep_create                = uct_tcp_ep_create_connected,
     .ep_destroy               = uct_tcp_ep_destroy,
     .iface_flush              = uct_tcp_iface_flush,
     .iface_fence              = uct_base_iface_fence,

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,6 +7,7 @@
 #ifndef UCT_DEF_H_
 #define UCT_DEF_H_
 
+#include <ucs/config/types.h>
 #include <ucs/type/status.h>
 
 #include <stddef.h>
@@ -88,6 +89,7 @@ typedef enum uct_am_trace_type   uct_am_trace_type_t;
 typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
+typedef struct uct_ep_params     uct_ep_params_t;
 typedef struct uct_tag_context   uct_tag_context_t;
 typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
 typedef int                      uct_worker_cb_id_t;
@@ -289,7 +291,7 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *                               routines respectively.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
- *                               @ref uct_ep_create_sockaddr function on the
+ *                               @ref uct_ep_params_t::sockaddr_pack_cb on the
  *                               client side.
  * @param [in]  length           Length of the received data.
  *

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -761,13 +761,18 @@ UCS_TEST_P(test_ud, ep_destroy_simple) {
     uct_ep_h ep;
     ucs_status_t status;
     uct_ud_ep_t *ud_ep1, *ud_ep2;
+    uct_ep_params_t ep_params;
 
-    status = uct_ep_create(m_e1->iface(), &ep);
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e1->iface();
+
+    status = uct_ep_create(&ep_params, &ep);
     EXPECT_UCS_OK(status);
     ud_ep1 = ucs_derived_of(ep, uct_ud_ep_t);
     uct_ep_destroy(ep);
 
-    status = uct_ep_create(m_e1->iface(), &ep);
+    ep_params.iface = m_e1->iface();
+    status = uct_ep_create(&ep_params, &ep);
     EXPECT_UCS_OK(status);
     /* coverity[use_after_free] */
     ud_ep2 = ucs_derived_of(ep, uct_ud_ep_t);
@@ -781,6 +786,7 @@ UCS_TEST_P(test_ud, ep_destroy_flush) {
     uct_ep_h ep;
     ucs_status_t status;
     uct_ud_ep_t *ud_ep1;
+    uct_ep_params_t ep_params;
 
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
@@ -793,7 +799,9 @@ UCS_TEST_P(test_ud, ep_destroy_flush) {
     validate_flush();
 
     /* next created ep must not reuse old id */
-    status = uct_ep_create(m_e1->iface(), &ep);
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e1->iface();
+    status = uct_ep_create(&ep_params, &ep);
     EXPECT_UCS_OK(status);
     ud_ep1 = ucs_derived_of(ep, uct_ud_ep_t);
     EXPECT_EQ(1U, ud_ep1->ep_id);
@@ -816,6 +824,7 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     uct_ep_h ep;
     ucs_status_t status;
     uct_ud_ep_t *ud_ep;
+    uct_ep_params ep_params;
 
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
@@ -824,13 +833,16 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     uct_ep_destroy(m_e1->ep(0));
 
     /* check that ep id are not reused on both sides */
-    status = uct_ep_create(m_e1->iface(), &ep);
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e1->iface();
+    status = uct_ep_create(&ep_params, &ep);
     EXPECT_UCS_OK(status);
     ud_ep = ucs_derived_of(ep, uct_ud_ep_t);
     uct_ep_destroy(ep);
     EXPECT_EQ(1U, ud_ep->ep_id);
 
-    status = uct_ep_create(m_e2->iface(), &ep);
+    ep_params.iface = m_e2->iface();
+    status = uct_ep_create(&ep_params, &ep);
     EXPECT_UCS_OK(status);
     /* coverity[use_after_free] */
     ud_ep = ucs_derived_of(ep, uct_ud_ep_t);

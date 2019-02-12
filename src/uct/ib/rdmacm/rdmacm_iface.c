@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -136,7 +136,7 @@ static ucs_status_t uct_rdmacm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 }
 
 static uct_iface_ops_t uct_rdmacm_iface_ops = {
-    .ep_create_sockaddr       = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_ep_t),
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_ep_t),
     .ep_flush                 = uct_rdmacm_ep_flush,
     .ep_fence                 = uct_base_ep_fence,

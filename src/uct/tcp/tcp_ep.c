@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -111,20 +111,19 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_tcp_ep_create, uct_tcp_ep_t, uct_tcp_ep_t,
                                 const struct sockaddr_in*)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_tcp_ep_destroy, uct_tcp_ep_t, uct_ep_t)
 
-ucs_status_t uct_tcp_ep_create_connected(uct_iface_t *tl_iface,
-                                         const uct_device_addr_t *dev_addr,
-                                         const uct_iface_addr_t *iface_addr,
+ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
                                          uct_ep_h *ep_p)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    uct_tcp_iface_t *iface = ucs_derived_of(params->iface, uct_tcp_iface_t);
     uct_tcp_ep_t *tcp_ep = NULL;
     struct sockaddr_in dest_addr;
     ucs_status_t status;
 
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port   = *(in_port_t*)iface_addr;
-    dest_addr.sin_addr   = *(struct in_addr*)dev_addr;
+    dest_addr.sin_port   = *(in_port_t*)params->iface_addr;
+    dest_addr.sin_addr   = *(struct in_addr*)params->dev_addr;
 
     /* TODO try to reuse existing connection */
     status = uct_tcp_ep_create(iface, -1, &dest_addr, &tcp_ep);

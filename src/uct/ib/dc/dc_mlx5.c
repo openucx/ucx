@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -88,20 +88,23 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
 
 
 static ucs_status_t
-uct_dc_mlx5_ep_create_connected(uct_iface_h tl_iface,
-                                const uct_device_addr_t *dev_addr,
-                                const uct_iface_addr_t *iface_addr,
-                                uct_ep_h* ep_p)
+uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
-    const uct_dc_mlx5_iface_addr_t *if_addr = (const uct_dc_mlx5_iface_addr_t *)iface_addr;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(params->iface,
+                                                uct_dc_mlx5_iface_t);
+    const uct_ib_address_t *ib_addr;
+    const uct_dc_mlx5_iface_addr_t *if_addr;
     ucs_status_t status;
     int is_global;
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
 
     ucs_trace_func("");
+
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
+    ib_addr = (const uct_ib_address_t *)params->dev_addr;
+    if_addr = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
+
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
                                       ib_addr, iface->super.super.super.path_bits[0],
                                       &av, &grh_av, &is_global);
@@ -1049,7 +1052,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_progress           = uct_rc_iface_do_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
-    .ep_create_connected      = uct_dc_mlx5_ep_create_connected,
+    .ep_create                = uct_dc_mlx5_ep_create_connected,
     .ep_destroy               = uct_dc_mlx5_ep_destroy,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
     .iface_query              = uct_dc_mlx5_iface_query,
