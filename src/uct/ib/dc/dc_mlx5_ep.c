@@ -535,9 +535,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
         }
     }
 
-    if (!uct_dc_mlx5_iface_dci_ep_has_tx_resources(ep)) {
-        /* Do not check FC resources here. All dcis may be flushed,
-         * while FC resources are missing. */
+    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
@@ -991,6 +989,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                       UCT_PENDING_REQ_PRIV_LEN);
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
         uct_dc_mlx5_pending_req_priv(r)->ep = ep;
         group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
     } else {

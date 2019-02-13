@@ -286,18 +286,11 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_dc_mlx5_iface_dci_ep_has_tx_resources(uct_dc_mlx5_ep_t *ep)
-{
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
-    return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
-           uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
-}
-
-static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
-    return uct_dc_mlx5_iface_dci_ep_has_tx_resources(ep) &&
+    return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
+           uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci) &&
            uct_rc_fc_has_resources(&iface->super.super, &ep->fc);
 }
 

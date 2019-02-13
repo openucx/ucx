@@ -332,6 +332,7 @@ UCS_TEST_P(test_uct_pending, pending_purge)
     for (int i = 0; i < num_eps; ++i) {
         m_e1->connect(i, *m_e2, i);
         send_am_fill_resources(m_e1->ep(i));
+        reqs[i].func = NULL;
         EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(i), &reqs[i], 0));
     }
 
