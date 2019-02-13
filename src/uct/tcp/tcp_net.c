@@ -190,7 +190,7 @@ static ucs_status_t uct_tcp_do_io(int fd, void *data, size_t *length_p,
     ssize_t ret;
 
     ucs_assert(*length_p > 0);
-    ret = io_func(fd, data, *length_p, 0);
+    ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
     if (ret == 0) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
