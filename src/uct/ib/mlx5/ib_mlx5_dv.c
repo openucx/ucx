@@ -99,8 +99,8 @@ static ucs_status_t uct_ib_mlx5dv_create_ksm(uct_ib_md_t *ibmd,
     memh->atomic_dvmr = mlx5dv_devx_obj_create(md->super.dev.ibv_context, in, inlen,
                                                out, sizeof(out));
     if (memh->atomic_dvmr == NULL) {
-        ucs_error("CREATE_MKEY KSM failed: %m");
-        status = UCS_ERR_IO_ERROR;
+        ucs_debug("CREATE_MKEY KSM failed: %m");
+        status = UCS_ERR_UNSUPPORTED;
         goto out;
     }
 
