@@ -121,7 +121,8 @@ struct mlx5_grh_av {
 
 
 enum {
-    UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0)    /* Device supports KSM */
+    UCT_IB_MLX5_MD_FLAG_KSM        = UCS_BIT(0),   /* Device supports KSM */
+    UCT_IB_MLX5_MD_FLAG_PCI_ATOMIC = UCS_BIT(1)    /* Device supports PCI atomics */
 };
 
 /**
