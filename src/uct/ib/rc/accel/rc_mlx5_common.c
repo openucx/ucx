@@ -810,3 +810,17 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
     return nfreed;
 }
+
+ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+
+    if (UCT_IB_MLX5_MD_FLAGS(md) & UCT_IB_MLX5_MD_FLAG_PCI_ATOMIC) {
+        iface->tx.next_fence = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
+        iface->tx.fence_beat++;
+    }
+
+    UCT_TL_IFACE_STAT_FENCE(&iface->super.super.super);
+    return UCS_OK;
+}

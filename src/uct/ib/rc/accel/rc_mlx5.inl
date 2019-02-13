@@ -1296,3 +1296,19 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     }
     return UCS_OK;
 }
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rc_mlx5_ep_atomic_fence(uct_rc_mlx5_iface_common_t *iface,
+                            uct_ib_mlx5_txwq_t *txwq)
+{
+    uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
+
+    fm_ce_se |= txwq->next_fence;
+    if (txwq->fence_beat != iface->tx.fence_beat) {
+        txwq->fence_beat = iface->tx.fence_beat;
+        fm_ce_se |= iface->tx.next_fence;
+    }
+    txwq->next_fence = 0;
+
+    return fm_ce_se;
+}
