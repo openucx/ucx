@@ -489,15 +489,15 @@ void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
     status = uct_query_md_resources(&resources, &num_resources);
     if (status != UCS_OK) {
         printf("#   < failed to query MD resources >\n");
-        goto out;
+        return;
     }
 
-    for (i = 0; i < num_resources; ++i) {
-        print_md_info(resources[i].md_name, print_opts, print_flags, req_tl_name);
+    if (print_opts & PRINT_DEVICES) {
+        for (i = 0; i < num_resources; ++i) {
+            print_md_info(resources[i].md_name, print_opts, print_flags, req_tl_name);
+        }
     }
 
     uct_release_md_resource_list(resources);
-out:
-    ;
 }
 
