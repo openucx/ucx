@@ -8,6 +8,7 @@
 
 #include "module.h"
 
+#include <ucs/sys/preprocessor.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -106,10 +107,34 @@ static void ucs_module_loader_init_paths()
     }
 }
 
+static void ucs_module_init(const char *module_path, void *dl)
+{
+    const char *module_init_name =
+                    UCS_PP_MAKE_STRING(UCS_MODULE_CONSTRUCTOR_NAME);
+    char *fullpath, buffer[PATH_MAX];
+    ucs_status_t (*init_func)();
+    ucs_status_t status;
+
+    fullpath = realpath(module_path, buffer);
+    ucs_trace("loaded %s [%p]", fullpath, dl);
+
+    init_func = dlsym(dl, module_init_name);
+    if (init_func == NULL) {
+        return;
+    }
+
+    ucs_trace("calling '%s' in '%s': [%p]", module_init_name, fullpath, init_func);
+    status = init_func();
+    if (status != UCS_OK) {
+        ucs_debug("initializing '%s' failed: %s, unloading", fullpath,
+                  ucs_status_string(status));
+        dlclose(dl);
+    }
+}
+
 static void ucs_module_load_one(const char *framework, const char *module_name)
 {
     char module_path[PATH_MAX] = {0};
-    char fullpath[PATH_MAX]    = {0};
     const char *error;
     unsigned i;
     void *dl;
@@ -125,7 +150,7 @@ static void ucs_module_load_one(const char *framework, const char *module_name)
         /* Using RTLD_GLOBAL to allow sub-modules */
         dl = dlopen(module_path, RTLD_LAZY|RTLD_GLOBAL);
         if (dl != NULL) {
-            ucs_debug("loaded %s [%p]", realpath(module_path, fullpath), dl);
+            ucs_module_init(module_path, dl);
             break;
         } else {
             /* If a module fails to load, silently give up */
