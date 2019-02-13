@@ -10,6 +10,7 @@
 ## 1.5.2 (TBD)
 Bugfixes:
 - Fix segfault when libuct.so is reloaded - issue #3558
+- Fix ucx_info crash when printing configuration alias
 
 ## 1.5.1 (April 1, 2019)
 Bugfixes:
