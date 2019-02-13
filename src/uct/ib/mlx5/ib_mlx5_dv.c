@@ -101,6 +101,7 @@ static ucs_status_t uct_ib_mlx5dv_create_ksm(uct_ib_md_t *ibmd,
     if (memh->atomic_dvmr == NULL) {
         ucs_debug("CREATE_MKEY KSM failed: %m");
         status = UCS_ERR_UNSUPPORTED;
+        md->flags &= ~UCT_IB_MLX5_MD_FLAG_KSM;
         goto out;
     }
 
