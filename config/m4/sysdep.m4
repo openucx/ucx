@@ -142,3 +142,9 @@ AC_CHECK_HEADERS([sys/capability.h],
                                  [AC_DEFINE([HAVE_SYS_CAPABILITY_H], [0], [Linux capability API support])],
                                  [[#include <sys/capability.h>]])]
                  )
+
+
+#
+# Check for PR_SET_PTRACER
+#
+AC_CHECK_DECLS([PR_SET_PTRACER], [], [], [#include <sys/prctl.h>])

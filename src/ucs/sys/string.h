@@ -98,6 +98,18 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr, char *ip_str, siz
  */
 char* ucs_strncpy_safe(char *dst, const char *src, size_t len);
 
+
+/**
+ * Remove whitespace characters in the beginning and end of the string, as
+ * detected by isspace(3). Returns a pointer to the new string (which may be a
+ * substring of 'str'). The original string 'str' may be modified in-place.
+ *
+ * @param str  String to remove whitespaces from.
+ * @return Pointer to the new string, with leading/trailing whitespaces removed.
+ */
+char *ucs_strtrim(char *str);
+
+
 END_C_DECLS
 
 #endif
