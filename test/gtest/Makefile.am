@@ -161,7 +161,10 @@ gtest_SOURCES += \
 	uct/ib/test_cq_moderation.cc \
 	uct/ib/test_ib_xfer.cc
 gtest_CPPFLAGS += \
-    $(IBVERBS_CPPFLAGS)
+	$(IBVERBS_CPPFLAGS)
+gtest_LDADD += \
+	$(IBVERBS_LDFLAGS) \
+	$(top_builddir)/src/uct/ib/libuct_ib.la
 if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/ib/ud_base.cc \
@@ -182,8 +185,6 @@ if HAVE_RDMACM
 gtest_SOURCES += \
 	uct/ib/test_sockaddr.cc
 endif
-gtest_LDADD += \
-	$(top_builddir)/src/uct/ib/libuct_ib.la
 endif # HAVE_IB
 
 if HAVE_CUDA
