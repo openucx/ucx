@@ -177,12 +177,15 @@ int main(int argc, char **argv)
         print_type_info(tl_name);
     }
 
-    if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
-        ucs_config_parser_print_all_opts(stdout, print_flags);
+    if ((print_opts & PRINT_DEVICES) || (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
+        /* if UCS_CONFIG_PRINT_CONFIG is ON, trigger loading UCT modules by
+         * calling print_uct_info()->uct_query_md_resources()
+         */
+        print_uct_info(print_opts, print_flags, tl_name);
     }
 
-    if (print_opts & PRINT_DEVICES) {
-        print_uct_info(print_opts, print_flags, tl_name);
+    if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
+        ucs_config_parser_print_all_opts(stdout, print_flags);
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP)) {
