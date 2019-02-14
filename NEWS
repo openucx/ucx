@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.5.0 rc2 (February 8, 2019)
+## 1.5.0 (February 14, 2019)
 Features:
 - New emulation mode enabling full UCX functionality (Atomic, Put, Get)
   over TCP and RDMA-CORE interconnects which don't implement full RDMA semantics
