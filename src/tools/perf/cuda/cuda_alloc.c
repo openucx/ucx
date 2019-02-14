@@ -69,8 +69,7 @@ static void ucp_perf_cuda_free(ucx_perf_context_t *perf, void *address,
     cudaFree(address);
 }
 
-void ucx_perf_cuda_global_init()
-{
+UCS_STATIC_INIT {
     static ucx_perf_allocator_t cuda_allocator = {
         .init      = ucx_perf_cuda_init,
         .ucp_alloc = ucp_perf_cuda_alloc,

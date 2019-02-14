@@ -16,6 +16,7 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/module.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
@@ -458,6 +459,7 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler)
 
 static ucs_status_t ucm_event_install(int events)
 {
+    UCS_MODULE_FRAMEWORK_DECLARE(ucm);
     ucm_event_installer_t *event_installer;
     int native_events, malloc_events;
     ucs_status_t status;
@@ -495,6 +497,7 @@ static ucs_status_t ucm_event_install(int events)
     ucm_debug("malloc hooks are ready");
 
     /* Call extra event installers */
+    UCS_MODULE_FRAMEWORK_LOAD(ucm);
     ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
         status = event_installer->func(events);
         if (status != UCS_OK) {

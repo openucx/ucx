@@ -51,6 +51,27 @@
 
 
 /**
+ * Define a function to be called when a module is loaded.
+ * Some things can't be done in shared library constructor, and need to be done
+ * only after dlopen() completes. For example, loading another shared library
+ * which uses symbols from the current module.
+ *
+ * Usage:
+ *    UCS_MODULE_INIT() { ... code ... }
+ */
+#define UCS_MODULE_INIT() \
+    ucs_status_t __attribute__((visibility("protected"))) \
+    UCS_MODULE_CONSTRUCTOR_NAME(void)
+
+
+/**
+ * Define the name of a loadable module global constructor
+ */
+#define UCS_MODULE_CONSTRUCTOR_NAME \
+    ucs_module_global_init
+
+
+/**
  * Internal function. Please use @ref UCS_MODULE_FRAMEWORK_LOAD macro instead.
  */
 void ucs_load_modules(const char *framework, const char *modules,

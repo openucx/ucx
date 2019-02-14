@@ -52,6 +52,7 @@ typedef struct uct_config_bundle {
 } uct_config_bundle_t;
 
 
+
 ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
                                     unsigned *num_resources_p)
 {

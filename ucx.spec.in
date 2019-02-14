@@ -1,10 +1,12 @@
 %{!?configure_options: %global configure_options %{nil}}
 %bcond_without cma
+%bcond_with    cuda
+%bcond_with    gdrcopy
 %bcond_without ib
 %bcond_without ib_cm
-%bcond_with knem
+%bcond_with    knem
 %bcond_without rdmacm
-%bcond_with xpmem
+%bcond_with    xpmem
 
 Name: ucx
 Version: @VERSION@
@@ -24,6 +26,12 @@ ExclusiveArch: aarch64 ppc64le x86_64
 BuildRequires: automake autoconf libtool gcc-c++ numactl-devel
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
+%endif
+%if %{with cuda}
+BuildRequires: xorg-x11-drv-nvidia-devel
+%endif
+%if %{with gdrcopy}
+BuildRequires: gdrcopy
 %endif
 %if %{with ib}
 BuildRequires: libibverbs-devel
@@ -79,6 +87,8 @@ Provides static libraries required for developing with UCX.
            --disable-assertions \
            --disable-params-check \
            %_enable_arg cma cma \
+           %_with_arg cuda cuda \
+           %_with_arg gdrcopy gdrcopy \
            %_with_arg ib verbs \
            %_with_arg ib_cm cm \
            %_with_arg knem knem \
@@ -129,6 +139,39 @@ process.
 
 %files cma
 %{_libdir}/ucx/libuct_cma.so.*
+%endif
+
+# ucx-cuda
+%if %{with cuda}
+%package cuda
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX CUDA support
+Group: System Environment/Libraries
+
+%description cuda
+Provide CUDA (NVIDIA GPU) support for UCX. Enables passing GPU memory pointers
+to UCX communication routines, and transports taking advantage of GPU-Direct
+technology for direct data transfer between GPU and RDMA devices.
+
+%files cuda
+%{_libdir}/ucx/libucx_perftest_cuda.so.*
+%{_libdir}/ucx/libucm_cuda.so.*
+%{_libdir}/ucx/libuct_cuda.so.*
+%endif
+
+# ucx-gdrcopy
+%if %{with gdrcopy}
+%package gdrcopy
+Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
+Summary: UCX GDRCopy support
+Group: System Environment/Libraries
+
+%description gdrcopy
+Provide GDRCopy support for UCX. GDRCopy is a low-latency GPU memory copy
+library, built on top of the NVIDIA GPUDirect RDMA technology.
+
+%files gdrcopy
+%{_libdir}/ucx/libuct_cuda_gdrcopy.so.*
 %endif
 
 # ucx-ib

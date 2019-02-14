@@ -50,8 +50,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          LDFLAGS="$save_LDFLAGS"
 
          AS_IF([test "x$cuda_happy" == "xyes"],
-               [AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA support])
-                AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
+               [AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
                 AC_SUBST([CUDA_LDFLAGS], ["$CUDA_LDFLAGS"])],
                [AS_IF([test "x$with_cuda" != "xguess"],
                       [AC_MSG_ERROR([CUDA support is requested but cuda packages can't found])],
@@ -65,7 +64,3 @@ AS_IF([test "x$cuda_checked" != "xyes"],
    ]) # "x$cuda_checked" != "xyes"
 
 ]) # UCX_CHECK_CUDA
-
-
-# TODO push this check to sub-components (ucm,uct,perftest)
-UCX_CHECK_CUDA
