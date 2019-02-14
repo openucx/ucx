@@ -17,6 +17,7 @@
 #include <ucm/api/ucm.h>
 #include <pthread.h>
 #include <sys/resource.h>
+#include <float.h>
 
 
 #define UCT_IB_MD_PREFIX         "ib"
@@ -25,6 +26,10 @@
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
+
+static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
+                               sizeof(ucs_config_bw_spec_t),
+                               UCS_CONFIG_TYPE_BW_SPEC);
 
 
 static ucs_config_field_t uct_ib_md_config_table[] = {
@@ -127,6 +132,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "The actual maximal length is also limited by device capabilities.",
      ucs_offsetof(uct_ib_md_config_t, ext.max_inline_klm_list), UCS_CONFIG_TYPE_UINT},
 #endif
+
+    {"PCI_BW", "",
+     "Maximum effective data transfer rate of PCI bus connected to HCA\n",
+     ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
 
     {NULL}
 };
@@ -1402,6 +1411,20 @@ uct_ib_md_parse_subnet_prefix(const char *subnet_prefix_str,
     return UCS_OK;
 }
 
+static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
+                               struct ibv_device *ib_device)
+{
+    unsigned i;
+
+    for (i = 0; i < md_config->pci_bw.count; i++) {
+        if (!strcmp(ib_device->name, md_config->pci_bw.device[i].name)) {
+            return md_config->pci_bw.device[i].bw;
+        }
+    }
+
+    return DBL_MAX;
+}
+
 ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
@@ -1545,6 +1568,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     if (md_attr.cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
         md->dev.max_zcopy_log_sge = 1;
     }
+
+    md->pci_bw = uct_ib_md_pci_bw(md_config, ib_device);
 
     *md_p = &md->super;
     status = UCS_OK;
