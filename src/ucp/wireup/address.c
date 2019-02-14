@@ -67,9 +67,13 @@ typedef struct {
                                         UCP_ADDRESS_FLAG_MD_ALLOC | \
                                         UCP_ADDRESS_FLAG_MD_REG)
 
-static size_t ucp_address_string_packed_size(const char *s)
+static size_t ucp_address_worker_name_size(ucp_worker_h worker)
 {
-    return strlen(s) + 1;
+#if ENABLE_DEBUG_DATA
+    return strlen(ucp_worker_get_name(worker)) + 1;
+#else
+    return 0;
+#endif
 }
 
 static size_t ucp_address_iface_attr_size(ucp_worker_t *worker)
@@ -85,27 +89,37 @@ static uint64_t ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
 }
 
 /* Pack a string and return a pointer to storage right after the string */
-static void* ucp_address_pack_string(const char *s, void *dest)
+static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest)
 {
+#if ENABLE_DEBUG_DATA
+    const char *s = ucp_worker_get_name(worker);
     size_t length = strlen(s);
 
     ucs_assert(length <= UINT8_MAX);
     *(uint8_t*)dest = length;
     memcpy(dest + 1, s, length);
     return dest + 1 + length;
+#else
+    return dest;
+#endif
 }
 
 /* Unpack a string and return pointer to next storage byte */
-static const void* ucp_address_unpack_string(const void *src, char *s, size_t max)
+static const void* ucp_address_unpack_worker_name(const void *src, char *s, size_t max)
 {
+#if ENABLE_DEBUG_DATA
     size_t length, avail;
 
     ucs_assert(max >= 1);
     length   = *(const uint8_t*)src;
     avail    = ucs_min(length, max - 1);
     memcpy(s, src + 1, avail);
-    s[avail]  = '\0';
+    s[avail] = '\0';
     return src + length + 1;
+#else
+    s[0] = '\0';
+    return src;
+#endif
 }
 
 static ucp_address_packed_device_t*
@@ -181,15 +195,6 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
     return UCS_OK;
 }
 
-static const char *ucp_address_get_worker_name(ucp_worker_h worker)
-{
-    #if ENABLE_DEBUG_DATA
-        return ucp_worker_get_name(worker);
-    #else
-        return "";
-    #endif
-}
-
 static size_t ucp_address_packed_size(ucp_worker_h worker,
                                       const ucp_address_packed_device_t *devices,
                                       ucp_rsc_index_t num_devices)
@@ -197,8 +202,7 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
     const ucp_address_packed_device_t *dev;
     size_t size;
 
-    size = sizeof(uint64_t) +
-           ucp_address_string_packed_size(ucp_address_get_worker_name(worker));
+    size = sizeof(uint64_t) + ucp_address_worker_name_size(worker);
 
     if (num_devices == 0) {
         size += 1;                      /* NULL md_index */
@@ -387,7 +391,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     *(uint64_t*)ptr = worker->uuid;
     ptr += sizeof(uint64_t);
-    ptr = ucp_address_pack_string(ucp_address_get_worker_name(worker), ptr);
+    ptr = ucp_address_pack_worker_name(worker, ptr);
 
     if (num_devices == 0) {
         *((uint8_t*)ptr) = UCP_NULL_RESOURCE;
@@ -578,8 +582,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     unpacked_address->uuid = *(uint64_t*)ptr;
     ptr += sizeof(uint64_t);
 
-    aptr = ucp_address_unpack_string(ptr, unpacked_address->name,
-                                     sizeof(unpacked_address->name));
+    aptr = ucp_address_unpack_worker_name(ptr, unpacked_address->name,
+                                          sizeof(unpacked_address->name));
 
     address_count = 0;
 
