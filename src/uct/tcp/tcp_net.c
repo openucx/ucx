@@ -30,15 +30,14 @@ typedef ssize_t (*uct_tcp_io_func_t)(int fd, void *data, size_t size, int flags)
 char *uct_tcp_sockaddr_2_string(const struct sockaddr_in *addr, char **str_addr,
                                 size_t *str_addr_len)
 {
-    int ret = 0;
+    char *tmp_addr = NULL;
+    int ret;
 
     if (str_addr != NULL && *str_addr != NULL && str_addr_len && NULL) {
         ret = snprintf(*str_addr, *str_addr_len, "%s:%d",
                        inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
-        *str_addr_len = ret;
-        return *str_addr;
+        return ret < 0 ? NULL : *str_addr;
     } else {
-        char *tmp_addr = NULL;
         ret = ucs_asprintf("ipv4_addr", &tmp_addr, "%s:%d",
                            inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
         if (ret == 0) {
