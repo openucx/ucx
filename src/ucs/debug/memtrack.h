@@ -108,6 +108,8 @@ void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
 int ucs_munmap(void *addr, size_t length);
 char *ucs_strdup(const char *src, const char *name);
 char *ucs_strndup(const char *src, size_t n, const char *name);
+int ucs_vasprintf(const char *name, char **strp, const char *fmt, va_list ap);
+int ucs_asprintf(const char *name, char **strp, const char *fmt, ...);
 
 #else
 
