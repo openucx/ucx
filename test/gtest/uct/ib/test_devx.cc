@@ -19,7 +19,7 @@ public:
         m_e = create_entity(0);
         m_entities.push_back(m_e);
 
-        if (!(md()->super.dev.flags & UCT_IB_DEVICE_FLAG_DEVX)) {
+        if (!(UCT_IB_MLX5_MD_FLAGS(md()) & UCT_IB_MLX5_MD_FLAG_DEVX)) {
             std::stringstream ss;
             ss << "DEVX is not supported by " << GetParam();
             UCS_TEST_SKIP_R(ss.str());

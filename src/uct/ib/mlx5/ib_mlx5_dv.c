@@ -314,7 +314,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     }
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
-    dev->flags |= UCT_IB_DEVICE_FLAG_DEVX;
+    md->flags |= UCT_IB_MLX5_MD_FLAG_DEVX;
     *p_md = &md->super;
     return status;
 
