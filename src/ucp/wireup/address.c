@@ -324,7 +324,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     if (ucp_worker_unified_mode(worker)) {
         /* Address contains resources index, not iface attrs.
          * Just take iface attrs from the local resource. */
-        rsc_idx               = *(ucp_rsc_index_t*)ptr;
+        rsc_idx               = (*(ucp_rsc_index_t*)ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
         wiface                = ucp_worker_iface(worker, rsc_idx);
         iface_attr->cap_flags = wiface->attr.cap.flags;
         iface_attr->priority  = wiface->attr.priority;
