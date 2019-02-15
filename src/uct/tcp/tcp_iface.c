@@ -146,10 +146,10 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     for (i = 0; i < nevents; ++i) {
         ep = events[i].data.ptr;
         if (events[i].events & EPOLLIN) {
-            count += uct_tcp_ep_progress_rx(ep);
+            count += ep->progress_rx(ep);
         }
         if (events[i].events & EPOLLOUT) {
-            count += uct_tcp_ep_progress_tx(ep);
+            count += ep->progress_tx(ep);
         }
     }
     return count;

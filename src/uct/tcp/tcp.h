@@ -32,6 +32,9 @@ typedef enum uct_tcp_ep_conn_state {
     UCT_TCP_EP_CONN_REFUSED,
 } uct_tcp_ep_conn_state_t;
 
+struct uct_tcp_ep;
+typedef unsigned (*uct_tcp_ep_progress_t)(struct uct_tcp_ep *ep);
+
 /**
  * TCP endpoint
  */
@@ -43,6 +46,8 @@ typedef struct uct_tcp_ep {
     void                          *buf;      /* Partial send/recv data */
     size_t                        length;    /* How much data in the buffer */
     size_t                        offset;    /* Next offset to send/recv */
+    uct_tcp_ep_progress_t         progress_tx;
+    uct_tcp_ep_progress_t         progress_rx;
     ucs_list_link_t               list;
     uct_tcp_ep_conn_state_t       conn_state;
     struct sockaddr_in            peer;

@@ -33,7 +33,7 @@ char *uct_tcp_sockaddr_2_string(const struct sockaddr_in *addr, char **str_addr,
     char *tmp_addr = NULL;
     int ret;
 
-    if (str_addr != NULL && *str_addr != NULL && str_addr_len && NULL) {
+    if ((str_addr != NULL) && (*str_addr != NULL) && (str_addr_len != NULL)) {
         ret = snprintf(*str_addr, *str_addr_len, "%s:%d",
                        inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
         return ret < 0 ? NULL : *str_addr;
