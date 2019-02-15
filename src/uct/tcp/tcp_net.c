@@ -26,12 +26,49 @@
 
 typedef ssize_t (*uct_tcp_io_func_t)(int fd, void *data, size_t size, int flags);
 
+/* Caller is responsible to free memory allocated if str_addr wasn't provided */
+char *uct_tcp_sockaddr_2_string(const struct sockaddr_in *addr, char **str_addr,
+                                size_t *str_addr_len)
+{
+    int ret = 0;
+
+    if (str_addr != NULL && *str_addr != NULL && str_addr_len && NULL) {
+        ret = snprintf(*str_addr, *str_addr_len, "%s:%d",
+                       inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+        *str_addr_len = ret;
+        return *str_addr;
+    } else {
+        char *tmp_addr = NULL;
+        ret = ucs_asprintf("ipv4_addr", &tmp_addr, "%s:%d",
+                           inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+        if (ret == 0) {
+            return NULL;
+        }
+
+        if (str_addr) {
+            *str_addr = tmp_addr;
+        }
+        if (str_addr_len) {
+            *str_addr_len = ret;
+        }
+
+        return tmp_addr;
+    }
+
+    return NULL;
+}
 
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
 {
     int ret = connect(fd, (struct sockaddr*)dest_addr, sizeof(*dest_addr));
     if (ret < 0) {
-        ucs_error("connect() failed: %m"); // TODO print address
+        if (errno == EINPROGRESS) {
+	    return UCS_INPROGRESS;
+        }
+
+        ucs_error("connect(%s:%d) failed: %m",
+                  inet_ntoa(dest_addr->sin_addr),
+                  ntohs(dest_addr->sin_port));
         return UCS_ERR_UNREACHABLE;
     }
     return UCS_OK;

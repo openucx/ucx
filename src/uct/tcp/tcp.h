@@ -26,6 +26,12 @@ typedef struct uct_tcp_am_hdr {
 } UCS_S_PACKED uct_tcp_am_hdr_t;
 
 
+typedef enum uct_tcp_ep_conn_state {
+    UCT_TCP_EP_CONN_IN_PROGRESS,
+    UCT_TCP_EP_CONN_CONNECTED,
+    UCT_TCP_EP_CONN_REFUSED,
+} uct_tcp_ep_conn_state_t;
+
 /**
  * TCP endpoint
  */
@@ -38,6 +44,8 @@ typedef struct uct_tcp_ep {
     size_t                        length;    /* How much data in the buffer */
     size_t                        offset;    /* Next offset to send/recv */
     ucs_list_link_t               list;
+    uct_tcp_ep_conn_state_t       conn_state;
+    struct sockaddr_in            peer;
 } uct_tcp_ep_t;
 
 
@@ -82,6 +90,9 @@ typedef struct uct_tcp_iface_config {
 
 extern uct_md_component_t uct_tcp_md;
 extern const char *uct_tcp_address_type_names[];
+
+char *uct_tcp_sockaddr_2_string(const struct sockaddr_in *addr, char **str_addr,
+                                size_t *str_addr_len);
 
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr);
 
