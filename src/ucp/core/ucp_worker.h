@@ -293,4 +293,10 @@ ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
     return &ucp_worker_iface(worker, rsc_index)->attr;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_unified_mode(ucp_worker_h worker)
+{
+    return worker->context->config.ext.unified_mode;
+}
+
 #endif
