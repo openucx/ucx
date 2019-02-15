@@ -270,6 +270,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_neth_t *neth;
     size_t inl_size, wqe_size;
 
+    UCT_CHECK_AM_ID(id);
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super),
                        "uct_ud_mlx5_ep_am_zcopy");
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length, 0,
