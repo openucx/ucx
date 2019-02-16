@@ -124,10 +124,6 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
-unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep);
-
-unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
-
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove);
 
 ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,

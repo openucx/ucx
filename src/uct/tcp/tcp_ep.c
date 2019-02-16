@@ -77,6 +77,116 @@ static void uct_tcp_ep_change_conn_state(uct_tcp_ep_t *ep,
     ucs_free(str_addr);
 }
 
+static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_tcp_iface_t);
+    size_t send_length;
+    ucs_status_t status;
+
+    send_length = ep->length - ep->offset;
+    ucs_assert(send_length > 0);
+
+    status = uct_tcp_send(ep->fd, ep->buf + ep->offset, &send_length);
+    if (status < 0) {
+        return 0;
+    }
+
+    ucs_trace_data("tcp_ep %p: sent %zu bytes", ep, send_length);
+
+    iface->outstanding -= send_length;
+    ep->offset         += send_length;
+    if (ep->offset == ep->length) {
+        ep->offset = 0;
+        ep->length = 0;
+    }
+
+    return send_length > 0;
+}
+
+static unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
+{
+    unsigned                     count = 0;
+    uct_pending_req_priv_queue_t *priv;
+
+    ucs_trace_func("ep=%p", ep);
+
+    if (ep->length > 0) {
+        count += uct_tcp_ep_send(ep);
+    }
+
+    uct_pending_queue_dispatch(priv, &ep->pending_q,
+                               uct_tcp_ep_can_send(ep) == UCS_OK);
+
+    if (uct_tcp_ep_can_send(ep) == UCS_OK) {
+        ucs_assert(ucs_queue_is_empty(&ep->pending_q));
+        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
+    }
+
+    return count;
+}
+
+static unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr;
+    ucs_status_t status;
+    size_t recv_length;
+    ssize_t remainder;
+
+    ucs_trace_func("ep=%p", ep);
+
+    /* Receive next chunk of data */
+    recv_length = iface->config.buf_size - ep->length;
+    ucs_assertv(recv_length > 0, "ep=%p", ep);
+
+    status = uct_tcp_recv(ep->fd, ep->buf + ep->length, &recv_length);
+    if (status != UCS_OK) {
+        if (status == UCS_ERR_CANCELED) {
+            ucs_debug("tcp_ep %p: remote disconnected", ep);
+            uct_tcp_ep_mod_events(ep, 0, EPOLLIN);
+            uct_tcp_ep_destroy(&ep->super.super);
+        }
+        return 0;
+    }
+
+    ep->length += recv_length;
+    ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, recv_length);
+
+    /* Parse received active messages */
+    while ((remainder = ep->length - ep->offset) >= sizeof(*hdr)) {
+        hdr = ep->buf + ep->offset;
+        ucs_assert(hdr->length <= (iface->config.buf_size - sizeof(uct_tcp_am_hdr_t)));
+
+        if (remainder < sizeof(*hdr) + hdr->length) {
+            break;
+        }
+
+        /* Full message was received */
+        ep->offset += sizeof(*hdr) + hdr->length;
+
+        if (hdr->am_id >= UCT_AM_ID_MAX) {
+            ucs_error("invalid am id: %d", hdr->am_id);
+            continue;
+        }
+
+        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, hdr->am_id,
+                           hdr + 1, hdr->length, "RECV fd %d", ep->fd);
+        uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
+                            hdr->length, 0);
+    }
+
+    /* Move the remaining data to the beginning of the buffer
+     * TODO avoid extra copy on partial receive
+     */
+    ucs_assert(remainder >= 0);
+    memmove(ep->buf, ep->buf + ep->offset, remainder);
+    ep->offset = 0;
+    ep->length = remainder;
+
+    return recv_length > 0;
+}
+
 static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
 {
     socklen_t conn_status_sz = sizeof(int);
@@ -260,116 +370,6 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
             uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_ADD);
         }
     }
-}
-
-static unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
-{
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_tcp_iface_t);
-    size_t send_length;
-    ucs_status_t status;
-
-    send_length = ep->length - ep->offset;
-    ucs_assert(send_length > 0);
-
-    status = uct_tcp_send(ep->fd, ep->buf + ep->offset, &send_length);
-    if (status < 0) {
-        return 0;
-    }
-
-    ucs_trace_data("tcp_ep %p: sent %zu bytes", ep, send_length);
-
-    iface->outstanding -= send_length;
-    ep->offset         += send_length;
-    if (ep->offset == ep->length) {
-        ep->offset = 0;
-        ep->length = 0;
-    }
-
-    return send_length > 0;
-}
-
-unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
-{
-    unsigned                     count = 0;
-    uct_pending_req_priv_queue_t *priv;
-
-    ucs_trace_func("ep=%p", ep);
-
-    if (ep->length > 0) {
-        count += uct_tcp_ep_send(ep);
-    }
-
-    uct_pending_queue_dispatch(priv, &ep->pending_q,
-                               uct_tcp_ep_can_send(ep) == UCS_OK);
-
-    if (uct_tcp_ep_can_send(ep) == UCS_OK) {
-        ucs_assert(ucs_queue_is_empty(&ep->pending_q));
-        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
-    }
-
-    return count;
-}
-
-unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
-{
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-    uct_tcp_am_hdr_t *hdr;
-    ucs_status_t status;
-    size_t recv_length;
-    ssize_t remainder;
-
-    ucs_trace_func("ep=%p", ep);
-
-    /* Receive next chunk of data */
-    recv_length = iface->config.buf_size - ep->length;
-    ucs_assertv(recv_length > 0, "ep=%p", ep);
-
-    status = uct_tcp_recv(ep->fd, ep->buf + ep->length, &recv_length);
-    if (status != UCS_OK) {
-        if (status == UCS_ERR_CANCELED) {
-            ucs_debug("tcp_ep %p: remote disconnected", ep);
-            uct_tcp_ep_mod_events(ep, 0, EPOLLIN);
-            uct_tcp_ep_destroy(&ep->super.super);
-        }
-        return 0;
-    }
-
-    ep->length += recv_length;
-    ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, recv_length);
-
-    /* Parse received active messages */
-    while ((remainder = ep->length - ep->offset) >= sizeof(*hdr)) {
-        hdr = ep->buf + ep->offset;
-        ucs_assert(hdr->length <= (iface->config.buf_size - sizeof(uct_tcp_am_hdr_t)));
-
-        if (remainder < sizeof(*hdr) + hdr->length) {
-            break;
-        }
-
-        /* Full message was received */
-        ep->offset += sizeof(*hdr) + hdr->length;
-
-        if (hdr->am_id >= UCT_AM_ID_MAX) {
-            ucs_error("invalid am id: %d", hdr->am_id);
-            continue;
-        }
-
-        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, hdr->am_id,
-                           hdr + 1, hdr->length, "RECV fd %d", ep->fd);
-        uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
-                            hdr->length, 0);
-    }
-
-    /* Move the remaining data to the beginning of the buffer
-     * TODO avoid extra copy on partial receive
-     */
-    ucs_assert(remainder >= 0);
-    memmove(ep->buf, ep->buf + ep->offset, remainder);
-    ep->offset = 0;
-    ep->length = remainder;
-
-    return recv_length > 0;
 }
 
 ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
