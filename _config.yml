@@ -2,7 +2,7 @@ title: UCX
 description: Unified Communication X
 google_analytics: UA-60366922-1
 show_downloads: false
-theme: jekyll-theme-architect
+theme: jekyll-theme-slate
 
 gems:
   - jekyll-mentions
