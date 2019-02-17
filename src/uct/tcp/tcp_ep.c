@@ -204,6 +204,7 @@ static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
         ucs_error("Non-blocking connect(%s:%d) failed: %d",
                   inet_ntoa(ep->peer.sin_addr),
                   ntohs(ep->peer.sin_port), conn_status);
+        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
         return 0;
     }
 
