@@ -263,12 +263,32 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_zcopy_hdr_length) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, invalid_am_id) {
+UCS_TEST_P(uct_p2p_err_test, short_invalid_am_id) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
     mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
+                   UCT_MEM_HANDLE_NULL, 0, UCT_INVALID_RKEY,
+                   "active message id");
+}
+
+UCS_TEST_P(uct_p2p_err_test, bcopy_invalid_am_id) {
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+
+    mapped_buffer sendbuf(4, 2, sender());
+
+    test_error_run(OP_AM_BCOPY, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
+                   UCT_MEM_HANDLE_NULL, 0, UCT_INVALID_RKEY,
+                   "active message id");
+}
+
+UCS_TEST_P(uct_p2p_err_test, zcopy_invalid_am_id) {
+    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
+
+    mapped_buffer sendbuf(4, 2, sender());
+
+    test_error_run(OP_AM_ZCOPY, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
                    UCT_MEM_HANDLE_NULL, 0, UCT_INVALID_RKEY,
                    "active message id");
 }
