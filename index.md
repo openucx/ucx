@@ -8,9 +8,9 @@ $ ./contrib/configure-release --prefix=$PWD/install
 $ make -j8 install
 ```
 
-### Developing over UCX API
-   API documentation [PDF](https://github.com/openucx/ucx/wiki/api-doc/v1.5/ucx-v1.5.pdf)  
-   [Examples](https://github.com/openucx/ucx/tree/master/test/examples)
+### API documentation (v1.5)
+   [HTML](api/v1.5/html)  [PDF](api/v1.5/ucx.pdf)  
+   [Examples](https://github.com/openucx/ucx/tree/v1.5.x/test/examples)
   
 ### Buzz
    [UCX @ OpenSHMEM workshop](http://www.openucx.org/wp-content/uploads/2015/08/UCX_OpenSHMEM_2015.pdf)       
