@@ -1,10 +1,8 @@
 title: UCX
 description: Unified Communication X
 google_analytics: UA-60366922-1
-show_downloads: true
+show_downloads: false
 theme: jekyll-theme-architect
-zip_url: false
-tar_url: "https://github.com/openucx/ucx/releases/download/v1.5.0/ucx-1.5.0.tar.gz"
 
 gems:
   - jekyll-mentions
