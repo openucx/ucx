@@ -245,8 +245,10 @@ AS_IF([test "x$with_docs_only" == xyes],
      AC_ARG_ENABLE([mt],
                    AS_HELP_STRING([--enable-mt],
                                   [Enable thread support in UCP and UCT, default: NO]),
-         [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])],
-         [AC_DEFINE([ENABLE_MT], [0])])
+         [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])
+          mt_enable=Enabled],
+         [AC_DEFINE([ENABLE_MT], [0])
+          mt_enable=Disabled])
 
 
      #
@@ -346,6 +348,7 @@ AC_MSG_NOTICE([Building documents only])
 ],
 [
 AC_MSG_NOTICE([UCX build configuration:])
+AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([      UCT modules:    <$(echo $uct_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([        CUDA modules: <$(echo $uct_cuda_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([        IB modules:   <$(echo $uct_ib_modules|tr ':' ' ') >])
