@@ -1130,6 +1130,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_md_t     *md  = uct_ib_iface_md(iface);
     static const unsigned ib_port_widths[] = {
         [0] = 1,
         [1] = 4,
@@ -1235,7 +1236,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         extra_pkt_len += UCT_IB_LRH_LEN;
     }
 
-    iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);
+    iface_attr->bandwidth = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
     iface_attr->priority  = uct_ib_device_spec(dev)->priority;
 
     return UCS_OK;

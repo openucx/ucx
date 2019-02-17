@@ -109,6 +109,7 @@ typedef struct uct_ib_md {
     } custom_devices;
     int                      check_subnet_filter;
     uint64_t                 subnet_filter;
+    double                   pci_bw;
 } uct_ib_md_t;
 
 
@@ -132,6 +133,8 @@ typedef struct uct_ib_md_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(spec) custom_devices; /**< Custom device specifications */
 
     char                     *subnet_prefix; /**< Filter of subnet_prefix for IB ports */
+
+    UCS_CONFIG_ARRAY_FIELD(ucs_config_bw_spec_t, device) pci_bw; /**< List of PCI BW for devices */
 } uct_ib_md_config_t;
 
 
