@@ -34,6 +34,7 @@ protected:
         unsigned           group_idx;
         unsigned           elem_idx;
         bool               last;
+        bool               release;
         ucs_arbiter_elem_t elem;
     };
 
@@ -157,8 +158,40 @@ protected:
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
     {
-        arb_elem *e = ucs_container_of(elem, arb_elem, elem);
-        release_element(e);
+        test_arbiter *self = static_cast<test_arbiter*>(arg);
+        arb_elem *e        = ucs_container_of(elem, arb_elem, elem);
+
+        if (e->release) {
+            release_element(e);
+            ++self->m_count;
+            return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+        }
+
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
+
+    static ucs_arbiter_cb_result_t purge_cond_cb(ucs_arbiter_t *arbiter,
+                                                 ucs_arbiter_elem_t *elem,
+                                                 void *arg)
+    {
+        test_arbiter *self = static_cast<test_arbiter*>(arg);
+        arb_elem *e        = ucs_container_of(elem, arb_elem, elem);
+
+        if (e->release) {
+            ++self->m_count;
+            return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+        }
+
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
+
+
+    static ucs_arbiter_cb_result_t purge_dummy_cb(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_elem_t *elem,
+                                                  void *arg)
+    {
+        test_arbiter *self = static_cast<test_arbiter*>(arg);
+        ++self->m_count;
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
@@ -241,6 +274,91 @@ UCS_TEST_F(test_arbiter, add_purge) {
     ucs_arbiter_cleanup(&arbiter);
 }
 
+UCS_TEST_F(test_arbiter, purge_cond) {
+
+    unsigned num_elems = m_num_groups = 25;
+    ucs_arbiter_group_t groups[m_num_groups];
+    unsigned purged_count[m_num_groups];
+
+    ucs_arbiter_t arbiter;
+    ucs_arbiter_init(&arbiter);
+    memset(purged_count, 0, sizeof(unsigned) * m_num_groups);
+
+    for (unsigned i = 0; i < m_num_groups; ++i) {
+        ucs_arbiter_group_init(&groups[i]);
+
+        for (unsigned j = 0; j < num_elems; ++j) {
+            arb_elem *e = new arb_elem;
+            if (ucs::rand() % 2) {
+                e->release = true;
+                ++purged_count[i];
+            } else {
+                e->release = false;
+            }
+            ucs_arbiter_elem_init(&e->elem);
+            ucs_arbiter_group_push_elem(&groups[i], &e->elem);
+            /* coverity[leaked_storage] */
+        }
+        ucs_arbiter_group_schedule(&arbiter, &groups[i]);
+    }
+
+    // All groups are scheduled, start purging them from some non-current group
+    unsigned start = ucs::rand() % m_num_groups;
+    for (unsigned i = 0; i < m_num_groups; ++i) {
+        unsigned idx = (start + i) % m_num_groups;
+        m_count = 0;
+        ucs_arbiter_group_purge(&arbiter, &groups[idx], purge_cb, this);
+        EXPECT_EQ(m_count, purged_count[idx]);
+
+        m_count = 0;
+        ucs_arbiter_group_purge(&arbiter, &groups[idx], purge_dummy_cb, this);
+        EXPECT_EQ(m_count, num_elems - purged_count[idx]);
+
+        ucs_arbiter_group_cleanup(&groups[idx]);
+    }
+
+    ucs_arbiter_cleanup(&arbiter);
+}
+
+UCS_TEST_F(test_arbiter, purge_corner) {
+
+    ucs_arbiter_t arbiter;
+    ucs_arbiter_group_t group;
+    arb_elem elems[2];
+
+    ucs_arbiter_init(&arbiter);
+    ucs_arbiter_group_init(&group);
+
+    for (int i = 0; i < 2; ++i) {
+        ucs_arbiter_elem_init(&elems[i].elem);
+        elems[i].release = !i; // try to purge first
+        ucs_arbiter_group_push_elem(&group, &elems[i].elem);
+    }
+    m_count = 0;
+    ucs_arbiter_group_purge(&arbiter, &group, purge_cond_cb, this);
+    EXPECT_EQ(1, m_count);
+    EXPECT_FALSE(ucs_arbiter_group_is_empty(&group));
+    EXPECT_FALSE(ucs_arbiter_elem_is_scheduled(&elems[0].elem));
+    EXPECT_TRUE(ucs_arbiter_elem_is_scheduled(&elems[1].elem));
+
+    // try to reuse 0-th element and purge it (now it is last element)
+    ucs_arbiter_group_push_elem(&group, &elems[0].elem);
+    EXPECT_EQ(true, elems[0].release);
+    m_count = 0;
+    ucs_arbiter_group_purge(&arbiter, &group, purge_cond_cb, this);
+    EXPECT_EQ(1, m_count);
+    EXPECT_FALSE(ucs_arbiter_elem_is_scheduled(&elems[0].elem));
+    EXPECT_TRUE(ucs_arbiter_elem_is_scheduled(&elems[1].elem));
+
+    // clear the group
+    ucs_arbiter_group_purge(&arbiter, &group, purge_dummy_cb, this);
+    EXPECT_FALSE(ucs_arbiter_elem_is_scheduled(&elems[0].elem));
+    EXPECT_FALSE(ucs_arbiter_elem_is_scheduled(&elems[1].elem));
+
+    ucs_arbiter_group_cleanup(&group);
+    ucs_arbiter_cleanup(&arbiter);
+}
+
 UCS_TEST_F(test_arbiter, multiple_dispatch) {
     m_num_groups = 20;
 
@@ -257,6 +375,7 @@ UCS_TEST_F(test_arbiter, multiple_dispatch) {
             arb_elem *e = new arb_elem;
             e->group_idx = i;
             e->elem_idx  = j;
+            e->release   = true;
             e->last      = (j == num_elems - 1);
             ucs_arbiter_elem_init(&e->elem);
             ucs_arbiter_group_push_elem(&groups[i], &e->elem);
