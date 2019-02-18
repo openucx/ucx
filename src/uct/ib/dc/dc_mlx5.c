@@ -1028,7 +1028,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_pending_add           = uct_dc_mlx5_ep_pending_add,
     .ep_pending_purge         = uct_dc_mlx5_ep_pending_purge,
     .ep_flush                 = uct_dc_mlx5_ep_flush,
-    .ep_fence                 = uct_base_ep_fence,
+    .ep_fence                 = uct_dc_mlx5_ep_fence,
 #if IBV_EXP_HW_TM_DC
     .ep_tag_eager_short       = uct_dc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_dc_mlx5_ep_tag_eager_bcopy,
@@ -1040,7 +1040,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_tag_recv_cancel    = uct_dc_mlx5_iface_tag_recv_cancel,
 #endif
     .iface_flush              = uct_dc_mlx5_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
+    .iface_fence              = uct_rc_mlx5_iface_fence,
     .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
