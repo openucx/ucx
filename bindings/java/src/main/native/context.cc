@@ -1,24 +1,27 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
 #include "jucx_common_def.h"
-#include "org_ucx_jucx_Bridge.h"
+#include "org_ucx_jucx_ucp_UcpContext.h"
 
 #include <ucp/api/ucp.h>
+
+
 /**
- * Bridge methods for creating ucp_context from java
+ * Bridge method for creating ucp_context from java
  */
 JNIEXPORT jlong JNICALL
-Java_org_ucx_jucx_Bridge_createContextNative(JNIEnv *env, jclass cls, jobject jucx_context_params)
+Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
+                                                     jobject jucx_ctx_params)
 {
     ucp_params_t ucp_params = { 0 };
     ucp_config_t *config;
     ucs_status_t status;
     ucp_context_h ucp_context;
     jfieldID field;
-    jclass jucx_param_class = env->GetObjectClass(jucx_context_params);
+    jclass jucx_param_class = env->GetObjectClass(jucx_ctx_params);
 
     status = ucp_config_read(nullptr, nullptr, &config);
     if (status != UCS_OK) {
@@ -26,26 +29,26 @@ Java_org_ucx_jucx_Bridge_createContextNative(JNIEnv *env, jclass cls, jobject ju
     }
 
     field = env->GetFieldID(jucx_param_class, "fieldMask", "J");
-    ucp_params.field_mask = env->GetLongField(jucx_context_params, field);
+    ucp_params.field_mask = env->GetLongField(jucx_ctx_params, field);
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_FEATURES) {
         field = env->GetFieldID(jucx_param_class, "features", "J");
-        ucp_params.features = env->GetLongField(jucx_context_params, field);
+        ucp_params.features = env->GetLongField(jucx_ctx_params, field);
     }
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) {
         field = env->GetFieldID(jucx_param_class, "mtWorkersShared", "Z");
-        ucp_params.mt_workers_shared = env->GetBooleanField(jucx_context_params, field);
+        ucp_params.mt_workers_shared = env->GetBooleanField(jucx_ctx_params, field);
     }
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
         field = env->GetFieldID(jucx_param_class, "estimatedNumEps", "J");
-        ucp_params.estimated_num_eps = env->GetLongField(jucx_context_params, field);
+        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params, field);
     }
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_TAG_SENDER_MASK) {
         field = env->GetFieldID(jucx_param_class, "tagSenderMask", "J");
-        ucp_params.estimated_num_eps = env->GetLongField(jucx_context_params, field);
+        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params, field);
     }
 
     status = ucp_init(&ucp_params, config, &ucp_context);
@@ -54,12 +57,13 @@ Java_org_ucx_jucx_Bridge_createContextNative(JNIEnv *env, jclass cls, jobject ju
     }
 
     ucp_config_release(config);
-    return (native_ptr) ucp_context;
+    return (native_ptr)ucp_context;
 }
 
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_Bridge_cleanupContextNative(JNIEnv *env, jclass cls, jlong ucp_context_ptr)
+Java_org_ucx_jucx_ucp_UcpContext_cleanupContextNative(JNIEnv *env, jclass cls,
+                                                      jlong ucp_context_ptr)
 {
     ucp_cleanup((ucp_context_h)ucp_context_ptr);
 }

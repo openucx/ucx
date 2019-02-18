@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -9,21 +9,17 @@ package org.ucx.jucx;
  * Wrapper around native ucx struct, that holds pointer address.
  */
 public abstract class UcxNativeStruct {
-    private long nativeId;
-
-    public UcxNativeStruct(long nativeId) {
-        this.nativeId = nativeId;
-    }
+    private Long nativeId;
 
     /**
      * Getter for native pointer as long.
      * @return long integer representing native pointer
      */
-    public long getNativeId() {
+    public Long getNativeId() {
         return nativeId;
     }
 
-    protected void setNativeId(long nativeId) {
+    protected void setNativeId(Long nativeId) {
         this.nativeId = nativeId;
     }
 }

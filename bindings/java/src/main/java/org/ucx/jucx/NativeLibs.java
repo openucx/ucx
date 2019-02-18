@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -15,8 +15,27 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class LoadLibrary {
-    static String errorMessage = null;
+public class NativeLibs {
+    private static final String UCM  = "libucm.so";
+    private static final String UCS  = "libucs.so";
+    private static final String UCT  = "libuct.so";
+    private static final String UCP  = "libucp.so";
+    private static final String JUCX = "libjucx.so";
+    private static String errorMessage = null;
+
+    static {
+        loadLibrary(UCM);   // UCM library
+        loadLibrary(UCS);   // UCS library
+        loadLibrary(UCT);   // UCT library
+        loadLibrary(UCP);   // UCP library
+        loadLibrary(JUCX);  // JUCX native library
+    }
+
+    public static void load() {
+        if (errorMessage != null) {
+            throw new UnsatisfiedLinkError(errorMessage);
+        }
+    }
 
     /**
      * Tries to load the library, by extracting it from the current class jar.
@@ -24,8 +43,8 @@ public class LoadLibrary {
      *
      * @param resourceName - library name to be extracted and loaded from the this current jar.
      */
-    public static void loadLibrary(String resourceName) {
-        ClassLoader loader = LoadLibrary.class.getClassLoader();
+    private static void loadLibrary(String resourceName) {
+        ClassLoader loader = NativeLibs.class.getClassLoader();
 
         // Search shared object on java classpath
         URL url = loader.getResource(resourceName);
@@ -43,7 +62,7 @@ public class LoadLibrary {
                 System.load(filename);
             } catch (UnsatisfiedLinkError ex) {
                 errorMessage = "Native code library failed to load: "
-                               + resourceName;
+                    + resourceName;
             }
 
             file.deleteOnExit();
@@ -57,7 +76,7 @@ public class LoadLibrary {
      * @return the File object representing the extracted file
      * @throws IOException if fails to extract resource properly
      */
-    public static File extractResource(URL resourceURL) throws IOException {
+    private static File extractResource(URL resourceURL) throws IOException {
         InputStream is = resourceURL.openStream();
         if (is == null) {
             errorMessage = "Error extracting native library content";
@@ -72,7 +91,7 @@ public class LoadLibrary {
         }
 
         File file = new File(tempDir,
-                             new File(resourceURL.getPath()).getName());
+            new File(resourceURL.getPath()).getName());
         FileOutputStream os = null;
         try {
             os = new FileOutputStream(file);
@@ -93,7 +112,7 @@ public class LoadLibrary {
      * Creates a new temp directory in default temp files directory.
      * Directory will be represented by {@link #tempDir}.
      */
-    public static void createTempDir() throws IOException {
+    private static void createTempDir() throws IOException {
         if (tempDir == null) {
             Path tmp = Files.createTempDirectory("jucx");
             tempDir = tmp.toFile();
@@ -104,8 +123,8 @@ public class LoadLibrary {
     /**
      * Helper function to copy an InputStream into an OutputStream.
      */
-    public static void copy(InputStream is, OutputStream os)
-            throws IOException {
+    private static void copy(InputStream is, OutputStream os)
+        throws IOException {
         if (is == null || os == null) {
             return;
         }
@@ -120,7 +139,7 @@ public class LoadLibrary {
      * Helper function to close InputStream or OutputStream in a quiet way
      * which hides the exceptions.
      */
-    public static void closeQuietly(Closeable closable) {
+    private static void closeQuietly(Closeable closable) {
         if (closable == null) {
             return;
         }
