@@ -72,7 +72,7 @@ UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 
 UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_odp,
-           "REG_METHODS=odp,direct", "DM_COUNT?=0")
+           "REG_METHODS=odp,direct")
 {
     run(1000);
 }
