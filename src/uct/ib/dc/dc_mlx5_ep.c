@@ -295,6 +295,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 #if HAVE_IBV_EXP_DM
     }
 
+    UCT_CHECK_AM_ID(id);
     UCT_CHECK_LENGTH(length + sizeof(uct_rc_mlx5_am_short_hdr_t), 0,
                      iface->super.dm.seg_len, "am_short");
     UCT_DC_CHECK_RES_AND_FC(iface, ep);
@@ -324,6 +325,7 @@ ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_rc_iface_send_desc_t *desc;
     size_t length;
 
+    UCT_CHECK_AM_ID(id);
     UCT_DC_CHECK_RES_AND_FC(iface, ep);
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp, desc,
                                       id, uct_rc_mlx5_am_hdr_fill, uct_rc_mlx5_hdr_t,

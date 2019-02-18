@@ -266,6 +266,8 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
     uct_tcp_am_hdr_t *hdr;
     size_t packed_length;
 
+    UCT_CHECK_AM_ID(am_id);
+
     if (!uct_tcp_ep_can_send(ep)) {
         return UCS_ERR_NO_RESOURCE;
     }
