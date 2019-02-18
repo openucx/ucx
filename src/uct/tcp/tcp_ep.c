@@ -36,18 +36,22 @@ static inline ucs_status_t uct_tcp_ep_check_conn_state(uct_tcp_ep_t *ep)
     return UCS_ERR_UNREACHABLE;
 }
 
+static inline unsigned uct_tcp_ep_nothing_to_send(uct_tcp_ep_t *ep)
+{
+    ucs_assert(ep->offset <= ep->length);
+    /* TODO optimize to allow partial sends/message coalescing */
+    return ep->length == 0;
+}
+
 static inline ucs_status_t uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
 {
     ucs_status_t status = uct_tcp_ep_check_conn_state(ep);
-
 
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
-    ucs_assert(ep->offset <= ep->length);
-    /* TODO optimize to allow partial sends/message coalescing */
-   return ep->length == 0 ? UCS_OK : UCS_ERR_NO_RESOURCE;
+    return uct_tcp_ep_nothing_to_send(ep) ? UCS_OK : UCS_ERR_NO_RESOURCE;
 }
 
 static void uct_tcp_ep_change_conn_state(uct_tcp_ep_t *ep,
@@ -115,9 +119,9 @@ static unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
     }
 
     uct_pending_queue_dispatch(priv, &ep->pending_q,
-                               uct_tcp_ep_can_send(ep) == UCS_OK);
+                               uct_tcp_ep_nothing_to_send(ep));
 
-    if (uct_tcp_ep_can_send(ep) == UCS_OK) {
+    if (uct_tcp_ep_nothing_to_send(ep)) {
         ucs_assert(ucs_queue_is_empty(&ep->pending_q));
         uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
     }
@@ -187,33 +191,7 @@ static unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
     return recv_length > 0;
 }
 
-static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
-{
-    socklen_t conn_status_sz = sizeof(int);
-    int ret, conn_status;
-
-    ret = getsockopt(ep->fd, SOL_SOCKET, SO_ERROR,
-                     &conn_status, &conn_status_sz);
-    if (ret < 0) {
-        ucs_error("Failed to get SO_ERROR on fd %d: %m", ep->fd);
-        return 0;
-    }
-
-    if (conn_status != 0) {
-        uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_REFUSED);
-        ucs_error("Non-blocking connect(%s:%d) failed: %d",
-                  inet_ntoa(ep->peer.sin_addr),
-                  ntohs(ep->peer.sin_port), conn_status);
-        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
-        return 0;
-    }
-
-    ep->progress_tx = uct_tcp_ep_progress_tx;
-    ep->progress_rx = uct_tcp_ep_progress_rx;
-    uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_CONNECTED);
-
-    return 0;
-}
+static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep);
 
 static unsigned uct_tcp_ep_empty_progress(uct_tcp_ep_t *ep)
 {
@@ -331,6 +309,39 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_tcp_ep_create, uct_tcp_ep_t, uct_tcp_ep_t,
                                 const struct sockaddr_in*)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_tcp_ep_destroy, uct_tcp_ep_t, uct_ep_t)
 
+static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    socklen_t conn_status_sz = sizeof(int);
+    int ret, conn_status;
+
+    ret = getsockopt(ep->fd, SOL_SOCKET, SO_ERROR,
+                     &conn_status, &conn_status_sz);
+    if (ret < 0) {
+        ucs_error("Failed to get SO_ERROR on fd %d: %m", ep->fd);
+        return 0;
+    }
+
+    if (conn_status != 0) {
+        uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_REFUSED);
+        ucs_error("Non-blocking connect(%s:%d) failed: %d",
+                  inet_ntoa(ep->peer.sin_addr),
+                  ntohs(ep->peer.sin_port), conn_status);
+        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
+        uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
+                          &ep->super.super, &iface->super.super,
+                          UCS_ERR_UNREACHABLE);
+        return 1;
+    }
+
+    ep->progress_tx = uct_tcp_ep_progress_tx;
+    ep->progress_rx = uct_tcp_ep_progress_rx;
+    uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_CONNECTED);
+
+    return 1;
+}
+
 ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
                                          uct_ep_h *ep_p)
 {
@@ -377,21 +388,17 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
                             uct_pack_callback_t pack_cb, void *arg,
                             unsigned flags)
 {
-    uct_tcp_ep_t *ep = ucs_derived_of(uct_ep, uct_tcp_ep_t);
+    uct_tcp_ep_t *ep       = ucs_derived_of(uct_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    ucs_status_t status    = uct_tcp_ep_can_send(ep);
     uct_tcp_am_hdr_t *hdr;
     size_t packed_length;
-    ucs_status_t status = uct_tcp_ep_can_send(ep);
+
+    UCT_CHECK_AM_ID(am_id);
 
     if (status != UCS_OK) {
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
         return status;
-    }
-
-    UCT_CHECK_AM_ID(am_id);
-
-    if (!uct_tcp_ep_can_send(ep)) {
-        return UCS_ERR_NO_RESOURCE;
     }
 
     hdr         = ep->buf;
@@ -440,10 +447,11 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp)
 {
-    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_tcp_ep_t *ep    = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    ucs_status_t status = uct_tcp_ep_can_send(ep);
 
-    if (uct_tcp_ep_can_send(ep) != UCS_OK) {
-        return UCS_ERR_NO_RESOURCE;
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
     UCT_TL_EP_STAT_FLUSH(&ep->super);
