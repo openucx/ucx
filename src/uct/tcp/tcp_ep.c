@@ -74,8 +74,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
         goto err_close;
     }
 
-    uct_tcp_ep_epoll_ctl(self, EPOLL_CTL_ADD);
-
     UCS_ASYNC_BLOCK(iface->super.worker->async);
     ucs_list_add_tail(&iface->ep_list, &self->list);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
@@ -140,11 +138,19 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
     int new_events = (ep->events | add) & ~remove;
 
     if (new_events != ep->events) {
+        int prev = ep->events;
+
         ep->events = new_events;
         ucs_trace("tcp_ep %p: set events to %c%c", ep,
                   (new_events & EPOLLIN)  ? 'i' : '-',
                   (new_events & EPOLLOUT) ? 'o' : '-');
-        uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_MOD);
+        if (new_events == 0) {
+            uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_DEL);
+        } else if (prev != 0) {
+            uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_MOD);
+        } else {
+            uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_ADD);
+        }
     }
 }
 
