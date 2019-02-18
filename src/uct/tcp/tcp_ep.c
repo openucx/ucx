@@ -384,6 +384,7 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
     ucs_status_t status = uct_tcp_ep_can_send(ep);
 
     if (status != UCS_OK) {
+        UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
         return status;
     }
 
