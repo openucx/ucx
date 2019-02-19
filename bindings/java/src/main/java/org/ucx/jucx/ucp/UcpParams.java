@@ -40,9 +40,6 @@ public class UcpParams {
      */
     private enum UcpParamField {
         UCP_PARAM_FIELD_FEATURES(UCS_BIT(0L)),
-        // UCP_PARAM_FIELD_REQUEST_SIZE(UCS_BIT(1L)),
-        // UCP_PARAM_FIELD_REQUEST_INIT(UCS_BIT(2L)),
-        // UCP_PARAM_FIELD_REQUEST_CLEANUP(UCS_BIT(3L)),
         UCP_PARAM_FIELD_TAG_SENDER_MASK(UCS_BIT(4L)),
         UCP_PARAM_FIELD_MT_WORKERS_SHARED(UCS_BIT(5L)),
         UCP_PARAM_FIELD_ESTIMATED_NUM_EPS(UCS_BIT(6L));
@@ -194,4 +191,3 @@ public class UcpParams {
         return this;
     }
 }
-
