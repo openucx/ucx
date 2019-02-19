@@ -112,6 +112,9 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer, 0);
 
+    // Progress iface to give a chance establish connections if it's required
+    progress();
+
     /* create receiver wakeup */
     status = uct_iface_event_fd_get(m_e2->iface(), &wakeup_fd.fd);
     ASSERT_EQ(UCS_OK, status);
