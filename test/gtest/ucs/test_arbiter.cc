@@ -158,16 +158,9 @@ protected:
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
     {
-        test_arbiter *self = static_cast<test_arbiter*>(arg);
-        arb_elem *e        = ucs_container_of(elem, arb_elem, elem);
-
-        if (e->release) {
-            release_element(e);
-            ++self->m_count;
-            return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
-        }
-
-        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+        arb_elem *e = ucs_container_of(elem, arb_elem, elem);
+        release_element(e);
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
     static ucs_arbiter_cb_result_t purge_cond_cb(ucs_arbiter_t *arbiter,
@@ -276,18 +269,19 @@ UCS_TEST_F(test_arbiter, add_purge) {
 
 UCS_TEST_F(test_arbiter, purge_cond) {
 
-    unsigned num_elems = m_num_groups = 25;
+    int num_elems = m_num_groups = 25;
     ucs_arbiter_group_t groups[m_num_groups];
-    unsigned purged_count[m_num_groups];
+    int purged_count[m_num_groups];
+    ucs::ptr_vector<arb_elem> elems;
 
     ucs_arbiter_t arbiter;
     ucs_arbiter_init(&arbiter);
-    memset(purged_count, 0, sizeof(unsigned) * m_num_groups);
+    memset(purged_count, 0, sizeof(int) * m_num_groups);
 
     for (unsigned i = 0; i < m_num_groups; ++i) {
         ucs_arbiter_group_init(&groups[i]);
 
-        for (unsigned j = 0; j < num_elems; ++j) {
+        for (int j = 0; j < num_elems; ++j) {
             arb_elem *e = new arb_elem;
             if (ucs::rand() % 2) {
                 e->release = true;
@@ -296,6 +290,7 @@ UCS_TEST_F(test_arbiter, purge_cond) {
                 e->release = false;
             }
             ucs_arbiter_elem_init(&e->elem);
+            elems.push_back(e);
             ucs_arbiter_group_push_elem(&groups[i], &e->elem);
             /* coverity[leaked_storage] */
         }
@@ -307,7 +302,7 @@ UCS_TEST_F(test_arbiter, purge_cond) {
     for (unsigned i = 0; i < m_num_groups; ++i) {
         unsigned idx = (start + i) % m_num_groups;
         m_count = 0;
-        ucs_arbiter_group_purge(&arbiter, &groups[idx], purge_cb, this);
+        ucs_arbiter_group_purge(&arbiter, &groups[idx], purge_cond_cb, this);
         EXPECT_EQ(m_count, purged_count[idx]);
 
         m_count = 0;

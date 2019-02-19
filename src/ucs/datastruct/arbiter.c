@@ -71,9 +71,10 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
                              ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg)
 {
-    ucs_arbiter_elem_t *tail = group->tail;
+    ucs_arbiter_elem_t *tail       = group->tail;
+    ucs_arbiter_elem_t *next_group = NULL;
+    ucs_arbiter_elem_t *prev_group = NULL;
     ucs_arbiter_elem_t *ptr, *next, *prev;
-    ucs_arbiter_elem_t *next_group, *prev_group;
     ucs_arbiter_elem_t *head, *orig_head;
     ucs_arbiter_cb_result_t result;
     int is_scheduled;
