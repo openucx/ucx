@@ -269,7 +269,9 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 }
 
 /**
- * @return whether the element is queued in some of the arbiter groups.
+ * @return Whether the element is queued in an arbiter group.
+ *         (an element can't be queued more than once)
+ *
  */
 static inline int ucs_arbiter_elem_is_scheduled(ucs_arbiter_elem_t *elem)
 {
