@@ -328,7 +328,6 @@ static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
         ucs_error("Non-blocking connect(%s:%d) failed: %d",
                   inet_ntoa(ep->peer.sin_addr),
                   ntohs(ep->peer.sin_port), conn_status);
-        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
                           &ep->super.super, &iface->super.super,
                           UCS_ERR_UNREACHABLE);
@@ -338,6 +337,9 @@ static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
     ep->progress_tx = uct_tcp_ep_progress_tx;
     ep->progress_rx = uct_tcp_ep_progress_rx;
     uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_CONNECTED);
+
+    /* Progress EP to progress events in the pending queue */
+    ep->progress_tx(ep);
 
     return 1;
 }
