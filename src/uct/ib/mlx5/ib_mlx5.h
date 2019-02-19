@@ -314,7 +314,7 @@ ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 
 /**
- * Initialize srq structure.
+ * DEVX doorbell record allocator
  */
 void *uct_ib_mlx5_alloc_dbrec(uct_ib_device_t *dev, uint32_t *mem_id, size_t *off);
 
