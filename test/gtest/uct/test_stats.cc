@@ -151,8 +151,11 @@ UCS_TEST_P(test_uct_stats, am_short)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    status = uct_ep_am_short(sender_ep(), 0, hdr, &send_data,
-                             sizeof(send_data));
+    do {
+        status = uct_ep_am_short(sender_ep(), 0, hdr, &send_data,
+                                 sizeof(send_data));
+        progress();
+    } while (status == UCS_ERR_NO_RESOURCE);
     EXPECT_UCS_OK(status);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_SHORT,
@@ -162,7 +165,7 @@ UCS_TEST_P(test_uct_stats, am_short)
 
 UCS_TEST_P(test_uct_stats, am_bcopy)
 {
-    uint64_t v;
+    ssize_t v;
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
@@ -171,7 +174,10 @@ UCS_TEST_P(test_uct_stats, am_bcopy)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    v = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
+    do {
+        v = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
+        progress();
+    } while (v == UCS_ERR_NO_RESOURCE);
     EXPECT_EQ(lbuf->length(), v);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_BCOPY, lbuf->length());
@@ -191,7 +197,9 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.am.max_iov);
 
-    status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, 0, NULL);
+    do {
+        status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, 0, NULL);
+    } while (status == UCS_ERR_NO_RESOURCE);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY, lbuf->length());
@@ -361,6 +369,9 @@ UCS_TEST_P(test_uct_stats, flush)
 {
     ucs_status_t status;
     uint64_t v;
+
+    // Progress iface to give a chance establish connections if it is required
+    progress();
 
     if (sender_ep()) {
         status = uct_ep_flush(sender_ep(), 0, NULL);
@@ -532,6 +543,9 @@ UCS_TEST_P(test_uct_stats, pending_add)
     EXPECT_UCS_OK(uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0,
                                            UCT_CB_FLAG_ASYNC));
 
+    // Progress iface to give a chance establish connections if it is required
+    progress();
+
     // Check that counter is not increased if pending_add returns NOT_OK
     EXPECT_EQ(uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0),
               UCS_ERR_BUSY);
@@ -540,8 +554,9 @@ UCS_TEST_P(test_uct_stats, pending_add)
 
     // Check that counter gets increased on every successfull pending_add returns NOT_OK
     fill_tx_q(0);
-    size_t len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
-    if (len == lbuf->length()) {
+
+    ssize_t len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
+    if (len == (ssize_t)lbuf->length()) {
         UCS_TEST_SKIP_R("Can't add to pending");
     }
 
