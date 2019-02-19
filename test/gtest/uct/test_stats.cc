@@ -178,7 +178,7 @@ UCS_TEST_P(test_uct_stats, am_bcopy)
         v = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
         progress();
     } while (v == UCS_ERR_NO_RESOURCE);
-    EXPECT_EQ(lbuf->length(), v);
+    EXPECT_EQ((ssize_t)lbuf->length(), v);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_BCOPY, lbuf->length());
     check_am_rx_counters(lbuf->length());
