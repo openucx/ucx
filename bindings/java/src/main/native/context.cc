@@ -17,17 +17,10 @@ Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
                                                      jobject jucx_ctx_params)
 {
     ucp_params_t ucp_params = { 0 };
-    ucp_config_t *config;
-    ucs_status_t status;
     ucp_context_h ucp_context;
     jfieldID field;
+
     jclass jucx_param_class = env->GetObjectClass(jucx_ctx_params);
-
-    status = ucp_config_read(nullptr, nullptr, &config);
-    if (status != UCS_OK) {
-        JNU_ThrowExceptionByStatus(env, status);
-    }
-
     field = env->GetFieldID(jucx_param_class, "fieldMask", "J");
     ucp_params.field_mask = env->GetLongField(jucx_ctx_params, field);
 
@@ -38,25 +31,26 @@ Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) {
         field = env->GetFieldID(jucx_param_class, "mtWorkersShared", "Z");
-        ucp_params.mt_workers_shared = env->GetBooleanField(jucx_ctx_params, field);
+        ucp_params.mt_workers_shared = env->GetBooleanField(jucx_ctx_params,
+                                                            field);
     }
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
         field = env->GetFieldID(jucx_param_class, "estimatedNumEps", "J");
-        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params, field);
+        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params,
+                                                         field);
     }
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_TAG_SENDER_MASK) {
         field = env->GetFieldID(jucx_param_class, "tagSenderMask", "J");
-        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params, field);
+        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params,
+                                                         field);
     }
 
-    status = ucp_init(&ucp_params, config, &ucp_context);
+    ucs_status_t status = ucp_init(&ucp_params, NULL, &ucp_context);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }
-
-    ucp_config_release(config);
     return (native_ptr)ucp_context;
 }
 

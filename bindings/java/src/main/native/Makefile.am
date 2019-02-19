@@ -21,12 +21,15 @@ libjucx_la_DEPENDENCIES = Makefile.am Makefile.in Makefile
 
 #Compile Java source code and pack to jar
 all:
-	$(MVNCMD) package
+	$(MVNCMD) package -DskipTests
 
 #Maven install phase
 install-data-hook:
-	$(MVNCMD) install
+	$(MVNCMD) install -DskipTests
 
 #Remove all compiled Java files
 clean-local:
 	$(MVNCMD) clean
+
+test:
+	$(MVNCMD) test
