@@ -135,7 +135,7 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
 
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
 {
-    int old_evens  = ep->events;
+    int old_events = ep->events;
     int new_events = (ep->events | add) & ~remove;
 
     if (new_events != ep->events) {
