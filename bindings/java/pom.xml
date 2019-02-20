@@ -184,7 +184,7 @@
         <configuration>
           <javahOutputDirectory>${basedir}/src/main/native/</javahOutputDirectory>
           <javahClassNames>
-            <javahClassName>org.ucx.jucx.UcxConstants</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
           </javahClassNames>
           <sources>

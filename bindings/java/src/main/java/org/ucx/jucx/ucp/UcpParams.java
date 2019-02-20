@@ -5,8 +5,6 @@
 
 package org.ucx.jucx.ucp;
 
-import org.ucx.jucx.UcxConstants;
-
 /**
  * Tuning parameters for UCP library.
  * The structure defines the parameters that are used for
@@ -47,7 +45,7 @@ public class UcpParams {
      */
     public UcpParams setTagSenderMask(long tagSenderMask) {
         this.tagSenderMask = tagSenderMask;
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_TAG_SENDER_MASK;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_TAG_SENDER_MASK;
         return this;
     }
 
@@ -66,7 +64,7 @@ public class UcpParams {
      */
     public UcpParams setMtWorkersShared(boolean mtWorkersShared) {
         this.mtWorkersShared = mtWorkersShared;
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_MT_WORKERS_SHARED;
         return this;
     }
 
@@ -79,7 +77,7 @@ public class UcpParams {
      */
     public UcpParams setEstimatedNumEps(long estimatedNumEps) {
         this.estimatedNumEps = estimatedNumEps;
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
         return this;
     }
 
@@ -87,8 +85,8 @@ public class UcpParams {
      * Request tag matching support.
      */
     public UcpParams requestTagFeature() {
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_FEATURES;
-        this.features |= UcxConstants.UCP_FEATURE_TAG;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_TAG;
         return this;
     }
 
@@ -96,8 +94,8 @@ public class UcpParams {
      * Request remote memory access support.
      */
     public UcpParams requestRmaFeature() {
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_FEATURES;
-        this.features |= UcxConstants.UCP_FEATURE_RMA;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_RMA;
         return this;
     }
 
@@ -105,8 +103,8 @@ public class UcpParams {
      * Request 32-bit atomic operations support.
      */
     public UcpParams requestAtomic32BitFeature() {
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_FEATURES;
-        this.features |= UcxConstants.UCP_FEATURE_AMO32;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_AMO32;
         return this;
     }
 
@@ -114,8 +112,8 @@ public class UcpParams {
      * Request 64-bit atomic operations support.
      */
     public UcpParams requestAtomic64BitFeature() {
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_FEATURES;
-        this.features |= UcxConstants.UCP_FEATURE_AMO64;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_AMO64;
         return this;
     }
 
@@ -123,8 +121,8 @@ public class UcpParams {
      * Request interrupt notification support.
      */
     public UcpParams requestWakeupFeature() {
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_FEATURES;
-        this.features |= UcxConstants.UCP_FEATURE_WAKEUP;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_WAKEUP;
         return this;
     }
 
@@ -132,8 +130,8 @@ public class UcpParams {
      * Request stream support.
      */
     public UcpParams requestStreamFeature() {
-        this.fieldMask |= UcxConstants.UCP_PARAM_FIELD_FEATURES;
-        this.features |= UcxConstants.UCP_FEATURE_STREAM;
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_STREAM;
         return this;
     }
 }

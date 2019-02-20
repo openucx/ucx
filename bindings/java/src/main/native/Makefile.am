@@ -18,7 +18,7 @@ lib_LTLIBRARIES = libjucx.la
 libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
                       -I$(topdir)/src
 
-libjucx_la_SOURCES = constants.cc context.cc jucx_common_def.cc
+libjucx_la_SOURCES = ucp_constants.cc context.cc jucx_common_def.cc
 
 noinst_libjucx_la_SOURCES = org_ucx_jucx_UcxConstants.h \
                             org_ucx_jucx_ucp_UcpContext.h

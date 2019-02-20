@@ -3,11 +3,11 @@
  * See file LICENSE for terms.
  */
 
-package org.ucx.jucx;
+package org.ucx.jucx.ucp;
 
-import org.ucx.jucx.ucp.UcpParams;
+import org.ucx.jucx.NativeLibs;
 
-public class UcxConstants {
+public class UcpConstants {
     static {
         NativeLibs.load();
         loadConstants();
