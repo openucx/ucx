@@ -40,19 +40,18 @@ typedef unsigned (*uct_tcp_ep_progress_t)(struct uct_tcp_ep *ep);
  */
 typedef struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    int                           fd;        /* Socket file descriptor */
-    uint32_t                      events;    /* Current notifications */
-    ucs_queue_head_t              pending_q; /* Pending operations */
-    void                          *buf;      /* Partial send/recv data */
-    size_t                        length;    /* How much data in the buffer */
-    size_t                        offset;    /* Next offset to send/recv */
-    uct_tcp_ep_progress_t         progress_tx;
-    uct_tcp_ep_progress_t         progress_rx;
+    uct_tcp_ep_conn_state_t       conn_state;  /* Connection state */
+    int                           fd;          /* Socket file descriptor */
+    uint32_t                      events;      /* Current notifications */
+    ucs_queue_head_t              pending_q;   /* Pending operations */
+    void                          *buf;        /* Partial send/recv data */
+    size_t                        length;      /* How much data in the buffer */
+    size_t                        offset;      /* Next offset to send/recv */
+    struct sockaddr_in            *peer_name;  /* Address of peer */
+    uct_tcp_ep_progress_t         progress_tx; /* TX operations progress function */
+    uct_tcp_ep_progress_t         progress_rx; /* RX operations progress function */
     ucs_list_link_t               list;
-    uct_tcp_ep_conn_state_t       conn_state;
-    struct sockaddr_in            peer;
 } uct_tcp_ep_t;
-
 
 /**
  * TCP interface

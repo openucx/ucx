@@ -61,7 +61,7 @@ static void uct_tcp_ep_change_conn_state(uct_tcp_ep_t *ep,
 
     ep->conn_state = new_conn_state;
 
-    str_addr = uct_tcp_sockaddr_2_string(&ep->peer, NULL, NULL);
+    str_addr = uct_tcp_sockaddr_2_string(ep->peer_name, NULL, NULL);
     if (!str_addr) {
         return;
     }
@@ -216,13 +216,19 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     self->length = 0;
     ucs_queue_head_init(&self->pending_q);
 
+    self->peer_name = ucs_malloc(sizeof(*self->peer_name), "ep::peer_name");
+    if (self->peer_name == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_buf;
+    }
+
     if (fd == -1) {
         status = ucs_tcpip_socket_create(&self->fd);
         if (status != UCS_OK) {
-            goto err;
+            goto err_free_peer_name;
         }
 
-        self->peer = *dest_addr;
+        *self->peer_name = *dest_addr;
 
         status = ucs_sys_fcntl_modfl(self->fd, O_NONBLOCK, 0);
         if (status != UCS_OK) {
@@ -259,8 +265,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
         uct_tcp_ep_epoll_ctl(self, EPOLL_CTL_ADD);
 
-        addr_len = sizeof(&self->peer);
-        if (getpeername(fd, (struct sockaddr *)&self->peer, &addr_len) < 0) {
+        addr_len = sizeof(*self->peer_name);
+        if (getpeername(fd, (struct sockaddr *)self->peer_name, &addr_len) < 0) {
             goto err_close;
         }
 
@@ -283,7 +289,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
 err_close:
     close(self->fd);
-err:
+err_free_peer_name:
+    ucs_free(self->peer_name);
+err_free_buf:
+    ucs_free(self->buf);
     return status;
 }
 
@@ -298,6 +307,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     ucs_list_del(&self->list);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
+    ucs_free(self->peer_name);
     ucs_free(self->buf);
     close(self->fd);
 }
@@ -326,8 +336,8 @@ static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
     if (conn_status != 0) {
         uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_REFUSED);
         ucs_error("Non-blocking connect(%s:%d) failed: %d",
-                  inet_ntoa(ep->peer.sin_addr),
-                  ntohs(ep->peer.sin_port), conn_status);
+                  inet_ntoa(ep->peer_name->sin_addr),
+                  ntohs(ep->peer_name->sin_port), conn_status);
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
                           &ep->super.super, &iface->super.super,
                           UCS_ERR_UNREACHABLE);
