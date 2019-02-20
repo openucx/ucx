@@ -27,6 +27,16 @@
                                   IBV_ACCESS_REMOTE_ATOMIC)
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
+typedef struct uct_ib_md_pci_info {
+    double   bw;       /* bandwidth */
+    unsigned payload;  /* payload used to data transfer */
+    unsigned overhead; /* PHY + data link layer + header + *CRC* */
+    unsigned nack;     /* number of TLC before ACK */
+    unsigned ctrl;     /* length of control TLP */
+    unsigned encoding; /* number of bits in symbol encoded, 8 - gen 1/2, 128 - gen 3 */
+    unsigned decoding; /* number of bits in symbol decoded, 10 - gen 1/2, 130 - gen 3 */
+} uct_ib_md_pci_info_t;
+
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
                                UCS_CONFIG_TYPE_BW_SPEC);
@@ -150,6 +160,36 @@ static ucs_stats_class_t uct_ib_md_stats_class = {
     }
 };
 #endif
+
+static uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
+    { /* GEN 1 */
+        .bw       = 2.5 * UCS_GBYTE / 8,
+        .payload  = 512,
+        .overhead = 28,
+        .nack     = 5,
+        .ctrl     = 256,
+        .encoding = 8,
+        .decoding = 10
+    },
+    { /* GEN 2 */
+        .bw       = 5.0 * UCS_GBYTE / 8,
+        .payload  = 512,
+        .overhead = 28,
+        .nack     = 5,
+        .ctrl     = 256,
+        .encoding = 8,
+        .decoding = 10
+    },
+    { /* GEN 3 */
+        .bw       = 8.0 * UCS_GBYTE / 8,
+        .payload  = 512,
+        .overhead = 30,
+        .nack     = 5,
+        .ctrl     = 256,
+        .encoding = 128,
+        .decoding = 130
+    },
+};
 
 UCS_LIST_HEAD(uct_ib_md_open_list);
 
@@ -1411,6 +1451,58 @@ uct_ib_md_parse_subnet_prefix(const char *subnet_prefix_str,
     return UCS_OK;
 }
 
+static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
+{
+    const char pci_data_path_fmt[]   = "/sys/class/infiniband/%s/device/%s";
+    const char pci_width_file_name[] = "current_link_width";
+    const char pci_speed_file_name[] = "current_link_speed";
+    char pci_width_str[16];
+    char pci_speed_str[16];
+    uct_ib_md_pci_info_t *p;
+    double bw;
+    unsigned width;
+    ssize_t len;
+    size_t i;
+
+    len = ucs_read_file(pci_width_str, sizeof(pci_width_str) - 1, 1, pci_data_path_fmt,
+                        ib_device->name, pci_width_file_name);
+    if (len < 1) {
+        return DBL_MAX; /* failed to read file */
+    } else {
+        pci_width_str[len] = '\0';
+    }
+
+    len = ucs_read_file(pci_speed_str, sizeof(pci_speed_str) - 1, 1, pci_data_path_fmt,
+                        ib_device->name, pci_speed_file_name);
+    if (len < 1) {
+        return DBL_MAX; /* failed to read file */
+    } else {
+        pci_speed_str[len] = '\0';
+    }
+
+    if (sscanf(pci_width_str, "%u", &width) < 1) {
+        return DBL_MAX;
+    }
+
+    if (sscanf(pci_speed_str, "%lf", &bw) < 1) {
+        return DBL_MAX;
+    }
+
+    bw *= UCS_GBYTE / 8; /* to gigabit */
+
+    for (i = 0; i < ucs_static_array_size(uct_ib_md_pci_info); i++) {
+        if (bw < (uct_ib_md_pci_info[i].bw * 1.2)) { /* use 1.2 multiplex to avoid round issues */
+            p = &uct_ib_md_pci_info[i]; /* use pointer to make equation shorter */
+            return bw * width *
+                   (p->payload * p->nack) /
+                   (((p->payload + p->overhead) * p->nack) + p->ctrl) *
+                   p->encoding / p->decoding;
+        }
+    }
+
+    return DBL_MAX;
+}
+
 static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
                                struct ibv_device *ib_device)
 {
@@ -1422,7 +1514,7 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
         }
     }
 
-    return DBL_MAX;
+    return uct_ib_md_read_pci_bw(ib_device);
 }
 
 ucs_status_t
