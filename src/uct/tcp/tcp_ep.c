@@ -28,9 +28,24 @@ static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 
 static inline ucs_status_t uct_tcp_ep_check_conn_state(uct_tcp_ep_t *ep)
 {
+    uct_tcp_iface_t *iface;
+    ucs_status_t status;
+
     if (ucs_likely(ep->conn_state == UCT_TCP_EP_CONN_CONNECTED)) {
         return UCS_OK;
-    } else if (ep->conn_state == UCT_TCP_EP_CONN_IN_PROGRESS) {
+    } else if (ucs_unlikely(ep->conn_state == UCT_TCP_EP_CONN_CLOSED)) {
+        iface = ucs_derived_of(ep->super.super.iface, uct_tcp_iface_t);
+
+        if (iface->config.lazy_conn == 0) {
+            status = UCS_ERR_UNREACHABLE;
+        } else {
+            status = uct_tcp_ep_connect_start(ep);
+            if (status == UCS_INPROGRESS) {
+                status = UCS_ERR_NO_RESOURCE;
+            }
+        }
+        return status;
+    } else if (ucs_unlikely(ep->conn_state == UCT_TCP_EP_CONN_IN_PROGRESS)) {
         return UCS_ERR_NO_RESOURCE;
     }
     return UCS_ERR_UNREACHABLE;
@@ -67,6 +82,9 @@ static void uct_tcp_ep_change_conn_state(uct_tcp_ep_t *ep,
     }
 
     switch(ep->conn_state) {
+    case UCT_TCP_EP_CONN_CLOSED:
+        ucs_debug("tcp_ep %p: connection closed to %s", ep, str_addr);
+        break;
     case UCT_TCP_EP_CONN_IN_PROGRESS:
         ucs_debug("tcp_ep %p: connection in progress to %s", ep, str_addr);
         break;
@@ -191,8 +209,6 @@ static unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
     return recv_length > 0;
 }
 
-static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep);
-
 static unsigned uct_tcp_ep_empty_progress(uct_tcp_ep_t *ep)
 {
     return 0;
@@ -237,23 +253,16 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
         uct_tcp_ep_epoll_ctl(self, EPOLL_CTL_ADD);
 
-        status = uct_tcp_socket_connect(self->fd, dest_addr);
-        if (status == UCS_INPROGRESS) {
-            /* Register event handler for handling connection
-             * establishment procedure */
-            self->progress_tx = uct_tcp_ep_connect_handler;
-            self->progress_rx = uct_tcp_ep_empty_progress;
-            uct_tcp_ep_change_conn_state(self, UCT_TCP_EP_CONN_IN_PROGRESS);
-
-	    /* Request EPOLLOUT events to receive connection
-             * establishment event */
-            uct_tcp_ep_mod_events(self, EPOLLOUT, 0);
-        } else if (status != UCS_OK) {
-            goto err_close;
+        if (iface->config.lazy_conn == 0) {
+            status = uct_tcp_ep_connect_start(self);
+            if (status != UCS_OK && status != UCS_INPROGRESS) {
+                goto err_close;
+            }
         } else {
-            self->progress_tx = uct_tcp_ep_progress_tx;
-            self->progress_rx = uct_tcp_ep_progress_rx;
-            uct_tcp_ep_change_conn_state(self, UCT_TCP_EP_CONN_CONNECTED);
+            /* Mark EP as not operational */
+            self->progress_tx = uct_tcp_ep_empty_progress;
+            self->progress_rx = uct_tcp_ep_empty_progress;
+            self->conn_state = UCT_TCP_EP_CONN_CLOSED;
         }
     } else {
         self->fd = fd;
@@ -352,6 +361,30 @@ static unsigned uct_tcp_ep_connect_handler(uct_tcp_ep_t *ep)
     ep->progress_tx(ep);
 
     return 1;
+}
+
+ucs_status_t uct_tcp_ep_connect_start(uct_tcp_ep_t *ep)
+{
+    ucs_status_t status;
+
+    status = uct_tcp_socket_connect(ep->fd, ep->peer_name);
+    if (status == UCS_INPROGRESS) {
+        /* Register event handler for handling connection
+         * establishment procedure */
+        ep->progress_tx = uct_tcp_ep_connect_handler;
+        ep->progress_rx = uct_tcp_ep_empty_progress;
+        uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_IN_PROGRESS);
+
+	/* Request EPOLLOUT events to receive connection
+         * establishment event */
+        uct_tcp_ep_mod_events(ep, EPOLLOUT, 0);
+    } else if (status == UCS_OK) {
+        ep->progress_tx = uct_tcp_ep_progress_tx;
+        ep->progress_rx = uct_tcp_ep_progress_rx;
+        uct_tcp_ep_change_conn_state(ep, UCT_TCP_EP_CONN_CONNECTED);
+    }
+
+    return status;
 }
 
 ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,

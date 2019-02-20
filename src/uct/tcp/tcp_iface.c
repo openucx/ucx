@@ -31,6 +31,11 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
+  {"LAZY_CONN", "n",
+   "Handles how the connections should be established ('n' - statically or\n"
+   "'y' - on demand)",
+   ucs_offsetof(uct_tcp_iface_config_t, lazy_conn), UCS_CONFIG_TYPE_BOOL},
+
   {"NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
    "option usually provides better performance",
@@ -288,6 +293,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                                    sizeof(uct_tcp_am_hdr_t);
     self->config.prefer_default  = config->prefer_default;
     self->config.max_poll        = config->max_poll;
+    self->config.lazy_conn       = config->lazy_conn;
     self->sockopt.nodelay        = config->sockopt_nodelay;
     self->sockopt.sndbuf         = config->sockopt_sndbuf;
     ucs_list_head_init(&self->ep_list);

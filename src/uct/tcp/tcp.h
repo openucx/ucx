@@ -27,6 +27,7 @@ typedef struct uct_tcp_am_hdr {
 
 
 typedef enum uct_tcp_ep_conn_state {
+    UCT_TCP_EP_CONN_CLOSED,
     UCT_TCP_EP_CONN_IN_PROGRESS,
     UCT_TCP_EP_CONN_CONNECTED,
     UCT_TCP_EP_CONN_REFUSED,
@@ -69,7 +70,8 @@ typedef struct uct_tcp_iface {
         struct sockaddr_in        netmask;        /* Network address mask */
         size_t                    buf_size;       /* Maximal bcopy size */
         int                       prefer_default; /* prefer default gateway */
-        unsigned                  max_poll;       /* number of events to poll per socket*/
+        unsigned                  max_poll;       /* number of events to poll per socket */
+        int                       lazy_conn;      /* Should the connection be established on demand? */
     } config;
 
     struct {
@@ -87,6 +89,7 @@ typedef struct uct_tcp_iface_config {
     int                           prefer_default;
     unsigned                      backlog;
     unsigned                      max_poll;
+    int                           lazy_conn;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
 } uct_tcp_iface_config_t;
@@ -117,6 +120,8 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
 ucs_status_t uct_tcp_ep_create(uct_tcp_iface_t *iface, int fd,
                                const struct sockaddr_in *dest_addr,
                                uct_tcp_ep_t **ep_p);
+
+ucs_status_t uct_tcp_ep_connect_start(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
                                          uct_ep_h *ep_p);
