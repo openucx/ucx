@@ -8,17 +8,41 @@
 #
 
 ## Current
-Feaures:
-- Statistics for UCT tag API
+Features:
+- TBD
+
+Tested configurations:
+- RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
+- CUDA: gdrcopy 1.3.2, cuda 9.2
+- XPMEM: 2.6.2
+- KNEM: 1.1.3
+
+## 1.5.0 (February 14, 2019)
+Features:
 - New emulation mode enabling full UCX functionality (Atomic, Put, Get)
-  over TCP and RDMA-CORE interconnects that don't implement full RDMA semantics.
+  over TCP and RDMA-CORE interconnects that don't implement full RDMA semantics
 - Non-blocking API for all one-sided operations. All blocking communication APIs marked
-  as deprecated.
-- New client/server connection establishment API
-- Added CUDA support for stream API
-- Added header file for experimental UCP API
-- Added network only worker addresses, which can be obtained using
-  ucp_worker_query() routine
+  as deprecated
+- New client/server connection establishment API, which allows connected handover between workers
+- Support for rdma-core direct-verbs (DEVX) and DC with mlx5 transports
+- GPU - Support for stream API and receive side pipelining
+- Malloc hooks using binary instrumentation instead of symbol override
+- Statistics for UCT tag API
+- GPU-to-Infiniband HCA affinity support based on locality/distance (PCIe)
+
+Bugfixes:
+- Fix overflow in RC/DC flush operations
+- Update description in SPEC file and README
+- Fix RoCE source port for dc_mlx5 flow control
+- Improve ucx_info help message
+- Fix segfault in UCP, due to int truncation in count_one_bits()
+- Multiple other bugfixes (full list on github)
+
+Tested configurations:
+- InfiniBand: MLNX_OFED 4.4-4.5, distribution inbox drivers, rdma-core
+- CUDA: gdrcopy 1.2, cuda 9.1.85
+- XPMEM: 2.6.2
+- KNEM: 1.1.2
 
 ## 1.4.0-rc2 (October 23, 2018)
 
