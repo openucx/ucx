@@ -1507,9 +1507,10 @@ static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
     for (i = 0; i < ucs_static_array_size(uct_ib_md_pci_info); i++) {
         if (bw < (uct_ib_md_pci_info[i].bw * 1.2)) { /* use 1.2 multiplex to avoid round issues */
             p = &uct_ib_md_pci_info[i]; /* use pointer to make equation shorter */
+            /* coverity[overflow] */
             effective_bw = bw * width *
                            (p->payload * p->nack) /
-                           ((((double)p->payload + p->overhead) * p->nack) + p->ctrl) *
+                           (((p->payload + p->overhead) * p->nack) + p->ctrl) *
                            p->encoding / p->decoding;
             ucs_trace("%s: pcie %ux %s, effective throughput %.3lfMB/s (%.3lfGb/s)",
                       ib_device->name, width, p->name,
