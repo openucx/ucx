@@ -20,7 +20,7 @@ Tested configurations:
 ## 1.5.0 (February 14, 2019)
 Features:
 - New emulation mode enabling full UCX functionality (Atomic, Put, Get)
-  over TCP and RDMA-CORE interconnects which don't implement full RDMA semantics
+  over TCP and RDMA-CORE interconnects that don't implement full RDMA semantics
 - Non-blocking API for all one-sided operations. All blocking communication APIs marked
   as deprecated
 - New client/server connection establishment API, which allows connected handover between workers
