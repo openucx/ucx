@@ -112,8 +112,10 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
                     break;
                 }
             } else if (ptr == tail) {
-                prev->next  = head;
                 group->tail = prev;
+                /* tail->next should point to head, make sure next is head
+                 * (it is assinged 2 lines below) */
+                ucs_assert_always(next == head);
             }
             prev->next = next;
         } else {
@@ -125,7 +127,9 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
 
     if (is_scheduled) {
         if (orig_head == prev_group) {
+            /* this is the only group which was scheduled */
             if (group->tail == NULL) {
+                /* group became empty - no more groups scheduled */
                 arbiter->current = NULL;
             } else if (orig_head != head) {
                 /* keep the group scheduled, but with new head element */
@@ -134,6 +138,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
             }
         } else {
             if (group->tail == NULL) {
+                /* group became empty - deschedule it */
                 prev_group->list.next = &next_group->list;
                 next_group->list.prev = &prev_group->list;
             } else if (orig_head != head) {
