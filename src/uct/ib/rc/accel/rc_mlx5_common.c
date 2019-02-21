@@ -10,17 +10,6 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 
-
-#if HAVE_IBV_EXP_DM
-/* uct_mlx5_dm_va is used to get pointer to DM mapped into process address space */
-typedef struct uct_mlx5_dm_va {
-    struct ibv_exp_dm  ibv_dm;
-    size_t             length;
-    uint64_t           *start_va;
-} uct_mlx5_dm_va_t;
-#endif
-
-
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -384,7 +373,7 @@ ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
 static ucs_status_t
 uct_rc_mlx5_iface_common_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
@@ -435,8 +424,9 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
                                     const uct_ib_mlx5_iface_config_t *config)
 {
     ucs_status_t status;
-    struct ibv_exp_alloc_dm_attr dm_attr;
-    struct ibv_exp_reg_mr_in mr_in;
+    struct ibv_alloc_dm_attr dm_attr;
+    uct_ib_mlx5dv_t obj;
+    struct mlx5dv_dm dvdm;
 
     data->seg_len      = ucs_min(ucs_align_up(config->dm.seg_len,
                                               sizeof(uct_rc_mlx5_dm_copy_data_t)),
@@ -447,28 +437,32 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
 
     dm_attr.length     = data->seg_len * data->seg_count;
     dm_attr.comp_mask  = 0;
-    data->dm           = ibv_exp_alloc_dm(data->device->ibv_context, &dm_attr);
+    data->dm           = ibv_alloc_dm(data->device->ibv_context, &dm_attr);
 
     if (data->dm == NULL) {
         /* TODO: prompt warning? */
-        ucs_debug("ibv_exp_alloc_dm(dev=%s length=%zu) failed: %m",
+        ucs_debug("ibv_alloc_dm(dev=%s length=%zu) failed: %m",
                   uct_ib_device_name(data->device), dm_attr.length);
         return UCS_ERR_NO_RESOURCE;
     }
 
-    memset(&mr_in, 0, sizeof(mr_in));
-    mr_in.pd           = uct_ib_iface_md(&iface->super)->pd;
-    mr_in.comp_mask    = IBV_EXP_REG_MR_DM;
-    mr_in.dm           = data->dm;
-    mr_in.length       = dm_attr.length;
-    data->mr           = ibv_exp_reg_mr(&mr_in);
+    data->mr           = ibv_reg_dm_mr(uct_ib_iface_md(&iface->super)->pd,
+                                       data->dm, 0, dm_attr.length,
+                                       IBV_ACCESS_ZERO_BASED   |
+                                       IBV_ACCESS_LOCAL_WRITE  |
+                                       IBV_ACCESS_REMOTE_READ  |
+                                       IBV_ACCESS_REMOTE_WRITE |
+                                       IBV_ACCESS_REMOTE_ATOMIC);
     if (data->mr == NULL) {
-        ucs_warn("ibv_exp_reg_mr() error - On Device Memory registration failed, %d %m", errno);
+        ucs_warn("ibv_reg_mr_dm() error - On Device Memory registration failed, %d %m", errno);
         status = UCS_ERR_NO_RESOURCE;
         goto failed_mr;
     }
 
-    data->start_va = ((uct_mlx5_dm_va_t*)data->dm)->start_va;
+    obj.dv_dm.in = data->dm;
+    obj.dv_dm.out = &dvdm;
+    uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_DM);
+    data->start_va = dvdm.buf;
 
     status = ucs_mpool_init(&data->mp, 0,
                             sizeof(uct_rc_iface_send_desc_t), 0, UCS_SYS_CACHE_LINE_SIZE,
@@ -485,7 +479,7 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
 failed_mpool:
     ibv_dereg_mr(data->mr);
 failed_mr:
-    ibv_exp_free_dm(data->dm);
+    ibv_free_dm(data->dm);
     data->dm = NULL;
     return status;
 }
@@ -497,7 +491,7 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 
     ucs_mpool_cleanup(&data->mp, 1);
     ibv_dereg_mr(data->mr);
-    ibv_exp_free_dm(data->dm);
+    ibv_free_dm(data->dm);
 }
 #endif
 
@@ -651,7 +645,7 @@ uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
                                  uct_rc_iface_t *rc_iface,
                                  const uct_ib_mlx5_iface_config_t *mlx5_config)
 {
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     if ((mlx5_config->dm.seg_len * mlx5_config->dm.count) == 0) {
         goto fallback;
     }
@@ -678,7 +672,7 @@ fallback:
 
 void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     if (iface->dm.dm) {
         uct_worker_tl_data_put(iface->dm.dm, uct_rc_mlx5_iface_common_dm_tl_cleanup);
     }

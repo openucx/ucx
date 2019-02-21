@@ -67,6 +67,10 @@ struct mlx5dv_obj {
         struct ibv_exp_wq       *in;
         struct mlx5dv_rwq       *out;
     } rwq;
+    struct {
+        struct ibv_exp_dm       *in;
+        struct mlx5dv_dm        *out;
+    } dm;
 };
 
 enum mlx5dv_obj_type {

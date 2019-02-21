@@ -361,7 +361,18 @@ AS_IF([test "x$with_ib" == xyes],
                    void* a3 = ibv_dereg_mr;
                    void* a4 = ibv_exp_free_dm;
                ],
-               [AC_DEFINE([HAVE_IBV_EXP_DM], 1, [Device Memory support])],
+               [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])
+                AC_DEFINE([HAVE_IBV_EXP_DM], 1, [Device Memory support (EXP)])],
+               [])
+            AC_TRY_COMPILE([#include <infiniband/verbs.h>],
+               [
+                   struct ibv_dm ibv_dm;
+                   struct ibv_alloc_dm_attr dm_attr;
+                   void* a1 = ibv_alloc_dm;
+                   void* a2 = ibv_reg_dm_mr;
+                   void* a3 = ibv_free_dm;
+               ],
+               [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
                [])
            ])
 
