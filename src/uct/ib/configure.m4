@@ -351,30 +351,14 @@ AS_IF([test "x$with_ib" == xyes],
                              [#include <infiniband/verbs.h>])])
 
        # Device Memory support
-       AS_IF([test "x$with_dm" != xno],
-           [AC_TRY_COMPILE([#include <infiniband/verbs_exp.h>],
-               [
-                   struct ibv_exp_dm ibv_dm;
-                   struct ibv_exp_alloc_dm_attr dm_attr;
-                   void* a1 = ibv_exp_alloc_dm;
-                   void* a2 = ibv_exp_reg_mr;
-                   void* a3 = ibv_dereg_mr;
-                   void* a4 = ibv_exp_free_dm;
-               ],
+       AS_IF([test "x$with_dm" != xno], [
+           AC_CHECK_DECLS([ibv_exp_alloc_dm],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])
                 AC_DEFINE([HAVE_IBV_EXP_DM], 1, [Device Memory support (EXP)])],
-               [])
-            AC_TRY_COMPILE([#include <infiniband/verbs.h>],
-               [
-                   struct ibv_dm ibv_dm;
-                   struct ibv_alloc_dm_attr dm_attr;
-                   void* a1 = ibv_alloc_dm;
-                   void* a2 = ibv_reg_dm_mr;
-                   void* a3 = ibv_free_dm;
-               ],
+               [], [[#include <infiniband/verbs_exp.h>]])
+           AC_CHECK_DECLS([ibv_alloc_dm],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
-               [])
-           ])
+               [], [[#include <infiniband/verbs.h>]])])
 
        AC_CHECK_DECLS([ibv_cmd_modify_qp],
                       [], [], [[#include <infiniband/driver.h>]])

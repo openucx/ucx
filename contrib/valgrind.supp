@@ -143,4 +143,10 @@
    ...
    fun:ucma_init_device
 }
+{
+   ibv_cmd_alloc_dm
+   Memcheck:Cond
+   ...
+   fun:ibv_cmd_alloc_dm
+}
 

@@ -423,10 +423,10 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
                                     uct_rc_iface_t *iface,
                                     const uct_ib_mlx5_iface_config_t *config)
 {
+    struct ibv_alloc_dm_attr dm_attr = {};
+    struct mlx5dv_dm dvdm = {};
+    uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
-    struct ibv_alloc_dm_attr dm_attr;
-    uct_ib_mlx5dv_t obj;
-    struct mlx5dv_dm dvdm;
 
     data->seg_len      = ucs_min(ucs_align_up(config->dm.seg_len,
                                               sizeof(uct_rc_mlx5_dm_copy_data_t)),
@@ -459,8 +459,8 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
         goto failed_mr;
     }
 
-    obj.dv_dm.in = data->dm;
-    obj.dv_dm.out = &dvdm;
+    UCT_IB_MLX5_DV_DM(obj).in  = data->dm;
+    UCT_IB_MLX5_DV_DM(obj).out = &dvdm;
     uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_DM);
     data->start_va = dvdm.buf;
 
