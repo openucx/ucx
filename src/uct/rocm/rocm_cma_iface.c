@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -103,7 +103,7 @@ static uct_iface_ops_t uct_rocm_cma_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_sm_ep_fence,
-    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_cma_ep_t),
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_cma_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_sm_iface_fence,
@@ -188,4 +188,3 @@ UCT_TL_COMPONENT_DEFINE(uct_rocm_cma_tl,
                         "ROCM_TL_",
                         uct_rocm_cma_iface_config_table,
                         uct_rocm_cma_iface_config_t);
-
