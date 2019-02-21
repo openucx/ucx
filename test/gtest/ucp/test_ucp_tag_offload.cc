@@ -19,6 +19,8 @@ public:
     void init()
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_TM_ENABLE", "y"));
+        /* TODO: update tag offload tests to operate on 2+ lanes */
+        modify_config("MAX_RNDV_LANES",  "1");
         test_ucp_tag::init();
         check_offload_support(true);
     }

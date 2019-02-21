@@ -137,7 +137,7 @@ static ucs_config_field_t ucp_config_table[] = {
   {"MAX_RNDV_LANES", NULL,"",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
-  {"MAX_RNDV_RAILS", "1",
+  {"MAX_RNDV_RAILS", "2",
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
