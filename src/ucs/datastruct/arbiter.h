@@ -84,7 +84,7 @@ typedef enum {
                                            group. Group IS NOT descheduled */
     UCS_ARBITER_CB_RESULT_DESCHED_GROUP,/* Keep current element but remove the
                                            current group and move to next group. */
-    UCS_ARBITER_CB_RESULT_RESCHED_GROUP,/* Keep current element, do not process 
+    UCS_ARBITER_CB_RESULT_RESCHED_GROUP,/* Keep current element, do not process
                                            the group anymore during current
                                            dispatch cycle. After dispatch()
                                            is finished group automatically
@@ -182,7 +182,7 @@ static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
 /**
  * Add a new work element to a group - internal function
  */
-void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, 
+void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem);
 
 /**
@@ -225,7 +225,7 @@ static inline int ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
 
 
 /**
- * @return whether if the group does not have any queued elements.
+ * @return whether the group does not have any queued elements.
  */
 static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
 {
@@ -269,7 +269,9 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 }
 
 /**
- * @return whether the group does not have any queued elements.
+ * @return Whether the element is queued in an arbiter group.
+ *         (an element can't be queued more than once)
+ *
  */
 static inline int ucs_arbiter_elem_is_scheduled(ucs_arbiter_elem_t *elem)
 {
@@ -329,7 +331,7 @@ static inline ucs_arbiter_group_t* ucs_arbiter_elem_group(ucs_arbiter_elem_t *el
 /**
  * @return true if element is the last one in the group
  */
-static inline int 
+static inline int
 ucs_arbiter_elem_is_last(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
 {
     return group->tail == elem;
