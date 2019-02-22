@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -9,7 +9,7 @@
 #include <uct/base/uct_md.h>
 
 
-/** Define name of memory domain for GPU memory. Must not be larget than
+/** Define name of memory domain for GPU memory. Must not be larger than
     UCT_MD_COMPONENT_NAME_MAX.
 */
 #define UCT_ROCM_CMA_MD_NAME    "rocm"
