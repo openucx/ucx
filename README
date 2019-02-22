@@ -126,4 +126,4 @@ To reference the UCX website:
 * [ROCm](https://rocm.github.io/)
 * Shared Memory
     * posix, sysv, cma, knem, and xpmem
-* TCP fallback
+* TCP/IP fallback
