@@ -59,7 +59,7 @@ To reference UCX in a publication, please use the following entry:
   author={Shamis, Pavel and Venkata, Manjunath Gorentla and Lopez, M Graham and Baker, Matthew B and Hernandez, Oscar and Itigin, Yossi and Dubman, Mike and Shainer, Gilad and Graham, Richard L and Liss, Liran and others},
   booktitle={2015 IEEE 23rd Annual Symposium on High-Performance Interconnects},
   pages={40--43},
- year={2015},
+  year={2015},
   organization={IEEE}
 }
 ```
