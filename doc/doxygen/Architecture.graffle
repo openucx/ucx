@@ -50,6 +50,70 @@
 	<array>
 		<dict>
 			<key>Bounds</key>
+			<string>{{852.09282985546679, 420.96999160200357}, {59.550483269270899, 42.5}}</string>
+			<key>Class</key>
+			<string>ShapedGraphic</string>
+			<key>FontInfo</key>
+			<dict>
+				<key>Color</key>
+				<dict>
+					<key>b</key>
+					<string>1</string>
+					<key>g</key>
+					<string>1</string>
+					<key>r</key>
+					<string>1</string>
+				</dict>
+				<key>Font</key>
+				<string>Helvetica</string>
+				<key>Size</key>
+				<real>12</real>
+			</dict>
+			<key>ID</key>
+			<integer>188</integer>
+			<key>Style</key>
+			<dict>
+				<key>fill</key>
+				<dict>
+					<key>Color</key>
+					<dict>
+						<key>b</key>
+						<real>0.28501100000000001</real>
+						<key>g</key>
+						<real>0.19603899999999999</real>
+						<key>r</key>
+						<real>0.14569599999999999</real>
+					</dict>
+				</dict>
+				<key>stroke</key>
+				<dict>
+					<key>Color</key>
+					<dict>
+						<key>b</key>
+						<real>1</real>
+						<key>g</key>
+						<real>1</real>
+						<key>r</key>
+						<real>1</real>
+					</dict>
+					<key>CornerRadius</key>
+					<real>9</real>
+				</dict>
+			</dict>
+			<key>Text</key>
+			<dict>
+				<key>Text</key>
+				<string>{\rtf1\ansi\ansicpg1252\cocoartf1671\cocoasubrtf200
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc\partightenfactor0
+
+\f0\fs24 \cf1 AMD ROCm}</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>Bounds</key>
 			<string>{{1184.0069157674907, 534.64014429599047}, {30.145112991333008, 25.304731369018555}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
@@ -421,7 +485,7 @@
 			<array>
 				<dict>
 					<key>Bounds</key>
-					<string>{{924.50358761548978, 415.74180339211495}, {109.45999145507812, 42.5}}</string>
+					<string>{{941.5724255273069, 420.96999160200357}, {90.140467982472359, 42.5}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -485,7 +549,7 @@
 				</dict>
 				<dict>
 					<key>Bounds</key>
-					<string>{{913.23358334302884, 382.60863295942545}, {132, 83.5}}</string>
+					<string>{{928.06585747492636, 383.10863295942545}, {117.15360408723336, 83.5}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -692,7 +756,7 @@
 			<array>
 				<dict>
 					<key>Bounds</key>
-					<string>{{1210.8479481351735, 405.60863295942545}, {118.10302432529897, 53.308473429951114}}</string>
+					<string>{{1210.8479481351735, 410.16151817205247}, {118.10302432529897, 53.308473429951114}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -1097,7 +1161,7 @@ Memory Services}</string>
 			<array>
 				<dict>
 					<key>Bounds</key>
-					<string>{{1071.6564599031929, 426.10863295942545}, {118.10302432529897, 33}}</string>
+					<string>{{1069.8882355475412, 430.46999923139811}, {118.10302432529897, 33}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -1162,7 +1226,7 @@ Management}</string>
 				</dict>
 				<dict>
 					<key>Bounds</key>
-					<string>{{1124.7594842284918, 388.60863295942545}, {65, 33}}</string>
+					<string>{{1122.9912598728401, 392.96999923139811}, {65, 33}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -1226,7 +1290,7 @@ Management}</string>
 				</dict>
 				<dict>
 					<key>Bounds</key>
-					<string>{{1070.2959329397952, 388.60863295942545}, {51.463551904833373, 33}}</string>
+					<string>{{1068.5277085841435, 392.96999923139811}, {51.463551904833373, 33}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -1804,7 +1868,7 @@ Common utilities\
 {\*\expandedcolortbl;;}
 \pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc\partightenfactor0
 
-\f0\b\fs24 \cf1 Burst Buffer, ADIOS, etc.}</string>
+\f0\b\fs24 \cf1 TensorFlow, Burst Buffer, etc.}</string>
 			</dict>
 		</dict>
 		<dict>
@@ -2543,7 +2607,7 @@ Tag-Matching, Rendezvous}</string>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{787.88949778896904, 418.96999160200357}, {109.45999145507812, 42.5}}</string>
+			<string>{{785.79060157204503, 420.96999160200357}, {59.550483269270899, 42.5}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -2602,13 +2666,14 @@ Tag-Matching, Rendezvous}</string>
 {\*\expandedcolortbl;;}
 \pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc\partightenfactor0
 
-\f0\fs24 \cf1 NVIDIA CUDA\
-AMD ROCm}</string>
+\f0\fs24 \cf1 \
+NVIDIA CUDA\
+}</string>
 			</dict>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{774.11950815916043, 381.10863295942545}, {132, 83.5}}</string>
+			<string>{{774.87540958023214, 383.10863295942545}, {145.3204712897541, 83.5}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -2675,7 +2740,7 @@ GPGPU}</string>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{704.56803416976027, 430.46999160200357}, {55.01145132306825, 33}}</string>
+			<string>{{700.49982030700983, 430.46999923139811}, {55.01145132306825, 33}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -2739,7 +2804,7 @@ GPGPU}</string>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{642.14343925593221, 430.46999160200357}, {55.01145132306825, 33}}</string>
+			<string>{{638.07522539318177, 430.46999923139811}, {55.01145132306825, 33}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -2803,7 +2868,7 @@ GPGPU}</string>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{579.71885994323611, 430.46999160200357}, {55.01145132306825, 33}}</string>
+			<string>{{575.65064608048567, 430.46999923139811}, {55.01145132306825, 33}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -2867,7 +2932,7 @@ GPGPU}</string>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{517.29428063054013, 430.46999160200357}, {55.01145132306825, 33}}</string>
+			<string>{{513.22606676778969, 430.46999923139811}, {55.01145132306825, 33}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -2931,7 +2996,7 @@ GPGPU}</string>
 		</dict>
 		<dict>
 			<key>Bounds</key>
-			<string>{{454.56780818325615, 430.46999160200357}, {55.01145132306825, 33}}</string>
+			<string>{{450.49959432050571, 430.46999923139811}, {55.01145132306825, 33}}</string>
 			<key>Class</key>
 			<string>ShapedGraphic</string>
 			<key>FontInfo</key>
@@ -3066,7 +3131,7 @@ GPGPU}</string>
 			<array>
 				<dict>
 					<key>Bounds</key>
-					<string>{{264.31463755369168, 430.46999923139811}, {40, 33}}</string>
+					<string>{{254.63651956395665, 430.46999923139811}, {55.01145132306825, 33}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -3130,71 +3195,7 @@ GPGPU}</string>
 				</dict>
 				<dict>
 					<key>Bounds</key>
-					<string>{{218.92439402341824, 430.46999923139811}, {40, 33}}</string>
-					<key>Class</key>
-					<string>ShapedGraphic</string>
-					<key>FontInfo</key>
-					<dict>
-						<key>Color</key>
-						<dict>
-							<key>b</key>
-							<string>1</string>
-							<key>g</key>
-							<string>1</string>
-							<key>r</key>
-							<string>1</string>
-						</dict>
-						<key>Font</key>
-						<string>Helvetica</string>
-						<key>Size</key>
-						<real>12</real>
-					</dict>
-					<key>ID</key>
-					<integer>117</integer>
-					<key>Style</key>
-					<dict>
-						<key>fill</key>
-						<dict>
-							<key>Color</key>
-							<dict>
-								<key>b</key>
-								<real>0.27063399999999999</real>
-								<key>g</key>
-								<real>0.182723</real>
-								<key>r</key>
-								<real>0.14530100000000001</real>
-							</dict>
-						</dict>
-						<key>stroke</key>
-						<dict>
-							<key>Color</key>
-							<dict>
-								<key>b</key>
-								<real>1</real>
-								<key>g</key>
-								<real>1</real>
-								<key>r</key>
-								<real>1</real>
-							</dict>
-							<key>CornerRadius</key>
-							<real>9</real>
-						</dict>
-					</dict>
-					<key>Text</key>
-					<dict>
-						<key>Text</key>
-						<string>{\rtf1\ansi\ansicpg1252\cocoartf1671\cocoasubrtf200
-{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
-{\colortbl;\red255\green255\blue255;}
-{\*\expandedcolortbl;;}
-\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc\partightenfactor0
-
-\f0\fs24 \cf1 XRC}</string>
-					</dict>
-				</dict>
-				<dict>
-					<key>Bounds</key>
-					<string>{{173.53415049314481, 430.46999923139811}, {40, 33}}</string>
+					<string>{{189.26661769804574, 430.46999923139811}, {55.01145132306825, 33}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -3258,7 +3259,7 @@ GPGPU}</string>
 				</dict>
 				<dict>
 					<key>Bounds</key>
-					<string>{{127.92439402341824, 430.46999923139811}, {40, 33}}</string>
+					<string>{{123.22666388253371, 430.46999923139811}, {55.01145132306825, 33}}</string>
 					<key>Class</key>
 					<string>ShapedGraphic</string>
 					<key>FontInfo</key>
@@ -3551,7 +3552,7 @@ GPGPU}</string>
 	<key>MasterSheets</key>
 	<array/>
 	<key>ModificationDate</key>
-	<string>2019-02-19 21:01:45 +0000</string>
+	<string>2019-02-22 15:26:11 +0000</string>
 	<key>Modifier</key>
 	<string>Pavel Shamis</string>
 	<key>NotesVisible</key>
@@ -3629,7 +3630,7 @@ GPGPU}</string>
 			<string>Canvas 1</string>
 		</array>
 		<key>Frame</key>
-		<string>{{0, 42}, {1680, 947}}</string>
+		<string>{{1258, 594}, {1680, 947}}</string>
 		<key>ShowInfo</key>
 		<true/>
 		<key>ShowRuler</key>
