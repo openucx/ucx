@@ -234,6 +234,16 @@ char *ucs_strndup(const char *src, size_t n, const char *name)
     return str;
 }
 
+int ucs_vasprintf(const char *name, char **strp, const char *fmt, va_list ap)
+{
+   int ret;
+
+   ret = vasprintf(strp, fmt, ap);
+   ucs_memtrack_allocated(strp, ret + 1, name);
+
+   return ret;
+}
+
 void ucs_memtrack_total(ucs_memtrack_entry_t* total)
 {
     if (!ucs_memtrack_is_enabled()) {
@@ -377,3 +387,15 @@ int ucs_memtrack_is_enabled()
 }
 
 #endif
+
+int ucs_asprintf(const char *name, char **strp, const char *fmt, ...)
+{
+    int ret;
+    va_list va;
+
+    va_start(va, fmt);
+    ret = ucs_vasprintf(name, strp, fmt, va);
+    va_end(va);
+
+    return ret;
+}

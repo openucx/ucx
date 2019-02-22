@@ -14,4 +14,5 @@ libuct_tcp_la_SOURCES = \
 	tcp_ep.c \
 	tcp_iface.c \
 	tcp_md.c \
-	tcp_net.c
+	tcp_net.c \
+        tcp_cm.c

@@ -17,6 +17,25 @@
 #define UCT_TCP_MAX_EVENTS        32
 
 
+#define UCT_TCP_EP_CONN_STATES(FUNC) \
+    FUNC(CLOSED), \
+    FUNC(ACCEPTING), \
+    FUNC(CONNECTING), \
+    FUNC(CONNECT_ACK), \
+    FUNC(CONNECTED), \
+    FUNC(REFUSED)
+
+#define UCT_TCP_EP_CONN_STATE_STR(_state) \
+    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)] = UCS_PP_MAKE_STRING(_state)
+
+
+#define UCT_TCP_EP_CONN_STATE_ENUM(_state) \
+    UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)
+
+struct uct_tcp_ep;
+typedef unsigned (*uct_tcp_ep_progress_t)(struct uct_tcp_ep *ep);
+
+
 /**
  * TCP active message header
  */
@@ -27,16 +46,56 @@ typedef struct uct_tcp_am_hdr {
 
 
 /**
+ * TCP endpoint communication context
+ */
+typedef struct uct_tcp_ep_ctx {
+    void                          *buf;      /* Partial send/recv data */
+    size_t                        length;    /* How much data in the buffer */
+    size_t                        offset;    /* Next offset to send/recv */
+} uct_tcp_ep_ctx_t;
+
+    /* There is a pretty rare case when we haven't received a
+     * `UCT_TCP_EP_CONN_REQ` connection event from the peer,
+     * because the connection can be closed before  */
+
+/**
+ * TCP connection message packet
+ */
+typedef struct uct_tcp_ep_conn_pkt {
+    enum {
+        UCT_TCP_EP_CONN_REQ,
+        UCT_TCP_EP_CONN_ACK,
+    } event;
+    union {
+        struct {
+            struct sockaddr_in iface_addr;
+        } req;
+    } data;
+} UCS_S_PACKED uct_tcp_ep_conn_pkt_t;
+
+
+/**
+ * TCP endpoint connection state
+ */
+typedef enum uct_tcp_ep_conn_state {
+    UCT_TCP_EP_CONN_STATES(UCT_TCP_EP_CONN_STATE_ENUM)
+} uct_tcp_ep_conn_state_t;
+
+
+/**
  * TCP endpoint
  */
 typedef struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    int                           fd;        /* Socket file descriptor */
-    uint32_t                      events;    /* Current notifications */
-    ucs_queue_head_t              pending_q; /* Pending operations */
-    void                          *buf;      /* Partial send/recv data */
-    size_t                        length;    /* How much data in the buffer */
-    size_t                        offset;    /* Next offset to send/recv */
+    int                           fd;          /* Socket file descriptor */
+    uct_tcp_ep_conn_state_t       conn_state;  /* State of connection with peer */
+    uint32_t                      events;      /* Current notifications */
+    uct_tcp_ep_ctx_t              *tx;         /* TX resources */
+    uct_tcp_ep_ctx_t              *rx;         /* RX resources */
+    uct_tcp_ep_progress_t         progress_tx; /* TX progress enigne */
+    uct_tcp_ep_progress_t         progress_rx; /* RX progress engine */
+    struct sockaddr_in            *peer_addr;  /* Remote iface addr */
+    ucs_queue_head_t              pending_q;   /* Pending operations */
     ucs_list_link_t               list;
 } uct_tcp_ep_t;
 
@@ -83,7 +142,15 @@ typedef struct uct_tcp_iface_config {
 extern uct_md_component_t uct_tcp_md;
 extern const char *uct_tcp_address_type_names[];
 
+int uct_tcp_sockaddr_cmp(const struct sockaddr_in *sa1,
+                         const struct sockaddr_in *sa2);
+
+char *uct_tcp_sockaddr_2_string(const struct sockaddr_in *addr, char **str_addr,
+                                size_t *str_addr_len);
+
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr);
+
+ucs_status_t uct_tcp_socket_connect_nb_get_status(int fd);
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
@@ -93,11 +160,29 @@ ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifadd
 
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
+int uct_tcp_socket_get_af(int fd);
+
 ucs_status_t uct_tcp_send(int fd, const void *data, size_t *length_p);
 
 ucs_status_t uct_tcp_recv(int fd, void *data, size_t *length_p);
 
+ucs_status_t uct_tcp_send_blocking(int fd, const void *data, size_t length);
+
+ucs_status_t uct_tcp_recv_blocking(int fd, void *data, size_t length);
+
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
+
+ucs_status_t uct_tcp_cm_send_conn_req(uct_tcp_ep_t *ep);
+
+ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
+
+ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface, int fd,
+                                             const struct sockaddr_in *peer_addr);
+
+unsigned uct_tcp_ep_empty_progress(uct_tcp_ep_t *ep);
+
+void uct_tcp_ep_change_conn_state(uct_tcp_ep_t *ep,
+                                  uct_tcp_ep_conn_state_t new_state);
 
 ucs_status_t uct_tcp_ep_create(uct_tcp_iface_t *iface, int fd,
                                const struct sockaddr_in *dest_addr,
@@ -105,6 +190,20 @@ ucs_status_t uct_tcp_ep_create(uct_tcp_iface_t *iface, int fd,
 
 ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
                                          uct_ep_h *ep_p);
+
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
+
+ucs_status_t uct_tcp_ep_assign_tx(uct_tcp_ep_t *ep);
+
+ucs_status_t uct_tcp_ep_assign_rx(uct_tcp_ep_t *ep);
+
+void uct_tcp_ep_remove_tx(uct_tcp_ep_t *ep);
+
+void uct_tcp_ep_remove_rx(uct_tcp_ep_t *ep);
+
+void uct_tcp_ep_migrate_tx(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep);
+
+void uct_tcp_ep_migrate_rx(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep);
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 

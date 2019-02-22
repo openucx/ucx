@@ -146,10 +146,10 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     for (i = 0; i < nevents; ++i) {
         ep = events[i].data.ptr;
         if (events[i].events & EPOLLIN) {
-            count += uct_tcp_ep_progress_rx(ep);
+            count += ep->progress_rx(ep);
         }
         if (events[i].events & EPOLLOUT) {
-            count += uct_tcp_ep_progress_tx(ep);
+            count += ep->progress_tx(ep);
         }
     }
     return count;
@@ -184,45 +184,48 @@ static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
+    socklen_t addrlen      = sizeof(struct sockaddr_in);
     struct sockaddr_in peer_addr;
-    socklen_t addrlen;
     ucs_status_t status;
-    uct_tcp_ep_t *ep;
     int fd;
 
     ucs_assert(listen_fd == iface->listen_fd);
 
-    addrlen = sizeof(peer_addr);
-    fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-    if (fd < 0) {
-        if ((errno != EAGAIN) && (errno != EINTR)) {
-            ucs_error("accept() failed: %m");
-            uct_tcp_iface_listen_close(iface);
+    do {
+        fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
+        if (fd < 0) {
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
+                ucs_error("accept() failed: %m");
+                uct_tcp_iface_listen_close(iface);
+            }
+            return;
         }
-        return;
-    }
 
-    ucs_debug("tcp_iface %p: accepted connection from %s:%d to fd %d", iface,
-              inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port), fd);
+        status = uct_tcp_cm_handle_incoming_conn(iface, fd, &peer_addr);
+        if (status != UCS_OK) {
+            goto err_close_fd;
+        }
+    } while (status == UCS_OK);
 
-    status = uct_tcp_ep_create(iface, fd, NULL, &ep);
-    if (status != UCS_OK) {
-        close(fd);
-        return;
-    }
+    return;
 
-    uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
+err_close_fd:
+    close(fd);
+    return;
 }
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 {
     int ret;
 
-    ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void*)&iface->sockopt.nodelay,
-                     sizeof(int));
-    if (ret < 0) {
-        ucs_error("Failed to set TCP_NODELAY on fd %d: %m", fd);
-        return UCS_ERR_IO_ERROR;
+    if (uct_tcp_socket_get_af(fd) != AF_UNIX ) {
+        ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
+                         (void*)&iface->sockopt.nodelay,
+                         sizeof(int));
+        if (ret < 0) {
+            ucs_error("Failed to set TCP_NODELAY on fd %d: %m", fd);
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (void*)&iface->sockopt.sndbuf,

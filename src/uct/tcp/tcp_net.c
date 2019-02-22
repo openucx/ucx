@@ -27,13 +27,84 @@
 typedef ssize_t (*uct_tcp_io_func_t)(int fd, void *data, size_t size, int flags);
 
 
+int uct_tcp_sockaddr_cmp(const struct sockaddr_in *sa1,
+                         const struct sockaddr_in *sa2)
+{
+    int cmp;
+
+    cmp = memcmp(&sa1->sin_addr, &sa2->sin_addr,
+                 sizeof(sa1->sin_addr));
+    return cmp ? cmp : memcmp(&sa1->sin_port, &sa2->sin_port,
+                              sizeof(sa1->sin_port));
+}
+
+/* Caller is responsible to free memory allocated if str_addr wasn't provided */
+char *uct_tcp_sockaddr_2_string(const struct sockaddr_in *addr, char **str_addr,
+                                size_t *str_addr_len)
+{
+    char *tmp_addr = NULL;
+    int ret;
+
+    if ((str_addr != NULL) && (*str_addr != NULL) && (str_addr_len != NULL)) {
+        ret = snprintf(*str_addr, *str_addr_len, "%s:%d",
+                       inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+        return ret < 0 ? NULL : *str_addr;
+    } else {
+        ret = ucs_asprintf("ipv4_addr", &tmp_addr, "%s:%d",
+                           inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+        if (ret == 0) {
+            return NULL;
+        }
+
+        if (str_addr) {
+            *str_addr = tmp_addr;
+        }
+        if (str_addr_len) {
+            *str_addr_len = ret;
+        }
+
+        return tmp_addr;
+    }
+
+    return NULL;
+}
+
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
 {
     int ret = connect(fd, (struct sockaddr*)dest_addr, sizeof(*dest_addr));
     if (ret < 0) {
-        ucs_error("connect() failed: %m"); // TODO print address
+        if (errno == EINPROGRESS) {
+            return UCS_INPROGRESS;
+        }
+
+        ucs_error("connect(%s:%d) failed: %m", inet_ntoa(dest_addr->sin_addr),
+                  ntohs(dest_addr->sin_port));
         return UCS_ERR_UNREACHABLE;
     }
+    return UCS_OK;
+}
+
+ucs_status_t uct_tcp_socket_connect_nb_get_status(int fd)
+{
+    socklen_t conn_status_sz = sizeof(int);
+    int ret, conn_status;
+
+    ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,
+                     &conn_status, &conn_status_sz);
+    if (ret < 0) {
+        ucs_error("Failed to get SO_ERROR on fd %d: %m", fd);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    if (conn_status == EINPROGRESS || conn_status == EWOULDBLOCK) {
+        return UCS_INPROGRESS;
+    }
+
+    if (conn_status != 0) {
+        ucs_error("SO_ERROR returns on fd %d: %d", fd, conn_status);
+        return UCS_ERR_UNREACHABLE;
+    }
+
     return UCS_OK;
 }
 
@@ -184,18 +255,37 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
     return UCS_OK;
 }
 
-static ucs_status_t uct_tcp_do_io(int fd, void *data, size_t *length_p,
-                                  uct_tcp_io_func_t io_func, const char *name)
+int uct_tcp_socket_get_af(int fd)
+{
+    socklen_t addr_sz;
+    struct sockaddr addr;
+    int ret;
+
+    addr_sz = sizeof(addr);
+
+    ret = getsockname(fd, &addr, &addr_sz);
+    if (ret < 0) {
+        ucs_error("getsockname for %d failed: %m", fd);
+        return -1;
+    }
+
+    return addr.sa_family;
+}
+
+static inline ucs_status_t uct_tcp_do_io_nb(int fd, void *data, size_t *length_p,
+                                            uct_tcp_io_func_t io_func, const char *name)
 {
     ssize_t ret;
 
     ucs_assert(*length_p > 0);
+
     ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
     if (ret == 0) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
     } else if (ret < 0) {
-        if ((errno == EINTR) || (errno == EAGAIN)) {
+        if ((errno == EINTR) || (errno == EAGAIN) ||
+            (errno == EWOULDBLOCK) || (errno == EINPROGRESS)) {
             *length_p = 0;
             return UCS_OK;
         } else {
@@ -209,13 +299,44 @@ static ucs_status_t uct_tcp_do_io(int fd, void *data, size_t *length_p,
     }
 }
 
+static inline ucs_status_t uct_tcp_do_io_b(int fd, void *data, size_t length,
+                                           uct_tcp_io_func_t io_func, const char *name)
+{
+    ucs_status_t status;
+    size_t done_cnt = 0, cur_cnt = length;
+
+    do {
+        status = uct_tcp_do_io_nb(fd, data, &cur_cnt, io_func, name);
+        if (status == UCS_OK) {
+            done_cnt += cur_cnt;
+        } else {
+            return status;
+        }
+
+        cur_cnt = length - done_cnt;
+    } while (done_cnt < length);
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_tcp_send(int fd, const void *data, size_t *length_p)
 {
-    return uct_tcp_do_io(fd, (void*)data, length_p, (uct_tcp_io_func_t)send,
-                         "send");
+    return uct_tcp_do_io_nb(fd, (void*)data, length_p, (uct_tcp_io_func_t)send,
+                            "send");
 }
 
 ucs_status_t uct_tcp_recv(int fd, void *data, size_t *length_p)
 {
-    return uct_tcp_do_io(fd, data, length_p, recv, "recv");
+    return uct_tcp_do_io_nb(fd, data, length_p, recv, "recv");
+}
+
+ucs_status_t uct_tcp_send_blocking(int fd, const void *data, size_t length)
+{
+    return uct_tcp_do_io_b(fd, (void*)data, length, (uct_tcp_io_func_t)send,
+                           "send");
+}
+
+ucs_status_t uct_tcp_recv_blocking(int fd, void *data, size_t length)
+{
+    return uct_tcp_do_io_b(fd, data, length, recv, "recv");
 }
