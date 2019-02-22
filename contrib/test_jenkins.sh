@@ -193,6 +193,19 @@ build_docs() {
 }
 
 #
+# Building java docs
+#
+build_java_docs() {
+	echo " ==== Building java docs ===="
+	if module_load dev/jdk && module_load dev/mvn
+	then
+		cd ../bindings/java && mvn javadoc:javadoc
+	else
+		echo "No jdk and mvn module, failed to build docs".
+	fi
+}
+
+#
 # Build without verbs
 #
 build_no_verbs() {
@@ -391,6 +404,27 @@ build_experimental_api() {
 	$MAKE clean
 	$MAKE install
 	test -e $ucx_inst/include/ucp/api/ucpx.h
+}
+
+#
+# Builds jucx
+#
+build_jucx() {
+	echo 1..1 > build_jucx.tap
+	if module_load dev/jdk && module_load dev/mvn
+	then
+		echo "==== Building JUCX bindings (java api for ucx) ===="
+		../contrib/configure-release --prefix=$ucx_inst --with-java
+		$MAKE clean
+		$MAKE
+		$MAKE distclean
+		echo "ok 1 - build successful " >> build_jucx.tap
+	else
+		echo "==== No jdk and mvn modules ==== "
+		echo "ok 1 - # SKIP because dev/jdk and dev/mvn modules are not available" >> build_jucx.tap
+	fi
+	module unload dev/jdk
+	module unload dev/mvn
 }
 
 #
@@ -754,6 +788,19 @@ test_malloc_hook() {
 	fi
 }
 
+test_jucx() {
+	echo "==== Running jucx test ===="
+	echo "1..2" > jucx_tests.tap
+	if module_load dev/jdk && module_load dev/mvn
+	then
+		cd ../bindings/java && mvn test
+	else
+		echo "Failed to load dev/jdk and dev/mvn modules." >> jucx_tests.tap
+	fi
+	module unload dev/jdk
+	module unload dev/mvn
+}
+
 #
 # Run Coverity and report errors
 #
@@ -945,6 +992,7 @@ run_tests() {
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
 	do_distributed_task 2 4 build_experimental_api
+	do_distributed_task 3 4 build_jucx
 
 	# all are running mpi tests
 	run_mpi_tests
@@ -963,6 +1011,7 @@ run_tests() {
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 1 3 test_malloc_hook
+	do_distributed_task 2 3 test_jucx
 
 	# all are running gtest
 	run_gtest_default
@@ -975,6 +1024,7 @@ run_tests() {
 prepare
 try_load_cuda_env
 do_distributed_task 0 4 build_docs
+do_distributed_task 0 4 build_java_docs
 do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
