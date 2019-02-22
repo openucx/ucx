@@ -183,7 +183,10 @@
         <extensions>true</extensions>
         <configuration>
           <javahOutputDirectory>${basedir}/src/main/native/</javahOutputDirectory>
-          <javahClassNames>org.ucx.jucx.Bridge</javahClassNames>
+          <javahClassNames>
+            <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
+          </javahClassNames>
           <sources>
             <source>
               <directory>${basedir}/src/main/native/</directory>
