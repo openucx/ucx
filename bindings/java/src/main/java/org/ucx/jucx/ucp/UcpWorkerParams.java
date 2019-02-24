@@ -8,7 +8,7 @@ package org.ucx.jucx.ucp;
 import java.nio.ByteBuffer;
 import java.util.BitSet;
 
-import org.ucx.jucx.ucs.UcsConstatns;
+import org.ucx.jucx.ucs.UcsConstants;
 
 public class UcpWorkerParams {
 
@@ -31,7 +31,7 @@ public class UcpWorkerParams {
     private int eventFD;
 
     /**
-     * Suggests the thread safety mode which workerand the associated resources
+     * Suggests the thread safety mode which worker and the associated resources
      * should be created with. The default value is UCS_THREAD_MODE_SINGLE and
      * it is used when the value of the parameter is not set. When this
      * parameter is set, the {@link UcpWorker#UcpWorker(UcpContext)}
@@ -39,7 +39,7 @@ public class UcpWorkerParams {
      * The thread mode with which worker is created can differ from the
      * suggested mode.
      */
-    public UcpWorkerParams setThreadMode(UcsConstatns.UcsThreadMode threadMode) {
+    public UcpWorkerParams setThreadMode(UcsConstants.UcsThreadMode threadMode) {
         this.fieldMask |= UcpConstants.UCP_WORKER_PARAM_FIELD_THREAD_MODE;
         this.threadMode = threadMode.ordinal();
         return this;

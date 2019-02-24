@@ -1,6 +1,11 @@
+/*
+ * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
 package org.ucx.jucx.ucs;
 
-public class UcsConstatns {
+public class UcsConstants {
 
     /**
      * Thread sharing mode
