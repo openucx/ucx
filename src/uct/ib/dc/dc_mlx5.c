@@ -922,7 +922,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                 /* Need to schedule fake ep in TX arbiter, because it
                  * might have been descheduled due to lack of FC window. */
                 ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
-                                           &ep->arb_group);
+                                           uct_dc_mlx5_ep_arb_group(iface, ep));
             }
 
             uct_dc_mlx5_iface_progress_pending(iface);
@@ -1111,6 +1111,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_list_head_init(&self->tx.gc_list);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
+    self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
+                         uct_dc_mlx5_iface_dci_do_rand_pending_tx :
+                         uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);
