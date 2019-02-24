@@ -56,7 +56,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_tcp_ep_t, 128);
 #  if HAVE_TL_RC
     EXPECTED_SIZE(uct_rc_ep_t, 80);
-    EXPECTED_SIZE(uct_rc_verbs_ep_t, 88);
+    EXPECTED_SIZE(uct_rc_verbs_ep_t, 96);
 #  endif
 #  if HAVE_TL_DC
     EXPECTED_SIZE(uct_dc_mlx5_ep_t, 32);
