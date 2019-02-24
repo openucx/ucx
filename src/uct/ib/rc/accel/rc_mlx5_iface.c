@@ -409,7 +409,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
-    self->tx.next_fence = 0;
+    self->tx.next_fm = 0;
     self->tx.fence_beat = 0;
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);

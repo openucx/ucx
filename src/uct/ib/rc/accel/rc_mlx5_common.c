@@ -692,6 +692,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
+    uct_ib_md_t *md = uct_ib_iface_md(ib_iface);
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -728,6 +729,15 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                               UCS_BIT(UCT_ATOMIC_OP_SWAP) |
                                               UCS_BIT(UCT_ATOMIC_OP_CSWAP);
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+    }
+
+    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+        iface_attr->cap.atomic64.op_flags  &= UCT_RC_MLX5_PCI_ATOMIC_OPS;
+        iface_attr->cap.atomic64.fop_flags &= UCT_RC_MLX5_PCI_ATOMIC_OPS;
+        iface_attr->cap.atomic32.op_flags  &= UCT_RC_MLX5_PCI_ATOMIC_OPS;
+        iface_attr->cap.atomic32.fop_flags &= UCT_RC_MLX5_PCI_ATOMIC_OPS;
+        iface_attr->cap.flags              &= ~UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_CPU;
     }
 
     /* Software overhead */
@@ -816,8 +826,8 @@ ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags)
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
 
-    if (UCT_IB_MLX5_MD_FLAGS(md) & UCT_IB_MLX5_MD_FLAG_PCI_ATOMIC) {
-        iface->tx.next_fence = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
+    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+        iface->tx.next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
         iface->tx.fence_beat++;
     }
 

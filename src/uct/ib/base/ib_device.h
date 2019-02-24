@@ -53,15 +53,16 @@ enum {
 
 
 enum {
-    UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
-    UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
-    UCT_IB_DEVICE_FLAG_MELLANOX = UCS_BIT(3),   /* Mellanox device */
-    UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(5),   /* Require only IB */
-    UCT_IB_DEVICE_FLAG_DC_V1    = UCS_BIT(6),   /* Device supports DC ver 1 */
-    UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
-    UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
-    UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
-                                  UCT_IB_DEVICE_FLAG_DC_V2 /* Device supports DC */
+    UCT_IB_DEVICE_FLAG_MLX4_PRM    = UCS_BIT(1),   /* Device supports mlx4 PRM */
+    UCT_IB_DEVICE_FLAG_MLX5_PRM    = UCS_BIT(2),   /* Device supports mlx5 PRM */
+    UCT_IB_DEVICE_FLAG_MELLANOX    = UCS_BIT(3),   /* Mellanox device */
+    UCT_IB_DEVICE_FLAG_LINK_IB     = UCS_BIT(5),   /* Require only IB */
+    UCT_IB_DEVICE_FLAG_DC_V1       = UCS_BIT(6),   /* Device supports DC ver 1 */
+    UCT_IB_DEVICE_FLAG_DC_V2       = UCS_BIT(7),   /* Device supports DC ver 2 */
+    UCT_IB_DEVICE_FLAG_AV          = UCS_BIT(8),   /* Device supports compact AV */
+    UCT_IB_DEVICE_FLAG_DC          = UCT_IB_DEVICE_FLAG_DC_V1 |
+                                     UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
+    UCT_IB_DEVICE_FLAG_PCI_ATOMICS = UCS_BIT(9)    /* Device supports PCI Atomics */
 };
 
 

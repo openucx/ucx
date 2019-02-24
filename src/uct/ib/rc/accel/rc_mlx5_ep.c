@@ -229,9 +229,9 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
                                        unpack_cb, comp, arg, length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                MLX5_OPCODE_RDMA_READ, length, remote_addr, rkey,
-                                uct_rc_mlx5_ep_atomic_fence(iface, &ep->tx.wq),
-                                0, desc, desc + 1, NULL);
+                                MLX5_OPCODE_RDMA_READ, length, remote_addr,
+                                rkey, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc, desc + 1,
+                                NULL);
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
     return UCS_INPROGRESS;
 }
@@ -251,8 +251,7 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_READ, iov, iovcnt,
                                        0, NULL, 0, remote_addr, rkey, 0ul, 0, 0,
-                                       uct_rc_mlx5_ep_atomic_fence(iface, &ep->tx.wq),
-                                       comp);
+                                       MLX5_WQE_CTRL_CQ_UPDATE, comp);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, GET, ZCOPY,
                                  uct_iov_total_length(iov, iovcnt));
     return status;
@@ -365,8 +364,7 @@ uct_rc_mlx5_ep_atomic_post(uct_ep_h tl_ep, unsigned opcode,
                                opcode, desc + 1, length, &desc->lkey,
                                remote_addr, ib_rkey,
                                compare_mask, compare, swap_mask, swap_add,
-                               NULL, NULL, 0,
-                               uct_rc_mlx5_ep_atomic_fence(iface, &ep->tx.wq),
+                               NULL, NULL, 0, MLX5_WQE_CTRL_CQ_UPDATE,
                                0, INT_MAX, NULL);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
@@ -501,8 +499,8 @@ ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
 
-    if (UCT_IB_MLX5_MD_FLAGS(md) & UCT_IB_MLX5_MD_FLAG_PCI_ATOMIC) {
-        ep->tx.wq.next_fence = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
+    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+        ep->tx.wq.next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
     }
 
     UCT_TL_EP_STAT_FENCE(&ep->super.super);

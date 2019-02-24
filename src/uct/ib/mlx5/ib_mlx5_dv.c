@@ -300,7 +300,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         }
 
         if (UCT_IB_MLX5DV_GET(atomic_caps, cap, fetch_add_pci_atomic)) {
-            md->flags |= UCT_IB_MLX5_MD_FLAG_PCI_ATOMIC;
+            dev->flags |= UCT_IB_DEVICE_FLAG_PCI_ATOMICS;
         }
     }
 

@@ -1641,7 +1641,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     ret = ibv_query_device(dev->ibv_context, &dev->dev_attr);
 #endif
     if (ret != 0) {
-        ucs_error("ibv_query_device() returned %d: %m", ret);
+        ucs_error("ibv_query_device(%s) returned %d: %m", ibv_get_device_name(ibv_device), ret);
         status = UCS_ERR_IO_ERROR;
         goto err_free_context;
     }
@@ -1673,6 +1673,12 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 #if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
     if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
         dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+#endif
+
+#if HAVE_DECL_IBV_EXP_DEVICE_ATTR_PCI_ATOMIC_CAPS
+    if (dev->dev_attr.pci_atomic_caps.fetch_add) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_PCI_ATOMICS;
     }
 #endif
 

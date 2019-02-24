@@ -303,7 +303,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
      */
     txwq->bb_max   = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(txwq->bb_max > 0);
-    txwq->next_fence = 0;
+    txwq->next_fm = 0;
     txwq->fence_beat = 0;
 
     uct_ib_mlx5_txwq_reset(txwq);
