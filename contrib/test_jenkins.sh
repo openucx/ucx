@@ -199,7 +199,10 @@ build_java_docs() {
 	echo " ==== Building java docs ===="
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		cd ../bindings/java && mvn javadoc:javadoc
+		pushd ../bindings/java && mvn javadoc:javadoc
+		popd
+		module unload dev/jdk
+		module unload dev/mvn
 	else
 		echo "No jdk and mvn module, failed to build docs".
 	fi
@@ -419,12 +422,12 @@ build_jucx() {
 		$MAKE
 		$MAKE distclean
 		echo "ok 1 - build successful " >> build_jucx.tap
+		module unload dev/jdk
+		module unload dev/mvn
 	else
 		echo "==== No jdk and mvn modules ==== "
 		echo "ok 1 - # SKIP because dev/jdk and dev/mvn modules are not available" >> build_jucx.tap
 	fi
-	module unload dev/jdk
-	module unload dev/mvn
 }
 
 #
@@ -793,12 +796,13 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		cd ../bindings/java && mvn test
+		pushd ../bindings/java && mvn test
+		popd
+		module unload dev/jdk
+		module unload dev/mvn
 	else
 		echo "Failed to load dev/jdk and dev/mvn modules." >> jucx_tests.tap
 	fi
-	module unload dev/jdk
-	module unload dev/mvn
 }
 
 #
