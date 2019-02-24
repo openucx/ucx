@@ -183,7 +183,7 @@ limitations under the License.
         <module name="AbbreviationAsWordInName">
             <property name="ignoreFinal" value="false"/>
             <property name="allowedAbbreviationLength" value="1"/>
-            <property name="allowedAbbreviations" value="XML,URL,HTTP,UI,GUI,HTML,JSON,PSNR"/>
+            <property name="allowedAbbreviations" value="XML,URL,HTTP,UI,GUI,HTML,JSON,PSNR,AMO,RMA"/>
         </module>
         <module name="OverloadMethodsDeclarationOrder"/>
         <module name="VariableDeclarationUsageDistance"/>

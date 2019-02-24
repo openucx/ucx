@@ -186,6 +186,7 @@
           <javahClassNames>
             <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpWorker</javahClassName>
           </javahClassNames>
           <sources>
             <source>
