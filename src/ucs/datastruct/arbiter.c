@@ -141,11 +141,17 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
                 /* group became empty - deschedule it */
                 prev_group->list.next = &next_group->list;
                 next_group->list.prev = &prev_group->list;
+                if (arbiter->current == orig_head) {
+                    arbiter->current = next_group;
+                }
             } else if (orig_head != head) {
                 /* keep the group scheduled, but with new head element */
                 ucs_list_insert_replace(&prev_group->list,
                                         &next_group->list,
                                         &head->list);
+                if (arbiter->current == orig_head) {
+                    arbiter->current = head;
+                }
             }
         }
     } else if ((orig_head != head) && (group->tail != NULL)) {
