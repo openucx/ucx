@@ -1,6 +1,7 @@
 <div align="center">
   <a href="http://www.openucx.org/"><img src="./doc/doxygen/UCX_Logo_930x933.png" width="200"></a>
   <br>
+  <a href="https://twitter.com/openucx"><img src="doc/doxygen/twitter.svg"></a>
   <a href="http://openucx.github.io/ucx/api/v1.5/html/"><img src="doc/doxygen/api.svg"></a>
   <a href="https://github.com/openucx/ucx/releases/tag/v1.5.0"><img src="doc/doxygen/release.svg"></a>
 </div>
@@ -19,6 +20,7 @@
       * [UCX Publications](#ucx-publications)
       * [UCX Architecture](#ucx-architecture)
       * [Supported Transports](#supported-transports)
+      * [Supported CPU Architectures](#supported-cpu-architectures)
 
 <hr>
 
@@ -30,7 +32,7 @@ layer for Message Passing ([MPI](https://www.mpi-forum.org/)),
 libraries and RPC/data-centric applications.
 
 UCX utilizes high-speed networks for inter-node communication, and
-shared memory mechanisms. for efficient intra-node communication.
+shared memory mechanisms for efficient intra-node communication.
 
 ## Using UCX
 
@@ -64,12 +66,16 @@ $ ./src/tools/perf/ucx_perftest <server-hostname> -t tag_lat -c 0
 * [Github](http://www.github.com/openucx/ucx/)
 * [Software Releases](http://www.github.com/openucx/ucx/releases)
 * [Mailing List](https://elist.ornl.gov/mailman/listinfo/ucx-group)
+* [Twitter](https://twitter.com/openucx)
 
 ## Licenses
 
-UCX comes with 2 licenses:
+UCX is licensed as:
 
 * [BSD3](LICENSE)
+
+The file [bindings/java/checkstyle.xml](bindings/java/checkstyle.xml) is licensed as:
+
 * [Apache 2.0](LICENSES.apache20)
 
 ## Contributor Agreement and Guidelines
@@ -108,7 +114,7 @@ To reference the UCX website:
 
 ## UCX Architecture
 
-<img src="doc/doxygen/Architecture.png">
+![](doc/doxygen/Architecture.png)
 
 | Component | Role        | Description |
 | :---:     | :---:       | ---         |
@@ -120,10 +126,17 @@ To reference the UCX website:
 ## Supported Transports
 
 * [Infiniband](https://www.infinibandta.org/)
+* [Omni-Path](https://www.intel.com/content/www/us/en/high-performance-computing-fabrics/omni-path-driving-exascale-computing.html)
 * [RoCE](http://www.roceinitiative.org/)
 * [Cray Gemini and Aries](https://www.cray.com/)
 * [CUDA](https://developer.nvidia.com/cuda-zone)
 * [ROCm](https://rocm.github.io/)
 * Shared Memory
-    * posix, sysv, cma, knem, and xpmem
-* TCP/IP fallback
+    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/hjelmn/xpmem)
+* TCP/IP
+
+## Supported CPU Architectures
+
+* [x86_64](https://en.wikipedia.org/wiki/X86-64)
+* [Power8/9](https://www.ibm.com/support/knowledgecenter/en/POWER9/p9hdx/POWER9welcome.htm)
+* [Arm v8](https://www.arm.com/products/silicon-ip-cpu)
