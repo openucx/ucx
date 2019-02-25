@@ -293,15 +293,7 @@ public:
 
         ucp_perf_test_prepare_iov_buffers();
 
-	if (m_perf.params.mem_type == UCT_MD_MEM_TYPE_HOST) {
-            *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
-	}
-//	else if ((m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
-//                   (m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
-//#if HAVE__CUDA
-//            cudaMemset(((uint8_t*)m_perf.recv_buffer + length - 1), -1, 1);
-//#endif
-//        }
+        m_perf.allocator->memset((char*)m_perf.recv_buffer + length - 1, -1, 1);
 
         ucp_perf_barrier(&m_perf);
 

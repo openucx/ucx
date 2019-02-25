@@ -69,16 +69,27 @@ static void ucp_perf_cuda_free(ucx_perf_context_t *perf, void *address,
     cudaFree(address);
 }
 
+static void* ucp_perf_cuda_memset(void *s, int c, size_t len)
+{
+    /* NOTE: This memset is needed onl for one-sided tests (e.g ucp_put_lat) but
+     * they don't work with CUDA anyway. So for now it's mostly for completeness.
+     */
+    cudaMemset(s, c, len);
+    return s;
+}
+
 UCS_STATIC_INIT {
     static ucx_perf_allocator_t cuda_allocator = {
         .init      = ucx_perf_cuda_init,
         .ucp_alloc = ucp_perf_cuda_alloc,
-        .ucp_free  = ucp_perf_cuda_free
+        .ucp_free  = ucp_perf_cuda_free,
+        .memset    = ucp_perf_cuda_memset
     };
     static ucx_perf_allocator_t cuda_managed_allocator = {
         .init      = ucx_perf_cuda_init,
         .ucp_alloc = ucp_perf_cuda_alloc_managed,
-        .ucp_free  = ucp_perf_cuda_free
+        .ucp_free  = ucp_perf_cuda_free,
+        .memset    = ucp_perf_cuda_memset
     };
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA]         = &cuda_allocator;
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] = &cuda_managed_allocator;
