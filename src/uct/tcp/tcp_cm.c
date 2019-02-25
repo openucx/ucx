@@ -286,7 +286,9 @@ static unsigned uct_tcp_cm_conn_req_rx_progress(uct_tcp_ep_t *ep)
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
     ucs_list_for_each(iter_ep, &iface->ep_list, list) {
-        if (uct_tcp_sockaddr_cmp(iter_ep->peer_addr, ep->peer_addr) == 0) {
+        if (uct_tcp_sockaddr_cmp(iter_ep->peer_addr, ep->peer_addr) == 0 &&
+            uct_tcp_sockaddr_cmp(iter_ep->peer_addr, &iface->config.ifaddr) != 0 &&
+            iter_ep->rx == NULL) {
             pair_ep = iter_ep;
             break;
         }

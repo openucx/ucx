@@ -424,7 +424,9 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
     ucs_list_for_each(iter_ep, &iface->ep_list, list) {
-        if (uct_tcp_sockaddr_cmp(iter_ep->peer_addr, &dest_addr) == 0) {
+        if (uct_tcp_sockaddr_cmp(iter_ep->peer_addr, &dest_addr) == 0 &&
+            uct_tcp_sockaddr_cmp(iter_ep->peer_addr, &iface->config.ifaddr) != 0 &&
+            iter_ep->tx == NULL) {
             ep = iter_ep;
             break;
         }
