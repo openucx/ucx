@@ -796,7 +796,9 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java && mvn test
+		pushd ../bindings/java/src/main/native
+		$MAKE
+		$MAKE test
 		popd
 		module unload dev/jdk
 		module unload dev/mvn
