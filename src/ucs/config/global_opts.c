@@ -40,7 +40,8 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
     .rcache_check_pfn      = 0,
-    .module_dir            = UCX_MODULE_DIR /* defined in Makefile.am */
+    .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
+    .module_log_level      = UCS_LOG_LEVEL_TRACE
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -209,6 +210,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"MODULE_DIR", UCX_MODULE_DIR,
    "Directory to search for loadable modules",
    ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
+
+  {"MODULE_LOG_LEVEL", "trace",
+   "Logging level for module loader\n",
+   ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
   {NULL}
 };
