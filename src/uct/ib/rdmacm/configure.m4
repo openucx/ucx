@@ -36,7 +36,12 @@ AS_IF([test "x$with_rdmacm" != xno],
                                             AC_SUBST(RDMACM_CPPFLAGS, ["-I$ucx_check_rdmacm_dir/include"])
                                             AC_SUBST(RDMACM_LDFLAGS,  ["-L$ucx_check_rdmacm_dir/lib$libsuff"])])
                                       AC_SUBST(RDMACM_LIBS,     [-lrdmacm])
-                                     ], 
+                                      # QP less support
+                                      AC_CHECK_DECLS(rdma_establish,
+                                                     [AC_DEFINE([HAVE_RDMACM_QP_LESS], 1, [RDMA CM QP less support])],
+                                                     [],
+                                                     [#include <$ucx_check_rdmacm_dir/include/rdma/rdma_cma.h>])
+                                     ],
                                      [AC_MSG_WARN([RDMACM requested but librdmacm is not found])
                                       AC_MSG_ERROR([Please install librdmacm and librdmacm-devel or disable rdmacm support])
                                      ])

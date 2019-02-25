@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017. ALL RIGHTS RESERVED.
 *
@@ -117,6 +117,22 @@ void uct_release_md_resource_list(uct_md_resource_desc_t *resources)
     ucs_free(resources);
 }
 
+ucs_status_t uct_find_md_component(const char *md_name,
+                                   uct_md_component_t **mdc_p)
+{
+    uct_md_component_t *mdc;
+
+    ucs_list_for_each(mdc, &uct_md_components_list, list) {
+        if (!strncmp(md_name, mdc->name, strlen(mdc->name))) {
+            *mdc_p = mdc;
+            return UCS_OK;
+        }
+    }
+
+    ucs_error("MD '%s' does not exist", md_name);
+    return UCS_ERR_NO_DEVICE;
+}
+
 ucs_status_t uct_md_open(const char *md_name, const uct_md_config_t *config,
                          uct_md_h *md_p)
 {
@@ -124,21 +140,19 @@ ucs_status_t uct_md_open(const char *md_name, const uct_md_config_t *config,
     ucs_status_t status;
     uct_md_h md;
 
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(md_name, mdc->name, strlen(mdc->name))) {
-            status = mdc->md_open(md_name, config, &md);
-            if (status != UCS_OK) {
-                return status;
-            }
-
-            ucs_assert_always(md->component == mdc);
-            *md_p = md;
-            return UCS_OK;
-        }
+    status = uct_find_md_component(md_name, &mdc);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ucs_error("MD '%s' does not exist", md_name);
-    return UCS_ERR_NO_DEVICE;
+    status = mdc->md_open(md_name, config, &md);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assert_always(md->component == mdc);
+    *md_p = md;
+    return UCS_OK;
 }
 
 void uct_md_close(uct_md_h md)

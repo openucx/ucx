@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2018-2019.  ALL RIGHTS RESERVED.
  * Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
@@ -181,4 +181,5 @@ static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_confi
 UCT_MD_COMPONENT_DEFINE(uct_cuda_ipc_md_component, UCT_CUDA_IPC_MD_NAME,
                         uct_cuda_ipc_query_md_resources, uct_cuda_ipc_md_open, NULL,
                         uct_cuda_ipc_rkey_unpack, uct_cuda_ipc_rkey_release, "CUDA_IPC_",
-                        uct_cuda_ipc_md_config_table, uct_cuda_ipc_md_config_t);
+                        uct_cuda_ipc_md_config_table, uct_cuda_ipc_md_config_t,
+                        ucs_empty_function_return_unsupported);

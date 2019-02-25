@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -425,4 +425,5 @@ err_free_md:
 UCT_MD_COMPONENT_DEFINE(uct_gdr_copy_md_component, UCT_GDR_COPY_MD_NAME,
                         uct_gdr_copy_query_md_resources, uct_gdr_copy_md_open, NULL,
                         uct_gdr_copy_rkey_unpack, uct_gdr_copy_rkey_release, "GDR_COPY_",
-                        uct_gdr_copy_md_config_table, uct_gdr_copy_md_config_t);
+                        uct_gdr_copy_md_config_table, uct_gdr_copy_md_config_t,
+                        ucs_empty_function_return_unsupported);
