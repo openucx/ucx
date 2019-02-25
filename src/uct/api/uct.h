@@ -370,11 +370,13 @@ enum uct_iface_open_mode {
    UCT_IFACE_OPEN_MODE_DEVICE          = UCS_BIT(0),
 
    /** Interface is opened on a specific address on the server side. This mode
-       will be deprecated in the near future for a better API. */
+       will be deprecated in the near future for a better API. See
+       @ref uct_cm_open . */
    UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER = UCS_BIT(1),
 
    /** Interface is opened on a specific address on the client side This mode
-       will be deprecated in the near future for a better API. */
+       will be deprecated in the near future for a better API. See
+       @ref uct_cm_open . */
    UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2)
 };
 
@@ -527,6 +529,23 @@ typedef enum {
                                 memory mapping and to avoid page faults when
                                 the memory is accessed for the first time. */
 } uct_mem_advice_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT connection manager created by @ref uct_cm_open parameters field
+ *        mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_cm_params_t are
+ * present, for backward compatibility support.
+ */
+enum uct_cm_params_field {
+    /** Enables @ref uct_cm_params::md_name */
+    UCT_CM_PARAM_FIELD_MD_NAME            = UCS_BIT(0),
+
+    /** Enables @ref uct_cm_params::worker */
+    UCT_CM_PARAM_FIELD_WORKER             = UCS_BIT(1)
+};
 
 
 /**
@@ -824,6 +843,31 @@ struct uct_ep_params {
      * request, the callback will not be invoked.
      */
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a connection manager object @ref uct_cm_h
+ */
+struct uct_cm_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_params_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                          field_mask;
+
+    /**
+     * Memory domain name, as returned from @ref uct_query_md_resources,
+     * mandatory field.
+     */
+    const char                        *md_name;
+
+    /**
+     * UCT worker, mandatory field.
+     */
+    uct_worker_h                      worker;
 };
 
 
@@ -2579,6 +2623,36 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {
     return iface->ops.iface_progress(iface);
 }
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Open a connection manager.
+ *
+ * Open a specific connection manager. All client server connection
+ * establishment operations are performed in the context of a specific
+ * connection manager.
+ * @note This is an alternative API for
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER and
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT .
+ *
+ * @param [in]  params      Connection management parameters, as defined by
+ *                          @ref uct_cm_params_t
+ * @param [out] cm_p        Filled with a handle to the connection
+ *                          manager.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_cm_open(const uct_cm_params_t *params, uct_cm_h *cm_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Close a connection manager.
+ *
+ * @param [in]  cm    Connection manager to close.
+ */
+void uct_cm_close(uct_cm_h cm);
 
 
 /**
