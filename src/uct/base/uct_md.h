@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -20,6 +20,9 @@ struct uct_md_component {
 
     ucs_status_t           (*md_open)(const char *md_name, const uct_md_config_t *config,
                                       uct_md_h *md_p);
+
+    ucs_status_t           (*cm_open)(const uct_cm_params_t *params,
+                                      uct_cm_h *cm_p);
 
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
@@ -80,14 +83,16 @@ typedef struct uct_md_registered_tl {
  * @param _cfg_prefix    Prefix for configuration environment vars.
  * @param _cfg_table     Defines the MDC's configuration values.
  * @param _cfg_struct    MDC configuration structure.
+ * @param _cm_open       Function to open a CM.
  */
 #define UCT_MD_COMPONENT_DEFINE(_mdc, _name, _query, _open, _priv, \
                                 _rkey_unpack, _rkey_release, \
-                                _cfg_prefix, _cfg_table, _cfg_struct) \
+                                _cfg_prefix, _cfg_table, _cfg_struct, _cm_open) \
     \
     uct_md_component_t _mdc = { \
         .query_resources = _query, \
         .md_open         = _open, \
+        .cm_open         = _cm_open, \
         .cfg_prefix      = _cfg_prefix, \
         .md_config_table = _cfg_table, \
         .md_config_size  = sizeof(_cfg_struct), \
@@ -183,6 +188,9 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
 uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
                                       uint64_t md_flags,
                                       const char *tl_name);
+
+ucs_status_t uct_find_md_component(const char *md_name,
+                                   uct_md_component_t **mdc_p);
 
 
 extern ucs_list_link_t uct_md_components_list;

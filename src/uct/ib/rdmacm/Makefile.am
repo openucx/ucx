@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -17,12 +17,14 @@ noinst_HEADERS = \
 	rdmacm_md.h \
 	rdmacm_iface.h \
 	rdmacm_ep.h \
-	rdmacm_def.h
+	rdmacm_def.h \
+	rdmacm_cm.h
 
 libuct_rdmacm_la_SOURCES = \
 	rdmacm_md.c \
 	rdmacm_iface.c \
-	rdmacm_ep.c
+	rdmacm_ep.c \
+	rdmacm_cm.c
 
 include $(top_srcdir)/config/module.am
 

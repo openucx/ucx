@@ -1,5 +1,6 @@
 /*
  * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -225,4 +226,5 @@ UCT_MD_COMPONENT_DEFINE(uct_rocm_cma_md_component, UCT_ROCM_CMA_MD_NAME,
                         uct_rocm_cma_rkey_unpack,
                         uct_rocm_cma_rkey_release, "ROCM_MD_",
                         uct_rocm_cma_md_config_table,
-                        uct_rocm_cma_md_config_t);
+                        uct_rocm_cma_md_config_t,
+                        ucs_empty_function_return_unsupported);

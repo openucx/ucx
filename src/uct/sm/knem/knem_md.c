@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -381,5 +381,6 @@ static ucs_status_t uct_knem_md_open(const char *md_name,
 UCT_MD_COMPONENT_DEFINE(uct_knem_md_component, "knem",
                         uct_knem_query_md_resources, uct_knem_md_open, 0,
                         uct_knem_rkey_unpack,
-                        uct_knem_rkey_release, "KNEM_", uct_knem_md_config_table,
-                        uct_knem_md_config_t)
+                        uct_knem_rkey_release, "KNEM_",
+                        uct_knem_md_config_table, uct_knem_md_config_t,
+                        ucs_empty_function_return_unsupported)

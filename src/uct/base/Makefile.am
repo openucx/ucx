@@ -11,11 +11,13 @@ noinst_HEADERS = \
 	uct_md.h \
 	uct_iface.h \
 	uct_log.h \
-	uct_worker.h
+	uct_worker.h \
+	uct_cm.h
 
 libuct_base_la_SOURCES = \
 	uct_md.c \
 	uct_mem.c \
 	uct_iface.c \
-	uct_worker.c
-	
+	uct_worker.c \
+	uct_cm.c
+
