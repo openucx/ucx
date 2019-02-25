@@ -75,7 +75,7 @@ echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 module_load() {
 	set +x
 	module=$1
-	if [ -n "$(module avail $module 2>&1)" ]
+	if $(type module &> /dev/null) && [ -n "$(module avail $module 2>&1)" ]
 	then
 		module load $module
 		set -x
@@ -420,6 +420,7 @@ build_jucx() {
 		../contrib/configure-release --prefix=$ucx_inst --with-java
 		$MAKE clean
 		$MAKE
+		$MAKE install
 		$MAKE distclean
 		echo "ok 1 - build successful " >> build_jucx.tap
 		module unload dev/jdk
@@ -796,9 +797,8 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java/src/main/native
-		$MAKE
-		$MAKE test
+		pushd ../bindings/java/
+		mvn test
 		popd
 		module unload dev/jdk
 		module unload dev/mvn
@@ -1003,7 +1003,12 @@ run_tests() {
 	# all are running mpi tests
 	run_mpi_tests
 
-	../contrib/configure-devel --prefix=$ucx_inst
+	if module_load dev/jdk && module_load dev/mvn
+	then
+		../contrib/configure-devel --prefix=$ucx_inst --with-java
+	else
+		../contrib/configure-devel --prefix=$ucx_inst
+	fi
 	$MAKE
 	$MAKE install
 
