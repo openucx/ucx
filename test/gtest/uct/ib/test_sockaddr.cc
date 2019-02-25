@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -314,3 +314,37 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)
+
+class test_uct_cm_sockaddr : public uct_test {
+public:
+    void init() {
+        uint16_t port;
+
+        uct_test::init();
+
+        /* This address is accessible, as it was tested at the resource creation */
+        m_listen_addr  = GetParam()->listen_sock_addr;
+        m_connect_addr = GetParam()->connect_sock_addr;
+
+        port = ucs::get_port();
+        m_listen_addr.set_port(port);
+        m_connect_addr.set_port(port);
+
+        server = uct_test::create_entity();
+        m_entities.push_back(server);
+        client = uct_test::create_entity();
+        m_entities.push_back(client);
+    }
+
+protected:
+    entity *server, *client;
+    ucs::sock_addr_storage m_listen_addr, m_connect_addr;
+};
+
+UCS_TEST_P(test_uct_cm_sockaddr, cm_open_close)
+{
+    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
+}
+
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)

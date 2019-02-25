@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -269,6 +269,13 @@ void safe_usleep(double usec);
  * Check if the given interface has an IPv4 or an IPv6 address.
  */
 bool is_inet_addr(const struct sockaddr* ifa_addr);
+
+
+/**
+ * Init port and cast to 'const struct sockaddr *' type
+ */
+const struct sockaddr *
+sockaddr_set_port(const struct sockaddr_storage& ss, uint16_t port);
 
 
 /**
@@ -645,6 +652,10 @@ private:
     { \
         _t h; \
         ucs_status_t status = _ctor(__VA_ARGS__, &h); \
+        if (status == UCS_ERR_UNSUPPORTED) { \
+            UCS_TEST_SKIP_R(std::string("Unsupported operation: ") + \
+                            UCS_PP_MAKE_STRING(_ctor)); \
+        } \
         ASSERT_UCS_OK(status); \
         _handle.reset(h, _dtor); \
     }
