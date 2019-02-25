@@ -11,7 +11,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
-#include <ucs/sys/string.h>
+#include <ucs/sys/socket.h>
 
 
 static unsigned ucp_listener_accept_cb_progress(void *arg)

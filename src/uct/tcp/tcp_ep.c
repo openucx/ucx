@@ -45,14 +45,14 @@
 
 static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-    struct epoll_event epoll_event;
+    uct_tcp_iface_t *iface         = ucs_derived_of(ep->super.super.iface,
+                                                    uct_tcp_iface_t);
+    struct epoll_event epoll_event = {
+        .data.ptr                  = ep,
+        .events                    = ep->events,
+    };
     int ret;
 
-    memset(&epoll_event, 0, sizeof(epoll_event));
-    epoll_event.data.ptr = ep;
-    epoll_event.events   = ep->events;
     ret = epoll_ctl(iface->epfd, op, ep->fd, &epoll_event);
     if (ret < 0) {
         ucs_fatal("epoll_ctl(epfd=%d, op=%d, fd=%d) failed: %m",
@@ -86,13 +86,14 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     ucs_queue_head_init(&self->pending_q);
 
     if (fd == -1) {
-        status = ucs_tcpip_socket_create(&self->fd);
+        status = ucs_socket_create(AF_INET, SOCK_STREAM, &self->fd);
         if (status != UCS_OK) {
             goto err;
         }
 
         /* TODO use non-blocking connect */
-        status = uct_tcp_socket_connect(self->fd, dest_addr);
+        status = ucs_socket_connect(self->fd,
+                                    (const struct sockaddr*)dest_addr);
         if (status != UCS_OK) {
             goto err_close;
         }
@@ -171,8 +172,8 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
 
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
 {
-    uint32_t old_events = ep->events;
-    uint32_t new_events = (ep->events | add) & ~remove;
+    int old_events = ep->events;
+    int new_events = (ep->events | add) & ~remove;
 
     if (new_events != ep->events) {
         ep->events = new_events;

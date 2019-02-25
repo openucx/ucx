@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/sys/module.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/socket.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/time/time.h>
 }

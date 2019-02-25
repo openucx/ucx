@@ -19,6 +19,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/socket.h>
 #include <string.h>
 
 

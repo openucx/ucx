@@ -13,6 +13,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/socket.h>
 #include <ucs/time/time.h>
 #include <errno.h>
 #include <iostream>
@@ -252,7 +253,7 @@ void *mmap_fixed_address();
  */
 template <typename S>
 std::string sockaddr_to_str(const S *saddr) {
-    char buffer[UCS_SOCKADDR_STRING_LEN];
+    static char buffer[UCS_SOCKADDR_STRING_LEN];
     return ::ucs_sockaddr_str(reinterpret_cast<const struct sockaddr*>(saddr),
                               buffer, UCS_SOCKADDR_STRING_LEN);
 }
