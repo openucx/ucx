@@ -1042,24 +1042,6 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_iface_t *iface,
-                                           ucs_arbiter_elem_t *elem)
-{
-    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    ucs_status_t status;
-
-    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
-        return UCS_ARBITER_CB_RESULT_STOP;
-    }
-
-    status = req->func(req);
-    ucs_trace_data("progress pending request %p returned: %s", req,
-                   ucs_status_string(status));
-
-    return status;
-}
-
 /**
  * dispatch requests waiting for tx resources (dcs* DCI policies)
  */
@@ -1073,9 +1055,16 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
                                                   uct_dc_mlx5_ep_t, arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
+    uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t status;
 
-    status = uct_dc_mlx5_iface_dci_do_common_pending_tx(iface, elem);
+    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
+        return UCS_ARBITER_CB_RESULT_STOP;
+    }
+
+    status = req->func(req);
+    ucs_trace_data("progress pending request %p returned: %s", req,
+                   ucs_status_string(status));
     if (status == UCS_OK) {
         /* For dcs* policies release dci if this is the last elem in the group
          * and the dci has no outstanding operations. For example pending
@@ -1115,7 +1104,13 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
                                                 uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
-    status = uct_dc_mlx5_iface_dci_do_common_pending_tx(iface, elem);
+    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
+        return UCS_ARBITER_CB_RESULT_STOP;
+    }
+
+    status = req->func(req);
+    ucs_trace_data("progress pending request %p returned: %s", req,
+                   ucs_status_string(status));
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
