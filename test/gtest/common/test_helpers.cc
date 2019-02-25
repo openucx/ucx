@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -96,6 +96,14 @@ void safe_usleep(double usec) {
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
     return (ifa_addr->sa_family == AF_INET) ||
            (ifa_addr->sa_family == AF_INET6);
+}
+
+const struct sockaddr *
+sockaddr_set_port(const struct sockaddr_storage& ss, uint16_t port) {
+    struct sockaddr_in *sockaddr_in_p = (struct sockaddr_in *)&ss;
+
+    sockaddr_in_p->sin_port = port;
+    return (const struct sockaddr *)sockaddr_in_p;
 }
 
 bool is_rdmacm_netdev(const char *ifa_name) {

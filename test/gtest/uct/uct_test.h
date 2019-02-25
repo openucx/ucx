@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
@@ -68,6 +68,8 @@ protected:
 
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
+
+        entity(const resource& resource, uct_md_config_t *md_config);
 
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle, int mem_type) const;
@@ -138,6 +140,7 @@ protected:
         uct_md_attr_t              m_md_attr;
         mutable async_wrapper      m_async;
         ucs::handle<uct_worker_h>  m_worker;
+        ucs::handle<uct_cm_h>      m_cm;
         ucs::handle<uct_iface_h>   m_iface;
         eps_vec_t                  m_eps;
         uct_iface_attr_t           m_iface_attr;
@@ -247,6 +250,7 @@ protected:
     uct_test::entity* create_entity(size_t rx_headroom,
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
+    uct_test::entity* create_entity();
     int max_connections();
 
     ucs_status_t send_am_message(entity *e, int wnd, uint8_t am_id = 0, int ep_idx = 0);

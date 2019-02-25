@@ -318,6 +318,11 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
     return new_ent;
 }
 
+uct_test::entity* uct_test::create_entity() {
+    entity *new_ent = new entity(*GetParam(), m_md_config);
+    return new_ent;
+}
+
 const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
@@ -408,15 +413,38 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     ASSERT_UCS_OK(status);
 
     UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
-                           uct_iface_open, m_md, m_worker, params, iface_config);
-
+                           uct_iface_open, m_md, m_worker, params,
+                           iface_config);
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
-
-    uct_iface_progress_enable(m_iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_iface_progress_enable(m_iface,
+                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     m_iface_params = *params;
 }
 
+uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+    memset(&m_iface_attr,   0, sizeof(m_iface_attr));
+    memset(&m_iface_params, 0, sizeof(m_iface_params));
+
+    UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
+                           uct_worker_create, &m_async.m_async,
+                           UCS_THREAD_MODE_SINGLE);
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
+                           uct_md_open, resource.md_name.c_str(), md_config);
+
+    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    ASSERT_UCS_OK(status);
+
+    uct_cm_params cm_params;
+    cm_params.field_mask = UCT_CM_PARAM_FIELD_MD_NAME |
+                           UCT_CM_PARAM_FIELD_WORKER;
+    cm_params.md_name    = resource.md_name.c_str();
+    cm_params.worker     = m_worker;
+
+    UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close,
+                           uct_cm_open, &cm_params);
+}
 
 void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const {
 #if HAVE_CUDA

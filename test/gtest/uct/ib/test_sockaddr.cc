@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -49,7 +49,6 @@ public:
         uct_test::init();
 
         uct_iface_params_t server_params, client_params;
-        struct sockaddr_in *listen_addr_in, *connect_addr_in;
 
         /* If we reached here, the interface is active, as it was tested at the
          * resource creation */
@@ -57,19 +56,14 @@ public:
             UCS_TEST_SKIP_R("There is no IP on the interface");
         }
 
-        /* This address is accessible, as it was tested at the resource creation */
-        listen_sock_addr.addr = (struct sockaddr *)&(GetParam()->listen_if_addr);
-        ASSERT_TRUE(listen_sock_addr.addr != NULL);
-
-        listen_addr_in = (struct sockaddr_in *) (listen_sock_addr.addr);
-
         /* Get a usable port on the host */
-        listen_addr_in->sin_port = ucs::get_port();
+        uint16_t port = ucs::get_port();
 
-        connect_sock_addr.addr = (struct sockaddr *)&(GetParam()->connect_if_addr);
-        ASSERT_TRUE(connect_sock_addr.addr != NULL);
-        connect_addr_in = (struct sockaddr_in *)connect_sock_addr.addr;
-        connect_addr_in->sin_port = listen_addr_in->sin_port;
+        /* This address is accessible, as it was tested at the resource creation */
+        listen_sock_addr.addr =
+            ucs::sockaddr_set_port(GetParam()->listen_if_addr, port);
+        connect_sock_addr.addr = 
+            ucs::sockaddr_set_port(GetParam()->connect_if_addr, port);
 
         /* open iface for the server side */
         server_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
@@ -325,3 +319,42 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)
+
+class test_uct_cm_sockaddr : public uct_test {
+public:
+    void init() {
+        uct_test::init();
+
+        /* If we reached here, the interface is active, as it was tested at the
+         * resource creation */
+        if (!ucs::is_inet_addr((struct sockaddr *)&(GetParam()->connect_if_addr))) {
+            UCS_TEST_SKIP_R("There is no IP on the interface");
+        }
+
+        /* Get a usable port on the host */
+        uint16_t port = ucs::get_port();
+
+        /* This address is accessible, as it was tested at the resource creation */
+        listen_sock_addr.addr =
+            ucs::sockaddr_set_port(GetParam()->listen_if_addr, port);
+        connect_sock_addr.addr =
+            ucs::sockaddr_set_port(GetParam()->connect_if_addr, port);
+
+        server = uct_test::create_entity();
+        m_entities.push_back(server);
+        client = uct_test::create_entity();
+        m_entities.push_back(client);
+    }
+
+protected:
+    entity *server, *client;
+    ucs_sock_addr_t listen_sock_addr, connect_sock_addr;
+};
+
+UCS_TEST_P(test_uct_cm_sockaddr, cm_open_close)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
+                     << " Interface: " << GetParam()->dev_name;
+}
+
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
