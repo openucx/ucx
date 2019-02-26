@@ -108,9 +108,9 @@ uct_ib_mlx5_get_dm_info(struct ibv_exp_dm *dm, struct mlx5dv_dm *dm_info)
     return UCS_OK;
 }
 
-# define UCT_IB_MLX5_DV_DM(obj) obj.dv_dm
+# define UCT_IB_MLX5_DV_DM(_obj) _obj.dv_dm
 #else
-# define UCT_IB_MLX5_DV_DM(obj) obj.dv.dm
+# define UCT_IB_MLX5_DV_DM(_obj) _obj.dv.dm
 #endif
 
 #endif
