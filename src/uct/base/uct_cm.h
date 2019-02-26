@@ -11,12 +11,17 @@
 #include <uct/base/uct_md.h>
 
 
+UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
+
 /**
  * Connection manager component operations
  */
 typedef struct uct_cm_ops {
     void         (*close)(uct_cm_h cm);
     ucs_status_t (*cm_query)(uct_cm_h cm, uct_cm_attr_t *cm_attr);
+    ucs_status_t (*listener_create)(const uct_listener_params_t *params,
+                                    uct_listener_h *listener_p);
+    void         (*listener_destroy)(uct_listener_h listener);
 } uct_cm_ops_t;
 
 

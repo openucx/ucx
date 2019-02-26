@@ -26,6 +26,64 @@ typedef struct uct_rdmacm_cm {
 } uct_rdmacm_cm_t;
 
 
+typedef struct uct_rdmacm_listener {
+    uct_listener_t                       super;
+    struct rdma_cm_id                    *id;
+    uct_listener_conn_request_callback_t conn_request_cb;
+    void                                 *user_data;
+} uct_rdmacm_listener_t;
+
+
+UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, const uct_listener_params_t *params)
+{
+    uct_rdmacm_cm_t *rdmacm_cm  = ucs_derived_of(params->cm, uct_rdmacm_cm_t);
+    ucs_status_t status = UCS_OK;
+    int backlog;
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_listener_t, params->cm);
+    self->id              = NULL;
+    self->conn_request_cb = params->conn_request_cb;
+    self->user_data       = (params->field_mask &
+                             UCT_LISTENER_PARAM_FIELD_USER_DATA) ?
+                            params->user_data : NULL;
+
+    if (rdma_create_id(rdmacm_cm->ev_ch, &self->id, self, RDMA_PS_TCP)) {
+        ucs_error("rdma_create_id() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    if (rdma_bind_addr(self->id, (struct sockaddr *)params->sockaddr.addr)) {
+        ucs_error("rdma_bind_addr() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    backlog = (params->field_mask & UCT_LISTENER_PARAM_FIELD_BACKLOG) ?
+              params->backlog : SOMAXCONN;
+    if (rdma_listen(self->id, backlog)) {
+        ucs_error("rdma_listen() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+out:
+    if ((status != UCS_OK) && (self->id != NULL)) {
+        rdma_destroy_id(self->id);
+    }
+    return status;
+}
+
+UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
+{
+    rdma_destroy_id(self->id);
+}
+
+UCS_CLASS_DEFINE(uct_rdmacm_listener_t, uct_listener_t);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_listener_t, uct_listener_t,
+                          const uct_listener_params_t *);
+UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_listener_t, uct_listener_t);
+
 static void uct_rdmacm_cm_cleanup(uct_cm_h cm)
 {
     uct_rdmacm_cm_t *rdmacm_cm = ucs_derived_of(cm, uct_rdmacm_cm_t);
@@ -43,8 +101,10 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 }
 
 uct_cm_ops_t uct_rdmacm_cm_ops = {
-    .close    = uct_rdmacm_cm_cleanup,
-    .cm_query = uct_rdmacm_cm_query
+    .close            = uct_rdmacm_cm_cleanup,
+    .cm_query         = uct_rdmacm_cm_query,
+    .listener_create  = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_listener_t),
+    .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_listener_t)
 };
 
 
