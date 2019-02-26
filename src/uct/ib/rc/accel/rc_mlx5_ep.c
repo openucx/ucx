@@ -499,10 +499,7 @@ ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
 
-    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
-        ep->tx.wq.next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
-    }
-
+    uct_rc_mlx5_add_fence(md, &ep->tx.wq);
     UCT_TL_EP_STAT_FENCE(&ep->super.super);
     return UCS_OK;
 }

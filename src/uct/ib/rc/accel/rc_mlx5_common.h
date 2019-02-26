@@ -41,9 +41,6 @@
                                 UCS_BIT(UCT_ATOMIC_OP_OR)  | \
                                 UCS_BIT(UCT_ATOMIC_OP_XOR))
 
-#define UCT_RC_MLX5_PCI_ATOMIC_OPS (UCS_BIT(UCT_ATOMIC_OP_ADD) | \
-                                    UCS_BIT(UCT_ATOMIC_OP_CSWAP))
-
 #define UCT_RC_MLX5_ATOMIC_FOPS (UCT_RC_MLX5_ATOMIC_OPS | UCS_BIT(UCT_ATOMIC_OP_SWAP))
 
 #define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op, _size, _flags)                        \
@@ -241,7 +238,9 @@ typedef struct uct_rc_mlx5_iface_common {
         ucs_mpool_t                  atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t      mmio_mode;
         uint16_t                     bb_max;     /* limit number of outstanding WQE BBs */
-        uint16_t                     fence_beat;
+        uint16_t                     fence_beat; /* 16bit is enough because if it wraps around,
+                                                  * it means the older ops are already completed
+                                                  * because QP size is less than 64k */
         uint8_t                      next_fm;
     } tx;
     struct {
