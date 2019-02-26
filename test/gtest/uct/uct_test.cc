@@ -865,6 +865,12 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     m_eps[index].reset(ep, uct_ep_destroy);
 }
 
+void uct_test::entity::listen(const uct_listener_params_t &params)
+{
+    UCS_TEST_CREATE_HANDLE(uct_listener_h, m_listener, uct_listener_destroy,
+                           uct_listener_create, &params);
+}
+
 void uct_test::entity::connect_to_ep(unsigned index, entity& other,
                                      unsigned other_index)
 {

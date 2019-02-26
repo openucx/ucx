@@ -137,6 +137,8 @@ protected:
         void connect_to_sockaddr(unsigned index, entity& other,
                                  const ucs::sock_addr_storage &remote_addr);
 
+        void listen(const uct_listener_params_t &params);
+
         void flush() const;
 
         static std::string client_priv_data;
@@ -164,15 +166,16 @@ protected:
         static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
                                            void *priv_data);
 
-        ucs::handle<uct_md_h>      m_md;
-        uct_md_attr_t              m_md_attr;
-        mutable async_wrapper      m_async;
-        ucs::handle<uct_worker_h>  m_worker;
-        ucs::handle<uct_cm_h>      m_cm;
-        ucs::handle<uct_iface_h>   m_iface;
-        eps_vec_t                  m_eps;
-        uct_iface_attr_t           m_iface_attr;
-        uct_iface_params_t         m_iface_params;
+        ucs::handle<uct_md_h>       m_md;
+        uct_md_attr_t               m_md_attr;
+        mutable async_wrapper       m_async;
+        ucs::handle<uct_worker_h>   m_worker;
+        ucs::handle<uct_cm_h>       m_cm;
+        ucs::handle<uct_listener_h> m_listener;
+        ucs::handle<uct_iface_h>    m_iface;
+        eps_vec_t                   m_eps;
+        uct_iface_attr_t            m_iface_attr;
+        uct_iface_params_t          m_iface_params;
     };
 
     class mapped_buffer {
