@@ -221,6 +221,15 @@ uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 }
 
+static UCS_F_ALWAYS_INLINE uct_dc_mlx5_ep_t *
+uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+{
+    /* Can be used with dcs* policies only, with rand policy every dci may
+     * be used by many eps */
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    return iface->tx.dcis[dci].ep;
+}
+
 enum uct_dc_mlx5_ep_flags {
     UCT_DC_MLX5_EP_FLAG_TX_WAIT  = UCS_BIT(0), /* ep is in the tx_wait state. See
                                                   description of the dcs+quota dci
@@ -311,7 +320,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
         return;
     }
 
-    ep = iface->tx.dcis[dci].ep;
+    ep = uct_dc_mlx5_ep_from_dci(iface, dci);
 
     ucs_assert(iface->tx.stack_top > 0);
 
@@ -348,7 +357,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
         return;
     }
 
-    ucs_assert(iface->tx.dcis[dci].ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    ucs_assert(uct_dc_mlx5_ep_from_dci(iface, dci)->dci != UCT_DC_MLX5_EP_NO_DCI);
     ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
     iface->tx.dcis[dci].ep = NULL;
@@ -373,9 +382,10 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
      * There is no need to check txqp because
      * dci must have resources to transmit.
      */
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
     ep->dci = iface->tx.dcis_stack[iface->tx.stack_top];
     ucs_assert(ep->dci < iface->tx.ndci);
-    ucs_assert(iface->tx.dcis[ep->dci].ep == NULL);
+    ucs_assert(uct_dc_mlx5_ep_from_dci(iface, ep->dci) == NULL);
     ucs_assert(iface->tx.dcis[ep->dci].flags == 0);
     iface->tx.dcis[ep->dci].ep = ep;
     iface->tx.stack_top++;

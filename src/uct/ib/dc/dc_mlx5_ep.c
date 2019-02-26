@@ -1042,64 +1042,11 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
-/**
- * dispatch requests waiting for tx resources (dcs* DCI policies)
- */
 ucs_arbiter_cb_result_t
-uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
-                                        ucs_arbiter_elem_t *elem,
-                                        void *arg)
-{
-
-    uct_dc_mlx5_ep_t *ep       = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                  uct_dc_mlx5_ep_t, arb_group);
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                                uct_dc_mlx5_iface_t);
-    uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
-    ucs_status_t status;
-
-    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
-        return UCS_ARBITER_CB_RESULT_STOP;
-    }
-
-    status = req->func(req);
-    ucs_trace_data("progress pending request %p returned: %s", req,
-                   ucs_status_string(status));
-    if (status == UCS_OK) {
-        /* For dcs* policies release dci if this is the last elem in the group
-         * and the dci has no outstanding operations. For example pending
-         * callback did not send anything. (uct_ep_flush or just return ok)
-         */
-        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
-            uct_dc_mlx5_iface_dci_free(iface, ep);
-        }
-        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
-    }
-    if (status == UCS_INPROGRESS) {
-        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
-    }
-
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
-        /* Deschedule the group even if FC is the only resource, which
-         * is missing. It will be scheduled again when credits arrive. */
-        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-    }
-
-    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
-                "pending callback returned error but send resources are available");
-    return UCS_ARBITER_CB_RESULT_STOP;
-}
-
-/**
- * dispatch requests waiting for tx resources (rand DCI policy)
- */
-ucs_arbiter_cb_result_t
-uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
-                                         ucs_arbiter_elem_t *elem,
-                                         void *arg)
+uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
+                                           ucs_arbiter_elem_t *elem)
 {
     uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_dc_mlx5_ep_t *ep       = uct_dc_mlx5_pending_req_priv(req)->ep;
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
     ucs_status_t status;
@@ -1118,16 +1065,66 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
     }
 
     if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
-        /* We can't desched group with rand policy if non FC resources are
-         * missing, since it's never scheduled again. */
-        return uct_rc_fc_has_resources(&iface->super.super, &ep->fc) ?
-               UCS_ARBITER_CB_RESULT_RESCHED_GROUP :
-               UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
     ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
                 "pending callback returned error but send resources are available");
     return UCS_ARBITER_CB_RESULT_STOP;
+}
+
+/**
+ * dispatch requests waiting for tx resources (dcs* DCI policies)
+ */
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_elem_t *elem,
+                                        void *arg)
+{
+
+    uct_dc_mlx5_ep_t *ep       = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                                  uct_dc_mlx5_ep_t, arb_group);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    ucs_arbiter_cb_result_t res;
+
+    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
+        /* For dcs* policies release dci if this is the last elem in the group
+         * and the dci has no outstanding operations. For example pending
+         * callback did not send anything. (uct_ep_flush or just return ok)
+         */
+        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
+            uct_dc_mlx5_iface_dci_free(iface, ep);
+        }
+    }
+
+    return res;
+}
+
+/**
+ * dispatch requests waiting for tx resources (rand DCI policy)
+ */
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_elem_t *elem,
+                                         void *arg)
+{
+    uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_dc_mlx5_ep_t *ep       = uct_dc_mlx5_pending_req_priv(req)->ep;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    ucs_arbiter_cb_result_t res;
+
+    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    if ((res == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) &&
+        uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
+        /* We can't desched group with rand policy if non FC resources are
+         * missing, since it's never scheduled again. */
+        res = UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+
+    return res;
 }
 
 static ucs_arbiter_cb_result_t

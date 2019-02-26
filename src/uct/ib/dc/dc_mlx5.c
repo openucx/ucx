@@ -764,12 +764,9 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *ifa
     int is_flush_done = 1;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        if ((iface->tx.dcis[i].ep != NULL) &&
-            uct_dc_mlx5_ep_fc_wait_for_grant(iface->tx.dcis[i].ep)) {
-            return UCS_INPROGRESS;
-        }
         if (uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
             is_flush_done = 0;
+            break;
         }
     }
     return is_flush_done ? UCS_OK : UCS_INPROGRESS;
@@ -949,7 +946,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                    UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     uct_rc_txqp_t        *txqp   = &iface->tx.dcis[dci].txqp;
-    uct_dc_mlx5_ep_t     *ep     = iface->tx.dcis[dci].ep;
+    uct_dc_mlx5_ep_t     *ep     = uct_dc_mlx5_ep_from_dci(iface, dci);
     ucs_status_t         ep_status;
     int16_t              outstanding;
 
