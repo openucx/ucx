@@ -593,6 +593,48 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief UCT connection manager created by @ref uct_cm_open parameters field
+ *        mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_cm_params_t are
+ * present, for backward compatibility support.
+ */
+enum uct_cm_params_field {
+    /** Enables @ref uct_cm_params::md_name */
+    UCT_CM_PARAM_FIELD_MD_NAME            = UCS_BIT(0),
+
+    /** Enables @ref uct_cm_params::worker */
+    UCT_CM_PARAM_FIELD_WORKER             = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT listener created by @ref uct_listener_create parameters field mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_listener_params_t
+ * are present, for backward compatibility support.
+ */
+enum uct_listener_params_field {
+    /** Enables @ref uct_listener_params::cm */
+    UCT_LISTENER_PARAM_FIELD_CM              = UCS_BIT(0),
+
+    /** Enables @ref uct_listener_params::sockaddr */
+    UCT_LISTENER_PARAM_FIELD_SOCKADDR        = UCS_BIT(1),
+
+    /** Enables @ref uct_listener_params::backlog */
+    UCT_LISTENER_PARAM_FIELD_BACKLOG         = UCS_BIT(2),
+
+    /** Enables @ref uct_listener_params::conn_request_cb */
+    UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB = UCS_BIT(3),
+
+    /** Enables @ref uct_listener_params::user_data */
+    UCT_LISTENER_PARAM_FIELD_USER_DATA       = UCS_BIT(4)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT endpoint created by @ref uct_ep_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_ep_params_t are
@@ -923,6 +965,45 @@ struct uct_cm_params {
      * UCT worker, mandatory field.
      */
     uct_worker_h                      worker;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a listener object @ref uct_listener_h
+ */
+struct uct_listener_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_listener_params_field. Fields not specified by this mask
+     * would be ignored.
+     */
+    uint64_t                             field_mask;
+
+    /**
+     * Connection manager, mandatory field.
+     */
+    uct_cm_h                             cm;
+
+    /**
+     * Socket address to listen, mandatory field.
+     */
+    ucs_sock_addr_t                      sockaddr;
+
+    /**
+     * Backlog of incoming connection requests.
+     */
+    int                                  backlog;
+
+    /**
+     * Callback for an incoming connection request on the server
+     */
+    uct_listener_conn_request_callback_t conn_request_cb;
+
+    /**
+     * User data associated with the listener
+     */
+    void *user_data;
 };
 
 
@@ -2775,6 +2856,30 @@ void uct_cm_close(uct_cm_h cm);
  * @param [out] cm_attr Filled with connection manager attributes.
  */
 ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Create a new listener object.
+ *
+ * @param [in]  params      User defined @ref uct_listener_params_t
+ *                          configurations for the @a listener_p.
+ * @param [out] listener_p  Filled with handle to the new listener.
+ *
+ *
+ * @return Error code. (@ref ucs_status_t)
+ */
+ucs_status_t uct_listener_create(const uct_listener_params_t *params,
+                                 uct_listener_h *listener_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Destroy a listener.
+ *
+ * @param [in]  listener    Listener to destroy.
+ */
+void uct_listener_destroy(uct_listener_h listener);
 
 
 /**

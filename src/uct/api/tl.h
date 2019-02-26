@@ -234,6 +234,14 @@ typedef struct uct_ep {
 } uct_ep_t;
 
 
+/**
+ * Listener for incoming connections
+ */
+typedef struct uct_listener {
+    uct_cm_h                 cm;
+} uct_listener_t;
+
+
 typedef struct uct_recv_desc uct_recv_desc_t;
 typedef void (*uct_desc_release_callback_t)(uct_recv_desc_t *self, void * desc);
 

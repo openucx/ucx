@@ -68,36 +68,39 @@ enum uct_cb_param_flags {
  * @addtogroup UCT_RESOURCE
  * @{
  */
-typedef struct uct_md_component  *uct_component_h;
-typedef struct uct_iface         *uct_iface_h;
-typedef struct uct_iface_config  uct_iface_config_t;
-typedef struct uct_md_config     uct_md_config_t;
-typedef struct uct_ep            *uct_ep_h;
-typedef void *                   uct_mem_h;
-typedef uintptr_t                uct_rkey_t;
-typedef struct uct_md            *uct_md_h;          /**< @brief Memory domain handler */
-typedef struct uct_md_ops        uct_md_ops_t;
-typedef void                     *uct_rkey_ctx_h;
-typedef struct uct_iface_attr    uct_iface_attr_t;
-typedef struct uct_iface_params  uct_iface_params_t;
-typedef struct uct_md_attr       uct_md_attr_t;
-typedef struct uct_completion    uct_completion_t;
-typedef struct uct_pending_req   uct_pending_req_t;
-typedef struct uct_worker        *uct_worker_h;
-typedef struct uct_md            uct_md_t;
-typedef enum uct_am_trace_type   uct_am_trace_type_t;
-typedef struct uct_device_addr   uct_device_addr_t;
-typedef struct uct_iface_addr    uct_iface_addr_t;
-typedef struct uct_ep_addr       uct_ep_addr_t;
-typedef struct uct_ep_params     uct_ep_params_t;
-typedef struct uct_cm_attr       uct_cm_attr_t;
-typedef struct uct_cm_params     uct_cm_params_t;
-typedef struct uct_cm            uct_cm_t;
-typedef uct_cm_t                 *uct_cm_h;
-typedef struct uct_tag_context   uct_tag_context_t;
-typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
-typedef int                      uct_worker_cb_id_t;
-typedef void*                    uct_conn_request_h;
+typedef struct uct_md_component    *uct_component_h;
+typedef struct uct_iface           *uct_iface_h;
+typedef struct uct_iface_config    uct_iface_config_t;
+typedef struct uct_md_config       uct_md_config_t;
+typedef struct uct_ep              *uct_ep_h;
+typedef void *                     uct_mem_h;
+typedef uintptr_t                  uct_rkey_t;
+typedef struct uct_md              *uct_md_h;          /**< @brief Memory domain handler */
+typedef struct uct_md_ops          uct_md_ops_t;
+typedef void                       *uct_rkey_ctx_h;
+typedef struct uct_iface_attr      uct_iface_attr_t;
+typedef struct uct_iface_params    uct_iface_params_t;
+typedef struct uct_md_attr         uct_md_attr_t;
+typedef struct uct_completion      uct_completion_t;
+typedef struct uct_pending_req     uct_pending_req_t;
+typedef struct uct_worker          *uct_worker_h;
+typedef struct uct_md              uct_md_t;
+typedef enum uct_am_trace_type     uct_am_trace_type_t;
+typedef struct uct_device_addr     uct_device_addr_t;
+typedef struct uct_iface_addr      uct_iface_addr_t;
+typedef struct uct_ep_addr         uct_ep_addr_t;
+typedef struct uct_ep_params       uct_ep_params_t;
+typedef struct uct_cm_attr         uct_cm_attr_t;
+typedef struct uct_cm_params       uct_cm_params_t;
+typedef struct uct_cm              uct_cm_t;
+typedef uct_cm_t                   *uct_cm_h;
+typedef struct uct_listener        *uct_listener_h;
+typedef struct uct_listener_params uct_listener_params_t;
+typedef struct uct_tag_context     uct_tag_context_t;
+typedef uint64_t                   uct_tag_t;  /* tag type - 64 bit */
+typedef int                        uct_worker_cb_id_t;
+typedef void*                      uct_conn_request_h;
+
 /**
  * @}
  */
@@ -303,6 +306,37 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
 typedef void
 (*uct_sockaddr_conn_request_callback_t)(uct_iface_h iface, void *arg,
                                         uct_conn_request_h conn_request,
+                                        const void *conn_priv_data,
+                                        size_t length);
+
+
+ /**
+  * @ingroup UCT_RESOURCE
+ * @brief Callback to process an incoming connection request message on the 
+ *        server side listener.
+ *
+ * This callback routine will be invoked on the server side upon receiving an
+ * incoming connection request. It should be set by the server side while
+ * initializing a listener.
+ * Incoming data is placed inside the conn_priv_data buffer.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
+ *
+ * @param [in]  listener         Transport listener.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_listener_params_t::user_data
+ * @param [in]  dev_name         Device name which handles incoming connection.
+ * @param [in]  conn_priv_data   Points to the received data.
+ *                               This is the private data that was passed to the
+ *                               @ref uct_ep_params_t::sockaddr_pack_cb on the
+ *                               client side.
+ * @param [in]  length           Length of the received data.
+ *
+ */
+typedef void
+(*uct_listener_conn_request_callback_t)(uct_listener_h listener, void *arg,
+                                        const char *dev_name,
                                         const void *conn_priv_data,
                                         size_t length);
 
