@@ -210,7 +210,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.reg_mem_types =
+        UCS_BIT(UCT_MD_MEM_TYPE_HOST) |
+        UCS_BIT(UCT_MD_MEM_TYPE_ROCM);
 
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
