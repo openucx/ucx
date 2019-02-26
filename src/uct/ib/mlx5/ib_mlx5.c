@@ -281,29 +281,29 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
               qp_info.dv.sq.stride, qp_info.dv.sq.wqe_cnt,
               uct_ib_mlx5_mmio_modes[mmio_mode]);
 
-    txwq->qstart   = qp_info.dv.sq.buf;
-    txwq->qend     = qp_info.dv.sq.buf + (qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt);
-    txwq->reg      = uct_worker_tl_data_get(worker,
-                                            UCT_IB_MLX5_WORKER_BF_KEY,
-                                            uct_ib_mlx5_mmio_reg_t,
-                                            uct_ib_mlx5_mmio_cmp,
-                                            uct_ib_mlx5_mmio_init,
-                                            (uintptr_t)qp_info.dv.bf.reg,
-                                            mmio_mode);
+    txwq->qstart     = qp_info.dv.sq.buf;
+    txwq->qend       = qp_info.dv.sq.buf + (qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt);
+    txwq->reg        = uct_worker_tl_data_get(worker,
+                                              UCT_IB_MLX5_WORKER_BF_KEY,
+                                              uct_ib_mlx5_mmio_reg_t,
+                                              uct_ib_mlx5_mmio_cmp,
+                                              uct_ib_mlx5_mmio_init,
+                                              (uintptr_t)qp_info.dv.bf.reg,
+                                              mmio_mode);
     if (UCS_PTR_IS_ERR(txwq->reg)) {
         return UCS_PTR_STATUS(txwq->reg);
     }
 
-    txwq->dbrec    = &qp_info.dv.dbrec[MLX5_SND_DBR];
+    txwq->dbrec      = &qp_info.dv.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not
      *    really know how many bb is there (but no more than max bb
      *  - on send we check that there is at least one bb. We know
      *  exact number of bbs once we actually are sending.
      */
-    txwq->bb_max   = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
+    txwq->bb_max     = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(txwq->bb_max > 0);
-    txwq->next_fm = 0;
+    txwq->next_fm    = 0;
     txwq->fence_beat = 0;
 
     uct_ib_mlx5_txwq_reset(txwq);

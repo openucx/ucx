@@ -217,7 +217,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_add_fence(uct_ib_md_t *md, uct_ib_mlx5_txwq_t *wq)
 {
-    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+    if (md->dev.pci_fadd_arg_sizes || md->dev.pci_cswap_arg_sizes) {
         wq->next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
     }
 }

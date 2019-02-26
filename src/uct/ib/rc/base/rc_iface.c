@@ -178,7 +178,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     }
 #endif
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
         iface_attr->cap.atomic32.op_flags  = 0;
         iface_attr->cap.atomic32.fop_flags = 0;
         iface_attr->cap.atomic64.op_flags  = 0;

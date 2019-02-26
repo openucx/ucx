@@ -692,13 +692,12 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
-    uct_ib_md_t *md = uct_ib_iface_md(ib_iface);
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
 
-    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
         if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {
             iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
             iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
@@ -835,7 +834,7 @@ ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags)
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
 
-    if (md->dev.flags & UCT_IB_DEVICE_FLAG_PCI_ATOMICS) {
+    if (md->dev.pci_fadd_arg_sizes || md->dev.pci_cswap_arg_sizes) {
         iface->tx.next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
         iface->tx.fence_beat++;
     }

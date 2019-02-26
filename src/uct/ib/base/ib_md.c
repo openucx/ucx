@@ -1677,12 +1677,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 #endif
 
 #if HAVE_DECL_IBV_EXP_DEVICE_ATTR_PCI_ATOMIC_CAPS
-    if (dev->dev_attr.pci_atomic_caps.fetch_add ||
-        dev->dev_attr.pci_atomic_caps.compare_swap) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_PCI_ATOMICS;
-        dev->pci_fadd_arg_sizes = dev->dev_attr.pci_atomic_caps.fetch_add << 2;
-        dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
-    }
+    dev->pci_fadd_arg_sizes  = dev->dev_attr.pci_atomic_caps.fetch_add << 2;
+    dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
 #endif
 
     *p_md = md;
