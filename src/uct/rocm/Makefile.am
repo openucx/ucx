@@ -5,6 +5,8 @@
 
 if HAVE_ROCM
 
+SUBDIRS = gdr
+
 module_LTLIBRARIES      = libuct_rocm.la
 libuct_rocm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS)
 libuct_rocm_la_CFLAGS   = $(BASE_CFLAGS)
