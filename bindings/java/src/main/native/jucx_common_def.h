@@ -21,7 +21,7 @@ JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *, const char *);
 
 void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
 
-#define JUCX_DEFINE_CONSTANT(_name) do { \
+#define JUCX_DEFINE_LONG_CONSTANT(_name) do { \
     jfieldID field = env->GetStaticFieldID(cls, #_name, "J"); \
     env->SetStaticLongField(cls, field, _name); \
 } while(0)
