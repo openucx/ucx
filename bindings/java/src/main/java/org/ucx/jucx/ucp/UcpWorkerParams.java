@@ -8,17 +8,10 @@ package org.ucx.jucx.ucp;
 import java.nio.ByteBuffer;
 import java.util.BitSet;
 
+import org.ucx.jucx.UcxParams;
 import org.ucx.jucx.ucs.UcsConstants;
 
-public class UcpWorkerParams {
-
-    /**
-     * Mask of valid fields in this structure.
-     * Fields not specified in this mask would be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    private long fieldMask;
-
+public class UcpWorkerParams extends UcxParams {
 
     private int threadMode;
 
@@ -30,6 +23,17 @@ public class UcpWorkerParams {
 
     private int eventFD;
 
+    @Override
+    public UcpWorkerParams clear() {
+        super.clear();
+        threadMode = 0;
+        cpuMask = new BitSet();
+        events = 0;
+        userData = null;
+        eventFD = 0;
+        return this;
+    }
+
     /**
      * Suggests the thread safety mode which worker and the associated resources
      * should be created with. The default value is UCS_THREAD_MODE_SINGLE and
@@ -39,9 +43,9 @@ public class UcpWorkerParams {
      * The thread mode with which worker is created can differ from the
      * suggested mode.
      */
-    public UcpWorkerParams setThreadMode(UcsConstants.UcsThreadMode threadMode) {
+    public UcpWorkerParams setThreadMode(int threadMode) {
         this.fieldMask |= UcpConstants.UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-        this.threadMode = threadMode.ordinal();
+        this.threadMode = threadMode;
         return this;
     }
 

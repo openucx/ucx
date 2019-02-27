@@ -4,14 +4,10 @@
  */
 
 #include "org_ucx_jucx_ucp_UcpConstants.h"
+#include "jucx_common_def.h"
 
 #include <ucp/api/ucp.h>
 
-
-#define JUCX_DEFINE_CONSTANT(_name) do { \
-    jfieldID field = env->GetStaticFieldID(cls, #_name, "J"); \
-    env->SetStaticLongField(cls, field, _name); \
-} while(0)
 
 /**
  * @brief Routine to set UCX constants in java

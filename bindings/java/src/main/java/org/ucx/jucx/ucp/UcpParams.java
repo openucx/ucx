@@ -5,6 +5,8 @@
 
 package org.ucx.jucx.ucp;
 
+import org.ucx.jucx.UcxParams;
+
 /**
  * Tuning parameters for UCP library.
  * The structure defines the parameters that are used for
@@ -16,13 +18,7 @@ package org.ucx.jucx.ucp;
  * semantics UCP library may avoid allocation of expensive resources associated with
  * send/receive queues.
  */
-public class UcpParams {
-    /**
-     * Mask of valid fields in this structure.
-     * Fields not specified in this mask would be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    private long fieldMask;
+public class UcpParams extends UcxParams {
 
     /**
      * UCP ucp_feature "features" that are used for library
@@ -37,6 +33,16 @@ public class UcpParams {
     private boolean mtWorkersShared;
 
     private long estimatedNumEps;
+
+    @Override
+    public UcpParams clear() {
+        super.clear();
+        features = 0L;
+        tagSenderMask = 0L;
+        mtWorkersShared = false;
+        estimatedNumEps = 0L;
+        return this;
+    }
 
     /**
      * Mask which specifies particular bits of the tag which can uniquely

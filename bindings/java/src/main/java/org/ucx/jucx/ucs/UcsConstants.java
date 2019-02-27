@@ -5,19 +5,23 @@
 
 package org.ucx.jucx.ucs;
 
+import org.ucx.jucx.NativeLibs;
+
 public class UcsConstants {
+    static {
+        NativeLibs.load();
+        loadConstants();
+    }
 
     /**
-     * Thread sharing mode
-     *
-     * <p>Specifies thread sharing mode of an object.
+     * Only the master thread can access (i.e. the thread that initialized the context;
+     * multiple threads may exist and never access)
      */
-    public enum UcsThreadMode {
-        UCS_THREAD_MODE_SINGLE,     /**< Only the master thread can access
-                                         (i.e. the thread that initialized the context;
-                                         multiple threads may exist and never access) */
-        UCS_THREAD_MODE_SERIALIZED, /**< Multiple threads can access, but only one at a time */
-        UCS_THREAD_MODE_MULTI,      /**< Multiple threads can access concurrently */
-        UCS_THREAD_MODE_LAST
-    }
+    public static int UCS_THREAD_MODE_SINGLE;
+    /**
+     * Multiple threads can access concurrently
+     */
+    public static int UCS_THREAD_MODE_MULTI;
+
+    private static native void loadConstants();
 }
