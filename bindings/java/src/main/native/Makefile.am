@@ -1,3 +1,8 @@
+#
+# Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+
 topdir=$(abs_top_builddir)
 javadir=$(topdir)/bindings/java
 MVNCMD=@cd $(javadir) && $(MVN)
