@@ -90,6 +90,7 @@ typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
 typedef struct uct_ep_params     uct_ep_params_t;
+typedef struct uct_cm_attr       uct_cm_attr_t;
 typedef struct uct_cm_params     uct_cm_params_t;
 typedef struct uct_cm            uct_cm_t;
 typedef uct_cm_t                 *uct_cm_h;

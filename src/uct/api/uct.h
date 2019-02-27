@@ -696,9 +696,10 @@ struct uct_iface_attr {
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
-    size_t                   max_conn_priv;  /**< Max size of the iface's private data.
-                                                  used for connection
-                                                  establishment with sockaddr */
+    size_t                   max_conn_priv;  /**< Max size of the iface's
+                                                  private data used for
+                                                  connection establishment with
+                                                  sockaddr */
     /*
      * The following fields define expected performance of the communication
      * interface, this would usually be a combination of device and system
@@ -845,6 +846,16 @@ struct uct_ep_params {
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
 };
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Connection manager attributes: capabilities and limitations.
+ */
+struct uct_cm_attr {
+    size_t      max_conn_priv;  /**< Max size of the connection manager's
+                                     private data used for connection
+                                     establishment with sockaddr */
+};
 
 /**
  * @ingroup UCT_RESOURCE
@@ -2653,6 +2664,16 @@ ucs_status_t uct_cm_open(const uct_cm_params_t *params, uct_cm_h *cm_p);
  * @param [in]  cm    Connection manager to close.
  */
 void uct_cm_close(uct_cm_h cm);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get connection manager attributes.
+ *
+ * @param [in]  cm      Connection manager to query.
+ * @param [out] cm_attr Filled with connection manager attributes.
+ */
+ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
 
 
 /**
