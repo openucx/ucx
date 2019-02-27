@@ -954,15 +954,18 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                    UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     uct_rc_txqp_t        *txqp   = &iface->tx.dcis[dci].txqp;
-    uct_dc_mlx5_ep_t     *ep     = iface->tx.dcis[dci].ep;
+    uct_dc_mlx5_ep_t     *ep;
     ucs_status_t         ep_status;
     int16_t              outstanding;
 
-    if (!ep || uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
+        (uct_dc_mlx5_ep_from_dci(iface, dci) == NULL)) {
         uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
                                         ib_iface->super.config.failure_level);
         return;
     }
+
+    ep = uct_dc_mlx5_ep_from_dci(iface, dci);
 
     uct_rc_txqp_purge_outstanding(txqp, status, 0);
 
