@@ -8,6 +8,41 @@
 #include <ucs/async/async.h>
 
 
+#define UCT_TCP_AM_SHORT_PACK_DATA(_pack_f, _target_buf, _target_length, \
+                                   _am_payload, _payload_length,  _am_header) \
+    do { \
+        *((uint64_t*)(_target_buf)) = (_am_header);           \
+        _pack_f((uint8_t*)(_target_buf) + sizeof(_am_header), \
+                _am_payload, _payload_length); \
+        _target_length = sizeof(_am_header) + _payload_length; \
+    } while (0)
+
+#define UCT_TCP_AM_BCOPY_PACK_DATA(_pack_f, _target_buf, _target_length, \
+                                   _am_arg, ...) \
+    _target_length = _pack_f(_target_buf, _am_arg)
+
+#define UCT_TCP_AM_PREPARE(_ep, _id, _len_thr, _hdr, \
+                           _pack_f, _am_payload, _payload_length, \
+                           _am_header, _method, _name)	  \
+    do { \
+        UCT_CHECK_AM_ID(_id); \
+        \
+        if (!uct_tcp_ep_can_send(_ep)) { \
+            return UCS_ERR_NO_RESOURCE; \
+        } \
+        \
+        (_hdr)        = (_ep)->buf; \
+        (_hdr)->am_id = _id; \
+        \
+        UCT_TCP_AM_ ## _method ## _PACK_DATA(_pack_f, (_hdr) + 1, (_hdr)->length, \
+                                             _am_payload, _payload_length, \
+                                             _am_header); \
+        \
+        UCT_CHECK_LENGTH((_hdr)->length, 0, _len_thr, _name); \
+        UCT_TL_EP_STAT_OP(&(_ep)->super, AM, _method, (_hdr)->length); \
+    } while (0)
+
+
 static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -39,7 +74,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
 
-    self->buf = ucs_malloc(iface->config.buf_size, "tcp_buf");
+    self->buf = ucs_malloc(ucs_max(iface->config.buf_size,
+                                   iface->config.short_size), "tcp_buf");
     if (self->buf == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -262,6 +298,36 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
     return recv_length > 0;
 }
 
+
+static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
+                                      const uct_tcp_am_hdr_t *hdr)
+{
+    uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
+                       hdr + 1, hdr->length, "SEND fd %d", ep->fd);
+
+    ep->length         = sizeof(*hdr) + hdr->length;
+    iface->outstanding += ep->length;
+
+    uct_tcp_ep_send(ep);
+    if (ep->length > 0) {
+        uct_tcp_ep_mod_events(ep, EPOLLOUT, 0);
+    }
+}
+
+ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
+                                 const void *payload, unsigned length)
+{
+    uct_tcp_ep_t *ep       = ucs_derived_of(uct_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr;
+
+    UCT_TCP_AM_PREPARE(ep, am_id, iface->config.short_size - sizeof(*hdr),
+                       hdr, memcpy, payload, length, header, SHORT, "am_short");
+
+    uct_tcp_ep_am_send(iface, ep, hdr);
+    return UCS_OK;
+}
+
 ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
                             uct_pack_callback_t pack_cb, void *arg,
                             unsigned flags)
@@ -269,32 +335,12 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
     uct_tcp_ep_t *ep = ucs_derived_of(uct_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
     uct_tcp_am_hdr_t *hdr;
-    size_t packed_length;
 
-    UCT_CHECK_AM_ID(am_id);
+    UCT_TCP_AM_PREPARE(ep, am_id, iface->config.buf_size - sizeof(*hdr),
+                       hdr, pack_cb, arg, NULL, NULL, BCOPY, "am_bcopy");
 
-    if (!uct_tcp_ep_can_send(ep)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    hdr         = ep->buf;
-    hdr->am_id  = am_id;
-    hdr->length = packed_length = pack_cb(hdr + 1, arg);
-    ep->length  = sizeof(*hdr) + packed_length;
-
-    UCT_CHECK_LENGTH(hdr->length, 0,
-                     iface->config.buf_size - sizeof(uct_tcp_am_hdr_t),
-                     "am_bcopy");
-    UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, hdr->length);
-    uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
-                       hdr + 1, hdr->length, "SEND fd %d", ep->fd);
-    iface->outstanding += ep->length;
-
-    uct_tcp_ep_send(ep);
-    if (ep->length > 0) {
-        uct_tcp_ep_mod_events(ep, EPOLLOUT, 0);
-    }
-    return packed_length;
+    uct_tcp_ep_am_send(iface, ep, hdr);
+    return hdr->length;
 }
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,

@@ -413,7 +413,14 @@ struct uct_ib_mlx5_atomic_caps_bits {
     uint8_t    reserved_at_c0[0x10];
     uint8_t    atomic_size_dc[0x10];
 
-    uint8_t    reserved_at_e0[0x720];
+    uint8_t    reserved_at_e0[0x1a0];
+
+    uint8_t    fetch_add_pci_atomic[0x10];
+    uint8_t    swap_pci_atomic[0x10];
+    uint8_t    compare_swap_pci_atomic[0x10];
+    uint8_t    reserved_at_2b0[0x10];
+
+    uint8_t    reserved_at_2c0[0x540];
 };
 
 union uct_ib_mlx5_hca_cap_union_bits {

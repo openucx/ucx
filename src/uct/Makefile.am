@@ -6,7 +6,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = base cuda ib sm tcp
+SUBDIRS = base cuda ib rocm sm tcp
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
@@ -56,21 +56,4 @@ libuct_la_SOURCES += \
     ugni/udt/ugni_udt_ep.c \
     ugni/smsg/ugni_smsg_iface.c	\
     ugni/smsg/ugni_smsg_ep.c
-endif
-
-if HAVE_ROCM
-libuct_la_CPPFLAGS += $(ROCM_CPPFLAGS)
-libuct_la_LDFLAGS +=  $(ROCM_LDFLAGS) $(ROCM_LIBS)
-
-noinst_HEADERS += \
-    rocm/rocm_cma_md.h \
-    rocm/rocm_cma_iface.h \
-    rocm/rocm_cma_ep.h \
-    rocm/rocm_common.h
-
-libuct_la_SOURCES += \
-    rocm/rocm_cma_md.c \
-    rocm/rocm_cma_iface.c \
-    rocm/rocm_cma_ep.c \
-    rocm/rocm_common.c
 endif
