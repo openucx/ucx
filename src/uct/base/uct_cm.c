@@ -32,3 +32,8 @@ void uct_cm_close(uct_cm_h cm)
 {
     cm->ops->close(cm);
 }
+
+ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
+{
+    return cm->ops->cm_query(cm, cm_attr);
+}
