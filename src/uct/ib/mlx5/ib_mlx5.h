@@ -101,6 +101,8 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
+#define UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC (2<<5)
+
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 
 #define UCT_IB_MLX5_AM_MAX_SHORT(_av_size) \
@@ -206,6 +208,8 @@ typedef struct uct_ib_mlx5_txwq {
 #if ENABLE_ASSERT
     uint16_t                    hw_ci;
 #endif
+    uint16_t                    fence_beat;
+    uint8_t                     next_fm;
 } uct_ib_mlx5_txwq_t;
 
 

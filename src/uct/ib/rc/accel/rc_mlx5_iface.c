@@ -409,6 +409,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
+    self->tx.next_fm                 = 0;
+    self->tx.fence_beat              = 0;
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
@@ -567,7 +569,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_mlx5_ep_flush,
-    .ep_fence                 = uct_base_ep_fence,
+    .ep_fence                 = uct_rc_mlx5_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_get_address           = uct_rc_mlx5_ep_get_address,
@@ -583,7 +585,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_tag_recv_cancel    = uct_rc_mlx5_iface_tag_recv_cancel,
 #endif
     .iface_flush              = uct_rc_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
+    .iface_fence              = uct_rc_mlx5_iface_fence,
     .iface_progress_enable    = uct_rc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,

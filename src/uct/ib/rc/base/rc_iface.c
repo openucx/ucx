@@ -178,6 +178,13 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     }
 #endif
 
+    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
+        iface_attr->cap.atomic32.op_flags  = 0;
+        iface_attr->cap.atomic32.fop_flags = 0;
+        iface_attr->cap.atomic64.op_flags  = 0;
+        iface_attr->cap.atomic64.fop_flags = 0;
+    }
+
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
