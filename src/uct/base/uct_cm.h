@@ -16,6 +16,7 @@
  */
 typedef struct uct_cm_ops {
     void         (*close)(uct_cm_h cm);
+    ucs_status_t (*cm_query)(uct_cm_h cm, uct_cm_attr_t *cm_attr);
 } uct_cm_ops_t;
 
 

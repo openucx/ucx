@@ -12,6 +12,7 @@
 #if HAVE_RDMACM_QP_LESS
 
 #include "rdmacm_cm.h"
+#include "rdmacm_iface.h"
 
 #include <ucs/async/async.h>
 
@@ -34,8 +35,16 @@ static void uct_rdmacm_cm_cleanup(uct_cm_h cm)
     ucs_free(cm);
 }
 
+static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
+{
+    memset(cm_attr, 0, sizeof(*cm_attr));
+    cm_attr->max_conn_priv = UCT_RDMACM_CM_MAX_CONN_PRIV;
+    return UCS_OK;
+}
+
 uct_cm_ops_t uct_rdmacm_cm_ops = {
-    .close = uct_rdmacm_cm_cleanup
+    .close    = uct_rdmacm_cm_cleanup,
+    .cm_query = uct_rdmacm_cm_query
 };
 
 
