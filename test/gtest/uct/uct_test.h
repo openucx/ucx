@@ -279,8 +279,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     tcp,                     \
     mm,                      \
     cma,                     \
-    knem,                    \
-    rocm
+    knem
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
     cuda_copy,              \
