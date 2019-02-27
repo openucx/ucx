@@ -90,6 +90,8 @@ protected:
 
         uct_worker_h worker() const;
 
+        uct_cm_h cm() const;
+
         uct_iface_h iface() const;
 
         const uct_iface_attr& iface_attr() const;

@@ -355,6 +355,13 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_close)
 {
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name;
+
+    for (size_t i = 0; i < m_entities.size(); ++i) {
+        uct_cm_attr_t attr;
+        ucs_status_t status = uct_cm_query(m_entities.at(i).cm(), &attr);
+        ASSERT_UCS_OK(status);
+        EXPECT_LE(size_t(0), attr.max_conn_priv);
+    }
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)

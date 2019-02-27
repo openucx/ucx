@@ -615,6 +615,10 @@ uct_worker_h uct_test::entity::worker() const {
     return m_worker;
 }
 
+uct_cm_h uct_test::entity::cm() const {
+    return m_cm;
+}
+
 uct_iface_h uct_test::entity::iface() const {
     return m_iface;
 }
