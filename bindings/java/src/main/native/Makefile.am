@@ -2,13 +2,13 @@ topdir=$(abs_top_builddir)
 javadir=$(topdir)/bindings/java
 MVNCMD=@cd $(javadir) && $(MVN)
 
-BUILT_SOURCES = org_ucx_jucx_UcxConstants.h \
+BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
                 org_ucx_jucx_ucp_UcpContext.h
 
-DISTCLEANFILES = org_ucx_jucx_UcxConstants.h \
+DISTCLEANFILES = org_ucx_jucx_ucp_UcpConstants.h \
                  org_ucx_jucx_ucp_UcpContext.h
 
-org_ucx_jucx_UcxConstants.h: org_ucx_jucx_ucp_UcpContext.h
+org_ucx_jucx_ucp_UcpConstants.h: org_ucx_jucx_ucp_UcpContext.h
 
 org_ucx_jucx_ucp_UcpContext.h:
 	$(MVNCMD) compile native:javah
@@ -19,9 +19,6 @@ libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
                       -I$(topdir)/src
 
 libjucx_la_SOURCES = ucp_constants.cc context.cc jucx_common_def.cc
-
-noinst_libjucx_la_SOURCES = org_ucx_jucx_UcxConstants.h \
-                            org_ucx_jucx_ucp_UcpContext.h
 
 libjucx_la_CXXFLAGS = -fPIC -DPIC -Werror -std=c++11
 
