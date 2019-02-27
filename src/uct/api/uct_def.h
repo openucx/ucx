@@ -90,6 +90,10 @@ typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
 typedef struct uct_ep_params     uct_ep_params_t;
+typedef struct uct_cm_attr       uct_cm_attr_t;
+typedef struct uct_cm_params     uct_cm_params_t;
+typedef struct uct_cm            uct_cm_t;
+typedef uct_cm_t                 *uct_cm_h;
 typedef struct uct_tag_context   uct_tag_context_t;
 typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
 typedef int                      uct_worker_cb_id_t;

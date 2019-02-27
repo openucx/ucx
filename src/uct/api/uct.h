@@ -739,9 +739,10 @@ struct uct_iface_attr {
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
-    size_t                   max_conn_priv;  /**< Max size of the iface's private data.
-                                                  used for connection
-                                                  establishment with sockaddr */
+    size_t                   max_conn_priv;  /**< Max size of the iface's
+                                                  private data used for
+                                                  connection establishment with
+                                                  sockaddr */
     /*
      * The following fields define expected performance of the communication
      * interface, this would usually be a combination of device and system
@@ -886,6 +887,42 @@ struct uct_ep_params {
      * request, the callback will not be invoked.
      */
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Connection manager attributes: capabilities and limitations.
+ */
+struct uct_cm_attr {
+    size_t      max_conn_priv;  /**< Max size of the connection manager's
+                                     private data used for connection
+                                     establishment with sockaddr */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a connection manager object @ref uct_cm_h
+ */
+struct uct_cm_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_params_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                          field_mask;
+
+    /**
+     * Memory domain name, as returned from @ref uct_query_md_resources,
+     * mandatory field.
+     */
+    const char                        *md_name;
+
+    /**
+     * UCT worker, mandatory field.
+     */
+    uct_worker_h                      worker;
 };
 
 
@@ -2698,6 +2735,46 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {
     return iface->ops.iface_progress(iface);
 }
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Open a connection manager.
+ *
+ * Open a specific connection manager. All client server connection
+ * establishment operations are performed in the context of a specific
+ * connection manager.
+ * @note This is an alternative API for
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER and
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT .
+ *
+ * @param [in]  params      Connection management parameters, as defined by
+ *                          @ref uct_cm_params_t
+ * @param [out] cm_p        Filled with a handle to the connection
+ *                          manager.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_cm_open(const uct_cm_params_t *params, uct_cm_h *cm_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Close a connection manager.
+ *
+ * @param [in]  cm    Connection manager to close.
+ */
+void uct_cm_close(uct_cm_h cm);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get connection manager attributes.
+ *
+ * @param [in]  cm      Connection manager to query.
+ * @param [out] cm_attr Filled with connection manager attributes.
+ */
+ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
 
 
 /**
