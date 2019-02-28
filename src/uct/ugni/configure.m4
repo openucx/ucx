@@ -14,7 +14,7 @@ AC_ARG_WITH([ugni],
 
 AS_IF([test "x$with_ugni" != "xno"], 
         [PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni cray-pmi], 
-                           [transports="${transports},cray-ugni"
+                           [uct_modules+=":ugni"
                             cray_ugni_supported=yes
                             AC_DEFINE([HAVE_TL_UGNI], [1],
                                       [Define if UGNI transport exists.])],
@@ -24,3 +24,4 @@ AS_IF([test "x$with_ugni" != "xno"],
                            )])
 
 AM_CONDITIONAL([HAVE_CRAY_UGNI], [test "x$cray_ugni_supported" == xyes])
+AC_CONFIG_FILES([src/uct/ugni/Makefile])
