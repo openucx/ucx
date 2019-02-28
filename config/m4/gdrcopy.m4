@@ -49,7 +49,7 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
             ],
             [
                 AS_IF([test "x$with_gdrcopy" != "xguess"],
-                    [AC_MSG_ERROR([gdrcopy support is requested but gdrcopy packages can't found])],
+                    [AC_MSG_ERROR([gdrcopy support is requested but gdrcopy packages can't be found])],
                     [AC_MSG_WARN([GDR_COPY not found])])
             ])
     ],
