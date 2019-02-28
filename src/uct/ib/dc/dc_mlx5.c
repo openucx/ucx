@@ -760,13 +760,18 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    int i;
     int is_flush_done = 1;
+    uct_dc_mlx5_ep_t *ep;
+    int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        if ((iface->tx.dcis[i].ep != NULL) &&
-            uct_dc_mlx5_ep_fc_wait_for_grant(iface->tx.dcis[i].ep)) {
-            return UCS_INPROGRESS;
+        /* TODO: Remove this check - no need to wait for grant, because we
+         * use gc_list for removed eps */
+        if (!uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            ep = uct_dc_mlx5_ep_from_dci(iface, i);
+            if ((ep != NULL) && uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
+                return UCS_INPROGRESS;
+            }
         }
         if (uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
             is_flush_done = 0;
@@ -922,7 +927,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                 /* Need to schedule fake ep in TX arbiter, because it
                  * might have been descheduled due to lack of FC window. */
                 ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
-                                           &ep->arb_group);
+                                           uct_dc_mlx5_ep_arb_group(iface, ep));
             }
 
             uct_dc_mlx5_iface_progress_pending(iface);
@@ -949,15 +954,18 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                    UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     uct_rc_txqp_t        *txqp   = &iface->tx.dcis[dci].txqp;
-    uct_dc_mlx5_ep_t     *ep     = iface->tx.dcis[dci].ep;
+    uct_dc_mlx5_ep_t     *ep;
     ucs_status_t         ep_status;
     int16_t              outstanding;
 
-    if (!ep) {
+    if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
+        (uct_dc_mlx5_ep_from_dci(iface, dci) == NULL)) {
         uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
                                         ib_iface->super.config.failure_level);
         return;
     }
+
+    ep = uct_dc_mlx5_ep_from_dci(iface, dci);
 
     uct_rc_txqp_purge_outstanding(txqp, status, 0);
 
@@ -1111,6 +1119,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_list_head_init(&self->tx.gc_list);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
+    self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
+                         uct_dc_mlx5_iface_dci_do_rand_pending_tx :
+                         uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);
