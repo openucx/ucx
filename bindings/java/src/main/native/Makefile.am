@@ -25,6 +25,12 @@ lib_LTLIBRARIES = libjucx.la
 libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
                       -I$(topdir)/src
 
+libjucx_la_SOURCES = context.cc \
+                     jucx_common_def.cc \
+                     ucp_constants.cc \
+                     ucs_constants.cc \
+                     worker.cc
+
 libjucx_la_CXXFLAGS = -fPIC -DPIC -Werror -std=c++11
 
 libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \

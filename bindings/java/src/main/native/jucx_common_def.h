@@ -26,9 +26,4 @@ void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
     env->SetStaticLongField(cls, field, _name); \
 } while(0)
 
-#define JUCX_DEFINE_ENUM(_name) do { \
-    jfieldID field = env->GetStaticFieldID(cls, #_name, "I"); \
-    env->SetStaticIntField(cls, field, _name); \
-} while(0)
-
 #endif

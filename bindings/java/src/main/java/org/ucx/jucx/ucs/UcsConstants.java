@@ -9,19 +9,23 @@ import org.ucx.jucx.NativeLibs;
 
 public class UcsConstants {
     static {
+        load();
+    }
+
+    public static class ThreadMode {
+        static {
+           load();
+        }
+        /**
+         * Multiple threads can access concurrently
+         */
+        public static int UCS_THREAD_MODE_MULTI;
+    }
+
+    private static void load() {
         NativeLibs.load();
         loadConstants();
     }
-
-    /**
-     * Only the master thread can access (i.e. the thread that initialized the context;
-     * multiple threads may exist and never access)
-     */
-    public static int UCS_THREAD_MODE_SINGLE;
-    /**
-     * Multiple threads can access concurrently
-     */
-    public static int UCS_THREAD_MODE_MULTI;
 
     private static native void loadConstants();
 }

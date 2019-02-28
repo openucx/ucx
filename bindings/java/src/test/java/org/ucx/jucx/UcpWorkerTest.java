@@ -23,8 +23,7 @@ public class UcpWorkerTest {
     @Test
     public void testSingleWorker() {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
-        assertEquals(UcsConstants.UCS_THREAD_MODE_MULTI, 2);
-        assertEquals(UcsConstants.UCS_THREAD_MODE_SINGLE, 0);
+        assertEquals(2, UcsConstants.ThreadMode.UCS_THREAD_MODE_MULTI);
         assertNotEquals(context.getNativeId(), null);
         UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
         assertNotEquals(worker.getNativeId(), null);
@@ -40,7 +39,7 @@ public class UcpWorkerTest {
         UcpWorker workers[] = new UcpWorker[numWorkers];
         UcpWorkerParams workerParam = new UcpWorkerParams();
         for (int i = 0; i < numWorkers; i++) {
-            workerParam.clear().setCpu(i).setThreadMode(UcsConstants.UCS_THREAD_MODE_MULTI);
+            workerParam.clear().setCpu(i).setMultiThreadMode();
             workers[i] = new UcpWorker(context, workerParam);
             assertNotEquals(workers[i].getNativeId(), null);
         }
@@ -62,13 +61,12 @@ public class UcpWorkerTest {
             workerParams.clear();
             if (i % 2 == 0) {
                 userData.asCharBuffer().put("TCPWorker" + i);
-                workerParams.requestWakeupRX().setUserData(userData)
-                    .setThreadMode(UcsConstants.UCS_THREAD_MODE_SINGLE);
+                workerParams.requestWakeupRX().setUserData(userData);
                 workers[i] = new UcpWorker(tcpContext, workerParams);
             } else {
                 userData.asCharBuffer().put("RDMAWorker" + i);
                 workerParams.requestWakeupRMA().setCpu(i).setUserData(userData)
-                    .setThreadMode(UcsConstants.UCS_THREAD_MODE_MULTI);
+                    .setMultiThreadMode();
                 workers[i] = new UcpWorker(rdmaContext, workerParams);
             }
         }

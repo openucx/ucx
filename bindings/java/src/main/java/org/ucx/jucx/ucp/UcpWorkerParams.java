@@ -39,13 +39,13 @@ public class UcpWorkerParams extends UcxParams {
      * should be created with. The default value is UCS_THREAD_MODE_SINGLE and
      * it is used when the value of the parameter is not set. When this
      * parameter is set, the {@link UcpWorker#UcpWorker(UcpContext)}
-     * attempts to create worker with this thread mode.
+     * attempts to create worker where multiple threads can access concurrently.
      * The thread mode with which worker is created can differ from the
      * suggested mode.
      */
-    public UcpWorkerParams setThreadMode(int threadMode) {
+    public UcpWorkerParams setMultiThreadMode() {
         this.fieldMask |= UcpConstants.UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-        this.threadMode = threadMode;
+        this.threadMode = UcsConstants.ThreadMode.UCS_THREAD_MODE_MULTI;
         return this;
     }
 

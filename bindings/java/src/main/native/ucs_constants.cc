@@ -11,6 +11,7 @@
 JNIEXPORT void JNICALL
 Java_org_ucx_jucx_ucs_UcsConstants_loadConstants(JNIEnv *env, jclass cls)
 {
-    JUCX_DEFINE_ENUM(UCS_THREAD_MODE_SINGLE);
-    JUCX_DEFINE_ENUM(UCS_THREAD_MODE_MULTI);
+    jclass thread_mode = env->FindClass("org/ucx/jucx/ucs/UcsConstants$ThreadMode");
+    jfieldID field = env->GetStaticFieldID(thread_mode, "UCS_THREAD_MODE_MULTI", "I");
+    env->SetStaticIntField(thread_mode, field, UCS_THREAD_MODE_MULTI);
 }
