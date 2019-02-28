@@ -15,7 +15,7 @@
 
 
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "MAX_SHORT=8192", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -84,6 +84,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                             UCT_IFACE_FLAG_AM_SHORT         |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
                              UCT_IFACE_FLAG_CB_SYNC          |
@@ -91,6 +92,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_EVENT_RECV;
 
     attr->cap.am.max_bcopy = iface->config.buf_size - sizeof(uct_tcp_am_hdr_t);
+    attr->cap.am.max_short = iface->config.short_size - sizeof(uct_tcp_am_hdr_t);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
                                 &attr->bandwidth);
@@ -236,6 +238,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
+    .ep_am_short              = uct_tcp_ep_am_short,
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
     .ep_pending_add           = uct_tcp_ep_pending_add,
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
@@ -276,20 +279,22 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_tcp_iface_ops, md, worker,
                               params, tl_config
-                              UCS_STATS_ARG((params->field_mask & 
+                              UCS_STATS_ARG((params->field_mask &
                                              UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
                                             params->stats_root : NULL)
                               UCS_STATS_ARG(params->mode.device.dev_name));
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
-    self->outstanding            = 0;
-    self->config.buf_size        = config->super.max_bcopy +
-                                   sizeof(uct_tcp_am_hdr_t);
-    self->config.prefer_default  = config->prefer_default;
-    self->config.max_poll        = config->max_poll;
-    self->sockopt.nodelay        = config->sockopt_nodelay;
-    self->sockopt.sndbuf         = config->sockopt_sndbuf;
+    self->outstanding           = 0;
+    self->config.buf_size       = config->super.max_bcopy +
+                                  sizeof(uct_tcp_am_hdr_t);
+    self->config.short_size     = config->super.max_short +
+                                  sizeof(uct_tcp_am_hdr_t);
+    self->config.prefer_default = config->prefer_default;
+    self->config.max_poll       = config->max_poll;
+    self->sockopt.nodelay       = config->sockopt_nodelay;
+    self->sockopt.sndbuf        = config->sockopt_sndbuf;
     ucs_list_head_init(&self->ep_list);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
