@@ -23,6 +23,7 @@ nobase_dist_libuct_la_HEADERS = \
 
 noinst_HEADERS = \
 	base/uct_md.h \
+	base/uct_component.h \
 	base/uct_iface.h \
 	base/uct_log.h \
 	base/uct_worker.h \
@@ -38,6 +39,7 @@ noinst_HEADERS = \
 libuct_la_SOURCES = \
 	base/uct_md.c \
 	base/uct_mem.c \
+	base/uct_component.c \
 	base/uct_iface.c \
 	base/uct_worker.c \
 	sm/base/sm_ep.c \

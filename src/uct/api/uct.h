@@ -1035,6 +1035,7 @@ extern const char *uct_alloc_method_names[];
 /**
  * @ingroup UCT_RESOURCE
  * @brief Query for memory resources.
+ * @deprecated Replaced by @ref uct_query_components and @ref uct_component_query.
  *
  * Obtain the list of memory domain resources available on the current system.
  *
@@ -1050,6 +1051,7 @@ ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
 /**
  * @ingroup UCT_RESOURCE
  * @brief Release the list of resources returned from @ref uct_query_md_resources.
+ * @deprecated Replaced by @ref uct_release_component_list.
  *
  * This routine releases the memory associated with the list of resources
  * allocated by @ref uct_query_md_resources.
