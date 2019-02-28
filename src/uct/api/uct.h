@@ -119,6 +119,62 @@ typedef struct uct_md_resource_desc {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief UCT component attributres field mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_component_attr_t
+ * are present. It is used for backward compatibility support.
+ */
+enum uct_component_attr_field {
+    UCT_COMPONENT_ATTR_FIELD_NAME              = UCS_BIT(0), /**< Component name */
+    UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT = UCS_BIT(1), /**< MD resource count */
+    UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES      = UCS_BIT(2)  /**< MD resources array */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT component attributes
+ *
+ * This structure defines the attributes for UCT component. It is used for
+ * @ref uct_component_query
+ */
+typedef struct uct_component_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_component_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t               field_mask;
+
+    /** Component name */
+    char                   name[UCT_COMPONENT_NAME_MAX];
+
+    /** Amount of memory-domain resources */
+    unsigned               md_resource_count;
+
+    /**
+     * Array of memory domain resources. When used, it should be initialized
+     * prior to calling @ref uct_component_query with a pointer to an array,
+     * which is large enough to hold all memory domain resource entries. After
+     * the call, this array would be filled with information about existing
+     * memory domain resources.
+     * In order to allocate such array, it's possible to call
+     * @ref uct_component_query twice: The first time would only obtain the
+     * amount of entries required, by specifying
+     * @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT in field_mask. Then the
+     * array could be allocated with such number of entries, and passed to a
+     * second call to @ref uct_component_query, this time setting field_mask to
+     * @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES.
+     */
+    uct_md_resource_desc_t *md_resources;
+
+} uct_component_attr_t;
+
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief  List of UCX device types.
  */
 typedef enum {
@@ -1001,6 +1057,50 @@ ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
  * @param [in] resources  Array of resource descriptors to release.
  */
 void uct_release_md_resource_list(uct_md_resource_desc_t *resources);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Query for list of components.
+ *
+ * Obtain the list of transport components available on the current system.
+ *
+ * @param [out] components_p      Filled with a pointer to an array of component
+ *                                handles.
+ * @param [out] num_components_p  Filled with the number of elements in the array.
+ *
+ * @return UCS_OK if successful, or UCS_ERR_NO_MEMORY if failed to allocate the
+ *         array of component handles.
+ */
+ucs_status_t uct_query_components(uct_component_h **components_p,
+                                  unsigned *num_components_p);
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Release the list of components returned from @ref uct_query_components.
+ *
+ * This routine releases the memory associated with the list of components
+ * allocated by @ref uct_query_components.
+ *
+ * @param [in] components  Array of component handles to release.
+ */
+void uct_release_component_list(uct_component_h *components);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get component attributes
+ *
+ * Query various attributes of a component.
+ *
+ * @param [in] component          Component handle to query attributes for. The
+ *                                handle can be obtained from @ref uct_query_components.
+ * @param [inout] component_attr  Filled with component attributes.
+ *
+ * @return UCS_OK if successful, or nonzero error code in case of failure.
+ */
+ucs_status_t uct_component_query(uct_component_h component,
+                                 uct_component_attr_t *component_attr);
 
 
 /**
