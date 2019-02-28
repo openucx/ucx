@@ -473,3 +473,22 @@ static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
     sport    = flow_id ^ (flow_id >> 16);
     av->rlid = htons(UCT_IB_MLX5_ROCE_SRC_PORT_MIN | sport);
 }
+
+static void UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_iface_fill_attr(uct_ib_mlx5_iface_t *mlx5, uct_ib_qp_attr_t *attr)
+{
+#if HAVE_IBV_EXP_RES_DOMAIN
+    attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+    attr->ibv.res_domain      = mlx5->res_domain->ibv_domain;
+#endif
+}
+
+static struct ibv_pd * UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_iface_qp_pd(uct_ib_iface_t *iface, uct_ib_mlx5_iface_t *mlx5)
+{
+#if HAVE_DECL_IBV_ALLOC_TD
+    return mlx5->res_domain->pd;
+#else
+    return uct_ib_iface_md(iface)->pd;
+#endif
+}

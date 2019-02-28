@@ -842,3 +842,24 @@ ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags)
     UCT_TL_IFACE_STAT_FENCE(&iface->super.super.super);
     return UCS_OK;
 }
+
+struct ibv_pd *uct_rc_mlx5_iface_qp_pd(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    return uct_ib_mlx5_iface_qp_pd(ib_iface, &iface->mlx5);
+}
+
+ucs_status_t uct_rc_mlx5_setup(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    return uct_ib_mlx5_iface_init(ib_iface, &iface->mlx5);
+}
+
+void uct_rc_mlx5_cleanup(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    uct_ib_mlx5_iface_cleanup(&iface->mlx5);
+}

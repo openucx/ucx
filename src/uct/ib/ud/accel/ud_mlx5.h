@@ -29,6 +29,7 @@ typedef struct {
 
 typedef struct {
     uct_ud_iface_t                      super;
+    uct_ib_mlx5_iface_t                 mlx5;
     struct {
         uct_ib_mlx5_txwq_t              wq;
     } tx;

@@ -234,6 +234,7 @@ typedef union uct_rc_mlx5_dm_copy_data {
 
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                   super;
+    uct_ib_mlx5_iface_t              mlx5;
     struct {
         ucs_mpool_t                  atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t      mmio_mode;
@@ -496,6 +497,12 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
 
 ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags);
+
+struct ibv_pd *uct_rc_mlx5_iface_qp_pd(uct_ib_iface_t *ib_iface);
+
+ucs_status_t uct_rc_mlx5_setup(uct_ib_iface_t *ib_iface);
+
+void uct_rc_mlx5_cleanup(uct_ib_iface_t *ib_iface);
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                                     void *data, size_t length, size_t valid_length,

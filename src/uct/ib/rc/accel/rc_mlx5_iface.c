@@ -234,16 +234,18 @@ static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
                                       iface->super.progress, flags);
 }
 
-static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
+static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *attr,
                                                 struct ibv_qp **qp_p)
 {
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
 #if HAVE_DECL_MLX5DV_CREATE_QP
-    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
 
-    uct_ib_iface_fill_attr(iface, attr);
+    uct_ib_iface_fill_attr(ib_iface, attr);
+    uct_ib_mlx5_iface_fill_attr(&iface->mlx5, attr);
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     dv_attr.comp_mask    = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     dv_attr.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
@@ -259,7 +261,7 @@ static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
 
     return UCS_OK;
 #else
-    return uct_ib_iface_create_qp(iface, attr, qp_p);
+    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5, attr, qp_p);
 #endif
 }
 
@@ -510,7 +512,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
-    init_attr.res_domain_key = UCT_IB_MLX5_RES_DOMAIN_KEY;
     init_attr.tm_cap_bit     = IBV_TM_CAP_RC;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
@@ -602,7 +603,10 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .event_cq                 = uct_rc_mlx5_iface_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
-    .create_qp                = uct_rc_mlx5_iface_create_qp
+    .create_qp                = uct_rc_mlx5_iface_create_qp,
+    .get_qp_pd                = uct_rc_mlx5_iface_qp_pd,
+    .setup_iface              = uct_rc_mlx5_setup,
+    .cleanup_iface            = uct_rc_mlx5_cleanup,
     },
     .init_rx                  = uct_rc_mlx5_init_rx,
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,

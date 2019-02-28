@@ -282,16 +282,18 @@ static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->super.cq[dir].cq_sn++;
 }
 
-#if HAVE_DC_DV
-static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
+static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *attr,
                                                 struct ibv_qp **qp_p)
 {
-    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    uct_dc_mlx5_iface_t *iface         = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+#if HAVE_DC_DV
+    uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
 
-    uct_ib_iface_fill_attr(iface, attr);
+    uct_ib_iface_fill_attr(ib_iface, attr);
+    uct_ib_mlx5_iface_fill_attr(&iface->super.mlx5, attr);
     attr->ibv.cap.max_recv_sge          = 0;
 
     dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
@@ -307,8 +309,12 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     *qp_p     = qp;
 
     return UCS_OK;
+#else
+    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->super.mlx5, attr, qp_p);
+#endif
 }
 
+#if HAVE_DC_DV
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_rc_txqp_t *dci)
 {
@@ -1067,11 +1073,10 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
-#if HAVE_DC_DV
-    .create_qp                = uct_dc_mlx5_iface_create_qp
-#else
-    .create_qp                = uct_ib_iface_create_qp
-#endif
+    .create_qp                = uct_dc_mlx5_iface_create_qp,
+    .get_qp_pd                = uct_rc_mlx5_iface_qp_pd,
+    .setup_iface              = uct_rc_mlx5_setup,
+    .cleanup_iface            = uct_rc_mlx5_cleanup,
     },
     .init_rx                  = uct_dc_mlx5_init_rx,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
@@ -1088,7 +1093,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_status_t status;
     ucs_trace_func("");
 
-    init_attr.res_domain_key = UCT_IB_MLX5_RES_DOMAIN_KEY;
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_DC;
     init_attr.qp_type        = UCT_IB_QPT_DCI;
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;

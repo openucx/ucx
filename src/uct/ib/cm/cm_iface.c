@@ -278,7 +278,6 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     init_attr.rx_cq_len      = config->super.rx.queue_len;
     init_attr.seg_size       = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
                                        config->super.super.max_bcopy);
-    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, md, worker,
                               params, &config->super, &init_attr);
@@ -452,6 +451,8 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     },
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = (void*)ucs_empty_function_return_success,
+    .setup_iface              = (void*)ucs_empty_function_return_success,
+    .cleanup_iface            = (void*)ucs_empty_function,
 };
 
 static ucs_status_t uct_cm_query_resources(uct_md_h md,

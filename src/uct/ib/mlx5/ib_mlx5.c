@@ -140,6 +140,143 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     return UCS_OK;
 }
 
+static int
+uct_ib_mlx5_iface_res_domain_cmp(uct_ib_mlx5_iface_res_domain_t *res_domain,
+                                 uct_ib_md_t *md, uct_priv_worker_t *worker)
+{
+#if HAVE_IBV_EXP_RES_DOMAIN
+    return res_domain->ibv_domain->context == md->dev.ibv_context;
+#elif HAVE_DECL_IBV_ALLOC_TD
+    return res_domain->real_pd == md->pd;
+#else
+    return 1;
+#endif
+}
+
+static ucs_status_t
+uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
+                                  uct_ib_md_t *md, uct_priv_worker_t *worker)
+{
+#if HAVE_IBV_EXP_RES_DOMAIN
+    struct ibv_exp_res_domain_init_attr attr;
+
+    attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
+                        IBV_EXP_RES_DOMAIN_MSG_MODEL;
+    attr.msg_model    = IBV_EXP_MSG_LOW_LATENCY;
+
+    switch (worker->thread_mode) {
+    case UCS_THREAD_MODE_SINGLE:
+        attr.thread_model = IBV_EXP_THREAD_SINGLE;
+        break;
+    case UCS_THREAD_MODE_SERIALIZED:
+        attr.thread_model = IBV_EXP_THREAD_UNSAFE;
+        break;
+    default:
+        attr.thread_model = IBV_EXP_THREAD_SAFE;
+        break;
+    }
+
+    res_domain->ibv_domain = ibv_exp_create_res_domain(md->dev.ibv_context, &attr);
+    if (res_domain->ibv_domain == NULL) {
+        ucs_error("ibv_exp_create_res_domain() on %s failed: %m",
+                  uct_ib_device_name(&md->dev));
+        return UCS_ERR_IO_ERROR;
+    }
+#elif HAVE_DECL_IBV_ALLOC_TD
+    struct ibv_parent_domain_init_attr attr;
+    struct ibv_td_init_attr td_attr;
+
+    if (worker->thread_mode == UCS_THREAD_MODE_MULTI) {
+        td_attr.comp_mask = 0;
+        res_domain->td = ibv_alloc_td(md->dev.ibv_context, &td_attr);
+        if (res_domain->td == NULL) {
+            ucs_error("ibv_alloc_td() on %s failed: %m",
+                      uct_ib_device_name(&md->dev));
+            return UCS_ERR_IO_ERROR;
+        }
+    } else {
+        res_domain->td = NULL;
+        res_domain->pd = md->pd;
+        res_domain->real_pd = md->pd;
+        return UCS_OK;
+    }
+
+    attr.td = res_domain->td;
+    attr.pd = md->pd;
+    attr.comp_mask = 0;
+    res_domain->pd = ibv_alloc_parent_domain(md->dev.ibv_context, &attr);
+    if (res_domain->pd == NULL) {
+        ucs_error("ibv_alloc_parent_domain() on %s failed: %m",
+                  uct_ib_device_name(&md->dev));
+        ibv_dealloc_td(res_domain->td);
+        return UCS_ERR_IO_ERROR;
+    }
+    res_domain->real_pd = md->pd;
+#endif
+    return UCS_OK;
+}
+
+static void uct_ib_mlx5_iface_res_domain_cleanup(uct_ib_mlx5_iface_res_domain_t *res_domain)
+{
+#if HAVE_IBV_EXP_RES_DOMAIN
+    struct ibv_exp_destroy_res_domain_attr attr;
+    int ret;
+
+    attr.comp_mask = 0;
+    ret = ibv_exp_destroy_res_domain(res_domain->ibv_domain->context,
+                                     res_domain->ibv_domain, &attr);
+    if (ret != 0) {
+        ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
+    }
+#elif HAVE_DECL_IBV_ALLOC_TD
+    int ret;
+
+    if (res_domain->td != NULL) {
+        ret = ibv_dealloc_pd(res_domain->pd);
+        if (ret != 0) {
+            ucs_warn("ibv_dealloc_pd() failed: %m");
+            return;
+        }
+
+        ret = ibv_dealloc_td(res_domain->td);
+        if (ret != 0) {
+            ucs_warn("ibv_dealloc_td() failed: %m");
+        }
+    }
+#endif
+}
+
+ucs_status_t uct_ib_mlx5_iface_init(uct_ib_iface_t *iface,
+                                    uct_ib_mlx5_iface_t *mlx5)
+{
+    mlx5->res_domain = uct_worker_tl_data_get(iface->super.worker,
+                                              UCT_IB_MLX5_RES_DOMAIN_KEY,
+                                              uct_ib_mlx5_iface_res_domain_t,
+                                              uct_ib_mlx5_iface_res_domain_cmp,
+                                              uct_ib_mlx5_iface_res_domain_init,
+                                              uct_ib_iface_md(iface),
+                                              iface->super.worker);
+    if (UCS_PTR_IS_ERR(mlx5->res_domain)) {
+        return UCS_PTR_STATUS(mlx5->res_domain);
+    }
+
+    return UCS_OK;
+}
+
+void uct_ib_mlx5_iface_cleanup(uct_ib_mlx5_iface_t *mlx5)
+{
+    uct_worker_tl_data_put(mlx5->res_domain, uct_ib_mlx5_iface_res_domain_cleanup);
+}
+
+ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
+                                         uct_ib_mlx5_iface_t *mlx5,
+                                         uct_ib_qp_attr_t *attr,
+                                         struct ibv_qp **qp_p)
+{
+    uct_ib_mlx5_iface_fill_attr(mlx5, attr);
+    return uct_ib_iface_create_qp(iface, attr, qp_p);
+}
+
 #if !HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {

@@ -652,6 +652,36 @@ static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->cq[dir].cq_sn++;
 }
 
+static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
+                                                uct_ib_qp_attr_t *attr,
+                                                struct ibv_qp **qp_p)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+
+    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5, attr, qp_p);
+}
+
+static struct ibv_pd *uct_ud_mlx5_iface_qp_pd(uct_ib_iface_t *ib_iface)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+
+    return uct_ib_mlx5_iface_qp_pd(ib_iface, &iface->mlx5);
+}
+
+static ucs_status_t uct_ud_mlx5_setup(uct_ib_iface_t *ib_iface)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+
+    return uct_ib_mlx5_iface_init(ib_iface, &iface->mlx5);
+}
+
+static void uct_ud_mlx5_cleanup(uct_ib_iface_t *ib_iface)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+
+    uct_ib_mlx5_iface_cleanup(&iface->mlx5);
+}
+
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
 
 static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
@@ -701,7 +731,10 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .event_cq                 = uct_ud_mlx5_iface_event_cq,
     .handle_failure           = uct_ud_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_ud_mlx5_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp
+    .create_qp                = uct_ud_mlx5_iface_create_qp,
+    .get_qp_pd                = uct_ud_mlx5_iface_qp_pd,
+    .setup_iface              = uct_ud_mlx5_setup,
+    .cleanup_iface            = uct_ud_mlx5_cleanup,
     },
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .tx_skb                   = uct_ud_mlx5_ep_tx_ctl_skb,
@@ -721,7 +754,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     ucs_trace_func("");
 
-    init_attr.res_domain_key = UCT_IB_MLX5_RES_DOMAIN_KEY;
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
