@@ -275,7 +275,7 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     return uct_ib_iface_create_qp(iface, attr, qp_p);
 }
 
-#if !HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+#if !HAVE_DEVX
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;

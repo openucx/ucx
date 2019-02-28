@@ -168,6 +168,8 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(IBVERBS_LDFLAGS) \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
+gtest_SOURCES += \
+	uct/ib/test_devx.cc
 if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/ib/ud_base.cc \

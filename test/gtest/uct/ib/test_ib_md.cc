@@ -92,7 +92,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 }
 
 bool test_ib_md::has_ksm() const {
-#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+#if HAVE_DEVX
     return (ucs_derived_of(md(), uct_ib_md_t)->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) &&
            (ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags & UCT_IB_MLX5_MD_FLAG_KSM);
 #elif defined(HAVE_EXP_UMR_KSM)
@@ -104,7 +104,7 @@ bool test_ib_md::has_ksm() const {
 }
 
 bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
-#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+#if HAVE_DEVX
     return has_ksm();
 #else
     return ib_md->umr_qp != NULL;
