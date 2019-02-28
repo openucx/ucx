@@ -207,7 +207,11 @@ static hsa_status_t uct_rocm_check_ptr_info(void *ptr, void **gpu_ptr,
     info.size = sizeof(hsa_amd_pointer_info_t);
 
     *need_lock = 1;
-    *gpu_ptr = 0;
+
+    if (gpu_ptr) {
+        *gpu_ptr = 0;
+    }
+
     status = hsa_amd_pointer_info(ptr, (hsa_amd_pointer_info_t *)&info,
                                                NULL, NULL, NULL);
 
