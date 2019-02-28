@@ -1,5 +1,6 @@
 /*
  * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019.       ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
