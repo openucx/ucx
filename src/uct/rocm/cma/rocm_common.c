@@ -99,7 +99,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
 
     if (device_type == HSA_DEVICE_TYPE_GPU) {
 
-        status = hsa_agent_get_info(agent, HSA_AMD_AGENT_INFO_BDFID, &bdfid);
+        status = hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_BDFID, &bdfid);
 
         if (status != HSA_STATUS_SUCCESS) {
             ucs_warn("Failure to get pci info: 0x%x", status);
