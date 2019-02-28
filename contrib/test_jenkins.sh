@@ -941,7 +941,7 @@ run_tests() {
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
 	do_distributed_task 2 4 build_cuda
-	do_distributed_task 3 4 build_clang
+	do_distributed_task 1 4 build_clang
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
 	do_distributed_task 2 4 build_experimental_api
@@ -958,9 +958,9 @@ run_tests() {
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
-	do_distributed_task 3 4 test_profiling
-	do_distributed_task 3 4 test_dlopen
-	do_distributed_task 3 4 test_memtrack
+	do_distributed_task 1 4 test_profiling
+	do_distributed_task 2 4 test_dlopen
+	do_distributed_task 1 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 1 3 test_malloc_hook
 
@@ -978,7 +978,7 @@ do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
-do_distributed_task 3 4 check_inst_headers
+do_distributed_task 2 4 check_inst_headers
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then
