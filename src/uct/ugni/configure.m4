@@ -19,7 +19,7 @@ AS_IF([test "x$with_ugni" != "xno"],
                             AC_DEFINE([HAVE_TL_UGNI], [1],
                                       [Define if UGNI transport exists.])],
                            [AS_IF([test "x$with_ugni" != "xdefault"],
-                                  [AC_MSG_WARN([UGNI support was requested but cray-ugni and cray-pmi packages can't be found])
+                                  [AC_MSG_WARN([UGNI support was requested but cray-ugni and cray-pmi packages cannot be found])
                                    AC_MSG_ERROR([Cannot continue])],[])]
                            )])
 
