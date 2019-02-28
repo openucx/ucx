@@ -27,6 +27,7 @@
     <ucs.lib.path>${ucx.src.dir}/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.src.dir}/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.src.dir}/ucp/.libs</ucp.lib.path>
+    <ucx.inst.dir>${env.UCX_INST}/lib</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -113,6 +114,12 @@
               <skip>${skipCopy}</skip>
               <outputDirectory>${basedir}/resources</outputDirectory>
               <resources>
+                <resource>
+                  <directory>${ucx.inst.dir}</directory>
+                  <includes>
+                    <include>**/*.so</include>
+                  </includes>
+                </resource>
                 <resource>
                   <directory>${native.dir}/.libs</directory>
                   <includes>

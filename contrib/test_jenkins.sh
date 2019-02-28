@@ -798,7 +798,7 @@ test_jucx() {
 	if module_load dev/jdk && module_load dev/mvn
 	then
 		pushd ../bindings/java/
-		mvn test
+		UCX_INST=$ucx_inst mvn clean test
 		popd
 		module unload dev/jdk
 		module unload dev/mvn
