@@ -348,4 +348,9 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
+{
+    return !(context->memtype_cache &&
+             context->memtype_cache->pgtable.num_regions);
+}
 #endif
