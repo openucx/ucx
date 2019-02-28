@@ -1,5 +1,6 @@
 /*
  * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019.       ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -98,7 +99,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
 
     if (device_type == HSA_DEVICE_TYPE_GPU) {
 
-        status = hsa_agent_get_info(agent, HSA_AMD_AGENT_INFO_BDFID, &bdfid);
+        status = hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_BDFID, &bdfid);
 
         if (status != HSA_STATUS_SUCCESS) {
             ucs_warn("Failure to get pci info: 0x%x", status);
@@ -209,7 +210,11 @@ static hsa_status_t uct_rocm_check_ptr_info(void *ptr, void **gpu_ptr,
     info.size = sizeof(hsa_amd_pointer_info_t);
 
     *need_lock = 1;
-    *gpu_ptr = 0;
+
+    if (gpu_ptr) {
+        *gpu_ptr = 0;
+    }
+
     status = hsa_amd_pointer_info(ptr, (hsa_amd_pointer_info_t *)&info,
                                                NULL, NULL, NULL);
 
