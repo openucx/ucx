@@ -39,7 +39,7 @@ public class UcpWorkerTest {
         UcpWorker workers[] = new UcpWorker[numWorkers];
         UcpWorkerParams workerParam = new UcpWorkerParams();
         for (int i = 0; i < numWorkers; i++) {
-            workerParam.clear().setCpu(i).setMultiThreadMode();
+            workerParam.clear().setCpu(i).requestThreadSafety();
             workers[i] = new UcpWorker(context, workerParam);
             assertNotEquals(workers[i].getNativeId(), null);
         }
@@ -66,7 +66,7 @@ public class UcpWorkerTest {
             } else {
                 userData.asCharBuffer().put("RDMAWorker" + i);
                 workerParams.requestWakeupRMA().setCpu(i).setUserData(userData)
-                    .setMultiThreadMode();
+                    .requestThreadSafety();
                 workers[i] = new UcpWorker(rdmaContext, workerParams);
             }
         }
