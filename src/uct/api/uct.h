@@ -3,6 +3,7 @@
  * @date        2014-2019
  * @copyright   Mellanox Technologies Ltd. All rights reserved.
  * @copyright   Oak Ridge National Laboratory. All rights received.
+ * @copyright   Advanced Micro Devices, Inc. All rights received.
  * @brief       Unified Communication Transport
  */
 
