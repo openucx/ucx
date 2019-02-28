@@ -4,8 +4,8 @@
 #
 
 topdir=$(abs_top_builddir)
-javadir=$(topdir)/bindings/java
-MVNCMD=@cd $(javadir) && $(MVN)
+javadir=$(top_srcdir)/bindings/java
+MVNCMD=$(MVN) -f $(javadir)/pom.xml
 
 BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
                 org_ucx_jucx_ucp_UcpContext.h
@@ -21,7 +21,7 @@ org_ucx_jucx_ucp_UcpContext.h:
 lib_LTLIBRARIES = libjucx.la
 
 libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
-                      -I$(topdir)/src
+                      -I$(topdir)/src -I$(top_srcdir)/src
 
 libjucx_la_SOURCES = ucp_constants.cc context.cc jucx_common_def.cc
 
