@@ -16,6 +16,7 @@
 #define UCT_RDMACM_CM_MAX_CONN_PRIV \
         (UCT_RDMACM_TCP_PRIV_DATA_LEN) - (sizeof(uct_rdmacm_priv_data_hdr_t))
 
+
 typedef struct uct_rdmacm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;
