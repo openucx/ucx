@@ -327,6 +327,7 @@ typedef void
  * @param [in]  arg              User argument for this callback as defined in
  *                               @ref uct_listener_params_t::user_data
  * @param [in]  dev_name         Device name which handles incoming connection.
+ * @param [in]  conn_request     Connection request handle.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
  *                               @ref uct_ep_params_t::sockaddr_pack_cb on the
@@ -337,8 +338,19 @@ typedef void
 typedef void
 (*uct_listener_conn_request_callback_t)(uct_listener_h listener, void *arg,
                                         const char *dev_name,
+                                        uct_conn_request_h conn_request,
                                         const void *conn_priv_data,
                                         size_t length);
+
+
+typedef void (*uct_ep_server_connected_cb_t)(uct_ep_h ep, void *arg,
+                                             ucs_status_t status);
+
+typedef void (*uct_ep_client_connected_cb_t)(uct_ep_h ep, void *arg,
+                                             const void *conn_priv_data,
+                                             size_t length, ucs_status_t status);
+
+typedef void (*uct_ep_sockaddr_disconnected_cb_t)(uct_ep_h ep, void *arg);
 
 
 /**

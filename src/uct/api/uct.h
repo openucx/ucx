@@ -642,25 +642,37 @@ enum uct_listener_params_field {
  */
 enum uct_ep_params_field {
     /** Enables @ref uct_ep_params::iface */
-    UCT_EP_PARAM_FIELD_IFACE             = UCS_BIT(0),
+    UCT_EP_PARAM_FIELD_IFACE                    = UCS_BIT(0),
 
     /** Enables @ref uct_ep_params::user_data */
-    UCT_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(1),
+    UCT_EP_PARAM_FIELD_USER_DATA                = UCS_BIT(1),
 
     /** Enables @ref uct_ep_params::dev_addr */
-    UCT_EP_PARAM_FIELD_DEV_ADDR          = UCS_BIT(2),
+    UCT_EP_PARAM_FIELD_DEV_ADDR                 = UCS_BIT(2),
 
     /** Enables @ref uct_ep_params::iface_addr */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR        = UCS_BIT(3),
+    UCT_EP_PARAM_FIELD_IFACE_ADDR               = UCS_BIT(3),
 
     /** Enables @ref uct_ep_params::sockaddr */
-    UCT_EP_PARAM_FIELD_SOCKADDR          = UCS_BIT(4),
+    UCT_EP_PARAM_FIELD_SOCKADDR                 = UCS_BIT(4),
 
     /** Enables @ref uct_ep_params::sockaddr_cb_flags */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS = UCS_BIT(5),
+    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS        = UCS_BIT(5),
 
     /** Enables @ref uct_ep_params::sockaddr_pack_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB  = UCS_BIT(6)
+    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB         = UCS_BIT(6),
+
+    /** Enables @ref uct_ep_params::cm */
+    UCT_EP_PARAM_FIELD_CM                       = UCS_BIT(7),
+
+    /** Enables @ref uct_ep_params::conn_request */
+    UCT_EP_PARAM_FIELD_CONN_REQUEST             = UCS_BIT(8),
+
+    /** Enables @ref uct_ep_params::sockaddr_connected_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB    = UCS_BIT(9),
+
+    /** Enables @ref uct_ep_params::sockaddr_disconnected_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB = UCS_BIT(10)
 };
 
 
@@ -881,7 +893,8 @@ struct uct_ep_params {
     uint64_t                          field_mask;
 
     /**
-     * Interface to create the endpoint on. This is a mandatory field.
+     * Interface to create the endpoint on. @a iface or @a cm field must be
+     * initialized but not both.
      */
     uct_iface_h                       iface;
 
@@ -929,6 +942,37 @@ struct uct_ep_params {
      * request, the callback will not be invoked.
      */
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+
+    /**
+     * The connection manager object as created by @ref uct_cm_open. @a cm or
+     * @a iface field must be initialized but not both.
+     */
+    uct_cm_h                          cm;
+
+    /**
+     * Connection request what was passed to
+     * @ref uct_listener_conn_request_callback_t .
+     */
+    uct_conn_request_h                conn_request;
+
+    union {
+        /**
+         * Callback that will be invoked when the endpoint is connected to
+         * server by a connection manager @ref uct_cm_h .
+         */
+        uct_ep_client_connected_cb_t      client;
+
+        /**
+         * Callback that will be invoked when the endpoint is connected to
+         * client by a connection manager @ref uct_cm_h .
+         */
+        uct_ep_server_connected_cb_t      server;
+    } sockaddr_connected_cb;
+
+    /**
+     * Callback that will be invoked when the endpoint is disconnected.
+     */
+    uct_ep_sockaddr_disconnected_cb_t     disconnected_cb;
 };
 
 
@@ -1719,6 +1763,16 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  * @return              Error code as defined by @ref ucs_status_t
  */
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Initiate synchronized disconnection of an endpoint connected to
+ *        sockaddr by connection manager @ref uct_cm_h .
+ *
+ * @param [in] ep       Endpoint to disconnect.
+ */
+ucs_status_t uct_ep_disconnect(uct_ep_h ep);
 
 
 /**
