@@ -19,6 +19,8 @@
 
 BEGIN_C_DECLS
 
+/** @file memtrack.h */
+
 enum {
     UCS_MEMTRACK_STAT_ALLOCATION_COUNT,
     UCS_MEMTRACK_STAT_ALLOCATION_SIZE,

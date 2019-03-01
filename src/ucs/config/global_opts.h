@@ -17,6 +17,8 @@
 
 BEGIN_C_DECLS
 
+/** @file global_opts.h */
+
 #define UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG    "WARN_UNUSED_ENV_VARS"
 
 /**

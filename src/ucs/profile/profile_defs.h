@@ -14,6 +14,8 @@
 
 BEGIN_C_DECLS
 
+/** @file profile_defs.h */
+
 #define UCS_PROFILE_STACK_MAX 64
 
 

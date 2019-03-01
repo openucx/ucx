@@ -16,6 +16,8 @@
 
 BEGIN_C_DECLS
 
+/** @file stats.h */
+
 void ucs_stats_init();
 void ucs_stats_cleanup();
 void ucs_stats_dump();

@@ -26,6 +26,8 @@
 
 BEGIN_C_DECLS
 
+/** @file uct.h */
+
 /**
  * @defgroup UCT_API Unified Communication Transport (UCT) API
  * @{

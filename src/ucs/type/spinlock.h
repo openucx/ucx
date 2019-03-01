@@ -12,6 +12,8 @@
 
 BEGIN_C_DECLS
 
+/** @file spinlock.h */
+
 /**
  * Reentrant spinlock.
  */

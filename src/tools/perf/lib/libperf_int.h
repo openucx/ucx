@@ -13,6 +13,8 @@
 
 BEGIN_C_DECLS
 
+/** @file libperf_int.h */
+
 #include <ucs/time/time.h>
 #include <ucs/async/async.h>
 

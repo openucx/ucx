@@ -17,6 +17,8 @@
 
 BEGIN_C_DECLS
 
+/** @file math.h */
+
 #define UCS_KBYTE    (1ull << 10)
 #define UCS_MBYTE    (1ull << 20)
 #define UCS_GBYTE    (1ull << 30)

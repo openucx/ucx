@@ -1,12 +1,17 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
 
 #ifndef UCS_TIME_DEF_H
 #define UCS_TIME_DEF_H
 
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
+
+/** @file time_def.h */
 
 /**
  * @ingroup UCS_RESOURCE
@@ -17,5 +22,6 @@
  */
 typedef unsigned long   ucs_time_t;
 
+END_C_DECLS
 
 #endif /* UCS_TIME_DEF_H */
