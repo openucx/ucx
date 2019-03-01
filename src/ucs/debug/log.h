@@ -20,6 +20,7 @@
 
 BEGIN_C_DECLS
 
+/** @file log.h */
 
 #define ucs_log_is_enabled(_level) \
     ucs_unlikely(((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= (ucs_global_opts.log_level)))

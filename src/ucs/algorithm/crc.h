@@ -14,6 +14,8 @@
 
 BEGIN_C_DECLS
 
+/** @file crc.h */
+
 /**
  * Calculate CRC16 of an arbitrary buffer.
  *

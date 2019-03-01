@@ -16,6 +16,7 @@
 
 BEGIN_C_DECLS
 
+/** @file strided_alloc.h */
 
 /* the distance between allocated elements */
 #define UCS_STRIDED_ALLOC_STRIDE (128 * UCS_KBYTE)

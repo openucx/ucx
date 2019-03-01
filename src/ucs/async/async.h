@@ -18,6 +18,8 @@
 
 BEGIN_C_DECLS
 
+/** @file async.h */
+
 /**
  * Async event context. Manages timer and fd notifications.
  */
