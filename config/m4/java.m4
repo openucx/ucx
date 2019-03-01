@@ -9,7 +9,7 @@
 #
 #
 java_happy="no"
-mvn_args="-Dsources=\"**/dummy/**\" -DtestSources=\"**/jucx/**\" -Dmaven.test.skip=true -DskipCopy=true"
+mvn_args="-DtestSources=\"**/jucx/**\" -Dmaven.test.skip=true -DskipCopy=true"
 AC_ARG_WITH([java],
             [AC_HELP_STRING([--with-java=(PATH)],
                             [Compile Java UCX (default is guess).])
@@ -21,11 +21,6 @@ AS_IF([test "x$with_java" != xno],
        AC_CHECK_PROG(JAVABIN, java, yes)
        AS_IF([test "x${MVNBIN}" == "xyes" -a "x${JAVABIN}" == "xyes"],
              [
-              AC_MSG_CHECKING([mvn plugins and dependencies availability])
-              AC_SUBST([MVNAVAIL], [$(cd bindings/java && mvn $(echo "${mvn_args}") install >/dev/null && \
-                                                          mvn $(echo "${mvn_args}") clean   >/dev/null && \
-                                                          echo yes || echo no)])
-              AC_MSG_RESULT([${MVNAVAIL}])
               AS_IF([test -n "$with_java" -a "x$with_java" != "xyes" -a "x$with_java" != "xguess"],
                     [java_dir=$with_java],
                     [
@@ -80,7 +75,7 @@ AS_IF([test "x$with_java" != xno],
      )
 
 AC_SUBST([JDK], [${java_dir}])
-AM_CONDITIONAL([HAVE_JAVA], [test "x$java_happy" != "xno" -a "x${MVNAVAIL}" != "xno"])
+AM_CONDITIONAL([HAVE_JAVA], [test "x$java_happy" != "xno"])
 #Set MVN according to whether user has Java and Maven or not
 AM_COND_IF([HAVE_JAVA],
            [AC_SUBST([MVN], ["mvn"])],
