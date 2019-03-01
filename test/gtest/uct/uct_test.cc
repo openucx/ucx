@@ -474,6 +474,7 @@ int uct_test::max_connections()
     }
 }
 
+const std::string uct_test::entity::server_priv_data = "Server private data";
 std::string uct_test::entity::client_priv_data = "";
 size_t uct_test::entity::client_cb_arg = 0;
 
@@ -562,6 +563,8 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
 
     UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close,
                            uct_cm_open, &cm_params);
+    status = uct_cm_query(m_cm, &m_cm_attr);
+    ASSERT_UCS_OK(status);
 }
 
 void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const {
@@ -737,6 +740,10 @@ uct_cm_h uct_test::entity::cm() const {
     return m_cm;
 }
 
+const uct_cm_attr_t& uct_test::entity::cm_attr() const {
+    return m_cm_attr;
+}
+
 uct_iface_h uct_test::entity::iface() const {
     return m_iface;
 }
@@ -752,6 +759,11 @@ const uct_iface_params& uct_test::entity::iface_params() const {
 uct_ep_h uct_test::entity::ep(unsigned index) const {
     return m_eps.at(index);
 }
+
+unsigned uct_test::entity::num_eps() const {
+    return m_eps.size();
+}
+
 
 void uct_test::entity::reserve_ep(unsigned index) {
     if (index >= m_eps.size()) {
@@ -835,8 +847,21 @@ ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
     return priv_data_len;
 }
 
-void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
-                                           const ucs::sock_addr_storage &remote_addr)
+ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
+                                              void *priv_data)
+{
+    const size_t priv_data_len = server_priv_data.length() + 1;
+
+    memcpy(priv_data, server_priv_data.c_str(), priv_data_len);
+    return priv_data_len;
+}
+
+void
+uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
+                                      const ucs::sock_addr_storage &remote_addr,
+                                      uct_ep_client_connected_cb_t connected_cb,
+                                      uct_ep_sockaddr_disconnected_cb_t disconnected_cb,
+                                      void *user_data)
 {
     uct_ep_h ep;
     ucs_status_t status;
@@ -849,13 +874,24 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     /* Connect to the server */
     ucs_sock_addr_t ucs_remote_addr = remote_addr.to_ucs_sock_addr();
     uct_ep_params_t params;
-    params.field_mask        = UCT_EP_PARAM_FIELD_IFACE             |
-                               UCT_EP_PARAM_FIELD_USER_DATA         |
+    if (m_cm) {
+        params.field_mask = UCT_EP_PARAM_FIELD_CM                       |
+                            UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB    |
+                            UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB;
+        params.cm                           = m_cm;
+        params.sockaddr_connected_cb.client = connected_cb;
+        params.disconnected_cb              = disconnected_cb;
+        
+    } else {
+        params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+        params.iface      = m_iface;
+        params.user_data  = user_data;
+    }
+    params.field_mask       |= UCT_EP_PARAM_FIELD_USER_DATA         |
                                UCT_EP_PARAM_FIELD_SOCKADDR          |
                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS |
                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
     params.iface             = iface();
-    params.user_data         = &client_cb_arg;
     params.sockaddr          = &ucs_remote_addr;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
     params.sockaddr_pack_cb  = client_priv_data_cb;
@@ -865,10 +901,46 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     m_eps[index].reset(ep, uct_ep_destroy);
 }
 
+void uct_test::entity::accept(uct_conn_request_h conn_request,
+                              uct_ep_server_connected_cb_t connected_cb,
+                              uct_ep_sockaddr_disconnected_cb_t disconnected_cb,
+                              void *user_data)
+{
+        uct_ep_h ep;
+        uct_ep_params_t ep_params;
+
+        ASSERT_TRUE(m_listener);
+        reserve_ep(m_eps.size());
+
+        ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                       |
+                               UCT_EP_PARAM_FIELD_CONN_REQUEST             |
+                               UCT_EP_PARAM_FIELD_USER_DATA                |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB    |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS        |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+
+        ep_params.cm                           = m_cm;
+        ep_params.conn_request                 = conn_request;
+        ep_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
+        ep_params.sockaddr_pack_cb             = server_priv_data_cb;
+        ep_params.sockaddr_connected_cb.server = connected_cb;
+        ep_params.disconnected_cb              = disconnected_cb;
+        ep_params.user_data                    = user_data;
+
+        ucs_status_t status = uct_ep_create(&ep_params, &ep);
+        ASSERT_UCS_OK(status);
+        m_eps.back().reset(ep, uct_ep_destroy);
+}
+
 void uct_test::entity::listen(const uct_listener_params_t &params)
 {
     UCS_TEST_CREATE_HANDLE(uct_listener_h, m_listener, uct_listener_destroy,
                            uct_listener_create, &params);
+}
+
+void uct_test::entity::disconnect(uct_ep_h ep) {
+    ASSERT_UCS_OK(uct_ep_disconnect(ep));
 }
 
 void uct_test::entity::connect_to_ep(unsigned index, entity& other,
@@ -943,10 +1015,15 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
-                               const ucs::sock_addr_storage &remote_addr)
+                               const ucs::sock_addr_storage &remote_addr,
+                               uct_ep_client_connected_cb_t connected_cb,
+                               uct_ep_sockaddr_disconnected_cb_t disconnected_cb,
+                               void *user_data)
 {
-    if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
-        connect_to_sockaddr(index, other, remote_addr);
+    if (m_cm ||
+        iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
+        connect_to_sockaddr(index, other, remote_addr, connected_cb,
+                            disconnected_cb, user_data);
     } else {
         UCS_TEST_SKIP_R("cannot connect");
     }

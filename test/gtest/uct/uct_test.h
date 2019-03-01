@@ -117,6 +117,8 @@ protected:
 
         uct_cm_h cm() const;
 
+        const uct_cm_attr_t& cm_attr() const;
+
         uct_iface_h iface() const;
 
         const uct_iface_attr& iface_attr() const;
@@ -125,22 +127,38 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
+        unsigned num_eps() const;
+
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
-                     const ucs::sock_addr_storage &remote_addr);
+                     const ucs::sock_addr_storage &remote_addr,
+                     uct_ep_client_connected_cb_t connected_cb,
+                     uct_ep_sockaddr_disconnected_cb_t disconnected_cb,
+                     void *user_data);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index, entity& other,
-                                 const ucs::sock_addr_storage &remote_addr);
+                                 const ucs::sock_addr_storage &remote_addr,
+                                 uct_ep_client_connected_cb_t connected_cb,
+                                 uct_ep_sockaddr_disconnected_cb_t disconnected_cb,
+                                 void *user_sata);
+
+        void accept(uct_conn_request_h conn_request,
+                    uct_ep_server_connected_cb_t connected_cb,
+                    uct_ep_sockaddr_disconnected_cb_t disconnected_cb,
+                    void *user_data);
 
         void listen(const uct_listener_params_t &params);
 
+        void disconnect(uct_ep_h ep);
+
         void flush() const;
 
+        static const std::string server_priv_data;
         static std::string client_priv_data;
         static size_t      client_cb_arg;
 
@@ -165,12 +183,15 @@ protected:
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
         static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
                                            void *priv_data);
+        static ssize_t server_priv_data_cb(void *arg, const char *dev_name,
+                                           void *priv_data);
 
         ucs::handle<uct_md_h>       m_md;
         uct_md_attr_t               m_md_attr;
         mutable async_wrapper       m_async;
         ucs::handle<uct_worker_h>   m_worker;
         ucs::handle<uct_cm_h>       m_cm;
+        uct_cm_attr_t               m_cm_attr;
         ucs::handle<uct_listener_h> m_listener;
         ucs::handle<uct_iface_h>    m_iface;
         eps_vec_t                   m_eps;
@@ -233,6 +254,18 @@ protected:
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (!(*flag))) {
+            short_progress_loop();
+        }
+    }
+
+    void wait_for_bits(volatile uint64_t *flag, uint64_t mask,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) *
+                              ucs::test_time_multiplier();
+        while ((ucs_get_time() < deadline) &&
+               (!ucs_test_all_flags(*flag, mask))) {
             short_progress_loop();
         }
     }
