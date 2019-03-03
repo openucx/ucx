@@ -24,18 +24,18 @@ BEGIN_C_DECLS
 #define UCS_GBYTE    (1ull << 30)
 #define UCS_TBYTE    (1ull << 40)
 
-#define ucs_min(a, b) \
+#define ucs_min(_a, _b) \
 ({ \
-    typeof(a) _a = (a);  \
-    typeof(b) _b = (b);  \
-    _a < _b ? _a : _b;   \
+    typeof(_a) __a = (_a); \
+    typeof(_b) __b = (_b); \
+    __a < __b ? __a : __b; \
 })
 
-#define ucs_max(a, b) \
+#define ucs_max(_a, _b) \
 ({ \
-    typeof(a) _a = (a);  \
-    typeof(b) _b = (b);  \
-    _a > _b ? _a : _b;   \
+    typeof(_a) __a = (_a); \
+    typeof(_b) __b = (_b); \
+    __a > __b ? __a : __b; \
 })
 
 #define ucs_is_pow2_or_zero(_n) \
@@ -65,22 +65,22 @@ BEGIN_C_DECLS
 #define ucs_align_up_pow2_ptr(_ptr, _alignment) \
     ((typeof(_ptr))ucs_align_up_pow2((uintptr_t)(_ptr), (_alignment)))
 
-#define ucs_roundup_pow2(n) \
+#define ucs_roundup_pow2(_n) \
     ({ \
-        typeof(n) pow2; \
-        ucs_assert((n) >= 1); \
-        for (pow2 = 1; pow2 < (n); pow2 <<= 1); \
+        typeof(_n) pow2; \
+        ucs_assert((_n) >= 1); \
+        for (pow2 = 1; pow2 < (_n); pow2 <<= 1); \
         pow2; \
     })
 
 /* Return values: 0 - aligned, non-0 - unaligned */
-#define ucs_check_if_align_pow2(n, p) ((n) & (p-1))
+#define ucs_check_if_align_pow2(_n, _p) ((_n) & ((_p) - 1))
 
 /* Return values: off-set from the alignment */
-#define ucs_padding_pow2(n, p) ucs_check_if_align_pow2(n, p)
+#define ucs_padding_pow2(_n, _p) ucs_check_if_align_pow2(_n, _p)
 
-#define UCS_MASK_SAFE(i) \
-    (((i) >= 64) ? ((uint64_t)(-1)) : UCS_MASK(i))
+#define UCS_MASK_SAFE(_i) \
+    (((_i) >= 64) ? ((uint64_t)(-1)) : UCS_MASK(_i))
 
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
