@@ -927,7 +927,7 @@ static void ucs_debug_handle_error_signal(int signo, const char *cause,
     va_end(ap);
 
     ucs_log_flush();
-    ucs_log_fatal_error(cause, "Caught signal %d (%s: %s%s)", signo,
+    ucs_log_fatal_error("Caught signal %d (%s: %s%s)", signo,
                         strsignal(signo), cause, buf);
     ucs_handle_error(cause);
 }
