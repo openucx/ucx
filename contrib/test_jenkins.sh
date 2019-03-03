@@ -54,7 +54,7 @@ fi
 #
 # Build command runs with 10 tasks
 #
-MAKE="make -j10"
+MAKEP="make -j10"
 
 
 #
@@ -194,9 +194,9 @@ build_docs() {
 		module_load tools/doxygen-1.8.11 || true
 	fi
 	../configure --prefix=$ucx_inst --with-docs-only
-	$MAKE clean
-	$MAKE docs
-	$MAKE clean # FIXME distclean does not work with docs-only
+	$MAKEP clean
+	$MAKEP docs
+	$MAKEP clean # FIXME distclean does not work with docs-only
 }
 
 #
@@ -205,9 +205,9 @@ build_docs() {
 build_no_verbs() {
 	echo "==== Build without IB verbs ===="
 	../contrib/configure-release --prefix=$ucx_inst --without-verbs
-	$MAKE clean
-	$MAKE
-	$MAKE distclean
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
 }
 
 #
@@ -216,9 +216,9 @@ build_no_verbs() {
 build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
 	../contrib/configure-release --prefix=$ucx_inst --disable-numa
-	$MAKE clean
-	$MAKE
-	$MAKE distclean
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
 }
 
 #
@@ -227,9 +227,9 @@ build_disable_numa() {
 build_release_pkg() {
 	echo "==== Build release ===="
 	../contrib/configure-release
-	$MAKE clean
-	$MAKE
-	$MAKE distcheck
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distcheck
 
 	# Show UCX info
 	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
@@ -268,7 +268,7 @@ build_release_pkg() {
 	fi
 	cd -
 
-	$MAKE distclean
+	$MAKEP distclean
 }
 
 #
@@ -280,9 +280,9 @@ build_icc() {
 	then
 		echo "==== Build with Intel compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
-		$MAKE clean
-		$MAKE
-		$MAKE distclean
+		$MAKEP clean
+		$MAKEP
+		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
@@ -297,9 +297,9 @@ build_icc() {
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
-	$MAKE clean
-	$MAKE
-	$MAKE distclean
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
 }
 
 #
@@ -314,22 +314,22 @@ build_cuda() {
         then
             echo "==== Build with enable cuda, gdr_copy ===="
             ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
-            $MAKE clean
-            $MAKE
-            $MAKE distclean
+            $MAKEP clean
+            $MAKEP
+            $MAKEP distclean
 
             ../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-            $MAKE clean
-            $MAKE
-            $MAKE distclean
+            $MAKEP clean
+            $MAKEP
+            $MAKEP distclean
             module unload dev/gdrcopy
         fi
 
         echo "==== Build with enable cuda, w/o gdr_copy ===="
         ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-        $MAKE clean
-        $MAKE
-        $MAKE distclean
+        $MAKEP clean
+        $MAKEP
+        $MAKEP distclean
 
         module unload dev/cuda
         echo "ok 1 - build successful " >> build_cuda.tap
@@ -348,11 +348,11 @@ build_clang() {
 	then
 		echo "==== Build with clang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		$MAKE clean
-		$MAKE
-		$MAKE install
+		$MAKEP clean
+		$MAKEP
+		$MAKEP install
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		$MAKE distclean
+		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_clang.tap
 	else
 		echo "==== Not building with clang compiler ===="
@@ -369,11 +369,11 @@ build_gcc_latest() {
 	then
 		echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
 		../contrib/configure-devel --prefix=$ucx_inst
-		$MAKE clean
-		$MAKE
-		$MAKE install
+		$MAKEP clean
+		$MAKEP
+		$MAKEP install
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		$MAKE distclean
+		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_gcc_latest.tap
 	else
 		echo "==== Not building with latest gcc compiler ===="
@@ -388,15 +388,15 @@ build_experimental_api() {
 	# Experimental header file should not be installed by regular build
 	echo "==== Install WITHOUT experimental API ===="
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKE clean
-	$MAKE install
+	$MAKEP clean
+	$MAKEP install
 	! test -e $ucx_inst/include/ucp/api/ucpx.h
 
 	# Experimental header file should be installed by --enable-experimental-api
 	echo "==== Install WITH experimental API ===="
 	../contrib/configure-release --prefix=$ucx_inst --enable-experimental-api
-	$MAKE clean
-	$MAKE install
+	$MAKEP clean
+	$MAKEP install
 	test -e $ucx_inst/include/ucp/api/ucpx.h
 }
 
@@ -409,11 +409,11 @@ build_armclang() {
     then
         echo "==== Build with armclang compiler ===="
         ../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
-        $MAKE clean
-        $MAKE
-        $MAKE install
+        $MAKEP clean
+        $MAKEP
+        $MAKEP install
         UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-        $MAKE distclean
+        $MAKEP distclean
         echo "ok 1 - build successful " >> build_armclang.tap
         module unload arm-compiler/latest
     else
@@ -427,10 +427,10 @@ check_inst_headers() {
 	echo "==== Testing installed headers ===="
 
 	../contrib/configure-release --prefix=$PWD/install
-	$MAKE clean
-	$MAKE install
+	$MAKEP clean
+	$MAKEP install
 	../contrib/check_inst_headers.sh $PWD/install/include
-	$MAKE distclean
+	$MAKEP distclean
 
 	echo "ok 1 - build successful " >> inst_headers.tap
 }
@@ -681,9 +681,9 @@ run_mpi_tests() {
 		try_load_cuda_env
 
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
-		$MAKE clean
-		$MAKE install
-		$MAKE installcheck # check whether installation is valid (it compiles examples at least)
+		$MAKEP clean
+		$MAKEP install
+		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
 
 		MPIRUN="mpirun \
 				-x UCX_ERROR_SIGNALS \
@@ -699,7 +699,7 @@ run_mpi_tests() {
 		test_malloc_hooks_mpi
 		echo "ok 2 - malloc hooks" >> mpi_tests.tap
 
-		$MAKE distclean
+		$MAKEP distclean
 
 		unload_cuda_env
 		module unload hpcx-gcc
@@ -718,8 +718,8 @@ test_profiling() {
 
 	# configure release mode, application profiling should work
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKE clean
-	$MAKE
+	$MAKEP clean
+	$MAKEP
 
 	# compile the profiling example code
 	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
@@ -735,8 +735,8 @@ test_profiling() {
 
 test_dlopen() {
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKE clean
-	$MAKE
+	$MAKEP clean
+	$MAKEP
 
 	echo "==== Running dlopen test ===="
 	strace ./ucx_profiling &> strace.log
@@ -745,8 +745,8 @@ test_dlopen() {
 
 test_memtrack() {
 	../contrib/configure-devel --prefix=$ucx_inst
-	$MAKE clean
-	$MAKE
+	$MAKEP clean
+	$MAKEP
 
 	echo "==== Running memtrack test ===="
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
@@ -774,11 +774,11 @@ run_coverity() {
 	if module_load tools/cov
 	then
 		echo "==== Running coverity ===="
-		$MAKE clean
+		$MAKEP clean
 		cov_build_id="cov_build_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
-		cov-build   --dir $cov_build $MAKE all
+		cov-build   --dir $cov_build $MAKEP all
 		cov-analyze $COV_OPT --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
@@ -816,8 +816,8 @@ run_gtest() {
 	compiler_name=$1
 	shift
 	../contrib/configure-devel --prefix=$ucx_inst $@
-	$MAKE clean
-	$MAKE
+	$MAKEP clean
+	$MAKEP
 
 	export GTEST_SHARD_INDEX=$worker
 	export GTEST_TOTAL_SHARDS=$nworkers
@@ -913,8 +913,8 @@ run_gtest_release() {
 	echo "1..1" > gtest_release.tap
 
 	../contrib/configure-release --prefix=$ucx_inst --enable-gtest
-	$MAKE clean
-	$MAKE
+	$MAKEP clean
+	$MAKEP
 
 	export GTEST_SHARD_INDEX=0
 	export GTEST_TOTAL_SHARDS=1
@@ -962,8 +962,8 @@ run_tests() {
 	run_mpi_tests
 
 	../contrib/configure-devel --prefix=$ucx_inst
-	$MAKE
-	$MAKE install
+	$MAKEP
+	$MAKEP install
 
 	run_ucx_tl_check
 
