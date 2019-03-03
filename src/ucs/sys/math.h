@@ -26,16 +26,16 @@ BEGIN_C_DECLS
 
 #define ucs_min(_a, _b) \
 ({ \
-    typeof(_a) __a = (_a); \
-    typeof(_b) __b = (_b); \
-    __a < __b ? __a : __b; \
+    typeof(_a) a = (_a); \
+    typeof(_b) b = (_b); \
+    a < b ? a : b; \
 })
 
 #define ucs_max(_a, _b) \
 ({ \
-    typeof(_a) __a = (_a); \
-    typeof(_b) __b = (_b); \
-    __a > __b ? __a : __b; \
+    typeof(_a) a = (_a); \
+    typeof(_b) b = (_b); \
+    a > b ? a :b; \
 })
 
 #define ucs_is_pow2_or_zero(_n) \
@@ -92,9 +92,9 @@ static inline double ucs_log2(double x)
 
 /**
  * Convert flags without a branch
- * @return 'newflag' oldflag is set in 'value', otherwise - 0
+ * @return '_newflag' if '_oldflag' is set in '_value', otherwise - 0
  */
-#define ucs_convert_flag(value, oldflag, newflag) \
+#define ucs_convert_flag(_value, _oldflag, _newflag) \
     ({ \
         UCS_STATIC_ASSERT(ucs_is_constant(oldflag)); \
         UCS_STATIC_ASSERT(ucs_is_constant(newflag)); \
