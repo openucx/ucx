@@ -3,6 +3,7 @@
  * @date        2014-2019
  * @copyright   Mellanox Technologies Ltd. All rights reserved.
  * @copyright   Oak Ridge National Laboratory. All rights received.
+ * @copyright   Advanced Micro Devices, Inc. All rights received.
  * @brief       Unified Communication Transport
  */
 
@@ -473,6 +474,7 @@ typedef enum {
     UCT_MD_MEM_TYPE_HOST = 0,      /**< Default system memory */
     UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
     UCT_MD_MEM_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed (or unified) memory*/
+    UCT_MD_MEM_TYPE_ROCM,          /**< AMD ROCM memory */
     UCT_MD_MEM_TYPE_LAST
 } uct_memory_type_t;
 
