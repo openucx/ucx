@@ -430,7 +430,7 @@ static ucs_status_t uct_mm_iface_create_signal_fd(uct_mm_iface_t *iface)
     addrlen = sizeof(struct sockaddr_un);
     memset(&iface->recv_fifo_ctl->signal_sockaddr, 0, addrlen);
     ret = getsockname(iface->signal_fd,
-                      (struct sockaddr *)&iface->recv_fifo_ctl->signal_sockaddr,
+                      (struct sockaddr *)ucs_unaligned_ptr(&iface->recv_fifo_ctl->signal_sockaddr),
                       &addrlen);
     if (ret < 0) {
         ucs_error("Failed to retrieve unix domain socket address: %m");

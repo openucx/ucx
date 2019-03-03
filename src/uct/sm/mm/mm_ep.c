@@ -188,7 +188,7 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
     *elem = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo, elem_index);
 
     /* try to get ownership of the head element */
-    returned_val = ucs_atomic_cswap64(&ep->fifo_ctl->head, head, head+1);
+    returned_val = ucs_atomic_cswap64(ucs_unaligned_ptr(&ep->fifo_ctl->head), head, head+1);
     if (returned_val != head) {
         return UCS_ERR_NO_RESOURCE;
     }
