@@ -74,7 +74,6 @@ typedef struct uct_tcp_iface {
 typedef struct uct_tcp_iface_config {
     uct_iface_config_t            super;
     int                           prefer_default;
-    unsigned                      backlog;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
