@@ -54,6 +54,7 @@ fi
 #
 # Build command runs with 10 tasks
 #
+MAKE="make"
 MAKEP="make -j10"
 
 
@@ -195,7 +196,7 @@ build_docs() {
 	fi
 	../configure --prefix=$ucx_inst --with-docs-only
 	$MAKEP clean
-	$MAKEP docs
+	$MAKE  docs
 	$MAKEP clean # FIXME distclean does not work with docs-only
 }
 
