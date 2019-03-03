@@ -91,11 +91,18 @@ module_load() {
 #
 try_load_cuda_env() {
 	num_gpus=0
+	have_cuda=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
-		module_load dev/cuda || true
-		module_load dev/gdrcopy || true
+		have_cuda=yes
+		module_load dev/cuda    || have_cuda=no
+		module_load dev/gdrcopy || have_cuda=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
+}
+
+unload_cuda_env() {
+	module unload dev/cuda
+	module unload dev/gdrcopy
 }
 
 #
@@ -593,7 +600,7 @@ run_ucx_perftest_mpi() {
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
 	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types_uct | sort -R > $ucx_inst_ptest/test_types_short_uct
+	cat $ucx_inst_ptest/test_types_uct |                sort -R > $ucx_inst_ptest/test_types_short_uct
 	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
 	UCT_PERFTEST="$ucx_inst/bin/ucx_perftest \
@@ -628,8 +635,8 @@ run_ucx_perftest_mpi() {
 		$MPIRUN -np 2 $ucx_env_vars $AFFINITY $UCP_PERFTEST
 	done
 
-	# run cuda tests
-	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
+	# run cuda tests if cuda module was loaded and GPU is found
+	if [ "X$have_cuda" == "Xyes" ] && (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
@@ -670,6 +677,9 @@ run_mpi_tests() {
 		# our local library path first
 		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
 
+		# Load CUDA modules for running perftest with CUDA
+		try_load_cuda_env
+
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		$MAKE clean
 		$MAKE install
@@ -690,6 +700,8 @@ run_mpi_tests() {
 		echo "ok 2 - malloc hooks" >> mpi_tests.tap
 
 		$MAKE distclean
+
+		unload_cuda_env
 		module unload hpcx-gcc
 	else
 		echo "==== Not running MPI tests ===="

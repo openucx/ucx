@@ -35,6 +35,7 @@ struct ucx_perf_allocator {
                               void **address_p, ucp_mem_h *memh, int non_blk_flag);
     void         (*ucp_free)(ucx_perf_context_t *perf, void *address,
                              ucp_mem_h memh);
+    void*        (*memset)(void *s, int c, size_t len);
 };
 
 
