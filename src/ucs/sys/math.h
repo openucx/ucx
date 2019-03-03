@@ -35,7 +35,7 @@ BEGIN_C_DECLS
 ({ \
     typeof(_a) a = (_a); \
     typeof(_b) b = (_b); \
-    a > b ? a :b; \
+    a > b ? a : b; \
 })
 
 #define ucs_is_pow2_or_zero(_n) \
@@ -96,11 +96,11 @@ static inline double ucs_log2(double x)
  */
 #define ucs_convert_flag(_value, _oldflag, _newflag) \
     ({ \
-        UCS_STATIC_ASSERT(ucs_is_constant(oldflag)); \
-        UCS_STATIC_ASSERT(ucs_is_constant(newflag)); \
-        UCS_STATIC_ASSERT(ucs_is_pow2(oldflag)); \
-        UCS_STATIC_ASSERT(ucs_is_pow2(newflag)); \
-        (((value) & (oldflag)) ? (newflag) : 0); \
+        UCS_STATIC_ASSERT(ucs_is_constant(_oldflag)); \
+        UCS_STATIC_ASSERT(ucs_is_constant(_newflag)); \
+        UCS_STATIC_ASSERT(ucs_is_pow2(_oldflag)); \
+        UCS_STATIC_ASSERT(ucs_is_pow2(_newflag)); \
+        (((_value) & (_oldflag)) ? (_newflag) : 0); \
     })
 
 
