@@ -5,6 +5,10 @@
 */
 
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h" /* Defines HAVE_RDMACM_QP_LESS */
+#endif
+
 #if HAVE_RDMACM_QP_LESS
 
 #include "rdmacm_cm.h"

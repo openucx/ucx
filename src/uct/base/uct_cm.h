@@ -7,8 +7,6 @@
 #ifndef UCT_CM_H_
 #define UCT_CM_H_
 
-#if HAVE_RDMACM_QP_LESS
-
 #include <uct/api/uct_def.h>
 #include <uct/base/uct_md.h>
 
@@ -26,5 +24,4 @@ struct uct_cm {
     uct_md_component_t *component;
 };
 
-#endif /* HAVE_RDMACM_QP_LESS */
 #endif /* UCT_CM_H_ */
