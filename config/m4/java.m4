@@ -22,7 +22,7 @@ AS_IF([test "x$with_java" != xno],
        AS_IF([test "x${MVNBIN}" == "xyes" -a "x${JAVABIN}" == "xyes"],
              [
               AC_MSG_CHECKING([mvn plugins and dependencies availability])
-              AC_SUBST([MVNAVAIL], [$(cd bindings/java && mvn $(echo "${mvn_args}") install >/dev/null && \
+              AC_SUBST([MVNAVAIL], [$(cd $srcdir/bindings/java && mvn $(echo "${mvn_args}") install >/dev/null && \
                                                           mvn $(echo "${mvn_args}") clean   >/dev/null && \
                                                           echo yes || echo no)])
               AC_MSG_RESULT([${MVNAVAIL}])
