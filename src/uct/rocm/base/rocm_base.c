@@ -15,7 +15,7 @@ static struct agents {
     int num;
     hsa_agent_t gpu_agents[MAX_AGENTS];
     int num_gpu;
-} uct_rocm_base_agents = {0};
+} uct_rocm_base_agents;
 
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents)
 {
@@ -63,6 +63,8 @@ hsa_status_t uct_rocm_base_init(void)
         status = HSA_STATUS_ERROR;
         return status;
     }
+
+    memset(&uct_rocm_base_agents, 0, sizeof(uct_rocm_base_agents));
 
     status = hsa_init();
     if (status != HSA_STATUS_SUCCESS) {
