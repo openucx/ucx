@@ -207,7 +207,8 @@ build_java_docs() {
 	echo " ==== Building java docs ===="
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java && mvn javadoc:javadoc
+		pushd ../bindings/java
+		mvn javadoc:javadoc
 		popd
 		module unload dev/jdk
 		module unload dev/mvn
@@ -1011,7 +1012,7 @@ run_tests() {
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
 	do_distributed_task 2 4 build_experimental_api
-	do_distributed_task 3 4 build_jucx
+	do_distributed_task 0 4 build_jucx
 
 	# all are running mpi tests
 	run_mpi_tests
@@ -1035,7 +1036,7 @@ run_tests() {
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 1 3 test_malloc_hook
-	do_distributed_task 2 3 test_jucx
+	do_distributed_task 0 3 test_jucx
 
 	# all are running gtest
 	run_gtest_default
