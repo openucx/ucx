@@ -6,6 +6,8 @@
 %bcond_without ib_cm
 %bcond_with    knem
 %bcond_without rdmacm
+%bcond_with    rocm
+%bcond_with    ugni
 %bcond_with    xpmem
 
 Name: ucx
@@ -44,6 +46,9 @@ BuildRequires: knem
 %endif
 %if %{with rdmacm}
 BuildRequires: librdmacm-devel
+%endif
+%if %{with rocm}
+BuildRequires: hsa-rocr-dev
 %endif
 %if %{with xpmem}
 BuildRequires: xpmem-devel
@@ -93,7 +98,9 @@ Provides static libraries required for developing with UCX.
            %_with_arg ib_cm cm \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
+           %_with_arg rocm rocm \
            %_with_arg xpmem xpmem \
+           %_with_arg ugni ugni \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -234,6 +241,34 @@ based connection establishment for RDMA-capable transports.
 
 %files rdmacm
 %{_libdir}/ucx/libuct_rdmacm.so.*
+%endif
+
+# ucx-rocm
+%if %{with rocm}
+%package rocm
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX ROCm GPU support
+Group: System Environment/Libraries
+
+%description rocm
+Provides Radeon Open Compute (ROCm) Runtime support for UCX.
+
+%files rocm
+%{_libdir}/ucx/libuct_rocm.so.*
+%endif
+
+# ucx-ugni
+%if %{with ugni}
+%package ugni
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX Gemini/Aries transport support.
+Group: System Environment/Libraries
+
+%description ugni
+Provides Gemini/Aries transport for UCX.
+
+%files ugni
+%{_libdir}/ucx/libuct_ugni.so.*
 %endif
 
 # ucx-xpmem

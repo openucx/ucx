@@ -14,6 +14,7 @@
 
 BEGIN_C_DECLS
 
+/** @file ucp_compat.h */
 
 /**
  * @ingroup UCP_WORKER

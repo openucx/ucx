@@ -45,24 +45,25 @@ typedef struct uct_tcp_ep {
  * TCP interface
  */
 typedef struct uct_tcp_iface {
-    uct_base_iface_t              super;          /* Parent class */
-    int                           listen_fd;      /* Server socket */
-    ucs_list_link_t               ep_list;        /* List of endpoints */
-    char                          if_name[IFNAMSIZ];/* Network interface name */
-    int                           epfd;           /* event poll set of sockets */
-    size_t                        outstanding;
+    uct_base_iface_t              super;             /* Parent class */
+    int                           listen_fd;         /* Server socket */
+    ucs_list_link_t               ep_list;           /* List of endpoints */
+    char                          if_name[IFNAMSIZ]; /* Network interface name */
+    int                           epfd;              /* Event poll set of sockets */
+    size_t                        outstanding;       /* How much data in the EP send buffers */
 
     struct {
-        struct sockaddr_in        ifaddr;         /* Network address */
-        struct sockaddr_in        netmask;        /* Network address mask */
-        size_t                    buf_size;       /* Maximal bcopy size */
-        int                       prefer_default; /* prefer default gateway */
-        unsigned                  max_poll;       /* number of events to poll per socket*/
+        struct sockaddr_in        ifaddr;            /* Network address */
+        struct sockaddr_in        netmask;           /* Network address mask */
+        size_t                    buf_size;          /* Maximal bcopy size */
+        size_t                    short_size;        /* Maximal short size */
+        int                       prefer_default;    /* Prefer default gateway */
+        unsigned                  max_poll;          /* Number of events to poll per socket*/
     } config;
 
     struct {
-        int                       nodelay;        /* TCP_NODELAY */
-        int                       sndbuf;         /* SO_SNDBUF */
+        int                       nodelay;           /* TCP_NODELAY */
+        int                       sndbuf;            /* SO_SNDBUF */
     } sockopt;
 } uct_tcp_iface_t;
 
@@ -73,7 +74,6 @@ typedef struct uct_tcp_iface {
 typedef struct uct_tcp_iface_config {
     uct_iface_config_t            super;
     int                           prefer_default;
-    unsigned                      backlog;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
@@ -113,6 +113,9 @@ unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep);
 unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove);
+
+ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
+                                 const void *payload, unsigned length);
 
 ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
                             uct_pack_callback_t pack_cb, void *arg,

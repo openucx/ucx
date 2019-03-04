@@ -378,7 +378,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
         if (sender().worker()->context->tl_rscs[tl].flags & UCP_TL_RSC_FLAG_SOCKADDR) {
             continue;
         }
-        packed_dev_priorities.insert(sender().worker()->ifaces[tl].attr.priority);
+        packed_dev_priorities.insert(ucp_worker_iface_get_attr(sender().worker(), tl)->priority);
     }
 
     ucp_unpacked_address unpacked_address;

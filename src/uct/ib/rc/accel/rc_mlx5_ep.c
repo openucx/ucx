@@ -240,15 +240,14 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp)
 {
-    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_rc_mlx5_ep_t *ep  = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
+    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super),
                        "uct_rc_mlx5_ep_get_zcopy");
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt),
-                     iface->config.max_inl_resp + 1, UCT_IB_MAX_MESSAGE_SIZE,
-                     "get_zcopy");
+                     iface->super.super.config.max_inl_resp + 1,
+                     UCT_IB_MAX_MESSAGE_SIZE, "get_zcopy");
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_READ, iov, iovcnt,
                                        0, NULL, 0, remote_addr, rkey, 0ul, 0, 0,
@@ -493,6 +492,16 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
     return uct_rc_mlx5_ep_atomic_fop(tl_ep, MLX5_OPCODE_ATOMIC_MASKED_CS, result, 1,
                                      sizeof(uint32_t), remote_addr, rkey, UCS_MASK(32),
                                      htonl(compare), -1, htonl(swap), comp);
+}
+
+ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+
+    uct_rc_mlx5_add_fence(md, &ep->tx.wq);
+    UCT_TL_EP_STAT_FENCE(&ep->super.super);
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,

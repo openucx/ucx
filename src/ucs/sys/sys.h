@@ -51,6 +51,8 @@
 
 BEGIN_C_DECLS
 
+/** @file sys.h */
+
 /**
  * @return Host name.
  */

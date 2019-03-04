@@ -116,6 +116,13 @@ protected:
         return self->dispatch(arbiter, elem);
     }
 
+    static ucs_arbiter_cb_result_t dispatch_dummy_cb(ucs_arbiter_t *arbiter,
+                                                     ucs_arbiter_elem_t *elem,
+                                                     void *arg)
+    {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
     ucs_arbiter_cb_result_t desched_group(ucs_arbiter_elem_t *elem)
     {
         ucs_arbiter_group_t *g = ucs_arbiter_elem_group(elem);
@@ -298,8 +305,9 @@ UCS_TEST_F(test_arbiter, purge_cond) {
     }
 
     // All groups are scheduled, start purging them from some non-current group
+    // (purge just half of the groups, the rest will be dispatched)
     unsigned start = ucs::rand() % m_num_groups;
-    for (unsigned i = 0; i < m_num_groups; ++i) {
+    for (unsigned i = 0; i < m_num_groups / 2; ++i) {
         unsigned idx = (start + i) % m_num_groups;
         m_count = 0;
         ucs_arbiter_group_purge(&arbiter, &groups[idx], purge_cond_cb, this);
@@ -311,6 +319,8 @@ UCS_TEST_F(test_arbiter, purge_cond) {
 
         ucs_arbiter_group_cleanup(&groups[idx]);
     }
+
+    ucs_arbiter_dispatch(&arbiter, 1, dispatch_dummy_cb, NULL);
 
     ucs_arbiter_cleanup(&arbiter);
 }

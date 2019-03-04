@@ -15,6 +15,8 @@
 
 BEGIN_C_DECLS
 
+/** @file string.h */
+
 /* A string to hold the IP address and port from a sockaddr */
 #define UCS_SOCKADDR_STRING_LEN  60
 

@@ -1,6 +1,6 @@
 /**
- * @file        uct.h
- * @date        2014-2016
+ * @file        status.h
+ * @date        2014-2019
  * @copyright   Mellanox Technologies Ltd. All rights reserved.
  * @copyright   The University of Tennessee and the University of Tennessee research foundation. All rights reserved.
  * @brief       Unified Communication Services
@@ -12,6 +12,8 @@
 #include <ucs/sys/compiler_def.h>
 
 BEGIN_C_DECLS
+
+/** @file status.h */
 
 /**
  * @defgroup UCS_API Unified Communication Services (UCS) API

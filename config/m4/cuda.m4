@@ -53,7 +53,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                [AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
                 AC_SUBST([CUDA_LDFLAGS], ["$CUDA_LDFLAGS"])],
                [AS_IF([test "x$with_cuda" != "xguess"],
-                      [AC_MSG_ERROR([CUDA support is requested but cuda packages can't found])],
+                      [AC_MSG_ERROR([CUDA support is requested but cuda packages cannot be found])],
                       [AC_MSG_WARN([CUDA not found])])])
 
         ]) # "x$with_cuda" == "xno"

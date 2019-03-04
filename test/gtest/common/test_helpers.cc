@@ -94,7 +94,8 @@ void safe_usleep(double usec) {
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
-    return ifa_addr->sa_family == AF_INET;
+    return (ifa_addr->sa_family == AF_INET) ||
+           (ifa_addr->sa_family == AF_INET6);
 }
 
 bool is_rdmacm_netdev(const char *ifa_name) {

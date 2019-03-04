@@ -13,6 +13,8 @@
 
 BEGIN_C_DECLS
 
+/** @file async_fwd.h */
+
 typedef struct ucs_async_context ucs_async_context_t;
 
 
