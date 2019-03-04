@@ -131,8 +131,20 @@ AC_ARG_WITH([docs_only],
                        [Compile only the docs and not the rest of UCX. [default=NO]]),
         ,[:],[with_docs_only=no])
 
+#
+#Doxygen options
+#
+DX_PS_FEATURE(OFF)
+DX_HTML_FEATURE(ON)
+DX_MAN_FEATURE(ON)
+DX_PDF_FEATURE(ON)
+DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
+
 AS_IF([test "x$with_docs_only" == xyes],
-    [AS_MESSAGE([dxonly])
+    [AS_MESSAGE([Documents only requested])
+     AS_IF([DX_TEST_FEATURE(doc)],
+           [],
+           [AC_MSG_ERROR([--with-only-docs was specified, but doxygen is not found])])
      AM_CONDITIONAL([DOCS_ONLY], [true])
      AM_CONDITIONAL([HAVE_GTEST], [false])
      AM_CONDITIONAL([HAVE_STATS], [false])
@@ -278,16 +290,6 @@ AS_IF([test "x$with_docs_only" == xyes],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])
 
     ]) # Docs only
-
-
-#
-#Doxygen options
-#
-DX_PS_FEATURE(OFF)
-DX_HTML_FEATURE(ON)
-DX_MAN_FEATURE(ON)
-DX_PDF_FEATURE(ON)
-DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 
 #
 # Print which transports are built
