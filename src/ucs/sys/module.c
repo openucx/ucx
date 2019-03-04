@@ -12,6 +12,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/math.h>
 #include <string.h>
 #include <limits.h>
 #include <dlfcn.h>
@@ -20,6 +21,13 @@
 
 #define UCS_MODULE_PATH_MEMTRACK_NAME   "module_path"
 #define UCS_MODULE_SRCH_PATH_MAX        2
+
+#define ucs_module_debug(_fmt, ...) \
+    ucs_log(ucs_min(UCS_LOG_LEVEL_DEBUG, ucs_global_opts.module_log_level), \
+            _fmt, ##  __VA_ARGS__)
+#define ucs_module_trace(_fmt, ...) \
+    ucs_log(ucs_min(UCS_LOG_LEVEL_TRACE, ucs_global_opts.module_log_level), \
+            _fmt, ##  __VA_ARGS__)
 
 static struct {
     ucs_init_once_t  init;
@@ -49,7 +57,7 @@ static void ucs_module_loader_add_dl_dir()
         return;
     }
 
-    ucs_debug("ucs library path: %s", dl_info.dli_fname);
+    ucs_module_debug("ucs library path: %s", dl_info.dli_fname);
 
     /* copy extension */
     dlpath_dup = ucs_strdup(dl_info.dli_fname,
@@ -116,18 +124,19 @@ static void ucs_module_init(const char *module_path, void *dl)
     ucs_status_t status;
 
     fullpath = realpath(module_path, buffer);
-    ucs_trace("loaded %s [%p]", fullpath, dl);
+    ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
     init_func = dlsym(dl, module_init_name);
     if (init_func == NULL) {
         return;
     }
 
-    ucs_trace("calling '%s' in '%s': [%p]", module_init_name, fullpath, init_func);
+    ucs_module_trace("calling '%s' in '%s': [%p]", module_init_name, fullpath,
+                     init_func);
     status = init_func();
     if (status != UCS_OK) {
-        ucs_debug("initializing '%s' failed: %s, unloading", fullpath,
-                  ucs_status_string(status));
+        ucs_module_debug("initializing '%s' failed: %s, unloading", fullpath,
+                         ucs_status_string(status));
         dlclose(dl);
     }
 }
@@ -155,7 +164,8 @@ static void ucs_module_load_one(const char *framework, const char *module_name)
         } else {
             /* If a module fails to load, silently give up */
             error = dlerror();
-            ucs_debug("%s", error ? error : "Unknown error");
+            ucs_module_debug("could not load '%s': %s", module_path,
+                             error ? error : "Unknown error");
         }
     }
 
@@ -172,7 +182,7 @@ void ucs_load_modules(const char *framework, const char *modules,
     ucs_module_loader_init_paths();
 
     UCS_INIT_ONCE(init_once) {
-        ucs_debug("loading modules for %s", framework);
+        ucs_module_debug("loading modules for %s", framework);
         modules_str = ucs_strdup(modules, "modules_list");
         if (modules_str != NULL) {
             saveptr     = NULL;

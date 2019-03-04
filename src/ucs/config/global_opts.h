@@ -113,6 +113,10 @@ typedef struct {
 
     /* directory for loadable modules */
     char                     *module_dir;
+
+    /* log level for module loader code */
+    ucs_log_level_t          module_log_level;
+
 } ucs_global_opts_t;
 
 
