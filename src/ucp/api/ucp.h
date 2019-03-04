@@ -1194,7 +1194,7 @@ ucs_status_t ucp_context_query(ucp_context_h context_p,
  * with the context.
  *
  * @param [in] context      Print this context object's configuration.
- * @param [in] stream       Output stream to which to print the information.
+ * @param [in] stream       Output stream on which to print the information.
  */
 void ucp_context_print_info(const ucp_context_h context, FILE *stream);
 
