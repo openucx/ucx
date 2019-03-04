@@ -9,7 +9,6 @@
 #
 #
 java_happy="no"
-mvn_args="-DtestSources=\"**/jucx/**\" -Dmaven.test.skip=true -DskipCopy=true"
 AC_ARG_WITH([java],
             [AC_HELP_STRING([--with-java=(PATH)],
                             [Compile Java UCX (default is guess).])

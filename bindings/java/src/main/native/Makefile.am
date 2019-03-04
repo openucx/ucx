@@ -7,7 +7,6 @@ topdir=$(abs_top_builddir)
 javadir=$(top_srcdir)/bindings/java
 MVNCMD=$(MVN) -f $(javadir)/pom.xml
 
-
 BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
                 org_ucx_jucx_ucp_UcpContext.h
 
