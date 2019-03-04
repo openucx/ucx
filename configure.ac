@@ -351,6 +351,7 @@ AC_MSG_NOTICE([Building documents only])
 [
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
+AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([       UCT modules:   <$(echo $uct_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([      CUDA modules:   <$(echo $uct_cuda_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([        IB modules:   <$(echo $uct_ib_modules|tr ':' ' ') >])
