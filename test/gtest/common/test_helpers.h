@@ -567,6 +567,10 @@ private:
     { \
         _t h; \
         ucs_status_t status = _ctor(__VA_ARGS__, &h); \
+        if (status == UCS_ERR_UNSUPPORTED) { \
+            UCS_TEST_SKIP_R(std::string("Unsupported operation: ") + \
+                            UCS_PP_MAKE_STRING(_ctor)); \
+        } \
         ASSERT_UCS_OK(status); \
         _handle.reset(h, _dtor); \
     }
