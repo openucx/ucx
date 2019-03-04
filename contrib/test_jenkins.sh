@@ -426,10 +426,10 @@ build_jucx() {
 	then
 		echo "==== Building JUCX bindings (java api for ucx) ===="
 		../contrib/configure-release --prefix=$ucx_inst --with-java
-		$MAKE clean
-		$MAKE
-		$MAKE install
-		$MAKE distclean
+		$MAKEP clean
+		$MAKEP
+		$MAKEP install
+		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_jucx.tap
 		module unload dev/jdk
 		module unload dev/mvn
@@ -810,7 +810,7 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java/
+		pushd ../../bindings/java/
 		UCX_INST=$ucx_inst mvn clean test
 		popd
 		module unload dev/jdk
