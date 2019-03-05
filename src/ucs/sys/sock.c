@@ -6,7 +6,7 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/socket.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
 
 #include <unistd.h>

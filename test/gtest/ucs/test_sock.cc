@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/sys/socket.h>
+#include <ucs/sys/sock.h>
 }
 
 #include <sys/un.h>

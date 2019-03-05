@@ -13,7 +13,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/socket.h>
+#include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <errno.h>
 #include <iostream>
