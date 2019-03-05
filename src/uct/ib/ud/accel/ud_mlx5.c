@@ -419,7 +419,7 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     uct_ud_ep_process_rx(&iface->super,
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
-                         (uct_ud_recv_skb_t *)desc, is_async);
+                         (uct_ud_recv_skb_t *)ucs_unaligned_ptr(desc), is_async);
 out:
     if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
         /* we need to try to post buffers always. Otherwise it is possible
