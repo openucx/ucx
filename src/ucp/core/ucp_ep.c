@@ -1043,7 +1043,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (iface_attr->cap.flags & short_flag && context->config.ext.enable_memtype_cache) {
+    if ((iface_attr->cap.flags & short_flag) &&
+        (context->config.ext.enable_memtype_cache)) {
         config->max_short = max_short - hdr_len;
     } else {
         config->max_short = -1;
@@ -1054,7 +1055,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 
     md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
-    if (!((iface_attr->cap.flags & zcopy_flag) && (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
+    if (!((iface_attr->cap.flags & zcopy_flag) &&
+          (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
         return;
     }
 
