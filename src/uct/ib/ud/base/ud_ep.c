@@ -505,7 +505,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
-        uct_ud_peer_copy(&ep->peer, (void*)&ctl->peer);
+        uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
     } else {
