@@ -17,6 +17,9 @@ DISTCLEANFILES = org_ucx_jucx_ucp_UcpConstants.h \
                  org_ucx_jucx_ucp_UcpWorker.h \
                  org_ucx_jucx_ucs_UcsConstants.h
 
+org_ucx_jucx_ucp_UcpConstants.h:
+org_ucx_jucx_ucp_UcpWorker.h:
+org_ucx_jucx_ucs_UcsConstants.h:
 org_ucx_jucx_ucp_UcpContext.h:
 	$(MVNCMD) compile native:javah
 
