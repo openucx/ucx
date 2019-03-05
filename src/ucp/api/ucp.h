@@ -1994,7 +1994,7 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * Application code should not make any changes to the content of the RKEY
  * buffer.
  *
- * @note The application is responsible to release RKEY when it is no longer
+ * @note The application is responsible for releasing RKEY when it is no longer
  *       needed by calling the @ref ucp_rkey_destroy "ucp_rkey_destroy()"
  *       routine.
  *
