@@ -100,7 +100,7 @@ static ucs_status_t uct_rocm_copy_query_md_resources(uct_md_resource_desc_t **re
                                                      unsigned *num_resources_p)
 {
     if (uct_rocm_base_init() != HSA_STATUS_SUCCESS) {
-        ucs_error("Could not initialize ROCm support");
+        ucs_debug("Could not initialize ROCm support");
         *resources_p     = NULL;
         *num_resources_p = 0;
         return UCS_OK;
