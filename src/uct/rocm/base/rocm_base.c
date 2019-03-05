@@ -36,7 +36,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
     else if (device_type == HSA_DEVICE_TYPE_GPU) {
         uint32_t bdfid = 0;
         uct_rocm_base_agents.gpu_agents[uct_rocm_base_agents.num_gpu++] = agent;
-        hsa_agent_get_info(agent, HSA_AMD_AGENT_INFO_BDFID, &bdfid);
+        hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_BDFID, &bdfid);
         ucs_trace("%d found gpu agent %lu bdfid %x", getpid(), agent.handle, bdfid);
     }
     else {
