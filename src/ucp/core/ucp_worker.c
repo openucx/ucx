@@ -1128,6 +1128,57 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
     uct_iface_close(wiface->iface);
 }
 
+static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
+{
+    ucp_context_h   context  = worker->context;
+    uct_cm_params_t cm_param = {
+        .field_mask          = UCT_CM_PARAM_FIELD_MD_NAME |
+                               UCT_CM_PARAM_FIELD_WORKER
+    };
+    ucs_status_t    status   = UCS_OK;
+    uct_cm_h        cms_tmp[UCP_MAX_MDS];
+    ucp_md_index_t  i;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    worker->num_cms = 0;
+    for (i = 0; i < context->num_mds; ++i) {
+        cm_param.md_name = context->tl_mds[i].rsc.md_name;
+        cm_param.worker  = worker->uct;
+        status           = uct_cm_open(&cm_param, &cms_tmp[worker->num_cms]);
+        if (status == UCS_OK) {
+            ++worker->num_cms;
+        } else {
+            ucs_assert_always(status == UCS_ERR_UNSUPPORTED);
+        }
+    }
+
+    if (worker->num_cms == 0) {
+        worker->cms = NULL;
+        goto out;
+    }
+
+    worker->cms = ucs_malloc(worker->num_cms * sizeof(*worker->cms), "ucp cms");
+    if (worker->cms == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+    memcpy(worker->cms, cms_tmp, worker->num_cms * sizeof(*worker->cms));
+
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return status;
+}
+
+static void ucp_worker_close_cms(ucp_worker_h worker)
+{
+    ucp_md_index_t i;
+
+    for (i = 0; i < worker->num_cms; ++i) {
+        uct_cm_close(worker->cms[i]);
+    }
+    ucs_free(worker->cms);
+}
+
 static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
                                         ucp_rsc_index_t rsc_index)
 {
@@ -1511,16 +1562,22 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_close_ifaces;
     }
 
+    /* Open all resources as connection managers on this worker */
+    status = ucp_worker_add_resource_cms(worker);
+    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+        goto err_close_ifaces;
+    }
+
     /* create mem type endponts */
     status = ucp_worker_create_mem_type_endpoints(worker);;
     if (status != UCS_OK) {
-        goto err_close_ifaces;
+        goto err_close_cms;
     }
 
     /* Init AM and registered memory pools */
     status = ucp_worker_init_mpools(worker);
     if (status != UCS_OK) {
-        goto err_close_ifaces;
+        goto err_close_cms;
     }
 
     /* Select atomic resources */
@@ -1534,6 +1591,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     *worker_p = worker;
     return UCS_OK;
 
+err_close_cms:
+    ucp_worker_close_cms(worker);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);
@@ -1573,6 +1632,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker->am_cbs);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
+    ucp_worker_close_cms(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_mpool_cleanup(&worker->am_mp, 1);

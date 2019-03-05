@@ -167,9 +167,10 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucp_worker_signal_internal(listener->wiface.worker);
 }
 
-ucs_status_t ucp_listener_create(ucp_worker_h worker,
-                                 const ucp_listener_params_t *params,
-                                 ucp_listener_h *listener_p)
+static ucs_status_t
+ucp_listener_create_on_iface(ucp_worker_h worker,
+                             const ucp_listener_params_t *params,
+                             ucp_listener_h *listener_p)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource;
@@ -193,8 +194,6 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         ucs_error("Only one accept handler should be provided");
         return UCS_ERR_INVALID_PARAM;
     }
-
-    UCS_ASYNC_BLOCK(&worker->async);
 
     /* Go through all the available resources and for each one, check if the given
      * sockaddr is accessible from its md. Start listening on the first md that
@@ -253,9 +252,9 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
         ucs_trace("listener %p: accepting connections on %s", listener,
                   tl_md->rsc.md_name);
-
-        *listener_p = listener;
-        status      = UCS_OK;
+        listener->is_wcm = 0;
+        *listener_p      = listener;
+        status           = UCS_OK;
         goto out;
     }
 
@@ -267,18 +266,101 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 err_free:
     ucs_free(listener);
 out:
+    return status;
+}
+
+static ucs_status_t
+ucp_listener_create_on_cm(ucp_worker_h worker,
+                          const ucp_listener_params_t *params,
+                          ucp_listener_h *listener_p)
+{
+    ucp_listener_h listener = ucs_calloc(1, sizeof(listener), "ucp listener");
+    uct_listener_params_t uct_params;
+    ucs_status_t   status;
+    ucp_md_index_t i;
+
+    if (listener == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    listener->is_wcm      = 1;
+    listener->wcm.worker  = worker;
+    uct_params.field_mask = UCT_LISTENER_PARAM_FIELD_CM |
+                            UCT_LISTENER_PARAM_FIELD_SOCKADDR |
+                            UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
+                            UCT_LISTENER_PARAM_FIELD_USER_DATA;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    status = UCS_OK;
+    for (i = 0; (i < worker->num_cms) && (status == UCS_OK); ++i) {
+        uct_params.cm              = worker->cms[i];
+        uct_params.sockaddr        = params->sockaddr;
+        uct_params.conn_request_cb = (void *)0xdeadbeaf;
+        uct_params.user_data       = listener;
+        status = uct_listener_create(&uct_params, &listener->wcm.ucts[i]);
+    }
+
+    if (status != UCS_OK) {
+        for (i = 0; (i < worker->num_cms) && listener->wcm.ucts[i]; ++i) {
+            uct_listener_destroy(listener->wcm.ucts[i]);
+        }
+        ucs_free(listener);
+    } else {
+        *listener_p = listener;
+    }
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return status;
+}
+
+ucs_status_t ucp_listener_create(ucp_worker_h worker,
+                                 const ucp_listener_params_t *params,
+                                 ucp_listener_h *listener_p)
+{
+    ucs_status_t status;
+
+    if (!(params->field_mask & UCP_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
+        ucs_error("Missing sockaddr for listener");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    UCP_CHECK_PARAM_NON_NULL(params->sockaddr.addr, status, return status);
+
+    if (ucs_test_all_flags(params->field_mask,
+                           UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER |
+                           UCP_LISTENER_PARAM_FIELD_CONN_HANDLER)) {
+        ucs_error("Only one accept handler should be provided");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    status = ucp_listener_create_on_cm(worker, params, listener_p);
+    if (status != UCS_OK) {
+        /* Fallback to UCT iface in server mode */
+        status = ucp_listener_create_on_iface(worker, params, listener_p);
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }
 
 void ucp_listener_destroy(ucp_listener_h listener)
 {
+    ucp_md_index_t i;
+
     ucs_trace("listener %p: destroying", listener);
 
-    /* remove pending slow-path progress in case it wasn't removed yet */
-    ucs_callbackq_remove_if(&listener->wiface.worker->uct->progress_q,
-                            ucp_listener_remove_filter, listener);
-    ucp_worker_iface_cleanup(&listener->wiface);
+    if (listener->is_wcm) {
+        for (i = 0; (i < listener->wcm.worker->num_cms) &&
+                    (listener->wcm.ucts[i] != NULL); ++i) {
+            uct_listener_destroy(listener->wcm.ucts[i]);
+        }
+    } else {
+        /* remove pending slow-path progress in case it wasn't removed yet */
+        ucs_callbackq_remove_if(&listener->wiface.worker->uct->progress_q,
+                                ucp_listener_remove_filter, listener);
+        ucp_worker_iface_cleanup(&listener->wiface);
+    }
     ucs_free(listener);
 }
 

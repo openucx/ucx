@@ -16,7 +16,14 @@
  * UCP listener
  */
 typedef struct ucp_listener {
-    ucp_worker_iface_t                  wiface;    /* UCT iface to listen on */
+    int                                 is_wcm;
+    union {
+        ucp_worker_iface_t              wiface;    /* UCT iface to listen on */
+        struct {
+            ucp_worker_h                worker;
+            uct_listener_h              ucts[UCP_MAX_RESOURCES];
+        } wcm;
+    };
     ucp_listener_accept_callback_t      accept_cb; /* Listen accept callback
                                                       which creates an endpoint
                                                     */

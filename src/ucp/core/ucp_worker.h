@@ -216,9 +216,14 @@ typedef struct ucp_worker {
     ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
     ucs_list_link_t               all_eps;       /* List of all endpoints */
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
+
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
+
+    uct_cm_h                      *cms;          /* Array of CMs, one for each MD component */
+    ucp_md_index_t                num_cms;       /* Number of CMs*/
+
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
