@@ -99,11 +99,16 @@ enum {
  * optimal because of additional checks, and that compiler needs to generate code
  * for error flow as well.
  */
-#define UCT_CHECK_PARAM(_condition, _err_message, ...) \
+#define UCT_CHECK_PARAM_EX(_condition, _action_on_fail, _err_message, ...) \
     if (ENABLE_PARAMS_CHECK && !(_condition)) { \
         ucs_error(_err_message, ## __VA_ARGS__); \
+        _action_on_fail; \
         return UCS_ERR_INVALID_PARAM; \
     }
+
+#define UCT_CHECK_PARAM(_condition, _err_message, ...) \
+    UCT_CHECK_PARAM_EX(_condition, ucs_empty_function(), \
+                       _err_message, ## __VA_ARGS__)
 
 
 /**
@@ -142,16 +147,20 @@ enum {
 /**
  * In debug mode, if _condition is not true, generate 'Invalid length' error.
  */
-#define UCT_CHECK_LENGTH(_length, _min_length, _max_length, _name) \
+#define UCT_CHECK_LENGTH_EX(_length, _min_length, _max_length, _action_on_fail, _name) \
     { \
         typeof(_length) __length = _length; \
-        UCT_CHECK_PARAM((_length) <= (_max_length), \
-                        "Invalid %s length: %zu (expected: <= %zu)", \
-                        _name, (size_t)(__length), (size_t)(_max_length)); \
-        UCT_CHECK_PARAM((ssize_t)(_length) >= (_min_length), \
-                        "Invalid %s length: %zu (expected: >= %zu)", \
-                        _name, (size_t)(__length), (size_t)(_min_length)); \
+        UCT_CHECK_PARAM_EX((_length) <= (_max_length), _action_on_fail, \
+                           "Invalid %s length: %zu (expected: <= %zu)", \
+                           _name, (size_t)(__length), (size_t)(_max_length)); \
+        UCT_CHECK_PARAM_EX((ssize_t)(_length) >= (_min_length), _action_on_fail, \
+                           "Invalid %s length: %zu (expected: >= %zu)", \
+                           _name, (size_t)(__length), (size_t)(_min_length)); \
     }
+
+#define UCT_CHECK_LENGTH(_length, _min_length, _max_length, _name) \
+    UCT_CHECK_LENGTH_EX(_length, _min_length, _max_length, \
+                        ucs_empty_function(), _name)
 
 /**
  * Skip if this is a zero-length operation.

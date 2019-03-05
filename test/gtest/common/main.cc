@@ -82,6 +82,8 @@ int main(int argc, char **argv) {
         modify_config_for_valgrind("IB_TX_BUFS_GROW", "64");
         modify_config_for_valgrind("RC_TX_CQ_LEN", "256");
         modify_config_for_valgrind("CM_TIMEOUT", "600ms");
+        modify_config_for_valgrind("TCP_TX_BUFS_GROW", "512");
+        modify_config_for_valgrind("TCP_RX_BUFS_GROW", "512");
         ucm_global_opts.enable_malloc_reloc = 1; /* Test reloc hooks with valgrind,
                                                     though it's generally unsafe. */
     }
