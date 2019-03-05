@@ -34,6 +34,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     unsigned memh_index, prev_memh_index;
     uct_mem_h *prev_uct_memh;
     ucp_md_map_t new_md_map;
+    const uct_md_attr_t *md_attr;
     unsigned prev_num_memh;
     unsigned md_index;
     ucs_status_t status;
@@ -85,6 +86,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     memh_index      = 0;
     prev_memh_index = 0;
     ucs_for_each_bit(md_index, reg_md_map) {
+        md_attr = &context->tl_mds[md_index].attr;
         if (*md_map_p & UCS_BIT(md_index)) {
             /* already registered, use previous memh */
             uct_memh[memh_index++] = prev_uct_memh[prev_memh_index++];
@@ -94,8 +96,8 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             ucs_assert(alloc_md_memh_p != NULL);
             uct_memh[memh_index++] = *alloc_md_memh_p;
             new_md_map            |= UCS_BIT(md_index);
-        } else if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) &&
-                   (context->tl_mds[md_index].attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
+        } else if ((md_attr->cap.flags & UCT_MD_FLAG_REG) &&
+                   (md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
             /* MD supports registration, register new memh on it */
             status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
                                     length, uct_flags, &uct_memh[memh_index]);
@@ -133,11 +135,14 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
                                         unsigned config_method_index,
                                         unsigned md_index)
 {
-    const char *config_mdc_name = context->config.alloc_methods[config_method_index].mdc_name;
-    const char *mdc_name        = context->tl_mds[md_index].attr.component_name;
+    const char *cfg_mdc_name;
+    const char *mdc_name;
 
-    return !strncmp(config_mdc_name, "*",      UCT_MD_COMPONENT_NAME_MAX) ||
-           !strncmp(config_mdc_name, mdc_name, UCT_MD_COMPONENT_NAME_MAX);
+    cfg_mdc_name = context->config.alloc_methods[config_method_index].mdc_name;
+    mdc_name     = context->tl_mds[md_index].attr.component_name;
+
+    return !strncmp(cfg_mdc_name, "*",      UCT_MD_COMPONENT_NAME_MAX) ||
+           !strncmp(cfg_mdc_name, mdc_name, UCT_MD_COMPONENT_NAME_MAX);
 }
 
 static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
@@ -429,10 +434,10 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
 {
     ucp_context_h context = worker->context;
     uct_md_h md;
+    const uct_md_attr_t *md_attr;
     ucs_status_t status;
     char *rkey_buffer;
 
-    md = context->tl_mds[md_index].md;
 
     *memh = UCT_MEM_HANDLE_NULL;
     status = ucp_mem_rereg_mds(context, UCS_BIT(md_index), remote_addr, length,
@@ -442,9 +447,10 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
         goto err;
     }
 
-    if (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
-        rkey_buffer = ucs_alloca(context->tl_mds[md_index].attr.rkey_packed_size);
-
+    md_attr = &context->tl_mds[md_index].attr;
+    if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
+        rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
+        md = context->tl_mds[md_index].md;
         status = uct_md_mkey_pack(md, memh[0], rkey_buffer);
         if (status != UCS_OK) {
             ucs_error("failed to pack key from md[%d]: %s",

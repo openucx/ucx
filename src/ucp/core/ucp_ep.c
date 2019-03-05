@@ -1036,7 +1036,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                      unsigned hdr_len, size_t adjust_min_val)
 {
     ucp_context_t *context = worker->context;
-    uct_md_attr_t *md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+    const uct_md_attr_t *md_attr;
     uct_iface_attr_t *iface_attr;
     size_t it;
     size_t zcopy_thresh;
@@ -1044,7 +1044,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (iface_attr->cap.flags & short_flag && context->config.ext.enable_memtype_cache) {
+    if ((iface_attr->cap.flags & short_flag) &&
+        (context->config.ext.enable_memtype_cache)) {
         config->max_short = max_short - hdr_len;
     } else {
         config->max_short = -1;
@@ -1054,7 +1055,9 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->max_bcopy = max_bcopy;
     }
 
-    if (!((iface_attr->cap.flags & zcopy_flag) && (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
+    md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+    if (!((iface_attr->cap.flags & zcopy_flag) &&
+          (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
         return;
     }
 
