@@ -26,4 +26,11 @@ void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
     env->SetStaticLongField(cls, field, _name); \
 } while(0)
 
+/**
+ * @brief Utility to convert Java InetSocketAddress class (corresponds to the Network Layer 4
+ * and consists of an IP address and a port number) to corresponding sockaddr_storage struct.
+ * Supports IPv4 and IPv6.
+ */
+bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss, socklen_t& sa_len);
+
 #endif

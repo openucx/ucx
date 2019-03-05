@@ -8,4 +8,13 @@ package org.ucx.jucx;
 /**
  * Exception to be thrown from JNI and all UCX routines.
  */
-public class UcxException extends RuntimeException{}
+public class UcxException extends RuntimeException {
+
+    public UcxException() {
+        super();
+    }
+
+    public UcxException(String message) {
+        super(message);
+    }
+}
