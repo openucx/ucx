@@ -76,7 +76,9 @@ echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 module_load() {
 	set +x
 	module=$1
-	if $(type module &> /dev/null) && [ -n "$(module avail $module 2>&1)" ]
+	m_avail="$(module avail $module 2>&1)" || true
+
+	if echo "$m_avail" | grep -q "$module"
 	then
 		module load $module
 		set -x
@@ -188,16 +190,31 @@ prepare() {
 # Build documentation
 #
 build_docs() {
-	echo " ==== Build docs only ===="
+	doxy_ready=0
+	doxy_target_version="1.8.11"
+	doxy_version="$(doxygen --version)" || true
+
 	# Try load newer doxygen if native is older than 1.8.11
-	if ! (echo "1.8.11"; doxygen --version) | sort -CV
+	if ! (echo $doxy_target_version; echo $doxy_version) | sort -CV
 	then
-		module_load tools/doxygen-1.8.11 || true
+		if module_load tools/doxygen-1.8.11
+		then
+			doxy_ready=1
+		else
+			echo " doxygen was not found"
+		fi
+	else
+		doxy_ready=1
 	fi
-	../configure --prefix=$ucx_inst --with-docs-only
-	$MAKEP clean
-	$MAKE  docs
-	$MAKEP clean # FIXME distclean does not work with docs-only
+
+	if [ $doxy_ready -eq 1 ]
+	then
+		echo " ==== Build docs only ===="
+		../configure --prefix=$ucx_inst --with-docs-only
+		$MAKEP clean
+		$MAKE  docs
+		$MAKEP clean # FIXME distclean does not work with docs-only
+	fi
 }
 
 #
@@ -812,10 +829,11 @@ test_jucx() {
 	if module_load dev/jdk && module_load dev/mvn
 	then
 		pushd ../bindings/java/
-		UCX_INST=$ucx_inst mvn clean test
+		JUCX_INST=$ucx_inst mvn clean test
 		popd
 		module unload dev/jdk
 		module unload dev/mvn
+		echo "ok 1 - jucx test" >> jucx_tests.tap
 	else
 		echo "Failed to load dev/jdk and dev/mvn modules." >> jucx_tests.tap
 	fi

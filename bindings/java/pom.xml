@@ -32,7 +32,7 @@
     <ucs.lib.path>${ucx.src.dir}/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.src.dir}/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.src.dir}/ucp/.libs</ucp.lib.path>
-    <ucx.inst.dir>${env.UCX_INST}/lib</ucx.inst.dir>
+    <ucx.inst.dir>${env.JUCX_INST}/lib</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
