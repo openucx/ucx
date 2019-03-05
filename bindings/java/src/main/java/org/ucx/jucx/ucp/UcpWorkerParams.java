@@ -37,7 +37,8 @@ public class UcpWorkerParams extends UcxParams {
     /**
      * Requests the thread safety mode which worker and the associated resources
      * should be created with.
-     * When thread safety requested, the {@link UcpWorker#UcpWorker(UcpContext)}
+     * When thread safety requested, the
+     * {@link org.ucx.jucx.ucp.UcpWorker#UcpWorker(UcpContext, UcpWorkerParams)}
      * attempts to create worker where multiple threads can access concurrently.
      * The thread mode with which worker is created can differ from the
      * suggested mode.

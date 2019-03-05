@@ -22,7 +22,7 @@ import org.ucx.jucx.UcxNativeStruct;
  * Although the worker can represent multiple network resources, it is
  * associated with a single {@link UcpContext} "UCX application context".
  * All communication functions require a context to perform the operation on
- * the dedicated hardware resource(s) and an {@link UcpEndPoint} "endpoint" to address the
+ * the dedicated hardware resource(s) and an "endpoint" to address the
  * destination.
  *
  * <p>Worker are parallel "threading points" that an upper layer may use to
