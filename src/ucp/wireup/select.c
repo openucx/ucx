@@ -1475,7 +1475,8 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
 
         md_index = resource->md_index;
         md       = context->tl_mds[md_index].md;
-        ucs_assert(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR);
+        ucs_assert(context->tl_mds[md_index].attr.cap.flags &
+                   UCT_MD_FLAG_SOCKADDR);
 
         if (uct_md_is_sockaddr_accessible(md, &params->sockaddr, UCT_SOCKADDR_ACC_REMOTE)) {
             /* TODO use score to prefer best tl rather than using first one */
