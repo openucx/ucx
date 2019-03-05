@@ -9,7 +9,7 @@
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/sys/string.h>
+#include <ucs/sys/socket.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>

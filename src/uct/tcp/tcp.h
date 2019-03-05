@@ -7,7 +7,7 @@
 #define UCT_TCP_MD_H
 
 #include <uct/base/uct_md.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/socket.h>
 #include <net/if.h>
 
 #define UCT_TCP_NAME "tcp"
@@ -83,8 +83,6 @@ typedef struct uct_tcp_iface_config {
 extern uct_md_component_t uct_tcp_md;
 extern const char *uct_tcp_address_type_names[];
 
-ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr);
-
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
 
@@ -93,9 +91,16 @@ ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifadd
 
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
+int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
+                         const struct sockaddr *sa2);
+
 ucs_status_t uct_tcp_send(int fd, const void *data, size_t *length_p);
 
 ucs_status_t uct_tcp_recv(int fd, void *data, size_t *length_p);
+
+ucs_status_t uct_tcp_send_blocking(int fd, const void *data, size_t length);
+
+ucs_status_t uct_tcp_recv_blocking(int fd, void *data, size_t length);
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
 

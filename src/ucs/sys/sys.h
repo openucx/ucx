@@ -339,34 +339,6 @@ void ucs_sys_free(void *ptr, size_t length);
 
 
 /**
- * Perform an ioctl call on the given interface with the given request.
- * Set the result in the ifreq struct.
- *
- * @param [in]  if_name      Interface name to test.
- * @param [in]  request      The request to fulfill.
- * @param [out] if_req       Filled with the requested information.
- *
- * @return UCS_OK on success or an error code on failure.
- */
-ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
-                             struct ifreq *if_req);
-
-
-/**
- * Check if the given interface is in an active state.
- */
-int ucs_netif_is_active(const char *if_name);
-
-
-/**
- * Create a socket.
- *
- * @param [out]  fd_p       Pointer to created fd.
- */
-ucs_status_t ucs_tcpip_socket_create(int *fd_p);
-
-
-/**
  * Empty function which can be casted to a no-operation callback in various situations.
  */
 void ucs_empty_function();

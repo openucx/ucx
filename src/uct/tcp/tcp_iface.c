@@ -264,7 +264,7 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     int ret;
 
     /* Create the server socket for accepting incoming connections */
-    status = ucs_tcpip_socket_create(&iface->listen_fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, &iface->listen_fd);
     if (status != UCS_OK) {
         return status;
     }

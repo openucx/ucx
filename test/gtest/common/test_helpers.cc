@@ -143,7 +143,7 @@ uint16_t get_port() {
     socklen_t len = sizeof(ret_addr);
     uint16_t port;
 
-    status = ucs_tcpip_socket_create(&sock_fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock_fd);
     EXPECT_EQ(status, UCS_OK);
 
     memset(&addr_in, 0, sizeof(struct sockaddr_in));
