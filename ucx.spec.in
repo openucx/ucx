@@ -255,6 +255,7 @@ Provides Radeon Open Compute (ROCm) Runtime support for UCX.
 
 %files rocm
 %{_libdir}/ucx/libuct_rocm.so.*
+%{_libdir}/ucx/libucm_rocm.so.*
 %endif
 
 # ucx-ugni
