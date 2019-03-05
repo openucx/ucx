@@ -1994,6 +1994,10 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * Application code should not make any changes to the content of the RKEY
  * buffer.
  *
+ * @note The application is responsible to release RKEY when it is no longer
+ *       needed by calling the @ref ucp_rkey_destroy "ucp_rkey_destroy()"
+ *       routine.
+ *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.
  * @param [out] rkey_p        Remote key handle.
@@ -2718,9 +2722,9 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  */
 ucs_status_ptr_t
 ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
-                     uint64_t value, void *result, size_t op_size,
-                     uint64_t remote_addr, ucp_rkey_h rkey,
-                     ucp_send_callback_t cb);
+                    uint64_t value, void *result, size_t op_size,
+                    uint64_t remote_addr, ucp_rkey_h rkey,
+                    ucp_send_callback_t cb);
 
 
 /**
