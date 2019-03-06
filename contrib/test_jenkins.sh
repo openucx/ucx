@@ -347,9 +347,13 @@ build_cuda() {
         ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
         $MAKEP clean
         $MAKEP
-        $MAKEP distclean
 
         module unload dev/cuda
+
+        echo "==== Running test_link_map with cuda build but no cuda module ===="
+        env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
+
+        $MAKEP distclean
         echo "ok 1 - build successful " >> build_cuda.tap
     else
         echo "==== Not building with cuda flags ===="

@@ -1629,5 +1629,5 @@ void ucx_perf_global_init()
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_HOST] = &host_allocator;
-    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest);
+    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, 0);
 }

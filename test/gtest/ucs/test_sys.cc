@@ -122,7 +122,7 @@ UCS_TEST_F(test_sys, module) {
     UCS_MODULE_FRAMEWORK_DECLARE(test);
 
     EXPECT_EQ(0, test_module_loaded);
-    UCS_MODULE_FRAMEWORK_LOAD(test);
+    UCS_MODULE_FRAMEWORK_LOAD(test, 0);
     EXPECT_EQ(1, test_module_loaded);
 }
 
