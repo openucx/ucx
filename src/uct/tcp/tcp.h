@@ -7,7 +7,7 @@
 #define UCT_TCP_MD_H
 
 #include <uct/base/uct_md.h>
-#include <ucs/sys/socket.h>
+#include <ucs/sys/sock.h>
 #include <net/if.h>
 
 #define UCT_TCP_NAME "tcp"
