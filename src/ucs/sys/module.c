@@ -141,12 +141,19 @@ static void ucs_module_init(const char *module_path, void *dl)
     }
 }
 
-static void ucs_module_load_one(const char *framework, const char *module_name)
+static void ucs_module_load_one(const char *framework, const char *module_name,
+                                unsigned flags)
 {
     char module_path[PATH_MAX] = {0};
     const char *error;
     unsigned i;
     void *dl;
+    int mode;
+
+    mode = RTLD_LAZY|RTLD_GLOBAL;
+    if (flags & UCS_MODULE_LOAD_FLAG_NODELETE) {
+        mode |= RTLD_NODELETE;
+    }
 
     for (i = 0; i < ucs_module_loader_state.srchpath_cnt; ++i) {
         snprintf(module_path, sizeof(module_path) - 1, "%s/lib%s_%s%s",
@@ -157,15 +164,15 @@ static void ucs_module_load_one(const char *framework, const char *module_name)
         (void)dlerror();
 
         /* Using RTLD_GLOBAL to allow sub-modules */
-        dl = dlopen(module_path, RTLD_LAZY|RTLD_GLOBAL);
+        dl = dlopen(module_path, mode);
         if (dl != NULL) {
             ucs_module_init(module_path, dl);
             break;
         } else {
             /* If a module fails to load, silently give up */
             error = dlerror();
-            ucs_module_debug("could not load '%s': %s", module_path,
-                             error ? error : "Unknown error");
+            ucs_module_debug("dlopen('%s', mode=0x%x) failed: %s", module_path,
+                             mode, error ? error : "Unknown error");
         }
     }
 
@@ -173,7 +180,7 @@ static void ucs_module_load_one(const char *framework, const char *module_name)
 }
 
 void ucs_load_modules(const char *framework, const char *modules,
-                      ucs_init_once_t *init_once)
+                      ucs_init_once_t *init_once, unsigned flags)
 {
     char *modules_str;
     char *saveptr;
@@ -188,7 +195,7 @@ void ucs_load_modules(const char *framework, const char *modules,
             saveptr     = NULL;
             module_name = strtok_r(modules_str, ":", &saveptr);
             while (module_name != NULL) {
-                ucs_module_load_one(framework, module_name);
+                ucs_module_load_one(framework, module_name, flags);
                 module_name = strtok_r(NULL, ":", &saveptr);
             }
             ucs_free(modules_str);

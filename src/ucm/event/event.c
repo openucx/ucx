@@ -497,7 +497,7 @@ static ucs_status_t ucm_event_install(int events)
     ucm_debug("malloc hooks are ready");
 
     /* Call extra event installers */
-    UCS_MODULE_FRAMEWORK_LOAD(ucm);
+    UCS_MODULE_FRAMEWORK_LOAD(ucm, UCS_MODULE_LOAD_FLAG_NODELETE);
     ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
         status = event_installer->func(events);
         if (status != UCS_OK) {
