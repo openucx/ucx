@@ -212,13 +212,13 @@ UCS_TEST_P(test_ucp_mmap, dm_alloc) {
 
         attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS |
                           UCP_MEM_ATTR_FIELD_LENGTH  |
-                          UCP_MEM_ATTR_FIELD_DEVMEM;
+                          UCP_MEM_ATTR_FIELD_REMOTE_ADDR;
         status = ucp_mem_query(memh, &attr);
         ASSERT_UCS_OK(status);
 
         EXPECT_TRUE(attr.address == NULL);
         EXPECT_TRUE(attr.length >= size);
-        EXPECT_TRUE(attr.devmem != 0);
+        EXPECT_TRUE(attr.remote_addr != 0);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);

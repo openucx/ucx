@@ -24,7 +24,7 @@
 #define UCP_RKEY_MPOOL_MAX_MD     3
 
 enum {
-    UCP_MEM_FLAG_DEVMEM = UCS_BIT(0)
+    UCP_MEM_FLAG_REMOTE_ADDR = UCS_BIT(0)
 };
 
 /**
