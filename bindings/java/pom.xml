@@ -32,6 +32,7 @@
     <ucs.lib.path>${ucx.src.dir}/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.src.dir}/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.src.dir}/ucp/.libs</ucp.lib.path>
+    <ucx.inst.dir>${env.JUCX_INST}/lib</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -119,6 +120,12 @@
               <outputDirectory>${basedir}/resources</outputDirectory>
               <resources>
                 <resource>
+                  <directory>${ucx.inst.dir}</directory>
+                  <includes>
+                    <include>**/*.so</include>
+                  </includes>
+                </resource>
+                <resource>
                   <directory>${native.dir}/.libs</directory>
                   <includes>
                     <include>**/*.so</include>
@@ -200,6 +207,11 @@
             </source>
           </sources>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.0.1</version>
       </plugin>
     </plugins>
   </build>
