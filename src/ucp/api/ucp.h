@@ -384,17 +384,8 @@ enum {
                                               of the page size. */
     UCP_MEM_MAP_DEVICE_MEM = UCS_BIT(3)  /**< Allocate memory on device. It allows
                                               using on-chip memory, located on the
-                                              device, as a data buffer for send/receive
-                                              and RDMA operations. Using the device
-                                              memory to store packets for transmission
-                                              can reduce transmission latency compared
-                                              to the host memory. Allocated buffer is
-                                              mapped as Write combining buffer which
-                                              cannot be used for general memory access
-                                              (data or code regions) due to the weak
-                                              ordering. Write-combining does not
-                                              guarantee that the combination of writes
-                                              and reads is done in the expected order. */
+                                              device, as a data buffer for RDMA operations.
+                                              Allocated buffer can't be accessed directly. */
 };
 
 

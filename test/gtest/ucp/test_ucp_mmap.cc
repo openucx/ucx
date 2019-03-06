@@ -176,6 +176,55 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, dm_alloc) {
+    int num_mds = 0;
+    ucp_mem_attr_t attr;
+    ucs_status_t status;
+    int i;
+
+    ucp_context_h context = sender().ucph();
+    for (i = 0; i < context->num_mds; i++) {
+        if (context->tl_mds[i].attr.cap.flags & UCT_MD_FLAG_DEVICE_ALLOC) {
+            num_mds++;
+            if (num_mds > 1) {
+                UCS_TEST_SKIP_R("2+ MEMIC devices are not supported");
+            }
+        }
+    }
+
+    sender().connect(&sender(), get_ep_params());
+
+    for (int i = 1; i < 300; ++i) {
+        size_t size = i * 100;
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = NULL;
+        params.length     = size;
+        params.flags      = UCP_MEM_MAP_ALLOCATE | UCP_MEM_MAP_DEVICE_MEM;
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        ASSERT_UCS_OK(status);
+
+        attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS |
+                          UCP_MEM_ATTR_FIELD_LENGTH  |
+                          UCP_MEM_ATTR_FIELD_DEVMEM;
+        status = ucp_mem_query(memh, &attr);
+        ASSERT_UCS_OK(status);
+
+        EXPECT_TRUE(attr.address == NULL);
+        EXPECT_TRUE(attr.length >= size);
+        EXPECT_TRUE(attr.devmem != 0);
+
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
+    }
+}
+
 UCS_TEST_P(test_ucp_mmap, reg) {
 
     ucs_status_t status;

@@ -23,6 +23,10 @@
  */
 #define UCP_RKEY_MPOOL_MAX_MD     3
 
+enum {
+    UCP_MEM_FLAG_DEVMEM = UCS_BIT(0)
+};
+
 /**
  * Remote memory key structure.
  * Contains remote keys for UCT MDs.
@@ -63,6 +67,7 @@ typedef struct ucp_mem {
     uct_memory_type_t             mem_type;     /**< type of allocated memory */
     uct_md_h                      alloc_md;     /* MD used to allocated the memory */
     ucp_md_map_t                  md_map;       /* Which MDs have valid memory handles */
+    uint8_t                       flags;        /* Flags used to create mem */
     uct_mem_h                     uct[0];       /* Valid memory handles, as popcount(md_map) */
 } ucp_mem_t;
 

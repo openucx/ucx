@@ -336,6 +336,8 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         }
     }
 
+    memh->flags = (uct_flags & UCT_MD_MEM_FLAG_ON_DEVICE) ? UCP_MEM_FLAG_DEVMEM : 0;
+
     ucs_debug("%s buffer %p length %zu memh %p md_map 0x%lx",
               (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" : "allocated",
               memh->address, memh->length, memh, memh->md_map);
@@ -504,11 +506,15 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
 ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
 {
     if (attr->field_mask & UCP_MEM_ATTR_FIELD_ADDRESS) {
-        attr->address = memh->address;
+        attr->address = (memh->flags & UCP_MEM_FLAG_DEVMEM) ? NULL : memh->address;
     }
 
     if (attr->field_mask & UCP_MEM_ATTR_FIELD_LENGTH) {
         attr->length = memh->length;
+    }
+
+    if (attr->field_mask & UCP_MEM_ATTR_FIELD_DEVMEM) {
+        attr->devmem = (memh->flags & UCP_MEM_FLAG_DEVMEM) ? (uint64_t)memh->address : 0;
     }
 
     return UCS_OK;

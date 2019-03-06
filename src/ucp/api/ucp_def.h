@@ -190,6 +190,11 @@ typedef struct ucp_mem_attr {
      * Size of the memory segment.
      */
      size_t                 length;
+
+    /**
+     * Virtual address of device memory buffer.
+     */
+     uint64_t               devmem;
 } ucp_mem_attr_t;
 
 
@@ -202,7 +207,8 @@ typedef struct ucp_mem_attr {
  */
 enum ucp_mem_attr_field {
     UCP_MEM_ATTR_FIELD_ADDRESS = UCS_BIT(0), /**< Virtual address */
-    UCP_MEM_ATTR_FIELD_LENGTH  = UCS_BIT(1)  /**< The size of memory region */
+    UCP_MEM_ATTR_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory region */
+    UCP_MEM_ATTR_FIELD_DEVMEM  = UCS_BIT(2)  /**< Device memory virtual address */
 };
 
 

@@ -161,7 +161,9 @@ fallback_no_dm:
 
             if ((status == UCS_ERR_NO_RESOURCE) &&
                 (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
-                flags &= ~UCT_MD_MEM_FLAG_ON_DEVICE;
+                flags     &= ~UCT_MD_MEM_FLAG_ON_DEVICE;
+                /* fallback into regular memory, but align length up to 8 bytes */
+                min_length = ucs_align_up(min_length, sizeof(uint64_t));
                 goto fallback_no_dm;
             }
 
