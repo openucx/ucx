@@ -21,7 +21,7 @@ AS_IF([test "x$with_xpmem" != "xno"],
                    AC_SUBST(XPMEM_LDFLAGS,  "$CRAY_XPMEM_LIBS")
                   ],
                   [
-                   # If Cray module failed try to search
+                   # If cray-xpmem module not found in pkg-config, try to search
                    xpmem_header=$(find /opt/xpmem /usr/local/include /usr/local/xpmem -name xpmem.h 2>/dev/null|head -1)
                    AS_IF([test -f "$xpmem_header"],
                          [with_xpmem=$(dirname $xpmem_header | head -1 | sed -e s,/include,,g)])
@@ -30,14 +30,13 @@ AS_IF([test "x$with_xpmem" != "xno"],
        ])
 
 # Verify XPMEM header file
-AS_IF([test -d "$with_xpmem"],
+AS_IF([test "x$xpmem_happy" == "xno" -a -d "$with_xpmem"],
       [AC_CHECK_HEADER([$with_xpmem/include/xpmem.h],
                        [AC_SUBST(XPMEM_CPPFLAGS, "-I$with_xpmem/include")
                         AC_SUBST(XPMEM_LDFLAGS,  "-L$with_xpmem/lib -lxpmem")
                         xpmem_happy="yes"],
-                       [AC_MSG_WARN([XPMEM header was not found])])
-       ],
-      [AC_MSG_WARN([XPMEM was disabled])])
+                       [AC_MSG_WARN([cray-xpmem header was not found in $with_xpmem])])
+       ])
 
 AS_IF([test "x$xpmem_happy" == "xyes"], [uct_modules+=":xpmem"])
 AM_CONDITIONAL([HAVE_XPMEM], [test "x$xpmem_happy" != "xno"])
