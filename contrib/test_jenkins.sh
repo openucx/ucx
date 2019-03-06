@@ -78,7 +78,7 @@ module_load() {
 	module=$1
 	m_avail="$(module avail $module 2>&1)" || true
 
-	if echo "$m_avail" | grep -q "$module"
+	if module avail -t 2>&1 | grep -q "^$module\$"
 	then
 		module load $module
 		set -x
