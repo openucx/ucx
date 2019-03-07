@@ -147,7 +147,6 @@ struct uct_ib_iface_ops {
                                              ucs_status_t status);
     ucs_status_t            (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                          struct ibv_qp **qp_p);
-    struct ibv_pd *         (*get_qp_pd)(uct_ib_iface_t *iface);
     ucs_status_t            (*setup_iface)(uct_ib_iface_t *iface);
     void                    (*cleanup_iface)(uct_ib_iface_t *iface);
 };

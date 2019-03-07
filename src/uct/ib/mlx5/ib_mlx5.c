@@ -147,7 +147,7 @@ uct_ib_mlx5_iface_res_domain_cmp(uct_ib_mlx5_iface_res_domain_t *res_domain,
 #if HAVE_IBV_EXP_RES_DOMAIN
     return res_domain->ibv_domain->context == md->dev.ibv_context;
 #elif HAVE_DECL_IBV_ALLOC_TD
-    return res_domain->real_pd == md->pd;
+    return res_domain->pd->context == md->dev.ibv_context;
 #else
     return 1;
 #endif
@@ -197,7 +197,6 @@ uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
     } else {
         res_domain->td = NULL;
         res_domain->pd = md->pd;
-        res_domain->real_pd = md->pd;
         return UCS_OK;
     }
 
@@ -211,7 +210,6 @@ uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
         ibv_dealloc_td(res_domain->td);
         return UCS_ERR_IO_ERROR;
     }
-    res_domain->real_pd = md->pd;
 #endif
     return UCS_OK;
 }
@@ -247,7 +245,7 @@ static void uct_ib_mlx5_iface_res_domain_cleanup(uct_ib_mlx5_iface_res_domain_t 
 }
 
 ucs_status_t uct_ib_mlx5_iface_init(uct_ib_iface_t *iface,
-                                    uct_ib_mlx5_iface_t *mlx5)
+                                    uct_ib_mlx5_iface_common_t *mlx5)
 {
     mlx5->res_domain = uct_worker_tl_data_get(iface->super.worker,
                                               UCT_IB_MLX5_RES_DOMAIN_KEY,
@@ -263,17 +261,17 @@ ucs_status_t uct_ib_mlx5_iface_init(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-void uct_ib_mlx5_iface_cleanup(uct_ib_mlx5_iface_t *mlx5)
+void uct_ib_mlx5_iface_cleanup(uct_ib_mlx5_iface_common_t *mlx5)
 {
     uct_worker_tl_data_put(mlx5->res_domain, uct_ib_mlx5_iface_res_domain_cleanup);
 }
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
-                                         uct_ib_mlx5_iface_t *mlx5,
+                                         uct_ib_mlx5_iface_common_t *mlx5,
                                          uct_ib_qp_attr_t *attr,
                                          struct ibv_qp **qp_p)
 {
-    uct_ib_mlx5_iface_fill_attr(mlx5, attr);
+    uct_ib_mlx5_iface_fill_attr(iface, mlx5, attr);
     return uct_ib_iface_create_qp(iface, attr, qp_p);
 }
 

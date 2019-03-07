@@ -234,7 +234,7 @@ typedef union uct_rc_mlx5_dm_copy_data {
 
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                   super;
-    uct_ib_mlx5_iface_t              mlx5;
+    uct_ib_mlx5_iface_common_t       mlx5_common;
     struct {
         ucs_mpool_t                  atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t      mmio_mode;

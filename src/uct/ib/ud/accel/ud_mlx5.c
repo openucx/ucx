@@ -658,28 +658,21 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
 
-    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5, attr, qp_p);
-}
-
-static struct ibv_pd *uct_ud_mlx5_iface_qp_pd(uct_ib_iface_t *ib_iface)
-{
-    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
-
-    return uct_ib_mlx5_iface_qp_pd(ib_iface, &iface->mlx5);
+    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common, attr, qp_p);
 }
 
 static ucs_status_t uct_ud_mlx5_setup(uct_ib_iface_t *ib_iface)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
 
-    return uct_ib_mlx5_iface_init(ib_iface, &iface->mlx5);
+    return uct_ib_mlx5_iface_init(ib_iface, &iface->mlx5_common);
 }
 
 static void uct_ud_mlx5_cleanup(uct_ib_iface_t *ib_iface)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
 
-    uct_ib_mlx5_iface_cleanup(&iface->mlx5);
+    uct_ib_mlx5_iface_cleanup(&iface->mlx5_common);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
@@ -732,7 +725,6 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .handle_failure           = uct_ud_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_ud_mlx5_ep_set_failed,
     .create_qp                = uct_ud_mlx5_iface_create_qp,
-    .get_qp_pd                = uct_ud_mlx5_iface_qp_pd,
     .setup_iface              = uct_ud_mlx5_setup,
     .cleanup_iface            = uct_ud_mlx5_cleanup,
     },

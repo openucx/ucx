@@ -309,7 +309,6 @@ typedef struct uct_ib_mlx5_iface_res_domain {
 #elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_td               *td;
     struct ibv_pd               *pd;
-    struct ibv_pd               *real_pd;
 #endif
 } uct_ib_mlx5_iface_res_domain_t;
 
@@ -317,19 +316,19 @@ typedef struct uct_ib_mlx5_iface_res_domain {
 /**
  *  MLX5 common iface part
  */
-typedef struct uct_ib_mlx5_iface {
+typedef struct uct_ib_mlx5_iface_common {
     uct_ib_mlx5_iface_res_domain_t   *res_domain;
-} uct_ib_mlx5_iface_t;
+} uct_ib_mlx5_iface_common_t;
 
 
 ucs_status_t uct_ib_mlx5_iface_init(uct_ib_iface_t *iface,
-                                    uct_ib_mlx5_iface_t *mlx5);
+                                    uct_ib_mlx5_iface_common_t *mlx5);
 
-void uct_ib_mlx5_iface_cleanup(uct_ib_mlx5_iface_t *mlx5);
+void uct_ib_mlx5_iface_cleanup(uct_ib_mlx5_iface_common_t *mlx5);
 
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
-                                         uct_ib_mlx5_iface_t *mlx5,
+                                         uct_ib_mlx5_iface_common_t *mlx5,
                                          uct_ib_qp_attr_t *attr,
                                          struct ibv_qp **qp_p);
 

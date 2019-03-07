@@ -245,7 +245,7 @@ static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
     struct ibv_qp *qp;
 
     uct_ib_iface_fill_attr(ib_iface, attr);
-    uct_ib_mlx5_iface_fill_attr(&iface->mlx5, attr);
+    uct_ib_mlx5_iface_fill_attr(ib_iface, &iface->mlx5_common, attr);
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     dv_attr.comp_mask    = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     dv_attr.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
@@ -261,7 +261,7 @@ static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     return UCS_OK;
 #else
-    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5, attr, qp_p);
+    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common, attr, qp_p);
 #endif
 }
 
@@ -604,7 +604,6 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
     .create_qp                = uct_rc_mlx5_iface_create_qp,
-    .get_qp_pd                = uct_rc_mlx5_iface_qp_pd,
     .setup_iface              = uct_rc_mlx5_setup,
     .cleanup_iface            = uct_rc_mlx5_cleanup,
     },

@@ -377,7 +377,6 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     .create_qp                = uct_ib_iface_create_qp,
-    .get_qp_pd                = uct_ib_iface_qp_pd,
     .setup_iface              = (void*)ucs_empty_function_return_success,
     .cleanup_iface            = (void*)ucs_empty_function,
     },

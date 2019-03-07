@@ -501,11 +501,15 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
     attr->ibv.sq_sig_all          = attr->sq_sig_all;
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
-    attr->ibv.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    attr->ibv.pd                  = iface->ops->get_qp_pd(iface);
+    if (!(attr->ibv.comp_mask & IBV_EXP_QP_INIT_ATTR_PD)) {
+        attr->ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
+        attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
+    }
 #elif HAVE_DECL_IBV_CREATE_QP_EX
-    attr->ibv.comp_mask           = IBV_QP_INIT_ATTR_PD;
-    attr->ibv.pd                  = iface->ops->get_qp_pd(iface);
+    if (!(attr->ibv.comp_mask & IBV_QP_INIT_ATTR_PD)) {
+        attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
+        attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
+    }
 #endif
 
     if (attr->qp_type == IBV_QPT_UD) {
@@ -545,7 +549,7 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 #elif HAVE_DECL_IBV_CREATE_QP_EX
     qp = ibv_create_qp_ex(dev->ibv_context, &attr->ibv);
 #else
-    qp = ibv_create_qp(iface->ops->get_qp_pd(iface), &attr->ibv);
+    qp = ibv_create_qp(uct_ib_iface_md(iface)->pd, &attr->ibv);
 #endif
     if (qp == NULL) {
         ucs_error("iface=%p: failed to create %s QP TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d: %m",
