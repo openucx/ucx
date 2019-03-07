@@ -269,7 +269,7 @@ Provide GDRCopy support for UCX ROCM. GDRCopy is a low-latency GPU memory copy
 library, built on top of the NVIDIA GPUDirect RDMA technology.
 
 %files rocmgdr
-%{_libdir}/ucx/libuct_rocm_gdrcopy.so.*
+%{_libdir}/ucx/libuct_rocm_gdr.so.*
 %endif
 %endif
 
