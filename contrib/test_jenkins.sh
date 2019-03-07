@@ -833,7 +833,9 @@ test_jucx() {
 	if module_load dev/jdk && module_load dev/mvn
 	then
 		pushd ../bindings/java/
+		export UCX_ERROR_SIGNALS=""
 		JUCX_INST=$ucx_inst mvn clean test
+		unset UCX_ERROR_SIGNALS
 		popd
 		module unload dev/jdk
 		module unload dev/mvn
