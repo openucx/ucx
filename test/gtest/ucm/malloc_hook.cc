@@ -940,6 +940,21 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
 #endif
 }
 
+UCS_TEST_F(malloc_hook, test_event) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    status = event.set(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
+    ASSERT_UCS_OK(status);
+
+    status = ucm_test_events(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
+    ASSERT_UCS_OK(status);
+}
+
 /* test for mmap events are fired from non-direct load modules
  * we are trying to load lib1, from lib1 load lib2, and
  * fire mmap event from lib2 */
