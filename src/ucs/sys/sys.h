@@ -54,6 +54,14 @@ BEGIN_C_DECLS
 /** @file sys.h */
 
 /**
+ * Checks if TMPDIR is set is the environment. If so make a local 
+ * copy of the envornment string and returns the copy.
+ * Returns "/tmp/" as a default if not set.
+ * @return tmpdir string.
+ */
+const char *ucs_get_tmpdir();
+
+/**
  * @return Host name.
  */
 const char *ucs_get_host_name();

@@ -658,7 +658,7 @@ static void ucs_debugger_attach()
         /* Generate a file name for gdb commands */
         memset(gdb_commands_file, 0, sizeof(gdb_commands_file));
         snprintf(gdb_commands_file, sizeof(gdb_commands_file) - 1,
-                 "/tmp/.gdbcommands.uid-%d", geteuid());
+                 "%s/.gdbcommands.uid-%d", ucs_get_tmpdir(), geteuid());
 
         /* Write gdb commands and add the file to argv is successful */
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);

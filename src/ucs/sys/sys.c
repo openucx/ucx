@@ -35,6 +35,22 @@
 #define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
 
+const char *ucs_get_tmpdir()
+{
+    static char tmpdir[256] = {0};
+    const char *default_tmpdir = "/tmp/";
+    char *env_buffer;
+    size_t path_len;
+
+    env_buffer = getenv("TMPDIR");
+    if (!env_buffer) {
+        return default_tmpdir;
+    }
+    path_len = strnlen(env_buffer, sizeof(tmpdir)-1);
+    memcpy(tmpdir, env_buffer, path_len);
+
+    return tmpdir;
+}
 
 const char *ucs_get_host_name()
 {
