@@ -513,10 +513,6 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
         attr->length = memh->length;
     }
 
-    if (attr->field_mask & UCP_MEM_ATTR_FIELD_REMOTE_ADDR) {
-        attr->remote_addr = (memh->flags & UCP_MEM_FLAG_REMOTE_ADDR) ? (uint64_t)memh->address : 0;
-    }
-
     return UCS_OK;
 }
 

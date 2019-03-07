@@ -386,10 +386,7 @@ enum {
                                               using on-chip memory, located on the
                                               device, as a data buffer for RDMA operations.
                                               Allocated buffer can be used only for remote
-                                              access, and can't be accessed by local CPU.
-                                              In order to obtain the address for remote
-                                              access, need to call @ref ucp_mem_query and
-                                              take the field @ref ucp_mem_attr_t.remote_addr */
+                                              access, and can't be accessed by local CPU. */
 };
 
 
