@@ -54,21 +54,21 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
         goto err_cq;
     }
 
-    srq_attr.attr.max_sge   = 1;
-    srq_attr.attr.max_wr    = 1;
+    srq_attr.attr.max_sge = 1;
+    srq_attr.attr.max_wr  = 1;
     srq = ibv_create_srq(pd, &srq_attr);
     if (srq == NULL) {
-        ucs_error("ibv_create_cq() failed: %m");
+        ucs_error("ibv_create_srq() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_srq;
     }
 
-    qp_attr.send_cq              = cq;
-    qp_attr.recv_cq              = cq;
-    qp_attr.qp_type              = IBV_QPT_DRIVER;
-    qp_attr.comp_mask            = IBV_QP_INIT_ATTR_PD;
-    qp_attr.pd                   = pd;
-    qp_attr.srq                  = srq;
+    qp_attr.send_cq       = cq;
+    qp_attr.recv_cq       = cq;
+    qp_attr.qp_type       = IBV_QPT_DRIVER;
+    qp_attr.comp_mask     = IBV_QP_INIT_ATTR_PD;
+    qp_attr.pd            = pd;
+    qp_attr.srq           = srq;
 
     dv_attr.comp_mask            = MLX5DV_QP_INIT_ATTR_MASK_DC;
     dv_attr.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCT;
@@ -80,11 +80,11 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
         goto err_qp;
     }
 
-    attr.qp_state        = IBV_QPS_INIT;
-    attr.port_num        = 1;
-    attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
-                           IBV_ACCESS_REMOTE_READ  |
-                           IBV_ACCESS_REMOTE_ATOMIC;
+    attr.qp_state         = IBV_QPS_INIT;
+    attr.port_num         = 1;
+    attr.qp_access_flags  = IBV_ACCESS_REMOTE_WRITE |
+                            IBV_ACCESS_REMOTE_READ  |
+                            IBV_ACCESS_REMOTE_ATOMIC;
     ret = ibv_modify_qp(qp, &attr, IBV_QP_STATE |
                                    IBV_QP_PKEY_INDEX |
                                    IBV_QP_PORT |
@@ -93,8 +93,8 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
         goto err;
     }
 
-    attr.qp_state                  = IBV_QPS_RTR;
-    attr.path_mtu = IBV_MTU_256;
+    attr.qp_state         = IBV_QPS_RTR;
+    attr.path_mtu         = IBV_MTU_256;
     attr.ah_attr.port_num = 1;
 
     ret = ibv_modify_qp(qp, &attr, IBV_QP_STATE |
