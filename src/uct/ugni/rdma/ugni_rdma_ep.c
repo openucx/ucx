@@ -748,6 +748,36 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     return uct_ugni_post_rdma(iface, ep, rdma);
 }
 
+UCS_CLASS_INIT_FUNC(uct_ugni_rdma_ep_t, const uct_ep_params_t *params)
+{
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, params);
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
+    ucs_status_t rc;
+
+    uct_ugni_iface_t *iface = ucs_derived_of(params->iface, uct_ugni_iface_t);
+    const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)params->iface_addr;
+    const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)params->dev_addr;
+
+    ucs_debug("Connecting RDMA ep %p", self);
+    rc = ugni_connect_ep(&self->super, iface, iface_addr, ugni_dev_addr);
+
+    if (UCS_OK != rc) {
+        ucs_error("Could not connect ep %p", self);
+        return rc;
+    }
+
+    return UCS_OK;
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_ep_t)
+{
+    return;
+}
+
+UCS_CLASS_DEFINE(uct_ugni_rdma_ep_t, uct_ugni_ep_t);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_rdma_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_rdma_ep_t, uct_ep_t);
+
 ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
