@@ -52,6 +52,7 @@
 #define UCT_IB_MLX5_CQE128_SIZE_LOG     7
 #define UCT_IB_MLX5_MAX_BB              4
 #define UCT_IB_MLX5_WORKER_BF_KEY       0x00c1b7e8u
+#define UCT_IB_MLX5_DEVX_UAR_KEY        0xdea1ab1eU
 #define UCT_IB_MLX5_RES_DOMAIN_KEY      0x1b1bda7aU
 #define UCT_IB_MLX5_WORKER_DM_KEY       0xacdf1245u
 #define UCT_IB_MLX5_EXTENDED_UD_AV      0x80 /* htonl(0x80000000) */
@@ -210,6 +211,21 @@ typedef struct uct_ib_mlx5_mmio_reg {
 } uct_ib_mlx5_mmio_reg_t;
 
 
+typedef struct uct_ib_mlx5_devx_uar {
+    uct_ib_mlx5_mmio_reg_t      super;
+#if HAVE_DEVX
+    struct mlx5dv_devx_uar      *uar;
+#endif
+    struct ibv_context          *ctx;
+} uct_ib_mlx5_devx_uar_t;
+
+
+typedef enum {
+    UCT_IB_MLX5_QP_TYPE_VERBS,
+    UCT_IB_MLX5_QP_TYPE_DEVX,
+} uct_ib_mlx5_qp_type_t;
+
+
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
     uint16_t                    sw_pi;      /* PI for next WQE */
@@ -225,6 +241,7 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    hw_ci;
 #endif
     uct_ib_fence_info_t         fi;
+    uct_ib_mlx5_qp_type_t       type;
 } uct_ib_mlx5_txwq_t;
 
 
@@ -384,6 +401,12 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
+
+ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
+                                        uct_ib_mlx5_md_t *md,
+                                        uct_ib_mlx5_txwq_t *txwq,
+                                        uct_ib_mlx5_mmio_mode_t mode);
+
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
 /**

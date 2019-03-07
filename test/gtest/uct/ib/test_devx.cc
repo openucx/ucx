@@ -4,7 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#include <infiniband/verbs.h>
+extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
+}
 #include <uct/api/uct.h>
 #include <uct/uct_test.h>
 #include <common/test.h>
@@ -29,6 +32,10 @@ public:
     uct_ib_mlx5_md_t *md() {
         return ucs_derived_of(m_e->md(), uct_ib_mlx5_md_t);
     }
+
+    uct_priv_worker_t *worker() {
+        return ucs_derived_of(m_e->worker(), uct_priv_worker_t);
+    }
 };
 
 UCS_TEST_P(test_devx, dbrec)
@@ -38,6 +45,18 @@ UCS_TEST_P(test_devx, dbrec)
     dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md()->dbrec_pool);
     ASSERT_FALSE(dbrec == NULL);
     ucs_mpool_put_inline(dbrec);
+}
+
+UCS_TEST_P(test_devx, uar)
+{
+    uct_ib_mlx5_txwq_t txwq;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_txwq_init_devx(worker(), md(), &txwq,
+                                        UCT_IB_MLX5_MMIO_MODE_BF_POST);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(txwq.type == UCT_IB_MLX5_QP_TYPE_DEVX);
+    uct_ib_mlx5_txwq_cleanup(&txwq);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_devx);
