@@ -29,7 +29,7 @@ static const char *uct_dc_tx_policy_names[] = {
 
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
-    {"", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
+    {"RC_MLX5_", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
