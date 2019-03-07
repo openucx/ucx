@@ -38,6 +38,18 @@ libuct_rocm_la_SOURCES += \
     copy/rocm_copy_iface.c \
     copy/rocm_copy_ep.c
 
+noinst_HEADERS += \
+    ipc/rocm_ipc_md.h \
+    ipc/rocm_ipc_iface.h \
+    ipc/rocm_ipc_ep.h \
+    ipc/rocm_ipc_cache.h
+
+libuct_rocm_la_SOURCES += \
+    ipc/rocm_ipc_md.c \
+    ipc/rocm_ipc_iface.c \
+    ipc/rocm_ipc_ep.c \
+    ipc/rocm_ipc_cache.c
+
 include $(top_srcdir)/config/module.am
 
 endif
