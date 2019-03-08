@@ -794,14 +794,23 @@ test_profiling() {
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "print_pi"
 }
 
-test_dlopen() {
+test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
 
-	echo "==== Running dlopen test ===="
+	# Make sure UCS library constructor does not call socket()
+	echo "==== Running UCS library loading test ===="
 	strace ./ucx_profiling &> strace.log
 	! grep '^socket' strace.log
+}
+
+test_dlopen() {
+	$MAKEP
+
+	# Make sure UCM is not unloaded
+	echo "==== Running dlopen test with memhooks ===="
+	./test/apps/test_dlopen
 }
 
 test_memtrack() {
@@ -1056,6 +1065,7 @@ run_tests() {
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
+	do_distributed_task 3 4 test_dlopen
 	do_distributed_task 3 4 test_dlopen
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
