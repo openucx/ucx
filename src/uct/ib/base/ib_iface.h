@@ -147,8 +147,8 @@ struct uct_ib_iface_ops {
                                              ucs_status_t status);
     ucs_status_t            (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                          struct ibv_qp **qp_p);
-    ucs_status_t            (*setup_iface)(uct_ib_iface_t *iface);
-    void                    (*cleanup_iface)(uct_ib_iface_t *iface);
+    ucs_status_t            (*init_res_domain)(uct_ib_iface_t *iface);
+    void                    (*cleanup_res_domain)(uct_ib_iface_t *iface);
 };
 
 
@@ -520,8 +520,6 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_bits, ah_attr);
 }
-
-struct ibv_pd *uct_ib_iface_qp_pd(uct_ib_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE
 size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)

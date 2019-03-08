@@ -498,11 +498,9 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
 
 ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
-struct ibv_pd *uct_rc_mlx5_iface_qp_pd(uct_ib_iface_t *ib_iface);
+ucs_status_t uct_rc_mlx5_init_res_domain(uct_ib_iface_t *ib_iface);
 
-ucs_status_t uct_rc_mlx5_setup(uct_ib_iface_t *ib_iface);
-
-void uct_rc_mlx5_cleanup(uct_ib_iface_t *ib_iface);
+void uct_rc_mlx5_cleanup_res_domain(uct_ib_iface_t *ib_iface);
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                                     void *data, size_t length, size_t valid_length,

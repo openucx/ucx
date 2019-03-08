@@ -321,10 +321,10 @@ typedef struct uct_ib_mlx5_iface_common {
 } uct_ib_mlx5_iface_common_t;
 
 
-ucs_status_t uct_ib_mlx5_iface_init(uct_ib_iface_t *iface,
-                                    uct_ib_mlx5_iface_common_t *mlx5);
+ucs_status_t uct_ib_mlx5_iface_init_res_domain(uct_ib_iface_t *iface,
+                                               uct_ib_mlx5_iface_common_t *mlx5);
 
-void uct_ib_mlx5_iface_cleanup(uct_ib_mlx5_iface_common_t *mlx5);
+void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_iface_common_t *mlx5);
 
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
