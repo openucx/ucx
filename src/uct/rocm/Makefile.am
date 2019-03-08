@@ -19,18 +19,6 @@ libuct_rocm_la_SOURCES = \
 	base/rocm_base.c
 
 noinst_HEADERS += \
-	cma/rocm_cma_md.h \
-	cma/rocm_cma_iface.h \
-	cma/rocm_cma_ep.h \
-	cma/rocm_common.h
-
-libuct_rocm_la_SOURCES += \
-	cma/rocm_cma_md.c \
-	cma/rocm_cma_iface.c \
-	cma/rocm_cma_ep.c \
-	cma/rocm_common.c
-
-noinst_HEADERS += \
     copy/rocm_copy_md.h \
     copy/rocm_copy_iface.h \
     copy/rocm_copy_ep.h
