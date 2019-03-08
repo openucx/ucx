@@ -40,4 +40,13 @@ public class UcpContextTest {
         UcpContext context = createContext(contextParams);
         closeContext(context);
     }
+    
+    @Test(expected = NullPointerException.class)
+    public void testCatchJVMSignal() {
+        UcpParams contextParams = new UcpParams().requestTagFeature();
+        UcpContext context = createContext(contextParams);
+        closeContext(context);
+        long nullPointer = context.getNativeId();
+        nullPointer += 2;
+    }
 }
