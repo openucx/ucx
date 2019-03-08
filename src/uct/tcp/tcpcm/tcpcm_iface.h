@@ -22,7 +22,7 @@ typedef struct uct_tcpcm_iface_config {
 struct uct_tcpcm_iface {
     uct_base_iface_t                     super;
 
-    int                                  *sock_id;
+    int                                  sock_id;
 
     uint8_t                              is_server;
     /** Fields used only for server side */

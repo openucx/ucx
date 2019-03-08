@@ -103,8 +103,6 @@ int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockadd
     unsigned int port = 0;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    printf("asdasd\n");
-
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
         ucs_error("Unknown sockaddr accessibility mode %d", mode);
         return 0;
