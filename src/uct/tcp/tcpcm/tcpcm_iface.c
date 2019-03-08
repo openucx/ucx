@@ -288,6 +288,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
     unsigned int port;
     int ret = 0;
     struct sockaddr *param_sockaddr;
+    int param_sockaddr_len;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -321,7 +322,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
 
-        param_sockaddr = (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr;
+        param_sockaddr = (struct sockaddr *) params->mode.sockaddr.listen_sockaddr.addr;
+        param_sockaddr_len = params->mode.sockaddr.listen_sockaddr.addrlen;
+
         status = ucs_socket_create(param_sockaddr->sa_family, SOCK_STREAM, &self->sock_id);
         if (status != UCS_OK) {
             return status;
@@ -332,7 +335,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_close_sock;
         }
 
-        ret = bind(self->sock_id, param_sockaddr, sizeof(param_sockaddr));
+        ret = bind(self->sock_id, param_sockaddr, param_sockaddr_len);
         if (ret < 0) {
             ucs_error("bind(fd=%d) failed: %m", self->sock_id);
             status = UCS_ERR_IO_ERROR;

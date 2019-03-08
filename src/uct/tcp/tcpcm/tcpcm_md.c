@@ -102,13 +102,16 @@ int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockadd
     int sock_id = -1;
     unsigned int port = 0;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr *param_sockaddr = NULL;
+
+    param_sockaddr = (struct sockaddr *)sockaddr->addr;
 
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
         ucs_error("Unknown sockaddr accessibility mode %d", mode);
         return 0;
     }
 
-    sock_id = socket(((struct sockaddr *)sockaddr->addr)->sa_family, SOCK_STREAM, 0);
+    sock_id = socket(param_sockaddr->sa_family, SOCK_STREAM, 0);
     if (-1 == sock_id) {
         ucs_error("unable to open socket");
         return 0;
@@ -116,34 +119,33 @@ int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockadd
 
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
 
-        if (bind(sock_id, (struct sockaddr *)sockaddr->addr, sockaddr->addrlen)) {
+        if (bind(sock_id, param_sockaddr, sockaddr->addrlen)) {
             ucs_debug("bind(addr = %s) failed: %m",
                       ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
             goto out_destroy_id;
         }
 
-        if (uct_tcpcm_is_sockaddr_inaddr_any((struct sockaddr *)sockaddr->addr)) {
+        if (uct_tcpcm_is_sockaddr_inaddr_any(param_sockaddr)) {
             is_accessible = 1;
             goto out_print;
         }
     }
 
-    is_accessible = uct_tcpcm_is_addr_route_resolved(sock_id,
-                                                     (struct sockaddr *)sockaddr->addr,
+    is_accessible = uct_tcpcm_is_addr_route_resolved(sock_id, param_sockaddr,
                                                      sockaddr->addrlen);
     if (!is_accessible) {
         goto out_destroy_id;
     }
 
  out_print:
-    ucs_sockaddr_get_port((struct sockaddr *)sockaddr->addr, &port);
+    ucs_sockaddr_get_port(param_sockaddr, &port);
     ucs_debug("address %s (port %d) is accessible from tcpcm_md %p with mode: %d",
-              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN), port, tcpcm_md, mode);
-    printf("address %s (port %d) is accessible from tcpcm_md %p with mode: %d",
-              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN), port, tcpcm_md, mode);
+              ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
+              port, tcpcm_md, mode);
+    printf("address %s (port %d) is accessible from tcpcm_md %p with mode: %d\n",
+           ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
+           port, tcpcm_md, mode);
 
  out_destroy_id:
     close(sock_id);
