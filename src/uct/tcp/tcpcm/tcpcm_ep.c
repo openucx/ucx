@@ -132,7 +132,7 @@ add_to_pending:
     uct_tcpcm_ep_add_to_pending(iface, self);
 out:
     ucs_debug("created an TCPCM endpoint on iface %p, "
-              "iface sock_id: %p remote addr: %s",
+              "iface sock_id: %d remote addr: %s",
                iface, iface->sock_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));

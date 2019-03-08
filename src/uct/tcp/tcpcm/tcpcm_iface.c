@@ -7,6 +7,7 @@
 #include "tcpcm_ep.h"
 #include <uct/base/uct_worker.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 
 
 enum uct_tcpcm_process_event_flags {
@@ -284,6 +285,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_tcpcm_md_t *tcpcm_md;
     ucs_status_t status;
+    unsigned int port;
+    int ret = 0;
+    struct sockaddr *param_sockaddr;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -315,28 +319,46 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->config.addr_resolve_timeout = tcpcm_md->addr_resolve_timeout;
 
-    /* FIXME create a socket to listen on, instead of creating an event channel*/
-
-    /* Set the event_channel fd to non-blocking mode
-     * (so that rdma_get_cm_event won't be blocking) */
-    /* FIXME no event channel */
-    /*
-    status = ucs_sys_fcntl_modfl(self->event_ch->fd, O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto err_destroy_event_channel;
-    }
-    */
-
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
 
-        /* Bind FIXME*/
+        param_sockaddr = (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr;
+        status = ucs_socket_create(param_sockaddr->sa_family, SOCK_STREAM, &self->sock_id);
+        if (status != UCS_OK) {
+            return status;
+        }
 
-        /* Listen FIXME*/
+        status = ucs_sys_fcntl_modfl(self->sock_id, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            goto err_close_sock;
+        }
 
-        ucs_debug("rdma_cm id %p listening on %s:%d", self->sock_id,
-                  ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
-                                   ip_port_str, UCS_SOCKADDR_STRING_LEN), 42
-                  /* FIXME ntohs(rdma_get_src_port(self->cm_id))*/);
+        ret = bind(self->sock_id, param_sockaddr, sizeof(param_sockaddr));
+        if (ret < 0) {
+            ucs_error("bind(fd=%d) failed: %m", self->sock_id);
+            status = UCS_ERR_IO_ERROR;
+            goto err_close_sock;
+        }
+
+        ret = listen(self->sock_id, config->backlog);
+        if (ret < 0) {
+            ucs_error("listen(fd=%d; backlog=%d)", self->sock_id, config->backlog);
+            status = UCS_ERR_IO_ERROR;
+            goto err_close_sock;
+        }
+
+        /* Register event handler for incoming connections */
+        status = ucs_async_set_event_handler(self->super.worker->async->mode,
+                                             self->sock_id, POLLIN | POLLERR,
+                                             uct_tcpcm_iface_event_handler,
+                                             self, self->super.worker->async);
+        if (status != UCS_OK) {
+            goto err_close_sock;
+        }
+
+        ucs_sockaddr_get_port(param_sockaddr, &port);
+        ucs_debug("tcpcm id %d listening on %s:%d", self->sock_id,
+                  ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
+                  port);
 
         if (!(params->mode.sockaddr.cb_flags & UCT_CB_FLAG_ASYNC)) {
             ucs_fatal("Synchronous callback is not supported");
@@ -347,7 +369,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
         self->is_server        = 1;
     } else {
-        self->sock_id          = NULL;
+        self->sock_id          = -1;
         self->is_server        = 0;
     }
 
@@ -355,26 +377,12 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_list_head_init(&self->pending_eps_list);
     ucs_list_head_init(&self->used_sock_ids_list);
 
-    /* Server and client register an event handler for incoming messages */
-
-    /* FIXME*/
-    status = ucs_async_set_event_handler(self->super.worker->async->mode,
-                                         *(self->sock_id), POLLIN,
-                                         uct_tcpcm_iface_event_handler,
-                                         self, self->super.worker->async);
-    if (status != UCS_OK) {
-        ucs_error("failed to set event handler");
-        goto err_destroy_id;
-    }
-
-
-    //ucs_debug("created an TCPCM iface %p, fd: %d, sock_id: %p",
-    //          &self, self->sock_id, self->sock_id);
     return UCS_OK;
 
-err_destroy_id:
-    /*close(self->sock_id); FIXME */
+ err_close_sock:
+    close(self->sock_id);
     return status;
+
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_iface_t)
