@@ -1,0 +1,131 @@
+/**
+ * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
+#include "tcpcm_md.h"
+
+#define UCT_TCPCM_MD_PREFIX              "tcpcm"
+
+static ucs_config_field_t uct_tcpcm_md_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_tcpcm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+  /* FIXME: do we need a timeout for tcp?
+  {"ADDR_RESOLVE_TIMEOUT", "500ms",
+   "Time to wait for address resolution to complete",
+   ucs_offsetof(uct_tcpcm_md_config_t, addr_resolve_timeout), UCS_CONFIG_TYPE_TIME},*/
+
+  {NULL}
+};
+
+static void uct_tcpcm_md_close(uct_md_h md);
+
+static uct_md_ops_t uct_tcpcm_md_ops = {
+    .close                  = uct_tcpcm_md_close,
+    .query                  = uct_tcpcm_md_query,
+    .is_sockaddr_accessible = uct_tcpcm_is_sockaddr_accessible,
+    .is_mem_type_owned      = (void *)ucs_empty_function_return_zero,
+};
+
+static void uct_tcpcm_md_close(uct_md_h md)
+{
+    uct_tcpcm_md_t *tcpcm_md = ucs_derived_of(md, uct_tcpcm_md_t);
+    ucs_free(tcpcm_md);
+}
+
+ucs_status_t uct_tcpcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+{
+    md_attr->cap.flags         = UCT_MD_FLAG_SOCKADDR;
+    md_attr->cap.reg_mem_types = 0;
+    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.max_alloc     = 0;
+    md_attr->cap.max_reg       = 0;
+    md_attr->rkey_packed_size  = 0;
+    md_attr->reg_cost.overhead = 0;
+    md_attr->reg_cost.growth   = 0;
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    return UCS_OK;
+}
+
+static int uct_tcpcm_is_sockaddr_inaddr_any(struct sockaddr *addr)
+{
+    struct sockaddr_in6 *addr_in6;
+    struct sockaddr_in *addr_in;
+
+    switch (addr->sa_family) {
+    case AF_INET:
+        addr_in = (struct sockaddr_in *)addr;
+        return addr_in->sin_addr.s_addr == INADDR_ANY;
+    case AF_INET6:
+        addr_in6 = (struct sockaddr_in6 *)addr;
+        return !memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr));
+    default:
+        ucs_debug("Invalid address family: %d", addr->sa_family);
+    }
+
+    return 0;
+}
+
+int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
+                                      uct_sockaddr_accessibility_t mode)
+{
+    uct_tcpcm_md_t *tcpcm_md = ucs_derived_of(md, uct_tcpcm_md_t);
+    int is_accessible = 0;
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
+    if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
+        ucs_error("Unknown sockaddr accessibility mode %d", mode);
+        return 0;
+    }
+
+    if (mode == UCT_SOCKADDR_ACC_LOCAL) {
+        if (uct_tcpcm_is_sockaddr_inaddr_any((struct sockaddr *)sockaddr->addr)) {
+            is_accessible = 1;
+        }
+    }
+
+    ucs_debug("address %s (port %d) is accessible from tcpcm_md %p with mode: %d",
+              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN),
+              42 /*get_port_from_sockaddr(sockaddr)*/, tcpcm_md, mode);
+
+    return is_accessible;
+}
+
+static ucs_status_t uct_tcpcm_query_md_resources(uct_md_resource_desc_t **resources_p,
+                                                  unsigned *num_resources_p)
+{
+    return uct_single_md_resource(&uct_tcpcm_mdc, resources_p, num_resources_p);
+}
+
+static ucs_status_t
+uct_tcpcm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
+                   uct_md_h *md_p)
+{
+    uct_tcpcm_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_tcpcm_md_config_t);
+    uct_tcpcm_md_t *md;
+    ucs_status_t status;
+
+    md = ucs_malloc(sizeof(*md), "tcpcm_md");
+    if (md == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    md->super.ops            = &uct_tcpcm_md_ops;
+    md->super.component      = &uct_tcpcm_mdc;
+    md->addr_resolve_timeout = md_config->addr_resolve_timeout;
+
+    *md_p = &md->super;
+    status = UCS_OK;
+
+out:
+    return status;
+}
+
+UCT_MD_COMPONENT_DEFINE(uct_tcpcm_mdc, UCT_TCPCM_MD_PREFIX,
+                        uct_tcpcm_query_md_resources, uct_tcpcm_md_open, NULL,
+                        ucs_empty_function_return_unsupported,
+                        (void*)ucs_empty_function_return_success,
+                        "TCPCM_", uct_tcpcm_md_config_table, uct_tcpcm_md_config_t);

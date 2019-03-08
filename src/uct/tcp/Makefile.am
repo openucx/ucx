@@ -3,6 +3,8 @@
 # See file LICENSE for terms.
 #
 
+SUBDIRS = tcpcm
+
 noinst_LTLIBRARIES     = libuct_tcp.la
 libuct_tcp_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_tcp_la_CPPFLAGS = $(BASE_CPPFLAGS)
