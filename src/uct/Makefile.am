@@ -19,6 +19,7 @@ libuct_la_LIBADD   = \
 	../ucs/libucs.la \
 	base/libuct_base.la \
 	sm/libuct_sm.la \
+	tcp/tcpcm/libuct_tcpcm.la \
 	tcp/libuct_tcp.la
 
 nobase_dist_libuct_la_HEADERS = \
