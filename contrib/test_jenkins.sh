@@ -224,9 +224,8 @@ build_java_docs() {
 	echo " ==== Building java docs ===="
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java
-		mvn javadoc:javadoc
-		popd
+		../configure --prefix=$ucx_inst --with-java
+		$MAKE -C ../build-test/bindings/java/src/main/native docs
 		module unload dev/jdk
 		module unload dev/mvn
 	else
@@ -832,11 +831,9 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java/
 		export UCX_ERROR_SIGNALS=""
-		JUCX_INST=$ucx_inst mvn clean test
+		JUCX_INST=$ucx_inst $MAKE -C bindings/java/src/main/native test
 		unset UCX_ERROR_SIGNALS
-		popd
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
