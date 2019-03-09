@@ -54,12 +54,17 @@ static int uct_tcpcm_is_addr_route_resolved(int sock_id, struct sockaddr *addr,
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char host[UCS_SOCKADDR_STRING_LEN];
     char serv[UCS_SOCKADDR_STRING_LEN];
+    int ret = -1;
 
-    if (getnameinfo(addr, addrlen, host,
-                    UCS_SOCKADDR_STRING_LEN, serv,
-                    UCS_SOCKADDR_STRING_LEN, NI_NAMEREQD)) {
+    ret = getnameinfo(addr, addrlen, host, UCS_SOCKADDR_STRING_LEN, serv,
+                      UCS_SOCKADDR_STRING_LEN, NI_NAMEREQD);
+    if (0 != ret) {
+        printf("getnameinfo error : %s\n", gai_strerror(ret));
         return 0;
     }
+
+    printf("attempting connect(addr = %s) \n",
+	   ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     if (connect(sock_id, addr, addrlen)) {
 
@@ -113,7 +118,6 @@ int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockadd
 
     sock_id = socket(param_sockaddr->sa_family, SOCK_STREAM, 0);
     if (-1 == sock_id) {
-        ucs_error("unable to open socket");
         return 0;
     }
 
