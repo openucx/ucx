@@ -247,15 +247,15 @@ UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
-  { "sm",    { "mm", "knem", "cma", "rdmacm", NULL } },
-  { "shm",   { "mm", "knem", "cma", "rdmacm", NULL } },
-  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
-  { "ud",    { "ud", "rdmacm", NULL } },
-  { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
-  { "rc",    { "rc", "ud:aux", "rdmacm", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
-  { "dc",    { "dc_mlx5", "rdmacm", NULL } },
-  { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
+  { "sm",    { "mm", "knem", "cma", "rdmacm", "tcpcm", NULL } },
+  { "shm",   { "mm", "knem", "cma", "rdmacm", "tcpcm", NULL } },
+  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", "tcpcm", NULL } },
+  { "ud",    { "ud", "rdmacm", "tcpcm", NULL } },
+  { "ud_x",  { "ud_mlx5", "rdmacm", "tcpcm", NULL } },
+  { "rc",    { "rc", "ud:aux", "rdmacm", "tcpcm", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", "tcpcm", NULL } },
+  { "dc",    { "dc_mlx5", "rdmacm", "tcpcm", NULL } },
+  { "dc_x",  { "dc_mlx5", "rdmacm", "tcpcm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
   { NULL }
 };

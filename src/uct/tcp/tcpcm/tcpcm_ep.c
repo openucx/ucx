@@ -17,6 +17,7 @@
 ucs_status_t uct_tcpcm_ep_set_sock_id(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t *ep)
 {
     ucs_status_t status;
+    struct sockaddr *dest_addr = NULL;
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
@@ -30,18 +31,22 @@ ucs_status_t uct_tcpcm_ep_set_sock_id(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t *
             goto out;
         }
 
-        /* Populate &ep->cm_id_ctx->sock_id */
-        if (1) {
+        /* FIXME: Review */
+        dest_addr = (struct sockaddr *) &(ep->remote_addr);
+
+        status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
+                                   &ep->sock_id_ctx->sock_id);
+        if (status != UCS_OK) {
             goto out_free;
         }
-        //ep->sock_id_ctx->sock_id = socket(); // how to get destination
-                                           // address and socket type?
 
         ep->sock_id_ctx->ep = ep;
         ucs_list_add_tail(&iface->used_sock_ids_list, &ep->sock_id_ctx->list);
         iface->sock_id_quota--;
-        ucs_debug("ep %p, new sock_id %p. sock_id_in_quota %d", ep,
+        ucs_debug("ep %p, new sock_id %d. sock_id_in_quota %d", ep,
                    ep->sock_id_ctx->sock_id, iface->sock_id_quota);
+        printf("ep %p, new sock_id %d. sock_id_in_quota %d\n", ep,
+               ep->sock_id_ctx->sock_id, iface->sock_id_quota);
         status = UCS_OK;
         goto out;
     } else {
@@ -85,8 +90,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
     }
 
     UCT_TCPCM_CB_FLAGS_CHECK((params->field_mask &
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ?
-                              params->sockaddr_cb_flags : 0);
+                              UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ?
+                             params->sockaddr_cb_flags : 0);
 
     self->pack_cb       = (params->field_mask &
                            UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
@@ -173,7 +178,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_ep_t)
     if (self->sock_id_ctx != NULL) {
         sock_id_ctx     = self->sock_id_ctx; // FIXME!
         sock_id_ctx->ep = NULL;
-        ucs_debug("ep destroy: cm_id %p", sock_id_ctx->sock_id);
+        ucs_debug("ep destroy: sock_id %d", sock_id_ctx->sock_id);
     }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }

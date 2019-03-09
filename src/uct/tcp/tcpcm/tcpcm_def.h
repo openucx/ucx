@@ -29,7 +29,7 @@ typedef struct uct_tcpcm_priv_data_hdr {
 } uct_tcpcm_priv_data_hdr_t;
 
 typedef struct uct_tcpcm_ctx {
-    int               *sock_id;
+    int               sock_id;
     uct_tcpcm_ep_t    *ep;
     ucs_list_link_t   list;    /* for list of used sock_ids *FIXME* */
 } uct_tcpcm_ctx_t;

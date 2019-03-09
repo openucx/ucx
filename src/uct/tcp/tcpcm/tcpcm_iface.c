@@ -219,13 +219,13 @@ static void uct_tcpcm_iface_process_conn_req(uct_tcpcm_iface_t *iface,
 static void uct_tcpcm_iface_release_sock_id(uct_tcpcm_iface_t *iface,
                                             uct_tcpcm_ctx_t *sock_id_ctx)
 {
-    ucs_trace("destroying cm_id %p", sock_id_ctx->sock_id);
+    ucs_trace("destroying sock_id %d", sock_id_ctx->sock_id);
 
     ucs_list_del(&sock_id_ctx->list);
     if (sock_id_ctx->ep != NULL) {
         sock_id_ctx->ep->sock_id_ctx = NULL;
     }
-    //rdma_destroy_id(cm_id_ctx->cm_id); FIXME close()?
+    close(sock_id_ctx->sock_id); // FIXME review
     ucs_free(sock_id_ctx);
     iface->sock_id_quota++;
 }
@@ -358,7 +358,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_close_sock;
         }
 
-        ucs_sockaddr_get_port(param_sockaddr, &port);
+        status = ucs_sockaddr_get_port(param_sockaddr, &port);
+        if (status != UCS_OK) {
+            goto err_close_sock;
+        }
+
         ucs_debug("tcpcm id %d listening on %s:%d", self->sock_id,
                   ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
                   port);
@@ -392,10 +396,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_iface_t)
 {
     uct_tcpcm_ctx_t *sock_id_ctx;
 
-    /* FIXME insert sock instead of ch->fd */
-    //ucs_async_remove_handler(self->event_ch->fd, 1);
+    ucs_async_remove_handler(self->sock_id, 1);
     if (self->is_server) {
-        //close(self->sock_id);
+        close(self->sock_id);
     }
 
     UCS_ASYNC_BLOCK(self->super.worker->async);
@@ -403,8 +406,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_iface_t)
     while (!ucs_list_is_empty(&self->used_sock_ids_list)) {
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_tcpcm_ctx_t, list);
-        //FIXME
-        //close(sock_id_ctx->sock_id);
+        close(sock_id_ctx->sock_id);
         ucs_free(sock_id_ctx);
         self->sock_id_quota++;
     }
