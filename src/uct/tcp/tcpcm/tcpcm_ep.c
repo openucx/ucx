@@ -127,7 +127,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
 
     self->is_on_pending = 0;
 
-    /* FIXME: do we need to resolve tcp addr? */
+    /* FIXME: review do we need to resolve tcp addr? */
+    status = ucs_socket_connect(self->sock_id_ctx->sock_id, sockaddr->addr);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     goto out;
 
@@ -141,7 +145,12 @@ out:
                iface, iface->sock_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
-    self->status = UCS_INPROGRESS;
+    printf("created an TCPCM endpoint on iface %p, "
+           "iface sock_id: %d remote addr: %s\n",
+           iface, iface->sock_id,
+           ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
+                            ip_port_str, UCS_SOCKADDR_STRING_LEN));
+    self->status = UCS_OK;
     return UCS_OK;
 
 err:

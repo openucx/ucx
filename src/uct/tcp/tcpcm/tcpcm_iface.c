@@ -245,6 +245,7 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
     //uct_tcpcm_ctx_t               *sock_id_ctx = NULL;
     //int                            ret;
 
+    fprintf(stderr, "event handler noticed something!");
     for (;;) {
 
         /* FIXME
@@ -285,7 +286,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_tcpcm_md_t *tcpcm_md;
     ucs_status_t status;
-    unsigned int port;
     int ret = 0;
     struct sockaddr *param_sockaddr;
     int param_sockaddr_len;
@@ -325,7 +325,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
         param_sockaddr = (struct sockaddr *) params->mode.sockaddr.listen_sockaddr.addr;
         param_sockaddr_len = params->mode.sockaddr.listen_sockaddr.addrlen;
 
-        status = ucs_socket_create(param_sockaddr->sa_family, SOCK_STREAM, &self->sock_id);
+        status = ucs_socket_create(param_sockaddr->sa_family, SOCK_STREAM,
+                                   &self->sock_id);
         if (status != UCS_OK) {
             return status;
         }
@@ -358,14 +359,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_close_sock;
         }
 
-        status = ucs_sockaddr_get_port(param_sockaddr, &port);
-        if (status != UCS_OK) {
-            goto err_close_sock;
-        }
-
-        ucs_debug("tcpcm id %d listening on %s:%d", self->sock_id,
-                  ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
-                  port);
+        ucs_debug("tcpcm id %d listening on %s", self->sock_id,
+                  ucs_sockaddr_str(param_sockaddr, ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN));
 
         if (!(params->mode.sockaddr.cb_flags & UCT_CB_FLAG_ASYNC)) {
             ucs_fatal("Synchronous callback is not supported");

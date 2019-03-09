@@ -59,12 +59,9 @@ static int uct_tcpcm_is_addr_route_resolved(int sock_id, struct sockaddr *addr,
     ret = getnameinfo(addr, addrlen, host, UCS_SOCKADDR_STRING_LEN, serv,
                       UCS_SOCKADDR_STRING_LEN, NI_NAMEREQD);
     if (0 != ret) {
-        printf("getnameinfo error : %s\n", gai_strerror(ret));
+        ucs_debug("getnameinfo error : %s\n", gai_strerror(ret));
         return 0;
     }
-
-    printf("attempting connect(addr = %s) \n",
-	   ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     if (connect(sock_id, addr, addrlen)) {
 
@@ -105,11 +102,10 @@ int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockadd
     uct_tcpcm_md_t *tcpcm_md = ucs_derived_of(md, uct_tcpcm_md_t);
     int is_accessible = 0;
     int sock_id = -1;
-    unsigned int port = 0;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr *param_sockaddr = NULL;
 
-    param_sockaddr = (struct sockaddr *)sockaddr->addr;
+    param_sockaddr = (struct sockaddr *) sockaddr->addr;
 
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
         ucs_error("Unknown sockaddr accessibility mode %d", mode);
@@ -143,13 +139,9 @@ int uct_tcpcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockadd
     }
 
  out_print:
-    ucs_sockaddr_get_port(param_sockaddr, &port);
-    ucs_debug("address %s (port %d) is accessible from tcpcm_md %p with mode: %d",
-              ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
-              port, tcpcm_md, mode);
-    printf("address %s (port %d) is accessible from tcpcm_md %p with mode: %d\n",
-           ucs_sockaddr_str(param_sockaddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
-           port, tcpcm_md, mode);
+    ucs_debug("address %s is accessible from tcpcm_md %p with mode: %d",
+              ucs_sockaddr_str(param_sockaddr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN), tcpcm_md, mode);
 
  out_destroy_id:
     close(sock_id);
