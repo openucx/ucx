@@ -18,6 +18,10 @@ BEGIN_C_DECLS
 #include <ucs/time/time.h>
 #include <ucs/async/async.h>
 
+#if _OPENMP
+#include <omp.h>
+#endif
+
 
 #define TIMING_QUEUE_SIZE    2048
 #define UCT_PERF_TEST_AM_ID  5
@@ -172,8 +176,20 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf,
 
     if (perf->current.time - perf->prev.time >= perf->report_interval) {
         ucx_perf_get_time(perf);
-        ucx_perf_calc_result(perf, &result);
-        rte_call(perf, report, &result, perf->params.report_arg, 0);
+
+        /* Disable all other threads' report generation and output.
+         * The master clause cannot be used here as the unit test
+         * uct_test_perf runs on single pthreads with no parallel region,
+         * using that clause will result in undefined behavior.
+         */
+#if _OPENMP
+        if (omp_get_thread_num() == 0)
+#endif /* _OPENMP */
+        {
+            ucx_perf_calc_result(perf, &result);
+            rte_call(perf, report, &result, perf->params.report_arg, 0);
+        }
+
         perf->prev = perf->current;
     }
 }
