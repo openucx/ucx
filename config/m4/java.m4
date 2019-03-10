@@ -12,7 +12,7 @@ java_happy="no"
 AC_ARG_WITH([java],
             [AC_HELP_STRING([--with-java=(PATH)],
                             [Compile Java UCX (default is guess).])
-            ], [], [with_java=guess])
+            ], [with_java=yes], [with_java=no])
 
 AS_IF([test "x$with_java" != xno],
       [
