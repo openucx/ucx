@@ -1066,7 +1066,7 @@ run_tests() {
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
 	do_distributed_task 3 4 test_dlopen
-	do_distributed_task 3 4 test_dlopen
+	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 1 3 test_malloc_hook
