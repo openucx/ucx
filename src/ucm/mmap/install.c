@@ -102,10 +102,9 @@ void ucm_fire_mmap_events(int events)
     }
 }
 
-ucs_status_t ucm_test_events(int events)
+static ucs_status_t ucm_mmap_test_events(int events, int *out_events)
 {
     ucm_event_handler_t handler;
-    int out_events;
 
     /* Install a temporary event handler which will add the supported event
      * type to out_events bitmap.
@@ -113,8 +112,8 @@ ucs_status_t ucm_test_events(int events)
     handler.events   = events;
     handler.priority = -1;
     handler.cb       = ucm_mmap_event_test_callback;
-    handler.arg      = &out_events;
-    out_events       = 0;
+    handler.arg      = out_events;
+    *out_events      = 0;
 
     ucm_event_handler_add(&handler);
 
@@ -122,20 +121,28 @@ ucs_status_t ucm_test_events(int events)
 
     ucm_event_handler_remove(&handler);
 
-    ucm_debug("mmap test: got 0x%x out of 0x%x", out_events, events);
+    ucm_debug("mmap test: got 0x%x out of 0x%x", *out_events, events);
 
     /* Return success iff we caught all wanted events */
-    if (!ucs_test_all_flags(out_events, events)) {
+    if (!ucs_test_all_flags(*out_events, events)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
 }
 
+ucs_status_t ucm_test_events(int events)
+{
+    int out_events;
+
+    return ucm_mmap_test_events(events, &out_events);
+}
+
 /* Called with lock held */
 static ucs_status_t ucm_mmap_test(int events)
 {
     static int installed_events = 0;
+    int out_events;
     ucs_status_t status;
 
     if (ucs_test_all_flags(installed_events, events)) {
@@ -143,10 +150,9 @@ static ucs_status_t ucm_mmap_test(int events)
         return UCS_OK;
     }
 
-    status = ucm_test_events(events);
-    if (status == UCS_OK) {
-        installed_events |= events;
-    }
+    status            = ucm_mmap_test_events(events, &out_events);
+    installed_events |= out_events;
+
     return status;
 }
 
