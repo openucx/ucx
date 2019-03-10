@@ -84,12 +84,27 @@ static ucs_status_t uct_tcpcm_accept(int sock_id)
 static ucs_status_t uct_tcpcm_iface_accept(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-    // struct rdma_cm_event *event = conn_request; FIXME
+    struct sockaddr peer_addr;
+    socklen_t addrlen;
+    int accept_fd;
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t         status = UCS_OK;
+    uct_tcpcm_iface_t *iface = ucs_derived_of(tl_iface, uct_tcpcm_iface_t);
 
-    ucs_trace("accepting at FIXME");
-    // FIXME
-    //status = uct_tcpcm_accept(*(conn_request->sock_id));
+    accept_fd = accept(iface->sock_id, (struct sockaddr*)&peer_addr, &addrlen);
+    if (accept_fd < 0) {
+        if ((errno != EAGAIN) && (errno != EINTR)) {
+            ucs_error("accept() failed: %m");
+            return UCS_ERR_IO_ERROR;
+            // FIXME uct_tcp_iface_listen_close(iface);
+            //close(iface->sock_id);
+        }
+    }
+
+    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d", iface,
+              ucs_sockaddr_str(&peer_addr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN), accept_fd);
+
 
     return status;
 }
@@ -195,23 +210,6 @@ static void uct_tcpcm_client_handle_failure(uct_tcpcm_iface_t *iface,
     }
 }
 
-
-static void uct_tcpcm_iface_process_conn_req(uct_tcpcm_iface_t *iface,
-                                              void *event,
-                                              struct sockaddr *remote_addr)
-{
-    uct_tcpcm_priv_data_hdr_t *hdr;
-
-    hdr = (uct_tcpcm_priv_data_hdr_t*) event->param.ud.private_data;
-    ucs_assert(hdr->status == UCS_OK);
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg,
-                           event,
-                           UCS_PTR_BYTE_OFFSET(event->param.ud.private_data,
-                                               sizeof(uct_tcpcm_priv_data_hdr_t)),
-                           hdr->length);
-}
-
-
 /**
  * Release sock_id. This function should be called when the async context
  * is locked.
@@ -239,13 +237,43 @@ static void uct_tcpcm_iface_sock_id_to_dev_name(int *sock_id, char *dev_name)
 
 #endif
 
+/* FIXME review this */
+
+static void uct_tcpcm_iface_process_conn_req(uct_tcpcm_iface_t *iface)
+{
+    void *dummy_data = NULL;
+    int dummy_len = -1;
+
+    dummy_data = ucs_malloc(1, "accept connection request");
+    if (dummy_data == NULL) {
+        ucs_error("failed to allocated dummy data %s",
+                      ucs_status_string(UCS_ERR_NO_MEMORY));
+        return;
+    }
+    dummy_len = 1;
+
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg,
+                           /* connection request*/
+                           NULL,
+                           /* private data */
+                           dummy_data,
+                           /* length */
+                           dummy_len);
+    ucs_free(dummy_data);
+}
+
+
 static void uct_tcpcm_iface_event_handler(int fd, void *arg)
 {
-    //uct_tcpcm_iface_t             *iface     = arg;
     //uct_tcpcm_ctx_t               *sock_id_ctx = NULL;
     //int                            ret;
+    uct_tcpcm_iface_t *iface = arg;
 
-    fprintf(stderr, "event handler noticed something!");
+    uct_tcpcm_iface_process_conn_req(iface);
+
+    return;
+
+#if 0
     for (;;) {
 
         /* FIXME
@@ -276,6 +304,8 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
         }
         */
     }
+#endif
+
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
