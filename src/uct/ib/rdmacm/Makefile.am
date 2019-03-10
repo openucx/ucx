@@ -10,7 +10,8 @@ if HAVE_RDMACM
 module_LTLIBRARIES        = libuct_rdmacm.la
 libuct_rdmacm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) $(RDMACM_CPPFLAGS)
 libuct_rdmacm_la_CFLAGS   = $(BASE_CFLAGS)
-libuct_rdmacm_la_LIBADD   = $(RDMACM_LIBS)
+libuct_rdmacm_la_LIBADD   = $(RDMACM_LIBS) $(top_builddir)/src/ucs/libucs.la \
+                            $(top_builddir)/src/uct/libuct.la
 libuct_rdmacm_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(RDMACM_LDFLAGS) -version-info $(SOVERSION)
 
 noinst_HEADERS = \

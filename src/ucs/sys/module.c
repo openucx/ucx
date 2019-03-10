@@ -150,9 +150,14 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
     void *dl;
     int mode;
 
-    mode = RTLD_LAZY|RTLD_GLOBAL;
+    mode = RTLD_LAZY;
     if (flags & UCS_MODULE_LOAD_FLAG_NODELETE) {
         mode |= RTLD_NODELETE;
+    }
+    if (flags & UCS_MODULE_LOAD_FLAG_GLOBAL) {
+        mode |= RTLD_GLOBAL;
+    } else {
+        mode |= RTLD_LOCAL;
     }
 
     for (i = 0; i < ucs_module_loader_state.srchpath_cnt; ++i) {
@@ -162,8 +167,6 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
 
         /* Clear error state */
         (void)dlerror();
-
-        /* Using RTLD_GLOBAL to allow sub-modules */
         dl = dlopen(module_path, mode);
         if (dl != NULL) {
             ucs_module_init(module_path, dl);

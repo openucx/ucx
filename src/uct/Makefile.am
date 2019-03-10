@@ -6,23 +6,49 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = base cuda ib rocm sm tcp ugni
+SUBDIRS = . cuda ib rocm sm ugni
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libuct_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_ladir       = $(includedir)/uct
-libuct_la_SOURCES  =
-noinst_HEADERS     =
-libuct_la_LIBADD   = \
-	../ucs/libucs.la \
-	base/libuct_base.la \
-	sm/libuct_sm.la \
-	tcp/libuct_tcp.la
 
 nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
 	api/version.h
+
+noinst_HEADERS = \
+	base/uct_md.h \
+	base/uct_iface.h \
+	base/uct_log.h \
+	base/uct_worker.h \
+	sm/base/sm_ep.h \
+	sm/base/sm_iface.h \
+	sm/mm/base/mm_iface.h \
+	sm/mm/base/mm_ep.h \
+	sm/mm/base/mm_def.h \
+	sm/mm/base/mm_md.h \
+	sm/self/self.h \
+	tcp/tcp.h
+
+libuct_la_SOURCES = \
+	base/uct_md.c \
+	base/uct_mem.c \
+	base/uct_iface.c \
+	base/uct_worker.c \
+	sm/base/sm_ep.c \
+	sm/base/sm_iface.c \
+	sm/mm/base/mm_iface.c \
+	sm/mm/base/mm_ep.c \
+	sm/mm/base/mm_md.c \
+	sm/mm/posix/mm_posix.c \
+	sm/mm/sysv/mm_sysv.c \
+	sm/self/self.c \
+	tcp/tcp_ep.c \
+	tcp/tcp_iface.c \
+	tcp/tcp_md.c \
+	tcp/tcp_net.c
