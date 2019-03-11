@@ -5,5 +5,5 @@
 #
 
 UCX_CHECK_CUDA
-AS_IF([test "x$cuda_happy" == "xyes"], [ucm_modules+=":cuda"])
+AS_IF([test "x$cuda_happy" = "xyes"], [ucm_modules+=":cuda"])
 AC_CONFIG_FILES([src/ucm/cuda/Makefile])
