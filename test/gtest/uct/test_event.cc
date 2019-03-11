@@ -148,7 +148,8 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     arm(m_e2, arm_flags);
 
     /* send the data again */
-    uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
+    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
+    ASSERT_EQ((ssize_t)sizeof(send_data), res);
     ++am_send_count;
 
     /* make sure the file descriptor IS signaled */

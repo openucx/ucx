@@ -131,6 +131,16 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
 
 
 /**
+ * Sets port to a given sockaddr structure.
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ * @param [in]   port       Port (host notation) that will be written
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port);
+
+/**
  * Returns IP addr of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.

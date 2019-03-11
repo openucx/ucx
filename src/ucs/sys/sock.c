@@ -191,6 +191,26 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
     return status;
 }
 
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port)
+{
+    ucs_status_t status = UCS_OK;
+
+    switch (addr->sa_family) {
+    case AF_INET:
+        UCS_SOCKET_INET_PORT(addr) = htons(port);
+        break;
+    case AF_INET6:
+        UCS_SOCKET_INET6_PORT(addr) = htons(port);
+        break;
+    default:
+        ucs_error("unknown address family: %d", addr->sa_family);
+        status = UCS_ERR_INVALID_PARAM;
+        break;
+    }
+
+    return status;
+}
+
 const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
 {
     switch (addr->sa_family) {

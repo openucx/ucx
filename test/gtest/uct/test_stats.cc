@@ -581,6 +581,9 @@ UCS_TEST_P(test_uct_stats, pending_add)
     EXPECT_UCS_OK(uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0,
                                            UCT_CB_FLAG_ASYNC));
 
+    // Give a chance to finish connection for some transports (ib/ud, tcp)
+    flush();
+
     // Check that counter is not increased if pending_add returns NOT_OK
     EXPECT_EQ(uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0),
               UCS_ERR_BUSY);

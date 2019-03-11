@@ -48,6 +48,7 @@
 #include <net/if_arp.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <poll.h>
 
 BEGIN_C_DECLS
 
@@ -336,6 +337,28 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length);
  * @param [in]  length      Length of the memory block.
  */
 void ucs_sys_free(void *ptr, size_t length);
+
+
+/**
+ * Convert epoll events to poll events
+ *
+ * @param [in]  epoll_events     Epoll events to convert.
+ *
+ * @return Poll events converted from given epoll events.
+ * @note Converts only EPOLLIN and EPOLLOUT events
+ */
+uint32_t ucs_sys_epoll_2_poll_events(uint32_t epoll_events);
+
+
+/**
+ * Convert poll events to epoll events
+ *
+ * @param [in]  poll_events      poll events to convert.
+ *
+ * @return Epoll events converted from given poll events.
+ * @note Converts only POLLIN and POLLOUT events
+ */
+uint32_t ucs_sys_poll_2_epoll_events(uint32_t poll_events);
 
 
 /**

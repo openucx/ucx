@@ -130,13 +130,27 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return UCS_OK;
 }
 
+static inline unsigned
+uct_tcp_iface_handle_events(uct_tcp_ep_t *ep, uint32_t epoll_events)
+{
+    unsigned count = 0;
+
+    if (epoll_events & EPOLLIN) {
+        count += ep->rx.progress(ep);
+    }
+    if (epoll_events & EPOLLOUT) {
+        count += ep->tx.progress(ep);
+    }
+
+    return count;
+}
+
 unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     unsigned read_events   = 0;
     unsigned count         = 0;
     struct epoll_event events[UCT_TCP_MAX_EVENTS];
-    uct_tcp_ep_t *ep;
     int i, nevents, max_events;
 
     do {
@@ -156,13 +170,8 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
         }
 
         for (i = 0; i < nevents; ++i) {
-            ep = events[i].data.ptr;
-            if (events[i].events & EPOLLIN) {
-                count += ep->rx.progress(ep);
-            }
-            if (events[i].events & EPOLLOUT) {
-                count += ep->tx.progress(ep);
-            }
+            count += uct_tcp_iface_handle_events(events[i].data.ptr,
+                                                 events[i].events);
         }
 
         read_events += nevents;
@@ -172,6 +181,25 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     } while ((read_events < iface->config.max_poll) && (nevents == max_events));
 
     return count;
+}
+
+unsigned uct_tcp_iface_progress_ep(uct_tcp_ep_t *ep)
+{
+    struct pollfd event = {
+        .fd             = ep->fd,
+        .events         = ucs_sys_epoll_2_poll_events(ep->events)
+    };
+    int ret;
+
+    ret = poll(&event, 1, 0);
+    if ((ret < 0) && (errno != EINTR)) {
+        ucs_error("poll(fd=%d) for tcp_ep %p failed: %m", ep->fd, ep);
+        return 0;
+    } else if (!ret) {
+        return 0;
+    }
+
+    return uct_tcp_iface_handle_events(ep, ucs_sys_poll_2_epoll_events(event.revents));
 }
 
 static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
@@ -203,34 +231,43 @@ static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr_in peer_addr;
     socklen_t addrlen;
     ucs_status_t status;
-    uct_tcp_ep_t *ep;
     int fd;
 
     ucs_assert(listen_fd == iface->listen_fd);
 
-    addrlen = sizeof(peer_addr);
-    fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-    if (fd < 0) {
-        if ((errno != EAGAIN) && (errno != EINTR)) {
-            ucs_error("accept() failed: %m");
-            uct_tcp_iface_listen_close(iface);
+    for (;;) {
+        addrlen = sizeof(peer_addr);
+
+        fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
+        if (fd < 0) {
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
+                ucs_error("accept() failed: %m");
+                uct_tcp_iface_listen_close(iface);
+            }
+            return;
         }
-        return;
+
+        /* This will be replaced by exact iface <address:port> information */
+        status = ucs_sockaddr_set_port((struct sockaddr*)&peer_addr, 0);
+        if (status != UCS_OK) {
+            close(fd);
+            return;
+        }
+
+        status = uct_tcp_cm_handle_incoming_conn(iface, (const struct sockaddr*)&peer_addr, fd);
+        if (status != UCS_OK) {
+            close(fd);
+            return;
+        }
+
+        ucs_debug("tcp_iface %p: accepted connection on %s to fd %d", iface,
+                  ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                   str_local_addr, UCS_SOCKADDR_STRING_LEN), fd);
     }
-
-    ucs_debug("tcp_iface %p: accepted connection from %s:%d to fd %d", iface,
-              inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port), fd);
-
-    status = uct_tcp_ep_create(iface, fd, NULL, &ep);
-    if (status != UCS_OK) {
-        close(fd);
-        return;
-    }
-
-    uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
 }
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
@@ -272,7 +309,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create                = uct_tcp_ep_create_connected,
+    .ep_create                = uct_tcp_ep_create,
     .ep_destroy               = uct_tcp_ep_destroy,
     .iface_flush              = uct_tcp_iface_flush,
     .iface_fence              = uct_base_iface_fence,
