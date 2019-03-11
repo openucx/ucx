@@ -87,11 +87,11 @@ static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_u
 
 UCS_CLASS_INIT_FUNC(uct_ugni_smsg_ep_t, const uct_ep_params_t *params)
 {
-    ucs_debug("Setting up SMSG ep");
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, params);
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(params->iface, uct_ugni_smsg_iface_t);
     void *mbox;
-    ucs_status_t rc;
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, params);
+    ucs_debug("Setting up SMSG ep");
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_mbox,
                              mbox, return UCS_ERR_NO_RESOURCE);

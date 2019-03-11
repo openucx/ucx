@@ -163,7 +163,6 @@ ucs_status_t ugni_connect_ep(uct_ugni_ep_t *ep,
                              const uct_devaddr_ugni_t *ugni_dev_addr)
 {
     gni_return_t ugni_rc;
-    ucs_status_t rc;
 
     uct_ugni_cdm_lock(&iface->cdm);
     ugni_rc = GNI_EpBind(ep->ep, ugni_dev_addr->nic_addr, iface_addr->domain_id);
