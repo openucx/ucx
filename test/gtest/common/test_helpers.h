@@ -163,6 +163,24 @@ namespace ucs {
 
 extern const double test_timeout_in_sec;
 
+typedef struct {
+    pthread_t         thread;
+    pthread_mutex_t   mutex;
+    pthread_cond_t    cv;
+    double            timeout;
+    pthread_t         parent_thread;
+    pthread_barrier_t barrier;
+    enum {
+        WATCHDOG_STOPPED,
+        WATCHDOG_RUNNING
+    } state;
+} test_watchdog_t;
+
+void *watchdog_func(void *arg);
+void watchdog_signal();
+void watchdog_start();
+void watchdog_stop();
+
 class test_abort_exception : public std::exception {
 };
 

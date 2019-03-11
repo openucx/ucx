@@ -15,7 +15,7 @@
 #include "tap.h"
 
 static int ucs_gtest_random_seed = -1;
-int    ucs::perf_retry_count     = 0; /* 0 - don't check performance */
+int ucs::perf_retry_count        = 0; /* 0 - don't check performance */
 double ucs::perf_retry_interval  = 1.0;
 
 void parse_test_opts(int argc, char **argv) {
@@ -55,6 +55,8 @@ int main(int argc, char **argv) {
 	::testing::InitGoogleTest(&argc, argv);
 
     char *str = getenv("GTEST_TAP");
+    int ret;
+
     /* Append TAP Listener */
     if (str) {
         if (0 < strtol(str, NULL, 0)) {
@@ -85,5 +87,10 @@ int main(int argc, char **argv) {
     }
     ucs_global_opts.warn_unused_env_vars = 0; /* Avoid warnings if not all
                                                  config vars are being used */
-    return RUN_ALL_TESTS();
+
+    ucs::watchdog_start();
+    ret = RUN_ALL_TESTS();
+    ucs::watchdog_stop();
+
+    return ret;
 }

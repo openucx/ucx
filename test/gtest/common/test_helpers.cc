@@ -15,6 +15,94 @@ namespace ucs {
 
 const double test_timeout_in_sec = 60.;
 
+const double watchdog_timeout_default = 900.; // 15 minutes
+
+static test_watchdog_t watchdog;
+
+void *watchdog_func(void *arg)
+{
+    int ret = 0;
+    struct timeval now;
+    struct timespec timeout;
+
+    pthread_mutex_lock(&watchdog.mutex);
+
+    /* sync with parent thread */
+    pthread_barrier_wait(&watchdog.barrier);
+
+    do {
+        gettimeofday(&now, 0);
+        ucs_sec_to_timespec(ucs_timeval_to_sec(&now) + watchdog.timeout,
+                            &timeout);
+
+        ret = pthread_cond_timedwait(&watchdog.cv, &watchdog.mutex, &timeout);
+        if (!ret) {
+            pthread_barrier_wait(&watchdog.barrier);
+        }
+    } while (!ret && (watchdog.state == test_watchdog_t::WATCHDOG_RUNNING));
+
+    if (ret) {
+        if (ret == ETIMEDOUT) {
+            ADD_FAILURE() << "Timeout expired - abort";
+            pthread_kill(watchdog.parent_thread, SIGABRT);
+        } else {
+            ADD_FAILURE() << "Watchdog fails " << ret;
+            abort();
+        }
+    }
+
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    return NULL;
+}
+
+void watchdog_signal()
+{
+    pthread_mutex_lock(&watchdog.mutex);
+    pthread_cond_signal(&watchdog.cv);
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    pthread_barrier_wait(&watchdog.barrier);
+}
+
+void watchdog_start()
+{
+    pthread_mutex_init(&watchdog.mutex, NULL);
+    pthread_cond_init(&watchdog.cv, NULL);
+    pthread_barrier_init(&watchdog.barrier, NULL, 2); // 2 - parent thread + watchdog
+
+    pthread_mutex_lock(&watchdog.mutex);
+    watchdog.state         = test_watchdog_t::WATCHDOG_RUNNING;
+    watchdog.timeout       = watchdog_timeout_default;
+    watchdog.parent_thread = pthread_self();
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    pthread_create(&watchdog.thread, NULL, watchdog_func, NULL);
+
+    /* sync with watchdog thread */
+    pthread_barrier_wait(&watchdog.barrier);
+
+    /* test signaling */
+    watchdog_signal();
+}
+
+void watchdog_stop()
+{
+    void *ret_val;
+
+    pthread_mutex_lock(&watchdog.mutex);
+    watchdog.state = test_watchdog_t::WATCHDOG_STOPPED;
+    pthread_cond_signal(&watchdog.cv);
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    pthread_barrier_wait(&watchdog.barrier);
+    pthread_join(watchdog.thread, &ret_val);
+
+    pthread_barrier_destroy(&watchdog.barrier);
+    pthread_cond_destroy(&watchdog.cv);
+    pthread_mutex_destroy(&watchdog.mutex);
+}
+
 int test_time_multiplier()
 {
     int factor = 1;
