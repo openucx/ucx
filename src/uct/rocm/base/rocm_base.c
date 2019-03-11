@@ -160,7 +160,17 @@ int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
 
     info.size = sizeof(hsa_amd_pointer_info_t);
     status = hsa_amd_pointer_info(addr, &info, NULL, NULL, NULL);
-    return status == HSA_STATUS_SUCCESS && info.type != HSA_EXT_POINTER_TYPE_UNKNOWN;
+    if (status == HSA_STATUS_SUCCESS &&
+        info.type == HSA_EXT_POINTER_TYPE_HSA) {
+        hsa_device_type_t dev_type;
+
+        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
+        if (status == HSA_STATUS_SUCCESS &&
+            dev_type == HSA_DEVICE_TYPE_GPU)
+            return 1;
+    }
+
+    return 0;
 }
 
 UCS_MODULE_INIT() {
