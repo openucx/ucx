@@ -338,9 +338,36 @@ build_debug() {
 }
 
 #
+# Build UGNI
+#
+build_ugni() {
+    echo 1..1 > build_ugni.tap
+
+    echo "==== Build with cray-ugni ===="
+    #
+    # Point pkg-config to contrib/cray-ugni-mock, and replace
+    # PKG_CONFIG_TOP_BUILD_DIR with source dir, since the mock .pc files contain
+    # relative paths.
+    #
+    ../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
+        PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
+        PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
+    $MAKEP clean
+    $MAKEP
+
+    # make sure UGNI transport is enabled
+    grep '#define HAVE_TL_UGNI 1' config.h
+
+    $MAKE  distcheck
+    $MAKEP distclean
+
+    module unload dev/cray-ugni
+    echo "ok 1 - build successful " >> build_ugni.tap
+}
+
+#
 # Build CUDA
 #
-
 build_cuda() {
     echo 1..1 > build_cuda.tap
     if module_load dev/cuda
@@ -1031,6 +1058,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 1 4 build_ugni
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
