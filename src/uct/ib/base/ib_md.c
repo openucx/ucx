@@ -200,6 +200,19 @@ static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
 
 UCS_LIST_HEAD(uct_ib_md_open_list);
 
+static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
+                                          const char *file, int mem_type,
+                                          const char *name)
+{
+    if (!access(file, F_OK))
+        md_attr->cap.reg_mem_types |= UCS_BIT(mem_type);
+
+    ucs_debug("%s: %s GPUDirect RDMA is %s",
+              uct_ib_device_name(&md->dev), name,
+              md_attr->cap.reg_mem_types & UCS_BIT(mem_type) ?
+              "enabled" : "disabled");
+}
+
 static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
@@ -214,15 +227,20 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
-        if (!access("/sys/kernel/mm/memory_peers/nv_mem/version", F_OK)) {
-            md_attr->cap.reg_mem_types |= UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
-            ucs_debug("%s: GPUDirect RDMA is enabled", uct_ib_device_name(&md->dev));
-        } else if (md->config.enable_gpudirect_rdma == UCS_YES) {
-            ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure nv_peer_mem"
-                      " plugin installed correctly.", uct_ib_device_name(&md->dev));
-            return UCS_ERR_UNSUPPORTED;
-        } else {
-            ucs_debug("%s: GPUDirect RDMA is disabled", uct_ib_device_name(&md->dev));
+        uct_ib_check_gpudirect_driver(md, md_attr,
+                                      "/sys/kernel/mm/memory_peers/nv_mem/version",
+                                      UCT_MD_MEM_TYPE_CUDA, "CUDA");
+
+        /* check if ROCM KFD driver is loaded */
+        uct_ib_check_gpudirect_driver(md, md_attr, "/dev/kfd",
+                                      UCT_MD_MEM_TYPE_ROCM, "ROCM");
+
+        if (!(md_attr->cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) &&
+            md->config.enable_gpudirect_rdma == UCS_YES) {
+                ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure"
+                          " nv_peer_mem or amdgpu plugin installed correctly.",
+                          uct_ib_device_name(&md->dev));
+                return UCS_ERR_UNSUPPORTED;
         }
     }
 
