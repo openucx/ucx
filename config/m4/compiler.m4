@@ -28,12 +28,12 @@ AC_ARG_ENABLE(compiler-opt,
         AC_HELP_STRING([--enable-compiler-opt], [Set optimization level [0-3]]),
         [],
         [enable_compiler_opt="none"])
-AS_IF([test "$enable_compiler_opt" = "yes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
-      [test "$enable_compiler_opt" = "none"],
+AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
+      [test "x$enable_compiler_opt" = "xnone"],
           [AS_IF([test "x$enable_debug" = xyes],
                  [BASE_CFLAGS="-O0 $BASE_CFLAGS"],
                  [BASE_CFLAGS="-O3 $BASE_CFLAGS"])],
-      [test "$enable_compiler_opt" = "no"], [],
+      [test "x$enable_compiler_opt" = "xno"], [],
       [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
 
 
