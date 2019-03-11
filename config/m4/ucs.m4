@@ -15,7 +15,7 @@ AC_ARG_ENABLE([profiling],
 	[],
 	[enable_profiling=no])
 
-AS_IF([test "x$enable_profiling" == xyes],
+AS_IF([test "x$enable_profiling" = xyes],
 	[AS_MESSAGE([enabling profiling])
 	 AC_DEFINE([HAVE_PROFILING], [1], [Enable profiling])
 	 HAVE_PROFILING=yes]
@@ -33,7 +33,7 @@ AC_ARG_ENABLE([backtrace-detail],
 	[],
 	[enable_backtrace_detail=yes])
 	
-AS_IF([test "x$enable_backtrace_detail" == xyes], 
+AS_IF([test "x$enable_backtrace_detail" = xyes],
 	[
 	BT=1
 	AC_CHECK_HEADER([bfd.h], [], [AC_MSG_WARN([binutils headers not found])]; BT=0)
@@ -43,7 +43,7 @@ AS_IF([test "x$enable_backtrace_detail" == xyes],
 	AC_CHECK_TYPES([struct dl_phdr_info], [], [AC_MSG_WARN([struct dl_phdr_info not defined])];BT=0,
 					[#define _GNU_SOURCE 1
 					 #include <link.h>]) 
-	if test "x$BT" == "x1"; then
+	if test "x$BT" = "x1"; then
 		AC_CHECK_FUNCS([cplus_demangle])
 		AC_DEFINE([HAVE_DETAILED_BACKTRACE], 1, [Enable detailed backtrace])
         case ${host} in
@@ -65,7 +65,7 @@ AC_ARG_ENABLE([stats],
 	[],
 	[enable_stats=no])
 	
-AS_IF([test "x$enable_stats" == xyes], 
+AS_IF([test "x$enable_stats" = xyes],
 	  [AS_MESSAGE([enabling statistics])
 	   AC_DEFINE([ENABLE_STATS], [1], [Enable statistics])
 	   HAVE_STATS=yes],
@@ -83,7 +83,7 @@ AC_ARG_ENABLE([tuning],
 	[],
 	[enable_tuning=no])
 	
-AS_IF([test "x$enable_tuning" == xyes], 
+AS_IF([test "x$enable_tuning" = xyes],
 	  [AS_MESSAGE([enabling tuning])
 	   AC_DEFINE([ENABLE_TUNING], [1], [Enable tuning])
 	   HAVE_TUNING=yes],
@@ -101,7 +101,7 @@ AC_ARG_ENABLE([memtrack],
 	[],
 	[enable_memtrack=no])
 	
-AS_IF([test "x$enable_memtrack" == xyes], 
+AS_IF([test "x$enable_memtrack" = xyes],
 	  [AS_MESSAGE([enabling memory tracking])
 	   AC_DEFINE([ENABLE_MEMTRACK], [1], [Enable memory tracking])
 	   HAVE_MEMTRACK=yes],
@@ -153,7 +153,6 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
 #
 # Manual configuration of cacheline size
 #
-
 AC_ARG_WITH([cache-line-size],
         [AC_HELP_STRING([--with-cache-line-size=SIZE],
             [Build UCX with cache line size defined by user. This parameter

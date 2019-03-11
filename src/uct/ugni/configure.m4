@@ -23,5 +23,5 @@ AS_IF([test "x$with_ugni" != "xno"],
                                    AC_MSG_ERROR([Cannot continue])],[])]
                            )])
 
-AM_CONDITIONAL([HAVE_CRAY_UGNI], [test "x$cray_ugni_supported" == xyes])
+AM_CONDITIONAL([HAVE_CRAY_UGNI], [test "x$cray_ugni_supported" = xyes])
 AC_CONFIG_FILES([src/uct/ugni/Makefile])

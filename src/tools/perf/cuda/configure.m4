@@ -6,6 +6,6 @@
 
 UCX_CHECK_CUDA
 
-AS_IF([test "x$cuda_happy" == "xyes"], [ucx_perftest_modules+=":cuda"])
+AS_IF([test "x$cuda_happy" = "xyes"], [ucx_perftest_modules+=":cuda"])
 
 AC_CONFIG_FILES([src/tools/perf/cuda/Makefile])

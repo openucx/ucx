@@ -30,7 +30,7 @@ AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 
 AC_CHECK_PROG(GITBIN,git,yes)
-AS_IF([test x"${GITBIN}" == x"yes"],
+AS_IF([test x"${GITBIN}" = x"yes"],
       [AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse --short=7 HEAD']))],
       [AC_SUBST(SCM_VERSION, "0000000")])
 
@@ -140,7 +140,7 @@ DX_MAN_FEATURE(ON)
 DX_PDF_FEATURE(ON)
 DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 
-AS_IF([test "x$with_docs_only" == xyes],
+AS_IF([test "x$with_docs_only" = xyes],
     [AS_MESSAGE([Documents only requested])
      AS_IF([DX_TEST_FEATURE(doc)],
            [],
@@ -208,7 +208,7 @@ AS_IF([test "x$with_docs_only" == xyes],
          [],
          [enable_frame_pointer=no])
 
-     AS_IF([test "x$enable_frame_pointer" == xyes],
+     AS_IF([test "x$enable_frame_pointer" = xyes],
          [AS_MESSAGE([compiling with frame pointer])
           BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
          [:])
@@ -222,7 +222,7 @@ AS_IF([test "x$with_docs_only" == xyes],
                         [Enable fault injection code, default: NO]),
          [],
          [enable_fault_injection=no])
-     AS_IF([test "x$enable_fault_injection" == xyes],
+     AS_IF([test "x$enable_fault_injection" = xyes],
         [AS_MESSAGE([enabling with fault injection code])
          AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
         [:]
@@ -271,7 +271,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AC_ARG_ENABLE([experimental-api],
                    AS_HELP_STRING([--enable-experimental-api],
                                   [Enable installing experimental APIs, default: NO]))
-	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" == "xyes"])
+	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" = "xyes"])
 
 
      #
@@ -286,7 +286,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AC_ARG_ENABLE([examples],
                    [AS_HELP_STRING([--enable-examples],
                                    [Enable examples build])],
-                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" == "xyes"])],
+                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])
 
     ]) # Docs only
@@ -310,7 +310,7 @@ AC_CONFIG_FILES([Makefile
                  doc/doxygen/header.tex
                  src/uct/api/version.h
                  ])
-AS_IF([test "x$with_docs_only" == xyes], [], [
+AS_IF([test "x$with_docs_only" = xyes], [], [
 AC_CONFIG_LINKS([
                  debian/compat:debian/compat
                  debian/copyright:debian/copyright
@@ -347,7 +347,7 @@ AC_OUTPUT
 # Print build condiguration
 #
 AC_MSG_NOTICE([=========================================================])
-AS_IF([test "x$with_docs_only" == xyes],
+AS_IF([test "x$with_docs_only" = xyes],
 [
 AC_MSG_NOTICE([Building documents only])
 ],
