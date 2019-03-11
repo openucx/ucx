@@ -427,8 +427,8 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     for (i = 1; i < N; i++) {
         m_e1->connect(i, *m_e2, i);
     }
-    /* give a chance to finish connection for some transports (ud) */
-    short_progress_loop();
+    /* give a chance to finish connection for some transports (ib/ud, tcp) */
+    short_progress_loop(1000);
 
     n_pending = 0;
 
@@ -481,8 +481,8 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
         reqs[i] = pending_alloc_simple(send_data, i);
     }
 
-    /* give a chance to finish connection for some transports (ud) */
-    short_progress_loop();
+    /* give a chance to finish connection for some transports (ib/ud, tcp) */
+    short_progress_loop(1000);
 
     n_pending = 0;
     for (iters = 0; iters < 10000; iters++) { 

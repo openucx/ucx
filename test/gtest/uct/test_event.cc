@@ -86,10 +86,11 @@ int test_uct_event_fd::m_am_count = 0;
 void test_uct_event_fd::test_recv_am(bool signaled)
 {
     uint64_t send_data = 0xdeadbeef;
+    int am_send_count = 0;
+    ssize_t res;
     recv_desc_t *recv_buffer;
     struct pollfd wakeup_fd;
     ucs_status_t status;
-    int am_send_count = 0;
     unsigned send_flags;
     unsigned arm_flags;
 
@@ -109,6 +110,9 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(send_data));
     recv_buffer->length = 0; /* Initialize length to 0 */
 
+    /* give a chance to finish connection for some transports (ib/ud, tcp) */
+    short_progress_loop(1000);
+
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer, 0);
 
@@ -124,7 +128,9 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data */
-    uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64,
+                                                &send_data, send_flags), res);
+    ASSERT_EQ((ssize_t)sizeof(send_data), res);
     ++am_send_count;
 
     /* make sure the file descriptor IS signaled ONCE */
