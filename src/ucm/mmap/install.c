@@ -102,7 +102,7 @@ void ucm_fire_mmap_events(int events)
     }
 }
 
-static ucs_status_t ucm_mmap_test_events(int events, int *out_events)
+ucs_status_t ucm_mmap_test_events(int events, int *out_events)
 {
     ucm_event_handler_t handler;
 
@@ -129,13 +129,6 @@ static ucs_status_t ucm_mmap_test_events(int events, int *out_events)
     }
 
     return UCS_OK;
-}
-
-ucs_status_t ucm_test_events(int events)
-{
-    int out_events;
-
-    return ucm_mmap_test_events(events, &out_events);
 }
 
 /* Called with lock held */
