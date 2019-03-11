@@ -22,6 +22,29 @@ static void vm_unmap_cb(ucm_event_type_t event_type, ucm_event_t *event,
 {
 }
 
+int test_ucm_set_event_handler(void *handle)
+{
+    ucs_status_t (*ucm_set_event_handler_f)(int events, int priority,
+                                            ucm_event_callback_t cb, void *arg);
+    ucs_status_t status;
+
+    dlerror();
+    ucm_set_event_handler_f = dlsym(handle, "ucm_set_event_handler");
+    if (ucm_set_event_handler_f == NULL) {
+        printf("failed to resolve ucm_set_event_handler(): %s\n", dlerror());
+        return -1;
+    }
+
+    status = ucm_set_event_handler_f(UCM_EVENT_VM_UNMAPPED, 0, vm_unmap_cb,
+                                     NULL);
+    if (status != UCS_OK) {
+        printf("ucm_set_event_handler() failed\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     const char *filename = QUOTE(LIB_PATH);
@@ -52,40 +75,25 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    /* load ucp */
+    /* load ucm */
     printf("opening '%s'\n", filename);
     dlerror();
-    handle = dlopen(filename, RTLD_NOW);//TODO no GLOBAL
+    handle = dlopen(filename, RTLD_NOW);
     if (handle == NULL) {
         fprintf(stderr, "failed to open %s: %s\n", filename, dlerror());
         return -1;
     }
 
     /* init ucm */
-    {
-        ucs_status_t (*ucm_set_event_handler_f)(int events, int priority,
-                                                ucm_event_callback_t cb, void *arg);
-        ucs_status_t status;
-
-        dlerror();
-        ucm_set_event_handler_f = dlsym(handle, "ucm_set_event_handler");
-        if (ucm_set_event_handler_f == NULL) {
-            printf("failed to resolve ucm_set_event_handler(): %s\n", dlerror());
-            return -1;
-        }
-
-        status = ucm_set_event_handler_f(UCM_EVENT_VM_UNMAPPED, 0, vm_unmap_cb,
-                                         NULL);
-        if (status != UCS_OK) {
-            printf("ucm_set_event_handler() failed\n");
-            return -1;
-        }
+    ret = test_ucm_set_event_handler(handle);
+    if (ret < 0) {
+        return ret;
     }
 
     /* unload ucp */
     dlclose(handle);
 
-    /* relase the memory - could break if UCM is unloaded */
+    /* release the memory - could break if UCM is unloaded */
     munmap(ptr2, alloc_size);
     free(ptr1);
 
