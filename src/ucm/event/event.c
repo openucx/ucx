@@ -588,6 +588,17 @@ ucs_status_t ucm_test_events(int events)
 {
     int out_events;
 
+    if (events & UCM_EVENT_VM_MAPPED) {
+        events |= UCM_EVENT_MMAP | UCM_EVENT_MREMAP |
+                  UCM_EVENT_SHMAT | UCM_EVENT_SBRK;
+    }
+
+    if (events & UCM_EVENT_VM_UNMAPPED) {
+        events |= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
+                  UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
+                  UCM_EVENT_SBRK | UCM_EVENT_MADVISE;
+    }
+
     return ucm_mmap_test_events(events, &out_events);
 }
 
