@@ -381,7 +381,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->am_buf_size = ucs_max(self->config.buf_size, self->config.short_size);
 
-    status = ucs_mpool_init(&self->buf_mpool.tx, 0, self->am_buf_size,
+    status = ucs_mpool_init(&self->tx_mpool, 0, self->am_buf_size,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             config->tx_mpool.bufs_grow == 0 ?
                             32 : config->tx_mpool.bufs_grow,
@@ -391,7 +391,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
-    status = ucs_mpool_init(&self->buf_mpool.rx, 0, self->am_buf_size * 2,
+    status = ucs_mpool_init(&self->rx_mpool, 0, self->am_buf_size * 2,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             config->rx_mpool.bufs_grow == 0 ?
                             32 : config->rx_mpool.bufs_grow,
@@ -429,9 +429,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 err_close_epfd:
     close(self->epfd);
 err_cleanup_rx_mpool:
-    ucs_mpool_cleanup(&self->buf_mpool.rx, 1);
+    ucs_mpool_cleanup(&self->rx_mpool, 1);
 err_cleanup_tx_mpool:
-    ucs_mpool_cleanup(&self->buf_mpool.tx, 1);
+    ucs_mpool_cleanup(&self->tx_mpool, 1);
 err:
     return status;
 }
@@ -455,8 +455,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
         uct_tcp_ep_destroy(&ep->super.super);
     }
 
-    ucs_mpool_cleanup(&self->buf_mpool.rx, 1);
-    ucs_mpool_cleanup(&self->buf_mpool.tx, 1);
+    ucs_mpool_cleanup(&self->rx_mpool, 1);
+    ucs_mpool_cleanup(&self->tx_mpool, 1);
 
     uct_tcp_iface_listen_close(self);
     close(self->epfd);

@@ -68,11 +68,9 @@ typedef struct uct_tcp_iface {
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     int                           epfd;              /* Event poll set of sockets */
     size_t                        outstanding;       /* How much data in the EP send buffers */
-    struct {
-        ucs_mpool_t               tx;                /* TX memory pool */
-        ucs_mpool_t               rx;                /* RX memory pool */
-    } buf_mpool;
-    size_t                        am_buf_size;
+    ucs_mpool_t                   tx_mpool;          /* TX memory pool */
+    ucs_mpool_t                   rx_mpool;          /* RX memory pool */
+    size_t                        am_buf_size;       /* AM buffer size */
 
     struct {
         struct sockaddr_in        ifaddr;            /* Network address */
