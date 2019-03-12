@@ -23,6 +23,7 @@ struct uct_tcpcm_iface {
     uct_base_iface_t                     super;
 
     int                                  sock_id;
+    int                                  listen_fd;
 
     uint8_t                              is_server;
     /** Fields used only for server side */
