@@ -115,6 +115,39 @@ static void ucs_module_loader_init_paths()
     }
 }
 
+/* Perform shallow search for a symbol */
+static void *ucs_module_dlsym_shallow(const char *module_path, void *dl, const char *symbol)
+{
+    Dl_info dl_info;
+    void *addr;
+    int ret;
+
+    addr = dlsym(dl, symbol);
+    if (addr == NULL) {
+        ucs_module_trace("could not find symbol '%s' in %s", symbol, module_path);
+        return NULL;
+    }
+
+    (void)dlerror();
+    ret = dladdr(addr, &dl_info);
+    if (ret == 0) {
+        ucs_module_debug("dladdr(%p) [%s] failed: %s", addr, symbol, dlerror());
+        return NULL;
+    }
+
+    /* return the symbol only if it was found in the requested library, and not,
+     * for example, in one of its dependencies.
+     */
+    if (strcmp(dl_info.dli_fname, module_path)) {
+        ucs_module_debug("symbol '%s' (address: %p) is found in %s, but "
+                         "expected %s - ignoring it",
+                         symbol, addr, dl_info.dli_fname, module_path);
+        return NULL;
+    }
+
+    return addr;
+}
+
 static void ucs_module_init(const char *module_path, void *dl)
 {
     const char *module_init_name =
@@ -126,7 +159,7 @@ static void ucs_module_init(const char *module_path, void *dl)
     fullpath = realpath(module_path, buffer);
     ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
-    init_func = dlsym(dl, module_init_name);
+    init_func = ucs_module_dlsym_shallow(module_path, dl, module_init_name);
     if (init_func == NULL) {
         return;
     }
