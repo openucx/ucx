@@ -62,6 +62,52 @@ out:
     return status;
 }
 
+ucs_status_t uct_tcpcm_send_client_info(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t *ep)
+{
+    uct_tcpcm_conn_param_t conn_param;
+    uct_tcpcm_priv_data_hdr_t *hdr;
+    ssize_t sent_len = 0;
+    ssize_t offset = 0;
+
+    memset(&conn_param.private_data, 0, UCT_TCPCM_UDP_PRIV_DATA_LEN);
+    hdr = &conn_param.hdr;
+
+    /* pack worker address into private data */
+    hdr->length = ep->pack_cb(ep->pack_cb_arg, "eth0",
+                              (void*)conn_param.private_data);
+    if (hdr->length < 0) {
+        ucs_error("tcpcm client (iface=%p) failed to fill "
+                  "private data. status: %s",
+                  iface, ucs_status_string(hdr->length));
+        return UCS_ERR_IO_ERROR;
+    }
+    hdr->status = UCS_OK;
+    conn_param.private_data_len = sizeof(uct_tcpcm_conn_param_t);
+
+    // send all of the connection info
+
+    if (UCS_OK != ucs_sys_fcntl_modfl(ep->sock_id_ctx->sock_id, O_NONBLOCK, 0)) {
+        ucs_error("fcntl() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    //while (sent_len < conn_param.private_data_len) {
+        sent_len += send(ep->sock_id_ctx->sock_id, (char *) &conn_param + offset,
+                         (conn_param.private_data_len - offset), 0);
+        ucs_debug("send_len = %d bytes %m", (int) sent_len);
+        offset = sent_len;
+	//}
+
+    if (ep != NULL) {
+        pthread_mutex_lock(&ep->ops_mutex);
+        ep->status = UCS_OK;
+        uct_tcpcm_ep_invoke_completions(ep, UCS_OK);
+        pthread_mutex_unlock(&ep->ops_mutex);
+    }
+
+    return UCS_OK;
+}
+
 static inline void uct_tcpcm_ep_add_to_pending(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t *ep)
 {
     UCS_ASYNC_BLOCK(iface->super.worker->async);
@@ -129,6 +175,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
 
     /* FIXME: review do we need to resolve tcp addr? */
     status = ucs_socket_connect(self->sock_id_ctx->sock_id, sockaddr->addr);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_tcpcm_send_client_info(iface, self);
     if (status != UCS_OK) {
         goto err;
     }
