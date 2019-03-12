@@ -4,7 +4,7 @@
 # See file LICENSE for terms.
 #
 
-AC_SUBST([UCM_LDFLAGS],
+AC_SUBST([UCM_MODULE_LDFLAGS],
          ["-Xlinker -z -Xlinker interpose"])
 
 ucm_modules=""

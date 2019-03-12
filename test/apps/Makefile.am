@@ -17,7 +17,7 @@ noinst_PROGRAMS = \
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
 test_dlopen_SOURCES  = test_dlopen.c
-test_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+test_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
 test_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_dlopen_LDADD    = -ldl
 
