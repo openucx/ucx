@@ -584,6 +584,13 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
     }
 }
 
+ucs_status_t ucm_test_events(int events)
+{
+    int out_events;
+
+    return ucm_mmap_test_events(events, &out_events);
+}
+
 UCS_STATIC_INIT {
     pthread_spin_init(&ucm_kh_lock, PTHREAD_PROCESS_PRIVATE);
     kh_init_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
