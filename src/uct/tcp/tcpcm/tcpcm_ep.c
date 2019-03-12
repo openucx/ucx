@@ -67,7 +67,9 @@ ucs_status_t uct_tcpcm_send_client_info(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t
     uct_tcpcm_conn_param_t conn_param;
     uct_tcpcm_priv_data_hdr_t *hdr;
     ssize_t sent_len = 0;
+    ssize_t recv_len = 0;
     ssize_t offset = 0;
+    int connect_confirm = -1;
 
     memset(&conn_param.private_data, 0, UCT_TCPCM_UDP_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
@@ -86,17 +88,19 @@ ucs_status_t uct_tcpcm_send_client_info(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t
 
     // send all of the connection info
 
-    if (UCS_OK != ucs_sys_fcntl_modfl(ep->sock_id_ctx->sock_id, O_NONBLOCK, 0)) {
-        ucs_error("fcntl() failed: %m");
-        return UCS_ERR_IO_ERROR;
-    }
+    //if (UCS_OK != ucs_sys_fcntl_modfl(ep->sock_id_ctx->sock_id, O_NONBLOCK, 0)) {
+    //    ucs_error("fcntl() failed: %m");
+    //    return UCS_ERR_IO_ERROR;
+    //}
 
-    //while (sent_len < conn_param.private_data_len) {
-        sent_len += send(ep->sock_id_ctx->sock_id, (char *) &conn_param + offset,
-                         (conn_param.private_data_len - offset), 0);
-        ucs_debug("send_len = %d bytes %m", (int) sent_len);
-        offset = sent_len;
-	//}
+    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &connect_confirm,
+                    sizeof(int), 0);
+    ucs_debug("recv len = %d\n", (int) recv_len);
+    ucs_debug("connect confirm = %d\n", connect_confirm);
+
+    sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param + offset,
+                    (conn_param.private_data_len - offset), 0);
+    ucs_debug("send_len = %d bytes %m", (int) sent_len);
 
     if (ep != NULL) {
         pthread_mutex_lock(&ep->ops_mutex);

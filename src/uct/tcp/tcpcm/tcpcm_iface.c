@@ -266,8 +266,9 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     //ucs_status_t         status = UCS_OK;
     ssize_t recv_len = 0;
-    ssize_t offset = 0;
+    ssize_t sent_len = 0;
     uct_tcpcm_conn_param_t conn_param;
+    int connect_confirm = 42;
 
     // accept client connection
     accept_fd = accept(iface->sock_id, (struct sockaddr*)&peer_addr, &addrlen);
@@ -280,21 +281,23 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
         }
     }
 
-    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d", iface,
+    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d %m", iface,
               ucs_sockaddr_str(&peer_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN), accept_fd);
 
-    // extract client information
-    //while (recv_len < sizeof(uct_tcpcm_conn_param_t)) {
-        recv_len += recv(accept_fd, (char *) &conn_param + offset,
-                         (sizeof(uct_tcpcm_conn_param_t) - offset), 0);
-        ucs_debug("recv len = %d\n", (int) recv_len);
-        sleep(1);
-        offset = recv_len;
-	//}
+    // extract client information FIXME: what if not all data arrives?
+
+    sent_len = send(accept_fd, (char *) &connect_confirm, sizeof(int), 0);
+    ucs_debug("send_len = %d bytes %m", (int) sent_len);
+
+    recv_len = recv(accept_fd, (char *) &conn_param,
+                    sizeof(uct_tcpcm_conn_param_t), 0);
+    ucs_debug("recv len = %d\n", (int) recv_len);
 
     // schedule connection req callback
-    uct_tcpcm_iface_process_conn_req(iface, conn_param);
+    if (recv_len == sizeof(uct_tcpcm_conn_param_t)) {
+        uct_tcpcm_iface_process_conn_req(iface, conn_param);
+    }
 
     return;
 
