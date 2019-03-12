@@ -92,7 +92,7 @@ static ucs_status_t uct_tcpcm_iface_accept(uct_iface_h tl_iface,
     ucs_status_t         status = UCS_OK;
     uct_tcpcm_iface_t *iface = ucs_derived_of(tl_iface, uct_tcpcm_iface_t);
 
-    accept_fd = accept(iface->sock_id, (struct sockaddr*)&peer_addr, &addrlen);
+    accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
             ucs_error("accept() failed: %m");
@@ -271,7 +271,7 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
     int connect_confirm = 42;
 
     // accept client connection
-    accept_fd = accept(iface->sock_id, (struct sockaddr*)&peer_addr, &addrlen);
+    accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
             ucs_error("accept() failed: %m");
@@ -377,6 +377,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     self->config.addr_resolve_timeout = tcpcm_md->addr_resolve_timeout;
+    self->sock_id = -1;
+    self->listen_fd = -1;
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
 
@@ -384,40 +386,40 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
         param_sockaddr_len = params->mode.sockaddr.listen_sockaddr.addrlen;
 
         status = ucs_socket_create(param_sockaddr->sa_family, SOCK_STREAM,
-                                   &self->sock_id);
+                                   &self->listen_fd);
         if (status != UCS_OK) {
             return status;
         }
 
-        status = ucs_sys_fcntl_modfl(self->sock_id, O_NONBLOCK, 0);
+        status = ucs_sys_fcntl_modfl(self->listen_fd, O_NONBLOCK, 0);
         if (status != UCS_OK) {
             goto err_close_sock;
         }
 
-        ret = bind(self->sock_id, param_sockaddr, param_sockaddr_len);
+        ret = bind(self->listen_fd, param_sockaddr, param_sockaddr_len);
         if (ret < 0) {
-            ucs_error("bind(fd=%d) failed: %m", self->sock_id);
+            ucs_error("bind(fd=%d) failed: %m", self->listen_fd);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
         }
 
-        ret = listen(self->sock_id, config->backlog);
+        ret = listen(self->listen_fd, config->backlog);
         if (ret < 0) {
-            ucs_error("listen(fd=%d; backlog=%d)", self->sock_id, config->backlog);
+            ucs_error("listen(fd=%d; backlog=%d)", self->listen_fd, config->backlog);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
         }
 
         /* Register event handler for incoming connections */
         status = ucs_async_set_event_handler(self->super.worker->async->mode,
-                                             self->sock_id, POLLIN | POLLERR,
+                                             self->listen_fd, POLLIN | POLLERR,
                                              uct_tcpcm_iface_event_handler,
                                              self, self->super.worker->async);
         if (status != UCS_OK) {
             goto err_close_sock;
         }
 
-        ucs_debug("tcpcm id %d listening on %s", self->sock_id,
+        ucs_debug("iface (%p) tcpcm id %d listening on %s", self, self->listen_fd,
                   ucs_sockaddr_str(param_sockaddr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
 
@@ -441,7 +443,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
     return UCS_OK;
 
  err_close_sock:
-    close(self->sock_id);
+    close(self->listen_fd);
     return status;
 
 }
@@ -450,9 +452,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_iface_t)
 {
     uct_tcpcm_ctx_t *sock_id_ctx;
 
-    ucs_async_remove_handler(self->sock_id, 1);
     if (self->is_server) {
-        close(self->sock_id);
+        if (-1 != self->listen_fd) {
+            ucs_debug("cleaning listen_fd = %d", self->listen_fd);
+            ucs_async_remove_handler(self->listen_fd, 1);
+            close(self->listen_fd);
+        }
     }
 
     UCS_ASYNC_BLOCK(self->super.worker->async);
