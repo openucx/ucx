@@ -84,6 +84,7 @@ static ucs_status_t uct_tcpcm_accept(int sock_id)
 static ucs_status_t uct_tcpcm_iface_accept(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
+#if 0
     struct sockaddr peer_addr;
     socklen_t addrlen;
     int accept_fd;
@@ -105,8 +106,9 @@ static ucs_status_t uct_tcpcm_iface_accept(uct_iface_h tl_iface,
               ucs_sockaddr_str(&peer_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN), accept_fd);
 
-
     return status;
+#endif
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcpcm_iface_reject(uct_iface_h tl_iface,
@@ -239,27 +241,16 @@ static void uct_tcpcm_iface_sock_id_to_dev_name(int *sock_id, char *dev_name)
 
 /* FIXME review this */
 
-static void uct_tcpcm_iface_process_conn_req(uct_tcpcm_iface_t *iface)
+static void uct_tcpcm_iface_process_conn_req(uct_tcpcm_iface_t *iface,
+                                             uct_tcpcm_conn_param_t conn_param)
 {
-    void *dummy_data = NULL;
-    int dummy_len = -1;
-
-    dummy_data = ucs_malloc(1, "accept connection request");
-    if (dummy_data == NULL) {
-        ucs_error("failed to allocated dummy data %s",
-                      ucs_status_string(UCS_ERR_NO_MEMORY));
-        return;
-    }
-    dummy_len = 1;
-
     iface->conn_request_cb(&iface->super.super, iface->conn_request_arg,
                            /* connection request*/
                            NULL,
                            /* private data */
-                           dummy_data,
+                           conn_param.private_data,
                            /* length */
-                           dummy_len);
-    ucs_free(dummy_data);
+                           conn_param.private_data_len);
 }
 
 
@@ -268,8 +259,42 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
     //uct_tcpcm_ctx_t               *sock_id_ctx = NULL;
     //int                            ret;
     uct_tcpcm_iface_t *iface = arg;
+    struct sockaddr peer_addr;
+    socklen_t addrlen;
+    int accept_fd;
+    //uct_tcpcm_priv_data_hdr_t *hdr;
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    //ucs_status_t         status = UCS_OK;
+    ssize_t recv_len = 0;
+    ssize_t offset = 0;
+    uct_tcpcm_conn_param_t conn_param;
 
-    uct_tcpcm_iface_process_conn_req(iface);
+    // accept client connection
+    accept_fd = accept(iface->sock_id, (struct sockaddr*)&peer_addr, &addrlen);
+    if (accept_fd < 0) {
+        if ((errno != EAGAIN) && (errno != EINTR)) {
+            ucs_error("accept() failed: %m");
+            return;
+            // FIXME uct_tcp_iface_listen_close(iface);
+            //close(iface->sock_id);
+        }
+    }
+
+    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d", iface,
+              ucs_sockaddr_str(&peer_addr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN), accept_fd);
+
+    // extract client information
+    //while (recv_len < sizeof(uct_tcpcm_conn_param_t)) {
+        recv_len += recv(accept_fd, (char *) &conn_param + offset,
+                         (sizeof(uct_tcpcm_conn_param_t) - offset), 0);
+        ucs_debug("recv len = %d\n", (int) recv_len);
+        sleep(1);
+        offset = recv_len;
+	//}
+
+    // schedule connection req callback
+    uct_tcpcm_iface_process_conn_req(iface, conn_param);
 
     return;
 
