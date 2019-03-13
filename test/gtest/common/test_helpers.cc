@@ -57,7 +57,8 @@ void *watchdog_func(void *arg)
         }
     } while (!ret);
 
-    if (ret && (watchdog.state != test_watchdog_t::WATCHDOG_STOP)) {
+    if (watchdog.state != test_watchdog_t::WATCHDOG_STOP) {
+        /* something wrong happened - handle it */
         if (ret == ETIMEDOUT) {
             ADD_FAILURE() << "Timeout expired - abort";
             pthread_kill(watchdog.parent_thread, SIGABRT);
