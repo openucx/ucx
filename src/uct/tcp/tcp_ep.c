@@ -372,22 +372,40 @@ uct_tcp_ep_comp_recv_am(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                         hdr->length, 0);
 }
 
-static inline unsigned uct_tcp_ep_do_next_rx(uct_tcp_iface_t *iface,
-                                             uct_tcp_ep_t *ep)
+unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
 {
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
     size_t remainder;
 
-    ucs_assertv(uct_tcp_ep_ctx_buf_empty(&ep->rx), "ep=%p", ep);
+    ucs_trace_func("ep=%p", ep);
 
-    ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
-    if (ucs_unlikely(ep->rx.buf == NULL)) {
-        ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
-        return 0;
+    if (!uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
+        ucs_assert(ep->rx.buf == NULL);
+
+        ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
+        if (ucs_unlikely(ep->rx.buf == NULL)) {
+            ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
+            return 0;
+        }
+
+        /* poast the enitre AM buffer */
+        recv_length = iface->am_buf_size;
+    } else if (ep->rx.length - ep->rx.offset < sizeof(*hdr)) {
+        ucs_assert(ep->rx.buf != NULL);
+
+        /* do partial receive of the remaining part of the hdr and
+         * and post the entire AM buffer */
+        recv_length = iface->am_buf_size - ep->rx.length;
+    } else {
+        ucs_assert(ep->rx.buf != NULL);
+
+        /* do partial receive of the remaining user data */
+        hdr         = ep->rx.buf + ep->rx.offset;
+        recv_length = hdr->length - (ep->rx.length - ep->rx.offset - sizeof(*hdr));
     }
-
-    recv_length = iface->am_buf_size;
 
     if (!uct_tcp_ep_recv(ep, &recv_length)) {
         goto out;
@@ -397,6 +415,12 @@ static inline unsigned uct_tcp_ep_do_next_rx(uct_tcp_iface_t *iface,
     while (uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
         remainder = ep->rx.length - ep->rx.offset;
         if (remainder < sizeof(*hdr)) {
+            ucs_assert(remainder >= 0);
+
+            /* Move the partially received hdr to the beginning of the buffer */
+            memmove(ep->rx.buf, ep->rx.buf + ep->rx.offset, remainder);
+            ep->rx.offset = 0;
+            ep->rx.length = remainder;
             goto out;
         }
 
@@ -417,72 +441,6 @@ static inline unsigned uct_tcp_ep_do_next_rx(uct_tcp_iface_t *iface,
 
 out:
     return recv_length > 0;
-}
-
-static inline unsigned uct_tcp_ep_do_partial_rx(uct_tcp_iface_t *iface,
-                                                uct_tcp_ep_t *ep)
-{
-    size_t cur_recvd_length;
-    uct_tcp_am_hdr_t *hdr;
-    size_t recv_length;
-
-    cur_recvd_length = ep->rx.length - ep->rx.offset;
-
-    if (cur_recvd_length < sizeof(*hdr)) {
-        recv_length = sizeof(*hdr) - cur_recvd_length;
-        if (!uct_tcp_ep_recv(ep, &recv_length)) {
-            return 0;
-        }
-
-        if (ep->rx.length - ep->rx.offset < sizeof(*hdr)) {
-            return recv_length > 0;
-        }
-
-        hdr = ep->rx.buf + ep->rx.offset;
-        if (hdr->length == 0) {
-            goto done;
-        }
-    } else {
-        hdr = ep->rx.buf + ep->rx.offset;
-    }
-
-    ucs_assert(hdr->length <= (iface->am_buf_size - sizeof(uct_tcp_am_hdr_t)));
-
-    cur_recvd_length = ep->rx.length - ep->rx.offset - sizeof(*hdr);
-    recv_length      = hdr->length - cur_recvd_length;
-
-    if (!uct_tcp_ep_recv(ep, &recv_length)) {
-        return 0;
-    }
-
-    ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, recv_length);
-
-    if (recv_length == hdr->length - cur_recvd_length) {
-        goto done;
-    }
-
-    return recv_length > 0;
-
-done:
-    uct_tcp_ep_comp_recv_am(iface, ep, hdr);
-    uct_tcp_ep_ctx_reset(&ep->rx);
-    return 1;
-}
-
-unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
-{
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-
-    ucs_trace_func("ep=%p", ep);
-
-    if (uct_tcp_ep_ctx_buf_empty(&ep->rx)) {
-        /* Receive next chunk of data */
-        return uct_tcp_ep_do_next_rx(iface, ep);
-    } else {
-        /* Receive remaining part of AM data */
-        return uct_tcp_ep_do_partial_rx(iface, ep);
-    }
 }
 
 static inline ucs_status_t
