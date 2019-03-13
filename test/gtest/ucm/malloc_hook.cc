@@ -980,6 +980,9 @@ UCS_TEST_F(malloc_hook, test_event_failed) {
     status = ucm_test_events(UCM_EVENT_MUNMAP);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
 
+    status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
     /* restore original mmap body */
     status = ucm_bistro_restore(rp);
     ASSERT_UCS_OK(status);
