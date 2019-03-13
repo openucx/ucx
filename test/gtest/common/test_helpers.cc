@@ -22,7 +22,7 @@ static test_watchdog_t watchdog;
 void *watchdog_func(void *arg)
 {
     int ret = 0;
-    struct timeval now;
+    double now;
     struct timespec timeout;
 
     pthread_mutex_lock(&watchdog.mutex);
@@ -31,9 +31,8 @@ void *watchdog_func(void *arg)
     pthread_barrier_wait(&watchdog.barrier);
 
     do {
-        gettimeofday(&now, 0);
-        ucs_sec_to_timespec(ucs_timeval_to_sec(&now) + watchdog.timeout,
-                            &timeout);
+        now = ucs_get_accurate_time();
+        ucs_sec_to_timespec(now + watchdog.timeout, &timeout);
 
         ret = pthread_cond_timedwait(&watchdog.cv, &watchdog.mutex, &timeout);
         if (!ret) {
@@ -65,10 +64,33 @@ void watchdog_signal()
     pthread_barrier_wait(&watchdog.barrier);
 }
 
+void watchdog_time_set(double new_timeout)
+{
+    pthread_mutex_lock(&watchdog.mutex);
+    /* change timeout value */
+    watchdog.timeout = new_timeout;
+    /* apply new value for timeout */
+    watchdog_signal();
+    pthread_mutex_unlock(&watchdog.mutex);
+}
+
+void watchdog_time_reset()
+{
+    watchdog_time_set(watchdog_timeout_default);
+}
+
 void watchdog_start()
 {
+    pthread_mutexattr_t mutex_attr;
+
+    pthread_mutexattr_init(&mutex_attr);
+    /* create reentrant mutex */
+    pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&watchdog.mutex, NULL);
+    pthread_mutexattr_destroy(&mutex_attr);
+
     pthread_cond_init(&watchdog.cv, NULL);
+
     pthread_barrier_init(&watchdog.barrier, NULL, 2); // 2 - parent thread + watchdog
 
     pthread_mutex_lock(&watchdog.mutex);

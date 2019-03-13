@@ -178,6 +178,8 @@ typedef struct {
 
 void *watchdog_func(void *arg);
 void watchdog_signal();
+void watchdog_time_set(double new_timeout);
+void watchdog_time_reset();
 void watchdog_start();
 void watchdog_stop();
 
