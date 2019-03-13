@@ -448,7 +448,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
                   "Created domain 0x%08x",
                   gni_err_str[ugni_rc], cdm->domain_id);
         uct_ugni_destroy_cdm(cdm);
-        status = UCS_ERR_NO_DEVICE;
+        return UCS_ERR_NO_DEVICE;
     }
 
     status = uct_ugni_cdm_init_lock(cdm);

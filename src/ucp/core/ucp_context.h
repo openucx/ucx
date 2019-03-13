@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -316,6 +317,12 @@ ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
 }
 extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
+static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
+{
+    return !(context->memtype_cache &&
+             context->memtype_cache->pgtable.num_regions);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                            uct_memory_type_t *mem_type_p)
@@ -330,7 +337,8 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
     }
 
     if (context->memtype_cache != NULL) {
-        if (ucs_memtype_cache_lookup(context->memtype_cache, addr,
+        if (!ucp_memory_type_cache_is_empty(context) &&
+            ucs_memtype_cache_lookup(context->memtype_cache, addr,
                                      length, &ucm_mem_type) == UCS_OK) {
             *mem_type_p = ucm_to_uct_mem_type_map[ucm_mem_type];
         }
@@ -347,5 +355,4 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
 
     return UCS_OK;
 }
-
 #endif

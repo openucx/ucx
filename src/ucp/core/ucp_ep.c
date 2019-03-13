@@ -19,6 +19,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <string.h>
 
 
@@ -1035,7 +1036,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                      unsigned hdr_len, size_t adjust_min_val)
 {
     ucp_context_t *context = worker->context;
-    uct_md_attr_t *md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+    const uct_md_attr_t *md_attr;
     uct_iface_attr_t *iface_attr;
     size_t it;
     size_t zcopy_thresh;
@@ -1043,7 +1044,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (iface_attr->cap.flags & short_flag && !context->num_mem_type_mds) {
+    if ((iface_attr->cap.flags & short_flag) &&
+        (context->config.ext.enable_memtype_cache)) {
         config->max_short = max_short - hdr_len;
     } else {
         config->max_short = -1;
@@ -1053,7 +1055,9 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->max_bcopy = max_bcopy;
     }
 
-    if (!((iface_attr->cap.flags & zcopy_flag) && (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
+    md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+    if (!((iface_attr->cap.flags & zcopy_flag) &&
+          (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
         return;
     }
 
@@ -1075,6 +1079,9 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->zcopy_auto_thresh    = 0;
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
                 ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
+        /* adjust max_short if zcopy_thresh is set externally */
+        config->max_short = ucs_min(config->max_short,
+                                    (ssize_t)config->zcopy_thresh[0]);
     }
 
     for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {

@@ -30,7 +30,7 @@ AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 
 AC_CHECK_PROG(GITBIN,git,yes)
-AS_IF([test x"${GITBIN}" == x"yes"],
+AS_IF([test x"${GITBIN}" = x"yes"],
       [AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse --short=7 HEAD']))],
       [AC_SUBST(SCM_VERSION, "0000000")])
 
@@ -131,8 +131,30 @@ AC_ARG_WITH([docs_only],
                        [Compile only the docs and not the rest of UCX. [default=NO]]),
         ,[:],[with_docs_only=no])
 
-AS_IF([test "x$with_docs_only" == xyes],
-    [AS_MESSAGE([dxonly])
+AC_DEFUN([UCX_DX_ENABLE_CHECK],
+         [AS_IF([DX_TEST_FEATURE($1)],
+                [],
+                [AS_IF([test "x$enable_doxygen_$1" == xyes],
+                       [AC_MSG_ERROR([--enable-doxygen-$1 was specified, but $1 tools were not found])],
+                       [])])])
+
+#
+# Doxygen options
+#
+DX_PS_FEATURE(OFF)
+DX_HTML_FEATURE(ON)
+DX_MAN_FEATURE(ON)
+DX_PDF_FEATURE(ON)
+DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
+
+AS_IF([test "x$with_docs_only" = xyes],
+    [AS_MESSAGE([Documents only requested])
+     AS_IF([DX_TEST_FEATURE(doc)],
+           [],
+           [AC_MSG_ERROR([--with-only-docs was specified, but doxygen was not found])])
+     UCX_DX_ENABLE_CHECK([html])
+     UCX_DX_ENABLE_CHECK([man])
+     UCX_DX_ENABLE_CHECK([pdf])
      AM_CONDITIONAL([DOCS_ONLY], [true])
      AM_CONDITIONAL([HAVE_GTEST], [false])
      AM_CONDITIONAL([HAVE_STATS], [false])
@@ -196,7 +218,7 @@ AS_IF([test "x$with_docs_only" == xyes],
          [],
          [enable_frame_pointer=no])
 
-     AS_IF([test "x$enable_frame_pointer" == xyes],
+     AS_IF([test "x$enable_frame_pointer" = xyes],
          [AS_MESSAGE([compiling with frame pointer])
           BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
          [:])
@@ -210,7 +232,7 @@ AS_IF([test "x$with_docs_only" == xyes],
                         [Enable fault injection code, default: NO]),
          [],
          [enable_fault_injection=no])
-     AS_IF([test "x$enable_fault_injection" == xyes],
+     AS_IF([test "x$enable_fault_injection" = xyes],
         [AS_MESSAGE([enabling with fault injection code])
          AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
         [:]
@@ -259,7 +281,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AC_ARG_ENABLE([experimental-api],
                    AS_HELP_STRING([--enable-experimental-api],
                                   [Enable installing experimental APIs, default: NO]))
-	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" == "xyes"])
+	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" = "xyes"])
 
 
      #
@@ -274,20 +296,10 @@ AS_IF([test "x$with_docs_only" == xyes],
      AC_ARG_ENABLE([examples],
                    [AS_HELP_STRING([--enable-examples],
                                    [Enable examples build])],
-                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" == "xyes"])],
+                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])
 
     ]) # Docs only
-
-
-#
-#Doxygen options
-#
-DX_PS_FEATURE(OFF)
-DX_HTML_FEATURE(ON)
-DX_MAN_FEATURE(ON)
-DX_PDF_FEATURE(ON)
-DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 
 #
 # Print which transports are built
@@ -298,6 +310,7 @@ build_modules+="${uct_ib_modules}"
 build_modules+="${uct_cuda_modules}"
 build_modules+="${ucm_modules}"
 build_modules+="${ucx_perftest_modules}"
+build_modules+="${uct_rocm_modules}"
 AC_SUBST([build_modules], [${build_modules}])
 
 #
@@ -307,7 +320,7 @@ AC_CONFIG_FILES([Makefile
                  doc/doxygen/header.tex
                  src/uct/api/version.h
                  ])
-AS_IF([test "x$with_docs_only" == xyes], [], [
+AS_IF([test "x$with_docs_only" = xyes], [], [
 AC_CONFIG_LINKS([
                  debian/compat:debian/compat
                  debian/copyright:debian/copyright
@@ -344,15 +357,17 @@ AC_OUTPUT
 # Print build condiguration
 #
 AC_MSG_NOTICE([=========================================================])
-AS_IF([test "x$with_docs_only" == xyes],
+AS_IF([test "x$with_docs_only" = xyes],
 [
 AC_MSG_NOTICE([Building documents only])
 ],
 [
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
+AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([       UCT modules:   <$(echo $uct_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([      CUDA modules:   <$(echo $uct_cuda_modules|tr ':' ' ') >])
+AC_MSG_NOTICE([      ROCM modules:   <$(echo $uct_rocm_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([        IB modules:   <$(echo $uct_ib_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([       UCM modules:   <$(echo $ucm_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([      Perf modules:   <$(echo $ucx_perftest_modules|tr ':' ' ') >])

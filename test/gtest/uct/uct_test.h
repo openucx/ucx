@@ -24,6 +24,14 @@
 #define DEFAULT_DELAY_MS           1.0
 #define DEFAULT_TIMEOUT_SEC       10.0
 
+#define UCT_TEST_CALL_AND_TRY_AGAIN(_func, _res) \
+    do { \
+        _res = _func; \
+        if (_res == UCS_ERR_NO_RESOURCE) { \
+            short_progress_loop(); \
+        } \
+    } while (_res == UCS_ERR_NO_RESOURCE)
+
 
 /* Testing resource */
 struct resource {
@@ -279,8 +287,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     tcp,                     \
     mm,                      \
     cma,                     \
-    knem,                    \
-    rocm
+    knem
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
     cuda_copy,              \

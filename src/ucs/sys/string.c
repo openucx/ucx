@@ -96,8 +96,10 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
 
 void ucs_strncpy_zero(char *dest, const char *src, size_t max)
 {
-    strncpy(dest, src, max - 1);
-    dest[max - 1] = '\0';
+    if (max) {
+        strncpy(dest, src, max - 1);
+        dest[max - 1] = '\0';
+    }
 }
 
 uint64_t ucs_string_to_id(const char* str)
@@ -122,29 +124,6 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
             ++suffix;
         }
         snprintf(buf, max, "%zu%s", value, *suffix);
-    }
-}
-
-const char* ucs_sockaddr_str(const struct sockaddr *sock_addr, char *str, size_t max_size)
-{
-    struct sockaddr_in6 *addr_in6;
-    struct sockaddr_in *addr_in;
-
-    switch (sock_addr->sa_family) {
-    case AF_INET:
-        addr_in = (struct sockaddr_in *) sock_addr;
-        inet_ntop(AF_INET, &addr_in->sin_addr, str, max_size);
-        max_size -= strlen(str);
-        snprintf(str + strlen(str), max_size, ":%d", ntohs(addr_in->sin_port));
-        return str;
-    case AF_INET6:
-        addr_in6 = (struct sockaddr_in6 *)sock_addr;
-        inet_ntop(AF_INET6, &addr_in6->sin6_addr, str, max_size);
-        max_size -= strlen(str);
-        snprintf(str + strlen(str), max_size, ":%d", ntohs(addr_in6->sin6_port));
-        return str;
-    default:
-        return "Invalid string";
     }
 }
 

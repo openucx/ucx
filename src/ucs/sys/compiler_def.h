@@ -9,7 +9,8 @@
 #ifndef UCS_COMPILER_DEF_H
 #define UCS_COMPILER_DEF_H
 
-
+/* Note: Place "@file <file name>.h" after BEGIN_C_DECS
+ * to avoid bugs in a documentation */
 #ifdef __cplusplus
 # define BEGIN_C_DECLS  extern "C" {
 # define END_C_DECLS    }

@@ -19,6 +19,8 @@
 
 BEGIN_C_DECLS
 
+/** @file parser.h */
+
 /*
  * Configuration varaibles syntax:
  *

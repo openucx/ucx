@@ -17,6 +17,8 @@
 
 BEGIN_C_DECLS
 
+/** @file global_opts.h */
+
 #define UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG    "WARN_UNUSED_ENV_VARS"
 
 /**
@@ -111,6 +113,10 @@ typedef struct {
 
     /* directory for loadable modules */
     char                     *module_dir;
+
+    /* log level for module loader code */
+    ucs_log_level_t          module_log_level;
+
 } ucs_global_opts_t;
 
 

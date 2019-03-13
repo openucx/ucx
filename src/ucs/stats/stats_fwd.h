@@ -13,6 +13,8 @@
 
 BEGIN_C_DECLS
 
+/** @file stats_fwd.h */
+
 typedef uint64_t                          ucs_stats_counter_t;        /* Stats counter*/
 typedef struct ucs_stats_class            ucs_stats_class_t;          /* Stats class */
 typedef struct ucs_stats_node             ucs_stats_node_t;           /* Stats node */

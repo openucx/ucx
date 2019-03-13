@@ -13,6 +13,7 @@
 
 BEGIN_C_DECLS
 
+/** @file mpool.h */
 
 typedef struct ucs_mpool_chunk   ucs_mpool_chunk_t;
 typedef union  ucs_mpool_elem    ucs_mpool_elem_t;

@@ -85,7 +85,7 @@ AS_IF([test "x$with_rocm" != "xno"],
     LDFLAGS="$SAVE_LDFLAGS"
     LIBS="$SAVE_LIBS"
 
-    AS_IF([test "x$rocm_happy" == "xyes"],
+    AS_IF([test "x$rocm_happy" = "xyes"],
           [AC_SUBST([ROCM_CPPFLAGS])
            AC_SUBST([ROCM_LDFLAGS])
            AC_SUBST([ROCM_LIBS])],

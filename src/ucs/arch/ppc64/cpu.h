@@ -19,6 +19,8 @@
 
 BEGIN_C_DECLS
 
+/** @file cpu.h */
+
 #define UCS_ARCH_CACHE_LINE_SIZE 128
 
 /* Assume the worst - weak memory ordering */

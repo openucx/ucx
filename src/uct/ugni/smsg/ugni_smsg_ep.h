@@ -47,7 +47,7 @@ typedef struct uct_ugni_smsg_desc {
     struct uct_ugni_smsg_desc *next;
 } uct_ugni_smsg_desc_t;
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, uct_iface_t*);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
 
 ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,

@@ -44,24 +44,22 @@ enum uct_am_trace_type {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Flags for active message and tag-matching offload callbacks (callback's parameters).
+ *
+ * If this flag is enabled, then data is part of a descriptor which includes
+ * the user-defined rx_headroom, and the callback may return UCS_INPROGRESS
+ * and hold on to that descriptor. Otherwise, the data can't be used outside
+ * the callback. If needed, the data must be copied-out.
+ *
+   @verbatim
+    descriptor    data
+    |             |
+    +-------------+-------------------------+
+    | rx_headroom | payload                 |
+    +-------------+-------------------------+
+   @endverbatim
+ *
  */
 enum uct_cb_param_flags {
-
-    /**
-     * If this flag is enabled, then data is part of a descriptor which includes
-     * the user-defined rx_headroom, and the callback may return UCS_INPROGRESS
-     * and hold on to that descriptor. Otherwise, the data can't be used outside
-     * the callback. If needed, the data must be copied-out.
-     *
-       @verbatim
-       descriptor    data
-       |             |
-       +-------------+-------------------------+
-       | rx_headroom | payload                 |
-       +-------------+-------------------------+
-       @endverbatim
-     *
-     */
     UCT_CB_PARAM_FLAG_DESC = UCS_BIT(0)
 };
 

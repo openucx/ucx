@@ -104,7 +104,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
         goto out;
     }
 
-    if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
+    if (ucs_likely(UCP_DT_IS_CONTIG(datatype)) &&
+        ucp_memory_type_cache_is_empty(ep->worker->context)) {
         length = ucp_contig_dt_length(datatype, count);
         if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_short)) {
             status = UCS_PROFILE_CALL(ucp_stream_send_am_short, ep, buffer,

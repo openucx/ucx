@@ -27,16 +27,6 @@
 typedef ssize_t (*uct_tcp_io_func_t)(int fd, void *data, size_t size, int flags);
 
 
-ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
-{
-    int ret = connect(fd, (struct sockaddr*)dest_addr, sizeof(*dest_addr));
-    if (ret < 0) {
-        ucs_error("connect() failed: %m"); // TODO print address
-        return UCS_ERR_UNREACHABLE;
-    }
-    return UCS_OK;
-}
-
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p)
 {

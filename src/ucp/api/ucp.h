@@ -1172,7 +1172,7 @@ void ucp_cleanup(ucp_context_h context_p);
  * @ingroup UCP_CONTEXT
  * @brief Get attributes specific to a particular context.
  *
- * This routine fetches an information about the context.
+ * This routine fetches information about the context.
  *
  * @param [in]  context_p  Handle to @ref ucp_context_h
  *                         "UCP application context".
@@ -1189,14 +1189,14 @@ ucs_status_t ucp_context_query(ucp_context_h context_p,
  * @ingroup UCP_CONTEXT
  * @brief Print context information.
  *
- * This routine prints information about the context configuration, including
+ * This routine prints information about the context configuration: including
  * memory domains, transport resources, and other useful information associated
  * with the context.
  *
- * @param [in] context      Context object whose configuration to print.
- * @param [in] stream       Output stream to print the information to.
+ * @param [in] context      Print this context object's configuration.
+ * @param [in] stream       Output stream on which to print the information.
  */
-void ucp_context_print_info(ucp_context_h context, FILE *stream);
+void ucp_context_print_info(const ucp_context_h context, FILE *stream);
 
 
 /**
@@ -1994,6 +1994,10 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * Application code should not make any changes to the content of the RKEY
  * buffer.
  *
+ * @note The application is responsible for releasing the RKEY object when
+ *       it is no longer needed by calling the @ref ucp_rkey_destroy
+ *       "ucp_rkey_destroy()" routine.
+ *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.
  * @param [out] rkey_p        Remote key handle.
@@ -2718,9 +2722,9 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  */
 ucs_status_ptr_t
 ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
-                     uint64_t value, void *result, size_t op_size,
-                     uint64_t remote_addr, ucp_rkey_h rkey,
-                     ucp_send_callback_t cb);
+                    uint64_t value, void *result, size_t op_size,
+                    uint64_t remote_addr, ucp_rkey_h rkey,
+                    ucp_send_callback_t cb);
 
 
 /**

@@ -579,7 +579,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 
 #if IBV_HW_TM
     if (rch->tmh_opcode != IBV_TMH_NO_TAG) {
-        struct ibv_tmh *tmh = (void*)rch;
+        struct ibv_tmh *tmh = ucs_unaligned_ptr(rch);
         struct ibv_rvh *rvh = (void*)(tmh + 1);
         uct_tag_t tag;
         uint32_t app_ctx;

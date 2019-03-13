@@ -16,6 +16,8 @@
 
 BEGIN_C_DECLS
 
+/** @file profile_on.h */
+
 /* Helper macro */
 #define _UCS_PROFILE_RECORD(_type, _name, _param64, _param32, _loc_id_p) \
     { \

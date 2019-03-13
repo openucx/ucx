@@ -42,14 +42,14 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
         CPPFLAGS="$save_CPPFLAGS"
         LDFLAGS="$save_LDFLAGS"
 
-        AS_IF([test "x$gdrcopy_happy" == "xyes"],
+        AS_IF([test "x$gdrcopy_happy" = "xyes"],
             [
                 AC_SUBST(GDR_COPY_CPPFLAGS, "-I$ucx_check_gdrcopy_dir/include/ ")
                 AC_SUBST(GDR_COPY_LDFLAGS, "-lgdrapi -L$ucx_check_gdrcopy_dir/lib64")
             ],
             [
                 AS_IF([test "x$with_gdrcopy" != "xguess"],
-                    [AC_MSG_ERROR([gdrcopy support is requested but gdrcopy packages can't found])],
+                    [AC_MSG_ERROR([gdrcopy support is requested but gdrcopy packages cannot be found])],
                     [AC_MSG_WARN([GDR_COPY not found])])
             ])
     ],

@@ -74,7 +74,7 @@ AC_ARG_WITH([valgrind],
     [],
     [with_valgrind=no]
 )
-AS_IF([test "x$with_valgrind" == xno],
+AS_IF([test "x$with_valgrind" = xno],
       [AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])],
       [AS_IF([test ! -d $with_valgrind], 
               [AC_MSG_NOTICE([Valgrind path was not defined, guessing ...])

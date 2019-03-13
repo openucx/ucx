@@ -148,11 +148,12 @@ UCS_TEST_P(test_uct_stats, am_short)
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
     init_bufs(0, sender().iface_attr().cap.am.max_short);
 
-    status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler,
+                                      0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    status = uct_ep_am_short(sender_ep(), 0, hdr, &send_data,
-                             sizeof(send_data));
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(sender_ep(), 0, hdr, &send_data,
+                                                sizeof(send_data)), status);
     EXPECT_UCS_OK(status);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_SHORT,
@@ -162,7 +163,7 @@ UCS_TEST_P(test_uct_stats, am_short)
 
 UCS_TEST_P(test_uct_stats, am_bcopy)
 {
-    uint64_t v;
+    ssize_t v;
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
@@ -171,8 +172,9 @@ UCS_TEST_P(test_uct_stats, am_bcopy)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    v = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
-    EXPECT_EQ(lbuf->length(), v);
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack,
+                                                lbuf, 0), v);
+    EXPECT_EQ((ssize_t)lbuf->length(), v);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_BCOPY, lbuf->length());
     check_am_rx_counters(lbuf->length());
@@ -191,7 +193,8 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.am.max_iov);
 
-    status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, 0, NULL);
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_zcopy(sender_ep(), 0, 0, 0,
+                                                iov, iovcnt, 0, NULL), status);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY, lbuf->length());
@@ -207,8 +210,8 @@ UCS_TEST_P(test_uct_stats, put_short)
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
     init_bufs(0, sender().iface_attr().cap.put.max_short);
 
-    status = uct_ep_put_short(sender_ep(), &send_data, sizeof(send_data),
-                              rbuf->addr(), rbuf->rkey());
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_short(sender_ep(), &send_data, sizeof(send_data),
+                                                 rbuf->addr(), rbuf->rkey()), status);
     EXPECT_UCS_OK(status);
 
     check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_SHORT,
@@ -217,14 +220,14 @@ UCS_TEST_P(test_uct_stats, put_short)
 
 UCS_TEST_P(test_uct_stats, put_bcopy)
 {
-    uint64_t v;
+    ssize_t v;
 
     check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
     init_bufs(0, sender().iface_attr().cap.put.max_bcopy);
 
-    v = uct_ep_put_bcopy(sender_ep(), mapped_buffer::pack, lbuf,
-                         rbuf->addr(), rbuf->rkey());
-    EXPECT_EQ(lbuf->length(), v);
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_bcopy(sender_ep(), mapped_buffer::pack, lbuf,
+                                                 rbuf->addr(), rbuf->rkey()), v);
+    EXPECT_EQ((ssize_t)lbuf->length(), v);
 
     check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_BCOPY,
                       lbuf->length());
@@ -240,7 +243,9 @@ UCS_TEST_P(test_uct_stats, put_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.put.max_iov);
 
-    status = uct_ep_put_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
+    UCT_TEST_CALL_AND_TRY_AGAIN(
+        uct_ep_put_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(),
+                         rbuf->rkey(), 0), status);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_ZCOPY,
@@ -256,9 +261,10 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
     init_bufs(0, sender().iface_attr().cap.get.max_bcopy);
 
     init_completion();
-    status = uct_ep_get_bcopy(sender_ep(), (uct_unpack_callback_t)memcpy,
-                              lbuf->ptr(), lbuf->length(),
-                              rbuf->addr(), rbuf->rkey(), &m_comp);
+    UCT_TEST_CALL_AND_TRY_AGAIN(
+        uct_ep_get_bcopy(sender_ep(), (uct_unpack_callback_t)memcpy,
+                         lbuf->ptr(), lbuf->length(),
+                         rbuf->addr(), rbuf->rkey(), &m_comp), status);
     wait_for_completion(status);
 
     short_progress_loop();
@@ -278,8 +284,9 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
                             sender().iface_attr().cap.get.max_iov);
 
     init_completion();
-    status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(),
-                              &m_comp);
+    UCT_TEST_CALL_AND_TRY_AGAIN(
+        uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(),
+                         rbuf->rkey(), &m_comp), status);
     wait_for_completion(status);
 
     short_progress_loop();
@@ -347,8 +354,10 @@ UCS_TEST_P(test_uct_stats, atomic_cswap##val) \
     init_bufs(sizeof(result), sizeof(result)); \
 \
     init_completion(); \
-    status = uct_ep_atomic_cswap##val (sender_ep(), 1, 2, rbuf->addr(),\
-                                       rbuf->rkey(), &result, &m_comp); \
+    UCT_TEST_CALL_AND_TRY_AGAIN( \
+        uct_ep_atomic_cswap##val (sender_ep(), 1, 2, rbuf->addr(), \
+                                  rbuf->rkey(), &result, &m_comp), \
+        status); \
     wait_for_completion(status); \
 \
     check_atomic_counters(); \
@@ -525,6 +534,7 @@ UCS_TEST_P(test_uct_stats, pending_add)
     const int num_reqs = 5;
     uct_pending_req_t p_reqs[num_reqs];
     uint64_t v;
+    ssize_t len;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
     init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
@@ -540,8 +550,11 @@ UCS_TEST_P(test_uct_stats, pending_add)
 
     // Check that counter gets increased on every successfull pending_add returns NOT_OK
     fill_tx_q(0);
-    size_t len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
-    if (len == lbuf->length()) {
+
+    UCT_TEST_CALL_AND_TRY_AGAIN(
+        uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack,
+                        lbuf, 0), len);
+    if (len == (ssize_t)lbuf->length()) {
         UCS_TEST_SKIP_R("Can't add to pending");
     }
 

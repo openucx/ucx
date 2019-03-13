@@ -13,7 +13,7 @@ AC_ARG_ENABLE([symbol-override],
 	[],
 	[enable_symbol_override=yes])
 	
-AS_IF([test "x$enable_symbol_override" == xyes], 
+AS_IF([test "x$enable_symbol_override" = xyes],
 	[AC_DEFINE([ENABLE_SYMBOL_OVERRIDE], [1], [Enable symbol override])]
 	[:]
 )
@@ -86,11 +86,11 @@ AC_CHECK_DECLS([SYS_ipc],
                [ipc_hooks_happy=no],
                [#include <sys/syscall.h>])
 
-AS_IF([test "x$mmap_hooks_happy" == "xyes"],
-      AS_IF([test "x$ipc_hooks_happy" == "xyes" -o "x$shm_hooks_happy" == "xyes"],
+AS_IF([test "x$mmap_hooks_happy" = "xyes"],
+      AS_IF([test "x$ipc_hooks_happy" = "xyes" -o "x$shm_hooks_happy" = "xyes"],
             [bistro_hooks_happy=yes]))
 
-AS_IF([test "x$bistro_hooks_happy" == "xyes"],
+AS_IF([test "x$bistro_hooks_happy" = "xyes"],
       [AC_DEFINE([UCM_BISTRO_HOOKS], [1], [Enable BISTRO hooks])],
       [AC_DEFINE([UCM_BISTRO_HOOKS], [0], [Enable BISTRO hooks])
        AC_MSG_WARN([Some of required syscalls could not be found])

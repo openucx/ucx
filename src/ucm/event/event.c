@@ -26,6 +26,15 @@
 #include <string.h>
 #include <errno.h>
 
+
+#define UCM_NATIVE_EVENT_VM_MAPPED (UCM_EVENT_MMAP  | UCM_EVENT_MREMAP | \
+                                    UCM_EVENT_SHMAT | UCM_EVENT_SBRK)
+
+#define UCM_NATIVE_EVENT_VM_UNMAPPED (UCM_EVENT_MMAP   | UCM_EVENT_MUNMAP | \
+                                      UCM_EVENT_MREMAP | UCM_EVENT_SHMDT  | \
+                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK   | \
+                                      UCM_EVENT_MADVISE)
+
 UCS_LIST_HEAD(ucm_event_installer_list);
 
 static pthread_spinlock_t ucm_kh_lock;
@@ -468,13 +477,10 @@ static ucs_status_t ucm_event_install(int events)
     native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |
                                UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
     if (events & UCM_EVENT_VM_MAPPED) {
-        native_events |= UCM_EVENT_MMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMAT | UCM_EVENT_SBRK;
+        native_events |= UCM_NATIVE_EVENT_VM_MAPPED;
     }
     if (events & UCM_EVENT_VM_UNMAPPED) {
-        native_events |= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
-                         UCM_EVENT_SBRK | UCM_EVENT_MADVISE;
+        native_events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
     }
 
     /* TODO lock */
@@ -497,7 +503,7 @@ static ucs_status_t ucm_event_install(int events)
     ucm_debug("malloc hooks are ready");
 
     /* Call extra event installers */
-    UCS_MODULE_FRAMEWORK_LOAD(ucm);
+    UCS_MODULE_FRAMEWORK_LOAD(ucm, UCS_MODULE_LOAD_FLAG_NODELETE);
     ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
         status = event_installer->func(events);
         if (status != UCS_OK) {
@@ -582,6 +588,21 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
         elem = ucs_list_extract_head(&gc_list, ucm_event_handler_t, list);
         free(elem);
     }
+}
+
+ucs_status_t ucm_test_events(int events)
+{
+    int out_events;
+
+    if (events & UCM_EVENT_VM_MAPPED) {
+        events |= UCM_NATIVE_EVENT_VM_MAPPED;
+    }
+
+    if (events & UCM_EVENT_VM_UNMAPPED) {
+        events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
+    }
+
+    return ucm_mmap_test_events(events, &out_events);
 }
 
 UCS_STATIC_INIT {

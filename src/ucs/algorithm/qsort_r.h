@@ -41,6 +41,8 @@
 
 BEGIN_C_DECLS
 
+/** @file qsort_r.h */
+
 /**
  * Compare callback for @ref qsort_r.
  */

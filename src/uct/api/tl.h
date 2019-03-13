@@ -21,6 +21,8 @@
 
 BEGIN_C_DECLS
 
+/** @file tl.h */
+
 /**
  * Transport interface operations.
  * Every operation exposed in the API should appear in the table below, to allow

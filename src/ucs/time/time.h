@@ -15,6 +15,8 @@
 
 BEGIN_C_DECLS
 
+/** @file time.h */
+
 /**
  * Short time type
  * Used to represent short time intervals, and takes less memory.

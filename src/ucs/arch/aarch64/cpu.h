@@ -23,6 +23,8 @@
 
 BEGIN_C_DECLS
 
+/** @file cpu.h */
+
 /**
  * Assume the worst - weak memory ordering.
  */
