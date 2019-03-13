@@ -26,6 +26,15 @@
 #include <string.h>
 #include <errno.h>
 
+
+#define UCM_NATIVE_EVENT_VM_MAPPED (UCM_EVENT_MMAP  | UCM_EVENT_MREMAP | \
+                                    UCM_EVENT_SHMAT | UCM_EVENT_SBRK)
+
+#define UCM_NATIVE_EVENT_VM_UNMAPPED (UCM_EVENT_MMAP   | UCM_EVENT_MUNMAP | \
+                                      UCM_EVENT_MREMAP | UCM_EVENT_SHMDT  | \
+                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK   | \
+                                      UCM_EVENT_MADVISE)
+
 UCS_LIST_HEAD(ucm_event_installer_list);
 
 static pthread_spinlock_t ucm_kh_lock;
@@ -468,13 +477,10 @@ static ucs_status_t ucm_event_install(int events)
     native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |
                                UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
     if (events & UCM_EVENT_VM_MAPPED) {
-        native_events |= UCM_EVENT_MMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMAT | UCM_EVENT_SBRK;
+        native_events |= UCM_NATIVE_EVENT_VM_MAPPED;
     }
     if (events & UCM_EVENT_VM_UNMAPPED) {
-        native_events |= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
-                         UCM_EVENT_SBRK | UCM_EVENT_MADVISE;
+        native_events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
     }
 
     /* TODO lock */
@@ -589,14 +595,11 @@ ucs_status_t ucm_test_events(int events)
     int out_events;
 
     if (events & UCM_EVENT_VM_MAPPED) {
-        events |= UCM_EVENT_MMAP | UCM_EVENT_MREMAP |
-                  UCM_EVENT_SHMAT | UCM_EVENT_SBRK;
+        events |= UCM_NATIVE_EVENT_VM_MAPPED;
     }
 
     if (events & UCM_EVENT_VM_UNMAPPED) {
-        events |= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                  UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
-                  UCM_EVENT_SBRK | UCM_EVENT_MADVISE;
+        events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
     }
 
     return ucm_mmap_test_events(events, &out_events);
