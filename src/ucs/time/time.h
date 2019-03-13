@@ -139,24 +139,12 @@ static inline void ucs_sec_to_timeval(double seconds, struct timeval *tv)
     tv->tv_usec = usec % UCS_USEC_PER_SEC;
 }
 
-/* Convert POSIX timeval to seconds */
-static inline double ucs_timeval_to_sec(const struct timeval *tv)
-{
-    return ((double)(tv->tv_sec) + ((double)(tv->tv_usec) / UCS_USEC_PER_SEC));
-}
-
 /* Convert seconds to POSIX timespec */
 static inline void ucs_sec_to_timespec(double seconds, struct timespec *ts)
 {
     int64_t nsec = (int64_t)( (seconds * UCS_NSEC_PER_SEC) + 0.5 );
     ts->tv_sec  = nsec / UCS_NSEC_PER_SEC;
     ts->tv_nsec = nsec % UCS_NSEC_PER_SEC;
-}
-
-/* Convert POSIX timeval to seconds */
-static inline double ucs_timespec_to_sec(const struct timespec *ts)
-{
-    return ((double)(ts->tv_sec) + ((double)(ts->tv_nsec) / UCS_NSEC_PER_SEC));
 }
 
 END_C_DECLS

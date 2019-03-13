@@ -162,6 +162,7 @@
 namespace ucs {
 
 extern const double test_timeout_in_sec;
+extern const double watchdog_timeout_default;
 
 typedef struct {
     pthread_t         thread;
@@ -171,15 +172,15 @@ typedef struct {
     pthread_t         parent_thread;
     pthread_barrier_t barrier;
     enum {
-        WATCHDOG_STOPPED,
-        WATCHDOG_RUNNING
+        WATCHDOG_STOP,
+        WATCHDOG_RUN,
+        WATCHDOG_TIMEOUT_SET,
     } state;
 } test_watchdog_t;
 
 void *watchdog_func(void *arg);
-void watchdog_signal();
-void watchdog_time_set(double new_timeout);
-void watchdog_time_reset();
+void watchdog_signal(int barrier = 1);
+void watchdog_timeout_set(double new_timeout);
 void watchdog_start();
 void watchdog_stop();
 
