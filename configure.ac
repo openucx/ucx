@@ -131,8 +131,15 @@ AC_ARG_WITH([docs_only],
                        [Compile only the docs and not the rest of UCX. [default=NO]]),
         ,[:],[with_docs_only=no])
 
+AC_DEFUN([UCX_DX_ENABLE_CHECK],
+         [AS_IF([DX_TEST_FEATURE($1)],
+                [],
+                [AS_IF([test "x$enable_doxygen_$1" == xyes],
+                       [AC_MSG_ERROR([--enable-doxygen-$1 was specified, but $1 tools are not found])],
+                       [])])])
+
 #
-#Doxygen options
+# Doxygen options
 #
 DX_PS_FEATURE(OFF)
 DX_HTML_FEATURE(ON)
@@ -145,6 +152,9 @@ AS_IF([test "x$with_docs_only" == xyes],
      AS_IF([DX_TEST_FEATURE(doc)],
            [],
            [AC_MSG_ERROR([--with-only-docs was specified, but doxygen is not found])])
+     UCX_DX_ENABLE_CHECK([html])
+     UCX_DX_ENABLE_CHECK([man])
+     UCX_DX_ENABLE_CHECK([pdf])
      AM_CONDITIONAL([DOCS_ONLY], [true])
      AM_CONDITIONAL([HAVE_GTEST], [false])
      AM_CONDITIONAL([HAVE_STATS], [false])
