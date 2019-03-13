@@ -24,13 +24,13 @@ BEGIN_C_DECLS
  * @brief Callback to process incoming active message
  *
  * When the callback is called, @a flags indicates how @a data should be handled.
- *  
+ *
  * @param [in]  arg      User-defined argument.
  * @param [in]  data     Points to the received data. This data may
  *                       persist after the callback returns and need
  *                       to be freed with @ref ucp_am_data_release
  * @param [in]  length   Length of data.
- * @param [in]  reply_ep If the active message is sent with the 
+ * @param [in]  reply_ep If the active message is sent with the
  *                       UCP_AM_SEND_REPLY flag, the sending ep
  *                       will be passed in. If not, NULL will be passed
  * @param [in]  flags    If this flag is set to UCP_CB_PARAM_FLAG_DATA,
@@ -38,7 +38,7 @@ BEGIN_C_DECLS
  *                       data will persist after the callback returns
  *
  * @return UCS_OK        @a data will not persist after the callback returns
- *                      
+ *
  * @return UCS_INPROGRESS Can only be returned if flags is set to
  *                        UCP_CB_PARAM_FLAG_DATA. If UCP_INPROGRESS
  *                        is returned, data will persist after the
@@ -68,7 +68,7 @@ enum ucp_am_cb_flags {
 };
 
 
-/** 
+/**
  * @ingroup UCP_WORKER
  * @brief Flags for sending a UCP AM
  *
@@ -102,7 +102,7 @@ enum ucp_cb_param_flags {
  *
  * This routine installs a user defined callback to handle incoming active
  * messages with a specific id. This callback is called whenever an active message,
- * which was sent from the remote peer by @ref for ucp_am_send_nb, is received on 
+ * which was sent from the remote peer by @ref for ucp_am_send_nb, is received on
  * this worker.
  *
  * @param [in]  worker      UCP worker on which to set the am handler
@@ -114,10 +114,10 @@ enum ucp_cb_param_flags {
  *                          Currently only UCP_AM_FLAG_WHOLE_MSG is supported, which indicates
  *                          the callback will not be invoked until all data has arrived.
  *
- * @return error code if the worker does not support active messages or 
+ * @return error code if the worker does not support active messages or
  *         requested callback flags
  */
-ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id, 
+ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
                                        ucp_am_callback_t cb, void *arg,
                                        uint32_t flags);
 
@@ -130,12 +130,12 @@ ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
  * CUDA memory.
  *
  * @param [in]  ep          UCP endpoint where the active message will be run
- * @param [in]  id          Active Message id. Specifies which registered 
+ * @param [in]  id          Active Message id. Specifies which registered
  *                          callback to run.
- * @param [in]  buffer      Pointer to the data to be sent to the target node 
+ * @param [in]  buffer      Pointer to the data to be sent to the target node
  *                          for the AM.
  * @param [in]  count       Number of elements to send.
- * @param [in]  datatype    Datatype descriptor for the elements in the buffer. 
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  cb          Callback that is invoked upon completion of the data
  *                          transfer if it is not completed immediately
  * @param [in]  flags       For Future use
@@ -161,7 +161,7 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @param [in] worker       Worker which received the active message
  * @param [in] data         Pointer to data that was passed into
  *                          the Active Message callback as the data
- *                          parameter and the callback flags were set to 
+ *                          parameter and the callback flags were set to
  *                          UCP_CB_PARAM_FLAG_DATA
  */
 void ucp_am_data_release(ucp_worker_h worker, void *data);

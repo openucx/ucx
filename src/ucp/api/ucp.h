@@ -135,7 +135,7 @@ enum ucp_params_field {
  * during @ref ucp_init "UCP initialization" process.
  */
 enum ucp_feature {
-    UCP_FEATURE_TAG          = UCS_BIT(0),  /**< Request tag matching 
+    UCP_FEATURE_TAG          = UCS_BIT(0),  /**< Request tag matching
                                                  support */
     UCP_FEATURE_RMA          = UCS_BIT(1),  /**< Request remote memory
                                                  access support */
@@ -143,11 +143,11 @@ enum ucp_feature {
                                                  operations support */
     UCP_FEATURE_AMO64        = UCS_BIT(3),  /**< Request 64-bit atomic
                                                  operations support */
-    UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt 
+    UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt
                                                  notification support */
     UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_EXPERIMENTAL = UCS_BIT(6)   /**< Request all 
-                                                 experimental 
+    UCP_FEATURE_EXPERIMENTAL = UCS_BIT(6)   /**< Request all
+                                                 experimental
                                                  features support */
 };
 
