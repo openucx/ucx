@@ -135,7 +135,7 @@ AC_DEFUN([UCX_DX_ENABLE_CHECK],
          [AS_IF([DX_TEST_FEATURE($1)],
                 [],
                 [AS_IF([test "x$enable_doxygen_$1" == xyes],
-                       [AC_MSG_ERROR([--enable-doxygen-$1 was specified, but $1 tools are not found])],
+                       [AC_MSG_ERROR([--enable-doxygen-$1 was specified, but $1 tools were not found])],
                        [])])])
 
 #
@@ -151,7 +151,7 @@ AS_IF([test "x$with_docs_only" = xyes],
     [AS_MESSAGE([Documents only requested])
      AS_IF([DX_TEST_FEATURE(doc)],
            [],
-           [AC_MSG_ERROR([--with-only-docs was specified, but doxygen is not found])])
+           [AC_MSG_ERROR([--with-only-docs was specified, but doxygen was not found])])
      UCX_DX_ENABLE_CHECK([html])
      UCX_DX_ENABLE_CHECK([man])
      UCX_DX_ENABLE_CHECK([pdf])
