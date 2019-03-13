@@ -27,7 +27,7 @@ static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 
 static inline int uct_tcp_ep_ctx_buf_empty(uct_tcp_ep_ctx_t *ctx)
 {
-    ucs_assert(ctx->length == 0 || ctx->buf != NULL);
+    ucs_assert((ctx->length == 0) || (ctx->buf != NULL));
 
     return ctx->length == 0;
 }
@@ -322,7 +322,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 {
     ucs_status_t status;
 
-    ucs_assertv(recv_length > 0, "ep=%p", ep);
+    ucs_assertv(*recv_length, "ep=%p", ep);
 
     status = uct_tcp_recv(ep->fd, ep->rx.buf + ep->rx.length, recv_length);
     if (ucs_unlikely(status != UCS_OK)) {
@@ -391,12 +391,12 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
             return 0;
         }
 
-        /* poast the enitre AM buffer */
+        /* post the entire AM buffer */
         recv_length = iface->am_buf_size;
     } else if (ep->rx.length - ep->rx.offset < sizeof(*hdr)) {
         ucs_assert(ep->rx.buf != NULL);
 
-        /* do partial receive of the remaining part of the hdr and
+        /* do partial receive of the remaining part of the hdr
          * and post the entire AM buffer */
         recv_length = iface->am_buf_size - ep->rx.length;
     } else {
@@ -415,8 +415,6 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
     while (uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
         remainder = ep->rx.length - ep->rx.offset;
         if (remainder < sizeof(*hdr)) {
-            ucs_assert(remainder >= 0);
-
             /* Move the partially received hdr to the beginning of the buffer */
             memmove(ep->rx.buf, ep->rx.buf + ep->rx.offset, remainder);
             ep->rx.offset = 0;
