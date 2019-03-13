@@ -1310,14 +1310,18 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
         goto out_iface_close;
     }
 
+    /* Enable progress before `uct_iface_flush` and `uct_worker_progress` called
+     * to give a chance to finish connection for some tranports (ib/ud, tcp).
+     * They may return UCS_INPROGRESS from `uct_iface_flush` when connections are
+     * in progress */
+    uct_iface_progress_enable(perf->uct.iface,
+                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
     status = uct_perf_test_setup_endpoints(perf);
     if (status != UCS_OK) {
         ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
         goto out_free_mem;
     }
-
-    uct_iface_progress_enable(perf->uct.iface,
-                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     return UCS_OK;
 
