@@ -294,10 +294,10 @@ enum ucp_ep_close_mode {
  */
 enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory that
-                                                       would be used in the
+                                                       will be used in the
                                                        @ref ucp_mem_map routine. */
     UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory that
-                                                       would be allocated or
+                                                       will be allocated or
                                                        registered in the
                                                        @ref ucp_mem_map routine.*/
     UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags. */
@@ -617,7 +617,7 @@ typedef struct ucp_generic_dt_ops {
 typedef struct ucp_params {
     /**
      * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                           field_mask;
@@ -687,7 +687,7 @@ typedef struct ucp_params {
     int                                mt_workers_shared;
 
     /**
-     * An optimization hint of how many endpoints would be created on this context.
+     * An optimization hint of how many endpoints will be created on this context.
      * For example, when used from MPI or SHMEM libraries, this number would specify
      * the number of ranks (or processing elements) in the job.
      * Does not affect semantics, but only transport selection criteria and the
@@ -785,7 +785,7 @@ typedef struct ucp_worker_attr {
 typedef struct ucp_worker_params {
     /**
      * Mask of valid fields in this structure, using bits from @ref ucp_worker_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
@@ -842,7 +842,7 @@ typedef struct ucp_worker_params {
      * support it. For example, on Linux, it will be placed in
      * @c epoll_data_t::ptr, when returned from @c epoll_wait(2).
      *
-     * Otherwise, events would be reported to the event file descriptor returned
+     * Otherwise, events will be reported to the event file descriptor returned
      * from @ref ucp_worker_get_efd().
      */
     int                     event_fd;
@@ -861,7 +861,7 @@ typedef struct ucp_listener_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref ucp_listener_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                            field_mask;
@@ -933,7 +933,7 @@ typedef struct ucp_mem_map_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref ucp_mem_map_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
@@ -2826,7 +2826,7 @@ void ucp_stream_data_release(ucp_ep_h ep, void *data);
  * This routine releases the non-blocking request back to the library, regardless
  * of its current state. Communications operations associated with this request
  * will make progress internally, however no further notifications or callbacks
- * would be invoked for this request.
+ * will be invoked for this request.
  */
 void ucp_request_free(void *request);
 
