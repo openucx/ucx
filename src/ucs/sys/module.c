@@ -16,6 +16,7 @@
 #include <string.h>
 #include <limits.h>
 #include <dlfcn.h>
+#include <link.h>
 #include <libgen.h>
 
 
@@ -115,9 +116,17 @@ static void ucs_module_loader_init_paths()
     }
 }
 
-/* Perform shallow search for a symbol */
-static void *ucs_module_dlsym_shallow(const char *module_path, void *dl, const char *symbol)
+static const char *ucs_module_short_path(const char *path)
 {
+    const char *p = strrchr(path, '/');
+    return (p == NULL) ? path : p + 1;
+}
+
+/* Perform shallow search for a symbol */
+static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
+                                      const char *symbol)
+{
+    struct link_map *lm_entry;
     Dl_info dl_info;
     void *addr;
     int ret;
@@ -135,13 +144,21 @@ static void *ucs_module_dlsym_shallow(const char *module_path, void *dl, const c
         return NULL;
     }
 
+    (void)dlerror();
+    ret = dlinfo(dl, RTLD_DI_LINKMAP, &lm_entry);
+    if (ret) {
+        ucs_module_debug("dlinfo(%p) [%s] failed: %s", dl, module_path, dlerror());
+        return NULL;
+    }
+
     /* return the symbol only if it was found in the requested library, and not,
      * for example, in one of its dependencies.
      */
-    if (strcmp(dl_info.dli_fname, module_path)) {
-        ucs_module_debug("symbol '%s' (address: %p) is found in %s, but "
-                         "expected %s - ignoring it",
-                         symbol, addr, dl_info.dli_fname, module_path);
+    if (lm_entry->l_addr != (uintptr_t)dl_info.dli_fbase) {
+        ucs_module_debug("ignoring '%s' (%p) from %s (%p), expected in %s (%lx)",
+                         symbol, addr, ucs_module_short_path(dl_info.dli_fname),
+                         dl_info.dli_fbase, ucs_module_short_path(module_path),
+                         lm_entry->l_addr);
         return NULL;
     }
 
