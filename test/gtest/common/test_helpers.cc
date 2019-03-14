@@ -27,7 +27,7 @@ void *watchdog_func(void *arg)
 
     pthread_mutex_lock(&watchdog.mutex);
 
-    /* sync with watched thread */
+    // sync with the watched thread
     pthread_barrier_wait(&watchdog.barrier);
 
     do {
@@ -36,37 +36,41 @@ void *watchdog_func(void *arg)
 
         ret = pthread_cond_timedwait(&watchdog.cv, &watchdog.mutex, &timeout);
         if (!ret) {
-            switch (watchdog.state) {
-            case test_watchdog_t::WATCHDOG_RUN:
-                if (watchdog.timeout != watchdog_timeout_default) {
-                    /* reset to the default one */
-                    watchdog.timeout = watchdog_timeout_default;
-                }
-                break;
-            case test_watchdog_t::WATCHDOG_STOP:
-                /* force the end of the cycle */
-                ret = 1;
-                break;
-            case test_watchdog_t::WATCHDOG_TIMEOUT_SET:
-                /* this value will be reseted to the default one when signal
-                 * will be received when the test completed */
-                watchdog.state = test_watchdog_t::WATCHDOG_RUN;
-                break;
-            }
             pthread_barrier_wait(&watchdog.barrier);
+        } else {
+            // something wrong happened - handle it
+            ADD_FAILURE() << strerror(ret) << " - abort testing";
+            if (ret == ETIMEDOUT) {
+                pthread_kill(watchdog.watched_thread, watchdog.kill_signal);
+            } else {
+                abort();
+            }
+        }
+
+        switch (watchdog.state) {
+        case WATCHDOG_TEST:
+            watchdog.kill_signal = SIGTERM;
+            // reset when the test completed
+            watchdog.state = WATCHDOG_DEFAULT_SET;
+            break;
+        case WATCHDOG_RUN:
+            // yawn - nothing to do
+            break;
+        case WATCHDOG_STOP:
+            // force the end of the loop
+            ret = 1;
+            break;
+        case WATCHDOG_TIMEOUT_SET:
+            // reset when the test completed
+            watchdog.state = WATCHDOG_DEFAULT_SET;
+            break;
+        case WATCHDOG_DEFAULT_SET:
+            watchdog.timeout     = watchdog_timeout_default;
+            watchdog.state       = WATCHDOG_RUN;
+            watchdog.kill_signal = SIGABRT;
+            break;
         }
     } while (!ret);
-
-    if (watchdog.state != test_watchdog_t::WATCHDOG_STOP) {
-        /* something wrong happened - handle it */
-        if (ret == ETIMEDOUT) {
-            ADD_FAILURE() << "Timeout expired - abort";
-            pthread_kill(watchdog.watched_thread, SIGABRT);
-        } else {
-            ADD_FAILURE() << "Watchdog fails " << ret;
-            abort();
-        }
-    }
 
     pthread_mutex_unlock(&watchdog.mutex);
 
@@ -84,18 +88,44 @@ void watchdog_signal(bool barrier)
     }
 }
 
-void watchdog_timeout_set(double new_timeout)
+void watchdog_set(test_watchdog_state_t new_state, double new_timeout)
 {
     pthread_mutex_lock(&watchdog.mutex);
-    /* change timeout value */
+    // change timeout value
     watchdog.timeout = new_timeout;
-    watchdog.state   = test_watchdog_t::WATCHDOG_TIMEOUT_SET;
-    /* apply new value for timeout */
+    watchdog.state   = new_state;
+    // apply new value for timeout
     watchdog_signal(0);
     pthread_mutex_unlock(&watchdog.mutex);
 
     pthread_barrier_wait(&watchdog.barrier);
 }
+
+void watchdog_set(test_watchdog_state_t new_state)
+{
+    watchdog_set(new_state, watchdog_timeout_default);
+}
+
+void watchdog_set(double new_timeout)
+{
+    watchdog_set(WATCHDOG_TIMEOUT_SET, new_timeout);
+}
+
+#define WATCHDOG_DEFINE_GETTER(_what, _what_type) \
+    _what_type UCS_PP_TOKENPASTE(watchdog_get_, _what)() \
+    { \
+        _what_type value; \
+        \
+        pthread_mutex_lock(&watchdog.mutex); \
+        value = watchdog._what; \
+        pthread_mutex_unlock(&watchdog.mutex); \
+        \
+        return value; \
+    }
+
+WATCHDOG_DEFINE_GETTER(timeout, double)
+WATCHDOG_DEFINE_GETTER(state, test_watchdog_state_t)
+WATCHDOG_DEFINE_GETTER(kill_signal, int)
 
 int watchdog_start()
 {
@@ -106,7 +136,7 @@ int watchdog_start()
     if (ret != 0) {
         return -1;
     }
-    /* create reentrant mutex */
+    // create reentrant mutex
     ret = pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
     if (ret != 0) {
         goto err_destroy_mutex_attr;
@@ -129,8 +159,9 @@ int watchdog_start()
     }
 
     pthread_mutex_lock(&watchdog.mutex);
-    watchdog.state          = test_watchdog_t::WATCHDOG_RUN;
+    watchdog.state          = WATCHDOG_RUN;
     watchdog.timeout        = watchdog_timeout_default;
+    watchdog.kill_signal    = SIGABRT;
     watchdog.watched_thread = pthread_self();
     pthread_mutex_unlock(&watchdog.mutex);
 
@@ -141,10 +172,10 @@ int watchdog_start()
 
     pthread_mutexattr_destroy(&mutex_attr);
 
-    /* sync with watchdog thread */
+    // sync with the watchdog thread
     pthread_barrier_wait(&watchdog.barrier);
 
-    /* test signaling */
+    // test signaling
     watchdog_signal();
 
     return 0;
@@ -165,7 +196,7 @@ void watchdog_stop()
     void *ret_val;
 
     pthread_mutex_lock(&watchdog.mutex);
-    watchdog.state = test_watchdog_t::WATCHDOG_STOP;
+    watchdog.state = WATCHDOG_STOP;
     watchdog_signal(0);
     pthread_mutex_unlock(&watchdog.mutex);
 
