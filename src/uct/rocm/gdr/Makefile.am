@@ -9,6 +9,8 @@ if HAVE_GDR_COPY
 module_LTLIBRARIES          = libuct_rocm_gdr.la
 libuct_rocm_gdr_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS) $(GDR_COPY_CPPFLAGS)
 libuct_rocm_gdr_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_rocm_gdr_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+                              $(top_builddir)/src/uct/rocm/libuct_rocm.la
 libuct_rocm_gdr_la_LDFLAGS  = $(ROCM_LDFLAGS) $(GDR_COPY_LDFLAGS) -version-info $(SOVERSION)
 
 noinst_HEADERS = \

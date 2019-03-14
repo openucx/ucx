@@ -16,6 +16,7 @@
 #include <string.h>
 #include <limits.h>
 #include <dlfcn.h>
+#include <link.h>
 #include <libgen.h>
 
 
@@ -115,6 +116,55 @@ static void ucs_module_loader_init_paths()
     }
 }
 
+static const char *ucs_module_short_path(const char *path)
+{
+    const char *p = strrchr(path, '/');
+    return (p == NULL) ? path : p + 1;
+}
+
+/* Perform shallow search for a symbol */
+static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
+                                      const char *symbol)
+{
+    struct link_map *lm_entry;
+    Dl_info dl_info;
+    void *addr;
+    int ret;
+
+    addr = dlsym(dl, symbol);
+    if (addr == NULL) {
+        ucs_module_trace("could not find symbol '%s' in %s", symbol, module_path);
+        return NULL;
+    }
+
+    (void)dlerror();
+    ret = dladdr(addr, &dl_info);
+    if (ret == 0) {
+        ucs_module_debug("dladdr(%p) [%s] failed: %s", addr, symbol, dlerror());
+        return NULL;
+    }
+
+    (void)dlerror();
+    ret = dlinfo(dl, RTLD_DI_LINKMAP, &lm_entry);
+    if (ret) {
+        ucs_module_debug("dlinfo(%p) [%s] failed: %s", dl, module_path, dlerror());
+        return NULL;
+    }
+
+    /* return the symbol only if it was found in the requested library, and not,
+     * for example, in one of its dependencies.
+     */
+    if (lm_entry->l_addr != (uintptr_t)dl_info.dli_fbase) {
+        ucs_module_debug("ignoring '%s' (%p) from %s (%p), expected in %s (%lx)",
+                         symbol, addr, ucs_module_short_path(dl_info.dli_fname),
+                         dl_info.dli_fbase, ucs_module_short_path(module_path),
+                         lm_entry->l_addr);
+        return NULL;
+    }
+
+    return addr;
+}
+
 static void ucs_module_init(const char *module_path, void *dl)
 {
     const char *module_init_name =
@@ -126,7 +176,7 @@ static void ucs_module_init(const char *module_path, void *dl)
     fullpath = realpath(module_path, buffer);
     ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
-    init_func = dlsym(dl, module_init_name);
+    init_func = ucs_module_dlsym_shallow(module_path, dl, module_init_name);
     if (init_func == NULL) {
         return;
     }
@@ -150,9 +200,14 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
     void *dl;
     int mode;
 
-    mode = RTLD_LAZY|RTLD_GLOBAL;
+    mode = RTLD_LAZY;
     if (flags & UCS_MODULE_LOAD_FLAG_NODELETE) {
         mode |= RTLD_NODELETE;
+    }
+    if (flags & UCS_MODULE_LOAD_FLAG_GLOBAL) {
+        mode |= RTLD_GLOBAL;
+    } else {
+        mode |= RTLD_LOCAL;
     }
 
     for (i = 0; i < ucs_module_loader_state.srchpath_cnt; ++i) {
@@ -162,8 +217,6 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
 
         /* Clear error state */
         (void)dlerror();
-
-        /* Using RTLD_GLOBAL to allow sub-modules */
         dl = dlopen(module_path, mode);
         if (dl != NULL) {
             ucs_module_init(module_path, dl);

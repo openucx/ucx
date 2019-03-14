@@ -831,12 +831,28 @@ test_ucs_load() {
 	! grep '^socket' strace.log
 }
 
-test_dlopen() {
+test_ucs_dlopen() {
 	$MAKEP
 
 	# Make sure UCM is not unloaded
-	echo "==== Running dlopen test with memhooks ===="
-	./test/apps/test_dlopen
+	echo "==== Running UCS dlopen test with memhooks ===="
+	./test/apps/test_ucs_dlopen
+}
+
+test_ucp_dlopen() {
+	../contrib/configure-release --prefix=$ucx_inst
+	$MAKEP clean
+	$MAKEP
+
+	# Make sure UCP library, when opened with dlopen(), loads CMA module
+	if find -name libuct_cma.so.0
+	then
+		echo "==== Running UCP library loading test ===="
+		./test/apps/test_ucp_dlopen # just to save output to log
+		./test/apps/test_ucp_dlopen | grep 'cma/cma'
+	else
+		echo "==== Not running UCP library loading test ===="
+	fi
 }
 
 test_memtrack() {
@@ -1090,7 +1106,8 @@ run_tests() {
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 3 4 test_dlopen
+	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var

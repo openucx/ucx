@@ -16,7 +16,8 @@
  * Flags for @ref UCS_MODULE_FRAMEWORK_LOAD
  */
 typedef enum {
-    UCS_MODULE_LOAD_FLAG_NODELETE = UCS_BIT(0) /**< Never unload */
+    UCS_MODULE_LOAD_FLAG_NODELETE = UCS_BIT(0), /**< Never unload */
+    UCS_MODULE_LOAD_FLAG_GLOBAL   = UCS_BIT(1)  /**< Load to global scope */
 } ucs_module_load_flags_t;
 
 
