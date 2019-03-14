@@ -176,7 +176,7 @@ typedef struct ucp_listener              *ucp_listener_h;
 typedef struct ucp_mem_attr {
    /**
      * Mask of valid fields in this structure, using bits from @ref ucp_mem_attr_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
@@ -482,7 +482,7 @@ typedef struct ucp_ep_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref ucp_ep_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
