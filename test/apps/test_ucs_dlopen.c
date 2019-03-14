@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -31,14 +31,15 @@ int test_ucm_set_event_handler(void *handle)
     dlerror();
     ucm_set_event_handler_f = dlsym(handle, "ucm_set_event_handler");
     if (ucm_set_event_handler_f == NULL) {
-        printf("failed to resolve ucm_set_event_handler(): %s\n", dlerror());
+        fprintf(stderr, "failed to resolve ucm_set_event_handler(): %s\n",
+                dlerror());
         return -1;
     }
 
     status = ucm_set_event_handler_f(UCM_EVENT_VM_UNMAPPED, 0, vm_unmap_cb,
                                      NULL);
     if (status != UCS_OK) {
-        printf("ucm_set_event_handler() failed\n");
+        fprintf(stderr, "ucm_set_event_handler() failed\n");
         return -1;
     }
 
@@ -56,7 +57,7 @@ int main(int argc, char **argv)
     /* get page size */
     ret = sysconf(_SC_PAGESIZE);
     if (ret < 0) {
-        printf("sysconf(_SC_PAGESIZE) failed: %m\n");
+        fprintf(stderr, "sysconf(_SC_PAGESIZE) failed: %m\n");
         return -1;
     }
     alloc_size = ret;
@@ -64,14 +65,14 @@ int main(int argc, char **argv)
     /* allocate some memory */
     ptr1 = malloc(alloc_size);
     if (!ptr1) {
-        printf("malloc() failed\n");
+        fprintf(stderr, "malloc() failed\n");
         return -1;
     }
 
     ptr2 = mmap(NULL, alloc_size, PROT_READ|PROT_WRITE,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (ptr2 == MAP_FAILED) {
-        printf("mmmap() failed: %m\n");
+        fprintf(stderr, "mmmap() failed: %m\n");
         return -1;
     }
 

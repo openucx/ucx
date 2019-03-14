@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -31,7 +31,7 @@ int test_ucp_init(void *handle)
     ucp_context_print_info_f = dlsym(handle, "ucp_context_print_info");
 
     if (!ucp_init_version_f || !ucp_cleanup_f || !ucp_context_print_info_f) {
-        printf("failed to get UCP function pointers\n");
+        fprintf(stderr, "failed to get UCP function pointers\n");
         return -1;
     }
 
@@ -40,7 +40,7 @@ int test_ucp_init(void *handle)
     status = ucp_init_version_f(UCP_API_MAJOR, UCP_API_MINOR, &ucp_params,
                                 NULL, &ucph);
     if (status != UCS_OK) {
-        printf("ucp_init_version() failed\n");
+        fprintf(stderr, "ucp_init_version() failed\n");
         return -1;
     }
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     /* get page size */
     ret = sysconf(_SC_PAGESIZE);
     if (ret < 0) {
-        printf("sysconf(_SC_PAGESIZE) failed: %m\n");
+        fprintf(stderr, "sysconf(_SC_PAGESIZE) failed: %m\n");
         return -1;
     }
     alloc_size = ret;
@@ -69,20 +69,20 @@ int main(int argc, char **argv)
     /* allocate some memory */
     ptr1 = malloc(alloc_size);
     if (!ptr1) {
-        printf("malloc() failed\n");
+        fprintf(stderr, "malloc() failed\n");
         return -1;
     }
 
     ptr2 = mmap(NULL, alloc_size, PROT_READ|PROT_WRITE,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (ptr2 == MAP_FAILED) {
-        printf("mmmap() failed: %m\n");
+        fprintf(stderr, "mmmap() failed: %m\n");
         return -1;
     }
 
     /* load ucp */
     printf("opening '%s'\n", filename);
-    handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);//TODO no GLOBAL
+    handle = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
     if (handle == NULL) {
         fprintf(stderr, "failed to open %s: %m\n", filename);
         return -1;
