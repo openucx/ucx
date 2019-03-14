@@ -169,7 +169,7 @@ typedef struct {
     pthread_mutex_t   mutex;
     pthread_cond_t    cv;
     double            timeout;
-    pthread_t         parent_thread;
+    pthread_t         watched_thread;
     pthread_barrier_t barrier;
     enum {
         WATCHDOG_STOP,
@@ -179,9 +179,9 @@ typedef struct {
 } test_watchdog_t;
 
 void *watchdog_func(void *arg);
-void watchdog_signal(int barrier = 1);
+void watchdog_signal(bool barrier = 1);
 void watchdog_timeout_set(double new_timeout);
-void watchdog_start();
+int watchdog_start();
 void watchdog_stop();
 
 class test_abort_exception : public std::exception {

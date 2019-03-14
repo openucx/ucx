@@ -27,7 +27,7 @@ void *watchdog_func(void *arg)
 
     pthread_mutex_lock(&watchdog.mutex);
 
-    /* sync with parent thread */
+    /* sync with watched thread */
     pthread_barrier_wait(&watchdog.barrier);
 
     do {
@@ -61,7 +61,7 @@ void *watchdog_func(void *arg)
         /* something wrong happened - handle it */
         if (ret == ETIMEDOUT) {
             ADD_FAILURE() << "Timeout expired - abort";
-            pthread_kill(watchdog.parent_thread, SIGABRT);
+            pthread_kill(watchdog.watched_thread, SIGABRT);
         } else {
             ADD_FAILURE() << "Watchdog fails " << ret;
             abort();
@@ -73,7 +73,7 @@ void *watchdog_func(void *arg)
     return NULL;
 }
 
-void watchdog_signal(int barrier)
+void watchdog_signal(bool barrier)
 {
     pthread_mutex_lock(&watchdog.mutex);
     pthread_cond_signal(&watchdog.cv);
@@ -97,33 +97,67 @@ void watchdog_timeout_set(double new_timeout)
     pthread_barrier_wait(&watchdog.barrier);
 }
 
-void watchdog_start()
+int watchdog_start()
 {
     pthread_mutexattr_t mutex_attr;
+    int ret;
 
-    pthread_mutexattr_init(&mutex_attr);
+    ret = pthread_mutexattr_init(&mutex_attr);
+    if (ret != 0) {
+        return -1;
+    }
     /* create reentrant mutex */
-    pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&watchdog.mutex, &mutex_attr);
-    pthread_mutexattr_destroy(&mutex_attr);
+    ret = pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+    if (ret != 0) {
+        goto err_destroy_mutex_attr;
+    }
 
-    pthread_cond_init(&watchdog.cv, NULL);
+    ret = pthread_mutex_init(&watchdog.mutex, &mutex_attr);
+    if (ret != 0) {
+        goto err_destroy_mutex_attr;
+    }
 
-    pthread_barrier_init(&watchdog.barrier, NULL, 2); // 2 - parent thread + watchdog
+    ret = pthread_cond_init(&watchdog.cv, NULL);
+    if (ret != 0) {
+        goto err_destroy_mutex;
+    }
+
+    // 2 - watched thread + watchdog
+    ret = pthread_barrier_init(&watchdog.barrier, NULL, 2);
+    if (ret != 0) {
+        goto err_destroy_cond;
+    }
 
     pthread_mutex_lock(&watchdog.mutex);
-    watchdog.state         = test_watchdog_t::WATCHDOG_RUN;
-    watchdog.timeout       = watchdog_timeout_default;
-    watchdog.parent_thread = pthread_self();
+    watchdog.state          = test_watchdog_t::WATCHDOG_RUN;
+    watchdog.timeout        = watchdog_timeout_default;
+    watchdog.watched_thread = pthread_self();
     pthread_mutex_unlock(&watchdog.mutex);
 
-    pthread_create(&watchdog.thread, NULL, watchdog_func, NULL);
+    ret = pthread_create(&watchdog.thread, NULL, watchdog_func, NULL);
+    if (ret != 0) {
+        goto err_destroy_barrier;
+    }
+
+    pthread_mutexattr_destroy(&mutex_attr);
 
     /* sync with watchdog thread */
     pthread_barrier_wait(&watchdog.barrier);
 
     /* test signaling */
     watchdog_signal();
+
+    return 0;
+
+err_destroy_barrier:
+    pthread_barrier_destroy(&watchdog.barrier);
+err_destroy_cond:
+    pthread_cond_destroy(&watchdog.cv);
+err_destroy_mutex:
+    pthread_mutex_destroy(&watchdog.mutex);
+err_destroy_mutex_attr:
+    pthread_mutexattr_destroy(&mutex_attr);
+    return -1;
 }
 
 void watchdog_stop()

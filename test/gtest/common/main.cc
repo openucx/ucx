@@ -88,8 +88,14 @@ int main(int argc, char **argv) {
     ucs_global_opts.warn_unused_env_vars = 0; /* Avoid warnings if not all
                                                  config vars are being used */
 
-    ucs::watchdog_start();
+    ret = ucs::watchdog_start();
+    if (ret != 0) {
+        ADD_FAILURE() << "Unable to start watchdog - abort";
+        return ret;
+    }
+
     ret = RUN_ALL_TESTS();
+
     ucs::watchdog_stop();
 
     return ret;
