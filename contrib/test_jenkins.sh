@@ -883,9 +883,7 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		export UCX_ERROR_SIGNALS=""
 		JUCX_INST=$ucx_inst $MAKE -C bindings/java/src/main/native test
-		unset UCX_ERROR_SIGNALS
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap

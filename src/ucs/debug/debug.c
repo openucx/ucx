@@ -28,6 +28,7 @@
 
 
 KHASH_MAP_INIT_INT64(ucs_debug_symbol, char*);
+KHASH_MAP_INIT_INT(ucs_signal_orig_action, struct sigaction*);
 
 #define UCS_GDB_MAX_ARGS         32
 #define BACKTRACE_MAX            64
@@ -113,6 +114,7 @@ static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
 static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
 khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
+khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
@@ -987,19 +989,15 @@ void ucs_handle_error(const char *message)
 
 static int ucs_debug_is_error_signal(int signum)
 {
-    int i;
+    khiter_t hash_it;
 
     if (!ucs_global_opts.handle_errors) {
         return 0;
     }
 
-    for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
-        if (signum == ucs_global_opts.error_signals.signals[i]) {
-            return 1;
-        }
-    }
-
-    return 0;
+    /* If this signal is error, but was disabled. */
+    hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
+    return hash_it != kh_end(&ucs_signal_orig_action_map);
 }
 
 static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
@@ -1085,21 +1083,37 @@ static void ucs_debug_set_signal_alt_stack()
               ucs_debug_signal_stack.ss_size);
 }
 
+static inline void ucs_debug_save_original_sighandler(int signum,
+                                                      const struct sigaction* orig_handler)
+{
+    struct sigaction *oact_copy;
+    khiter_t hash_it;
+    int hash_extra_status;
+
+    hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
+    if (hash_it != kh_end(&ucs_signal_orig_action_map)) {
+        return;
+    }
+
+    oact_copy = (struct sigaction *)ucs_malloc(sizeof(*orig_handler), "orig_sighandler");
+    *oact_copy = *orig_handler;
+    hash_it = kh_put(ucs_signal_orig_action,
+                     &ucs_signal_orig_action_map,
+                     signum, &hash_extra_status);
+    kh_value(&ucs_signal_orig_action_map, hash_it) = oact_copy;
+
+}
+
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
 {
     struct sigaction sigact, old_action;
     int i;
     int ret;
 
-    if (handler == NULL) {
-        sigact.sa_handler   = SIG_DFL;
-        sigact.sa_flags     = 0;
-    } else {
-        sigact.sa_sigaction = handler;
-        sigact.sa_flags     = SA_SIGINFO;
-        if (ucs_debug_signal_stack.ss_sp != NULL) {
-            sigact.sa_flags |= SA_ONSTACK;
-        }
+    sigact.sa_sigaction = handler;
+    sigact.sa_flags     = SA_SIGINFO;
+    if (ucs_debug_signal_stack.ss_sp != NULL) {
+        sigact.sa_flags |= SA_ONSTACK;
     }
     sigemptyset(&sigact.sa_mask);
 
@@ -1111,6 +1125,7 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
                      ucs_global_opts.error_signals.signals[i]);
         }
         ucs_debug_signal_restorer = old_action.sa_restorer;
+        ucs_debug_save_original_sighandler(ucs_global_opts.error_signals.signals[i], &old_action);
     }
 }
 
@@ -1172,12 +1187,16 @@ unsigned long ucs_debug_get_lib_base_addr()
 void ucs_debug_init()
 {
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
+    kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     if (ucs_global_opts.handle_errors) {
         ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
     }
     if (ucs_global_opts.debug_signo > 0) {
-        signal(ucs_global_opts.debug_signo, ucs_debug_signal_handler);
+        struct sigaction sigact, old_action;
+        sigact.sa_handler = ucs_debug_signal_handler;
+        orig_sigaction(ucs_global_opts.debug_signo, &sigact, &old_action);
+        ucs_debug_save_original_sighandler(ucs_global_opts.debug_signo, &old_action);
     }
 
 #ifdef HAVE_DETAILED_BACKTRACE
@@ -1188,15 +1207,47 @@ void ucs_debug_init()
 void ucs_debug_cleanup(int on_error)
 {
     char *sym;
+    int signum;
+    struct sigaction *hndl;
 
-    if (ucs_global_opts.handle_errors) {
-        ucs_set_signal_handler(NULL);
-    }
-    if (ucs_global_opts.debug_signo > 0) {
-        signal(ucs_global_opts.debug_signo, SIG_DFL);
-    }
+    kh_foreach_key(&ucs_signal_orig_action_map, signum,
+                   ucs_debug_disable_signal(signum));
+
     if (!on_error) {
         kh_foreach_value(&ucs_debug_symbols_cache, sym, ucs_free(sym));
+        kh_foreach_value(&ucs_signal_orig_action_map, hndl, ucs_free(hndl));
         kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
+        kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
+}
+
+void ucs_debug_disable_signal(int signum)
+{
+    khiter_t hash_it;
+    struct sigaction *original_action, ucs_action;
+    int ret;
+
+    hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map,
+                     signum);
+    if (hash_it == kh_end(&ucs_signal_orig_action_map)) {
+        ucs_warn("ucs_debug_disable_signal: signal %d was not set in ucs",
+                 signum);
+        return;
+    }
+
+    original_action = kh_val(&ucs_signal_orig_action_map, hash_it);
+    ret = orig_sigaction(signum, original_action, &ucs_action);
+    if (ret < 0) {
+        ucs_warn("failed to set signal handler for sig %d : %m", signum);
+    }
+
+    kh_del(ucs_signal_orig_action, &ucs_signal_orig_action_map, hash_it);
+    ucs_free(original_action);
+}
+
+void ucs_debug_disable_signals()
+{
+    int signum;
+    kh_foreach_key(&ucs_signal_orig_action_map, signum,
+                   ucs_debug_disable_signal(signum));
 }
