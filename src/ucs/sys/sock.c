@@ -73,6 +73,23 @@ ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
     return UCS_OK;
 }
 
+ucs_status_t ucs_socket_setopt(int fd, int level, int optname, const void *optval,
+                               const void *default_optval, socklen_t optlen)
+{
+    int ret;
+
+    if ((default_optval == NULL) || memcmp(optval, default_optval, optlen)) {
+        ret = setsockopt(fd, level, optname, optval, optlen);
+        if (ret < 0) {
+            ucs_error("Failed to set %d option for %d level on fd %d: %m",
+                      optname, level, fd);
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
     char str[UCS_SOCKADDR_STRING_LEN];

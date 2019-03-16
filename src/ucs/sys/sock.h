@@ -66,6 +66,25 @@ ucs_status_t ucs_socket_create(int domain, int type, int *fd_p);
 
 
 /**
+ * Set options on sockets if optval != def_optval
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [in]   level       The level at which the option is defined.
+ * @param [in]   optname     The socket option for which the value is to be set.
+ * @param [in]   optval      A pointer to the buffer in which the value for the
+ *                           requested option is specified.
+ * @param [in]   def_optval  A pointer to the buffer in which the default value
+ *                           for the requested option is specified.
+ * @param [in]   optlen      The size, in bytes, of the buffer pointed to by the
+ *                           optval and def_optval parameters.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
+ */
+ucs_status_t ucs_socket_setopt(int fd, int level, int optname, const void *optval,
+                               const void *def_optval, socklen_t optlen);
+
+
+/**
  * Connects the socket referred to by the file descriptor `fd`
  * to the address specified by `dest_addr`.
  *
