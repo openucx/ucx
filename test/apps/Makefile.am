@@ -32,7 +32,7 @@ test_ucp_dlopen_LDADD    = -ldl
 test_link_map_SOURCES  = test_link_map.c
 test_link_map_CPPFLAGS = $(BASE_CPPFLAGS)
 test_link_map_CFLAGS   = $(BASE_CFLAGS)
-test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
+test_link_map_LDADD    = -ldl $(top_builddir)/src/ucs/libucs.la $(top_builddir)/src/ucp/libucp.la
 
 if HAVE_TCMALLOC
 noinst_PROGRAMS       += test_tcmalloc
