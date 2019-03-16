@@ -13,8 +13,8 @@
 #define UCT_TCP_NAME "tcp"
 
 
-/** How many events to wait for in epoll_wait */
-#define UCT_TCP_MAX_EVENTS        32
+/* How many events to wait for in epoll_wait */
+#define UCT_TCP_MAX_EVENTS        16
 
 
 /* Forward declaration */

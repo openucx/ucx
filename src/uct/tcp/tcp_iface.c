@@ -13,9 +13,8 @@
 #include <netinet/tcp.h>
 #include <dirent.h>
 
-
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
-  {"", "MAX_SHORT=8192", NULL,
+  {"", "MAX_SHORT=8k", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -23,7 +22,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Give higher priority to the default network interface on the host",
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
 
-  {"MAX_POLL", "16",
+  {"MAX_POLL", UCS_PP_MAKE_STRING(UCT_TCP_MAX_EVENTS),
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
@@ -124,32 +123,44 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    unsigned read_events   = 0;
+    unsigned count         = 0;
     struct epoll_event events[UCT_TCP_MAX_EVENTS];
     uct_tcp_ep_t *ep;
-    unsigned count;
-    int i, nevents;
-    int max_events;
+    int i, nevents, max_events;
 
-    ucs_trace_poll("iface=%p", iface);
+    do {
+        max_events = ucs_min(iface->config.max_poll - read_events,
+                             UCT_TCP_MAX_EVENTS);
 
-    max_events = ucs_min(UCT_TCP_MAX_EVENTS, iface->config.max_poll);
-    nevents = epoll_wait(iface->epfd, events, max_events, 0);
-    if ((nevents < 0) && (errno != EINTR)) {
-        ucs_error("epoll_wait(epfd=%d max=%d) failed: %m", iface->epfd,
-                  max_events);
-        return 0;
-    }
-
-    count = 0;
-    for (i = 0; i < nevents; ++i) {
-        ep = events[i].data.ptr;
-        if (events[i].events & EPOLLIN) {
-            count += ep->rx.progress(ep);
+        nevents = epoll_wait(iface->epfd, events, max_events, 0);
+        if (ucs_unlikely((nevents < 0))) {
+            if (errno == EINTR) {
+                /* force a new loop iteration */
+                nevents = max_events;
+                continue;
+            }
+            ucs_error("epoll_wait(epfd=%d max=%d) failed: %m",
+                      iface->epfd, max_events);
+            return 0;
         }
-        if (events[i].events & EPOLLOUT) {
-            count += ep->tx.progress(ep);
+
+        for (i = 0; i < nevents; ++i) {
+            ep = events[i].data.ptr;
+            if (events[i].events & EPOLLIN) {
+                count += ep->rx.progress(ep);
+            }
+            if (events[i].events & EPOLLOUT) {
+                count += ep->tx.progress(ep);
+            }
         }
-    }
+
+        read_events += nevents;
+
+        ucs_trace_poll("iface=%p epoll_wait()=%d, total=%u",
+                       iface, nevents, read_events);
+    } while ((read_events < iface->config.max_poll) && (nevents == max_events));
+
     return count;
 }
 
