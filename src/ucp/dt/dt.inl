@@ -57,7 +57,8 @@ ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
             goto err_truncated;
         }
         if (ucs_likely(UCP_MEM_IS_HOST(mem_type)) ||
-            (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(mem_type)))) {
+            (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(mem_type))) ||
+            (ucs_likely(UCP_MEM_IS_ROCM_MANAGED(mem_type)))) {
             UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, buffer, data, length);
         } else {
             ucp_mem_type_unpack(worker, buffer, data, length, mem_type);
