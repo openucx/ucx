@@ -68,6 +68,7 @@ gtest_SOURCES = \
 	common/main.cc \
 	common/test_helpers.cc \
 	common/test_obj_size.cc \
+	common/test_watchdog.cc \
 	common/test_perf.cc \
 	common/test.cc \
 	\

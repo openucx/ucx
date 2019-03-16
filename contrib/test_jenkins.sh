@@ -936,6 +936,43 @@ run_coverity() {
 	fi
 }
 
+run_gtest_watchdog_test() {
+	expected_run_time=$1
+	expected_err_str="Connection timed out - abort testing"
+
+	make -C test/gtest
+
+	start_time=`date +%s`
+
+	env WATCHDOG_GTEST_TIMEOUT_=$expected_run_time \
+		GTEST_FILTER=test_watchdog.watchdog_timeout \
+		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
+	pid=$!
+	wait $pid
+
+	end_time=`date +%s`
+
+	res="$(grep -x "$expected_err_str" watchdog_timeout_test)" || true
+
+	rm -f watchdog_timeout_test
+
+	if [ "$res" != "$expected_err_str" ]
+	then
+		echo "didn't find [$expected_err_str] string in the test output"
+		exit 1
+	fi
+
+	run_time=$(($end_time-$start_time))
+	expected_run_time=$(($expected_run_time*2))
+
+	if [ $run_time -gt $expected_run_time ]
+	then
+		echo "Watchdog timeout test takes $run_time seconds that" \
+			"is greater than expected $expected_run_time seconds"
+		exit 1
+	fi
+}
+
 #
 # Run the test suite (gtest)
 # Arguments: <compiler-name> [configure-flags]
@@ -946,6 +983,9 @@ run_gtest() {
 	../contrib/configure-devel --prefix=$ucx_inst $@
 	$MAKEP clean
 	$MAKEP
+
+	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
+	run_gtest_watchdog_test 5
 
 	export GTEST_SHARD_INDEX=$worker
 	export GTEST_TOTAL_SHARDS=$nworkers
@@ -1014,6 +1054,16 @@ run_gtest() {
 		echo "1..1"                                          > vg_skipped.tap
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
+
+	unset GTEST_SHARD_INDEX
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_RANDOM_SEED
+	unset GTEST_SHUFFLE
+	unset GTEST_TAP
+	unset GTEST_REPORT_DIR
+	unset GTEST_EXTRA_ARGS
+	unset VALGRIND_EXTRA_ARGS
+	unset CUDA_VISIBLE_DEVICES
 }
 
 run_gtest_default() {
@@ -1054,6 +1104,13 @@ run_gtest_release() {
 	echo "==== Running unit tests (release configuration) ===="
 	env GTEST_FILTER=\*test_obj_size\* $AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
+
+	unset GTEST_SHARD_INDEX
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_RANDOM_SEED
+	unset GTEST_SHUFFLE
+	unset GTEST_TAP
+	unset GTEST_REPORT_DIR
 }
 
 run_ucx_tl_check() {

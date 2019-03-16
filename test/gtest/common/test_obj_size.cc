@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -40,11 +40,11 @@ class test_obj_size : public ucs::test {
 UCS_TEST_F(test_obj_size, size) {
 
 #if ENABLE_DEBUG_DATA
-   UCS_TEST_SKIP_R("Debug data");
+    UCS_TEST_SKIP_R("Debug data");
 #elif ENABLE_STATS
-   UCS_TEST_SKIP_R("Statistic enabled");
+    UCS_TEST_SKIP_R("Statistic enabled");
 #elif ENABLE_ASSERT
-   UCS_TEST_SKIP_R("Assert enabled");
+    UCS_TEST_SKIP_R("Assert enabled");
 #else
     EXPECTED_SIZE(ucp_ep_t, 64);
     EXPECTED_SIZE(ucp_request_t, 232);
