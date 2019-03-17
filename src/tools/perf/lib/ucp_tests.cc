@@ -398,10 +398,6 @@ public:
         ucp_worker_flush(m_perf.ucp.worker);
         ucx_perf_get_time(&m_perf);
 
-        if (my_index == 1) {
-            ucx_perf_update(&m_perf, 0, 0);
-        }
-
         ucp_perf_barrier(&m_perf);
         return UCS_OK;
     }
