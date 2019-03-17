@@ -28,7 +28,7 @@ typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
  */
 typedef struct uct_tcp_am_hdr {
     uint8_t                       am_id;
-    uint16_t                      length;
+    unsigned                      length;
 } UCS_S_PACKED uct_tcp_am_hdr_t;
 
 
