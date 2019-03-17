@@ -554,6 +554,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
 
+    uct_init_fi(&self->tx.fi);
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
@@ -877,4 +878,17 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
 ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     return uct_rc_iface_common_event_arm(tl_iface, events, 0);
+}
+
+ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+
+    if (iface->config.fence) {
+        iface->tx.fi.fence_flag = 1;
+        iface->tx.fi.fence_beat++;
+    }
+
+    UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
+    return UCS_OK;
 }

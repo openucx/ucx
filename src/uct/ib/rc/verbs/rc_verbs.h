@@ -32,10 +32,7 @@ typedef struct uct_rc_verbs_txcnt {
 typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
-    struct {
-        uint16_t                fence_beat;
-        int                     fence_flag;
-    } tx;
+    uct_fence_info_t       fi;
 } uct_rc_verbs_ep_t;
 
 
@@ -66,12 +63,7 @@ typedef struct uct_rc_verbs_iface {
         size_t                  short_desc_size;
         size_t                  max_inline;
         unsigned                tx_max_wr;
-        int                     no_fence;
     } config;
-    struct {
-        uint16_t                fence_beat;
-        int                     fence_flag;
-    } tx;
 } uct_rc_verbs_iface_t;
 
 

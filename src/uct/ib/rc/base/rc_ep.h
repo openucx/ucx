@@ -445,4 +445,36 @@ uct_rc_fc_req_moderation(uct_rc_fc_t *fc, uct_rc_iface_t *iface)
             UCT_RC_EP_FC_FLAG_SOFT_REQ : 0;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_fence_info_t* fi, int flag)
+{
+    int fence = fi->fence_flag;
+
+    /* a call to iface_fence increases beat, so if endpoint beat is not in
+     * sync with iface beat it means the endpoint did not post any WQE with
+     * fence flag yet */
+    if (fi->fence_beat != iface->tx.fi.fence_beat) {
+        fi->fence_beat = iface->tx.fi.fence_beat;
+        fence |= iface->tx.fi.fence_flag;
+    }
+
+    fi->fence_flag = 0;
+    return fence ? flag : 0;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_ep_fence(uct_ep_h tl_ep, uct_fence_info_t* fi, int fence)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+
+    /* in case PCI Atomics are enabled atomic/read operation on target
+     * are unordered according to PCI specification so we need to
+     * request atomic fence for next such operation */
+    if (fence && iface->config.fence) {
+        fi->fence_flag = 1;
+    }
+
+    UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_OK;
+}
 #endif

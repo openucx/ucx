@@ -199,6 +199,7 @@ struct uct_rc_iface {
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
+        uct_fence_info_t        fi;
     } tx;
 
     struct {
@@ -236,6 +237,7 @@ struct uct_rc_iface {
 #if ENABLE_ASSERT
         int                  tx_cq_len;
 #endif
+        int                  fence;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
@@ -348,6 +350,8 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
 ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
                                   const uct_rc_iface_config_t *config);
 
+ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)
 {
@@ -437,5 +441,4 @@ uct_rc_iface_atomic_handler(uct_rc_iface_t *iface, int ext, unsigned length)
     }
     return NULL;
 }
-
 #endif

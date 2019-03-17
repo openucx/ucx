@@ -90,21 +90,6 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
     uct_rc_txqp_add_send_op_sn(&ep->super.txqp, &desc->super, ep->txcnt.pi);
 }
 
-static UCS_F_ALWAYS_INLINE int
-uct_rc_verbs_ep_atomic_fence(uct_rc_verbs_iface_t *iface,
-                             uct_rc_verbs_ep_t* ep, int flag)
-{
-    int fence = ep->tx.fence_flag;
-
-    if (ep->tx.fence_beat != iface->tx.fence_beat) {
-        ep->tx.fence_beat = iface->tx.fence_beat;
-        fence |= iface->tx.fence_flag;
-    }
-
-    ep->tx.fence_flag = 0;
-    return fence ? flag : 0;
-}
-
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                            size_t iovcnt, uint64_t remote_addr, uct_rkey_t rkey,
@@ -123,7 +108,8 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.opcode, opcode, sge, sge_cnt, remote_addr, rkey);
     wr.next = NULL;
     if (opcode == IBV_WR_RDMA_READ) {
-        send_flags |= uct_rc_verbs_ep_atomic_fence(iface, ep, IBV_SEND_FENCE);
+        send_flags |= uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                             IBV_SEND_FENCE);
     }
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, send_flags, INT_MAX);
@@ -163,7 +149,8 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                           result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
                                 rkey, desc, IBV_SEND_SIGNALED |
-                                uct_rc_verbs_ep_atomic_fence(iface, ep, IBV_SEND_FENCE));
+                                uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                                       IBV_SEND_FENCE));
     return UCS_INPROGRESS;
 }
 
@@ -203,7 +190,8 @@ uct_rc_verbs_ep_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_verbs_ep_ext_atomic_post(ep, opcode, length, compare_mask, compare_add,
                                     swap, remote_addr, rkey, desc,
                                     IBV_EXP_SEND_SIGNALED |
-                                    uct_rc_verbs_ep_atomic_fence(iface, ep, IBV_EXP_SEND_FENCE));
+                                    uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                                           IBV_EXP_SEND_FENCE));
     return UCS_INPROGRESS;
 }
 #endif
@@ -554,15 +542,9 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
 ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    if (!iface->config.no_fence) {
-        ep->tx.fence_flag = 1;
-    }
-
-    UCT_TL_EP_STAT_FENCE(&ep->super.super);
-    return UCS_OK;
+    return uct_rc_ep_fence(tl_ep, &ep->fi, 1);
 }
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -616,8 +598,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
-    self->tx.fence_flag = 0;
-    self->tx.fence_beat = 0;
+    uct_init_fi(&self->fi);
 
     return UCS_OK;
 }

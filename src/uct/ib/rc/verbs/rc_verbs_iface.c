@@ -202,7 +202,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->config.tx_max_wr / 4);
-    self->config.no_fence            = !config->fence;
+    self->super.config.fence         = config->fence;
 
     self->super.progress = uct_rc_verbs_iface_progress;
 
@@ -257,8 +257,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     } else {
         self->fc_desc = NULL;
     }
-    self->tx.fence_flag = 0;
-    self->tx.fence_beat = 0;
 
     return UCS_OK;
 
@@ -266,19 +264,6 @@ err_common_cleanup:
     ucs_mpool_cleanup(&self->short_desc_mp, 1);
 err:
     return status;
-}
-
-ucs_status_t uct_rc_verbs_iface_fence(uct_iface_h tl_iface, unsigned flags)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-
-    if (!iface->config.no_fence) {
-        iface->tx.fence_flag = 1;
-        iface->tx.fence_beat++;
-    }
-
-    UCT_TL_IFACE_STAT_FENCE(&iface->super.super.super);
-    return UCS_OK;
 }
 
 ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
@@ -380,7 +365,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_get_address           = uct_rc_ep_get_address,
     .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
-    .iface_fence              = uct_rc_verbs_iface_fence,
+    .iface_fence              = uct_rc_iface_fence,
     .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
