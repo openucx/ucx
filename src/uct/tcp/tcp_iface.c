@@ -337,7 +337,7 @@ err_close_sock:
     return status;
 }
 
-static ucs_mpool_ops_t buf_mp_ops = {
+static ucs_mpool_ops_t uct_tcp_mpool_ops = {
     ucs_mpool_chunk_malloc,
     ucs_mpool_chunk_free,
     NULL,
@@ -386,7 +386,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                             (config->tx_mpool.bufs_grow == 0) ?
                             32 : config->tx_mpool.bufs_grow,
                             config->tx_mpool.max_bufs,
-                            &buf_mp_ops, "uct_tcp_iface_tx_buf_mp");
+                            &uct_tcp_mpool_ops, "uct_tcp_iface_tx_buf_mp");
     if (status != UCS_OK) {
         goto err;
     }
@@ -396,7 +396,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                             (config->rx_mpool.bufs_grow == 0) ?
                             32 : config->rx_mpool.bufs_grow,
                             config->rx_mpool.max_bufs,
-                            &buf_mp_ops, "uct_tcp_iface_rx_buf_mp");
+                            &uct_tcp_mpool_ops, "uct_tcp_iface_rx_buf_mp");
     if (status != UCS_OK) {
         goto err_cleanup_tx_mpool;
     }
