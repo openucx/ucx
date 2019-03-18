@@ -23,9 +23,7 @@ typedef struct uct_rocm_ipc_md_config {
 
 typedef struct uct_rocm_ipc_key {
     hsa_amd_ipc_memory_t ipc;
-    int ipc_valid;
     uintptr_t address;
-    uintptr_t lock_address;
     size_t length;
     int dev_num;
 } uct_rocm_ipc_key_t;
