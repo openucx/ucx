@@ -62,7 +62,7 @@ double ucs_x86_tsc_freq_from_cpu_model()
     char buf[256];
     char model[256];
     char *rate;
-    char newline;
+    char newline[2];
     double ghz, max_ghz;
     FILE* f;
     int rc;
@@ -86,7 +86,7 @@ double ucs_x86_tsc_freq_from_cpu_model()
             continue;
         }
 
-        rc = sscanf(rate, "@ %lfGHz%[\n]", &ghz, &newline);
+        rc = sscanf(rate, "@ %lfGHz%[\n]", &ghz, newline);
         if (rc != 2) {
             continue;
         }
