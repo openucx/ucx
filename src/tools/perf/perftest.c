@@ -796,6 +796,8 @@ static unsigned sock_rte_group_index(void *rte_group)
 static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
                              void *arg)
 {
+#pragma omp barrier
+
 #pragma omp master
   {
     sock_rte_group_t *group = rte_group;
@@ -1020,6 +1022,8 @@ static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
     int dummy;
     int flag;
 
+#pragma omp barrier
+
 #pragma omp master
 
     /*
@@ -1156,6 +1160,8 @@ static unsigned ext_rte_group_index(void *rte_group)
 static void ext_rte_barrier(void *rte_group, void (*progress)(void *arg),
                             void *arg)
 {
+#pragma omp barrier
+
 #pragma omp master
   {
     rte_group_t group = (rte_group_t)rte_group;

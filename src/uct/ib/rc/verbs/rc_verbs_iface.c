@@ -190,10 +190,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
-    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
     init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
     init_attr.qp_type        = IBV_QPT_RC;
+    init_attr.rx_cq_len      = config->super.super.rx.queue_len;
+    init_attr.seg_size       = config->super.super.super.max_bcopy;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super, &init_attr);
@@ -382,7 +383,9 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp
+    .create_qp                = uct_ib_iface_create_qp,
+    .init_res_domain          = (void*)ucs_empty_function_return_success,
+    .cleanup_res_domain       = (void*)ucs_empty_function,
     },
     .init_rx                  = uct_rc_iface_init_rx,
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,

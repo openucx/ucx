@@ -22,7 +22,7 @@ AC_ARG_WITH([mpi],
 #
 # Search for mpicc and mpirun in the given path.
 #
-AS_IF([test "x$with_mpi" == xyes],
+AS_IF([test "x$with_mpi" = xyes],
         [
         AC_ARG_VAR(MPICC,[MPI C compiler command])
         AC_PATH_PROGS(MPICC,mpicc mpiicc,"",$mpi_path)

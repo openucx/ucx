@@ -1,0 +1,17 @@
+#
+# Copyright (C) Mellanox Technologies Ltd. 2009.  ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+prefix = ${pc_top_builddir}/contrib/cray-ugni-mock
+exec_prefix = ${prefix}
+bindir = ${prefix}/bin 
+libdir = ${prefix}/lib
+includedir = ${prefix}/include
+
+Name: cray-pmi
+Description: Mock library for cray-ugni
+Version: 0.1
+Cflags: -I${includedir} 
+Libs: -L${libdir}

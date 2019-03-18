@@ -5,11 +5,12 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = cuda rocm
+SUBDIRS = . cuda rocm
 
 lib_LTLIBRARIES    = libucm.la
 libucm_ladir       = $(includedir)/ucm
-libucm_la_LDFLAGS  = $(UCM_LDFLAGS) -ldl -version-info $(SOVERSION)
+libucm_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) -Xlinker -z -Xlinker nodelete \
+                     -ldl -version-info $(SOVERSION)
 libucm_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCM_MALLOC_PREFIX=ucm_dl
 libucm_la_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_NO_DEPRECATED)
 

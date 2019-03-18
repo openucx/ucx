@@ -5,6 +5,8 @@
 
 #include "rocm_base.h"
 
+#include <ucs/sys/module.h>
+
 #include <hsa_ext_amd.h>
 
 #include <pthread.h>
@@ -159,4 +161,10 @@ int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
     info.size = sizeof(hsa_amd_pointer_info_t);
     status = hsa_amd_pointer_info(addr, &info, NULL, NULL, NULL);
     return status == HSA_STATUS_SUCCESS && info.type != HSA_EXT_POINTER_TYPE_UNKNOWN;
+}
+
+UCS_MODULE_INIT() {
+    UCS_MODULE_FRAMEWORK_DECLARE(uct_rocm);
+    UCS_MODULE_FRAMEWORK_LOAD(uct_rocm, 0);
+    return UCS_OK;
 }

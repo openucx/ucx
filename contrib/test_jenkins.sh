@@ -224,9 +224,8 @@ build_java_docs() {
 	echo " ==== Building java docs ===="
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java
-		mvn javadoc:javadoc
-		popd
+		../configure --prefix=$ucx_inst --with-java
+		$MAKE -C ../build-test/bindings/java/src/main/native docs
 		module unload dev/jdk
 		module unload dev/mvn
 	else
@@ -338,9 +337,36 @@ build_debug() {
 }
 
 #
+# Build UGNI
+#
+build_ugni() {
+    echo 1..1 > build_ugni.tap
+
+    echo "==== Build with cray-ugni ===="
+    #
+    # Point pkg-config to contrib/cray-ugni-mock, and replace
+    # PKG_CONFIG_TOP_BUILD_DIR with source dir, since the mock .pc files contain
+    # relative paths.
+    #
+    ../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
+        PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
+        PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
+    $MAKEP clean
+    $MAKEP
+
+    # make sure UGNI transport is enabled
+    grep '#define HAVE_TL_UGNI 1' config.h
+
+    $MAKE  distcheck
+    $MAKEP distclean
+
+    module unload dev/cray-ugni
+    echo "ok 1 - build successful " >> build_ugni.tap
+}
+
+#
 # Build CUDA
 #
-
 build_cuda() {
     echo 1..1 > build_cuda.tap
     if module_load dev/cuda
@@ -794,14 +820,39 @@ test_profiling() {
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "print_pi"
 }
 
-test_dlopen() {
+test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
 
-	echo "==== Running dlopen test ===="
+	# Make sure UCS library constructor does not call socket()
+	echo "==== Running UCS library loading test ===="
 	strace ./ucx_profiling &> strace.log
 	! grep '^socket' strace.log
+}
+
+test_ucs_dlopen() {
+	$MAKEP
+
+	# Make sure UCM is not unloaded
+	echo "==== Running UCS dlopen test with memhooks ===="
+	./test/apps/test_ucs_dlopen
+}
+
+test_ucp_dlopen() {
+	../contrib/configure-release --prefix=$ucx_inst
+	$MAKEP clean
+	$MAKEP
+
+	# Make sure UCP library, when opened with dlopen(), loads CMA module
+	if find -name libuct_cma.so.0
+	then
+		echo "==== Running UCP library loading test ===="
+		./test/apps/test_ucp_dlopen # just to save output to log
+		./test/apps/test_ucp_dlopen | grep 'cma/cma'
+	else
+		echo "==== Not running UCP library loading test ===="
+	fi
 }
 
 test_memtrack() {
@@ -832,9 +883,9 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
-		pushd ../bindings/java/
-		JUCX_INST=$ucx_inst mvn clean test
-		popd
+		export UCX_ERROR_SIGNALS=""
+		JUCX_INST=$ucx_inst $MAKE -C bindings/java/src/main/native test
+		unset UCX_ERROR_SIGNALS
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
@@ -885,6 +936,43 @@ run_coverity() {
 	fi
 }
 
+run_gtest_watchdog_test() {
+	expected_run_time=$1
+	expected_err_str="Connection timed out - abort testing"
+
+	make -C test/gtest
+
+	start_time=`date +%s`
+
+	env WATCHDOG_GTEST_TIMEOUT_=$expected_run_time \
+		GTEST_FILTER=test_watchdog.watchdog_timeout \
+		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
+	pid=$!
+	wait $pid
+
+	end_time=`date +%s`
+
+	res="$(grep -x "$expected_err_str" watchdog_timeout_test)" || true
+
+	rm -f watchdog_timeout_test
+
+	if [ "$res" != "$expected_err_str" ]
+	then
+		echo "didn't find [$expected_err_str] string in the test output"
+		exit 1
+	fi
+
+	run_time=$(($end_time-$start_time))
+	expected_run_time=$(($expected_run_time*2))
+
+	if [ $run_time -gt $expected_run_time ]
+	then
+		echo "Watchdog timeout test takes $run_time seconds that" \
+			"is greater than expected $expected_run_time seconds"
+		exit 1
+	fi
+}
+
 #
 # Run the test suite (gtest)
 # Arguments: <compiler-name> [configure-flags]
@@ -895,6 +983,9 @@ run_gtest() {
 	../contrib/configure-devel --prefix=$ucx_inst $@
 	$MAKEP clean
 	$MAKEP
+
+	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
+	run_gtest_watchdog_test 5
 
 	export GTEST_SHARD_INDEX=$worker
 	export GTEST_TOTAL_SHARDS=$nworkers
@@ -963,6 +1054,16 @@ run_gtest() {
 		echo "1..1"                                          > vg_skipped.tap
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
+
+	unset GTEST_SHARD_INDEX
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_RANDOM_SEED
+	unset GTEST_SHUFFLE
+	unset GTEST_TAP
+	unset GTEST_REPORT_DIR
+	unset GTEST_EXTRA_ARGS
+	unset VALGRIND_EXTRA_ARGS
+	unset CUDA_VISIBLE_DEVICES
 }
 
 run_gtest_default() {
@@ -1003,6 +1104,13 @@ run_gtest_release() {
 	echo "==== Running unit tests (release configuration) ===="
 	env GTEST_FILTER=\*test_obj_size\* $AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
+
+	unset GTEST_SHARD_INDEX
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_RANDOM_SEED
+	unset GTEST_SHUFFLE
+	unset GTEST_TAP
+	unset GTEST_REPORT_DIR
 }
 
 run_ucx_tl_check() {
@@ -1029,6 +1137,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 1 4 build_ugni
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
@@ -1054,7 +1163,9 @@ run_tests() {
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 3 4 test_dlopen
+	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 1 4 test_ucs_dlopen
+	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 1 3 test_malloc_hook

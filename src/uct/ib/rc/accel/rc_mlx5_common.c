@@ -829,3 +829,17 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
     return nfreed;
 }
+
+ucs_status_t uct_rc_mlx5_init_res_domain(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    return uct_ib_mlx5_iface_init_res_domain(ib_iface, &iface->mlx5_common);
+}
+
+void uct_rc_mlx5_cleanup_res_domain(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    uct_ib_mlx5_iface_cleanup_res_domain(&iface->mlx5_common);
+}

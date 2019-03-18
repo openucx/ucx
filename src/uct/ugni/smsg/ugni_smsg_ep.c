@@ -85,11 +85,13 @@ static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_u
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_ep_t, uct_iface_t *tl_iface)
+UCS_CLASS_INIT_FUNC(uct_ugni_smsg_ep_t, const uct_ep_params_t *params)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, tl_iface, NULL, NULL);
-    uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
+    uct_ugni_smsg_iface_t *iface = ucs_derived_of(params->iface, uct_ugni_smsg_iface_t);
     void *mbox;
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, params);
+    ucs_debug("Setting up SMSG ep");
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_mbox,
                              mbox, return UCS_ERR_NO_RESOURCE);
@@ -118,7 +120,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_smsg_ep_t, uct_ugni_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, uct_iface_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
 
 ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr) {
@@ -155,8 +157,9 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_status_t rc = UCS_OK;
     uint32_t ep_hash;
 
-    uncompact_smsg_attr(ucs_derived_of(iface, uct_ugni_smsg_iface_t), compact_remote_attr, &remote_attr);
-    rc = ugni_connect_ep(iface, ugni_dev_addr, &iface_addr->super, &ep->super);
+    uncompact_smsg_attr(ucs_derived_of(iface, uct_ugni_smsg_iface_t), 
+                        compact_remote_attr, &remote_attr);
+    rc = ugni_connect_ep(&ep->super, iface, &iface_addr->super, ugni_dev_addr);
 
     if(UCS_OK != rc){
         ucs_error("Could not connect ep in smsg");

@@ -11,15 +11,23 @@ SUBDIRS = sockaddr
 endif
 
 noinst_PROGRAMS = \
-	test_dlopen \
+	test_ucp_dlopen \
+	test_ucs_dlopen \
 	test_link_map
 
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
-test_dlopen_SOURCES  = test_dlopen.c
-test_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
-test_dlopen_CFLAGS   = $(BASE_CFLAGS)
-test_dlopen_LDADD    = -ldl
+test_ucs_dlopen_SOURCES  = test_ucs_dlopen.c
+test_ucs_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
+                           -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+test_ucs_dlopen_CFLAGS   = $(BASE_CFLAGS)
+test_ucs_dlopen_LDADD    = -ldl
+
+test_ucp_dlopen_SOURCES  = test_ucp_dlopen.c
+test_ucp_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
+                           -DLIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+test_ucp_dlopen_CFLAGS   = $(BASE_CFLAGS)
+test_ucp_dlopen_LDADD    = -ldl
 
 test_link_map_SOURCES  = test_link_map.c
 test_link_map_CPPFLAGS = $(BASE_CPPFLAGS)

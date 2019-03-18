@@ -157,14 +157,15 @@ ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
     return status;
 }
 
-ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface,
-                             const uct_devaddr_ugni_t *dev_addr,
+ucs_status_t ugni_connect_ep(uct_ugni_ep_t *ep, 
+                             uct_ugni_iface_t *iface,
                              const uct_sockaddr_ugni_t *iface_addr,
-                             uct_ugni_ep_t *ep){
+                             const uct_devaddr_ugni_t *ugni_dev_addr)
+{
     gni_return_t ugni_rc;
 
     uct_ugni_cdm_lock(&iface->cdm);
-    ugni_rc = GNI_EpBind(ep->ep, dev_addr->nic_addr, iface_addr->domain_id);
+    ugni_rc = GNI_EpBind(ep->ep, ugni_dev_addr->nic_addr, iface_addr->domain_id);
     uct_ugni_cdm_unlock(&iface->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         uct_ugni_cdm_lock(&iface->cdm);
@@ -175,7 +176,7 @@ ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface,
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_debug("Binding ep %p to address (%d %d)", ep, dev_addr->nic_addr,
+    ucs_debug("Binding ep %p to address (%d %d)", ep, ugni_dev_addr->nic_addr,
               iface_addr->domain_id);
 
     ep->flush_group->flush_comp.count = UCT_UGNI_INIT_FLUSH;
@@ -184,12 +185,9 @@ ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface,
 }
 
 /* Endpoint definition */
-UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
-                    const uct_device_addr_t *dev_addr, const uct_iface_addr_t *addr)
+UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, const uct_ep_params_t *params)
 {
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
-    const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
-    const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)dev_addr;
+    uct_ugni_iface_t *iface = ucs_derived_of(params->iface, uct_ugni_iface_t);
     ucs_status_t rc = UCS_OK;
     gni_return_t ugni_rc;
     uint32_t *big_hash;
@@ -209,11 +207,6 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
                   gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
-
-    if(NULL != addr){
-        rc = ugni_connect_ep(iface, ugni_dev_addr, iface_addr, self);
-    }
-
     ucs_arbiter_group_init(&self->arb_group);
     big_hash = (void *)&self->ep;
     self->hash_key = big_hash[0];
@@ -249,8 +242,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_base_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*,
-                          const uct_device_addr_t *, const uct_iface_addr_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 uct_ugni_ep_t *uct_ugni_iface_lookup_ep(uct_ugni_iface_t *iface, uintptr_t hash_key)

@@ -147,19 +147,9 @@ struct uct_ib_iface_ops {
                                              ucs_status_t status);
     ucs_status_t            (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                          struct ibv_qp **qp_p);
+    ucs_status_t            (*init_res_domain)(uct_ib_iface_t *iface);
+    void                    (*cleanup_res_domain)(uct_ib_iface_t *iface);
 };
-
-
-typedef struct uct_ib_iface_res_domain {
-    uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
-    struct ibv_exp_res_domain   *ibv_domain;
-#elif HAVE_DECL_IBV_ALLOC_TD
-    struct ibv_td               *td;
-    struct ibv_pd               *pd;
-    struct ibv_pd               *ibv_domain;
-#endif
-} uct_ib_iface_res_domain_t;
 
 
 struct uct_ib_iface {
@@ -176,7 +166,6 @@ struct uct_ib_iface {
     uint8_t                 is_global_addr;
     uint8_t                 addr_size;
     union ibv_gid           gid;
-    uct_ib_iface_res_domain_t *res_domain;
 
     struct {
         unsigned            rx_payload_offset;   /* offset from desc to payload */
@@ -219,7 +208,6 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    tx_cq_len;       /* Send CQ length */
     unsigned    rx_cq_len;       /* Receive CQ length */
     size_t      seg_size;        /* Transport segment size */
-    uint32_t    res_domain_key;  /* Resource domain key */
     int         tm_cap_bit;      /* Required HW tag-matching capabilities */
     unsigned    fc_req_size;     /* Flow control request size */
     int         qp_type;         /* IB QP type */
@@ -540,20 +528,6 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     uct_ib_address_unpack(ib_addr, &lid, &gid);
 
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_bits, ah_attr);
-}
-
-static UCS_F_ALWAYS_INLINE
-struct ibv_pd *uct_ib_iface_qp_pd(uct_ib_iface_t *iface)
-{
-    struct ibv_pd *pd;
-
-    pd = uct_ib_iface_md(iface)->pd;
-#if HAVE_DECL_IBV_ALLOC_TD
-    if (iface->res_domain && iface->res_domain->ibv_domain) {
-        pd = iface->res_domain->ibv_domain;
-    }
-#endif
-    return pd;
 }
 
 static UCS_F_ALWAYS_INLINE

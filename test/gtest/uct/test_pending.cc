@@ -427,8 +427,9 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     for (i = 1; i < N; i++) {
         m_e1->connect(i, *m_e2, i);
     }
-    /* give a chance to finish connection for some transports (ud) */
-    short_progress_loop();
+
+    /* give a chance to finish connection for some transports (ib/ud, tcp) */
+    flush();
 
     n_pending = 0;
 
@@ -454,16 +455,20 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     EXPECT_EQ(0, n_pending);
 }
 
-
 UCS_TEST_P(test_uct_pending, pending_fairness)
 {
-    int N=16;
-    int i, iters;
+    int N = 16;
     uint64_t send_data = 0xdeadbeef;
+    int i, iters;
     ucs_status_t status;
-    
+
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    /* TODO: need to investigate the slowness of the test with TCP */
+    if (GetParam()->tl_name == "tcp") {
+        ucs::watchdog_set(ucs::watchdog_timeout_default * 2.0);
     }
 
     initialize();
@@ -481,8 +486,8 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
         reqs[i] = pending_alloc_simple(send_data, i);
     }
 
-    /* give a chance to finish connection for some transports (ud) */
-    short_progress_loop();
+    /* give a chance to finish connection for some transports (ib/ud, tcp) */
+    flush();
 
     n_pending = 0;
     for (iters = 0; iters < 10000; iters++) { 

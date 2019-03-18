@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -19,8 +19,6 @@ public:
     void init()
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_TM_ENABLE", "y"));
-        /* TODO: update tag offload tests to operate on 2+ lanes */
-        modify_config("MAX_RNDV_LANES",  "1");
         test_ucp_tag::init();
         check_offload_support(true);
     }
@@ -56,9 +54,7 @@ public:
 
     void activate_offload(entity &se, ucp_tag_t tag = 0x11)
     {
-        uint64_t small_val = 0xFAFA;
-
-        send_recv(se, tag, sizeof(small_val));
+        send_recv(se, tag, receiver().worker()->context->config.ext.tm_thresh);
     }
 
     void req_cancel(entity &e, request *req)
@@ -85,6 +81,7 @@ UCS_TEST_P(test_ucp_tag_offload, post_after_cancel)
 
     EXPECT_EQ(1u, receiver().worker()->tm.expected.sw_all_count);
     req_cancel(receiver(), req);
+    EXPECT_EQ(0u, receiver().worker()->tm.expected.sw_all_count);
 
     req = recv_nb_and_check(&recvbuf, recvbuf.size(), DATATYPE, tag,
                             UCP_TAG_MASK_FULL);
@@ -99,14 +96,17 @@ UCS_TEST_P(test_ucp_tag_offload, post_after_comp)
     ucp_tag_t tag      = 0x11;
     std::vector<char> recvbuf(2048, 0);
 
+    activate_offload(sender());
+
     request *req = recv_nb_and_check(&small_val, sizeof(small_val), DATATYPE,
                                      tag, UCP_TAG_MASK_FULL);
 
     EXPECT_EQ(1u, receiver().worker()->tm.expected.sw_all_count);
 
-    send_b(&small_val, sizeof(small_val), DATATYPE, 0x11);
+    send_b(&small_val, sizeof(small_val), DATATYPE, tag);
     wait(req);
     request_free(req);
+    EXPECT_EQ(0u, receiver().worker()->tm.expected.sw_all_count);
 
     req = recv_nb_and_check(&recvbuf, recvbuf.size(), DATATYPE, tag,
                             UCP_TAG_MASK_FULL);
@@ -287,6 +287,12 @@ public:
 
     void init()
     {
+        // The test checks that increase of active ifaces is handled
+        // correctly. It needs to start with a single active iface, therefore
+        // disable multi-rail.
+        modify_config("MAX_EAGER_LANES", "1");
+        modify_config("MAX_RNDV_LANES",  "1");
+
         test_ucp_tag_offload::init();
 
         // TODO: add more tls which support tag offloading

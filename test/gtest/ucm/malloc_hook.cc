@@ -940,6 +940,54 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
 #endif
 }
 
+UCS_TEST_F(malloc_hook, test_event) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    status = event.set(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
+    ASSERT_UCS_OK(status);
+
+    status = ucm_test_events(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_F(malloc_hook, test_event_failed) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+    const char *symbol = "munmap";
+    ucm_bistro_restore_point_t *rp = NULL;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    if (ucm_global_opts.mmap_hook_mode != UCM_MMAP_HOOK_BISTRO) {
+        UCS_TEST_SKIP_R("skipping on non-BISTRO hooks");
+    }
+
+    status = event.set(UCM_EVENT_MUNMAP);
+    ASSERT_UCS_OK(status);
+
+    /* set hook to mmap call */
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE((intptr_t)rp, NULL);
+
+    status = ucm_test_events(UCM_EVENT_MUNMAP);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    /* restore original mmap body */
+    status = ucm_bistro_restore(rp);
+    ASSERT_UCS_OK(status);
+}
+
 /* test for mmap events are fired from non-direct load modules
  * we are trying to load lib1, from lib1 load lib2, and
  * fire mmap event from lib2 */

@@ -13,7 +13,7 @@ AC_ARG_WITH([rdmacm],
            [], [with_rdmacm=guess])
 
 AS_IF([test "x$with_rdmacm" != xno],
-      [AS_IF([test "x$with_rdmacm" == xguess -o "x$with_rdmacm" == xyes -o "x$with_rdmacm" == x],
+      [AS_IF([test "x$with_rdmacm" = xguess -o "x$with_rdmacm" = xyes -o "x$with_rdmacm" = x],
              [ucx_check_rdmacm_dir=/usr],
              [ucx_check_rdmacm_dir=$with_rdmacm])
 

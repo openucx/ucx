@@ -11,14 +11,14 @@
 java_happy="no"
 AC_ARG_WITH([java],
             [AC_HELP_STRING([--with-java=(PATH)],
-                            [Compile Java UCX (default is guess).])
-            ], [], [with_java=guess])
+                            [Compile Java UCX (default is no).])
+            ], [], [with_java=no])
 
 AS_IF([test "x$with_java" != xno],
       [
        AC_CHECK_PROG(MVNBIN,  mvn,  yes)
        AC_CHECK_PROG(JAVABIN, java, yes)
-       AS_IF([test "x${MVNBIN}" == "xyes" -a "x${JAVABIN}" == "xyes"],
+       AS_IF([test "x${MVNBIN}" = "xyes" -a "x${JAVABIN}" = "xyes"],
              [
               AS_IF([test -n "$with_java" -a "x$with_java" != "xyes" -a "x$with_java" != "xguess"],
                     [java_dir=$with_java],
@@ -27,7 +27,7 @@ AS_IF([test "x$with_java" != xno],
                            [],
                            [
                             AC_CHECK_PROG(READLINK, readlink, yes)
-                            AS_IF([test "x${READLINK}" == xyes],
+                            AS_IF([test "x${READLINK}" = xyes],
                                   [
                                    AC_SUBST([JAVA], [$(readlink -f $(type -P java))])
                                    AC_SUBST([JAVA_HOME], [${JAVA%*/jre*}])
@@ -35,7 +35,7 @@ AS_IF([test "x$with_java" != xno],
                                   ],
                                   [
                                    AS_IF(
-                                         [test "x$with_java" == "xguess"],
+                                         [test "x$with_java" = "xguess"],
                                          [AC_MSG_WARN([For Java support please install readlink or set JAVA_HOME=<path-to-java>])],
                                          [AC_MSG_ERROR([Java support requested, but couldn't find path; please set JAVA_HOME=<path-to-java>])]
                                         )
@@ -53,7 +53,7 @@ AS_IF([test "x$with_java" != xno],
                                java_happy="yes"
                               ],
                               [
-                               AS_IF([test "x$with_java" == "xguess"],
+                               AS_IF([test "x$with_java" = "xguess"],
                                      [AC_MSG_WARN([Couldn't find jni headers.])],
                                      [AC_MSG_ERROR([Java support requested, but couldn't find jni headers in $java_dir])]
                                     )
@@ -63,7 +63,7 @@ AS_IF([test "x$with_java" != xno],
               CPPFLAGS="$save_CPPFLAGS"
              ],
              [
-              AS_IF([test "x$with_java" == "xguess"],
+              AS_IF([test "x$with_java" = "xguess"],
                     [AC_MSG_WARN([Disabling Java support - java or mvn not in path.])],
                     [AC_MSG_ERROR([Java support was explicitly requested, but java or mvn not in path.])]
                    )

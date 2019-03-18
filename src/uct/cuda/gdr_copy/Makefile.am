@@ -8,6 +8,8 @@ if HAVE_GDR_COPY
 module_LTLIBRARIES              = libuct_cuda_gdrcopy.la
 libuct_cuda_gdrcopy_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS) $(GDR_COPY_CPPFLAGS)
 libuct_cuda_gdrcopy_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_cuda_gdrcopy_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+                                  $(top_builddir)/src/uct/cuda/libuct_cuda.la
 libuct_cuda_gdrcopy_la_LDFLAGS  = $(CUDA_LDFLAGS) $(GDR_COPY_LDFLAGS) -version-info $(SOVERSION)
 
 noinst_HEADERS = \

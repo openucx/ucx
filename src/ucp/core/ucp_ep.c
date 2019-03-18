@@ -1079,6 +1079,9 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->zcopy_auto_thresh    = 0;
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
                 ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
+        /* adjust max_short if zcopy_thresh is set externally */
+        config->max_short = ucs_min(config->max_short,
+                                    (ssize_t)config->zcopy_thresh[0]);
     }
 
     for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {

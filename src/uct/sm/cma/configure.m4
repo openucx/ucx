@@ -15,7 +15,7 @@ AS_IF([test "x$enable_cma" != xno],
             [AC_CHECK_FUNC([process_vm_readv],
                            [cma_happy="yes"],
                            [cma_happy="no"])
-             AS_IF([test "x$cma_happy" == xyes],
+             AS_IF([test "x$cma_happy" = "xyes"],
                    [uct_modules+=":cma"])
             ])
       ]
