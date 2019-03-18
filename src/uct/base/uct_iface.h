@@ -460,7 +460,7 @@ typedef struct {
             break; \
         } \
         \
-        _req = ucs_container_of(priv, uct_pending_req_t, priv); \
+        _req = ucs_container_of(_priv, uct_pending_req_t, priv); \
         ucs_queue_pull_non_empty(_queue); \
         _status = _req->func(_req); \
         if (_status != UCS_OK) { \
