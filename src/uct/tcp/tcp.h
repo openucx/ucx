@@ -68,6 +68,9 @@ typedef struct uct_tcp_iface {
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     int                           epfd;              /* Event poll set of sockets */
     size_t                        outstanding;       /* How much data in the EP send buffers */
+    ucs_mpool_t                   tx_mpool;          /* TX memory pool */
+    ucs_mpool_t                   rx_mpool;          /* RX memory pool */
+    size_t                        am_buf_size;       /* AM buffer size */
 
     struct {
         struct sockaddr_in        ifaddr;            /* Network address */
@@ -94,6 +97,8 @@ typedef struct uct_tcp_iface_config {
     unsigned                      max_poll;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
+    uct_iface_mpool_config_t      tx_mpool;
+    uct_iface_mpool_config_t      rx_mpool;
 } uct_tcp_iface_config_t;
 
 
@@ -127,8 +132,6 @@ ucs_status_t uct_tcp_ep_create(uct_tcp_iface_t *iface, int fd,
 
 ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
                                          uct_ep_h *ep_p);
-
-void uct_tcp_ep_ctx_migrate(uct_tcp_ep_ctx_t *to_ctx, uct_tcp_ep_ctx_t *from_ctx);
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
