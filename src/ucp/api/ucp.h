@@ -135,7 +135,7 @@ enum ucp_params_field {
  * during @ref ucp_init "UCP initialization" process.
  */
 enum ucp_feature {
-    UCP_FEATURE_TAG          = UCS_BIT(0),  /**< Request tag matching 
+    UCP_FEATURE_TAG          = UCS_BIT(0),  /**< Request tag matching
                                                  support */
     UCP_FEATURE_RMA          = UCS_BIT(1),  /**< Request remote memory
                                                  access support */
@@ -143,11 +143,11 @@ enum ucp_feature {
                                                  operations support */
     UCP_FEATURE_AMO64        = UCS_BIT(3),  /**< Request 64-bit atomic
                                                  operations support */
-    UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt 
+    UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt
                                                  notification support */
     UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_EXPERIMENTAL = UCS_BIT(6)   /**< Request all 
-                                                 experimental 
+    UCP_FEATURE_EXPERIMENTAL = UCS_BIT(6)   /**< Request all
+                                                 experimental
                                                  features support */
 };
 
@@ -294,10 +294,10 @@ enum ucp_ep_close_mode {
  */
 enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory that
-                                                       would be used in the
+                                                       will be used in the
                                                        @ref ucp_mem_map routine. */
     UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory that
-                                                       would be allocated or
+                                                       will be allocated or
                                                        registered in the
                                                        @ref ucp_mem_map routine.*/
     UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags. */
@@ -617,7 +617,7 @@ typedef struct ucp_generic_dt_ops {
 typedef struct ucp_params {
     /**
      * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                           field_mask;
@@ -687,7 +687,7 @@ typedef struct ucp_params {
     int                                mt_workers_shared;
 
     /**
-     * An optimization hint of how many endpoints would be created on this context.
+     * An optimization hint of how many endpoints will be created on this context.
      * For example, when used from MPI or SHMEM libraries, this number would specify
      * the number of ranks (or processing elements) in the job.
      * Does not affect semantics, but only transport selection criteria and the
@@ -785,7 +785,7 @@ typedef struct ucp_worker_attr {
 typedef struct ucp_worker_params {
     /**
      * Mask of valid fields in this structure, using bits from @ref ucp_worker_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
@@ -842,7 +842,7 @@ typedef struct ucp_worker_params {
      * support it. For example, on Linux, it will be placed in
      * @c epoll_data_t::ptr, when returned from @c epoll_wait(2).
      *
-     * Otherwise, events would be reported to the event file descriptor returned
+     * Otherwise, events will be reported to the event file descriptor returned
      * from @ref ucp_worker_get_efd().
      */
     int                     event_fd;
@@ -861,7 +861,7 @@ typedef struct ucp_listener_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref ucp_listener_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                            field_mask;
@@ -933,7 +933,7 @@ typedef struct ucp_mem_map_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref ucp_mem_map_params_field.
-     * Fields not specified in this mask would be ignored.
+     * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
@@ -1172,7 +1172,7 @@ void ucp_cleanup(ucp_context_h context_p);
  * @ingroup UCP_CONTEXT
  * @brief Get attributes specific to a particular context.
  *
- * This routine fetches an information about the context.
+ * This routine fetches information about the context.
  *
  * @param [in]  context_p  Handle to @ref ucp_context_h
  *                         "UCP application context".
@@ -1189,14 +1189,14 @@ ucs_status_t ucp_context_query(ucp_context_h context_p,
  * @ingroup UCP_CONTEXT
  * @brief Print context information.
  *
- * This routine prints information about the context configuration, including
+ * This routine prints information about the context configuration: including
  * memory domains, transport resources, and other useful information associated
  * with the context.
  *
- * @param [in] context      Context object whose configuration to print.
- * @param [in] stream       Output stream to print the information to.
+ * @param [in] context      Print this context object's configuration.
+ * @param [in] stream       Output stream on which to print the information.
  */
-void ucp_context_print_info(ucp_context_h context, FILE *stream);
+void ucp_context_print_info(const ucp_context_h context, FILE *stream);
 
 
 /**
@@ -1994,6 +1994,10 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * Application code should not make any changes to the content of the RKEY
  * buffer.
  *
+ * @note The application is responsible for releasing the RKEY object when
+ *       it is no longer needed by calling the @ref ucp_rkey_destroy
+ *       "ucp_rkey_destroy()" routine.
+ *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.
  * @param [out] rkey_p        Remote key handle.
@@ -2718,9 +2722,9 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  */
 ucs_status_ptr_t
 ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
-                     uint64_t value, void *result, size_t op_size,
-                     uint64_t remote_addr, ucp_rkey_h rkey,
-                     ucp_send_callback_t cb);
+                    uint64_t value, void *result, size_t op_size,
+                    uint64_t remote_addr, ucp_rkey_h rkey,
+                    ucp_send_callback_t cb);
 
 
 /**
@@ -2822,7 +2826,7 @@ void ucp_stream_data_release(ucp_ep_h ep, void *data);
  * This routine releases the non-blocking request back to the library, regardless
  * of its current state. Communications operations associated with this request
  * will make progress internally, however no further notifications or callbacks
- * would be invoked for this request.
+ * will be invoked for this request.
  */
 void ucp_request_free(void *request);
 

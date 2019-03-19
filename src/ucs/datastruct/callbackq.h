@@ -16,6 +16,8 @@
 
 BEGIN_C_DECLS
 
+/** @file callbackq.h */
+
 /*
  * Thread-safe callback queue:
  *  - only one thread can dispatch

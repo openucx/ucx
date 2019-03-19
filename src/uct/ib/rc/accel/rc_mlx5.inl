@@ -215,6 +215,33 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_add_fence(uct_ib_md_t *md, uct_ib_mlx5_txwq_t *wq)
+{
+    if (md->dev.pci_fadd_arg_sizes || md->dev.pci_cswap_arg_sizes) {
+        wq->next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rc_mlx5_ep_fm(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq)
+{
+    uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
+
+    fm_ce_se     |= txwq->next_fm;
+    txwq->next_fm = 0;
+
+    /* a call to iface_fence increases beat, so if endpoint beat is not in
+     * sync with iface beat it means the endpoint did not post any WQE with
+     * fence flag yet */
+    if (txwq->fence_beat != iface->tx.fence_beat) {
+        txwq->fence_beat = iface->tx.fence_beat;
+        fm_ce_se        |= iface->tx.next_fm;
+    }
+
+    return fm_ce_se;
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              uint8_t opcode, uint8_t opmod, uint8_t fm_ce_se,
@@ -413,6 +440,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case MLX5_OPCODE_RDMA_READ:
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq);
+        /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
         ucs_assert(length <= UCT_IB_MAX_MESSAGE_SIZE);
@@ -433,6 +462,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     case MLX5_OPCODE_ATOMIC_FA:
     case MLX5_OPCODE_ATOMIC_CS:
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq);
         ucs_assert(length == sizeof(uint64_t));
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
@@ -451,6 +481,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case MLX5_OPCODE_ATOMIC_MASKED_CS:
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq);
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
@@ -488,6 +519,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
      case MLX5_OPCODE_ATOMIC_MASKED_FA:
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq);
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
@@ -597,6 +629,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 #endif
 
     case MLX5_OPCODE_RDMA_READ:
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq);
+        /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
         ucs_assert(uct_iov_total_length(iov, iovcnt) <= UCT_IB_MAX_MESSAGE_SIZE);
@@ -1296,3 +1330,5 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     }
     return UCS_OK;
 }
+
+

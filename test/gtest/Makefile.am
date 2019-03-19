@@ -68,6 +68,7 @@ gtest_SOURCES = \
 	common/main.cc \
 	common/test_helpers.cc \
 	common/test_obj_size.cc \
+	common/test_watchdog.cc \
 	common/test_perf.cc \
 	common/test.cc \
 	\
@@ -149,6 +150,7 @@ gtest_SOURCES = \
 	ucs/test_strided_alloc.cc \
 	ucs/test_string.cc \
 	ucs/test_sys.cc \
+	ucs/test_sock.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
@@ -192,6 +194,7 @@ if HAVE_CUDA
 gtest_SOURCES += \
 	ucm/cuda_hooks.cc
 gtest_LDADD += \
+	$(CUDA_LDFLAGS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
 endif
 

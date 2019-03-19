@@ -15,6 +15,199 @@ namespace ucs {
 
 const double test_timeout_in_sec = 60.;
 
+const double watchdog_timeout_default = 900.; // 15 minutes
+
+static test_watchdog_t watchdog;
+
+void *watchdog_func(void *arg)
+{
+    int ret = 0;
+    double now;
+    struct timespec timeout;
+
+    pthread_mutex_lock(&watchdog.mutex);
+
+    // sync with the watched thread
+    pthread_barrier_wait(&watchdog.barrier);
+
+    do {
+        now = ucs_get_accurate_time();
+        ucs_sec_to_timespec(now + watchdog.timeout, &timeout);
+
+        ret = pthread_cond_timedwait(&watchdog.cv, &watchdog.mutex, &timeout);
+        if (!ret) {
+            pthread_barrier_wait(&watchdog.barrier);
+        } else {
+            // something wrong happened - handle it
+            ADD_FAILURE() << strerror(ret) << " - abort testing";
+            if (ret == ETIMEDOUT) {
+                pthread_kill(watchdog.watched_thread, watchdog.kill_signal);
+            } else {
+                abort();
+            }
+        }
+
+        switch (watchdog.state) {
+        case WATCHDOG_TEST:
+            watchdog.kill_signal = SIGTERM;
+            // reset when the test completed
+            watchdog.state = WATCHDOG_DEFAULT_SET;
+            break;
+        case WATCHDOG_RUN:
+            // yawn - nothing to do
+            break;
+        case WATCHDOG_STOP:
+            // force the end of the loop
+            ret = 1;
+            break;
+        case WATCHDOG_TIMEOUT_SET:
+            // reset when the test completed
+            watchdog.state = WATCHDOG_DEFAULT_SET;
+            break;
+        case WATCHDOG_DEFAULT_SET:
+            watchdog.timeout     = watchdog_timeout_default;
+            watchdog.state       = WATCHDOG_RUN;
+            watchdog.kill_signal = SIGABRT;
+            break;
+        }
+    } while (!ret);
+
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    return NULL;
+}
+
+void watchdog_signal(bool barrier)
+{
+    pthread_mutex_lock(&watchdog.mutex);
+    pthread_cond_signal(&watchdog.cv);
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    if (barrier) {
+        pthread_barrier_wait(&watchdog.barrier);
+    }
+}
+
+void watchdog_set(test_watchdog_state_t new_state, double new_timeout)
+{
+    pthread_mutex_lock(&watchdog.mutex);
+    // change timeout value
+    watchdog.timeout = new_timeout;
+    watchdog.state   = new_state;
+    // apply new value for timeout
+    watchdog_signal(0);
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    pthread_barrier_wait(&watchdog.barrier);
+}
+
+void watchdog_set(test_watchdog_state_t new_state)
+{
+    watchdog_set(new_state, watchdog_timeout_default);
+}
+
+void watchdog_set(double new_timeout)
+{
+    watchdog_set(WATCHDOG_TIMEOUT_SET, new_timeout);
+}
+
+#define WATCHDOG_DEFINE_GETTER(_what, _what_type) \
+    _what_type UCS_PP_TOKENPASTE(watchdog_get_, _what)() \
+    { \
+        _what_type value; \
+        \
+        pthread_mutex_lock(&watchdog.mutex); \
+        value = watchdog._what; \
+        pthread_mutex_unlock(&watchdog.mutex); \
+        \
+        return value; \
+    }
+
+WATCHDOG_DEFINE_GETTER(timeout, double)
+WATCHDOG_DEFINE_GETTER(state, test_watchdog_state_t)
+WATCHDOG_DEFINE_GETTER(kill_signal, int)
+
+int watchdog_start()
+{
+    pthread_mutexattr_t mutex_attr;
+    int ret;
+
+    ret = pthread_mutexattr_init(&mutex_attr);
+    if (ret != 0) {
+        return -1;
+    }
+    // create reentrant mutex
+    ret = pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+    if (ret != 0) {
+        goto err_destroy_mutex_attr;
+    }
+
+    ret = pthread_mutex_init(&watchdog.mutex, &mutex_attr);
+    if (ret != 0) {
+        goto err_destroy_mutex_attr;
+    }
+
+    ret = pthread_cond_init(&watchdog.cv, NULL);
+    if (ret != 0) {
+        goto err_destroy_mutex;
+    }
+
+    // 2 - watched thread + watchdog
+    ret = pthread_barrier_init(&watchdog.barrier, NULL, 2);
+    if (ret != 0) {
+        goto err_destroy_cond;
+    }
+
+    pthread_mutex_lock(&watchdog.mutex);
+    watchdog.state          = WATCHDOG_RUN;
+    watchdog.timeout        = watchdog_timeout_default;
+    watchdog.kill_signal    = SIGABRT;
+    watchdog.watched_thread = pthread_self();
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    ret = pthread_create(&watchdog.thread, NULL, watchdog_func, NULL);
+    if (ret != 0) {
+        goto err_destroy_barrier;
+    }
+
+    pthread_mutexattr_destroy(&mutex_attr);
+
+    // sync with the watchdog thread
+    pthread_barrier_wait(&watchdog.barrier);
+
+    // test signaling
+    watchdog_signal();
+
+    return 0;
+
+err_destroy_barrier:
+    pthread_barrier_destroy(&watchdog.barrier);
+err_destroy_cond:
+    pthread_cond_destroy(&watchdog.cv);
+err_destroy_mutex:
+    pthread_mutex_destroy(&watchdog.mutex);
+err_destroy_mutex_attr:
+    pthread_mutexattr_destroy(&mutex_attr);
+    return -1;
+}
+
+void watchdog_stop()
+{
+    void *ret_val;
+
+    pthread_mutex_lock(&watchdog.mutex);
+    watchdog.state = WATCHDOG_STOP;
+    watchdog_signal(0);
+    pthread_mutex_unlock(&watchdog.mutex);
+
+    pthread_barrier_wait(&watchdog.barrier);
+    pthread_join(watchdog.thread, &ret_val);
+
+    pthread_barrier_destroy(&watchdog.barrier);
+    pthread_cond_destroy(&watchdog.cv);
+    pthread_mutex_destroy(&watchdog.mutex);
+}
+
 int test_time_multiplier()
 {
     int factor = 1;
@@ -94,7 +287,8 @@ void safe_usleep(double usec) {
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
-    return ifa_addr->sa_family == AF_INET;
+    return (ifa_addr->sa_family == AF_INET) ||
+           (ifa_addr->sa_family == AF_INET6);
 }
 
 bool is_rdmacm_netdev(const char *ifa_name) {
@@ -142,7 +336,7 @@ uint16_t get_port() {
     socklen_t len = sizeof(ret_addr);
     uint16_t port;
 
-    status = ucs_tcpip_socket_create(&sock_fd);
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock_fd);
     EXPECT_EQ(status, UCS_OK);
 
     memset(&addr_in, 0, sizeof(struct sockaddr_in));

@@ -24,7 +24,7 @@ extern "C" {
 #include <cuda_runtime.h>
 #endif
 
-std::string const test_md::mem_types[] = {"host", "cuda", "cuda-managed"};
+std::string const test_md::mem_types[] = {"host", "cuda", "cuda-managed", "rocm", "rocm-managed"};
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -125,8 +125,8 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
         if (fill_buffer) {
             memcpy(*address, fill_buffer, size);
         }
-    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
 #if HAVE_CUDA
+    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
         cudaError_t cerr;
 
         cerr = cudaMalloc(address, size);
@@ -136,11 +136,12 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
             cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
             ASSERT_TRUE(cerr == cudaSuccess);
         }
-#else
-        std::stringstream ss;
-        ss << "can't allocate cuda memory for " << GetParam();
-        UCS_TEST_SKIP_R(ss.str());
 #endif
+    } else {
+        std::stringstream ss;
+        ss << "can't allocate " << mem_types[mem_type]
+           << " memory for " << GetParam();
+        UCS_TEST_SKIP_R(ss.str());
     }
 }
 
@@ -534,7 +535,6 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                    xpmem, \
                    cuda_cpy, \
                    cuda_ipc, \
-                   rocm, \
                    ib, \
                    ugni, \
                    rdmacm \

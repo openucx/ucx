@@ -259,18 +259,18 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 {
     skip_loopback();
 
+    m_sbuf.resize(msg_size);
+    m_rbuf.resize(msg_size);
+
     /* connect 2 ep's from sender() to 2 receiver entities */
     create_entity();
     sender().connect(&stable_receiver(),  get_ep_params(), STABLE_EP_INDEX);
     sender().connect(&failing_receiver(), get_ep_params(), FAILING_EP_INDEX);
 
-    m_sbuf.resize(msg_size);
-    m_rbuf.resize(msg_size);
-
     set_rkeys();
 
     if (!(GetParam().variant & FAIL_IMM)) {
-        /* if not faill immediately, run traffic on failing pair to connect it */
+        /* if not fail immediately, run traffic on failing pair to connect it */
         smoke_test(false);
     }
 

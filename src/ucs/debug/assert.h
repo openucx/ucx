@@ -16,6 +16,7 @@
 
 BEGIN_C_DECLS
 
+/** @file assert.h */
 
 /**
  * Fail if _expression evaluates to 0

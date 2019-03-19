@@ -264,7 +264,9 @@ public:
                       false);
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
-        wait_for_flag(is_sw_rndv ? &r_ctx.sw_rndv : &r_ctx.comp);
+        // max rndv can be quite big, use increased timeout
+        wait_for_flag(is_sw_rndv ? &r_ctx.sw_rndv : &r_ctx.comp,
+                      3 * DEFAULT_TIMEOUT_SEC);
 
         check_rx_completion(r_ctx, true, SEND_SEED, UCS_OK, is_sw_rndv);
 

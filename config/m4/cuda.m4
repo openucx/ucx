@@ -11,7 +11,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                 [AS_HELP_STRING([--with-cuda=(DIR)], [Enable the use of CUDA (default is guess).])],
                 [], [with_cuda=guess])
 
-    AS_IF([test "x$with_cuda" == "xno"],
+    AS_IF([test "x$with_cuda" = "xno"],
         [cuda_happy=no],
         [
          save_CPPFLAGS="$CPPFLAGS"
@@ -39,24 +39,24 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                           [cuda_happy="yes"], [cuda_happy="no"])
 
          # Check cuda libraries
-         AS_IF([test "x$cuda_happy" == "xyes"],
+         AS_IF([test "x$cuda_happy" = "xyes"],
                 [AC_CHECK_LIB([cuda], [cuPointerGetAttribute],
                               [CUDA_LDFLAGS+=" -lcuda"], [cuda_happy="no"])])
-         AS_IF([test "x$cuda_happy" == "xyes"],
+         AS_IF([test "x$cuda_happy" = "xyes"],
                 [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
                               [CUDA_LDFLAGS+=" -lcudart"], [cuda_happy="no"])])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
 
-         AS_IF([test "x$cuda_happy" == "xyes"],
+         AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
                 AC_SUBST([CUDA_LDFLAGS], ["$CUDA_LDFLAGS"])],
                [AS_IF([test "x$with_cuda" != "xguess"],
-                      [AC_MSG_ERROR([CUDA support is requested but cuda packages can't found])],
+                      [AC_MSG_ERROR([CUDA support is requested but cuda packages cannot be found])],
                       [AC_MSG_WARN([CUDA not found])])])
 
-        ]) # "x$with_cuda" == "xno"
+        ]) # "x$with_cuda" = "xno"
 
         cuda_checked=yes
         AM_CONDITIONAL([HAVE_CUDA], [test "x$cuda_happy" != xno])

@@ -178,6 +178,13 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     }
 #endif
 
+    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
+        iface_attr->cap.atomic32.op_flags  = 0;
+        iface_attr->cap.atomic32.fop_flags = 0;
+        iface_attr->cap.atomic64.op_flags  = 0;
+        iface_attr->cap.atomic64.fop_flags = 0;
+    }
+
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
@@ -505,8 +512,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
 
-    init_attr->rx_cq_len = config->super.rx.queue_len;
-    init_attr->seg_size  = config->super.super.max_bcopy;
     init_attr->tx_cq_len = config->tx.cq_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,

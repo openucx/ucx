@@ -67,28 +67,97 @@ void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
     ucs_list_del(&head->list);
 }
 
-void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
+                             ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg)
 {
-    ucs_arbiter_elem_t *tail = group->tail;
-    ucs_arbiter_elem_t *ptr, *next;
-    ucs_arbiter_elem_t *head;
+    ucs_arbiter_elem_t *tail       = group->tail;
+    ucs_arbiter_elem_t *next_group = NULL;
+    ucs_arbiter_elem_t *prev_group = NULL;
+    ucs_arbiter_elem_t *ptr, *next, *prev;
+    ucs_arbiter_elem_t *head, *orig_head;
+    ucs_arbiter_cb_result_t result;
+    int is_scheduled;
 
     if (tail == NULL) {
         return; /* Empty group */
     }
 
-    head = tail->next;
-    ucs_arbiter_group_head_desched(arbiter, head);
+    orig_head    = head = tail->next;
+    is_scheduled = (head->list.next != NULL);
+    next         = head;
+    prev         = tail;
 
-    next = head;
+    if (is_scheduled) {
+        prev_group = ucs_list_prev(&head->list, ucs_arbiter_elem_t, list);
+        next_group = ucs_list_next(&head->list, ucs_arbiter_elem_t, list);
+    }
+
     do {
-        ptr  = next;
-        next = ptr->next;
+        ptr       = next;
+        next      = ptr->next;
+        /* Can't touch the element if it gets removed. But it can be reused
+         * later as well, so it's next should be NULL. */
         ptr->next = NULL;
-        cb(arbiter, ptr, cb_arg);
+        result    = cb(arbiter, ptr, cb_arg);
+
+        if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
+            if (ptr == head) {
+                head = next;
+                if (ptr == tail) {
+                    /* Last element is being removed - mark group as empty */
+                    group->tail = NULL;
+                    /* Break here to keep ptr->next = NULL, otherwise ptr->next
+                       will be set to itself below */
+                    break;
+                }
+            } else if (ptr == tail) {
+                group->tail = prev;
+                /* tail->next should point to head, make sure next is head
+                 * (it is assinged 2 lines below) */
+                ucs_assert_always(next == head);
+            }
+            prev->next = next;
+        } else {
+            /* keep the element */
+            ptr->next = next; /* Restore next pointer */
+            prev      = ptr;
+        }
     } while (ptr != tail);
-    group->tail = NULL;
+
+    if (is_scheduled) {
+        if (orig_head == prev_group) {
+            /* this is the only group which was scheduled */
+            if (group->tail == NULL) {
+                /* group became empty - no more groups scheduled */
+                arbiter->current = NULL;
+            } else if (orig_head != head) {
+                /* keep the group scheduled, but with new head element */
+                arbiter->current = head;
+                ucs_list_head_init(&head->list);
+            }
+        } else {
+            if (group->tail == NULL) {
+                /* group became empty - deschedule it */
+                prev_group->list.next = &next_group->list;
+                next_group->list.prev = &prev_group->list;
+                if (arbiter->current == orig_head) {
+                    arbiter->current = next_group;
+                }
+            } else if (orig_head != head) {
+                /* keep the group scheduled, but with new head element */
+                ucs_list_insert_replace(&prev_group->list,
+                                        &next_group->list,
+                                        &head->list);
+                if (arbiter->current == orig_head) {
+                    arbiter->current = head;
+                }
+            }
+        }
+    } else if ((orig_head != head) && (group->tail != NULL)) {
+        /* Mark new head as unscheduled */
+        head->list.next = NULL;
+    }
 }
 
 void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,

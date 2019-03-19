@@ -282,16 +282,18 @@ static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->super.cq[dir].cq_sn++;
 }
 
-#if HAVE_DC_DV
-static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
+static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *attr,
                                                 struct ibv_qp **qp_p)
 {
-    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    uct_dc_mlx5_iface_t *iface         = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+#if HAVE_DC_DV
+    uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
 
-    uct_ib_iface_fill_attr(iface, attr);
+    uct_ib_iface_fill_attr(ib_iface, attr);
+    uct_ib_mlx5_iface_fill_attr(ib_iface, &iface->super.mlx5_common, attr);
     attr->ibv.cap.max_recv_sge          = 0;
 
     dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
@@ -307,8 +309,12 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     *qp_p     = qp;
 
     return UCS_OK;
+#else
+    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->super.mlx5_common, attr, qp_p);
+#endif
 }
 
+#if HAVE_DC_DV
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_rc_txqp_t *dci)
 {
@@ -760,13 +766,18 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    int i;
     int is_flush_done = 1;
+    uct_dc_mlx5_ep_t *ep;
+    int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        if ((iface->tx.dcis[i].ep != NULL) &&
-            uct_dc_mlx5_ep_fc_wait_for_grant(iface->tx.dcis[i].ep)) {
-            return UCS_INPROGRESS;
+        /* TODO: Remove this check - no need to wait for grant, because we
+         * use gc_list for removed eps */
+        if (!uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            ep = uct_dc_mlx5_ep_from_dci(iface, i);
+            if ((ep != NULL) && uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
+                return UCS_INPROGRESS;
+            }
         }
         if (uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
             is_flush_done = 0;
@@ -922,7 +933,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                 /* Need to schedule fake ep in TX arbiter, because it
                  * might have been descheduled due to lack of FC window. */
                 ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface),
-                                           &ep->arb_group);
+                                           uct_dc_mlx5_ep_arb_group(iface, ep));
             }
 
             uct_dc_mlx5_iface_progress_pending(iface);
@@ -949,15 +960,18 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                    UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     uct_rc_txqp_t        *txqp   = &iface->tx.dcis[dci].txqp;
-    uct_dc_mlx5_ep_t     *ep     = iface->tx.dcis[dci].ep;
+    uct_dc_mlx5_ep_t     *ep;
     ucs_status_t         ep_status;
     int16_t              outstanding;
 
-    if (!ep) {
+    if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
+        (uct_dc_mlx5_ep_from_dci(iface, dci) == NULL)) {
         uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
                                         ib_iface->super.config.failure_level);
         return;
     }
+
+    ep = uct_dc_mlx5_ep_from_dci(iface, dci);
 
     uct_rc_txqp_purge_outstanding(txqp, status, 0);
 
@@ -1028,7 +1042,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_pending_add           = uct_dc_mlx5_ep_pending_add,
     .ep_pending_purge         = uct_dc_mlx5_ep_pending_purge,
     .ep_flush                 = uct_dc_mlx5_ep_flush,
-    .ep_fence                 = uct_base_ep_fence,
+    .ep_fence                 = uct_dc_mlx5_ep_fence,
 #if IBV_EXP_HW_TM_DC
     .ep_tag_eager_short       = uct_dc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_dc_mlx5_ep_tag_eager_bcopy,
@@ -1040,7 +1054,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_tag_recv_cancel    = uct_dc_mlx5_iface_tag_recv_cancel,
 #endif
     .iface_flush              = uct_dc_mlx5_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
+    .iface_fence              = uct_rc_mlx5_iface_fence,
     .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
@@ -1059,11 +1073,9 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
-#if HAVE_DC_DV
-    .create_qp                = uct_dc_mlx5_iface_create_qp
-#else
-    .create_qp                = uct_ib_iface_create_qp
-#endif
+    .create_qp                = uct_dc_mlx5_iface_create_qp,
+    .init_res_domain          = uct_rc_mlx5_init_res_domain,
+    .cleanup_res_domain       = uct_rc_mlx5_cleanup_res_domain,
     },
     .init_rx                  = uct_dc_mlx5_init_rx,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
@@ -1080,7 +1092,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_status_t status;
     ucs_trace_func("");
 
-    init_attr.res_domain_key = UCT_IB_MLX5_RES_DOMAIN_KEY;
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_DC;
     init_attr.qp_type        = UCT_IB_QPT_DCI;
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
@@ -1111,6 +1122,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_list_head_init(&self->tx.gc_list);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
+    self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
+                         uct_dc_mlx5_iface_dci_do_rand_pending_tx :
+                         uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);

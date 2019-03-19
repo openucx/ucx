@@ -222,6 +222,23 @@ ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                           remote_addr, rkey, comp);
 }
 
+ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uct_ib_md_t *md            = uct_ib_iface_md(&iface->super.super.super);
+
+    /* in case PCI Atomics are enabled atomic/read operation on target
+     * are unordered according to PCI specification so we need to
+     * request atomic fence for next such operation */
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        uct_rc_mlx5_add_fence(md, &iface->tx.dci_wqs[ep->dci]);
+    }
+
+    UCT_TL_EP_STAT_FENCE(&ep->super);
+    return UCS_OK;
+}
+
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                const void *buffer, unsigned length)
@@ -878,7 +895,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_dc_mlx5_iface_t);
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super, NULL, NULL);
-    ucs_arbiter_group_cleanup(&self->arb_group);
+    ucs_arbiter_group_cleanup(uct_dc_mlx5_ep_arb_group(iface, self));
     uct_rc_fc_cleanup(&self->fc);
 
     ucs_assert_always(self->flags & UCT_DC_MLX5_EP_FLAG_VALID);
@@ -968,6 +985,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    ucs_arbiter_group_t *group;
 
     /* ep can tx iff
      * - iface has resources: cqe and tx skb
@@ -986,16 +1004,24 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
         }
     }
 
-    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_arb_t) <=
+    UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
                       UCT_PENDING_REQ_PRIV_LEN);
-    uct_pending_req_arb_group_push(&ep->arb_group, r);
 
-    /* no dci:
-     *  Do not grab dci here. Instead put the group on dci allocation arbiter.
-     *  This way we can assure fairness between all eps waiting for
-     *  dci allocation. Relevant for dcs and dcs_quota policies.
-     */
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+        uct_dc_mlx5_pending_req_priv(r)->ep = ep;
+        group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
+    } else {
+        group = &ep->arb_group;
+    }
+    uct_pending_req_arb_group_push(group, r);
+
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        /* no dci:
+         *  Do not grab dci here. Instead put the group on dci allocation arbiter.
+         *  This way we can assure fairness between all eps waiting for
+         *  dci allocation. Relevant for dcs and dcs_quota policies.
+         */
         uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
         UCT_TL_EP_STAT_PEND(&ep->super);
         return UCS_OK;
@@ -1033,18 +1059,13 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
-/**
- * dispatch requests waiting for tx resources
- */
 ucs_arbiter_cb_result_t
-uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
-                                    ucs_arbiter_elem_t *elem,
-                                    void *arg)
+uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
+                                           ucs_arbiter_elem_t *elem)
 {
-
-    uct_dc_mlx5_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_mlx5_ep_t, arb_group);
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
-    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
     if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
@@ -1055,30 +1076,13 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     ucs_trace_data("progress pending request %p returned: %s", req,
                    ucs_status_string(status));
     if (status == UCS_OK) {
-        /* For dcs* policies release dci if this is the last elem in the group
-         * and the dci has no outstanding operations. For example pending
-         * callback did not send anything. (uct_ep_flush or just return ok)
-         */
-        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
-            uct_dc_mlx5_iface_dci_free(iface, ep);
-        }
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
-    }
-    if (status == UCS_INPROGRESS) {
+    } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     }
 
     if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
-        /* Deschedule the group even if FC is the only resource, which
-         * is missing. It will be scheduled again when credits arrive.
-         * We can't desched group with rand policy if non FC resources are
-         * missing, since it's never scheduled again. */
-        if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
-            uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
-            return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
-        } else {
-            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-        }
+        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
     ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
@@ -1086,27 +1090,88 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     return UCS_ARBITER_CB_RESULT_STOP;
 }
 
-
-static ucs_arbiter_cb_result_t uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
-                                                               ucs_arbiter_elem_t *elem,
-                                                               void *arg)
+/**
+ * dispatch requests waiting for tx resources (dcs* DCI policies)
+ */
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_elem_t *elem,
+                                        void *arg)
 {
-    uct_purge_cb_args_t  *cb_args   = arg;
-    uct_pending_purge_callback_t cb = cb_args->cb;
-    uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_fc_request_t *freq       = ucs_derived_of(req, uct_rc_fc_request_t);
-    uct_dc_mlx5_ep_t *ep            = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                       uct_dc_mlx5_ep_t, arb_group);
+
+    uct_dc_mlx5_ep_t *ep       = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                                  uct_dc_mlx5_ep_t, arb_group);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    ucs_arbiter_cb_result_t res;
+
+    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
+        /* For dcs* policies release dci if this is the last elem in the group
+         * and the dci has no outstanding operations. For example pending
+         * callback did not send anything. (uct_ep_flush or just return ok)
+         */
+        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
+            uct_dc_mlx5_iface_dci_free(iface, ep);
+        }
+    }
+
+    return res;
+}
+
+/**
+ * dispatch requests waiting for tx resources (rand DCI policy)
+ */
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_elem_t *elem,
+                                         void *arg)
+{
+    uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_dc_mlx5_ep_t *ep       = uct_dc_mlx5_pending_req_priv(req)->ep;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    ucs_arbiter_cb_result_t res;
+
+    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    if ((res == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) &&
+        uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
+        /* We can't desched group with rand policy if non FC resources are
+         * missing, since it's never scheduled again. */
+        res = UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+
+    return res;
+}
+
+static ucs_arbiter_cb_result_t
+uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                ucs_arbiter_elem_t *elem, void *arg)
+{
+    uct_purge_cb_args_t *cb_args = arg;
+    void **priv_args             = cb_args->arg;
+    uct_dc_mlx5_ep_t *ep         = priv_args[0];
+    uct_dc_mlx5_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
+                                                  uct_dc_mlx5_iface_t);
+    uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_rc_fc_request_t *freq;
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
+        (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
+        /* element belongs to another ep - do not remove it */
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
 
     if (ucs_likely(req->func != uct_dc_mlx5_iface_fc_grant)){
-        if (cb != NULL) {
-            cb(req, cb_args->arg);
+        if (cb_args->cb != NULL) {
+            cb_args->cb(req, priv_args[1]);
         } else {
             ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
     } else {
         /* User callback should not be called for FC messages.
          * Just return pending request memory to the pool */
+        freq = ucs_derived_of(req, uct_rc_fc_request_t);
         ucs_mpool_put(freq);
     }
 
@@ -1115,9 +1180,17 @@ static ucs_arbiter_cb_result_t uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *ar
 
 void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg)
 {
-    uct_dc_mlx5_iface_t *iface    = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
-    uct_dc_mlx5_ep_t *ep          = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uct_purge_cb_args_t args = {cb, arg};
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    void *priv_args[2]         = {ep, arg};
+    uct_purge_cb_args_t args   = {cb, priv_args};
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
+                                uct_dc_mlx5_ep_rand_arb_group(iface, ep),
+                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+        return;
+    }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface), &ep->arb_group,

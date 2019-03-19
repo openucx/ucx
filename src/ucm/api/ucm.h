@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -54,7 +55,10 @@ typedef enum ucm_event_type {
 typedef enum ucm_mem_type {
     /*cuda memory */
     UCM_MEM_TYPE_CUDA         = UCS_BIT(0),
-    UCM_MEM_TYPE_CUDA_MANAGED = UCS_BIT(1)
+    UCM_MEM_TYPE_CUDA_MANAGED = UCS_BIT(1),
+    /* rocm memory */
+    UCM_MEM_TYPE_ROCM         = UCS_BIT(2),
+    UCM_MEM_TYPE_ROCM_MANAGED = UCS_BIT(3),
 } ucm_mem_type_t;
 
 
@@ -302,6 +306,20 @@ void ucm_set_external_event(int events);
  * @param [in]  events     Which events to remove from the external events list.
  */
 void ucm_unset_external_event(int events);
+
+
+/**
+ * @brief Test event handlers
+ *
+ * This routine checks if event handlers are called when corresponding system API
+ * is invoked.
+ *
+ * @param [in]  events    Bit-mask of events which are supposed to be handled
+ *                        externally.
+ *
+ * @return Status code.
+ */
+ucs_status_t ucm_test_events(int events);
 
 
 /**

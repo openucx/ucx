@@ -14,6 +14,8 @@
 
 BEGIN_C_DECLS
 
+/** @file class.h */
+
 typedef struct ucs_class     ucs_class_t;
 
 

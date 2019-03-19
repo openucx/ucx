@@ -691,37 +691,55 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
 
-    if (dev->atomic_arg_sizes & sizeof(uint64_t)) {
-        iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
-        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
+        if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {
+            iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        }
+        if (dev->pci_cswap_arg_sizes & sizeof(uint64_t)) {
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+        }
+        if (dev->pci_fadd_arg_sizes & sizeof(uint32_t)) {
+            iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        }
+        if (dev->pci_cswap_arg_sizes & sizeof(uint32_t)) {
+            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+        }
+        iface_attr->cap.flags                  |= UCT_IFACE_FLAG_ATOMIC_CPU;
+    } else {
+        if (dev->atomic_arg_sizes & sizeof(uint64_t)) {
+            iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                UCS_BIT(UCT_ATOMIC_OP_CSWAP);
 
-        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
-    }
+            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        }
 
-    if (dev->ext_atomic_arg_sizes & sizeof(uint64_t)) {
-        iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_AND)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_OR)   |
-                                              UCS_BIT(UCT_ATOMIC_OP_XOR);
-        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_AND)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_OR)   |
-                                              UCS_BIT(UCT_ATOMIC_OP_XOR)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_SWAP);
-        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
-    }
+        if (dev->ext_atomic_arg_sizes & sizeof(uint64_t)) {
+            iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_AND)  |
+                UCS_BIT(UCT_ATOMIC_OP_OR)   |
+                UCS_BIT(UCT_ATOMIC_OP_XOR);
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_AND)  |
+                UCS_BIT(UCT_ATOMIC_OP_OR)   |
+                UCS_BIT(UCT_ATOMIC_OP_XOR)  |
+                UCS_BIT(UCT_ATOMIC_OP_SWAP);
+            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        }
 
-    if (dev->ext_atomic_arg_sizes & sizeof(uint32_t)) {
-        iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_AND)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_OR)   |
-                                              UCS_BIT(UCT_ATOMIC_OP_XOR);
-        iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_AND)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_OR)   |
-                                              UCS_BIT(UCT_ATOMIC_OP_XOR)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_SWAP) |
-                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
-        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        if (dev->ext_atomic_arg_sizes & sizeof(uint32_t)) {
+            iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                UCS_BIT(UCT_ATOMIC_OP_AND)  |
+                UCS_BIT(UCT_ATOMIC_OP_OR)   |
+                UCS_BIT(UCT_ATOMIC_OP_XOR);
+            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                UCS_BIT(UCT_ATOMIC_OP_AND)  |
+                UCS_BIT(UCT_ATOMIC_OP_OR)   |
+                UCS_BIT(UCT_ATOMIC_OP_XOR)  |
+                UCS_BIT(UCT_ATOMIC_OP_SWAP) |
+                UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        }
     }
 
     /* Software overhead */
@@ -803,4 +821,32 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     mlx5_cq->cq_ci             += nfreed;
 
     return nfreed;
+}
+
+ucs_status_t uct_rc_mlx5_iface_fence(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+
+    if (md->dev.pci_fadd_arg_sizes || md->dev.pci_cswap_arg_sizes) {
+        iface->tx.next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
+        iface->tx.fence_beat++;
+    }
+
+    UCT_TL_IFACE_STAT_FENCE(&iface->super.super.super);
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_init_res_domain(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    return uct_ib_mlx5_iface_init_res_domain(ib_iface, &iface->mlx5_common);
+}
+
+void uct_rc_mlx5_cleanup_res_domain(uct_ib_iface_t *ib_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    uct_ib_mlx5_iface_cleanup_res_domain(&iface->mlx5_common);
 }

@@ -48,7 +48,9 @@ static const char * ucp_rndv_modes[] = {
 
 uct_memory_type_t ucm_to_uct_mem_type_map[] = {
     [UCM_MEM_TYPE_CUDA]         = UCT_MD_MEM_TYPE_CUDA,
-    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_CUDA_MANAGED
+    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_CUDA_MANAGED,
+    [UCM_MEM_TYPE_ROCM]         = UCT_MD_MEM_TYPE_ROCM,
+    [UCM_MEM_TYPE_ROCM_MANAGED] = UCT_MD_MEM_TYPE_ROCM_MANAGED,
 };
 
 static ucs_config_field_t ucp_config_table[] = {
@@ -137,7 +139,7 @@ static ucs_config_field_t ucp_config_table[] = {
   {"MAX_RNDV_LANES", NULL,"",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
-  {"MAX_RNDV_RAILS", "1",
+  {"MAX_RNDV_RAILS", "2",
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
@@ -736,7 +738,6 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
                                    ucp_tl_md_t *tl_md)
 {
-
     uct_md_config_t *md_config;
     ucs_status_t status;
 

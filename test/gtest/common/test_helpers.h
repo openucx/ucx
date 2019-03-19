@@ -13,6 +13,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <errno.h>
 #include <iostream>
@@ -161,6 +162,37 @@
 namespace ucs {
 
 extern const double test_timeout_in_sec;
+extern const double watchdog_timeout_default;
+
+typedef enum {
+    WATCHDOG_STOP,
+    WATCHDOG_RUN,
+    WATCHDOG_TIMEOUT_SET,
+    WATCHDOG_DEFAULT_SET,
+    WATCHDOG_TEST
+} test_watchdog_state_t;
+
+typedef struct {
+    pthread_t             thread;
+    pthread_mutex_t       mutex;
+    pthread_cond_t        cv;
+    double                timeout;
+    pthread_t             watched_thread;
+    pthread_barrier_t     barrier;
+    test_watchdog_state_t state;
+    int                   kill_signal;
+} test_watchdog_t;
+
+void *watchdog_func(void *arg);
+void watchdog_signal(bool barrier = 1);
+void watchdog_set(test_watchdog_state_t new_state, double new_timeout);
+void watchdog_set(test_watchdog_state_t new_state);
+void watchdog_set(double new_timeout);
+test_watchdog_state_t watchdog_get_state();
+double watchdog_get_timeout();
+int watchdog_get_kill_signal();
+int watchdog_start();
+void watchdog_stop();
 
 class test_abort_exception : public std::exception {
 };
@@ -252,7 +284,7 @@ void *mmap_fixed_address();
  */
 template <typename S>
 std::string sockaddr_to_str(const S *saddr) {
-    char buffer[UCS_SOCKADDR_STRING_LEN];
+    static char buffer[UCS_SOCKADDR_STRING_LEN];
     return ::ucs_sockaddr_str(reinterpret_cast<const struct sockaddr*>(saddr),
                               buffer, UCS_SOCKADDR_STRING_LEN);
 }

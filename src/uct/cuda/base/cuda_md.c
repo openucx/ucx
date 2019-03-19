@@ -30,6 +30,6 @@ int uct_cuda_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
 UCS_MODULE_INIT() {
     /* TODO make gdrcopy independent of cuda */
     UCS_MODULE_FRAMEWORK_DECLARE(uct_cuda);
-    UCS_MODULE_FRAMEWORK_LOAD(uct_cuda);
+    UCS_MODULE_FRAMEWORK_LOAD(uct_cuda, 0);
     return UCS_OK;
 }

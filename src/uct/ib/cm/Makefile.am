@@ -8,6 +8,8 @@ if HAVE_TL_CM
 module_LTLIBRARIES       = libuct_ib_cm.la
 libuct_ib_cm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
 libuct_ib_cm_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_ib_cm_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+                           $(top_builddir)/src/uct/ib/libuct_ib.la
 libuct_ib_cm_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(IBCM_LIBS) -version-info $(SOVERSION)
 
 noinst_HEADERS = \

@@ -292,7 +292,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
 
     /* QP and WQE index */
     if (dump_qp) {
-        snprintf(s, ends - s, "QP 0x%x [%03ld]", qp_num,
+        snprintf(s, ends - s, "QP 0x%x [%03ld] ", qp_num,
                  (wqe - qstart) / MLX5_SEND_WQE_BB);
         s += strlen(s);
     }

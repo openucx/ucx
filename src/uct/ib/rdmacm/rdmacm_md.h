@@ -8,7 +8,7 @@
 
 #include "rdmacm_def.h"
 #include <uct/base/uct_md.h>
-#include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <rdma/rdma_cma.h>
 

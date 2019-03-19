@@ -15,6 +15,10 @@
 #include <tools/perf/lib/libperf_int.h>
 #include <unistd.h>
 
+#if _OPENMP
+#include <omp.h>
+#endif /* _OPENMP */
+
 #define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status)        \
     _status = __get_atomic_flag((_size), (_op32), (_op64), (_op));                \
     if (_status != UCS_OK) {                                                      \
@@ -239,12 +243,12 @@ void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
     perf->current.time_acc = perf->start_time_acc;
 }
 
-static void ucx_perf_test_reset(ucx_perf_context_t *perf,
-                                ucx_perf_params_t *params)
+/* Initialize/reset all parameters that could be modified by the warm-up run */
+static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
+                                          ucx_perf_params_t *params)
 {
     unsigned i;
 
-    perf->params            = *params;
     perf->max_iter          = (perf->params.max_iter == 0) ? UINT64_MAX :
                                perf->params.max_iter;
     perf->report_interval   = ucs_time_from_sec(perf->params.report_interval);
@@ -256,12 +260,21 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     perf->prev.bytes        = 0;
     perf->prev.iters        = 0;
     perf->timing_queue_head = 0;
-    perf->offset            = 0;
-    perf->allocator         = ucx_perf_mem_type_allocators[params->mem_type];
+
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
     }
     ucx_perf_test_start_clock(perf);
+}
+
+static void ucx_perf_test_init(ucx_perf_context_t *perf,
+                               ucx_perf_params_t *params)
+{
+    perf->params            = *params;
+    perf->offset            = 0;
+    perf->allocator         = ucx_perf_mem_type_allocators[params->mem_type];
+
+    ucx_perf_test_prepare_new_run(perf, params);
 }
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
@@ -1310,14 +1323,18 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
         goto out_iface_close;
     }
 
+    /* Enable progress before `uct_iface_flush` and `uct_worker_progress` called
+     * to give a chance to finish connection for some tranports (ib/ud, tcp).
+     * They may return UCS_INPROGRESS from `uct_iface_flush` when connections are
+     * in progress */
+    uct_iface_progress_enable(perf->uct.iface,
+                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
     status = uct_perf_test_setup_endpoints(perf);
     if (status != UCS_OK) {
         ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
         goto out_free_mem;
     }
-
-    uct_iface_progress_enable(perf->uct.iface,
-                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     return UCS_OK;
 
@@ -1455,7 +1472,7 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
         goto out;
     }
 
-    ucx_perf_test_reset(perf, params);
+    ucx_perf_test_init(perf, params);
 
     if (perf->allocator == NULL) {
         ucs_error("Unsupported memory type");
@@ -1482,7 +1499,7 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
             }
 
             ucx_perf_funcs[params->api].barrier(perf);
-            ucx_perf_test_reset(perf, params);
+            ucx_perf_test_prepare_new_run(perf, params);
         }
 
         /* Run test */
@@ -1506,7 +1523,6 @@ out:
 
 #if _OPENMP
 /* multiple threads sharing the same worker/iface */
-#include <omp.h>
 
 typedef struct {
     pthread_t           pt;
@@ -1537,8 +1553,7 @@ static void* ucx_perf_thread_run_test(void* arg)
                 goto out;
             }
         }
-#pragma omp master
-        ucx_perf_test_reset(perf, params);
+        ucx_perf_test_prepare_new_run(perf, params);
     }
 
     /* Run test */
@@ -1623,10 +1638,16 @@ void ucx_perf_global_init()
     static ucx_perf_allocator_t host_allocator = {
         .init      = ucs_empty_function_return_success,
         .ucp_alloc = ucp_perf_test_alloc_host,
-        .ucp_free  = ucp_perf_test_free_host
+        .ucp_free  = ucp_perf_test_free_host,
+        .memset    = memset
     };
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_HOST] = &host_allocator;
-    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest);
+
+    /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
+     * alloc hooks, which are using dlsym() to get pointer to original function,
+     * do not work. Need to use bistro for memtype hooks to fix it.
+     */
+    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, UCS_MODULE_LOAD_FLAG_GLOBAL);
 }

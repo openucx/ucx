@@ -186,12 +186,12 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem);
 
 /**
- * Remove all elements from a group, and call the callback for each of them.
- * Callback return value is ignored.
+ * Call the callback for each element from a group. If the callback returns
+ * UCS_ARBITER_CB_RESULT_REMOVE_ELEM, remove it from the group.
  *
  * @param [in]  arbiter  Arbiter object to remove the group from.
  * @param [in]  group    Group to clean up.
- * @param [in]  cb       Callback to be called for each removed element.
+ * @param [in]  cb       Callback to be called for each element.
  * @param [in]  cb_arg   Last argument for the callback.
  */
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,

@@ -539,7 +539,9 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp
+    .create_qp                = uct_ib_iface_create_qp,
+    .init_res_domain          = (void*)ucs_empty_function_return_success,
+    .cleanup_res_domain       = (void*)ucs_empty_function,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
@@ -590,8 +592,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
 
     ucs_trace_func("");
-
-    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
                               worker, params, config, &init_attr);

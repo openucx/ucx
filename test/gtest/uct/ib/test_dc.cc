@@ -36,6 +36,15 @@ public:
         uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
     }
 
+    entity* create_rand_entity() {
+        if (UCS_OK != uct_config_modify(m_iface_config, "DC_TX_POLICY", "rand")) {
+            UCS_TEST_ABORT("Error: cannot enable random DCI policy");
+        }
+        entity *rand_e = uct_test::create_entity(0);
+        m_entities.push_back(rand_e);
+        return rand_e;
+    }
+
     static uct_dc_mlx5_iface_t* dc_iface(entity *e) {
         return ucs_derived_of(e->iface(), uct_dc_mlx5_iface_t);
     }
@@ -66,6 +75,7 @@ public:
 
 protected:
     static uint32_t m_am_rx_count;
+    static int      m_purge_count;
 
     struct dcs_comp {
         uct_completion_t uct_comp;
@@ -150,9 +160,15 @@ protected:
         iface->super.super.tx.cq_available = 8;
     }
 
+    static void purge_count_cb(uct_pending_req_t *uct_req, void *arg)
+    {
+        ++m_purge_count;
+    }
+
 };
 
 int test_dc::n_warnings         = 0;
+int test_dc::m_purge_count      = 0;
 uint32_t test_dc::m_am_rx_count = 0;
 
 UCS_TEST_P(test_dc, dcs_single) {
@@ -414,13 +430,8 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
 UCS_TEST_P(test_dc, rand_dci_many_eps) {
     uct_dc_mlx5_ep_t *ep;
 
-    m_am_rx_count = 0;
-
-    if (UCS_OK != uct_config_modify(m_iface_config, "DC_TX_POLICY", "rand")) {
-        UCS_TEST_ABORT("Error: cannot enable random DCI policy");
-    }
-    entity *rand_e = uct_test::create_entity(0);
-    m_entities.push_back(rand_e);
+    m_am_rx_count  = 0;
+    entity *rand_e = create_rand_entity();
     uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, NULL, 0);
 
     uct_dc_mlx5_iface_t *iface = dc_iface(rand_e);
@@ -447,6 +458,44 @@ UCS_TEST_P(test_dc, rand_dci_many_eps) {
     flush();
 }
 
+UCS_TEST_P(test_dc, rand_dci_pending_purge) {
+    entity *rand_e             = create_rand_entity();
+    uct_dc_mlx5_iface_t *iface = dc_iface(rand_e);
+    int num_eps                = 5;
+    int ndci                   = iface->tx.ndci;
+    int num_reqs               = 10;
+    int idx                    = 0;
+    uct_pending_req_t preq[num_eps * num_reqs * ndci];
+    int dci_id;
+    uct_dc_mlx5_ep_t *ep;
+
+    iface->super.super.tx.cq_available = 0;
+
+    for (dci_id = 0; dci_id < ndci; ++dci_id) {
+        for (int i = 0; i < num_eps; i++) {
+            int ep_id = i + dci_id*ndci;
+            rand_e->connect_to_iface(ep_id, *m_e2);
+            ep = dc_ep(rand_e, ep_id);
+            EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+            for (int j = 0; j < num_reqs; ++j, ++idx) {
+                preq[idx].func = NULL;
+                ASSERT_UCS_OK(uct_ep_pending_add(rand_e->ep(ep_id),
+                                                 &preq[idx], 0));
+            }
+        }
+    }
+
+    for (dci_id = 0; dci_id < ndci; ++dci_id) {
+        for (int i = 0; i < num_eps; i++) {
+            m_purge_count = 0;
+            uct_ep_pending_purge(rand_e->ep(i + dci_id*ndci),
+                                 purge_count_cb, NULL);
+            EXPECT_EQ(num_reqs, m_purge_count);
+        }
+    }
+
+    flush();
+}
 
 UCS_TEST_P(test_dc, stress_iface_ops) {
     test_iface_ops();

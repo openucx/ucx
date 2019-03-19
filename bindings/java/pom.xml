@@ -1,3 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+  ~ See file LICENSE for terms.
+  -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
@@ -27,6 +32,7 @@
     <ucs.lib.path>${ucx.src.dir}/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.src.dir}/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.src.dir}/ucp/.libs</ucp.lib.path>
+    <ucx.inst.dir>${env.JUCX_INST}/lib</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -114,6 +120,12 @@
               <outputDirectory>${basedir}/resources</outputDirectory>
               <resources>
                 <resource>
+                  <directory>${ucx.inst.dir}</directory>
+                  <includes>
+                    <include>**/*.so</include>
+                  </includes>
+                </resource>
+                <resource>
                   <directory>${native.dir}/.libs</directory>
                   <includes>
                     <include>**/*.so</include>
@@ -156,7 +168,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.17</version>
+            <version>8.18</version>
           </dependency>
         </dependencies>
         <executions>
@@ -183,13 +195,23 @@
         <extensions>true</extensions>
         <configuration>
           <javahOutputDirectory>${basedir}/src/main/native/</javahOutputDirectory>
-          <javahClassNames>org.ucx.jucx.Bridge</javahClassNames>
+          <javahClassNames>
+            <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpWorker</javahClassName>
+            <javahClassName>org.ucx.jucx.ucs.UcsConstants</javahClassName>
+          </javahClassNames>
           <sources>
             <source>
               <directory>${basedir}/src/main/native/</directory>
             </source>
           </sources>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.0.1</version>
       </plugin>
     </plugins>
   </build>

@@ -26,15 +26,15 @@ static inline unsigned uct_ugni_ep_hash(uct_ugni_ep_t *ep)
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ugni_ep_t, uct_ugni_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
 
-UCS_CLASS_DECLARE(uct_ugni_ep_t, uct_iface_t*, const uct_device_addr_t*,
-                  const uct_iface_addr_t*);
-UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*,
-                           const uct_device_addr_t*, const uct_iface_addr_t*);
+UCS_CLASS_DECLARE(uct_ugni_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 uct_ugni_ep_t *uct_ugni_iface_lookup_ep(uct_ugni_iface_t *iface, uintptr_t hash_key);
-ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface, const uct_devaddr_ugni_t *dev_addr,
-                             const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep);
+ucs_status_t ugni_connect_ep(uct_ugni_ep_t *ep,
+                             uct_ugni_iface_t *iface, 
+                             const uct_sockaddr_ugni_t *iface_addr,
+                             const uct_devaddr_ugni_t *dev_addr);
 ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                      unsigned flags);
 void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,

@@ -5,11 +5,13 @@
 
 if HAVE_IB
 
-SUBDIRS = cm rdmacm
+SUBDIRS = . cm rdmacm
 
 module_LTLIBRARIES    = libuct_ib.la
 libuct_ib_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
 libuct_ib_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_ib_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+                        $(top_builddir)/src/uct/libuct.la
 libuct_ib_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(NUMA_LIBS) -version-info $(SOVERSION)
 libmlx5_ver           = $(shell (rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | head -1)
 

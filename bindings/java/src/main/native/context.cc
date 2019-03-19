@@ -1,72 +1,63 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
-#include "context.h"
-#include "request_util.h"
 
-ucs_status_t context::ref_context() {
-    ucs_status_t status = UCS_OK;
-    {   // Lock before checking context and updating reference counter
-        std::lock_guard<std::mutex> lk(ref_lock);
-        if (ucp_context == nullptr) {
-            status = create_context();
-        }
+#include "jucx_common_def.h"
+#include "org_ucx_jucx_ucp_UcpContext.h"
 
-        if (status == UCS_OK) {
-            ++ref_count;
-        }
-    }   // Unlock
+#include <ucp/api/ucp.h>
 
-    return status;
-}
 
-void context::deref_context() {
-    std::lock_guard<std::mutex> lk(ref_lock);
-    if (--ref_count == 0) { // All workers released
-        release_context();
-    }
-}
-
-context::~context() {
-    if (ucp_context) {
-        ucp_cleanup(ucp_context);
-    }
-}
-
-ucp_context_h context::get_ucp_context() {
-    return ucp_context;
-}
-
-ucs_status_t context::create_context() {
+/**
+ * Bridge method for creating ucp_context from java
+ */
+JNIEXPORT jlong JNICALL
+Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
+                                                     jobject jucx_ctx_params)
+{
     ucp_params_t ucp_params = { 0 };
-    ucp_config_t *config;
-    ucs_status_t status;
+    ucp_context_h ucp_context;
+    jfieldID field;
 
-    status = ucp_config_read(nullptr, nullptr, &config);
-    if (status != UCS_OK) {
-        return status;
+    jclass jucx_param_class = env->GetObjectClass(jucx_ctx_params);
+    field = env->GetFieldID(jucx_param_class, "fieldMask", "J");
+    ucp_params.field_mask = env->GetLongField(jucx_ctx_params, field);
+
+    if (ucp_params.field_mask & UCP_PARAM_FIELD_FEATURES) {
+        field = env->GetFieldID(jucx_param_class, "features", "J");
+        ucp_params.features = env->GetLongField(jucx_ctx_params, field);
     }
 
-    uint64_t features   =   UCP_FEATURE_TAG;
-    uint64_t field_mask =   UCP_PARAM_FIELD_FEATURES        |
-                            UCP_PARAM_FIELD_REQUEST_INIT    |
-                            UCP_PARAM_FIELD_REQUEST_SIZE;
+    if (ucp_params.field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) {
+        field = env->GetFieldID(jucx_param_class, "mtWorkersShared", "Z");
+        ucp_params.mt_workers_shared = env->GetBooleanField(jucx_ctx_params,
+                                                            field);
+    }
 
-    ucp_params.features     = features;
-    ucp_params.field_mask   = field_mask;
-    ucp_params.request_size = sizeof(jucx_request);
-    ucp_params.request_init = request_util::request_handler::request_init;
+    if (ucp_params.field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
+        field = env->GetFieldID(jucx_param_class, "estimatedNumEps", "J");
+        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params,
+                                                         field);
+    }
 
-    status = ucp_init(&ucp_params, config, &ucp_context);
-    ucp_config_release(config);
+    if (ucp_params.field_mask & UCP_PARAM_FIELD_TAG_SENDER_MASK) {
+        field = env->GetFieldID(jucx_param_class, "tagSenderMask", "J");
+        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params,
+                                                         field);
+    }
 
-    return status;
+    ucs_status_t status = ucp_init(&ucp_params, NULL, &ucp_context);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+    return (native_ptr)ucp_context;
 }
 
-void context::release_context() {
-    if (ucp_context) {
-        ucp_cleanup(ucp_context);
-    }
-    ucp_context = nullptr;
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_ucp_UcpContext_cleanupContextNative(JNIEnv *env, jclass cls,
+                                                      jlong ucp_context_ptr)
+{
+    ucp_cleanup((ucp_context_h)ucp_context_ptr);
 }

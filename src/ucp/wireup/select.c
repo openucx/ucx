@@ -9,7 +9,7 @@
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
@@ -1475,16 +1475,20 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
 
         md_index = resource->md_index;
         md       = context->tl_mds[md_index].md;
-        ucs_assert(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR);
+        ucs_assert(context->tl_mds[md_index].attr.cap.flags &
+                   UCT_MD_FLAG_SOCKADDR);
 
-        if (uct_md_is_sockaddr_accessible(md, &params->sockaddr, UCT_SOCKADDR_ACC_REMOTE)) {
+        if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
+                                          UCT_SOCKADDR_ACC_REMOTE)) {
             /* TODO use score to prefer best tl rather than using first one */
             *rsc_index_p = tl_id;
             return UCS_OK;
         }
 
-        ucs_debug("md %s cannot reach %s", context->tl_mds[md_index].rsc.md_name,
-                  ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
+        ucs_debug("md %s cannot reach %s",
+                  context->tl_mds[md_index].rsc.md_name,
+                  ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
+                                   sizeof(saddr_str)));
     }
 
     return UCS_ERR_UNREACHABLE;
