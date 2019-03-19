@@ -151,7 +151,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
     status = uct_tcp_ep_addr_init(&self->peer_addr, dest_addr);
     if (status != UCS_OK) {
-        return UCS_OK;
+        return status;
     }
 
     self->tx.buf      = NULL;
@@ -162,10 +162,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
     ucs_queue_head_init(&self->pending_q);
     self->events = 0;
-    self->fd     = -1;
+    self->fd     = fd;
     ucs_list_head_init(&self->list);
 
-    if (fd == -1) {
+    if (self->fd == -1) {
         status = ucs_socket_create(AF_INET, SOCK_STREAM, &self->fd);
         if (status != UCS_OK) {
             goto err_cleanup;
@@ -180,8 +180,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
         uct_tcp_ep_ctx_init(&self->tx);
         self->tx.progress = uct_tcp_ep_progress_tx;
     } else {
-        self->fd = fd;
-
         uct_tcp_ep_ctx_init(&self->rx);
         self->rx.progress = uct_tcp_ep_progress_rx;
     }
