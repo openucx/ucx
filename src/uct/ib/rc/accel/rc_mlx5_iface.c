@@ -446,9 +446,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
-    self->super.config.fence = !!((dev->pci_fadd_arg_sizes | dev->pci_cswap_arg_sizes) &
-                                  (sizeof(uint32_t) | sizeof(uint64_t)));
-
+    self->super.config.fence = uct_ib_device_has_pci_atomics(dev);
     self->super.rx.srq.quota = self->rx.srq.mask + 1;
 
     /* By default set to something that is always in cache */

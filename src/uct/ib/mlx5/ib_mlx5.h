@@ -208,7 +208,7 @@ typedef struct uct_ib_mlx5_txwq {
 #if ENABLE_ASSERT
     uint16_t                    hw_ci;
 #endif
-    uct_fence_info_t            fi;
+    uct_ib_fence_info_t         fi;
 } uct_ib_mlx5_txwq_t;
 
 

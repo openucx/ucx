@@ -29,6 +29,11 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                  IBV_SEND_SIGNALED);
     }
+    if (wr->opcode == IBV_WR_RDMA_READ) {
+        send_flags |= uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                             IBV_SEND_FENCE);
+    }
+
     wr->send_flags = send_flags;
     wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
@@ -100,19 +105,14 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     struct ibv_sge sge[UCT_IB_MAX_IOV];
     struct ibv_send_wr wr;
     size_t sge_cnt;
-    int send_flags = IBV_SEND_SIGNALED;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
     UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.opcode, opcode, sge, sge_cnt, remote_addr, rkey);
     wr.next = NULL;
-    if (opcode == IBV_WR_RDMA_READ) {
-        send_flags |= uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
-                                             IBV_SEND_FENCE);
-    }
 
-    uct_rc_verbs_ep_post_send(iface, ep, &wr, send_flags, INT_MAX);
+    uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED, INT_MAX);
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi,
                               UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
     return UCS_INPROGRESS;
@@ -598,7 +598,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
-    uct_init_fi(&self->fi);
+    uct_ib_fence_info_init(&self->fi);
 
     return UCS_OK;
 }

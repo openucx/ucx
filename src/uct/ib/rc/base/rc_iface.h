@@ -199,7 +199,7 @@ struct uct_rc_iface {
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
-        uct_fence_info_t        fi;
+        uct_ib_fence_info_t     fi;
     } tx;
 
     struct {

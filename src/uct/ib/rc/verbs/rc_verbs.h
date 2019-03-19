@@ -32,7 +32,7 @@ typedef struct uct_rc_verbs_txcnt {
 typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
-    uct_fence_info_t       fi;
+    uct_ib_fence_info_t    fi;
 } uct_rc_verbs_ep_t;
 
 

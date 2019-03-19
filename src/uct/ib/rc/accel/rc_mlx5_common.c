@@ -697,7 +697,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
 
-    if (iface->super.config.fence) {
+    if (uct_ib_device_has_pci_atomics(dev)) {
         if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {
             iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
             iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);

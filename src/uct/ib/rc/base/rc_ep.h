@@ -446,7 +446,7 @@ uct_rc_fc_req_moderation(uct_rc_fc_t *fc, uct_rc_iface_t *iface)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_fence_info_t* fi, int flag)
+uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
 {
     int fence = fi->fence_flag;
 
@@ -463,7 +463,7 @@ uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_fence_info_t* fi, int flag)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_ep_fence(uct_ep_h tl_ep, uct_fence_info_t* fi, int fence)
+uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
@@ -477,4 +477,5 @@ uct_rc_ep_fence(uct_ep_h tl_ep, uct_fence_info_t* fi, int fence)
     UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
+
 #endif

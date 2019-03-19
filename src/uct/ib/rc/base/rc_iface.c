@@ -150,7 +150,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_RECV;
 
-    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
+    if (uct_ib_device_has_pci_atomics(dev)) {
         if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {
             iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
             iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
@@ -552,7 +552,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
 
-    uct_init_fi(&self->tx.fi);
+    uct_ib_fence_info_init(&self->tx.fi);
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
@@ -890,3 +890,4 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
     UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
     return UCS_OK;
 }
+

@@ -1315,4 +1315,3 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     return UCS_OK;
 }
 
-
