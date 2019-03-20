@@ -37,10 +37,18 @@ typedef struct uct_rc_mlx5_ep_address {
     uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
 
+typedef struct {
+    uct_rc_mlx5_iface_common_t  super;
+} uct_rc_mlx5_iface_t;
+
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t);
 UCS_CLASS_DECLARE_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_rc_mlx5_iface_t,
+                            uct_md_h md, uct_worker_h worker,
+                            const uct_iface_params_t *params,
+                            const uct_iface_config_t *tl_config);
 
 void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
                                            struct mlx5_cqe64 *cqe);

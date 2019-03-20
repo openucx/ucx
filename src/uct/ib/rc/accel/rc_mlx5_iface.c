@@ -498,10 +498,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_common_t, uct_rc_iface_t);
 
-typedef struct {
-    uct_rc_mlx5_iface_common_t  super;
-} uct_rc_mlx5_iface_t;
-
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                     uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,

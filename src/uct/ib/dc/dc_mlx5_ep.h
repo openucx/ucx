@@ -62,6 +62,16 @@ UCS_CLASS_DECLARE_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   const uct_dc_mlx5_iface_addr_t *,
                   uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
 
+UCS_CLASS_DECLARE_NEW_FUNC(uct_dc_mlx5_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
+                           const uct_dc_mlx5_iface_addr_t *,
+                           uct_ib_mlx5_base_av_t *);
+
+UCS_CLASS_DECLARE_CLEANUP_FUNC(uct_dc_mlx5_grh_ep_t);
+
+UCS_CLASS_DECLARE_NEW_FUNC(uct_dc_mlx5_grh_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
+                           const uct_dc_mlx5_iface_addr_t *,
+                           uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
+
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
                                            ucs_arbiter_elem_t *elem);
