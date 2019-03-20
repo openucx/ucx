@@ -406,8 +406,8 @@ ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *i
  * NOTE: the file and function memory remains valid as long as the backtrace
  * object is not destroyed.
  */
-int backtrace_next(backtrace_h bckt, unsigned long *address, char const ** file,
-                   char const ** function, unsigned *lineno)
+static int backtrace_next(backtrace_h bckt, unsigned long *address, char const ** file,
+                          char const ** function, unsigned *lineno)
 {
     struct backtrace_line *line;
 
