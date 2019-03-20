@@ -190,9 +190,10 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
                          return 0;
                      }
                  ]])],
-               [AC_MSG_RESULT([yes])],
-               [AC_MSG_RESULT([no])
-                CFLAGS="$SAVE_CFLAGS"])
+               [AC_MSG_RESULT([yes])
+                BASE_CFLAGS="$BASE_CFLAGS -diag-disable 269"],
+               [AC_MSG_RESULT([no])])
+CFLAGS="$SAVE_CFLAGS"
 
 
 #
