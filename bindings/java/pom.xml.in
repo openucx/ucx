@@ -9,12 +9,19 @@
 
   <groupId>org.ucx</groupId>
   <artifactId>jucx</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>@VERSION@-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>jucx</name>
   <url>https://github.com/openucx/ucx</url>
   <description>Java binding to ucx high performance communication library</description>
+
+  <mailingLists>
+    <mailingList>
+      <name>UCX group</name>
+      <archive>https://elist.ornl.gov/mailman/listinfo/ucx-group</archive>
+    </mailingList>
+  </mailingLists>
 
   <licenses>
     <license>
@@ -26,13 +33,15 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <native.dir>${basedir}/src/main/native</native.dir>
-    <ucx.src.dir>${basedir}/../../src</ucx.src.dir>
-    <ucm.lib.path>${ucx.src.dir}/ucm/.libs</ucm.lib.path>
-    <ucs.lib.path>${ucx.src.dir}/ucs/.libs</ucs.lib.path>
-    <uct.lib.path>${ucx.src.dir}/uct/.libs</uct.lib.path>
-    <ucp.lib.path>${ucx.src.dir}/ucp/.libs</ucp.lib.path>
-    <ucx.inst.dir>${env.JUCX_INST}/lib</ucx.inst.dir>
+    <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>
+    <jucx.src.dir>${ucx.src.dir}/../bindings/java</jucx.src.dir>
+    <ucx.build.dir>@abs_top_builddir@</ucx.build.dir>
+    <native.dir>${ucx.build.dir}/bindings/java/src/main/native/</native.dir>
+    <ucm.lib.path>${ucx.build.dir}/src/ucm/.libs</ucm.lib.path>
+    <ucs.lib.path>${ucx.build.dir}/src/ucs/.libs</ucs.lib.path>
+    <uct.lib.path>${ucx.build.dir}/src/uct/.libs</uct.lib.path>
+    <ucp.lib.path>${ucx.build.dir}/src/ucp/.libs</ucp.lib.path>
+    <ucx.inst.dir>@prefix@/lib</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -48,6 +57,9 @@
   </dependencies>
 
   <build>
+    <sourceDirectory>${jucx.src.dir}/src/main/java</sourceDirectory>
+    <testSourceDirectory>${jucx.src.dir}/src/test/java</testSourceDirectory>
+    <directory>${native.dir}/build-java</directory>
     <testResources>
       <testResource>
         <directory>resources</directory>
@@ -176,7 +188,7 @@
             <id>validate</id>
             <phase>validate</phase>
             <configuration>
-              <configLocation>checkstyle.xml</configLocation>
+              <configLocation>${jucx.src.dir}/checkstyle.xml</configLocation>
               <encoding>UTF-8</encoding>
               <consoleOutput>true</consoleOutput>
               <failsOnError>true</failsOnError>
@@ -194,7 +206,7 @@
         <version>1.0-alpha-9</version>
         <extensions>true</extensions>
         <configuration>
-          <javahOutputDirectory>${basedir}/src/main/native/</javahOutputDirectory>
+          <javahOutputDirectory>${native.dir}</javahOutputDirectory>
           <javahClassNames>
             <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
@@ -204,7 +216,7 @@
           </javahClassNames>
           <sources>
             <source>
-              <directory>${basedir}/src/main/native/</directory>
+              <directory>${jucx.src.dir}/src/main/native/</directory>
             </source>
           </sources>
         </configuration>
