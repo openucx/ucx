@@ -123,6 +123,7 @@ BEGIN_C_DECLS
     } \
     static UCS_F_ALWAYS_INLINE _ret_type _name##_inner(__VA_ARGS__)
 
+#define UCS_PROFILE_DECLARE_FUNC(_ret_type, _name, _arglist, ...)
 
 /**
  * Create a profiled function whose return type is void.
@@ -144,6 +145,7 @@ BEGIN_C_DECLS
     } \
     static UCS_F_ALWAYS_INLINE void _name##_inner(__VA_ARGS__)
 
+#define UCS_PROFILE_DECLARE_FUNC_VOID(_ret_type, _name, _arglist, ...)
 
 /*
  * Profile a function call, and specify explicit name string for the profile.
