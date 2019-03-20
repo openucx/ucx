@@ -21,7 +21,13 @@
                   ## __VA_ARGS__); \
     }
 
-#define ucm_fatal(_message, ...) ucm_log(UCS_LOG_LEVEL_FATAL, _message, ## __VA_ARGS__)
+#define ucm_log_fatal(_level, _message, ...) \
+    if (((_level) <= UCS_MAX_LOG_LEVEL)) {                              \
+        __ucm_log(__FILE__, __LINE__, __FUNCTION__, (_level), _message, \
+                  ## __VA_ARGS__); \
+    }
+
+#define ucm_fatal(_message, ...) ucm_log_fatal(UCS_LOG_LEVEL_FATAL, _message, ## __VA_ARGS__)
 #define ucm_error(_message, ...) ucm_log(UCS_LOG_LEVEL_ERROR, _message, ## __VA_ARGS__)
 #define ucm_warn(_message, ...)  ucm_log(UCS_LOG_LEVEL_WARN,  _message, ## __VA_ARGS__)
 #define ucm_info(_message, ...)  ucm_log(UCS_LOG_LEVEL_INFO,  _message, ## __VA_ARGS__)
