@@ -219,11 +219,13 @@ static void unload_file(struct backtrace_file *file)
     bfd_close(file->abfd);
 }
 
+#ifdef HAVE_CPLUS_DEMANGLE
+extern char *cplus_demangle(const char *, int);
+#endif
 static char *ucs_debug_demangle(const char *name)
 {
     char *demangled = NULL;
 #ifdef HAVE_CPLUS_DEMANGLE
-    extern char *cplus_demangle(const char *, int);
     demangled = cplus_demangle(name, 0);
 #endif
     return demangled ? demangled : strdup(name);

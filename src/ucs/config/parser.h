@@ -87,9 +87,9 @@ typedef struct ucs_config_bw_spec {
 } ucs_config_bw_spec_t;
 
 
+extern ucs_list_link_t ucs_config_global_list;
 #define UCS_CONFIG_REGISTER_TABLE(_fields, _name, _prefix, _type) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t ucs_config_global_list; \
         static ucs_config_global_list_entry_t entry; \
         entry.fields = _fields; \
         entry.name   = _name; \

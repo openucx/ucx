@@ -208,6 +208,8 @@ out_unlock:
     pthread_mutex_unlock(&ucs_profile_ctx.mutex);
 }
 
+extern ucs_profile_global_context_t ucs_profile_ctx;
+
 void ucs_profile_record(ucs_profile_type_t type, const char *name,
                         uint32_t param32, uint64_t param64, const char *file,
                         int line, const char *function, volatile int *loc_id_p);
@@ -215,7 +217,6 @@ void ucs_profile_record(ucs_profile_type_t type, const char *name,
                         uint32_t param32, uint64_t param64, const char *file,
                         int line, const char *function, volatile int *loc_id_p)
 {
-    extern ucs_profile_global_context_t ucs_profile_ctx;
     ucs_profile_global_context_t *ctx = &ucs_profile_ctx;
     ucs_profile_record_t   *rec;
     ucs_profile_location_t *loc;
