@@ -73,7 +73,7 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                 uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -91,7 +91,7 @@ uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned len
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                const void *payload, unsigned length)
 {
@@ -115,7 +115,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 }
 
 #if HAVE_IBV_EXP_DM
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         size_t hdr_len, const void *payload, unsigned length,
                         unsigned opcode, uint8_t fm_ce_se,
@@ -390,7 +390,7 @@ uct_rc_mlx5_ep_atomic_fop(uct_ep_h tl_ep, int opcode, void *result, int ext,
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                               uint64_t value, uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -420,7 +420,7 @@ uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_atomic_fop_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                                uint64_t value, void *result,
                                uint64_t remote_addr, uct_rkey_t rkey,
@@ -664,7 +664,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                       const void *data, size_t length)
 {

@@ -96,7 +96,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                               uint64_t value, uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -145,7 +145,7 @@ uct_dc_mlx5_ep_atomic_fop(uct_dc_mlx5_ep_t *ep, int opcode, void *result, int ex
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_atomic_fop_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                                uint64_t value, void *result,
                                uint64_t remote_addr, uct_rkey_t rkey,
@@ -239,7 +239,7 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                const void *buffer, unsigned length)
 {
@@ -267,7 +267,7 @@ uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 }
 
 #if HAVE_IBV_EXP_DM
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_short_dm(uct_dc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         size_t hdr_len, const void *payload, unsigned length,
                         unsigned opcode, uint8_t fm_ce_se,
@@ -383,7 +383,7 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
                                 unsigned length, uint64_t remote_addr,
                                 uct_rkey_t rkey)
@@ -574,7 +574,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 }
 
 #if IBV_EXP_HW_TM_DC
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                       const void *data, size_t length)
 {

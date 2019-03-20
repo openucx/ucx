@@ -1164,7 +1164,7 @@ done:
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
  * and tail is filled by head of message. */
-static void UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
@@ -1217,7 +1217,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     }
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
                                 uct_rc_mlx5_dm_copy_data_t *cache,
                                 size_t hdr_len, const void *payload,
@@ -1265,7 +1265,7 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t value,
                                      int *op, uint64_t *compare_mask, uint64_t *compare,
                                      uint64_t *swap_mask, uint64_t *swap, int *ext)

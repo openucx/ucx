@@ -160,7 +160,7 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
  * @return Whether completed.
  *         *req_status if filled with the completion status if completed.
  */
-static int UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE int
 ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
                      unsigned pending_flags)
 {
