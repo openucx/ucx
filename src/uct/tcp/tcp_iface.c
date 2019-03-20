@@ -35,7 +35,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Socket send buffer size",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"RCVBUF", "64k",
+  {"RCVBUF", "auto",
    "Socket receive buffer size",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_rcvbuf), UCS_CONFIG_TYPE_MEMUNITS},
 
