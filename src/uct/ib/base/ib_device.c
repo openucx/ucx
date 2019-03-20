@@ -629,12 +629,12 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-uint8_t uct_ib_to_fabric_time(double time)
+uint8_t uct_ib_to_fabric_time(double uct_time)
 {
     double to;
     long t;
 
-    to = log(time / 4.096e-6) / log(2.0);
+    to = log(uct_time / 4.096e-6) / log(2.0);
     if (to < 1) {
         return 1; /* Very small timeout */
     } else if (to > 30) {

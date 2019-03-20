@@ -258,7 +258,7 @@ ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
 }
 
 static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
-                                       ucp_rsc_index_t index,
+                                       ucp_rsc_index_t idx,
                                        const uct_iface_attr_t *iface_attr,
                                        int enable_atomics)
 {
@@ -271,7 +271,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
         /* In unified mode all workers have the same transports and tl bitmap.
          * Just send rsc index, so the remote peer could fetch iface attributes
          * from its local iface. */
-        *(ucp_rsc_index_t*)ptr = index;
+        *(ucp_rsc_index_t*)ptr = idx;
         return sizeof(ucp_rsc_index_t);
     }
 
@@ -449,13 +449,13 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     size_t iface_addr_len;
     size_t ep_addr_len;
     uint64_t md_flags;
-    unsigned index;
+    unsigned idx;
     int attr_len;
     void *ptr;
     const void *flags_ptr;
 
     ptr = buffer;
-    index = 0;
+    idx = 0;
 
     *(uint64_t*)ptr = worker->uuid;
     ptr = (uint8_t*)ptr + sizeof(uint64_t);
@@ -558,20 +558,20 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             /* Save the address index of this transport */
             if (order != NULL) {
-                order[ucs_bitmap2idx(tl_bitmap, i)] = index;
+                order[ucs_bitmap2idx(tl_bitmap, i)] = idx;
             }
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
                       " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
                       "lat_ovh: %e dev_priority %d",
-                      index,
+                      idx,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
                       md_flags, iface_attr->cap.flags,
                       iface_attr->bandwidth,
                       iface_attr->overhead,
                       iface_attr->latency.overhead,
                       iface_attr->priority);
-            ++index;
+            ++idx;
         }
     }
 

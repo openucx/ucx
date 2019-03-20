@@ -668,17 +668,17 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     ucs_config_array_field_t *field = dest;
     void *temp_field;
     const ucs_config_array_t *array = arg;
-    char *dup, *token, *saveptr;
+    char *ucs_dup, *token, *saveptr;
     int ret;
     unsigned i;
 
-    dup = strdup(buf);
-    if (dup == NULL) {
+    ucs_dup = strdup(buf);
+    if (ucs_dup == NULL) {
         return 0;
     }
 
     saveptr = NULL;
-    token = strtok_r(dup, ",", &saveptr);
+    token = strtok_r(ucs_dup, ",", &saveptr);
     temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
     i = 0;
     while (token != NULL) {
@@ -686,7 +686,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
                                  array->parser.arg);
         if (!ret) {
             ucs_free(temp_field);
-            free(dup);
+            free(ucs_dup);
             return 0;
         }
 
@@ -699,7 +699,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 
     field->data = temp_field;
     field->count = i;
-    free(dup);
+    free(ucs_dup);
     return 1;
 }
 

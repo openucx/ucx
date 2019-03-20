@@ -412,7 +412,7 @@ static void ucm_operator_vec_delete(void* ptr)
 static int ucm_add_to_environ(char *env_str)
 {
     char *saved_env_str;
-    unsigned index;
+    unsigned idx;
     size_t len;
     char *p;
 
@@ -425,19 +425,19 @@ static int ucm_add_to_environ(char *env_str)
     }
 
     /* Check if we already have variable with same name */
-    index = 0;
-    while (index < ucm_malloc_hook_state.num_env_strs) {
-        saved_env_str = ucm_malloc_hook_state.env_strs[index];
+    idx = 0;
+    while (idx < ucm_malloc_hook_state.num_env_strs) {
+        saved_env_str = ucm_malloc_hook_state.env_strs[idx];
         if ((strlen(saved_env_str) >= len) && !strncmp(env_str, saved_env_str, len)) {
             ucm_trace("replace `%s' with `%s'", saved_env_str, env_str);
             ucm_free(saved_env_str, NULL);
             goto out_insert;
         }
-        ++index;
+        ++idx;
     }
 
     /* Not found - enlarge array by one */
-    index = ucm_malloc_hook_state.num_env_strs;
+    idx = ucm_malloc_hook_state.num_env_strs;
     ++ucm_malloc_hook_state.num_env_strs;
     ucm_malloc_hook_state.env_strs =
                     ucm_realloc(ucm_malloc_hook_state.env_strs,
@@ -445,7 +445,7 @@ static int ucm_add_to_environ(char *env_str)
                                 NULL);
 
 out_insert:
-    ucm_malloc_hook_state.env_strs[index] = env_str;
+    ucm_malloc_hook_state.env_strs[idx] = env_str;
     return 0;
 }
 

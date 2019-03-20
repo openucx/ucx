@@ -17,10 +17,10 @@
 #define UCS_PTR_ARRAY_INITIAL_SIZE  8
 
 
-static inline int ucs_ptr_array_is_free(ucs_ptr_array_t *ptr_array, unsigned index)
+static inline int ucs_ptr_array_is_free(ucs_ptr_array_t *ptr_array, unsigned idx)
 {
-    return (index < ptr_array->size) &&
-            __ucs_ptr_array_is_free(ptr_array->start[index]);
+    return (idx < ptr_array->size) &&
+            __ucs_ptr_array_is_free(ptr_array->start[idx]);
 }
 
 static inline uint32_t ucs_ptr_array_placeholder_get(ucs_ptr_array_elem_t elem)
@@ -162,7 +162,7 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
                               uint32_t *placeholder_p)
 {
     ucs_ptr_array_elem_t *elem;
-    unsigned index;
+    unsigned idx;
 
     ucs_assert_always(((uintptr_t)value & UCS_PTR_ARRAY_FLAG_FREE) == 0);
 
@@ -171,9 +171,9 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
     }
 
     /* Get the first item on the free list */
-    index = ptr_array->freelist;
-    ucs_assert(index != UCS_PTR_ARRAY_SENTINEL);
-    elem = &ptr_array->start[index];
+    idx = ptr_array->freelist;
+    ucs_assert(idx != UCS_PTR_ARRAY_SENTINEL);
+    elem = &ptr_array->start[idx];
 
     /* Remove from free list */
     ptr_array->freelist = ucs_ptr_array_freelist_get_next(*elem);
@@ -181,27 +181,27 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
     /* Populate */
     *placeholder_p = ucs_ptr_array_placeholder_get(*elem);
     *elem = (uintptr_t)value;
-    return index;
+    return idx;
 }
 
-void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned index,
+void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned idx,
                           uint32_t placeholder)
 {
-    ucs_ptr_array_elem_t *elem = &ptr_array->start[index];
+    ucs_ptr_array_elem_t *elem = &ptr_array->start[idx];
 
-    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, index));
+    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, idx));
     *elem = UCS_PTR_ARRAY_FLAG_FREE;
     ucs_ptr_array_placeholder_set(elem, placeholder);
     ucs_ptr_array_freelist_set_next(elem, ptr_array->freelist);
-    ptr_array->freelist = index;
+    ptr_array->freelist = idx;
 }
 
-void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned index, void *new_val)
+void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned idx, void *new_val)
 {
     void *old_elem;
 
-    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, index));
-    old_elem = (void *)ptr_array->start[index];
-    ptr_array->start[index] = (uintptr_t)new_val;
+    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, idx));
+    old_elem = (void *)ptr_array->start[idx];
+    ptr_array->start[idx] = (uintptr_t)new_val;
     return old_elem;
 }

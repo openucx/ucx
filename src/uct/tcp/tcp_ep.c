@@ -293,10 +293,10 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
     return status;
 }
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t uct_remove)
 {
     int old_events = ep->events;
-    int new_events = (ep->events | add) & ~remove;
+    int new_events = (ep->events | add) & ~uct_remove;
 
     if (new_events != ep->events) {
         ep->events = new_events;
@@ -409,7 +409,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
                                             uct_tcp_iface_t);
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
-    size_t remainder;
+    size_t uct_remainder;
 
     ucs_trace_func("ep=%p", ep);
 
@@ -444,19 +444,19 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
 
     /* Parse received active messages */
     while (uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
-        remainder = ep->rx.length - ep->rx.offset;
-        if (remainder < sizeof(*hdr)) {
+        uct_remainder = ep->rx.length - ep->rx.offset;
+        if (uct_remainder < sizeof(*hdr)) {
             /* Move the partially received hdr to the beginning of the buffer */
-            memmove(ep->rx.buf, (char *) ep->rx.buf + ep->rx.offset, remainder);
+            memmove(ep->rx.buf, (char *) ep->rx.buf + ep->rx.offset, uct_remainder);
             ep->rx.offset = 0;
-            ep->rx.length = remainder;
+            ep->rx.length = uct_remainder;
             goto out;
         }
 
         hdr = (uct_tcp_am_hdr_t *) ((char *) ep->rx.buf + ep->rx.offset);
         ucs_assert(hdr->length <= (iface->am_buf_size - sizeof(uct_tcp_am_hdr_t)));
 
-        if (remainder < sizeof(*hdr) + hdr->length) {
+        if (uct_remainder < sizeof(*hdr) + hdr->length) {
             goto out;
         }
 

@@ -47,10 +47,10 @@
  */
 #define UCS_WORD_COPY(_dst_type, _dst, _src_type, _src, _size) \
     { \
-        unsigned i; \
+        unsigned word_cp_i; \
         UCS_STATIC_ASSERT(sizeof(_src_type) == sizeof(_dst_type)); \
-        for (i = 0; i < (_size) / sizeof(_src_type); ++i) { \
-            *((_dst_type*)(_dst) + i) = *((_src_type*)(_src) + i); \
+        for (word_cp_i = 0; word_cp_i < (_size) / sizeof(_src_type); ++word_cp_i) { \
+            *((_dst_type*)(_dst) + word_cp_i) = *((_src_type*)(_src) + word_cp_i); \
         } \
     }
 

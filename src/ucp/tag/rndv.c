@@ -336,7 +336,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     const size_t max_iovcnt = 1;
     uct_iface_attr_t* attrs;
     ucs_status_t status;
-    size_t offset, length, ucp_mtu, remainder, align, chunk;
+    size_t offset, length, ucp_mtu, ucs_remainder, align, chunk;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
     ucp_rsc_index_t rsc_index;
@@ -378,10 +378,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     max_zcopy = config->tag.rndv.max_get_zcopy;
 
     offset    = rndv_req->send.state.dt.offset;
-    remainder = (uintptr_t)rndv_req->send.buffer % align;
+    ucs_remainder = (uintptr_t)rndv_req->send.buffer % align;
 
-    if ((offset == 0) && (remainder > 0) && (rndv_req->send.length > ucp_mtu)) {
-        length = ucp_mtu - remainder;
+    if ((offset == 0) && (ucs_remainder > 0) && (rndv_req->send.length > ucp_mtu)) {
+        length = ucp_mtu - ucs_remainder;
     } else {
         chunk = ucs_align_up((size_t)(ucs_min(rndv_req->send.length /
                                               rndv_req->send.rndv_get.lane_count,
@@ -414,7 +414,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                (rndv_req->send.length - (offset + length) >= min_zcopy));
 
     ucs_trace_data("req %p: offset %zu remainder %zu rma-get to %p len %zu lane %d",
-                   rndv_req, offset, remainder, (char *)rndv_req->send.buffer + offset,
+                   rndv_req, offset, ucs_remainder, (char *)rndv_req->send.buffer + offset,
                    length, lane);
 
     state = rndv_req->send.state.dt;
@@ -723,7 +723,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     const size_t max_iovcnt = 1;
     ucp_ep_h ep             = sreq->send.ep;
     ucs_status_t status;
-    size_t offset, ucp_mtu, align, remainder, length;
+    size_t offset, ucp_mtu, align, ucs_remainder, length;
     uct_iface_attr_t *attrs;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
@@ -740,16 +740,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     ucp_mtu   = attrs->cap.put.align_mtu;
 
     offset    = sreq->send.state.dt.offset;
-    remainder = (uintptr_t)sreq->send.buffer % align;
+    ucs_remainder = (uintptr_t)sreq->send.buffer % align;
 
-    if ((offset == 0) && (remainder > 0) && (sreq->send.length > ucp_mtu)) {
-        length = ucp_mtu - remainder;
+    if ((offset == 0) && (ucs_remainder > 0) && (sreq->send.length > ucp_mtu)) {
+        length = ucp_mtu - ucs_remainder;
     } else {
         length = ucs_min(sreq->send.length - offset,
                          ucp_ep_config(ep)->tag.rndv.max_put_zcopy);
     }
 
-    ucs_trace_data("req %p: offset %zu remainder %zu. read to %p len %zu",
+    ucs_trace_data("req %p: offset %zu ucs_remainder %zu. read to %p len %zu",
                    sreq, offset, (uintptr_t)sreq->send.buffer % align,
                    (char*)sreq->send.buffer + offset, length);
 

@@ -73,7 +73,7 @@ static const char* time_units_str[] = {
 
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
-    struct stat stat;
+    struct stat read_stat;
     int ret, fd;
 
     fd = open(file_name, O_RDONLY);
@@ -83,14 +83,14 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto out;
     }
 
-    ret = fstat(fd, &stat);
+    ret = fstat(fd, &read_stat);
     if (ret < 0) {
         fprintf(stderr, "fstat(%s) failed: %m\n", file_name);
         goto out_close;
     }
 
-    data->length = stat.st_size;
-    data->mem    = mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    data->length = read_stat.st_size;
+    data->mem    = mmap(NULL, read_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data->mem == MAP_FAILED) {
         fprintf(stderr, "mmap(%s, length=%zd) failed: %m\n", file_name,
                 data->length);

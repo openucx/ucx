@@ -871,7 +871,7 @@ unsigned long ucs_sys_get_pfn(uintptr_t address)
     return data & UCS_MASK(55);
 }
 
-ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
+ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int ucs_remove)
 {
     int oldfl, ret;
 
@@ -881,7 +881,7 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
         return UCS_ERR_IO_ERROR;
     }
 
-    ret = fcntl(fd, F_SETFL, (oldfl | add) & ~remove);
+    ret = fcntl(fd, F_SETFL, (oldfl | add) & ~ucs_remove);
     if (ret < 0) {
         ucs_error("fcntl(fd=%d, F_SETFL) returned %d: %m", fd, ret);
         return UCS_ERR_IO_ERROR;

@@ -251,7 +251,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
     size_t length          = req->recv.length;
-    ucp_mem_desc_t *rdesc  = NULL;
+    ucp_mem_desc_t *ucp_rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     ucp_rsc_index_t mdi;
@@ -289,14 +289,14 @@ ucp_tag_offload_do_post(ucp_request_t *req)
         iov.buffer          = (void*)req->recv.buffer;
         iov.memh            = req->recv.state.dt.contig.memh[0];
     } else {
-        rdesc = ucp_worker_mpool_get(worker);
-        if (rdesc == NULL) {
+        ucp_rdesc = ucp_worker_mpool_get(worker);
+        if (ucp_rdesc == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
 
-        iov.memh            = ucp_memh2uct(rdesc->memh, mdi);
-        iov.buffer          = rdesc + 1;
-        req->recv.tag.rdesc = rdesc;
+        iov.memh            = ucp_memh2uct(ucp_rdesc->memh, mdi);
+        iov.buffer          = ucp_rdesc + 1;
+        req->recv.tag.rdesc = ucp_rdesc;
     }
 
     iov.length = length;

@@ -181,16 +181,16 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
                       ucs_log_level_t level, const char *format, ...)
 {
     ucs_log_func_rc_t rc;
-    unsigned index;
+    unsigned idx;
     va_list ap;
 
     /* Call handlers in reverse order */
     rc    = UCS_LOG_FUNC_RC_CONTINUE;
-    index = ucs_log_handlers_count;
-    while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
-        --index;
+    idx = ucs_log_handlers_count;
+    while ((idx > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
+        --idx;
         va_start(ap, format);
-        rc = ucs_log_handlers[index](file, line, function, level, format, ap);
+        rc = ucs_log_handlers[idx](file, line, function, level, format, ap);
         va_end(ap);
     }
 }

@@ -509,18 +509,18 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *info)
 {
-    Dl_info dlinfo;
+    Dl_info ucs_dlinfo;
     int ret;
 
-    ret = dladdr(address, &dlinfo);
+    ret = dladdr(address, &ucs_dlinfo);
     if (!ret) {
         return UCS_ERR_NO_ELEM;
     }
 
-    ucs_strncpy_safe(info->file.path, dlinfo.dli_fname, sizeof(info->file.path));
-    info->file.base = (uintptr_t)dlinfo.dli_fbase;
+    ucs_strncpy_safe(info->file.path, ucs_dlinfo.dli_fname, sizeof(info->file.path));
+    info->file.base = (uintptr_t)ucs_dlinfo.dli_fbase;
     ucs_strncpy_safe(info->function,
-                     (dlinfo.dli_sname != NULL) ? dlinfo.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
+                     (ucs_dlinfo.dli_sname != NULL) ? ucs_dlinfo.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
                      sizeof(info->function));
     ucs_strncpy_safe(info->source_file, UCS_DEBUG_UNKNOWN_SYM, sizeof(info->source_file));
     info->line_number = 0;

@@ -482,7 +482,7 @@ err:
     return status;
 }
 
-ucs_status_t ucs_async_remove_handler(int id, int sync)
+ucs_status_t ucs_async_remove_handler(int id, int ucs_sync)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -516,7 +516,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
         ucs_atomic_add32(&handler->async->num_handlers, -1);
     }
 
-    if (sync) {
+    if (ucs_sync) {
         while (handler->refcount > 1) {
             /* TODO use pthread_cond / futex to reduce CPU usage while waiting
              * for the async handler to complete */

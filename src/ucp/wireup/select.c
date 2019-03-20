@@ -957,12 +957,12 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
 {
     /* best single MTU bandwidth */
     double size = iface_attr->cap.am.max_bcopy;
-    double time = (size / ucs_min(iface_attr->bandwidth,
+    double ucp_time = (size / ucs_min(iface_attr->bandwidth,
                                   remote_iface_attr->bandwidth)) +
                   iface_attr->overhead + remote_iface_attr->overhead +
                   ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
 
-    return size / time * 1e-5;
+    return size / ucp_time * 1e-5;
 }
 
 static int ucp_wireup_is_ep_single_lane(ucp_ep_h ep, ucp_rsc_index_t rsc_index)

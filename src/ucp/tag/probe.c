@@ -14,7 +14,7 @@
 
 
 ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
-                                   ucp_tag_t tag_mask, int remove,
+                                   ucp_tag_t tag_mask, int ucp_remove,
                                    ucp_tag_recv_info_t *info)
 {
     ucp_context_h UCS_V_UNUSED context = worker->context;
@@ -25,10 +25,10 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                     return NULL);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d", tag, tag_mask,
-                  remove);
+    ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64" ucp_remove=%d", tag, tag_mask,
+                  ucp_remove);
 
-    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, remove, "probe");
+    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, ucp_remove, "probe");
     if (rdesc != NULL) {
         flags            = rdesc->flags;
         info->sender_tag = ucp_rdesc_get_tag(rdesc);
