@@ -3,6 +3,7 @@
 * See file LICENSE for terms.
 */
 
+#include <ucp/api/ucp.h>
 
 void ucp_get_version(unsigned *major_version, unsigned *minor_version,
                      unsigned *release_number)

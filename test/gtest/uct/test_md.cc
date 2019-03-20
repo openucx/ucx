@@ -16,7 +16,11 @@ extern "C" {
 #include <net/if_arp.h>
 #include <ifaddrs.h>
 #include <netdb.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 
 
 #if HAVE_CUDA

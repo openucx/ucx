@@ -46,7 +46,11 @@
 #include <pthread.h>
 #include <sys/ioctl.h>
 #include <net/if_arp.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 #include <netdb.h>
 
 BEGIN_C_DECLS

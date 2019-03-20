@@ -9,7 +9,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
-
+#include <strings.h>
 
 enum {
     PRINT_VERSION        = UCS_BIT(0),

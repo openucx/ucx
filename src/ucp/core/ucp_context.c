@@ -19,7 +19,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
 #include <string.h>
-
+#include <strings.h>
 
 #define UCP_RSC_CONFIG_ALL    "all"
 

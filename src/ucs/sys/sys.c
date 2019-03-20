@@ -22,7 +22,11 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 #include <dirent.h>
 #include <sched.h>
 #include <ctype.h>

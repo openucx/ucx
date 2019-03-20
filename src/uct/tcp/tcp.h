@@ -8,7 +8,11 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/sys/sock.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 
 #define UCT_TCP_NAME "tcp"
 
