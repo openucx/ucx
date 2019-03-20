@@ -295,7 +295,7 @@ void ucs_memtrack_dump(FILE* output_stream)
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
 }
 
-static void ucs_memtrack_generate_report()
+static void ucs_memtrack_generate_report(void)
 {
     ucs_status_t status;
     FILE* output_stream;
@@ -315,7 +315,7 @@ static void ucs_memtrack_generate_report()
     }
 }
 
-void ucs_memtrack_init()
+void ucs_memtrack_init(void)
 {
     ucs_status_t status;
 
@@ -343,7 +343,7 @@ void ucs_memtrack_init()
     ucs_memtrack_context.enabled = 1;
 }
 
-void ucs_memtrack_cleanup()
+void ucs_memtrack_cleanup(void)
 {
     ucs_memtrack_entry_t *entry;
 
@@ -371,7 +371,7 @@ void ucs_memtrack_cleanup()
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
 }
 
-int ucs_memtrack_is_enabled()
+int ucs_memtrack_is_enabled(void)
 {
     return ucs_memtrack_context.enabled;
 }

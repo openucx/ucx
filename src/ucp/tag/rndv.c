@@ -74,6 +74,8 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     return sizeof(*rndv_rts_hdr) + packed_rkey_size;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
+                         uct_pending_req_t *self);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
@@ -110,6 +112,8 @@ static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
     return sizeof(*rndv_rtr_hdr) + packed_rkey_size;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
+                         uct_pending_req_t *self);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
                  uct_pending_req_t *self)
 {
@@ -187,6 +191,8 @@ static void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_request_send(rndv_req, 0);
 }
 
+UCS_PROFILE_DECLARE_FUNC_VOID(ucp_rndv_complete_rma_put_zcopy, (sreq),
+                              ucp_request_t *sreq);
 UCS_PROFILE_FUNC_VOID(ucp_rndv_complete_rma_put_zcopy, (sreq),
                       ucp_request_t *sreq)
 {
@@ -456,6 +462,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     }
 }
 
+UCS_PROFILE_DECLARE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
+                              uct_completion_t *self, ucs_status_t status);
 UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
                       uct_completion_t *self, ucs_status_t status)
 {
@@ -613,6 +621,9 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
     return status;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
+                         (arg, data, length, tl_flags),
+                         void *arg, void *data, size_t length, unsigned tl_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
                  (arg, data, length, tl_flags),
                  void *arg, void *data, size_t length, unsigned tl_flags)
@@ -620,6 +631,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     return ucp_rndv_process_rts(arg, data, length, tl_flags);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
+                         (arg, data, length, flags),
+                         void *arg, void *data, size_t length, unsigned flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
@@ -636,6 +650,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
+                         (arg, data, length, flags),
+                         void *arg, void *data, size_t length, unsigned flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
@@ -666,6 +683,8 @@ static size_t ucp_rndv_pack_data(void *dest, void *arg)
                                       &sreq->send.state.dt, length);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
+                         uct_pending_req_t *self);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                  uct_pending_req_t *self)
 {
@@ -695,6 +714,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
     return status;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
+                         uct_pending_req_t *self);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
                  uct_pending_req_t *self)
 {
@@ -801,6 +822,8 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
                                  ucp_rndv_am_zcopy_send_req_complete, 1);
 }
 
+UCS_PROFILE_DECLARE_FUNC_VOID(ucp_rndv_frag_put_completion, (self, status),
+                              uct_completion_t *self, ucs_status_t status);
 UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_put_completion, (self, status),
                       uct_completion_t *self, ucs_status_t status)
 {
@@ -816,6 +839,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_put_completion, (self, status),
     ucp_request_put(frag_req);
 }
 
+UCS_PROFILE_DECLARE_FUNC_VOID(ucp_rndv_frag_get_completion, (self, status),
+                              uct_completion_t *self, ucs_status_t status);
 UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_get_completion, (self, status),
                       uct_completion_t *self, ucs_status_t status)
 {
@@ -901,6 +926,9 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
     return status;;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
+                         (arg, data, length, flags),
+                         void *arg, void *data, size_t length, unsigned flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
@@ -979,6 +1007,9 @@ out_send:
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rndv_data_handler,
+                         (arg, data, length, flags),
+                         void *arg, void *data, size_t length, unsigned flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)

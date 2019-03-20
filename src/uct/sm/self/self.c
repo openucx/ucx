@@ -237,10 +237,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_self_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_self_ep_t, uct_base_ep_t);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_self_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_self_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 
 
+ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                  const void *payload, unsigned length);
 ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
@@ -263,6 +267,9 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     return UCS_OK;
 }
 
+ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                             uct_pack_callback_t pack_cb, void *arg,
+                             unsigned flags);
 ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              uct_pack_callback_t pack_cb, void *arg,
                              unsigned flags)

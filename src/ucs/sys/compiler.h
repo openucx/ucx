@@ -89,13 +89,13 @@
  * Define code which runs at global constructor phase
  */
 #define UCS_STATIC_INIT \
-    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
+    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)(void)
 
 
 /*
  * Define code which runs at global destructor phase
  */
 #define UCS_STATIC_CLEANUP \
-    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
+    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)(void)
 
 #endif

@@ -1418,7 +1418,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
     }
 }
 
-void ucs_config_parser_warn_unused_env_vars()
+void ucs_config_parser_warn_unused_env_vars(void)
 {
     static uint32_t warn_once = 1;
     char unused_env_vars_names[40];

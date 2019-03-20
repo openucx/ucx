@@ -16,6 +16,7 @@
 #define QUOTE(x) _QUOTE(x)
 
 
+int test_ucp_init(void *handle);
 int test_ucp_init(void *handle)
 {
     ucs_status_t (*ucp_init_version_f)(unsigned, unsigned, const ucp_params_t*,

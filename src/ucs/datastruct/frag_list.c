@@ -216,6 +216,9 @@ static inline void frag_list_insert_tail(ucs_frag_list_t *head,
  */
 ucs_frag_list_ooo_type_t
 ucs_frag_list_insert_head(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
+                          ucs_frag_list_sn_t sn);
+ucs_frag_list_ooo_type_t
+ucs_frag_list_insert_head(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
                           ucs_frag_list_sn_t sn)
 {
      ucs_frag_list_elem_t *h;

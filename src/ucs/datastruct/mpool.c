@@ -192,7 +192,7 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     chunk            = ptr;
     chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
                                    data->alignment);
-    chunk->elems     = (void*)(chunk + 1) + chunk_padding;
+    chunk->elems     = (char*)(chunk + 1) + chunk_padding;
     chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
                        ucs_mpool_elem_total_size(data));
 

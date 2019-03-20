@@ -194,7 +194,7 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
         parent_class::TearDownTestCase, \
         new ::testing::internal::TestFactoryImpl<\
             GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>);\
-void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
+void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body(void)
 
 
 /*

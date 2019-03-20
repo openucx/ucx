@@ -1633,7 +1633,7 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 }
 #endif /* _OPENMP */
 
-void ucx_perf_global_init()
+void ucx_perf_global_init(void)
 {
     static ucx_perf_allocator_t host_allocator = {
         .init      = (void*)ucs_empty_function_return_success,

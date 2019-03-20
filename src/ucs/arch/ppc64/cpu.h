@@ -37,7 +37,7 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_wc_fence()     ucs_memory_bus_fence()
 
 
-static inline uint64_t ucs_arch_read_hres_clock()
+static inline uint64_t ucs_arch_read_hres_clock(void)
 {
 #ifndef HAVE_SYS_PLATFORM_PPC_H
     uint64_t tb;
@@ -48,12 +48,12 @@ static inline uint64_t ucs_arch_read_hres_clock()
 #endif
 }
 
-static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
+static inline ucs_cpu_model_t ucs_arch_get_cpu_model(void)
 {
     return UCS_CPU_MODEL_UNKNOWN;
 }
 
-static inline int ucs_arch_get_cpu_flag()
+static inline int ucs_arch_get_cpu_flag(void)
 {
     return UCS_CPU_FLAG_UNKNOWN;
 }

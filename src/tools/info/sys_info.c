@@ -66,7 +66,7 @@ out:
     return result;
 }
 
-void print_sys_info()
+void print_sys_info(void)
 {
     size_t size;
 

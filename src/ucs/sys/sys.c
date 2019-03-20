@@ -40,7 +40,7 @@
 #define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
 
 
-const char *ucs_get_host_name()
+const char *ucs_get_host_name(void)
 {
     static char hostname[256] = {0};
 
@@ -51,7 +51,7 @@ const char *ucs_get_host_name()
     return hostname;
 }
 
-const char *ucs_get_user_name()
+const char *ucs_get_user_name(void)
 {
     static char username[256] = {0};
 
@@ -75,7 +75,7 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max)
     }
 }
 
-const char *ucs_get_exe()
+const char *ucs_get_exe(void)
 {
     static char exe[1024];
     int ret;
@@ -114,7 +114,7 @@ uint32_t ucs_file_checksum(const char *filename)
     return crc;
 }
 
-static uint64_t ucs_get_mac_address()
+static uint64_t ucs_get_mac_address(void)
 {
     static uint64_t mac_address = 0;
     struct ifreq ifr, *it, *end;
@@ -185,7 +185,7 @@ static uint64_t __sumup_host_name(unsigned prime_index)
     return sum;
 }
 
-uint64_t ucs_machine_guid()
+uint64_t ucs_machine_guid(void)
 {
     return ucs_get_prime(0) * ucs_get_mac_address() +
            __sumup_host_name(1);
@@ -211,7 +211,7 @@ static long ucs_sysconf(int name)
     return rc;
 }
 
-int ucs_get_first_cpu()
+int ucs_get_first_cpu(void)
 {
     int first_cpu, total_cpus, ret;
     cpu_set_t mask;
@@ -379,7 +379,7 @@ ucs_status_t ucs_read_file_number(long *value, int silent,
     return UCS_OK;
 }
 
-size_t ucs_get_max_iov()
+size_t ucs_get_max_iov(void)
 {
     static long max_iov = 0;
 
@@ -394,7 +394,7 @@ size_t ucs_get_max_iov()
     return max_iov;
 }
 
-size_t ucs_get_page_size()
+size_t ucs_get_page_size(void)
 {
     static long page_size = 0;
 
@@ -433,7 +433,7 @@ static ssize_t ucs_get_meminfo_entry(const char* pattern)
     return val_b;
 }
 
-size_t ucs_get_memfree_size()
+size_t ucs_get_memfree_size(void)
 {
     size_t mem_free;
 
@@ -447,7 +447,7 @@ size_t ucs_get_memfree_size()
     return mem_free;
 }
 
-ssize_t ucs_get_huge_page_size()
+ssize_t ucs_get_huge_page_size(void)
 {
     static ssize_t huge_page_size = 0;
 
@@ -464,7 +464,7 @@ ssize_t ucs_get_huge_page_size()
     return huge_page_size;
 }
 
-size_t ucs_get_phys_mem_size()
+size_t ucs_get_phys_mem_size(void)
 {
     static size_t phys_mem_size = 0;
     long phys_pages;
@@ -483,7 +483,7 @@ size_t ucs_get_phys_mem_size()
 }
 
 #define UCS_SYS_THP_ENABLED_FILE "/sys/kernel/mm/transparent_hugepage/enabled"
-int ucs_is_thp_enabled()
+int ucs_is_thp_enabled(void)
 {
     char buf[256];
     int rc;
@@ -499,7 +499,7 @@ int ucs_is_thp_enabled()
 }
 
 #define UCS_PROC_SYS_SHMMAX_FILE "/proc/sys/kernel/shmmax"
-size_t ucs_get_shmmax()
+size_t ucs_get_shmmax(void)
 {
     ucs_status_t status;
     long size;
@@ -815,7 +815,7 @@ int ucs_get_mem_prot(unsigned long start, unsigned long end)
     return ctx.prot;
 }
 
-const char* ucs_get_process_cmdline()
+const char* ucs_get_process_cmdline(void)
 {
     static char cmdline[1024] = {0};
     static int initialized = 0;
@@ -986,56 +986,56 @@ void ucs_sys_free(void *ptr, size_t length)
     }
 }
 
-void ucs_empty_function()
+void ucs_empty_function(void)
 {
 }
 
-unsigned ucs_empty_function_return_zero()
-{
-    return 0;
-}
-
-int64_t ucs_empty_function_return_zero_int64()
+unsigned ucs_empty_function_return_zero(void)
 {
     return 0;
 }
 
-ucs_status_t ucs_empty_function_return_success()
+int64_t ucs_empty_function_return_zero_int64(void)
+{
+    return 0;
+}
+
+ucs_status_t ucs_empty_function_return_success(void)
 {
     return UCS_OK;
 }
 
-ucs_status_t ucs_empty_function_return_unsupported()
+ucs_status_t ucs_empty_function_return_unsupported(void)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
-ucs_status_t ucs_empty_function_return_inprogress()
+ucs_status_t ucs_empty_function_return_inprogress(void)
 {
     return UCS_INPROGRESS;
 }
 
-ucs_status_t ucs_empty_function_return_no_resource()
+ucs_status_t ucs_empty_function_return_no_resource(void)
 {
     return UCS_ERR_NO_RESOURCE;
 }
 
-ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource()
+ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource(void)
 {
     return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
 }
 
-ucs_status_t ucs_empty_function_return_ep_timeout()
+ucs_status_t ucs_empty_function_return_ep_timeout(void)
 {
     return UCS_ERR_ENDPOINT_TIMEOUT;
 }
 
-ssize_t ucs_empty_function_return_bc_ep_timeout()
+ssize_t ucs_empty_function_return_bc_ep_timeout(void)
 {
     return UCS_ERR_ENDPOINT_TIMEOUT;
 }
 
-ucs_status_t ucs_empty_function_return_busy()
+ucs_status_t ucs_empty_function_return_busy(void)
 {
     return UCS_ERR_BUSY;
 }

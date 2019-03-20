@@ -221,7 +221,7 @@ UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_table, "UCS global", NULL,
                           ucs_global_opts_t)
 
 
-void ucs_global_opts_init()
+void ucs_global_opts_init(void)
 {
     ucs_status_t status;
 
@@ -249,7 +249,7 @@ ucs_status_t ucs_global_opts_clone(void *dst)
     return ucs_config_parser_clone_opts(&ucs_global_opts, dst, ucs_global_opts_table);
 }
 
-void ucs_global_opts_release()
+void ucs_global_opts_release(void)
 {
     return ucs_config_parser_release_opts(&ucs_global_opts, ucs_global_opts_table);
 }

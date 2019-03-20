@@ -307,7 +307,7 @@ static void request_init(void *request)
 /**
  * Print this application's usage help message.
  */
-static void usage()
+static void usage(void)
 {
     fprintf(stderr, "Usage: ucp_client_server [parameters]\n");
     fprintf(stderr, "UCP client-server example utility\n");

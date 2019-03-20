@@ -20,7 +20,7 @@
 
 uct_md_component_t uct_cma_md_component;
 
-static int uct_cma_test_ptrace_scope()
+static int uct_cma_test_ptrace_scope(void)
 {
     static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
     const char *extra_info_str;
@@ -86,7 +86,7 @@ static int uct_cma_test_ptrace_scope()
     return cma_supported;
 }
 
-static int uct_cma_test_writev()
+static int uct_cma_test_writev(void)
 {
     uint64_t test_dst       = 0;
     uint64_t test_src       = 0;

@@ -72,7 +72,7 @@ static void ucs_profile_file_write_records(int fd, ucs_profile_record_t *begin,
     ucs_profile_file_write_data(fd, begin, (void*)end - (void*)begin);
 }
 
-static void ucs_profile_write()
+static void ucs_profile_write(void)
 {
     ucs_profile_header_t header;
     char fullpath[1024] = {0};
@@ -210,6 +210,9 @@ out_unlock:
 
 void ucs_profile_record(ucs_profile_type_t type, const char *name,
                         uint32_t param32, uint64_t param64, const char *file,
+                        int line, const char *function, volatile int *loc_id_p);
+void ucs_profile_record(ucs_profile_type_t type, const char *name,
+                        uint32_t param32, uint64_t param64, const char *file,
                         int line, const char *function, volatile int *loc_id_p)
 {
     extern ucs_profile_global_context_t ucs_profile_ctx;
@@ -262,7 +265,7 @@ void ucs_profile_record(ucs_profile_type_t type, const char *name,
 }
 
 
-void ucs_profile_global_init()
+void ucs_profile_global_init(void)
 {
     size_t num_records;
 
@@ -302,7 +305,7 @@ off:
     ucs_trace("profiling is disabled");
 }
 
-static void ucs_profile_reset_locations()
+static void ucs_profile_reset_locations(void)
 {
     ucs_profile_location_t *loc;
 
@@ -321,7 +324,7 @@ static void ucs_profile_reset_locations()
     pthread_mutex_unlock(&ucs_profile_ctx.mutex);
 }
 
-void ucs_profile_global_cleanup()
+void ucs_profile_global_cleanup(void)
 {
     ucs_profile_write();
     ucs_free(ucs_profile_ctx.log.start);
@@ -332,7 +335,7 @@ void ucs_profile_global_cleanup()
     ucs_profile_reset_locations();
 }
 
-void ucs_profile_dump()
+void ucs_profile_dump(void)
 {
     ucs_profile_location_t *loc;
 

@@ -427,7 +427,7 @@ static void* ucs_stats_thread_func(void *arg)
     return NULL;
 }
 
-static void ucs_stats_open_dest()
+static void ucs_stats_open_dest(void)
 {
     ucs_status_t status;
     char *copy_str, *saveptr;
@@ -477,7 +477,7 @@ static void ucs_stats_open_dest()
     }
 }
 
-static void ucs_stats_close_dest()
+static void ucs_stats_close_dest(void)
 {
     if (ucs_stats_context.flags & UCS_STATS_FLAG_SOCKET) {
         ucs_stats_context.flags &= ~UCS_STATS_FLAG_SOCKET;
@@ -499,7 +499,7 @@ static void ucs_stats_dump_sighandler(int signo)
     ucs_stats_dump();
 }
 
-static void ucs_stats_set_trigger()
+static void ucs_stats_set_trigger(void)
 {
     char *p;
 
@@ -530,7 +530,7 @@ static void ucs_stats_set_trigger()
     }
 }
 
-static void ucs_stats_unset_trigger()
+static void ucs_stats_unset_trigger(void)
 {
     void *result;
 
@@ -567,7 +567,7 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
     }
 }
 
-void ucs_stats_init()
+void ucs_stats_init(void)
 {
     ucs_assert(ucs_stats_context.flags == 0);
     ucs_stats_open_dest();
@@ -591,7 +591,7 @@ void ucs_stats_init()
               (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM_CLOSE)  ? 'c' : '-');
 }
 
-void ucs_stats_cleanup()
+void ucs_stats_cleanup(void)
 {
     if (!ucs_stats_is_active()) {
         return;
@@ -603,14 +603,14 @@ void ucs_stats_cleanup()
     ucs_assert(ucs_stats_context.flags == 0);
 }
 
-void ucs_stats_dump()
+void ucs_stats_dump(void)
 {
     pthread_mutex_lock(&ucs_stats_context.lock);
     __ucs_stats_dump(0);
     pthread_mutex_unlock(&ucs_stats_context.lock);
 }
 
-int ucs_stats_is_active()
+int ucs_stats_is_active(void)
 {
     return ucs_stats_context.flags & (UCS_STATS_FLAG_SOCKET|UCS_STATS_FLAG_STREAM);
 }
@@ -621,24 +621,24 @@ ucs_stats_node_t * ucs_stats_get_root() {
 
 #else
 
-void ucs_stats_init()
+void ucs_stats_init(void)
 {
 }
 
-void ucs_stats_cleanup()
+void ucs_stats_cleanup(void)
 {
 }
 
-void ucs_stats_dump()
+void ucs_stats_dump(void)
 {
 }
 
-int ucs_stats_is_active()
+int ucs_stats_is_active(void)
 {
     return 0;
 }
 
-ucs_stats_node_t *ucs_stats_get_root()
+ucs_stats_node_t *ucs_stats_get_root(void)
 {
     return NULL;
 }

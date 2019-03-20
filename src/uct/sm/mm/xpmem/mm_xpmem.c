@@ -13,7 +13,7 @@
 #include <ucs/debug/log.h>
 
 
-static ucs_status_t uct_xpmem_query()
+static ucs_status_t uct_xpmem_query(void)
 {
     int version;
 
@@ -30,7 +30,7 @@ static size_t uct_xpmem_get_path_size(uct_md_h md)
     return 0;
 }
 
-static uint8_t uct_xpmem_get_priority()
+static uint8_t uct_xpmem_get_priority(void)
 {
     return 0;
 }

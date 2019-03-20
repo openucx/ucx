@@ -741,6 +741,7 @@ void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
     }
 }
 
+void ucp_worker_iface_event(int fd, void *arg);
 void ucp_worker_iface_event(int fd, void *arg)
 {
     ucp_worker_iface_t *wiface = arg;

@@ -53,6 +53,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 
 #define _UCM_DEFINE_DLSYM_FUNC(_name, _orig_name, _over_name, _rettype, _fail_val, ...) \
     _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
+    _rettype _orig_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     \
     /* Call the original function using dlsym(RTLD_NEXT) */ \
     _rettype _orig_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
@@ -81,6 +82,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 
 #define UCM_DEFINE_SYSCALL_FUNC(_name, _rettype, _syscall_id, ...) \
     /* Call syscall */ \
+    _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         return (_rettype)(size_t)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \

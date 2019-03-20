@@ -51,6 +51,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
     return status;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_mem_type_pack,
+                         (worker, dest, src, length, mem_type),
+                         ucp_worker_h worker, void *dest, const void *src, size_t length,
+                         uct_memory_type_t mem_type);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
                  (worker, dest, src, length, mem_type),
                  ucp_worker_h worker, void *dest, const void *src, size_t length,

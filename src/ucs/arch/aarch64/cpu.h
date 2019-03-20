@@ -65,7 +65,7 @@ static inline uint64_t ucs_arch_read_hres_clock(void)
     return ticks;
 }
 
-static inline double ucs_arch_get_clocks_per_sec()
+static inline double ucs_arch_get_clocks_per_sec(void)
 {
     uint64_t freq;
     asm volatile("mrs %0, cntfrq_el0" : "=r" (freq));
@@ -79,12 +79,12 @@ static inline double ucs_arch_get_clocks_per_sec()
 
 #endif
 
-static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
+static inline ucs_cpu_model_t ucs_arch_get_cpu_model(void)
 {
     return UCS_CPU_MODEL_ARM_AARCH64;
 }
 
-static inline int ucs_arch_get_cpu_flag()
+static inline int ucs_arch_get_cpu_flag(void)
 {
     return UCS_CPU_FLAG_UNKNOWN;
 }

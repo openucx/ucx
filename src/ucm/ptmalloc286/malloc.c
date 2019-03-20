@@ -1005,7 +1005,7 @@ DLMALLOC_EXPORT size_t dlmalloc_max_footprint(void);
   guarantee that this number of bytes can actually be obtained from
   the system.
 */
-DLMALLOC_EXPORT size_t dlmalloc_footprint_limit();
+DLMALLOC_EXPORT size_t dlmalloc_footprint_limit(void);
 
 /*
   malloc_set_footprint_limit();
@@ -5355,6 +5355,7 @@ size_t dlmalloc_max_footprint(void) {
   return gm->max_footprint;
 }
 
+size_t dlmalloc_footprint_limit(void);
 size_t dlmalloc_footprint_limit(void) {
   size_t maf = gm->footprint_limit;
   return maf == 0 ? MAX_SIZE_T : maf;
@@ -5378,7 +5379,7 @@ struct mallinfo dlmallinfo(void) {
 #endif /* NO_MALLINFO */
 
 #if !NO_MALLOC_STATS
-void dlmalloc_stats() {
+void dlmalloc_stats(void) {
   internal_malloc_stats(gm);
 }
 #endif /* NO_MALLOC_STATS */
@@ -5388,6 +5389,7 @@ int dlmallopt(int param_number, int value) {
 }
 
 /* extension to use in testing */
+int dlmallopt_get(int param_number);
 int dlmallopt_get(int param_number) {
 
   ensure_initialization();

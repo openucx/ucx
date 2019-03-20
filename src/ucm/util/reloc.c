@@ -73,7 +73,7 @@ static void ucm_reloc_file_lock(int fd, int l_type)
     }
 }
 
-static int ucm_reloc_get_aux_phsize()
+static int ucm_reloc_get_aux_phsize(void)
 {
 #define UCM_RELOC_AUXV_BUF_LEN 16
     static const char *proc_auxv_filename = "/proc/self/auxv";
@@ -332,7 +332,7 @@ void* ucm_reloc_get_orig(const char *symbol, void *replacement)
 }
 
 /* called with lock held */
-static ucs_status_t ucm_reloc_install_dlopen()
+static ucs_status_t ucm_reloc_install_dlopen(void)
 {
     static int installed = 0;
     ucs_status_t status;

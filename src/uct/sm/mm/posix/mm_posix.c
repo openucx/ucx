@@ -123,7 +123,7 @@ static size_t uct_posix_get_path_size(uct_md_h md)
     }
 }
 
-static uint8_t uct_posix_get_priority()
+static uint8_t uct_posix_get_priority(void)
 {
     return 0;
 }

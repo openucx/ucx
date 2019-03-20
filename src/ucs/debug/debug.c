@@ -600,7 +600,7 @@ out:
     return sym ? sym : UCS_DEBUG_UNKNOWN_SYM;
 }
 
-static void ucs_debugger_attach()
+static void ucs_debugger_attach(void)
 {
     static const char *vg_cmds_fmt = "file %s\n"
                                      "target remote | vgdb\n";
@@ -689,7 +689,7 @@ static void ucs_debugger_attach()
     waitpid(pid, &ret, 0);
 }
 
-static void UCS_F_NOINLINE ucs_debug_freeze()
+static void UCS_F_NOINLINE ucs_debug_freeze(void)
 {
     static volatile int freeze = 1;
     while (freeze) {
@@ -702,7 +702,7 @@ static void ucs_debug_stop_handler(int signo)
     ucs_debug_freeze();
 }
 
-static void ucs_debug_stop_other_threads()
+static void ucs_debug_stop_other_threads(void)
 {
     static const char *task_dir = "/proc/self/task";
     struct dirent *entry;
@@ -1047,7 +1047,7 @@ static void ucs_debug_signal_handler(int signo)
     ucs_profile_dump();
 }
 
-static void ucs_debug_set_signal_alt_stack()
+static void ucs_debug_set_signal_alt_stack(void)
 {
     int ret;
 
@@ -1123,7 +1123,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            (address == ucs_debug_signal_restorer);
 }
 
-static struct dl_address_search *ucs_debug_get_lib_info()
+static struct dl_address_search *ucs_debug_get_lib_info(void)
 {
     static struct dl_address_search dl = {0, NULL, 0};
 
@@ -1139,7 +1139,7 @@ static struct dl_address_search *ucs_debug_get_lib_info()
     return (dl.filename == NULL || dl.base == 0) ? NULL : &dl;
 }
 
-const char *ucs_debug_get_lib_path()
+const char *ucs_debug_get_lib_path(void)
 {
     static char ucs_lib_path[256] = {0};
     struct dl_address_search *dl;
@@ -1154,13 +1154,13 @@ const char *ucs_debug_get_lib_path()
     return ucs_lib_path;
 }
 
-unsigned long ucs_debug_get_lib_base_addr()
+unsigned long ucs_debug_get_lib_base_addr(void)
 {
     struct dl_address_search *dl = ucs_debug_get_lib_info();
     return (dl == NULL) ? 0 : dl->base;
 }
 
-void ucs_debug_init()
+void ucs_debug_init(void)
 {
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     if (ucs_global_opts.handle_errors) {

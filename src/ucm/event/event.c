@@ -156,17 +156,17 @@ static ucs_list_link_t ucm_event_handlers =
         } \
     }
 
-void ucm_event_enter()
+void ucm_event_enter(void)
 {
     ucm_event_lock(pthread_rwlock_rdlock);
 }
 
-void ucm_event_enter_exclusive()
+void ucm_event_enter_exclusive(void)
 {
     ucm_event_lock(pthread_rwlock_wrlock);
 }
 
-void ucm_event_leave()
+void ucm_event_leave(void)
 {
     pthread_rwlock_unlock(&ucm_event_lock);
 }

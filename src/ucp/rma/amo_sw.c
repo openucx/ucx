@@ -190,6 +190,8 @@ DEFINE_AMO_SW_OP(64)
 DEFINE_AMO_SW_FOP(32)
 DEFINE_AMO_SW_FOP(64)
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -238,6 +240,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {

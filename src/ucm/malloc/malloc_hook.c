@@ -586,7 +586,7 @@ static void ucm_malloc_test(int events)
               ucm_malloc_hook_state.hook_called ? "" : " not");
 }
 
-static void ucm_malloc_populate_glibc_cache()
+static void ucm_malloc_populate_glibc_cache(void)
 {
     char hostname[NAME_MAX];
 
@@ -655,7 +655,7 @@ static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {
     { NULL, NULL }
 };
 
-static void ucm_malloc_install_optional_symbols()
+static void ucm_malloc_install_optional_symbols(void)
 {
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS)) {
         ucm_malloc_install_symbols(ucm_malloc_optional_symbol_patches);
@@ -663,7 +663,7 @@ static void ucm_malloc_install_optional_symbols()
     }
 }
 
-static void ucm_malloc_set_env_mallopt()
+static void ucm_malloc_set_env_mallopt(void)
 {
     /* copy values of M_MMAP_THRESHOLD and M_TRIM_THRESHOLD
      * if they were overriden by the user
@@ -790,7 +790,7 @@ UCS_STATIC_INIT {
     kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
 }
 
-static void UCS_F_DTOR ucm_clear_env()
+static void UCS_F_DTOR ucm_clear_env(void)
 {
     unsigned i;
 

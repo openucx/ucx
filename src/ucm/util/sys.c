@@ -36,7 +36,7 @@ ucm_global_config_t ucm_global_opts = {
     .alloc_alignment            = 16
 };
 
-size_t ucm_get_page_size()
+size_t ucm_get_page_size(void)
 {
     static long page_size = -1;
     long value;

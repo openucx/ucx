@@ -13,13 +13,13 @@
 #include <ucs/sys/preprocessor.h>
 
 
-void print_version()
+void print_version(void)
 {
     printf("# UCT version=%s revision %s\n", UCT_VERNO_STRING, UCT_SCM_VERSION);
     printf("# configured with: %s\n", UCX_CONFIGURE_FLAGS);
 }
 
-void print_build_config()
+void print_build_config(void)
 {
     typedef struct {
         const char *name;

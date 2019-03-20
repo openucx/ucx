@@ -69,6 +69,8 @@ void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 }
 
 ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp);
+ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp)
 {
     if (comp != NULL) {
@@ -158,6 +160,9 @@ static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
     iface->recv_fifo_ctl->tail = iface->read_index;
 }
 
+ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
+                                             uct_mm_fifo_element_t *fifo_elem_p,
+                                             unsigned need_new_desc);
 ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
                                              uct_mm_fifo_element_t *fifo_elem_p,
                                              unsigned need_new_desc)
@@ -333,6 +338,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_is_reachable       = uct_sm_iface_is_reachable
 };
 
+void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_mm_recv_desc_t *desc = obj;
@@ -358,6 +364,8 @@ static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems
     }
 }
 
+ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
+                                      uct_mm_iface_config_t *config, uct_md_h md);
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
                                       uct_mm_iface_config_t *config, uct_md_h md)
 {

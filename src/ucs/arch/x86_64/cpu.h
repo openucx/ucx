@@ -42,13 +42,13 @@ BEGIN_C_DECLS
 
 extern ucs_ternary_value_t ucs_arch_x86_enable_rdtsc;
 
-double ucs_arch_get_clocks_per_sec();
-double ucs_x86_init_tsc_freq();
+double ucs_arch_get_clocks_per_sec(void);
+double ucs_x86_init_tsc_freq(void);
 
-ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
-ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
+ucs_cpu_model_t ucs_arch_get_cpu_model(void) UCS_F_NOOPTIMIZE;
+ucs_cpu_flag_t ucs_arch_get_cpu_flag(void) UCS_F_NOOPTIMIZE;
 
-static inline int ucs_arch_x86_rdtsc_enabled()
+static inline int ucs_arch_x86_rdtsc_enabled(void)
 {
     double UCS_V_UNUSED dummy_freq;
 
@@ -60,7 +60,7 @@ static inline int ucs_arch_x86_rdtsc_enabled()
     return ucs_arch_x86_enable_rdtsc;
 }
 
-static inline uint64_t ucs_arch_read_hres_clock()
+static inline uint64_t ucs_arch_read_hres_clock(void)
 {
     uint32_t low, high;
 

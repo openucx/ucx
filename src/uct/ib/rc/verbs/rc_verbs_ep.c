@@ -11,6 +11,7 @@
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
 
+void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 {
     txcnt->pi = txcnt->ci = 0;

@@ -36,13 +36,13 @@ typedef uint32_t             ucs_short_time_t;
 #define UCS_NSEC_PER_SEC   1000000000ul  /* Nano */
 
 
-double ucs_get_cpu_clocks_per_sec();
+double ucs_get_cpu_clocks_per_sec(void);
 
 
 /**
  * @return The current time, in UCS time units.
  */
-static inline ucs_time_t ucs_get_time()
+static inline ucs_time_t ucs_get_time(void)
 {
     return (ucs_time_t)ucs_arch_read_hres_clock();
 }
@@ -51,7 +51,7 @@ static inline ucs_time_t ucs_get_time()
  * @return The current accurate time, in seconds.
  * @note This function may have higher overhead than @ref ucs_get_time()
  */
-static inline double ucs_get_accurate_time()
+static inline double ucs_get_accurate_time(void)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -61,7 +61,7 @@ static inline double ucs_get_accurate_time()
 /**
  * @return The clock value of a single second.
  */
-static inline double ucs_time_sec_value()
+static inline double ucs_time_sec_value(void)
 {
     return ucs_get_cpu_clocks_per_sec();
 }

@@ -42,8 +42,8 @@ struct ucs_async_context {
  *
  * GLobal initialization and cleanup of async event handling.
  */
-void ucs_async_global_init();
-void ucs_async_global_cleanup();
+void ucs_async_global_init(void);
+void ucs_async_global_cleanup(void);
 
 
 /**

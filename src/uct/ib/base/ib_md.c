@@ -1269,13 +1269,13 @@ out:
     return status;
 }
 
-static void uct_ib_fork_warn()
+static void uct_ib_fork_warn(void)
 {
     ucs_warn("IB: ibv_fork_init() was disabled or failed, yet a fork() has been issued.");
     ucs_warn("IB: data corruption might occur when using registered memory.");
 }
 
-static void uct_ib_fork_warn_enable()
+static void uct_ib_fork_warn_enable(void)
 {
     static volatile uint32_t enabled = 0;
     int ret;

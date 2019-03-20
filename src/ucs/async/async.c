@@ -613,14 +613,16 @@ void ucs_async_poll(ucs_async_context_t *async)
     }
 }
 
-void ucs_async_global_init()
+void ucs_async_global_init(void);
+void ucs_async_global_init(void)
 {
     pthread_rwlock_init(&ucs_async_global_context.handlers_lock, NULL);
     kh_init_inplace(ucs_async_handler, &ucs_async_global_context.handlers);
     ucs_async_method_call_all(init);
 }
 
-void ucs_async_global_cleanup()
+void ucs_async_global_cleanup(void);
+void ucs_async_global_cleanup(void)
 {
     int num_elems = kh_size(&ucs_async_global_context.handlers);
     if (num_elems != 0) {

@@ -124,6 +124,9 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
     return status;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_only_handler,
+                        (arg, data, length, am_flags),
+                        void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_only_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
@@ -134,6 +137,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_only_handler,
                                     sizeof(ucp_eager_hdr_t), 0);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_first_handler,
+                         (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
@@ -143,6 +149,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
                                     sizeof(ucp_eager_first_hdr_t), 0);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_middle_handler,
+                        (arg, data, length, am_flags),
+                        void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
@@ -191,6 +200,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
     return status;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
+                         (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
@@ -202,6 +214,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
                                     sizeof(ucp_eager_sync_hdr_t), 0);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_sync_first_handler,
+                         (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_first_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
@@ -212,6 +227,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_first_handler,
                                     sizeof(ucp_eager_sync_first_hdr_t), 0);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
+                         (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
@@ -236,6 +254,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
+                         (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)

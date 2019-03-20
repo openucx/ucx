@@ -375,7 +375,7 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
  * Check all UCX_ environment variables have been used so far by the
  * configuration parser, issue a warning if not. Called just before program exit.
  */
-void ucs_config_parser_warn_unused_env_vars();
+void ucs_config_parser_warn_unused_env_vars(void);
 
 
 /**

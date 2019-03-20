@@ -346,7 +346,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     free(scope_ends);
 }
 
-static void close_pipes()
+static void close_pipes(void)
 {
     close(output_pipefds[0]);
     close(output_pipefds[1]);
@@ -455,7 +455,7 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
     return 0;
 }
 
-static void usage()
+static void usage(void)
 {
     printf("Usage: ucx_read_profile [options] [profile-file]\n");
     printf("Options are:\n");
@@ -468,6 +468,7 @@ static void usage()
     printf("  -h              Show this help message\n");
 }
 
+int parse_args(int argc, char **argv, options_t *opts);
 int parse_args(int argc, char **argv, options_t *opts)
 {
     int c;

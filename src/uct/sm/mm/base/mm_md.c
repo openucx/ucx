@@ -191,6 +191,8 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
 }
 
 ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
+                             void *handle, uint64_t raddr, void **laddr_p);
+ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p)
 {
     uct_mm_remote_seg_t *mm_desc = handle;

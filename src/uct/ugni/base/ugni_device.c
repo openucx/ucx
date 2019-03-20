@@ -117,7 +117,7 @@ static ucs_status_t get_ptag(uint8_t *ptag)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_fetch_pmi()
+static ucs_status_t uct_ugni_fetch_pmi(void)
 {
     int spawned = 0,
         rc;
@@ -156,7 +156,7 @@ static ucs_status_t uct_ugni_fetch_pmi()
     return UCS_OK;
 }
 
-static uct_ugni_job_info_t *uct_ugni_get_job_info()
+static uct_ugni_job_info_t *uct_ugni_get_job_info(void)
 {
     ucs_status_t status;
 
@@ -168,7 +168,7 @@ static uct_ugni_job_info_t *uct_ugni_get_job_info()
     return &job_info;
 }
 
-ucs_status_t init_device_list()
+ucs_status_t init_device_list(void)
 {
     ucs_status_t status = UCS_OK;
     int i, num_active_devices;

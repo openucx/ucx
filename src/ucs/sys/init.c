@@ -72,7 +72,7 @@ static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
     }
 }
 
-static void UCS_F_CTOR ucs_init()
+static void UCS_F_CTOR ucs_init(void)
 {
     ucs_check_cpu_flags();
     ucs_log_early_init(); /* Must be called before all others */
