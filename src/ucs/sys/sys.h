@@ -29,6 +29,10 @@
 #include <sys/syscall.h>
 #include <sys/param.h>
 #include <sys/mman.h>
+
+#ifndef __USE_XOPEN
+#define __USE_XOPEN
+#endif
 #include <sys/shm.h>
 #include <arpa/inet.h>
 #include <stdlib.h>

@@ -433,6 +433,10 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
     return UCS_INPROGRESS;
 }
 
+#ifndef be64toh
+uint64_t be64toh(uint64_t big_endian_64bits);
+#endif
+
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
             (uct_rc_iface_send_op_t *op, const void *resp) \
