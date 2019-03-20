@@ -5,6 +5,8 @@
  */
 
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -74,8 +76,16 @@ int main(int argc, char **argv)
         return -1;
     }
 
+#ifdef MAP_ANONYMOUS
     ptr2 = mmap(NULL, alloc_size, PROT_READ|PROT_WRITE,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+#else
+    int fd;
+    fd = open("/dev/zero", O_RDWR);
+    ptr2 = mmap(NULL, alloc_size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
+    close(fd);
+#endif
+
     if (ptr2 == MAP_FAILED) {
         fprintf(stderr, "mmmap() failed: %m\n");
         return -1;

@@ -117,8 +117,15 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
     void *ptr;
 
     size = ucs_align_up_pow2(sizeof(size_t) + *size_p, ucs_get_page_size());
+#ifdef MAP_ANONYMOUS
     ptr = ucm_orig_mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS,
                         -1, 0);
+#else
+    int fd = open("/dev/zero", O_RDWR);
+    ptr = ucm_orig_mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE,
+                        fd, 0);
+    close(fd);
+#endif
     if (ptr == MAP_FAILED) {
         ucs_error("mmmap(size=%zu) failed: %m", size);
         return UCS_ERR_NO_MEMORY;

@@ -20,6 +20,10 @@
 /* How many events to wait for in epoll_wait */
 #define UCT_TCP_MAX_EVENTS        16
 
+/* If IFNAMSIZ is not found, set it to a large number */
+#ifndef IFNAMSIZ
+#define IFNAMSIZ 256
+#endif
 
 /* Forward declaration */
 typedef struct uct_tcp_ep uct_tcp_ep_t;

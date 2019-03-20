@@ -39,9 +39,11 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {
     int mm_flags = 0;
 
+#ifdef MAP_NONBLOCK
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
         mm_flags |= MAP_NONBLOCK;
     }
+#endif
 
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
         mm_flags |= MAP_FIXED;
@@ -211,8 +213,13 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             /* Allocate huge pages */
             alloc_length = min_length;
             address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
+#ifdef SHM_HUGETLB
             status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
                                     SHM_HUGETLB, alloc_name, &shmid);
+#else
+            status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
+                                    0, alloc_name, &shmid);
+#endif
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }
