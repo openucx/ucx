@@ -79,9 +79,6 @@ typedef enum ucs_cpu_flag {
 static inline void ucs_clear_cache(void *start, void *end)
 {
 #if HAVE___CLEAR_CACHE
-    /* do not allow global declaration of compiler intrinsic */
-    void __clear_cache(void* beg, void* end);
-
     __clear_cache(start, end);
 #else
     ucs_arch_clear_cache(start, end);
