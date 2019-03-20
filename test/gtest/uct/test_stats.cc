@@ -16,9 +16,17 @@ extern "C" {
 
 #if ENABLE_STATS
 
+#define EXPECT_STAT(_side, _uct_obj, _stat, _exp_val) \
+    do { \
+        uint64_t v = UCS_STATS_GET_COUNTER(_uct_obj(_side())->stats, _stat); \
+        EXPECT_EQ(get_cntr_init(UCS_PP_MAKE_STRING(_side), \
+                                UCS_PP_MAKE_STRING(_stat)) + (_exp_val), v); \
+    } while (0)
+
+
 class test_uct_stats : public uct_p2p_test {
 public:
-    test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL)  {
+    test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL) {
         m_comp.func  = NULL;
         m_comp.count = 0;
     }
@@ -26,6 +34,57 @@ public:
     virtual void init() {
         stats_activate();
         uct_p2p_test::init();
+
+        // Sender EP
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_FLUSH),
+                          UCT_EP_STAT_FLUSH);
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_FLUSH_WAIT),
+                          UCT_EP_STAT_FLUSH_WAIT);
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_FENCE),
+                          UCT_EP_STAT_FENCE);
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_AM),
+                          UCT_EP_STAT_AM);
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_NO_RES),
+                          UCT_EP_STAT_NO_RES);
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_PENDING),
+                          UCT_EP_STAT_PENDING);
+        collect_cntr_init("sender", uct_ep(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_EP_STAT_ATOMIC),
+                          UCT_EP_STAT_ATOMIC);
+
+        // Sender IFACE
+        collect_cntr_init("sender", uct_iface(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_IFACE_STAT_FLUSH),
+                          UCT_IFACE_STAT_FLUSH);
+        collect_cntr_init("sender", uct_iface(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_IFACE_STAT_FLUSH_WAIT),
+                          UCT_IFACE_STAT_FLUSH_WAIT);
+        collect_cntr_init("sender", uct_iface(sender())->stats,
+                          UCS_PP_MAKE_STRING(UCT_IFACE_STAT_FENCE),
+                          UCT_IFACE_STAT_FENCE);
+
+        // Receiver IFACE
+        collect_cntr_init("receiver", uct_iface(receiver())->stats,
+                          UCS_PP_MAKE_STRING(UCT_IFACE_STAT_RX_AM),
+                          UCT_IFACE_STAT_RX_AM);
+        collect_cntr_init("receiver", uct_iface(receiver())->stats,
+                          UCS_PP_MAKE_STRING(UCT_IFACE_STAT_RX_AM_BYTES),
+                          UCT_IFACE_STAT_RX_AM_BYTES);
+    }
+
+    void collect_cntr_init(std::string side, ucs_stats_node_t *stats_node,
+                           std::string stat_name, unsigned stat) {
+        cntr_init[side][stat_name] = UCS_STATS_GET_COUNTER(stats_node, stat);
+    }
+
+    size_t get_cntr_init(std::string side, std::string stat_name) {
+        return cntr_init[side][stat_name];
     }
 
     void init_bufs(size_t min, size_t max)
@@ -61,34 +120,23 @@ public:
     {
     }
 
-    void check_tx_counters(int op, int type, size_t len) {
-        uint64_t v;
-
-        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, op);
-        EXPECT_EQ(1UL, v);
-        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, type);
-        EXPECT_EQ(len, v);
-    }
-
     void check_am_rx_counters(size_t len) {
+        uint64_t iface_rx_am_init = get_cntr_init("receiver",
+                                                  UCS_PP_MAKE_STRING(UCT_IFACE_STAT_RX_AM));
         uint64_t v;
 
         ucs_time_t deadline = ucs::get_deadline();
         do {
             short_progress_loop();
             v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM);
-        } while ((ucs_get_time() < deadline) && !v);
+        } while ((ucs_get_time() < deadline) && (v == iface_rx_am_init));
 
-        EXPECT_EQ(1UL, v);
-        v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM_BYTES);
-        EXPECT_EQ(len, v);
+        EXPECT_STAT(receiver, uct_iface, UCT_IFACE_STAT_RX_AM, 1UL);
+        EXPECT_STAT(receiver, uct_iface, UCT_IFACE_STAT_RX_AM_BYTES, len);
     }
 
     void check_atomic_counters() {
-        uint64_t v;
-
-        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_ATOMIC);
-        EXPECT_EQ(1UL, v);
+        EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_ATOMIC, 1UL);
         /* give atomic chance to complete */
         short_progress_loop();
     }
@@ -134,6 +182,7 @@ public:
 protected:
     mapped_buffer *lbuf, *rbuf;
     uct_completion_t m_comp;
+    std::map< std::string, std::map< std::string, uint64_t > > cntr_init;
 };
 
 
@@ -156,8 +205,9 @@ UCS_TEST_P(test_uct_stats, am_short)
                                                 sizeof(send_data)), status);
     EXPECT_UCS_OK(status);
 
-    check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_SHORT,
-                      sizeof(hdr) + sizeof(send_data));
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_AM, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_SHORT,
+                sizeof(hdr) + sizeof(send_data));
     check_am_rx_counters(sizeof(hdr) + sizeof(send_data));
 }
 
@@ -176,7 +226,9 @@ UCS_TEST_P(test_uct_stats, am_bcopy)
                                                 lbuf, 0), v);
     EXPECT_EQ((ssize_t)lbuf->length(), v);
 
-    check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_BCOPY, lbuf->length());
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_AM, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_BCOPY,
+                lbuf->length());
     check_am_rx_counters(lbuf->length());
 }
 
@@ -197,7 +249,9 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
                                                 iov, iovcnt, 0, NULL), status);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
-    check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY, lbuf->length());
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_AM, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_ZCOPY,
+                lbuf->length());
     check_am_rx_counters(lbuf->length());
 }
 
@@ -214,8 +268,9 @@ UCS_TEST_P(test_uct_stats, put_short)
                                                  rbuf->addr(), rbuf->rkey()), status);
     EXPECT_UCS_OK(status);
 
-    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_SHORT,
-                      sizeof(send_data));
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PUT, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_SHORT,
+                sizeof(send_data));
 }
 
 UCS_TEST_P(test_uct_stats, put_bcopy)
@@ -229,8 +284,9 @@ UCS_TEST_P(test_uct_stats, put_bcopy)
                                                  rbuf->addr(), rbuf->rkey()), v);
     EXPECT_EQ((ssize_t)lbuf->length(), v);
 
-    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_BCOPY,
-                      lbuf->length());
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PUT, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_BCOPY,
+                lbuf->length());
 }
 
 UCS_TEST_P(test_uct_stats, put_zcopy)
@@ -248,8 +304,9 @@ UCS_TEST_P(test_uct_stats, put_zcopy)
                          rbuf->rkey(), 0), status);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
-    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_ZCOPY,
-                      lbuf->length());
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PUT, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_ZCOPY,
+                lbuf->length());
 }
 
 
@@ -268,8 +325,9 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
     wait_for_completion(status);
 
     short_progress_loop();
-    check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_BCOPY,
-                      lbuf->length());
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_GET, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_BCOPY,
+                lbuf->length());
 }
 
 UCS_TEST_P(test_uct_stats, get_zcopy)
@@ -290,8 +348,9 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
     wait_for_completion(status);
 
     short_progress_loop();
-    check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_ZCOPY,
-                      lbuf->length());
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_GET, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_ZCOPY,
+                lbuf->length());
 }
 
 #define TEST_STATS_ATOMIC_POST(_op, _val)                                      \
@@ -369,41 +428,33 @@ TEST_STATS_ATOMIC_CSWAP(64)
 UCS_TEST_P(test_uct_stats, flush)
 {
     ucs_status_t status;
-    uint64_t v;
 
     if (sender_ep()) {
         status = uct_ep_flush(sender_ep(), 0, NULL);
         EXPECT_UCS_OK(status);
-        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FLUSH);
-        EXPECT_EQ(1UL, v);
-        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FLUSH_WAIT);
-        EXPECT_EQ(0UL, v);
+        EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FLUSH, 1Ul);
+        EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FLUSH_WAIT, 0UL);
     }
 
     status = uct_iface_flush(sender().iface(), 0, NULL);
     EXPECT_UCS_OK(status);
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FLUSH);
-    EXPECT_EQ(1UL, v);
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FLUSH_WAIT);
-    EXPECT_EQ(0UL, v);
+    EXPECT_STAT(sender, uct_iface, UCT_IFACE_STAT_FLUSH, 1UL);
+    EXPECT_STAT(sender, uct_iface, UCT_IFACE_STAT_FLUSH_WAIT, 0UL);
 }
 
 UCS_TEST_P(test_uct_stats, fence)
 {
     ucs_status_t status;
-    uint64_t v;
 
     if (sender_ep()) {
         status = uct_ep_fence(sender_ep(), 0);
         EXPECT_UCS_OK(status);
-        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FENCE);
-        EXPECT_EQ(1UL, v);
+        EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FENCE, 1UL);
     }
 
     status = uct_iface_fence(sender().iface(), 0);
     EXPECT_UCS_OK(status);
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FENCE);
-    EXPECT_EQ(1UL, v);
+    EXPECT_STAT(sender, uct_iface, UCT_IFACE_STAT_FENCE, 1UL);
 }
 
 /* flush test only check stats on tls with am_bcopy
@@ -411,7 +462,6 @@ UCS_TEST_P(test_uct_stats, fence)
  */
 UCS_TEST_P(test_uct_stats, flush_wait_iface)
 {
-    uint64_t v;
     uint64_t count_wait;
     ucs_status_t status;
 
@@ -431,15 +481,12 @@ UCS_TEST_P(test_uct_stats, flush_wait_iface)
         progress();
     } while (status != UCS_OK);
 
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FLUSH);
-    EXPECT_EQ(1UL, v);
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FLUSH_WAIT);
-    EXPECT_EQ(count_wait, v);
+    EXPECT_STAT(sender, uct_iface, UCT_IFACE_STAT_FLUSH, 1UL);
+    EXPECT_STAT(sender, uct_iface, UCT_IFACE_STAT_FLUSH_WAIT, count_wait);
 }
 
 UCS_TEST_P(test_uct_stats, flush_wait_ep)
 {
-    uint64_t v;
     uint64_t count_wait;
     ucs_status_t status;
 
@@ -459,10 +506,8 @@ UCS_TEST_P(test_uct_stats, flush_wait_ep)
         progress();
     } while (status != UCS_OK);
 
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FLUSH);
-    EXPECT_EQ(1UL, v);
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FLUSH_WAIT);
-    EXPECT_EQ(count_wait, v);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FLUSH, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FLUSH_WAIT, count_wait);
 }
 
 /* fence test only check stats on tls with am_bcopy
@@ -470,7 +515,6 @@ UCS_TEST_P(test_uct_stats, flush_wait_ep)
  */
 UCS_TEST_P(test_uct_stats, fence_iface)
 {
-    uint64_t v;
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
@@ -486,13 +530,11 @@ UCS_TEST_P(test_uct_stats, fence_iface)
 
     fill_tx_q(0);
 
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FENCE);
-    EXPECT_EQ(1UL, v);
+    EXPECT_STAT(sender, uct_iface, UCT_IFACE_STAT_FENCE, 1UL);
 }
 
 UCS_TEST_P(test_uct_stats, fence_ep)
 {
-    uint64_t v;
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
@@ -508,13 +550,12 @@ UCS_TEST_P(test_uct_stats, fence_ep)
 
     fill_tx_q(0);
 
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FENCE);
-    EXPECT_EQ(1UL, v);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FENCE, 1UL);
 }
 
 UCS_TEST_P(test_uct_stats, tx_no_res)
 {
-    uint64_t v, count;
+    uint64_t count;
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
@@ -523,17 +564,15 @@ UCS_TEST_P(test_uct_stats, tx_no_res)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
     count = fill_tx_q(1024);
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_NO_RES);
-    EXPECT_EQ(count, v);
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_AM);
-    EXPECT_EQ(1024-count, v);
+
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_NO_RES, count);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_AM, 1024 - count);
 }
 
 UCS_TEST_P(test_uct_stats, pending_add)
 {
-    const int num_reqs = 5;
+    const size_t num_reqs = 5;
     uct_pending_req_t p_reqs[num_reqs];
-    uint64_t v;
     ssize_t len;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
@@ -545,8 +584,7 @@ UCS_TEST_P(test_uct_stats, pending_add)
     // Check that counter is not increased if pending_add returns NOT_OK
     EXPECT_EQ(uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0),
               UCS_ERR_BUSY);
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_PENDING);
-    EXPECT_EQ(0ul, v);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PENDING, 0UL);
 
     // Check that counter gets increased on every successfull pending_add returns NOT_OK
     fill_tx_q(0);
@@ -558,14 +596,13 @@ UCS_TEST_P(test_uct_stats, pending_add)
         UCS_TEST_SKIP_R("Can't add to pending");
     }
 
-    for (int i = 0; i < num_reqs; ++i) {
+    for (size_t i = 0; i < num_reqs; ++i) {
         p_reqs[i].func = NULL;
         EXPECT_UCS_OK(uct_ep_pending_add(sender().ep(0), &p_reqs[i], 0));
     }
     uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
 
-    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_PENDING);
-    EXPECT_EQ(static_cast<uint64_t>(num_reqs), v);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PENDING, num_reqs);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_stats);
