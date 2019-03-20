@@ -98,8 +98,11 @@ AS_IF([test "x$with_ib" = "xyes"],
             [
             AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
             AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
-            AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
-            AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
+            # Enables Glibc endian conversion interfaces used in IB transport and infiniband/mlx5dv.h.
+            # Glibc <= 2.19 requires _BSD_SOURCE and Glibc > 2.19 requires _DEFAULT_SOURCE.
+            # See http://man7.org/linux/man-pages/man3/htole32.3.html.
+            AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl -D_BSD_SOURCE=1 -D_DEFAULT_SOURCE=1"])
+            AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl -D_BSD_SOURCE=1 -D_DEFAULT_SOURCE=1"])
             ],
             [AC_MSG_WARN([libibverbs not found]); with_ib=no])
 
@@ -131,6 +134,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        LDFLAGS="$IBVERBS_LDFAGS $LDFLAGS"
        CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
        CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
+
        AC_CHECK_HEADER([infiniband/verbs_exp.h],
            [AC_DEFINE([HAVE_VERBS_EXP_H], 1, [IB experimental verbs])
            verbs_exp=yes],
