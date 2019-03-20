@@ -48,6 +48,11 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {NULL}
 };
 
+const static uct_tcp_ep_progress_t uct_tcp_ep_progress_cb_table[][UCT_TCP_EP_CTX_TYPE_MAX] = {
+    UCT_TCP_EP_CONN_STATES(UCT_TCP_EP_CONN_STATE_CTX_PROGRESS)
+};
+
+
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);
 
 static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
@@ -136,10 +141,12 @@ uct_tcp_iface_handle_events(uct_tcp_ep_t *ep, uint32_t epoll_events)
     unsigned count = 0;
 
     if (epoll_events & EPOLLIN) {
-        count += ep->rx.progress(ep);
+        count += uct_tcp_ep_progress_cb_table
+            [ep->conn_state][UCT_TCP_EP_CTX_TYPE_RX](ep);
     }
     if (epoll_events & EPOLLOUT) {
-        count += ep->tx.progress(ep);
+        count += uct_tcp_ep_progress_cb_table
+            [ep->conn_state][UCT_TCP_EP_CTX_TYPE_TX](ep);
     }
 
     return count;
@@ -183,23 +190,9 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     return count;
 }
 
-unsigned uct_tcp_iface_progress_ep(uct_tcp_ep_t *ep)
+unsigned uct_tcp_iface_invoke_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
 {
-    struct pollfd event = {
-        .fd             = ep->fd,
-        .events         = ucs_sys_epoll_2_poll_events(ep->events)
-    };
-    int ret;
-
-    ret = poll(&event, 1, 0);
-    if ((ret < 0) && (errno != EINTR)) {
-        ucs_error("poll(fd=%d) for tcp_ep %p failed: %m", ep->fd, ep);
-        return 0;
-    } else if (!ret) {
-        return 0;
-    }
-
-    return uct_tcp_iface_handle_events(ep, ucs_sys_poll_2_epoll_events(event.revents));
+    return uct_tcp_ep_progress_cb_table[ep->conn_state][ctx_type](ep);
 }
 
 static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,

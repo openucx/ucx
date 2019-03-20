@@ -12,22 +12,55 @@
 
 #define UCT_TCP_NAME "tcp"
 
-
 /* How many events to wait for in epoll_wait */
 #define UCT_TCP_MAX_EVENTS        16
 
-#define UCT_TCP_EP_CONN_STATES(FUNC) \
-    FUNC(CLOSED), \
-    FUNC(CONNECTING), \
-    FUNC(CONNECTED)
+#define UCT_TCP_EP_CONN_STATES(_FUNC) \
+    _FUNC(CLOSED, "connection closed", \
+          UCT_TCP_EP_CTX_PROGRESS(TX, UCT_TCP_EP_EMPTY_CTX_PROGRESS), /* TX */ \
+          UCT_TCP_EP_CTX_PROGRESS(RX, UCT_TCP_EP_EMPTY_CTX_PROGRESS)  /* RX */ ), \
+    _FUNC(CONNECTING, "connection in progress", \
+          UCT_TCP_EP_CTX_PROGRESS(TX, uct_tcp_cm_conn_progress),      /* TX */ \
+          UCT_TCP_EP_CTX_PROGRESS(RX, UCT_TCP_EP_EMPTY_CTX_PROGRESS)  /* RX */ ), \
+    _FUNC(CONNECTED, "connected", \
+          UCT_TCP_EP_CTX_PROGRESS(TX, uct_tcp_ep_progress_tx),        /* TX */ \
+          UCT_TCP_EP_CTX_PROGRESS(RX, uct_tcp_ep_progress_rx)         /* RX */ )
 
-#define UCT_TCP_EP_CONN_STATE_STR(_state) \
-    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)] = UCS_PP_MAKE_STRING(_state)
+#define UCT_TCP_EP_EMPTY_CTX_PROGRESS (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
 
+#define UCT_TCP_EP_CTX_PROGRESS(_ctx_type, _ctx_progress) \
+    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CTX_TYPE_, _ctx_type)] = _ctx_progress \
 
-#define UCT_TCP_EP_CONN_STATE_ENUM(_state) \
+#define UCT_TCP_EP_CONN_STATE_STR(_state, _description, ...) \
+    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)] = { \
+        [UCT_TCP_EP_CONN_STATE_STR_NAME]  = UCS_PP_MAKE_STRING(_state), \
+        [UCT_TCP_EP_CONN_STATE_STR_DESCR] = _description \
+    }
+
+#define UCT_TCP_EP_CONN_STATE_CTX_PROGRESS(_state, _description, \
+                                           _tx_progress_table, _rx_progress_table) \
+    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)] = { _tx_progress_table, _rx_progress_table }
+
+#define UCT_TCP_EP_CONN_STATE_ENUM(_state, ...) \
     UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)
 
+/**
+ * TCP context type
+ */
+typedef enum uct_tcp_ep_ctx_type {
+    UCT_TCP_EP_CTX_TYPE_TX,
+    UCT_TCP_EP_CTX_TYPE_RX,
+    UCT_TCP_EP_CTX_TYPE_MAX
+} uct_tcp_ep_ctx_type_t;
+
+/**
+ * TCP connection state string representation switch
+ */
+typedef enum uct_tcp_ep_conn_state_str_switch {
+    UCT_TCP_EP_CONN_STATE_STR_NAME,
+    UCT_TCP_EP_CONN_STATE_STR_DESCR,
+    UCT_TCP_EP_CONN_STATE_STR_MAX
+} uct_tcp_ep_conn_state_str_switch_t;
 
 /**
  * TCP endpoint connection state
@@ -58,7 +91,6 @@ typedef struct uct_tcp_ep_ctx {
     void                          *buf;      /* Partial send/recv data */
     size_t                        length;    /* How much data in the buffer */
     size_t                        offset;    /* Next offset to send/recv */
-    uct_tcp_ep_progress_t         progress;  /* Progress engine */
 } uct_tcp_ep_ctx_t;
 
 
@@ -150,7 +182,7 @@ ucs_status_t uct_tcp_recv_blocking(int fd, void *data, size_t length);
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
 
-unsigned uct_tcp_iface_progress_ep(uct_tcp_ep_t *ep);
+unsigned uct_tcp_iface_invoke_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr *dest_addr,
@@ -161,7 +193,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
-void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type);
 
 ucs_status_t uct_tcp_ep_addr_init(ucs_sock_addr_t *sock_addr,
                                   const struct sockaddr *addr);
@@ -190,7 +222,9 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp);
 
-void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
+unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep);
+
+void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type,
                                   uct_tcp_ep_conn_state_t new_conn_state);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,

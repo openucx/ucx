@@ -82,7 +82,7 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 
 /**
- * Connects the socket referred to by the file descriptor `fd`
+ * Connect the socket referred to by the file descriptor `fd`
  * to the address specified by `dest_addr`.
  *
  * @param [in]  fd                Socket fd.
@@ -95,7 +95,7 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
 
 
 /**
- * Reports information about non-blocking connection status for
+ * Report information about non-blocking connection status for
  * the socket referred to by the file descriptor `fd`.
  *
  * @param [in]  fd          Socket fd.
@@ -107,7 +107,7 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd);
 
 
 /**
- * Returns size of a given sockaddr structure.
+ * Return size of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  size_p     Pointer to variable where size of
@@ -119,7 +119,7 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p);
 
 
 /**
- * Returns port of a given sockaddr structure.
+ * Return port of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  port_p     Pointer to variable where port (host notation)
@@ -131,7 +131,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
 
 
 /**
- * Sets port to a given sockaddr structure.
+ * Set port to a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [in]   port       Port (host notation) that will be written
@@ -141,7 +141,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
 ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port);
 
 /**
- * Returns IP addr of a given sockaddr structure.
+ * Return IP addr of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  *

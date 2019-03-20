@@ -982,26 +982,6 @@ void ucs_sys_free(void *ptr, size_t length)
     }
 }
 
-uint32_t ucs_sys_epoll_2_poll_events(uint32_t epoll_events)
-{
-    uint32_t poll_events = 0;
-
-    poll_events |= epoll_events & EPOLLIN  ? POLLIN  : 0;
-    poll_events |= epoll_events & EPOLLOUT ? POLLOUT : 0;
-
-    return poll_events;
-}
-
-uint32_t ucs_sys_poll_2_epoll_events(uint32_t poll_events)
-{
-    uint32_t epoll_events = 0;
-
-    epoll_events |= poll_events & POLLIN  ? EPOLLIN  : 0;
-    epoll_events |= poll_events & POLLOUT ? EPOLLOUT : 0;
-
-    return epoll_events;
-}
-
 void ucs_empty_function()
 {
 }

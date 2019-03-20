@@ -39,7 +39,7 @@ static inline int uct_tcp_ep_ctx_buf_need_progress(uct_tcp_ep_ctx_t *ctx)
     return ctx->offset < ctx->length;
 }
 
-static inline int uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
+static inline ucs_status_t uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
 {
     if (ucs_unlikely(ep->conn_state != UCT_TCP_EP_CONN_CONNECTED)) {
         if (ep->conn_state == UCT_TCP_EP_CONN_CLOSED) {
@@ -49,15 +49,10 @@ static inline int uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
         ucs_assertv(ep->conn_state == UCT_TCP_EP_CONN_CONNECTING,
                     "ep=%p", ep);
 
-        while (uct_tcp_iface_progress_ep(ep) &&
-               (ep->conn_state != UCT_TCP_EP_CONN_CONNECTED));
-
-        if (ep->conn_state != UCT_TCP_EP_CONN_CONNECTED) {
-            return UCS_ERR_NO_RESOURCE;
-        }
+        return UCS_ERR_NO_RESOURCE;
     }
 
-    return UCS_OK;
+    return uct_tcp_ep_ctx_buf_empty(&ep->tx) ? UCS_OK : UCS_ERR_NO_RESOURCE;
 }
 
 static inline void uct_tcp_ep_ctx_rewind(uct_tcp_ep_ctx_t *ctx)
@@ -149,12 +144,10 @@ static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
     if (ep->tx.buf) {
         uct_tcp_ep_ctx_reset(&ep->tx);
     }
-    ep->tx.progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero;
 
     if (ep->rx.buf) {
         uct_tcp_ep_ctx_reset(&ep->rx);
     }
-    ep->rx.progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero;
 
     uct_tcp_ep_close_fd(&ep->fd);
 }
@@ -176,14 +169,12 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     }
 
     uct_tcp_ep_ctx_init(&self->tx);
-    self->tx.progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero;
-
     uct_tcp_ep_ctx_init(&self->rx);
-    self->rx.progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero;
 
     self->events     = 0;
     self->fd         = fd; 
     self->conn_state = UCT_TCP_EP_CONN_CLOSED;
+
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
 
@@ -232,13 +223,13 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_tcp_ep_init, uct_tcp_ep_t, uct_tcp_ep_t,
                                 const struct sockaddr*)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_tcp_ep_destroy, uct_tcp_ep_t, uct_ep_t)
 
-void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
 
     if (ep->conn_state != UCT_TCP_EP_CONN_CLOSED) {
-        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_CLOSED);
+        uct_tcp_cm_change_conn_state(ep, ctx_type, UCT_TCP_EP_CONN_CLOSED);
     }
 
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
@@ -284,7 +275,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
                                uct_ep_h *ep_p)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(params->iface, uct_tcp_iface_t);
-    uct_tcp_ep_t *ep = NULL;
+    uct_tcp_ep_t *ep       = NULL;
     struct sockaddr_in dest_addr;
     ucs_status_t status;
 
@@ -379,7 +370,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 
 unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 {
-    unsigned                     count = 0;
+    unsigned count = 0;
     uct_pending_req_priv_queue_t *priv;
 
     ucs_trace_func("ep=%p", ep);
@@ -501,10 +492,6 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
         }
     }
 
-    if (!uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
-        goto err_no_res;
-    }
-
     ucs_assertv(ep->tx.buf == NULL, "ep=%p", ep);
 
     ep->tx.buf = ucs_mpool_get_inline(&iface->tx_mpool);
@@ -602,8 +589,7 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
-    if ((uct_tcp_ep_can_send(ep) == UCS_OK) &&
-        (uct_tcp_ep_ctx_buf_empty(&ep->tx))) {
+    if (uct_tcp_ep_can_send(ep) == UCS_OK) {
         return UCS_ERR_BUSY;
     }
 
@@ -615,7 +601,7 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
 void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                               void *arg)
 {
-    uct_tcp_ep_t                 *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_pending_req_priv_queue_t *priv;
 
     uct_pending_queue_purge(priv, &ep->pending_q, 1, cb, arg);
@@ -628,11 +614,8 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status = uct_tcp_ep_can_send(ep);
 
     if (ucs_unlikely(status != UCS_OK)) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
         return status;
-    }
-
-    if (!uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
-        return UCS_ERR_NO_RESOURCE;
     }
 
     UCT_TL_EP_STAT_FLUSH(&ep->super);
