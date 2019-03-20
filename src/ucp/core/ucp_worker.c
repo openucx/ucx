@@ -66,8 +66,8 @@ static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
-    .obj_init      = ucs_empty_function,
-    .obj_cleanup   = ucs_empty_function
+    .obj_init      = (void*)ucs_empty_function,
+    .obj_cleanup   = (void*)ucs_empty_function
 };
 
 
@@ -75,14 +75,14 @@ ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .chunk_alloc   = ucp_reg_mpool_malloc,
     .chunk_release = ucp_reg_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (void*)ucs_empty_function
 };
 
 ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .chunk_alloc   = ucp_frag_mpool_malloc,
     .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (void*)ucs_empty_function
 };
 
 void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force);

@@ -85,8 +85,8 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         }
         return UCS_OK;
     }
-    req->send.buffer          += frag_length;
-    req->send.rma.remote_addr += frag_length;
+    req->send.buffer          = (char *)req->send.buffer + frag_length;
+    req->send.rma.remote_addr = (size_t) ((char *)req->send.rma.remote_addr + frag_length);
     return UCS_INPROGRESS;
 }
 

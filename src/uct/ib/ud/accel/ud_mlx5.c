@@ -130,12 +130,14 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
     pi      = iface->rx.wq.rq_wqe_counter & iface->rx.wq.mask;
 
     for (count = 0; count < batch; count ++) {
+        void *desc_hdr;
         next_pi = (pi + 1) &  iface->rx.wq.mask;
         ucs_prefetch(rx_wqes + next_pi);
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
         rx_wqes[pi].lkey = htonl(desc->lkey);
-        rx_wqes[pi].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
+        desc_hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+        rx_wqes[pi].addr = htobe64((uintptr_t)desc_hdr);
         pi = next_pi;
     }
     if (ucs_unlikely(count == 0)) {
@@ -385,11 +387,13 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     uint32_t len;
     void *packet;
     unsigned count;
+    uint64_t addr_h;
 
     ci     = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
-    packet = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
-    ucs_prefetch(packet + UCT_IB_GRH_LEN);
-    desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
+    addr_h = be64toh(iface->rx.wq.wqes[ci].addr);
+    packet = (void *) addr_h;
+    ucs_prefetch((char*)packet + UCT_IB_GRH_LEN);
+    desc   = (uct_ib_iface_recv_desc_t *)((char*)packet - iface->super.super.config.rx_hdr_offset);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX]);
     if (cqe == NULL) {

@@ -626,7 +626,7 @@ static int ucm_malloc_mallopt(int param_number, int value)
 }
 
 static char *ucm_malloc_blacklist[] = {
-    "libnvidia-fatbinaryloader.so",
+    (char *) "libnvidia-fatbinaryloader.so",
     NULL
 };
 

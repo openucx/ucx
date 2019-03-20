@@ -642,7 +642,7 @@ static void ucs_debugger_attach()
 
         if (!RUNNING_ON_VALGRIND) {
             snprintf(pid_str, sizeof(pid_str), "%d", debug_pid);
-            argv[narg++] = "-p";
+            argv[narg++] = (void *) "-p";
             argv[narg++] = pid_str;
         }
 
@@ -669,7 +669,7 @@ static void ucs_debugger_attach()
             }
             close(fd);
 
-            argv[narg++] = "-x";
+            argv[narg++] = (void *) "-x";
             argv[narg++] = gdb_commands_file;
         } else {
             ucs_log_fatal_error("Unable to open '%s' for writing: %m",

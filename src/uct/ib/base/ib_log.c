@@ -61,7 +61,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
         s               += strlen(s);
 
         if (data_dump) {
-            len = ucs_min(sg_list[i].length, (void*)data + sizeof(data) - md);
+            len = ucs_min(sg_list[i].length, (size_t)((char *) data + sizeof(data) - (char *) md));
             memcpy(md, (void*)sg_list[i].addr, len);
 
             md              += len;

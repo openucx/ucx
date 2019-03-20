@@ -354,8 +354,8 @@ static void close_pipes()
 
 static int redirect_output(const ucs_profile_header_t *hdr)
 {
-    char *less_argv[] = {LESS_COMMAND,
-                         "-R" /* show colors */,
+    char *less_argv[] = {(char *)(LESS_COMMAND),
+                         (char *)"-R" /* show colors */,
                          NULL};;
     struct winsize wsz;
     uint64_t num_lines;

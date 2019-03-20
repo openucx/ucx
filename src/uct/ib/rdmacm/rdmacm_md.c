@@ -241,6 +241,6 @@ out:
 
 UCT_MD_COMPONENT_DEFINE(uct_rdmacm_mdc, UCT_RDMACM_MD_PREFIX,
                         uct_rdmacm_query_md_resources, uct_rdmacm_md_open, NULL,
-                        ucs_empty_function_return_unsupported,
+                        (void*)ucs_empty_function_return_unsupported,
                         (void*)ucs_empty_function_return_success,
                         "RDMACM_", uct_rdmacm_md_config_table, uct_rdmacm_md_config_t);

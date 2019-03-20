@@ -1430,9 +1430,9 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
     if ((proxy_lane == lane) || (proxy_lane == UCP_NULL_LANE)) {
         if (key->lanes[lane].proxy_lane == lane) {
-            desc_str = " <proxy>";
+            desc_str = (char *) " <proxy>";
         } else {
-            desc_str = "";
+            desc_str = (char *) "";
         }
         snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
                  lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),

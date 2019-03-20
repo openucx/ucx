@@ -175,9 +175,9 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     }
 
     /* Get ELF tables pointers */
-    jmprel   = (void*)ucm_reloc_get_entry(base, dphdr, DT_JMPREL);
-    symtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
-    strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
+    jmprel   = (void*)(intptr_t) ucm_reloc_get_entry(base, dphdr, DT_JMPREL);
+    symtab   = (void*)(intptr_t) ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
+    strtab   = (void*)(intptr_t) ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
     pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
 
     /* Find matching symbol and replace it */

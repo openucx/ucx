@@ -952,7 +952,7 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
     if (old_ptr == NULL) {
         /* Note: Must pass the 0 offset as "long", otherwise it will be
          * partially undefined when converted to syscall arguments */
-        ptr = (void*)syscall(__NR_mmap, NULL, new_length, PROT_READ|PROT_WRITE,
+        ptr = (void*)(size_t)syscall(__NR_mmap, NULL, new_length, PROT_READ|PROT_WRITE,
                              MAP_PRIVATE|MAP_ANONYMOUS, -1, 0ul);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
@@ -961,7 +961,7 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
         }
     } else {
         old_length = ucs_align_up_pow2(old_length, ucs_get_page_size());
-        ptr = (void*)syscall(__NR_mremap, old_ptr, old_length, new_length,
+        ptr = (void*)(size_t)syscall(__NR_mremap, old_ptr, old_length, new_length,
                              MREMAP_MAYMOVE);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mremap(%p, %zu, %zu, MAYMOVE) failed: %m",

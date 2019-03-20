@@ -93,7 +93,7 @@ typedef struct uct_md_registered_tl {
         .md_config_size  = sizeof(_cfg_struct), \
         .priv            = _priv, \
         .rkey_unpack     = _rkey_unpack, \
-        .rkey_ptr        = ucs_empty_function_return_unsupported, \
+        .rkey_ptr        = (void*)ucs_empty_function_return_unsupported, \
         .rkey_release    = _rkey_release, \
         .name            = _name, \
         .tl_list         = { &_mdc.tl_list, &_mdc.tl_list } \

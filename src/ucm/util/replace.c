@@ -102,7 +102,7 @@ _UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, -1, void*
 
 void *ucm_brk_syscall(void *addr)
 {
-    return (void*)syscall(SYS_brk, addr);
+    return (void*)(size_t) syscall(SYS_brk, addr);
 }
 
 int ucm_orig_brk(void *addr)

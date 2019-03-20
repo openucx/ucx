@@ -83,7 +83,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     /* Call syscall */ \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        return (_rettype)(size_t)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
 #if UCM_BISTRO_HOOKS

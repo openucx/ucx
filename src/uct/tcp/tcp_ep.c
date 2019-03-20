@@ -7,6 +7,39 @@
 
 #include <ucs/async/async.h>
 
+#define UCT_TCP_AM_SHORT_PACK_DATA(_pack_f, _target_buf, _target_length, \
+                                   _am_payload, _payload_length,  _am_header) \
+    do { \
+        *((uint64_t*)(_target_buf)) = (_am_header); \
+        _pack_f((uint8_t*)(_target_buf) + sizeof(_am_header), \
+                _am_payload, _payload_length); \
+        _target_length = sizeof(_am_header) + _payload_length; \
+    } while (0)
+
+#define UCT_TCP_AM_BCOPY_PACK_DATA(_pack_f, _target_buf, _target_length, \
+                                   _am_arg, ...) \
+    _target_length = _pack_f(_target_buf, _am_arg)
+
+#define UCT_TCP_AM_PREPARE(_ep, _id, _len_thr, _hdr, \
+                           _pack_f, _am_payload, _payload_length, \
+                           _am_header, _method, _name) \
+    do { \
+        UCT_CHECK_AM_ID(_id); \
+        \
+        if (!uct_tcp_ep_can_send(_ep)) { \
+            return UCS_ERR_NO_RESOURCE; \
+        } \
+        \
+        (_hdr)        = (_ep)->tx.buf; \
+        (_hdr)->am_id = _id; \
+        \
+        UCT_TCP_AM_ ## _method ## _PACK_DATA(_pack_f, (_hdr) + 1, (_hdr)->length, \
+                                             _am_payload, _payload_length, \
+                                             _am_header); \
+        \
+        UCT_CHECK_LENGTH((int16_t) ((_hdr)->length), 0, _len_thr, _name); \
+        UCT_TL_EP_STAT_OP(&(_ep)->super, AM, _method, (_hdr)->length); \
+    } while (0)
 
 static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 {

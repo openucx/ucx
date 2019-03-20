@@ -1636,7 +1636,7 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
-        .init      = ucs_empty_function_return_success,
+        .init      = (void*)ucs_empty_function_return_success,
         .ucp_alloc = ucp_perf_test_alloc_host,
         .ucp_free  = ucp_perf_test_free_host,
         .memset    = memset
