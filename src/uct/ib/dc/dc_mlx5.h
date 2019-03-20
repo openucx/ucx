@@ -109,7 +109,7 @@ typedef struct uct_dc_dci {
                                                 processed. Better have dci num
                                                 groups scheduled than ep num. */
     };
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
 } uct_dc_dci_t;
@@ -164,9 +164,9 @@ struct uct_dc_mlx5_iface {
         ucs_arbiter_callback_t    pend_cb;
     } tx;
 
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
     struct ibv_exp_dct            *rx_dct;
-#elif HAVE_DC_DV
+#elif defined(HAVE_DC_DV)
     struct ibv_qp                 *rx_dct;
 #endif
 

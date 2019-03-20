@@ -577,7 +577,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 {
     uct_rc_mlx5_hdr_t *rch = data;
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     if (rch->tmh_opcode != IBV_TMH_NO_TAG) {
         struct ibv_tmh *tmh = ucs_unaligned_ptr(rch);
         struct ibv_rvh *rvh = (void*)(tmh + 1);
@@ -652,7 +652,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 
 ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
 {
@@ -920,7 +920,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
     uct_rc_mlx5_ep_clean_qp(self, self->super.txqp.qp);
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_mlx5_ep_clean_qp(self, self->tm_qp);
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp->qp_num);

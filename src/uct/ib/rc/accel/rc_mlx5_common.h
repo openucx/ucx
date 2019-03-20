@@ -93,7 +93,7 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
 };
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
        (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_tmh))/ \
         sizeof(struct mlx5_wqe_data_seg))
@@ -165,7 +165,7 @@ typedef struct uct_rc_mlx5_cmd_wq {
                                                ops array size */
 } uct_rc_mlx5_cmd_wq_t;
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 #  define UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
                                               _pack_cb, _arg, _length) \
        { \
@@ -365,7 +365,7 @@ UCS_CLASS_DECLARE_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
        _length = _pack_cb(hdr, _arg); \
    }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
                                      struct ibv_tmh *tmh, uct_tag_t tag,
                                      unsigned byte_len);
@@ -510,7 +510,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
 {
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     rch->tmh_opcode   = IBV_TMH_NO_TAG;
 #endif
     rch->rc_hdr.am_id = id;

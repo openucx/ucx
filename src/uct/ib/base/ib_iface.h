@@ -51,9 +51,9 @@ typedef enum {
 
 enum {
     UCT_IB_QPT_UNKNOWN,
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
     UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
-#elif HAVE_DC_DV
+#elif defined(HAVE_DC_DV)
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
 #endif
 };

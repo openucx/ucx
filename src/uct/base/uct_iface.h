@@ -27,7 +27,7 @@ enum {
     UCT_EP_STAT_PUT,
     UCT_EP_STAT_GET,
     UCT_EP_STAT_ATOMIC,
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     UCT_EP_STAT_TAG,
 #endif
     UCT_EP_STAT_BYTES_SHORT,

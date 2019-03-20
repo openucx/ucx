@@ -46,7 +46,7 @@ KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_DEVICE_STAT_LAST,
@@ -831,7 +831,7 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
         return 0;
     }
 
-#  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE
+#  if defined(HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE) && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE
     return dev_attr->odp_mr_max_size;
 #  else
     return 1ul << 28; /* Limit ODP to 256 MB by default */

@@ -13,7 +13,7 @@
 #include <sys/uio.h>
 #include <string.h>
 
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
 #  include <sys/capability.h>
 #endif
 
@@ -63,7 +63,7 @@ static int uct_cma_test_ptrace_scope(void)
 #endif
     } else if (!strcmp(value, "2")) {
         /* ptrace scope 2 means only a process with CAP_SYS_PTRACE can attach */
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
         ucs_status_t status;
         uint32_t ecap;
 

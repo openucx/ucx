@@ -15,7 +15,7 @@
 #include <stdio.h>
 
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
 
 #define UCS_MEMTRACK_FORMAT_STRING    ("%22s: size: %9lu / %9lu\tcount: %9u / %9u\n")
 
@@ -45,7 +45,7 @@ static ucs_memtrack_context_t ucs_memtrack_context = {
     .total   = {0}
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_memtrack_stats_class = {
     .name = "memtrack",
     .num_counters = UCS_MEMTRACK_STAT_LAST,

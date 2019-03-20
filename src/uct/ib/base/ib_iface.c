@@ -165,7 +165,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which pkey value to use. Should be between 0 and 0x7fff.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
   {"RESOURCE_DOMAIN", "y",
    "Enable multiple resource domains (experimental).",
    ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
@@ -608,7 +608,8 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_status_t status;
-#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+#if defined(HAVE_DECL_IBV_EXP_SETENV) && HAVE_DECL_IBV_EXP_SETENV &&    \
+    (!defined(HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE) || !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE)
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     const char *cqe_size_env_value;
     size_t cqe_size = 64;
@@ -652,7 +653,8 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
     status = UCS_OK;
 
 out_unsetenv:
-#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+#if defined(HAVE_DECL_IBV_EXP_SETENV) && HAVE_DECL_IBV_EXP_SETENV &&    \
+    (!defined(HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE) || !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE)
     *inl = cqe_size / 2;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */

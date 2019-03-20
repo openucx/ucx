@@ -54,7 +54,7 @@ ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
                                    int comp_vector, int ignore_overrun,
                                    size_t *inl, struct ibv_cq **cq_p)
 {
-#if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+#if defined(HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE) && HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
     struct ibv_cq *cq;
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
@@ -144,7 +144,7 @@ static int
 uct_ib_mlx5_iface_res_domain_cmp(uct_ib_mlx5_iface_res_domain_t *res_domain,
                                  uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     return res_domain->ibv_domain->context == md->dev.ibv_context;
 #elif HAVE_DECL_IBV_ALLOC_TD
     return res_domain->pd->context == md->dev.ibv_context;
@@ -157,7 +157,7 @@ static ucs_status_t
 uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
                                   uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain_init_attr attr;
 
     attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
@@ -216,7 +216,7 @@ uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
 
 static void uct_ib_mlx5_iface_res_domain_cleanup(uct_ib_mlx5_iface_res_domain_t *res_domain)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
     int ret;
 
@@ -362,7 +362,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->curr       = txwq->qstart;
     txwq->sw_pi      = 0;
     txwq->prev_sw_pi = -1;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
 #endif
     memset(txwq->qstart, 0, (char*)txwq->qend - (char*)txwq->qstart);

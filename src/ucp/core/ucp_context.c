@@ -171,7 +171,7 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
    "Maximal length of worker name. "
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
    "Sent to remote peer as part of worker address."
 #else
    "Not sent to remote peer per build configuration."

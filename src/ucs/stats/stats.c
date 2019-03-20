@@ -27,7 +27,7 @@ const char *ucs_stats_formats_names[] = {
     [UCS_STATS_LAST]        = NULL
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 enum {
     UCS_STATS_FLAG_ON_EXIT        = UCS_BIT(0),

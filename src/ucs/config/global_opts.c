@@ -83,7 +83,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Enable output of ucs_print(). This option is intended for use by the library developers.\n",
   ucs_offsetof(ucs_global_opts_t, log_print_enable), UCS_CONFIG_TYPE_BOOL},
 
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
  {"MPOOL_FIFO", "n",
   "Enable FIFO behavior for memory pool, instead of LIFO. Useful for\n"
   "debugging because object pointers are not recycled.",
@@ -91,7 +91,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #endif
 
  {"HANDLE_ERRORS",
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
   "bt,freeze",
 #else
   "bt",
@@ -138,7 +138,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Signal number used for async signaling.",
   ucs_offsetof(ucs_global_opts_t, async_signo), UCS_CONFIG_TYPE_SIGNO},
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
  {"STATS_DEST", "",
   "Destination to send statistics to. If the value is empty, statistics are\n"
   "not reported. Possible values are:\n"
@@ -176,7 +176,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 
 #endif
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"

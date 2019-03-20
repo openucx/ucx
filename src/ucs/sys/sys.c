@@ -31,7 +31,7 @@
 #include <sched.h>
 #include <ctype.h>
 
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
 #  include <sys/capability.h>
 #endif
 
@@ -553,7 +553,7 @@ static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
 
 ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 {
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
     cap_user_header_t hdr = ucs_alloca(sizeof(*hdr));
     cap_user_data_t data  = ucs_alloca(sizeof(*data) * _LINUX_CAPABILITY_U32S_3);
     int ret;
@@ -577,7 +577,7 @@ ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 
 static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
 {
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
     ucs_status_t status;
     uint32_t ecap;
 

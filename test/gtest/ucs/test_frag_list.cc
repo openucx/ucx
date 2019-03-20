@@ -59,7 +59,7 @@ void frag_list::init()
 {
     ::srand(::time(NULL));
     ucs_stats_cleanup();
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     push_config();
     modify_config("STATS_DEST", "stdout");
     modify_config("STATS_TRIGGER", "");
@@ -73,7 +73,7 @@ void frag_list::cleanup()
 {
     ucs_frag_list_cleanup(&m_frags);
     ucs_stats_cleanup();
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     pop_config();
 #endif
     ucs_stats_init();
@@ -99,7 +99,7 @@ UCS_TEST_F(frag_list, in_order_rcv) {
         err = ucs_frag_list_insert(&m_frags, &pkt, i);
         EXPECT_EQ(UCS_FRAG_LIST_INSERT_FAST, err);
     }
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     EXPECT_EQ((ucs_stats_counter_t)1, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
     EXPECT_EQ((ucs_stats_counter_t)9, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
     EXPECT_EQ((ucs_stats_counter_t)0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
@@ -154,7 +154,7 @@ UCS_TEST_F(frag_list, one_hole) {
         i++;
     }
     EXPECT_EQ((unsigned)5, i);
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     EXPECT_EQ((ucs_stats_counter_t)2, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
     EXPECT_EQ((ucs_stats_counter_t)10, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
     EXPECT_EQ((ucs_stats_counter_t)1, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
@@ -222,7 +222,7 @@ UCS_TEST_F(frag_list, two_holes_basic) {
         i++;
     }
     EXPECT_EQ((unsigned)20, i);
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     EXPECT_EQ((ucs_stats_counter_t)7, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
     EXPECT_EQ((ucs_stats_counter_t)19, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
     EXPECT_EQ((ucs_stats_counter_t)2, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));

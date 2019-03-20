@@ -28,7 +28,7 @@
     (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
     .name           = "ucp_worker",
     .num_counters   = UCP_WORKER_STAT_LAST,

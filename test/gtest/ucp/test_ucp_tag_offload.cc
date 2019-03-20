@@ -396,7 +396,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
                               "\\rc,\\ud,rc_x,dc_x")
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class test_ucp_tag_offload_stats : public test_ucp_tag_offload_multi {
 public:

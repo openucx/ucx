@@ -73,7 +73,7 @@ typedef struct {
 
 static size_t ucp_address_worker_name_size(ucp_worker_h worker)
 {
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     return strlen(ucp_worker_get_name(worker)) + 1;
 #else
     return 0;
@@ -95,7 +95,7 @@ static uint64_t ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
 /* Pack a string and return a pointer to storage right after the string */
 static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest)
 {
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     const char *s = ucp_worker_get_name(worker);
     size_t length = strlen(s);
 
@@ -111,7 +111,7 @@ static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest)
 /* Unpack a string and return pointer to next storage byte */
 static const void* ucp_address_unpack_worker_name(const void *src, char *s, size_t max)
 {
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     size_t length, avail;
 
     ucs_assert(max >= 1);

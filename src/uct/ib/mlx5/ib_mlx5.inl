@@ -47,7 +47,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 {
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     wq->hw_ci = hw_ci;
 #endif
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
@@ -59,7 +59,7 @@ static inline void
 uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
 {
 
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     uint16_t wqe_s, wqe_e;
     uint16_t hw_ci, sw_pi;
     uint16_t wqe_cnt;
@@ -205,7 +205,7 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
 {
     if (qp_type == IBV_QPT_UD) {
         mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_KEY);
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
     } else if (qp_type == UCT_IB_QPT_DCI) {
         mlx5_av_base(&seg->av)->key.dc_key     = htobe64(UCT_IB_KEY);
 #endif
@@ -488,7 +488,7 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     attr->ibv.pd              = mlx5->res_domain->pd;
 #endif
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
     attr->ibv.res_domain      = mlx5->res_domain->ibv_domain;
 #endif

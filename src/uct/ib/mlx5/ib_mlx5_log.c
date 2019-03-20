@@ -249,7 +249,7 @@ static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
     if (qp_type == IBV_QPT_UD) {
         return 1;
     }
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
     if (qp_type == UCT_IB_QPT_DCI) {
         return 1;
     }

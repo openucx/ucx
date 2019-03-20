@@ -265,7 +265,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);
 
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
     if (qp_type == UCT_IB_QPT_DCI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
@@ -611,7 +611,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
         break;
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_TM:
     case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_TM:
         inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_tmh),
@@ -654,7 +654,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                                  max_log_sge, NULL);
 }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
                        uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int index,
@@ -743,7 +743,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 
         tm_hdr_len = sizeof(*tmh) + sizeof(rvh);
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
         if (qp_type == UCT_IB_QPT_DCI) {
             /* RAVH can be wrapped as well */
             ravh_ptr = uct_ib_mlx5_txwq_wrap_data(txwq, (char*)tmh +
@@ -1050,7 +1050,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     unsigned count;
     void *rc_hdr;
     unsigned flags;
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     struct ibv_tmh *tmh;
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
@@ -1080,7 +1080,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         goto done;
     }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
     /* Should be a fast path, because small (latency-critical) messages

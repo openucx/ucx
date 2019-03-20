@@ -14,7 +14,7 @@ extern "C" {
 #include "uct_test.h"
 #include "uct_p2p_test.h"
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class test_uct_stats : public uct_p2p_test {
 public:

@@ -154,7 +154,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
     {NULL}
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_md_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_MD_STAT_LAST,
@@ -1764,7 +1764,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
 #if HAVE_DECL_IBV_EXP_QUERY_DEVICE
     ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
-#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
+#elif defined(HAVE_DECL_IBV_QUERY_DEVICE_EX)
     ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
 #else
     ret = ibv_query_device(dev->ibv_context, &dev->dev_attr);
@@ -1783,7 +1783,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
             dev->ext_atomic_arg_sizes = dev->dev_attr.ext_atom.log_atomic_arg_sizes;
         }
-#  if HAVE_MASKED_ATOMICS_ENDIANNESS
+#ifdef HAVE_MASKED_ATOMICS_ENDIANNESS
         if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
             dev->ext_atomic_arg_sizes |=
                 dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes;

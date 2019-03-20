@@ -33,7 +33,7 @@ typedef struct {
 
 extern const ucp_proto_t ucp_stream_am_proto;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {
     .name           = "ucp_ep",
     .num_counters   = UCP_EP_STAT_LAST,
@@ -100,7 +100,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
         ep->uct_eps[lane] = NULL;
     }
 
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
 

@@ -14,7 +14,7 @@
 #include <ucs/type/class.h>
 #include <endian.h>
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
     .name = "rc_fc",
     .num_counters = UCT_RC_FC_STAT_LAST,

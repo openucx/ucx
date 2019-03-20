@@ -138,7 +138,7 @@
 /*
  * Safe setenv
  */
-#if HAVE_DECL_IBV_EXP_SETENV
+#if defined(HAVE_DECL_IBV_EXP_SETENV) && HAVE_DECL_IBV_EXP_SETENV
 #  define ibv_exp_unsetenv(_c, _n)                  0
 #else
 #  define ibv_exp_setenv(_c, _n, _v, _o)            setenv(_n, _v, _o)
@@ -175,7 +175,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_HCA)
 #  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_GLOB)
 #  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE)
-#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
+#elif defined(HAVE_DECL_IBV_QUERY_DEVICE_EX)
 #  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_HCA)
 #  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_GLOB)
 #  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
@@ -196,8 +196,8 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 /*
  * HW tag matching
  */
-#if IBV_HW_TM
-#  if HAVE_INFINIBAND_TM_TYPES_H
+#ifdef IBV_HW_TM
+#  if defined(HAVE_INFINIBAND_TM_TYPES_H) && HAVE_INFINIBAND_TM_TYPES_H
 #    include <infiniband/tm_types.h>
 #  else
 #    define ibv_tmh                         ibv_exp_tmh
@@ -210,7 +210,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
 #    define IBV_TM_CAP_DC                   IBV_EXP_TM_CAP_DC
 #  endif
-#  if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+#  if defined(HAVE_STRUCT_IBV_TM_CAPS_FLAGS) && HAVE_STRUCT_IBV_TM_CAPS_FLAGS
 #    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.flags)
 #  else
 #    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.capability_flags)

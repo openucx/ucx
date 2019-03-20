@@ -15,7 +15,7 @@ extern "C" {
 #include <set>
 
 
-#if HAVE_PROFILING
+#ifdef HAVE_PROFILING
 
 class scoped_profile {
 public:

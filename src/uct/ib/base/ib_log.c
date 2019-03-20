@@ -16,7 +16,7 @@ const char *uct_ib_qp_type_str(int qp_type)
         return "RC";
     case IBV_QPT_UD:
         return "UD";
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
     case UCT_IB_QPT_DCI:
         return "DCI";
 #endif

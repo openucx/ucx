@@ -53,7 +53,7 @@ ucs_ptr_array_freelist_set_next(ucs_ptr_array_elem_t *elem, unsigned next)
 
 static void UCS_F_MAYBE_UNUSED ucs_ptr_array_dump(ucs_ptr_array_t *ptr_array)
 {
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     ucs_ptr_array_elem_t elem;
     unsigned i;
 
@@ -89,7 +89,7 @@ void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, uint32_t init_placeholder,
 {
     ptr_array->init_placeholder = init_placeholder;
     ucs_ptr_array_clear(ptr_array);
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
     ucs_snprintf_zero(ptr_array->name, sizeof(ptr_array->name), "%s", name);
 #endif
 }

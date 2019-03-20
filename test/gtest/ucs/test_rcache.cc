@@ -608,7 +608,7 @@ UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
     munmap(mem, size1+size2);
 }
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 class test_rcache_stats : public test_rcache {
 protected:
 
