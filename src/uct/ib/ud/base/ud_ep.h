@@ -258,7 +258,8 @@ struct uct_ud_ep {
 #endif
 };
 
-UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
+UCS_CLASS_DECLARE(uct_ud_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t*);
 
 /**
  * UD pending request private data

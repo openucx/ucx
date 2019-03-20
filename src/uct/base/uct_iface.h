@@ -178,8 +178,10 @@ enum {
 /**
  * Declare classes for structures defined in api/tl.h
  */
-UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_md_h);
-UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
+UCS_CLASS_DECLARE(uct_iface_h);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_iface_h, uct_iface_ops_t, uct_md_h);
+UCS_CLASS_DECLARE(uct_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_ep_t, uct_iface_h);
 
 
 /**
@@ -219,7 +221,8 @@ typedef struct uct_base_iface {
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
 } uct_base_iface_t;
 
-UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_base_iface_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_iface_config_t*
                   UCS_STATS_ARG(ucs_stats_node_t*) UCS_STATS_ARG(const char*));
 
@@ -240,7 +243,8 @@ typedef struct uct_base_ep {
     uct_ep_t          super;
     UCS_STATS_NODE_DECLARE(stats);
 } uct_base_ep_t;
-UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
+UCS_CLASS_DECLARE(uct_base_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_base_ep_t, uct_base_iface_t*);
 
 
 /**

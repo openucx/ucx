@@ -17,7 +17,8 @@
 #include <ucp/core/ucp_request.inl>
 
 
-UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
+UCS_CLASS_DECLARE(ucp_wireup_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h);
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_wireup_ep_t, uct_ep_t);

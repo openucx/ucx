@@ -10,9 +10,10 @@
 #include <uct/base/uct_iface.h>
 #include <uct/api/uct.h>
 
-UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_md_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_ugni_iface_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_ugni_iface_t, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, uct_iface_ops_t*,
-                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*))
+                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
 
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);

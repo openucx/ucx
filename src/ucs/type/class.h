@@ -56,9 +56,14 @@ struct ucs_class {
  *
  * @param _type     Class type.
  */
-#define UCS_CLASS_DECLARE(_type, ...) \
-    extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
+#define UCS_CLASS_DECLARE(_type) \
+    extern ucs_class_t _UCS_CLASS_DECL_NAME(_type);
+
+#define UCS_CLASS_DECLARE_INIT_FUNC(_type, ...) \
     UCS_CLASS_INIT_FUNC(_type, ## __VA_ARGS__);
+
+#define UCS_CLASS_DECLARE_CLEANUP_FUNC(_type) \
+    UCS_CLASS_CLEANUP_FUNC(_type);
 
 #define UCS_CLASS_NAME(_type) \
     _UCS_CLASS_DECL_NAME(_type)
@@ -70,7 +75,6 @@ struct ucs_class {
  * @param _super    Superclass type (may be void to indicate top-level class)
  */
 #define UCS_CLASS_DEFINE(_type, _super) \
-    extern ucs_class_t _UCS_CLASS_DECL_NAME(_super); \
     ucs_class_t _UCS_CLASS_DECL_NAME(_type) = { \
         UCS_PP_QUOTE(_type), \
         sizeof(_type), \
@@ -91,7 +95,6 @@ struct ucs_class {
  */
 #define UCS_CLASS_INIT(_type, _obj, ...) \
     ({ \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
         int init_count = 1; \
         ucs_status_t class_init_status; \
@@ -125,7 +128,6 @@ struct ucs_class {
  */
 #define UCS_CLASS_CLEANUP(_type, _obj) \
     { \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         UCS_CLASS_CLEANUP_CALL(&_UCS_CLASS_DECL_NAME(_type), _obj); \
     }
 
@@ -143,7 +145,6 @@ struct ucs_class {
     _UCS_CLASS_NEW (_type, _obj, ## __VA_ARGS__)
 #define _UCS_CLASS_NEW(_type, _obj, ...) \
     ({ \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *_ucs_class_new_cls = &_UCS_CLASS_DECL_NAME(_type); \
         ucs_status_t _ucs_class_new_status; \
         void *obj; \
@@ -303,6 +304,7 @@ void ucs_class_free(void *obj);
  * The empty class.
  */
 UCS_CLASS_DECLARE(void);
+UCS_CLASS_DECLARE_INIT_FUNC(void);
 
 END_C_DECLS
 

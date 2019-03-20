@@ -140,6 +140,7 @@ static ucs_mpool_ops_t uct_self_iface_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+UCS_CLASS_DECLARE(uct_self_iface_t);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_iface_t, uct_iface_t);
 
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,

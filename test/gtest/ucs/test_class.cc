@@ -16,19 +16,22 @@ class test_class : public ucs::test {
 typedef struct base {
     int            field1;
 } base_t;
-UCS_CLASS_DECLARE(base_t, int);
+UCS_CLASS_DECLARE(base_t);
+UCS_CLASS_DECLARE_INIT_FUNC(base_t, int);
 
 typedef struct derived {
     base_t         super;
     int            field2;
 } derived_t;
-UCS_CLASS_DECLARE(derived_t, int, int);
+UCS_CLASS_DECLARE(derived_t);
+UCS_CLASS_DECLARE_INIT_FUNC(derived_t, int, int);
 
 typedef struct derived2 {
     base_t         super;
     int            field2;
 } derived2_t;
-UCS_CLASS_DECLARE(derived2_t, int, int);
+UCS_CLASS_DECLARE(derived2_t);
+UCS_CLASS_DECLARE_INIT_FUNC(derived2_t, int, int);
 
 static int base_init_count = 0;
 static int derived_init_count = 0;

@@ -44,6 +44,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {NULL}
 };
 
+UCS_CLASS_DECLARE(uct_tcp_iface_t);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);
 
 static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,

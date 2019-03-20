@@ -205,7 +205,8 @@ typedef struct uct_ib_iface_init_attr {
     int         flags;           /* Various flags (see enum) */
 } uct_ib_iface_init_attr_t;
 
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_ib_iface_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_ib_iface_config_t*,
                   const uct_ib_iface_init_attr_t*);
 
