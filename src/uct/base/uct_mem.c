@@ -370,7 +370,7 @@ UCS_PROFILE_FUNC_VOID(uct_iface_mp_chunk_release, (mp, chunk),
     uct_iface_mp_chunk_hdr_t *hdr;
     uct_allocated_memory_t mem;
 
-    hdr = chunk - sizeof(*hdr);
+    hdr = (uct_iface_mp_chunk_hdr_t *)((char *)chunk - sizeof(*hdr));
 
     mem.address = hdr;
     mem.method  = hdr->method;
@@ -388,7 +388,7 @@ static void uct_iface_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
     uct_iface_mp_chunk_hdr_t *hdr;
 
     init_obj_cb = uct_iface_mp_priv(mp)->init_obj_cb;
-    hdr = chunk - sizeof(*hdr);
+    hdr = (uct_iface_mp_chunk_hdr_t *)((char *)chunk - sizeof(*hdr));
     if (init_obj_cb != NULL) {
         init_obj_cb(&iface->super, obj, hdr->memh);
     }

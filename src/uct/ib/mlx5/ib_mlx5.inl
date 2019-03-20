@@ -10,7 +10,7 @@
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
 {
-    return cq->cq_buf + ((index & (cq->cq_length - 1)) << cq->cqe_size_log);
+    return (struct mlx5_cqe64*)((char*)cq->cq_buf + ((index & (cq->cq_length - 1)) << cq->cqe_size_log));
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -118,12 +118,12 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 {
     ptrdiff_t n;
 
-    if (dest + length <= wq->qend) {
+    if ((char*)dest + length <= (char*)wq->qend) {
         memcpy(dest, src, length);
     } else {
-        n = wq->qend - dest;
+        n = (char*)wq->qend - (char*)dest;
         memcpy(dest, src, n);
-        memcpy(wq->qstart, src + n, length - n);
+        memcpy(wq->qstart, (char*)src + n, length - n);
     }
 }
 
@@ -156,7 +156,7 @@ static UCS_F_ALWAYS_INLINE void *
 uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
 {
     if (ucs_unlikely(seg >= txwq->qend)) {
-        seg -= (txwq->qend - txwq->qstart);
+        seg = (char*)seg - (char*)txwq->qend + (char*)txwq->qstart;
     }
     return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
 }
@@ -168,7 +168,7 @@ static UCS_F_ALWAYS_INLINE void *
 uct_ib_mlx5_txwq_wrap_data(uct_ib_mlx5_txwq_t *txwq, void *data)
 {
     if (ucs_unlikely(data >= txwq->qend)) {
-        data -= (txwq->qend - txwq->qstart);
+        data = (char*)data - (char*)txwq->qend + (char*)txwq->qstart;
     }
     return data;
 }
@@ -378,8 +378,8 @@ void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
 
     for (n = 0; n < num_bb; ++n) {
         uct_ib_mlx5_bf_copy_bb(dst, src);
-        dst += MLX5_SEND_WQE_BB;
-        src += MLX5_SEND_WQE_BB;
+        dst = (char*)dst + MLX5_SEND_WQE_BB;
+        src = (char*)src + MLX5_SEND_WQE_BB;
         if (ucs_unlikely(src == wq->qend)) {
             src = wq->qstart;
         }
@@ -427,7 +427,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
         ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB);
         *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
         ucs_memory_bus_store_fence();
-        src = uct_ib_mlx5_txwq_wrap_any(wq, src + (num_bb * MLX5_SEND_WQE_BB));
+        src = uct_ib_mlx5_txwq_wrap_any(wq, (char*)src + (num_bb * MLX5_SEND_WQE_BB));
     }
 
     /* We don't want the compiler to reorder instructions and hurt latency */
@@ -456,7 +456,7 @@ static inline uct_ib_mlx5_srq_seg_t *
 uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
     ucs_assert(index <= srq->mask);
-    return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
+    return (uct_ib_mlx5_srq_seg_t *)((char*)srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE);
 }
 
 static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,

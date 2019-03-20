@@ -96,7 +96,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
 
         if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
             req->recv.tag.info.length = recv_len;
-            status = ucp_request_recv_data_unpack(req, data + hdr_len, recv_len,
+            status = ucp_request_recv_data_unpack(req, (char*)data + hdr_len, recv_len,
                                                   0, 1);
             ucp_request_complete_tag_recv(req, status);
         } else {
@@ -104,7 +104,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
             req->recv.tag.info.length =
             req->recv.tag.remaining   = eagerf_hdr->total_len;
 
-            status = ucp_tag_request_process_recv_data(req, data + hdr_len,
+            status = ucp_tag_request_process_recv_data(req, (char*)data + hdr_len,
                                                        recv_len, 0, 0);
             ucs_assert(status == UCS_INPROGRESS);
 
@@ -187,7 +187,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
         recv_len = length - sizeof(*hdr);
 
         UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
-        status = ucp_tag_request_process_recv_data(req, data + sizeof(*hdr),
+        status = ucp_tag_request_process_recv_data(req, (char *)data + sizeof(*hdr),
                                                    recv_len, hdr->offset, 0);
         if (status != UCS_INPROGRESS) {
             /* request completed, delete hash entry */
@@ -373,7 +373,7 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     p = buffer + strlen(buffer);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + header_len,
+    ucp_dump_payload(worker->context, p, buffer + max - p, (char *)data + header_len,
                      length - header_len);
 }
 

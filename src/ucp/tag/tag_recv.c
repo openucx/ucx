@@ -68,7 +68,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         ucp_memory_type_detect_mds(worker->context, buffer, recv_len, &mem_type);
 
         status = ucp_dt_unpack_only(worker, buffer, count, datatype, mem_type,
-                                    (void*)(rdesc + 1) + hdr_len, recv_len, 1);
+                                    (char*)(rdesc + 1) + hdr_len, recv_len, 1);
         ucp_recv_desc_release(rdesc);
 
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {

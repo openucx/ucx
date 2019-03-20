@@ -165,7 +165,7 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     /* find PT_DYNAMIC */
     dphdr = NULL;
     for (i = 0; i < phnum; ++i) {
-        dphdr = (void*)phdr + phsize * i;
+        dphdr = (void*) ((char*)phdr + phsize * i);
         if (dphdr->p_type == PT_DYNAMIC) {
             break;
         }
@@ -181,7 +181,7 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
 
     /* Find matching symbol and replace it */
-    for (reloc = jmprel; (void*)reloc < jmprel + pltrelsz; ++reloc) {
+    for (reloc = jmprel; (char*)reloc < (char*) jmprel + pltrelsz; ++reloc) {
         elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
         if (!strcmp(ctx->patch->symbol, elf_sym)) {
             entry = (void *)(base + reloc->r_offset);

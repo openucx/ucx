@@ -217,7 +217,7 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ib_iface_t *iface = ucs_container_of(self, uct_ib_iface_t, release_desc);
     void *ib_desc;
 
-    ib_desc = desc - iface->config.rx_headroom_offset;
+    ib_desc = (void *) ((char *) desc - iface->config.rx_headroom_offset);
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -262,13 +262,13 @@ void uct_ib_address_pack(uct_ib_iface_t *iface,
         ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
                          UCT_IB_ADDRESS_FLAG_LID;
         *(uint16_t*) ptr = lid;
-        ptr += sizeof(uint16_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint16_t));
 
         if ((gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) ||
             iface->is_global_addr) {
             ib_addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
             *(uint64_t*) ptr = gid->global.interface_id;
-            ptr += sizeof(uint64_t);
+            ptr = (void *) ((char *) ptr + sizeof(uint64_t));
 
             if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
                                               UCT_IB_SITE_LOCAL_PREFIX) &&
@@ -300,23 +300,23 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
         *lid = *(uint16_t*)ptr;
-        ptr += sizeof(uint16_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint16_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
         gid->global.interface_id = *(uint64_t*)ptr;
-        ptr += sizeof(uint64_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint64_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
         gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
                                     ((uint64_t) *(uint16_t*) ptr << 48);
-        ptr += sizeof(uint16_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint16_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
         gid->global.subnet_prefix = *(uint64_t*) ptr;
-        ptr += sizeof(uint64_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint64_t));
     }
 }
 

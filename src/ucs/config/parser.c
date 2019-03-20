@@ -1333,7 +1333,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
              */
             inner_prefix.prefix = field->name;
             ucs_list_add_tail(prefix_list, &inner_prefix.list);
-            ucs_config_parser_print_opts_recurs(stream, opts + field->offset,
+            ucs_config_parser_print_opts_recurs(stream, (char *) opts + field->offset,
                                                 field->parser.arg, flags,
                                                 env_prefix, prefix_list);
             ucs_list_del(&inner_prefix.list);
@@ -1345,7 +1345,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                     ucs_fatal("could not find aliased field of %s", field->name);
                 }
                 ucs_config_parser_print_field(stream,
-                                              opts + alias_table_offset,
+                                              (char *) opts + alias_table_offset,
                                               env_prefix, prefix_list,
                                               field->name, aliased_field,
                                               flags, "%-*s %s%s",

@@ -499,7 +499,7 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     p = buffer + strlen(buffer);
 
     ucs_assert(hdr->ep_ptr != 0);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + hdr_len,
+    ucp_dump_payload(worker->context, p, buffer + max - p, (char *)data + hdr_len,
                      length - hdr_len);
 }
 

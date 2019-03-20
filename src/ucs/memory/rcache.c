@@ -126,7 +126,7 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
 
     /* Store the size in the first bytes of the chunk */
     *(size_t*)ptr = size;
-    *chunk_p = ptr  + sizeof(size_t);
+    *chunk_p = (void *) ((char *) ptr  + sizeof(size_t));
     *size_p  = size - sizeof(size_t);
     return UCS_OK;
 }
@@ -137,7 +137,7 @@ static void ucs_rcache_mp_chunk_release(ucs_mpool_t *mp, void *chunk)
     void *ptr;
     int ret;
 
-    ptr = chunk - sizeof(size_t);
+    ptr = (void *) ((char *) chunk - sizeof(size_t));
     size = *(size_t*)ptr;
     ret = ucm_orig_munmap(ptr, size);
     if (ret) {

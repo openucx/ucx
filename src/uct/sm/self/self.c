@@ -260,7 +260,7 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
     *(uint64_t*)send_buffer = header;
-    memcpy(send_buffer + sizeof(uint64_t), payload, length);
+    memcpy((char*)send_buffer + sizeof(uint64_t), payload, length);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, total_length);
     uct_self_iface_sendrecv_am(iface, id, send_buffer, total_length, "SHORT");

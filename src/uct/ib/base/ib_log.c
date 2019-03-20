@@ -64,7 +64,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
             len = ucs_min(sg_list[i].length, (size_t)((char *) data + sizeof(data) - (char *) md));
             memcpy(md, (void*)sg_list[i].addr, len);
 
-            md              += len;
+            md              = (void *) ((char *) md + len);
             total_len       += len;
             total_valid_len += sg_list[i].length;
         }
@@ -236,7 +236,7 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
     len = length;
     if (iface->config.qp_type == IBV_QPT_UD) {
         len  -= UCT_IB_GRH_LEN;
-        data += UCT_IB_GRH_LEN;
+        data = (void *) ((char *) data + UCT_IB_GRH_LEN);
     }
     uct_ib_log_dump_recv_completion(iface, l_qp, r_qp, slid, data, len,
                                     packet_dump_cb, buf, sizeof(buf) - 1);

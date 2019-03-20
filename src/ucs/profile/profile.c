@@ -69,7 +69,7 @@ static void ucs_profile_file_write_data(int fd, void *data, size_t size)
 static void ucs_profile_file_write_records(int fd, ucs_profile_record_t *begin,
                                            ucs_profile_record_t *end)
 {
-    ucs_profile_file_write_data(fd, begin, (void*)end - (void*)begin);
+    ucs_profile_file_write_data(fd, begin, (char*)end - (char*)begin);
 }
 
 static void ucs_profile_write(void)

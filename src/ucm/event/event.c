@@ -357,7 +357,7 @@ void *ucm_sbrk(intptr_t increment)
     ucm_trace("ucm_sbrk(increment=%+ld)", increment);
 
     if (increment < 0) {
-        ucm_dispatch_vm_munmap(ucm_orig_sbrk(0) + increment, -increment);
+        ucm_dispatch_vm_munmap((char *) ucm_orig_sbrk(0) + increment, -increment);
     }
 
     event.sbrk.result    = MAP_FAILED;
@@ -365,7 +365,7 @@ void *ucm_sbrk(intptr_t increment)
     ucm_event_dispatch(UCM_EVENT_SBRK, &event);
 
     if ((increment > 0) && (event.sbrk.result != MAP_FAILED)) {
-        ucm_dispatch_vm_mmap(ucm_orig_sbrk(0) - increment, increment);
+        ucm_dispatch_vm_mmap((char *) ucm_orig_sbrk(0) - increment, increment);
     }
 
     ucm_event_leave();
@@ -389,7 +389,7 @@ int ucm_brk(void *addr)
     ucm_trace("ucm_brk(addr=%p)", addr);
 
     if (increment < 0) {
-        ucm_dispatch_vm_munmap(old_addr + increment, -increment);
+        ucm_dispatch_vm_munmap((char *) old_addr + increment, -increment);
     }
 
     event.sbrk.result    = (void*)-1;

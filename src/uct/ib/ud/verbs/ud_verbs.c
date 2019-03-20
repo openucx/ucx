@@ -328,7 +328,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
-        if (!uct_ud_iface_check_grh(&iface->super, packet + UCT_IB_GRH_LEN,
+        if (!uct_ud_iface_check_grh(&iface->super, (char *) packet + UCT_IB_GRH_LEN,
                                     wc[i].wc_flags & IBV_WC_GRH)) {
             ucs_mpool_put_inline((void*)wc[i].wr_id);
             continue;
@@ -336,7 +336,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
         uct_ib_log_recv_completion(&iface->super.super, &wc[i], packet,
                                    wc[i].byte_len, uct_ud_dump_packet);
         uct_ud_ep_process_rx(&iface->super,
-                             (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
+                             (uct_ud_neth_t *)((char *) packet + UCT_IB_GRH_LEN),
                              wc[i].byte_len - UCT_IB_GRH_LEN,
                              (uct_ud_recv_skb_t *)wc[i].wr_id,
                              is_async);

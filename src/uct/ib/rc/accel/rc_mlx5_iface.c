@@ -191,11 +191,11 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     /* Create a copy of RC txwq for completion error reporting, since the QP
      * would be released by set_ep_failed()*/
     txwq_copy = ep->tx.wq;
-    txwq_size = ep->tx.wq.qend - ep->tx.wq.qstart;
+    txwq_size = (char*)ep->tx.wq.qend - (char*)ep->tx.wq.qstart;
     txwq_copy.qstart = ucs_malloc(txwq_size, "rc_txwq_copy");
     if (txwq_copy.qstart != NULL) {
         memcpy(txwq_copy.qstart, ep->tx.wq.qstart, txwq_size);
-        txwq_copy.qend = txwq_copy.qstart + txwq_size;
+        txwq_copy.qend = (char*)txwq_copy.qstart + txwq_size;
     }
 
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);

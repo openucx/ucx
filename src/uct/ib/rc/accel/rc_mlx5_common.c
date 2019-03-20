@@ -819,7 +819,7 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         } else if (nfreed) {
             dest = uct_ib_mlx5_get_cqe(mlx5_cq, pi + nfreed);
             owner_bit = dest->op_own & MLX5_CQE_OWNER_MASK;
-            memcpy((void*)(dest + 1) - cqe_sz, (void*)(cqe + 1) - cqe_sz, cqe_sz);
+            memcpy((char*)(dest + 1) - cqe_sz, (char*)(cqe + 1) - cqe_sz, cqe_sz);
             dest->op_own = (dest->op_own & ~MLX5_CQE_OWNER_MASK) | owner_bit;
         }
     }

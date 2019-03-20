@@ -43,16 +43,18 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
     size_t md_size;
 
     *(ucp_md_map_t*)p = md_map;
-    p += sizeof(ucp_md_map_t);
+    p = (uint8_t *)p + sizeof(ucp_md_map_t);
 
-    *((uint8_t *)p++) = mem_type;
+    *(uint8_t*)p = mem_type;
+    p = (uint8_t *)p + 1;
 
     ucs_for_each_bit(md_index, md_map) {
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         ucs_assert_always(md_size <= UINT8_MAX);
-        *((uint8_t*)p++) = md_size;
+        *(uint8_t*)p = md_size;
+        p = (uint8_t *)p + 1;
         memcpy(p, *uct_rkeys, md_size);
-        p += md_size;
+        p = (uint8_t *)p + md_size;
         ++uct_rkeys;
     }
 }
@@ -72,17 +74,19 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
 
     /* Write the MD map */
     *(ucp_md_map_t*)p = md_map;
-    p += sizeof(ucp_md_map_t);
+    p = (uint8_t*)p + sizeof(ucp_md_map_t);
 
     /* Write memory type */
     UCS_STATIC_ASSERT(UCT_MD_MEM_TYPE_LAST <= 255);
-    *((uint8_t*)p++) = mem_type;
+    *(uint8_t*)p = mem_type;
+    p = (uint8_t *)p + 1;
 
     /* Write both size and rkey_buffer for each UCT rkey */
     uct_memh_index = 0;
     ucs_for_each_bit (md_index, md_map) {
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
-        *((uint8_t*)p++) = md_size;
+        *(uint8_t*)p = md_size;
+        p = (uint8_t *)p + 1;
         status = uct_md_mkey_pack(context->tl_mds[md_index].md,
                                   memh[uct_memh_index], p);
         if (status != UCS_OK) {
@@ -94,10 +98,10 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                   context->tl_mds[md_index].rsc.md_name);
 
         ++uct_memh_index;
-        p += md_size;
+        p = (uint8_t*)p + md_size;
     }
 
-    return p - rkey_buffer;
+    return (ssize_t)((uint8_t*)p - (uint8_t*)rkey_buffer);
 }
 
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
@@ -188,7 +192,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     /* MD map for the unpacked rkey */
     md_map   = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
     md_count = ucs_popcount(md_map);
-    p       += sizeof(ucp_md_map_t);
+    p        = (uint8_t*)p + sizeof(ucp_md_map_t);
 
     /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
      * allocations are done from a memory pool.
@@ -208,7 +212,8 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     }
 
     /* Read memory type */
-    mem_type = *((uint8_t*)p++);
+    mem_type = *(uint8_t*)p;
+    p = (uint8_t *)p + 1;
 
     rkey->md_map   = md_map;
     rkey->mem_type = mem_type;
@@ -220,7 +225,8 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     remote_md_index = 0; /* Index of remote MD */
     rkey_index      = 0; /* Index of the rkey in the array */
     ucs_for_each_bit (remote_md_index, remote_md_map) {
-        md_size = *((uint8_t*)p++);
+        md_size = *(uint8_t*)p;
+        p = (uint8_t*)p + 1;
 
         /* Use bit operations to iterate through the indices of the remote MDs
          * as provided in the md_map. md_map always holds a bitmap of MD indices
@@ -252,7 +258,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
             }
         }
 
-        p += md_size;
+        p = (uint8_t*)p + md_size;
     }
 
     ucp_rkey_resolve_inner(rkey, ep);
@@ -275,17 +281,17 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
     int first;
 
     snprintf(p, endp - p, "{");
-    p += strlen(p);
+    p = (char*)p + strlen(p);
 
     md_map = *(ucp_md_map_t*)(rkey_buffer);
-    rkey_buffer += sizeof(ucp_md_map_t);
+    rkey_buffer = (uint8_t*)rkey_buffer + sizeof(ucp_md_map_t);
 
-    rkey_buffer += sizeof(uint8_t);
+    rkey_buffer = (uint8_t*)rkey_buffer + sizeof(uint8_t);
 
     first = 1;
     ucs_for_each_bit(md_index, md_map) {
          md_size      = *((uint8_t*)rkey_buffer);
-         rkey_buffer += sizeof(uint8_t);
+         rkey_buffer  = (uint8_t*)rkey_buffer + sizeof(uint8_t);
 
          if (!first) {
              snprintf(p, endp - p, ",");
@@ -294,12 +300,12 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
          first = 0;
 
          snprintf(p, endp - p, "%d:", md_index);
-         p += strlen(p);
+         p = (char*)p + strlen(p);
 
          ucs_log_dump_hex(rkey_buffer, md_size, p, endp - p);
-         p += strlen(p);
+         p = (char*)p + strlen(p);
 
-         rkey_buffer += md_size;
+         rkey_buffer = (uint8_t*)rkey_buffer + md_size;
     }
 
     snprintf(p, endp - p, "}");

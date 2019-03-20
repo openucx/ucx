@@ -257,7 +257,7 @@ ucp_tag_recv_request_process_rdesc(ucp_request_t *req, ucp_recv_desc_t *rdesc,
 
      hdr_len  = rdesc->payload_offset;
      recv_len = rdesc->length - hdr_len;
-     status = ucp_tag_request_process_recv_data(req, (void*)(rdesc + 1) + hdr_len,
+     status = ucp_tag_request_process_recv_data(req, (char*)(rdesc + 1) + hdr_len,
                                                 recv_len, offset, 0);
      ucp_recv_desc_release(rdesc);
      return status;

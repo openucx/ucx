@@ -64,7 +64,7 @@ void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     void *mm_desc;
 
-    mm_desc = desc - sizeof(uct_mm_recv_desc_t);
+    mm_desc = (char *) desc - sizeof(uct_mm_recv_desc_t);
     ucs_mpool_put(mm_desc);
 }
 
@@ -178,7 +178,7 @@ ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
 
     fifo_elem_p->desc_mmid   = desc->key;
     fifo_elem_p->desc_offset = iface->rx_headroom +
-                               (ptrdiff_t) ((void*) (desc + 1) - desc->base_address);
+                               (ptrdiff_t) ((char *) (desc + 1) - (char *) desc->base_address);
     fifo_elem_p->desc_chunk_base_addr = desc->base_address;
     fifo_elem_p->desc_mpool_size      = desc->mpool_length;
 
@@ -202,7 +202,7 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
         VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
                                   elem->length);
 
-        data = elem->desc_chunk_base_addr + elem->desc_offset;
+        data = (char*) elem->desc_chunk_base_addr + elem->desc_offset;
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
                            data, elem->length, "RX: AM_BCOPY");

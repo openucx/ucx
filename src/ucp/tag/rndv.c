@@ -414,7 +414,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                (rndv_req->send.length - (offset + length) >= min_zcopy));
 
     ucs_trace_data("req %p: offset %zu remainder %zu rma-get to %p len %zu lane %d",
-                   rndv_req, offset, remainder, rndv_req->send.buffer + offset,
+                   rndv_req, offset, remainder, (char *)rndv_req->send.buffer + offset,
                    length, lane);
 
     state = rndv_req->send.state.dt;
@@ -751,7 +751,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
 
     ucs_trace_data("req %p: offset %zu remainder %zu. read to %p len %zu",
                    sreq, offset, (uintptr_t)sreq->send.buffer % align,
-                   (void*)sreq->send.buffer + offset, length);
+                   (char*)sreq->send.buffer + offset, length);
 
     state = sreq->send.state.dt;
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iovcnt, &state,
@@ -912,7 +912,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
         frag_req->send.length                    = length;
         frag_req->send.uct.func                  = ucp_rndv_progress_rma_get_zcopy;
         frag_req->send.rndv_get.rkey             = NULL;
-        frag_req->send.rndv_get.remote_address   = (uint64_t)(sreq->send.buffer + offset);
+        frag_req->send.rndv_get.remote_address   = (uint64_t)((char*)sreq->send.buffer + offset);
         frag_req->send.rndv_get.lanes_map        = 0;
         frag_req->send.rndv_get.lane_count       = 0;
         frag_req->send.rndv_get.rreq             = sreq;

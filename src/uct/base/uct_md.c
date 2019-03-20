@@ -437,7 +437,7 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
 
     ucs_list_for_each(mdc, &uct_md_components_list, list) {
         if (!strncmp(rkey_buffer, mdc->name, UCT_MD_COMPONENT_NAME_MAX)) {
-            status = mdc->rkey_unpack(mdc, rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
+            status = mdc->rkey_unpack(mdc, (char *) rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
                                       &rkey_ob->rkey, &rkey_ob->handle);
             if (status == UCS_OK) {
                 rkey_ob->type = mdc;

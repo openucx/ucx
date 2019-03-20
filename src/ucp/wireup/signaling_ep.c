@@ -22,7 +22,7 @@ static size_t ucp_signaling_ep_pack_short(void *dest, void *arg)
     ucp_signaling_ep_pack_ctx_t *ctx = arg;
 
     *(uint64_t*)dest = ctx->header;
-    memcpy(dest + sizeof(uint64_t), ctx->payload, ctx->length);
+    memcpy((char *)dest + sizeof(uint64_t), ctx->payload, ctx->length);
     return sizeof(uint64_t) + ctx->length;
 }
 

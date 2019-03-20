@@ -88,7 +88,7 @@ static void ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
 
     chunk_mem = ucs_strided_alloc_chunk_to_mem(chunk);
     for (i = elems_per_chunk - 1; i >= 0; --i) {
-        elem = chunk_mem + (i * sa->elem_size);
+        elem = (ucs_strided_alloc_elem_t *) ((char *) chunk_mem + (i * sa->elem_size));
         ucs_strided_alloc_push_to_freelist(sa, elem);
     }
 

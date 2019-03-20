@@ -174,7 +174,7 @@ typedef struct uct_rc_mlx5_cmd_wq {
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
            hdr = (_desc) + 1; \
            uct_rc_mlx5_fill_tmh(hdr, _tag, _app_ctx, IBV_TMH_EAGER); \
-           hdr += sizeof(struct ibv_tmh); \
+           hdr = (char*)hdr + sizeof(struct ibv_tmh); \
            _length = _pack_cb(hdr, _arg); \
        }
 #endif

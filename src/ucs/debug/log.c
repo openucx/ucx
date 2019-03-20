@@ -306,7 +306,7 @@ const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
         if (((i % 4) == 0) && (i > 0)) {
             *(p++) = ':';
         }
-        value = *(uint8_t*)(data + i);
+        value = *(uint8_t*)((char *) data + i);
         p[0] = hexchars[value / 16];
         p[1] = hexchars[value % 16];
         p += 2;

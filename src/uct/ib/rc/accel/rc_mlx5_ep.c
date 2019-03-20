@@ -606,7 +606,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 
     data = &rch->rc_hdr;
     /* coverity[overrun-buffer-val] */
-    uct_rc_ep_packet_dump(iface, type, data, length - (data - (void *)rch),
+    uct_rc_ep_packet_dump(iface, type, data, length - ((char*)data - (char *)rch),
                           valid_length, buffer, max);
 }
 

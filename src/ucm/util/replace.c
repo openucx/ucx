@@ -133,7 +133,7 @@ void *ucm_orig_sbrk(intptr_t increment)
         return ucm_orig_dlsym_sbrk(increment);
     } else {
         prev = ucm_brk_syscall(0);
-        return ucm_orig_brk(prev + increment) ? (void*)-1 : prev;
+        return ucm_orig_brk((char *) prev + increment) ? (void*)-1 : prev;
     }
 }
 

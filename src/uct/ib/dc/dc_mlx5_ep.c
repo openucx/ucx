@@ -1004,7 +1004,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
         }
     }
 
-    UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
+    UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv_t) <=
                       UCT_PENDING_REQ_PRIV_LEN);
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {

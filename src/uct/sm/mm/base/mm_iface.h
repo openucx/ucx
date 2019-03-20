@@ -157,7 +157,7 @@ static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems
    fifo_ctl = uct_mm_set_fifo_ctl(mem_region);
 
    /* initiate the pointer to the beginning of the first FIFO element */
-   *fifo_elems = (void*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
+   *fifo_elems = (char*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 }
 
 void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc);

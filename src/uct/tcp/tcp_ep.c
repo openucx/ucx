@@ -333,7 +333,7 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     send_length = ep->tx.length - ep->tx.offset;
     ucs_assert(send_length > 0);
 
-    status = uct_tcp_send(ep->fd, ep->tx.buf + ep->tx.offset, &send_length);
+    status = uct_tcp_send(ep->fd, (char *)ep->tx.buf + ep->tx.offset, &send_length);
     if (status < 0) {
         return 0;
     }
@@ -355,7 +355,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 
     ucs_assertv(*recv_length, "ep=%p", ep);
 
-    status = uct_tcp_recv(ep->fd, ep->rx.buf + ep->rx.length, recv_length);
+    status = uct_tcp_recv(ep->fd, (char *) ep->rx.buf + ep->rx.length, recv_length);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_CANCELED) {
             uct_tcp_ep_handle_disconnected(ep, &ep->rx);
@@ -434,7 +434,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         ucs_assert(ep->rx.buf != NULL);
 
         /* do partial receive of the remaining user data */
-        hdr         = ep->rx.buf + ep->rx.offset;
+        hdr         = (uct_tcp_am_hdr_t *) ((char *) ep->rx.buf + ep->rx.offset);
         recv_length = hdr->length - (ep->rx.length - ep->rx.offset - sizeof(*hdr));
     }
 
@@ -447,13 +447,13 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         remainder = ep->rx.length - ep->rx.offset;
         if (remainder < sizeof(*hdr)) {
             /* Move the partially received hdr to the beginning of the buffer */
-            memmove(ep->rx.buf, ep->rx.buf + ep->rx.offset, remainder);
+            memmove(ep->rx.buf, (char *) ep->rx.buf + ep->rx.offset, remainder);
             ep->rx.offset = 0;
             ep->rx.length = remainder;
             goto out;
         }
 
-        hdr = ep->rx.buf + ep->rx.offset;
+        hdr = (uct_tcp_am_hdr_t *) ((char *) ep->rx.buf + ep->rx.offset);
         ucs_assert(hdr->length <= (iface->am_buf_size - sizeof(uct_tcp_am_hdr_t)));
 
         if (remainder < sizeof(*hdr) + hdr->length) {

@@ -319,7 +319,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
 
     switch (opcode) {
     case MLX5_OPCODE_SEND_IMM:
@@ -426,7 +426,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     opmod         = 0;
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
 
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND_IMM: /* Used by tag offload */
@@ -585,7 +585,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
 
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
@@ -1208,10 +1208,10 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     log_sge->num_sge = i;
 
     /* copy payload to DM */
-    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t, payload + head, body);
+    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t, (char*)payload + head, body);
     if (tail) {
         dst += body;
-        memcpy(&padding, payload + head + body, tail);
+        memcpy(&padding, (char*)payload + head + body, tail);
         /* use uint64_t for source datatype because it is aligned buffer on stack */
         UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, &padding, sizeof(padding));
     }
@@ -1249,7 +1249,7 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
          * hint to valgrind to make it defined */
         VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
-        buffer = (void*)(desc->super.buffer - iface->dm.dm->start_va);
+        buffer = (void*)((char*)desc->super.buffer - (char*)iface->dm.dm->start_va);
 
         uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
                                             length, desc->super.buffer, log_sge);

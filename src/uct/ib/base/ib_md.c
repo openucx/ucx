@@ -626,7 +626,7 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
     }
 
     ucs_debug("UMR registered memory %p..%p offset 0x%lx on %s lkey 0x%x rkey 0x%x",
-              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
+              mr->addr, (char *) mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
               umr->lkey, umr->rkey);
     memh->atomic_mr   = umr;
     memh->atomic_rkey = umr->rkey;
@@ -798,7 +798,7 @@ uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, si
 
     if ((memh->flags & UCT_IB_MEM_FLAG_ODP)) {
         if ((addr < memh->mr->addr) ||
-            (addr + length > memh->mr->addr + memh->mr->length)) {
+            ((char *) addr + length > (char *) memh->mr->addr + memh->mr->length)) {
             return UCS_ERR_INVALID_PARAM;
         }
         ucs_debug("memh %p prefetch %p length %llu", memh, addr, 
@@ -865,7 +865,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     }
 
     ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
-              memh->mr->addr, memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
+              memh->mr->addr, (char *) memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
 
     uct_ib_mem_init(memh, flags, exp_access);
@@ -934,7 +934,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     }
 
     ucs_debug("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
-              "exp_access 0x%lx flags 0x%x", address, address + length,
+              "exp_access 0x%lx flags 0x%x", address, (char *) address + length,
               uct_ib_device_name(&md->dev), memh->mr->lkey, memh->mr->rkey,
               exp_access, flags);
 

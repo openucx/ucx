@@ -23,7 +23,7 @@ static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_data_t *data,
                                                      ucs_mpool_chunk_t *chunk,
                                                      unsigned elem_index)
 {
-    return chunk->elems + elem_index * ucs_mpool_elem_total_size(data);
+    return (ucs_mpool_elem_t *) ((char *) chunk->elems + elem_index * ucs_mpool_elem_total_size(data));
 }
 
 static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)

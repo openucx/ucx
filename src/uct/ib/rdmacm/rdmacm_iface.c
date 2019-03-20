@@ -318,7 +318,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
             priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name,
-                                        (void*)(conn_param.private_data +
+                                        (void*)((char *) conn_param.private_data +
                                         sizeof(uct_rdmacm_priv_data_hdr_t)));
             if (priv_data_ret < 0) {
                 ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
