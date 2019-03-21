@@ -891,7 +891,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
     if (ctx->server_addr == NULL) {
         optval = 1;
         status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
-                                   &optval, NULL, sizeof(optval));
+                                   &optval, sizeof(optval));
         if (status != UCS_OK) {
             goto err_close_sockfd;
         }

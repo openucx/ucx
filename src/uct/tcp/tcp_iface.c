@@ -235,28 +235,31 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 {
-    int sock_buf_def = (int)UCS_CONFIG_MEMUNITS_AUTO;
     ucs_status_t status;
 
     status = ucs_socket_setopt(fd, IPPROTO_TCP, TCP_NODELAY,
                                (const void*)&iface->sockopt.nodelay,
-                               NULL, sizeof(int));
+                               sizeof(int));
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
-                               (const void*)&iface->sockopt.sndbuf,
-                               &sock_buf_def, sizeof(int));
-    if (status != UCS_OK) {
-        return status;
+    if (iface->sockopt.sndbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
+                                   (const void*)&iface->sockopt.sndbuf,
+                                   sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
-    status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
-                               (const void*)&iface->sockopt.rcvbuf,
-                               &sock_buf_def, sizeof(int));
-    if (status != UCS_OK) {
-        return status;
+    if (iface->sockopt.rcvbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
+                                   (const void*)&iface->sockopt.rcvbuf,
+                                   sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
