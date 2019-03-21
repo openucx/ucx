@@ -14,7 +14,7 @@ public class UcsConstants {
 
     public static class ThreadMode {
         static {
-           load();
+            load();
         }
         /**
          * Multiple threads can access concurrently
