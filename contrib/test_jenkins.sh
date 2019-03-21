@@ -938,8 +938,8 @@ run_coverity() {
 
 run_gtest_watchdog_test() {
 	watchdog_timeout=$1
-        sleep_time=$2
-        expected_runtime=$3
+	sleep_time=$2
+	expected_runtime=$3
 	expected_err_str="Connection timed out - abort testing"
 
 	make -C test/gtest
@@ -947,7 +947,7 @@ run_gtest_watchdog_test() {
 	start_time=`date +%s`
 
 	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
-            WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
+		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
 		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
 	pid=$!
