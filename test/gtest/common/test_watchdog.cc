@@ -82,15 +82,12 @@ UCS_TEST_F(test_watchdog, watchdog_timeout) {
     if (gtest_timeout == NULL) {
         UCS_TEST_SKIP_R("WATCHDOG_GTEST_TIMEOUT_ is not set");
     }
-    ASSERT_TRUE(gtest_timeout != NULL);
+    timeout = atof(gtest_timeout);
 
     gtest_sleep_time = getenv("WATCHDOG_GTEST_SLEEP_TIME_");
     if (gtest_sleep_time == NULL) {
         UCS_TEST_SKIP_R("WATCHDOG_GTEST_SLEEP_TIME_ is not set");
     }
-    ASSERT_TRUE(gtest_sleep_time != NULL);
-
-    timeout    = atof(gtest_timeout);
     sleep_time = atof(gtest_sleep_time);
 
     ucs::watchdog_set(ucs::WATCHDOG_TEST, timeout);
