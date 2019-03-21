@@ -937,14 +937,17 @@ run_coverity() {
 }
 
 run_gtest_watchdog_test() {
-	expected_run_time=$1
+	watchdog_timeout=$1
+        sleep_time=$2
+        expected_runtime=$3
 	expected_err_str="Connection timed out - abort testing"
 
 	make -C test/gtest
 
 	start_time=`date +%s`
 
-	env WATCHDOG_GTEST_TIMEOUT_=$expected_run_time \
+	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
+            WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
 		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
 	pid=$!
@@ -962,13 +965,12 @@ run_gtest_watchdog_test() {
 		exit 1
 	fi
 
-	run_time=$(($end_time-$start_time))
-	expected_run_time=$(($expected_run_time*2))
+	runtime=$(($end_time-$start_time))
 
-	if [ $run_time -gt $expected_run_time ]
+	if [ $run_time -gt $expected_runtime ]
 	then
-		echo "Watchdog timeout test takes $run_time seconds that" \
-			"is greater than expected $expected_run_time seconds"
+		echo "Watchdog timeout test takes $runtime seconds that" \
+			"is greater than expected $expected_runtime seconds"
 		exit 1
 	fi
 }
@@ -985,7 +987,7 @@ run_gtest() {
 	$MAKEP
 
 	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
-	run_gtest_watchdog_test 5
+	run_gtest_watchdog_test 5 60 300
 
 	export GTEST_SHARD_INDEX=$worker
 	export GTEST_TOTAL_SHARDS=$nworkers

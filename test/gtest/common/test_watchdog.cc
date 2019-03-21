@@ -72,23 +72,30 @@ UCS_TEST_F(test_watchdog, watchdog_signal) {
 }
 
 UCS_TEST_F(test_watchdog, watchdog_timeout) {
-    double timeout;
-    char *p;
+    double timeout, sleep_time;
+    char *gtest_timeout, *gtest_sleep_time;
 
     /* This test can not be run with the other tests
      * because it terminates testing due to timeout
      */
-    p = getenv("WATCHDOG_GTEST_TIMEOUT_");
-    if (p == NULL) {
+    gtest_timeout = getenv("WATCHDOG_GTEST_TIMEOUT_");
+    if (gtest_timeout == NULL) {
         UCS_TEST_SKIP_R("WATCHDOG_GTEST_TIMEOUT_ is not set");
     }
-    ASSERT_TRUE(p != NULL);
+    ASSERT_TRUE(gtest_timeout != NULL);
 
-    timeout = atof(p);
+    gtest_sleep_time = getenv("WATCHDOG_GTEST_SLEEP_TIME_");
+    if (gtest_sleep_time == NULL) {
+        UCS_TEST_SKIP_R("WATCHDOG_GTEST_SLEEP_TIME_ is not set");
+    }
+    ASSERT_TRUE(gtest_sleep_time != NULL);
+
+    timeout    = atof(gtest_timeout);
+    sleep_time = atof(gtest_sleep_time);
 
     ucs::watchdog_set(ucs::WATCHDOG_TEST, timeout);
 
-    sleep(timeout * 2);
+    sleep((int)ceil(sleep_time));
 
     // shouldn't reach this statement
     ASSERT_NE(timeout, timeout);
