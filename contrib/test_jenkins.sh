@@ -870,6 +870,38 @@ test_unused_env_var() {
 	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
 }
 
+test_env_var_aliases() {
+	echo "==== Running MLX5 env var aliases test ===="
+	vars=( "TM_ENABLE" "TM_MAX_BCOPY" "TM_LIST_SIZE" "TX_MAX_BB" )
+	for var in "${vars[@]}"
+	do
+		for tl in "RC_MLX5" "DC_MLX5"
+		do
+			val=$(./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+			if [ -z $val ]
+			then
+				echo "UCX_${tl}_${var} does not exist in UCX config"
+				exit 1
+			fi
+			# To check that changing env var takes an effect,
+			# create some value, which is different from the default.
+			magic_val=`echo $val | sed -e ' s/inf\|auto/15/; s/n/swap/; s/y/n/; s/swap/y/; s/\([0-9]\)/\11/'`
+
+			# Check that both (tl name and common RC) aliases work
+			for var_alias in "RC" $tl
+			do
+				var_name=UCX_${var_alias}_${var}
+				val_set=$(export $var_name=$magic_val; ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+				if [ "$val_set" != "$magic_val" ]
+				then
+					echo "Can't set $var_name"
+					exit 1
+				fi
+			done
+		done
+	done
+}
+
 test_malloc_hook() {
 	echo "==== Running malloc hooks test ===="
 	if [ -x ./test/apps/test_tcmalloc ]
@@ -1168,6 +1200,7 @@ run_tests() {
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
+	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
 	do_distributed_task 0 3 test_jucx
 
