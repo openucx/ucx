@@ -11,41 +11,13 @@
 
 class test_ucp_rma : public test_ucp_memheap {
 private:
-    // TODO: need to investigate the slowness of the disabled tests
-    std::vector<std::string> disabled_tests;
-
     static void send_completion(void *request, ucs_status_t status){}
 public:
-    test_ucp_rma() : test_ucp_memheap() {
-        disabled_tests.push_back("nbi_large");
-        disabled_tests.push_back("nb_large");
-        disabled_tests.push_back("nonblocking_put_nbi_flush_worker");
-        disabled_tests.push_back("nonblocking_put_nbi_flush_ep");
-        disabled_tests.push_back("nonblocking_stream_put_nbi_flush_worker");
-        disabled_tests.push_back("nonblocking_stream_put_nbi_flush_ep");
-        disabled_tests.push_back("nonblocking_put_nb_flush_worker");
-        disabled_tests.push_back("nonblocking_put_nb_flush_ep");
-        disabled_tests.push_back("nonblocking_stream_put_nb_flush_worker");
-        disabled_tests.push_back("nonblocking_stream_put_nb_flush_ep");
-        disabled_tests.push_back("nonblocking_get_nbi_flush_worker");
-        disabled_tests.push_back("nonblocking_get_nbi_flush_ep");
-        disabled_tests.push_back("nonblocking_stream_get_nbi_flush_worker");
-        disabled_tests.push_back("nonblocking_stream_get_nbi_flush_ep");
-        disabled_tests.push_back("nonblocking_get_nb_flush_worker");
-        disabled_tests.push_back("nonblocking_get_nb_flush_ep");
-        disabled_tests.push_back("nonblocking_stream_get_nb_flush_worker");
-        disabled_tests.push_back("nonblocking_stream_get_nb_flush_ep");
-    }
-
     void init() {
         ucp_test::init();
 
-        std::string full_test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        std::string test_name = full_test_name.substr(0, full_test_name.find("/"));
-
-        if ((std::find(disabled_tests.begin(),
-                       disabled_tests.end(), test_name) != disabled_tests.end()) &&
-            (GetParam().transports.front().compare("dc_x") == 0) &&
+        // TODO: need to investigate the slowness of the disabled tests
+        if ((GetParam().transports.front().compare("dc_x") == 0) &&
             (GetParam().variant == UCP_MEM_MAP_NONBLOCK)) {
             UCS_TEST_SKIP_R("skipping this test until the slowness is resolved");
         }
