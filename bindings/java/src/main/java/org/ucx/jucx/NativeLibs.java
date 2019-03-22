@@ -75,6 +75,7 @@ public class NativeLibs {
         try {
             createTempDir();
             ucxTempFolder = Files.createDirectory(Paths.get(tempDir.getPath(), "ucx"));
+            ucxTempFolder.toFile().deleteOnExit();
         } catch (IOException ex) {
             errorMessage = "Failed to create temp directory";
             return;
@@ -86,6 +87,7 @@ public class NativeLibs {
             FileOutputStream os = null;
             FileInputStream is = null;
             File out = new File(ucxTempFolder.toAbsolutePath().toString(), uctLib.getName());
+            out.deleteOnExit();
             try {
                 is = new FileInputStream(uctLib);
                 os = new FileOutputStream(out);
@@ -123,6 +125,7 @@ public class NativeLibs {
 
         File file = new File(tempDir,
             new File(resourceURL.getPath()).getName());
+        file.deleteOnExit();
         FileOutputStream os = null;
         try {
             os = new FileOutputStream(file);
