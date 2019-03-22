@@ -11,8 +11,46 @@
 
 class test_ucp_rma : public test_ucp_memheap {
 private:
+    // TODO: need to investigate the slownees of the disabled tests
+    std::vector<std::string> disabled_tests;
+
     static void send_completion(void *request, ucs_status_t status){}
 public:
+    test_ucp_rma() : test_ucp_memheap() {
+        disabled_tests.push_back("nbi_large");
+        disabled_tests.push_back("nb_large");
+        disabled_tests.push_back("nonblocking_put_nbi_flush_worker");
+        disabled_tests.push_back("nonblocking_put_nbi_flush_ep");
+        disabled_tests.push_back("nonblocking_stream_put_nbi_flush_worker");
+        disabled_tests.push_back("nonblocking_stream_put_nbi_flush_ep");
+        disabled_tests.push_back("nonblocking_put_nb_flush_worker");
+        disabled_tests.push_back("nonblocking_put_nb_flush_ep");
+        disabled_tests.push_back("nonblocking_stream_put_nb_flush_worker");
+        disabled_tests.push_back("nonblocking_stream_put_nb_flush_ep");
+        disabled_tests.push_back("nonblocking_get_nbi_flush_worker");
+        disabled_tests.push_back("nonblocking_get_nbi_flush_ep");
+        disabled_tests.push_back("nonblocking_stream_get_nbi_flush_worker");
+        disabled_tests.push_back("nonblocking_stream_get_nbi_flush_ep");
+        disabled_tests.push_back("nonblocking_get_nb_flush_worker");
+        disabled_tests.push_back("nonblocking_get_nb_flush_ep");
+        disabled_tests.push_back("nonblocking_stream_get_nb_flush_worker");
+        disabled_tests.push_back("nonblocking_stream_get_nb_flush_ep");
+    }
+
+    void init() {
+        ucp_test::init();
+
+        std::string full_test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+        std::string test_name = full_test_name.substr(0, full_test_name.find("/"));
+
+        if ((std::find(disabled_tests.begin(),
+                       disabled_tests.end(), test_name) != disabled_tests.end()) &&
+            (GetParam().transports.front().compare("dc_x") == 0) &&
+            (GetParam().variant == UCP_MEM_MAP_NONBLOCK)) {
+            UCS_TEST_SKIP_R("skipping this test until the slowness is resolved");
+        }
+    }
+
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_RMA;
@@ -89,14 +127,6 @@ public:
     }
 
     void test_message_sizes(blocking_send_func_t func, size_t *msizes, int iters, int is_nbi);
-
-    void conditionally_disable_test() {
-        // TODO: need to investigate the slownees of the disabled tests
-        if ((GetParam().transports.front().compare("dc_x") == 0) &&
-            (GetParam().variant == UCP_MEM_MAP_NONBLOCK)) {
-            UCS_TEST_SKIP_R("skipping this test until the slowness is resolved");
-        }
-    }
 };
 
 void test_ucp_rma::test_message_sizes(blocking_send_func_t func, size_t *msizes, int iters, int is_nbi)
@@ -136,8 +166,6 @@ UCS_TEST_P(test_ucp_rma, nbi_med) {
 UCS_TEST_P(test_ucp_rma, nbi_large) {
     size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
 
-    conditionally_disable_test();
-
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
@@ -169,8 +197,6 @@ UCS_TEST_P(test_ucp_rma, nb_med) {
 UCS_TEST_P(test_ucp_rma, nb_large) {
     size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
 
-    conditionally_disable_test();
-
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
@@ -200,8 +226,6 @@ UCS_TEST_P(test_ucp_rma, nonblocking_put_nbi_flush_ep) {
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_worker) {
-    conditionally_disable_test();
-
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
@@ -211,8 +235,6 @@ UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_worker) {
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_ep) {
-    conditionally_disable_test();
-
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, true);
@@ -240,8 +262,6 @@ UCS_TEST_P(test_ucp_rma, nonblocking_put_nb_flush_ep) {
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nb_flush_worker) {
-    conditionally_disable_test();
-
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nb),
                        DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
@@ -251,8 +271,6 @@ UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nb_flush_worker) {
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nb_flush_ep) {
-    conditionally_disable_test();
-
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nb),
                        DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, true);
