@@ -59,13 +59,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
-    /* Reset CI to prevent cq_available overrun on ep_destoroy */
-    ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
-
-    if (ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
-                                     status) == UCS_OK) {
+    if (uct_rc_verbs_ep_handle_failure(ep, status) == UCS_OK) {
         log_lvl = iface->super.super.config.failure_level;
     }
 

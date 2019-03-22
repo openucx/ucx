@@ -91,12 +91,6 @@ typedef struct uct_dc_mlx5_iface_config {
 } uct_dc_mlx5_iface_config_t;
 
 
-typedef enum {
-    UCT_DC_DCI_FLAG_EP_CANCELED         = UCS_BIT(0),
-    UCT_DC_DCI_FLAG_EP_DESTROYED        = UCS_BIT(1)
-} uct_dc_dci_state_t;
-
-
 typedef struct uct_dc_dci {
     uct_rc_txqp_t                 txqp; /* DCI qp */
     union {

@@ -197,6 +197,7 @@ public:
                                       since flush returned */
 
         if (destroy_ep) {
+            ASSERT_FALSE(is_flush_cancel());
             sender().destroy_ep(0);
         }
 
@@ -225,6 +226,7 @@ public:
         (this->*flush)();
 
         if (destroy_ep) {
+            ASSERT_FALSE(is_flush_cancel());
             sender().destroy_ep(0);
         }
 
@@ -368,9 +370,6 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
          if (status == UCS_OK) {
              --flush_req.comp.count;
          } else if (status == UCS_ERR_NO_RESOURCE) {
-             if (is_flush_cancel()) {
-                 continue;
-             }
              /* If flush returned NO_RESOURCE, add to pending must succeed */
              flush_req.test      = this;
              flush_req.uct.func  = flush_progress;
@@ -404,6 +403,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      }
 
      if (destroy_ep) {
+        ASSERT_FALSE(is_flush_cancel());
         sender().destroy_ep(0);
      }
 
@@ -425,12 +425,8 @@ UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_no_comp) {
         return;
     }
 
-    am_rx_count   = 0;
+    am_rx_count    = 0;
     m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-    test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
-
-    am_rx_count   = 0;
-    m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
 }
 
@@ -447,12 +443,8 @@ UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_nb) {
         return;
     }
 
-    am_rx_count   = 0;
+    am_rx_count    = 0;
     m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-    test_flush_put_bcopy(&uct_flush_test::flush_ep_nb);
-
-    am_rx_count   = 0;
-    m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     test_flush_put_bcopy(&uct_flush_test::flush_ep_nb);
 }
 
@@ -461,18 +453,12 @@ UCS_TEST_P(uct_flush_test, am_zcopy_flush_ep_no_comp) {
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
-
         test_flush_am_zcopy(&uct_flush_test::flush_ep_no_comp, false);
-
-        am_rx_count   = 0;
+        am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_zcopy(&uct_flush_test::flush_ep_no_comp, false);
-
-        am_rx_count   = 0;
-        m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     }
 
-    test_flush_am_zcopy(&uct_flush_test::flush_ep_no_comp, true);
+    test_flush_am_zcopy(&uct_flush_test::flush_ep_no_comp, false);
 }
 
 UCS_TEST_P(uct_flush_test, am_zcopy_flush_iface_no_comp) {
@@ -485,16 +471,11 @@ UCS_TEST_P(uct_flush_test, am_zcopy_flush_ep_nb) {
 
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         test_flush_am_zcopy(&uct_flush_test::flush_ep_nb, false);
-
-        am_rx_count   = 0;
+        am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_zcopy(&uct_flush_test::flush_ep_nb, false);
-
-        am_rx_count   = 0;
-        m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     }
 
-    test_flush_am_zcopy(&uct_flush_test::flush_ep_nb, true);
+    test_flush_am_zcopy(&uct_flush_test::flush_ep_nb, false);
 }
 
 UCS_TEST_P(uct_flush_test, am_flush_ep_no_comp) {
@@ -503,16 +484,11 @@ UCS_TEST_P(uct_flush_test, am_flush_ep_no_comp) {
 
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         test_flush_am_disconnect(&uct_flush_test::flush_ep_no_comp, false);
-
-        am_rx_count   = 0;
+        am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_disconnect(&uct_flush_test::flush_ep_no_comp, false);
-
-        am_rx_count   = 0;
-        m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     }
 
-    test_flush_am_disconnect(&uct_flush_test::flush_ep_no_comp, true);
+    test_flush_am_disconnect(&uct_flush_test::flush_ep_no_comp, false);
 }
 
 UCS_TEST_P(uct_flush_test, am_flush_iface_no_comp) {
@@ -525,16 +501,11 @@ UCS_TEST_P(uct_flush_test, am_flush_ep_nb) {
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         test_flush_am_disconnect(&uct_flush_test::flush_ep_nb, false);
-
-        am_rx_count   = 0;
+        am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_disconnect(&uct_flush_test::flush_ep_nb, false);
-
-        am_rx_count   = 0;
-        m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     }
 
-    test_flush_am_disconnect(&uct_flush_test::flush_ep_nb, true);
+    test_flush_am_disconnect(&uct_flush_test::flush_ep_nb, false);
 }
 
 UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
@@ -543,13 +514,8 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
 
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         test_flush_am_pending(&uct_flush_test::flush_ep_nb, false);
-
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_pending(&uct_flush_test::flush_ep_nb, false);
-
-        am_rx_count    = 0;
-        m_flush_flags &= ~UCT_FLUSH_FLAG_CANCEL;
     }
 
     test_flush_am_pending(&uct_flush_test::flush_ep_nb, false);

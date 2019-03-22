@@ -960,10 +960,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
     uint32_t             qp_num  = ntohl(cqe->sop_drop_qpn) &
                                    UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
-    uct_rc_txqp_t        *txqp   = &iface->tx.dcis[dci].txqp;
     uct_dc_mlx5_ep_t     *ep;
-    ucs_status_t         ep_status;
-    int16_t              outstanding;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
         (uct_dc_mlx5_ep_from_dci(iface, dci) == NULL)) {
@@ -973,54 +970,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
     }
 
     ep = uct_dc_mlx5_ep_from_dci(iface, dci);
-
-    uct_rc_txqp_purge_outstanding(txqp, status, 0);
-
-    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
-       is not updated for the error cqe and all outstanding wqes*/
-    outstanding = (int16_t)iface->super.super.config.tx_qp_len -
-                  uct_rc_txqp_available(txqp);
-    iface->super.super.tx.cq_available += outstanding;
-    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
-
-    /* since we removed all outstanding ops on the dci, it should be released */
-    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    uct_dc_mlx5_iface_dci_put(iface, dci);
-    ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
-
-    if (ep == iface->tx.fc_ep) {
-        /* Cannot handle errors on flow-control endpoint.
-         * Or shall we ignore them?
-         */
-        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
-                  ucs_status_string(status));
-        ep_status = UCS_OK;
-    } else {
-        ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
-                                                                &ep->super.super,
-                                                                status);
-        if (ep_status != UCS_OK) {
-            uct_ib_mlx5_completion_with_err(ib_iface, arg,
-                                            &iface->tx.dci_wqs[dci],
-                                            UCS_LOG_LEVEL_FATAL);
-            return;
-        }
-    }
-
-    uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
-                                    ib_iface->super.config.failure_level);
-
-    status = uct_dc_mlx5_iface_reset_dci(iface, dci);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
-    }
-
-    status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
-    }
+    uct_dc_mlx5_ep_handle_failure(ep, arg, status);
 }
 
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {

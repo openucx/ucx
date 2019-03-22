@@ -356,6 +356,12 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
+        uct_rc_verbs_ep_handle_failure(ep, UCS_ERR_CANCELED);
+        return UCS_OK;
+    }
+
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
     if (status != UCS_INPROGRESS) {
         return status;
@@ -420,6 +426,21 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, flags, INT_MAX);
     return UCS_OK;
+}
+
+ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
+                                            ucs_status_t status)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                           uct_rc_iface_t);
+
+    iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
+    /* Reset CI to prevent cq_available overrun on ep_destoroy */
+    ep->txcnt.ci = ep->txcnt.pi;
+    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+
+    return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
+                                           status);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)

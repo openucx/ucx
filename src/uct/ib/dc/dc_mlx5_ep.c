@@ -513,7 +513,8 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                  uct_completion_t *comp)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
@@ -521,15 +522,17 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
-            uct_rc_txqp_purge_outstanding(&iface->tx.dcis[ep->dci].txqp,
-                                          UCS_ERR_CANCELED, 0);
-#if ENABLE_ASSERT
-            iface->tx.dcis[ep->dci].flags |= UCT_DC_DCI_FLAG_EP_CANCELED;
-#endif
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            return UCS_ERR_UNSUPPORTED;
         }
 
         uct_ep_pending_purge(tl_ep, NULL, 0);
+        if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+            /* No dci -> no WQEs -> HW is clean, nothing to cancel */
+            return UCS_OK;
+        }
+
+        uct_dc_mlx5_ep_handle_failure(ep, NULL, UCS_ERR_CANCELED);
         return UCS_OK;
     }
 
@@ -909,10 +912,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
               self, (int16_t)iface->super.super.config.tx_qp_len -
               uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
-    iface->tx.dcis[self->dci].ep     = NULL;
-#if ENABLE_ASSERT
-    iface->tx.dcis[self->dci].flags |= UCT_DC_DCI_FLAG_EP_DESTROYED;
-#endif
+    iface->tx.dcis[self->dci].ep = NULL;
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_ep_t, uct_base_ep_t);
@@ -1217,4 +1217,68 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
         ep->fc.fc_wnd = INT16_MAX;
     }
     return UCS_OK;
+}
+
+void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
+                                   ucs_status_t status)
+{
+    uct_iface_h tl_iface       = ep->super.super.iface;
+    uint8_t dci                = ep->dci;
+    uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
+    int16_t outstanding;
+    ucs_status_t ep_status;
+
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+
+    uct_rc_txqp_purge_outstanding(txqp, status, 0);
+
+    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
+       is not updated for the error cqe and all outstanding wqes*/
+    outstanding = (int16_t)iface->super.super.config.tx_qp_len -
+                  uct_rc_txqp_available(txqp);
+    iface->super.super.tx.cq_available += outstanding;
+    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
+
+    /* since we removed all outstanding ops on the dci, it should be released */
+    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    uct_dc_mlx5_iface_dci_put(iface, dci);
+    ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
+
+    if (ep == iface->tx.fc_ep) {
+        ucs_assert(status != UCS_ERR_CANCELED);
+        /* Cannot handle errors on flow-control endpoint.
+         * Or shall we ignore them?
+         */
+        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
+                  ucs_status_string(status));
+        ep_status = UCS_OK;
+    } else {
+        ep_status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
+                                                 status);
+        if (ep_status != UCS_OK) {
+            uct_ib_mlx5_completion_with_err(ib_iface, arg,
+                                            &iface->tx.dci_wqs[dci],
+                                            UCS_LOG_LEVEL_FATAL);
+            return;
+        }
+    }
+
+    if (status != UCS_ERR_CANCELED) {
+        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
+                                        ib_iface->super.config.failure_level);
+    }
+
+    status = uct_dc_mlx5_iface_reset_dci(iface, dci);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
+
+    status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
 }
