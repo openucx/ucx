@@ -84,6 +84,7 @@ typedef struct uct_tcp_iface {
     struct {
         int                       nodelay;           /* TCP_NODELAY */
         int                       sndbuf;            /* SO_SNDBUF */
+        int                       rcvbuf;            /* SO_RCVBUF */
     } sockopt;
 } uct_tcp_iface_t;
 
@@ -96,7 +97,8 @@ typedef struct uct_tcp_iface_config {
     int                           prefer_default;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
-    size_t                        sockopt_sndbuf;
+    int                           sockopt_sndbuf;
+    int                           sockopt_rcvbuf;
     uct_iface_mpool_config_t      tx_mpool;
     uct_iface_mpool_config_t      rx_mpool;
 } uct_tcp_iface_config_t;

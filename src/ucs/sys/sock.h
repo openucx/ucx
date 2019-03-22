@@ -15,7 +15,6 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 
-
 BEGIN_C_DECLS
 
 
@@ -63,6 +62,23 @@ int ucs_netif_is_active(const char *if_name);
  * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p);
+
+
+/**
+ * Set options on socket.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [in]   level       The level at which the option is defined.
+ * @param [in]   optname     The socket option for which the value is to be set.
+ * @param [in]   optval      A pointer to the buffer in which the value for the
+ *                           requested option is specified.
+ * @param [in]   optlen      The size, in bytes, of the buffer pointed to by the
+ *                           optval and def_optval parameters.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
+ */
+ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
+                               const void *optval, socklen_t optlen);
 
 
 /**
