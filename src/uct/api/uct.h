@@ -360,7 +360,13 @@ enum uct_flush_flags {
                                                  canceled in which case the user
                                                  will need to handle their
                                                  completions through
-                                                 the relevant callbacks. */
+                                                 the relevant callbacks.
+                                                 After @ref uct_ep_flush
+                                                 with this flag is completed,
+                                                 the endpoint will be set to
+                                                 error state, and it becomes
+                                                 unusable for send operations
+                                                 and should be destroyed. */
 };
 
 
