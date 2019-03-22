@@ -20,7 +20,7 @@
 #define UCT_UD_IPV4_ADDR_LEN sizeof(struct in_addr)
 #define UCT_UD_IPV6_ADDR_LEN sizeof(struct in6_addr)
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
     .name = "ud_iface",
     .num_counters = UCT_UD_IFACE_STAT_LAST,

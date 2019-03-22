@@ -34,7 +34,7 @@ static void uct_ud_ep_set_state(uct_ud_ep_t *ep, uint32_t state)
     ep->flags |= state;
 }
 
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
 static void uct_ud_peer_copy(uct_ud_peer_name_t *dst, uct_ud_peer_name_t *src)
 {
     memcpy(dst, src, sizeof(*src));

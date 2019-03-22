@@ -31,9 +31,9 @@
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <locale.h>
-#if HAVE_MPI
+#ifdef HAVE_MPI
 #  include <mpi.h>
-#elif HAVE_RTE
+#elif defined(HAVE_RTE)
 #   include<rte.h>
 #endif
 
@@ -337,17 +337,17 @@ static void usage(const struct perftest_context *ctx, const char *program)
     test_type_t *test;
     int UCS_V_UNUSED rank;
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (ctx->mpi && (rank != 0)) {
         return;
     }
 #endif
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
     printf("  Note: test can be also launched as an MPI application\n");
     printf("\n");
-#elif HAVE_RTE
+#elif defined(HAVE_RTE)
     printf("  Note: this test can be also launched as an libRTE application\n");
     printf("\n");
 #endif
@@ -378,7 +378,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                    file is a test to run, first word is test name, the rest of\n");
     printf("                    the line is command-line arguments for the test.\n");
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
-#if HAVE_MPI
+#ifdef HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
     printf("     -h             show this help message\n");
@@ -439,7 +439,7 @@ static const char *__basename(const char *path)
     return (p == NULL) ? path : (p + 1);
 }
 
-static ucs_status_t parse_ucp_datatype_params(const char *optarg,
+static ucs_status_t parse_ucp_datatype_params(const char *ucs_optarg,
                                               ucp_perf_datatype_t *datatype)
 {
     const char  *iov_type         = "iov";
@@ -447,9 +447,9 @@ static ucs_status_t parse_ucp_datatype_params(const char *optarg,
     const char  *contig_type      = "contig";
     const size_t contig_type_size = strlen("contig");
 
-    if (0 == strncmp(optarg, iov_type, iov_type_size)) {
+    if (0 == strncmp(ucs_optarg, iov_type, iov_type_size)) {
         *datatype = UCP_PERF_DATATYPE_IOV;
-    } else if (0 == strncmp(optarg, contig_type, contig_type_size)) {
+    } else if (0 == strncmp(ucs_optarg, contig_type, contig_type_size)) {
         *datatype = UCP_PERF_DATATYPE_CONTIG;
     } else {
         return UCS_ERR_INVALID_PARAM;
@@ -458,14 +458,14 @@ static ucs_status_t parse_ucp_datatype_params(const char *optarg,
     return UCS_OK;
 }
 
-static ucs_status_t parse_message_sizes_params(const char *optarg,
+static ucs_status_t parse_message_sizes_params(const char *ucs_optarg,
                                                ucx_perf_params_t *params)
 {
     char *optarg_ptr, *optarg_ptr2;
     size_t token_num, token_it;
     const char delim = ',';
 
-    optarg_ptr = (char *)optarg;
+    optarg_ptr = (char *)ucs_optarg;
     token_num  = 0;
     /* count the number of given message sizes */
     while ((optarg_ptr = strchr(optarg_ptr, delim)) != NULL) {
@@ -480,7 +480,7 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
         return UCS_ERR_NO_MEMORY;
     }
 
-    optarg_ptr = (char *)optarg;
+    optarg_ptr = (char *)ucs_optarg;
     errno = 0;
     for (token_it = 0; token_it < token_num; ++token_it) {
         params->msg_size_list[token_it] = strtoul(optarg_ptr, &optarg_ptr2, 10);
@@ -532,7 +532,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->msg_size_list[0] = 8;
 }
 
-static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
+static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *ucs_optarg)
 {
     test_type_t *test;
     char *optarg2 = NULL;
@@ -540,15 +540,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
     switch (opt) {
     case 'd':
         ucs_snprintf_zero(params->uct.dev_name, sizeof(params->uct.dev_name),
-                          "%s", optarg);
+                          "%s", ucs_optarg);
         return UCS_OK;
     case 'x':
         ucs_snprintf_zero(params->uct.tl_name, sizeof(params->uct.tl_name),
-                          "%s", optarg);
+                          "%s", ucs_optarg);
         return UCS_OK;
     case 't':
         for (test = tests; test->name; ++test) {
-            if (!strcmp(optarg, test->name)) {
+            if (!strcmp(ucs_optarg, test->name)) {
                 params->api       = test->api;
                 params->command   = test->command;
                 params->test_type = test->test_type;
@@ -561,15 +561,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
         return UCS_OK;
     case 'D':
-        if (!strcmp(optarg, "short")) {
+        if (!strcmp(ucs_optarg, "short")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
-        } else if (!strcmp(optarg, "bcopy")) {
+        } else if (!strcmp(ucs_optarg, "bcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
-        } else if (!strcmp(optarg, "zcopy")) {
+        } else if (!strcmp(ucs_optarg, "zcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
-        } else if (UCS_OK == parse_ucp_datatype_params(optarg,
+        } else if (UCS_OK == parse_ucp_datatype_params(ucs_optarg,
                                                        &params->ucp.send_datatype)) {
-            optarg2 = strchr(optarg, ',');
+            optarg2 = strchr(ucs_optarg, ',');
             if (optarg2) {
                 if (UCS_OK != parse_ucp_datatype_params(optarg2 + 1,
                                                        &params->ucp.recv_datatype)) {
@@ -582,24 +582,24 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
         return UCS_OK;
     case 'i':
-        params->iov_stride = atol(optarg);
+        params->iov_stride = atol(ucs_optarg);
         return UCS_OK;
     case 'n':
-        params->max_iter = atol(optarg);
+        params->max_iter = atol(ucs_optarg);
         return UCS_OK;
     case 's':
-        return parse_message_sizes_params(optarg, params);
+        return parse_message_sizes_params(ucs_optarg, params);
     case 'H':
-        params->am_hdr_size = atol(optarg);
+        params->am_hdr_size = atol(ucs_optarg);
         return UCS_OK;
     case 'W':
-        params->uct.fc_window = atoi(optarg);
+        params->uct.fc_window = atoi(ucs_optarg);
         return UCS_OK;
     case 'O':
-        params->max_outstanding = atoi(optarg);
+        params->max_outstanding = atoi(ucs_optarg);
         return UCS_OK;
     case 'w':
-        params->warmup_iter = atol(optarg);
+        params->warmup_iter = atol(ucs_optarg);
         return UCS_OK;
     case 'o':
         params->flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
@@ -617,13 +617,13 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->flags |= UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE;
         return UCS_OK;
     case 'M':
-        if (!strcmp(optarg, "single")) {
+        if (!strcmp(ucs_optarg, "single")) {
             params->thread_mode = UCS_THREAD_MODE_SINGLE;
             return UCS_OK;
-        } else if (!strcmp(optarg, "serialized")) {
+        } else if (!strcmp(ucs_optarg, "serialized")) {
             params->thread_mode = UCS_THREAD_MODE_SERIALIZED;
             return UCS_OK;
-        } else if (!strcmp(optarg, "multi")) {
+        } else if (!strcmp(ucs_optarg, "multi")) {
             params->thread_mode = UCS_THREAD_MODE_MULTI;
             return UCS_OK;
         } else {
@@ -631,17 +631,17 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             return UCS_ERR_INVALID_PARAM;
         }
     case 'T':
-        params->thread_count = atoi(optarg);
+        params->thread_count = atoi(ucs_optarg);
         params->thread_mode = UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
-        if (!strcmp(optarg, "thread") || !strcmp(optarg, "thread_spinlock")) {
+        if (!strcmp(ucs_optarg, "thread") || !strcmp(ucs_optarg, "thread_spinlock")) {
             params->async_mode = UCS_ASYNC_MODE_THREAD_SPINLOCK;
             return UCS_OK;
-        } else if (!strcmp(optarg, "thread_mutex")) {
+        } else if (!strcmp(ucs_optarg, "thread_mutex")) {
             params->async_mode = UCS_ASYNC_MODE_THREAD_MUTEX;
             return UCS_OK;
-        } else if (!strcmp(optarg, "signal")) {
+        } else if (!strcmp(ucs_optarg, "signal")) {
             params->async_mode = UCS_ASYNC_MODE_SIGNAL;
             return UCS_OK;
         } else {
@@ -649,23 +649,23 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             return UCS_ERR_INVALID_PARAM;
         }
     case 'r':
-        if (!strcmp(optarg, "recv_data")) {
+        if (!strcmp(ucs_optarg, "recv_data")) {
             params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
-        } else if (!strcmp(optarg, "recv")) {
+        } else if (!strcmp(ucs_optarg, "recv")) {
             params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
     case 'm':
-        if (!strcmp(optarg, "host")) {
+        if (!strcmp(ucs_optarg, "host")) {
             params->mem_type = UCT_MD_MEM_TYPE_HOST;
             return UCS_OK;
-        } else if (!strcmp(optarg, "cuda") &&
+        } else if (!strcmp(ucs_optarg, "cuda") &&
                    (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL)) {
             params->mem_type = UCT_MD_MEM_TYPE_CUDA;
             return UCS_OK;
-        } else if (!strcmp(optarg, "cuda-managed") &&
+        } else if (!strcmp(ucs_optarg, "cuda-managed") &&
                    (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL)) {
             params->mem_type = UCT_MD_MEM_TYPE_CUDA_MANAGED;
             return UCS_OK;
@@ -760,7 +760,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
             ctx->cpu = atoi(optarg);
             break;
         case 'P':
-#if HAVE_MPI
+#ifdef HAVE_MPI
             ctx->mpi = atoi(optarg) && mpi_initialized;
             break;
 #endif
@@ -804,15 +804,15 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
   {
     sock_rte_group_t *group = rte_group;
     const unsigned magic = 0xdeadbeef;
-    unsigned sync;
+    unsigned sock_sync;
 
-    sync = magic;
-    safe_send(group->connfd, &sync, sizeof(unsigned), progress, arg);
+    sock_sync = magic;
+    safe_send(group->connfd, &sock_sync, sizeof(unsigned), progress, arg);
 
-    sync = 0;
-    safe_recv(group->connfd, &sync, sizeof(unsigned), progress, arg);
+    sock_sync = 0;
+    safe_recv(group->connfd, &sock_sync, sizeof(unsigned), progress, arg);
 
-    ucs_assert(sync == magic);
+    ucs_assert(sock_sync == magic);
   }
 #pragma omp barrier
 }
@@ -999,7 +999,7 @@ static ucs_status_t cleanup_sock_rte(struct perftest_context *ctx)
     return UCS_OK;
 }
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
 static unsigned mpi_rte_group_size(void *rte_group)
 {
     int size;
@@ -1145,7 +1145,7 @@ static ucx_perf_rte_t mpi_rte = {
     .exchange_vec  = (void*)ucs_empty_function,
     .report        = mpi_rte_report,
 };
-#elif HAVE_RTE
+#elif defined(HAVE_RTE)
 static unsigned ext_rte_group_size(void *rte_group)
 {
     rte_group_t group = (rte_group_t)rte_group;
@@ -1272,7 +1272,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 {
     ucs_trace_func("");
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
     int size, rank;
 
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -1289,7 +1289,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.rte_group         = NULL;
     ctx->params.rte               = &mpi_rte;
     ctx->params.report_arg        = ctx;
-#elif HAVE_RTE
+#elif defined(HAVE_RTE)
     rte_group_t group;
 
     rte_init(NULL, NULL, &group);
@@ -1306,7 +1306,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 {
-#if HAVE_RTE
+#ifdef HAVE_RTE
     rte_finalize();
 #endif
     return UCS_OK;
@@ -1450,7 +1450,7 @@ int main(int argc, char **argv)
     int mpi_rte;
     int ret;
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
     mpi_initialized = !isatty(0) && (MPI_Init(&argc, &argv) == 0);
 #else
     mpi_initialized = 0;
@@ -1471,7 +1471,7 @@ int main(int argc, char **argv)
     if (ctx.mpi) {
         mpi_rte = 1;
     } else {
-#if HAVE_RTE
+#ifdef HAVE_RTE
         mpi_rte = 1;
 #else
         mpi_rte = 0;
@@ -1507,7 +1507,7 @@ out:
         free(ctx.params.msg_size_list);
     }
     if (mpi_initialized) {
-#if HAVE_MPI
+#ifdef HAVE_MPI
         MPI_Finalize();
 #endif
     }

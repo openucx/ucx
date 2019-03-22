@@ -46,8 +46,13 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     if (hugetlb != UCS_NO) {
+#ifdef SHM_HUGETLB
         status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
                                 flags | SHM_HUGETLB, alloc_name, &shmid);
+#else
+        status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
+                                flags, alloc_name, &shmid);
+#endif
         if (status == UCS_OK) {
             goto out_ok;
         }
@@ -116,7 +121,7 @@ static size_t uct_sysv_get_path_size(uct_md_h md)
     return 0;
 }
 
-static uint8_t uct_sysv_get_priority()
+static uint8_t uct_sysv_get_priority(void)
 {
     return 0;
 }

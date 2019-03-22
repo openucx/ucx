@@ -662,7 +662,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class test_dc_flow_control_stats : public test_rc_flow_control_stats {
 public:

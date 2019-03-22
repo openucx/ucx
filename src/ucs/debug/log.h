@@ -113,13 +113,13 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
 /**
  * Flush logging output.
  */
-void ucs_log_flush();
+void ucs_log_flush(void);
 
 
 /**
  * @return Configured log buffer size
  */
-size_t ucs_log_get_buffer_size();
+size_t ucs_log_get_buffer_size(void);
 
 
 /**
@@ -140,9 +140,9 @@ void ucs_log_fatal_error(const char *format, ...);
 /**
  * Initialize/cleanup logging subsystem.
  */
-void ucs_log_early_init();
-void ucs_log_init();
-void ucs_log_cleanup();
+void ucs_log_early_init(void);
+void ucs_log_init(void);
+void ucs_log_cleanup(void);
 
 
 const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
@@ -154,8 +154,8 @@ const char *ucs_log_dump_hex(const void* data, size_t length, char *buf,
  * Add/remove logging handlers
  */
 void ucs_log_push_handler(ucs_log_func_t handler);
-void ucs_log_pop_handler();
-unsigned ucs_log_num_handlers();
+void ucs_log_pop_handler(void);
+unsigned ucs_log_num_handlers(void);
 
 END_C_DECLS
 

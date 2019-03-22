@@ -160,9 +160,9 @@ typedef struct uct_ib_md_open_entry {
                                            uct_ib_md_t **p_md);
 } uct_ib_md_open_entry_t;
 
+extern ucs_list_link_t uct_ib_md_open_list;
 #define UCT_IB_MD_OPEN(_open_fn, _priority) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_ib_md_open_list; \
         static uct_ib_md_open_entry_t entry = { \
             .md_open = _open_fn, \
         }; \

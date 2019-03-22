@@ -412,7 +412,7 @@ static void ucm_operator_vec_delete(void* ptr)
 static int ucm_add_to_environ(char *env_str)
 {
     char *saved_env_str;
-    unsigned index;
+    unsigned idx;
     size_t len;
     char *p;
 
@@ -425,19 +425,19 @@ static int ucm_add_to_environ(char *env_str)
     }
 
     /* Check if we already have variable with same name */
-    index = 0;
-    while (index < ucm_malloc_hook_state.num_env_strs) {
-        saved_env_str = ucm_malloc_hook_state.env_strs[index];
+    idx = 0;
+    while (idx < ucm_malloc_hook_state.num_env_strs) {
+        saved_env_str = ucm_malloc_hook_state.env_strs[idx];
         if ((strlen(saved_env_str) >= len) && !strncmp(env_str, saved_env_str, len)) {
             ucm_trace("replace `%s' with `%s'", saved_env_str, env_str);
             ucm_free(saved_env_str, NULL);
             goto out_insert;
         }
-        ++index;
+        ++idx;
     }
 
     /* Not found - enlarge array by one */
-    index = ucm_malloc_hook_state.num_env_strs;
+    idx = ucm_malloc_hook_state.num_env_strs;
     ++ucm_malloc_hook_state.num_env_strs;
     ucm_malloc_hook_state.env_strs =
                     ucm_realloc(ucm_malloc_hook_state.env_strs,
@@ -445,7 +445,7 @@ static int ucm_add_to_environ(char *env_str)
                                 NULL);
 
 out_insert:
-    ucm_malloc_hook_state.env_strs[index] = env_str;
+    ucm_malloc_hook_state.env_strs[idx] = env_str;
     return 0;
 }
 
@@ -586,7 +586,7 @@ static void ucm_malloc_test(int events)
               ucm_malloc_hook_state.hook_called ? "" : " not");
 }
 
-static void ucm_malloc_populate_glibc_cache()
+static void ucm_malloc_populate_glibc_cache(void)
 {
     char hostname[NAME_MAX];
 
@@ -626,7 +626,7 @@ static int ucm_malloc_mallopt(int param_number, int value)
 }
 
 static char *ucm_malloc_blacklist[] = {
-    "libnvidia-fatbinaryloader.so",
+    (char *) "libnvidia-fatbinaryloader.so",
     NULL
 };
 
@@ -655,7 +655,7 @@ static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {
     { NULL, NULL }
 };
 
-static void ucm_malloc_install_optional_symbols()
+static void ucm_malloc_install_optional_symbols(void)
 {
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS)) {
         ucm_malloc_install_symbols(ucm_malloc_optional_symbol_patches);
@@ -663,7 +663,7 @@ static void ucm_malloc_install_optional_symbols()
     }
 }
 
-static void ucm_malloc_set_env_mallopt()
+static void ucm_malloc_set_env_mallopt(void)
 {
     /* copy values of M_MMAP_THRESHOLD and M_TRIM_THRESHOLD
      * if they were overriden by the user
@@ -790,7 +790,7 @@ UCS_STATIC_INIT {
     kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
 }
 
-static void UCS_F_DTOR ucm_clear_env()
+static void UCS_F_DTOR ucm_clear_env(void)
 {
     unsigned i;
 

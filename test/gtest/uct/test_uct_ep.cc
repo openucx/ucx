@@ -46,7 +46,7 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
     ucs_status_t status;
     unsigned count;
 
-#if HAVE_DC_DV
+#ifdef HAVE_DC_DV
     if (GetParam()->tl_name.compare("dc_mlx5") == 0) {
         UCS_TEST_SKIP_R("DCI stuck bug");
     }

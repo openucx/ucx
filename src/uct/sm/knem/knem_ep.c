@@ -41,7 +41,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_knem_ep_t, uct_ep_t);
 
 static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
-                                        uct_knem_key_t *key, int write)
+                                        uct_knem_key_t *key, int ucs_write)
 {
     struct knem_cmd_inline_copy icopy;
     struct knem_cmd_param_iovec knem_iov[UCT_SM_MAX_IOV];
@@ -69,7 +69,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
     ucs_assert(remote_addr >= key->address);
     icopy.remote_offset = remote_addr - key->address;
 
-    icopy.write = write; /* if 0 then, READ from the remote region into my local segments
+    icopy.write = ucs_write; /* if 0 then, READ from the remote region into my local segments
                           * if 1 then, WRITE to the remote region from my local segment */
     icopy.flags = 0;     /* TBD: add check and support for KNEM_FLAG_DMA */
     icopy.current_status = 0;
@@ -84,7 +84,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
     }
 
     uct_knem_trace_data(remote_addr, (uintptr_t)key, "%s [length %zu]",
-                        write?"PUT_ZCOPY":"GET_ZCOPY",
+                        ucs_write?"PUT_ZCOPY":"GET_ZCOPY",
                         uct_iov_total_length(iov, iovcnt));
     return UCS_OK;
 }

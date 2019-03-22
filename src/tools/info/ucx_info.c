@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-static void usage() {
+static void usage(void);
+static void usage(void) {
     printf("Usage: ucx_info [options]\n");
     printf("At least one of the following options has to be set:\n");
     printf("  -v              Show version information\n");

@@ -668,17 +668,17 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     ucs_config_array_field_t *field = dest;
     void *temp_field;
     const ucs_config_array_t *array = arg;
-    char *dup, *token, *saveptr;
+    char *ucs_dup, *token, *saveptr;
     int ret;
     unsigned i;
 
-    dup = strdup(buf);
-    if (dup == NULL) {
+    ucs_dup = strdup(buf);
+    if (ucs_dup == NULL) {
         return 0;
     }
 
     saveptr = NULL;
-    token = strtok_r(dup, ",", &saveptr);
+    token = strtok_r(ucs_dup, ",", &saveptr);
     temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
     i = 0;
     while (token != NULL) {
@@ -686,7 +686,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
                                  array->parser.arg);
         if (!ret) {
             ucs_free(temp_field);
-            free(dup);
+            free(ucs_dup);
             return 0;
         }
 
@@ -699,7 +699,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 
     field->data = temp_field;
     field->count = i;
-    free(dup);
+    free(ucs_dup);
     return 1;
 }
 
@@ -1333,7 +1333,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
              */
             inner_prefix.prefix = field->name;
             ucs_list_add_tail(prefix_list, &inner_prefix.list);
-            ucs_config_parser_print_opts_recurs(stream, opts + field->offset,
+            ucs_config_parser_print_opts_recurs(stream, (char *) opts + field->offset,
                                                 field->parser.arg, flags,
                                                 env_prefix, prefix_list);
             ucs_list_del(&inner_prefix.list);
@@ -1345,7 +1345,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                     ucs_fatal("could not find aliased field of %s", field->name);
                 }
                 ucs_config_parser_print_field(stream,
-                                              opts + alias_table_offset,
+                                              (char *) opts + alias_table_offset,
                                               env_prefix, prefix_list,
                                               field->name, aliased_field,
                                               flags, "%-*s %s%s",
@@ -1418,7 +1418,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
     }
 }
 
-void ucs_config_parser_warn_unused_env_vars()
+void ucs_config_parser_warn_unused_env_vars(void)
 {
     static uint32_t warn_once = 1;
     char unused_env_vars_names[40];

@@ -29,6 +29,10 @@
 #include <sys/syscall.h>
 #include <sys/param.h>
 #include <sys/mman.h>
+
+#ifndef __USE_XOPEN
+#define __USE_XOPEN
+#endif
 #include <sys/shm.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -46,7 +50,11 @@
 #include <pthread.h>
 #include <sys/ioctl.h>
 #include <net/if_arp.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 #include <netdb.h>
 
 BEGIN_C_DECLS
@@ -56,13 +64,13 @@ BEGIN_C_DECLS
 /**
  * @return Host name.
  */
-const char *ucs_get_host_name();
+const char *ucs_get_host_name(void);
 
 
 /**
  * @return user name.
  */
-const char *ucs_get_user_name();
+const char *ucs_get_user_name(void);
 
 
 /**
@@ -78,7 +86,7 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max);
 /**
  * @return Path to the main executable.
  */
-const char *ucs_get_exe();
+const char *ucs_get_exe(void);
 
 
 /**
@@ -90,13 +98,13 @@ uint32_t ucs_file_checksum(const char *filename);
 /**
  * Get a globally unique identifier of the machine running the current process.
  */
-uint64_t ucs_machine_guid();
+uint64_t ucs_machine_guid(void);
 
 
 /**
  * Get the first processor number we are bound to.
  */
-int ucs_get_first_cpu();
+int ucs_get_first_cpu(void);
 
 
 /**
@@ -156,31 +164,31 @@ ucs_status_t ucs_read_file_number(long *value, int silent,
 /**
  * @return Regular _SC_IOV_MAX on the system.
  */
-size_t ucs_get_max_iov();
+size_t ucs_get_max_iov(void);
 
 
 /**
  * @return Regular page size on the system.
  */
-size_t ucs_get_page_size();
+size_t ucs_get_page_size(void);
 
 
 /**
  * @return Huge page size on the system, or -1 if unsupported.
  */
-ssize_t ucs_get_huge_page_size();
+ssize_t ucs_get_huge_page_size(void);
 
 
 /**
  * @return free mem size on the system.
  */
-size_t ucs_get_memfree_size();
+size_t ucs_get_memfree_size(void);
 
 
 /**
  * @return Physical memory size on the system.
  */
-size_t ucs_get_phys_mem_size();
+size_t ucs_get_phys_mem_size(void);
 
 
 /**
@@ -266,7 +274,7 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove);
 /**
  * Get process command line
  */
-const char* ucs_get_process_cmdline();
+const char* ucs_get_process_cmdline(void);
 
 
 /**
@@ -295,7 +303,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header, double scale);
  *
  * @return 1 for true and 0 for false
  */
-int ucs_is_thp_enabled();
+int ucs_is_thp_enabled(void);
 
 
 /**
@@ -303,7 +311,7 @@ int ucs_is_thp_enabled();
  *
  * @return shmmax size
  */
-size_t ucs_get_shmmax();
+size_t ucs_get_shmmax(void);
 
 
 /**
@@ -341,17 +349,17 @@ void ucs_sys_free(void *ptr, size_t length);
 /**
  * Empty function which can be casted to a no-operation callback in various situations.
  */
-void ucs_empty_function();
-unsigned ucs_empty_function_return_zero();
-int64_t ucs_empty_function_return_zero_int64();
-ucs_status_t ucs_empty_function_return_success();
-ucs_status_t ucs_empty_function_return_unsupported();
-ucs_status_t ucs_empty_function_return_inprogress();
-ucs_status_t ucs_empty_function_return_no_resource();
-ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource();
-ucs_status_t ucs_empty_function_return_ep_timeout();
-ssize_t ucs_empty_function_return_bc_ep_timeout();
-ucs_status_t ucs_empty_function_return_busy();
+void ucs_empty_function(void);
+unsigned ucs_empty_function_return_zero(void);
+int64_t ucs_empty_function_return_zero_int64(void);
+ucs_status_t ucs_empty_function_return_success(void);
+ucs_status_t ucs_empty_function_return_unsupported(void);
+ucs_status_t ucs_empty_function_return_inprogress(void);
+ucs_status_t ucs_empty_function_return_no_resource(void);
+ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource(void);
+ucs_status_t ucs_empty_function_return_ep_timeout(void);
+ssize_t ucs_empty_function_return_bc_ep_timeout(void);
+ucs_status_t ucs_empty_function_return_busy(void);
 
 END_C_DECLS
 

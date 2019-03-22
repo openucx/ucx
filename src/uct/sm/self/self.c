@@ -140,6 +140,7 @@ static ucs_mpool_ops_t uct_self_iface_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+UCS_CLASS_DECLARE(uct_self_iface_t);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_iface_t, uct_iface_t);
 
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
@@ -237,10 +238,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_self_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_self_ep_t, uct_base_ep_t);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_self_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_self_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 
 
+ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                  const void *payload, unsigned length);
 ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
@@ -256,13 +261,16 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
     *(uint64_t*)send_buffer = header;
-    memcpy(send_buffer + sizeof(uint64_t), payload, length);
+    memcpy((char*)send_buffer + sizeof(uint64_t), payload, length);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, total_length);
     uct_self_iface_sendrecv_am(iface, id, send_buffer, total_length, "SHORT");
     return UCS_OK;
 }
 
+ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                             uct_pack_callback_t pack_cb, void *arg,
+                             unsigned flags);
 ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              uct_pack_callback_t pack_cb, void *arg,
                              unsigned flags)
@@ -298,19 +306,19 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic32_fetch        = uct_sm_ep_atomic32_fetch,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_success,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_check                 = (void*)ucs_empty_function_return_success,
+    .ep_pending_add           = (void*)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (void*)ucs_empty_function,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_self_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress_enable    = (void*)ucs_empty_function,
+    .iface_progress_disable   = (void*)ucs_empty_function,
+    .iface_progress           = (void*)ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_self_iface_t),
     .iface_query              = uct_self_iface_query,
-    .iface_get_device_address = ucs_empty_function_return_success,
+    .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_get_address        = uct_self_iface_get_address,
     .iface_is_reachable       = uct_self_iface_is_reachable
 };
@@ -355,9 +363,9 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
     static uct_md_ops_t md_ops = {
         .close        = (void*)ucs_empty_function,
         .query        = uct_self_md_query,
-        .mkey_pack    = ucs_empty_function_return_success,
+        .mkey_pack    = (void*)ucs_empty_function_return_success,
         .mem_reg      = uct_self_mem_reg,
-        .mem_dereg    = ucs_empty_function_return_success,
+        .mem_dereg    = (void*)ucs_empty_function_return_success,
         .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
     };
     static uct_md_t md = {
@@ -385,5 +393,5 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_md_component_t *mdc,
 static UCT_MD_COMPONENT_DEFINE(uct_self_md, UCT_SELF_NAME,
                                uct_self_query_md_resources, uct_self_md_open, NULL,
                                uct_self_md_rkey_unpack,
-                               ucs_empty_function_return_success, "SELF_",
+                               (void*)ucs_empty_function_return_success, "SELF_",
                                uct_md_config_table, uct_md_config_t);

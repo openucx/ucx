@@ -56,7 +56,7 @@ static inline void ucs_queue_push(ucs_queue_head_t *queue, ucs_queue_elem_t *ele
 {
     *queue->ptail = elem;
     queue->ptail = &elem->next;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     elem->next = NULL; /* For sanity check below */
 #endif
 }

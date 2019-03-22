@@ -588,7 +588,7 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
-#if HAVE_DC_DV
+#ifdef HAVE_DC_DV
     if (GetParam().transports.front().compare("dc_x") == 0) {
         UCS_TEST_SKIP_R("DCI stuck bug");
     }
@@ -996,7 +996,7 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_with_empty_buffers, "ZCOPY_THRESH=512") {
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class test_ucp_tag_stats : public test_ucp_tag_xfer {
 public:

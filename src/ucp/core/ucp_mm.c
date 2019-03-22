@@ -536,7 +536,7 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     }
 
     if ((params->address < memh->address) ||
-        (params->address + params->length > memh->address + memh->length)) {
+        ((char *)params->address + params->length > (char *)memh->address + memh->length)) {
         return UCS_ERR_INVALID_PARAM;
     }
 

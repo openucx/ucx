@@ -89,19 +89,19 @@ extern const char *ucs_profile_mode_names[];
 /**
  * Initialize profiling system.
  */
-void ucs_profile_global_init();
+void ucs_profile_global_init(void);
 
 
 /**
  * Save and cleanup profiling.
  */
-void ucs_profile_global_cleanup();
+void ucs_profile_global_cleanup(void);
 
 
 /**
  * Save and reset profiling.
  */
-void ucs_profile_dump();
+void ucs_profile_dump(void);
 
 END_C_DECLS
 

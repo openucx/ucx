@@ -101,6 +101,7 @@ static void ucs_callbackq_array_free(void *ptr, size_t elem_size, int count)
  * @param [in]  id  ID to release in the lookup array.
  * @return index which this ID used to hold.
  */
+int ucs_callbackq_put_id(ucs_callbackq_t *cbq, int id);
 int ucs_callbackq_put_id(ucs_callbackq_t *cbq, int id)
 {
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
@@ -117,6 +118,7 @@ int ucs_callbackq_put_id(ucs_callbackq_t *cbq, int id)
     return idx_with_flag;
 }
 
+int ucs_callbackq_put_id_noflag(ucs_callbackq_t *cbq, int id);
 int ucs_callbackq_put_id_noflag(ucs_callbackq_t *cbq, int id)
 {
     return ucs_callbackq_put_id(cbq, id) & UCS_CALLBACKQ_IDX_MASK;
@@ -126,6 +128,7 @@ int ucs_callbackq_put_id_noflag(ucs_callbackq_t *cbq, int id)
  * @param [in]  idx  Index to save in the lookup array.
  * @return unique ID which holds index 'idx'.
  */
+int ucs_callbackq_get_id(ucs_callbackq_t *cbq, unsigned idx);
 int ucs_callbackq_get_id(ucs_callbackq_t *cbq, unsigned idx)
 {
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);

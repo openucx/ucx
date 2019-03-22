@@ -265,7 +265,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);
 
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
     if (qp_type == UCT_IB_QPT_DCI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
@@ -319,7 +319,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
 
     switch (opcode) {
     case MLX5_OPCODE_SEND_IMM:
@@ -426,7 +426,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     opmod         = 0;
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
 
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND_IMM: /* Used by tag offload */
@@ -585,7 +585,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
 
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
@@ -611,7 +611,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
         break;
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_TM:
     case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_TM:
         inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_tmh),
@@ -654,7 +654,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                                  max_log_sge, NULL);
 }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
                        uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int index,
@@ -743,7 +743,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 
         tm_hdr_len = sizeof(*tmh) + sizeof(rvh);
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
         if (qp_type == UCT_IB_QPT_DCI) {
             /* RAVH can be wrapped as well */
             ravh_ptr = uct_ib_mlx5_txwq_wrap_data(txwq, (char*)tmh +
@@ -1050,7 +1050,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     unsigned count;
     void *rc_hdr;
     unsigned flags;
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     struct ibv_tmh *tmh;
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
@@ -1080,7 +1080,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         goto done;
     }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
     /* Should be a fast path, because small (latency-critical) messages
@@ -1164,7 +1164,7 @@ done:
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
  * and tail is filled by head of message. */
-static void UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
@@ -1208,16 +1208,16 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     log_sge->num_sge = i;
 
     /* copy payload to DM */
-    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t, payload + head, body);
+    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t, (char*)payload + head, body);
     if (tail) {
         dst += body;
-        memcpy(&padding, payload + head + body, tail);
+        memcpy(&padding, (char*)payload + head + body, tail);
         /* use uint64_t for source datatype because it is aligned buffer on stack */
         UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, &padding, sizeof(padding));
     }
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
                                 uct_rc_mlx5_dm_copy_data_t *cache,
                                 size_t hdr_len, const void *payload,
@@ -1249,7 +1249,7 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
          * hint to valgrind to make it defined */
         VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
-        buffer = (void*)(desc->super.buffer - iface->dm.dm->start_va);
+        buffer = (void*)((char*)desc->super.buffer - (char*)iface->dm.dm->start_va);
 
         uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
                                             length, desc->super.buffer, log_sge);
@@ -1265,7 +1265,7 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t value,
                                      int *op, uint64_t *compare_mask, uint64_t *compare,
                                      uint64_t *swap_mask, uint64_t *swap, int *ext)

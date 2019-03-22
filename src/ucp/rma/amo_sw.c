@@ -30,7 +30,7 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
 
     if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
         /* compare-swap has two arguments */
-        memcpy((void*)(atomich + 1) + size, req->send.buffer, size);
+        memcpy((char*)(atomich + 1) + size, req->send.buffer, size);
         length += size;
     }
 
@@ -190,6 +190,8 @@ DEFINE_AMO_SW_OP(64)
 DEFINE_AMO_SW_FOP(32)
 DEFINE_AMO_SW_FOP(64)
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -238,6 +240,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -280,7 +284,7 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     }
 
     p = buffer + strlen(buffer);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + header_len,
+    ucp_dump_payload(worker->context, p, buffer + max - p, (char *)data + header_len,
                      length - header_len);
 }
 

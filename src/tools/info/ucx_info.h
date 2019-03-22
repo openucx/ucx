@@ -9,7 +9,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
-
+#include <strings.h>
 
 enum {
     PRINT_VERSION        = UCS_BIT(0),
@@ -24,11 +24,11 @@ enum {
 };
 
 
-void print_version();
+void print_version(void);
 
-void print_sys_info();
+void print_sys_info(void);
 
-void print_build_config();
+void print_build_config(void);
 
 void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
                     const char *req_tl_name);

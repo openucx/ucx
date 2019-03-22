@@ -29,7 +29,7 @@ typedef struct ucm_event_installer {
 
 extern ucs_list_link_t ucm_event_installer_list;
 
-ucs_status_t ucm_set_mmap_hooks();
+ucs_status_t ucm_set_mmap_hooks(void);
 
 void ucm_event_handler_add(ucm_event_handler_t *handler);
 
@@ -37,11 +37,11 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler);
 
 void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event);
 
-void ucm_event_enter();
+void ucm_event_enter(void);
 
-void ucm_event_enter_exclusive();
+void ucm_event_enter_exclusive(void);
 
-void ucm_event_leave();
+void ucm_event_leave(void);
 
 static UCS_F_ALWAYS_INLINE void
 ucm_dispatch_vm_mmap(void *addr, size_t length)

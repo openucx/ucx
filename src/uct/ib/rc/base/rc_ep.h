@@ -201,7 +201,8 @@ struct uct_rc_ep {
     uct_rc_fc_t         fc;
 };
 
-UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
+UCS_CLASS_DECLARE(uct_rc_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t*);
 
 
 typedef struct uct_rc_ep_address {

@@ -23,7 +23,7 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
-#if ENABLE_DEBUG_DATA || ENABLE_ASSERT
+#if defined(ENABLE_DEBUG_DATA) || defined(ENABLE_ASSERT)
 typedef uint32_t                   ucp_ep_flags_t;
 #else
 typedef uint16_t                   ucp_ep_flags_t;
@@ -267,7 +267,7 @@ typedef struct ucp_ep {
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_NAME_MAX];
 #endif
 

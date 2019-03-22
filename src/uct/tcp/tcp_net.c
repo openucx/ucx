@@ -10,7 +10,7 @@
 #  include "config.h"
 #endif
 
-#if HAVE_IB
+#ifdef HAVE_IB
 #include <uct/ib/base/ib_device.h> /* for ipoib header size */
 #endif
 #include <ucs/sys/string.h>
@@ -20,7 +20,11 @@
 #include <linux/if_ether.h>
 #include <sys/ioctl.h>
 #include <net/if_arp.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 #include <netdb.h>
 
 
@@ -85,7 +89,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                      ETH_FCS_LEN + /* CRC */
                      12; /* inter-packet gap */
         break;
-#if HAVE_IB
+#ifdef HAVE_IB
     case ARPHRD_INFINIBAND:
         ll_headers = UCT_IB_LRH_LEN +
                      UCT_IB_GRH_LEN +

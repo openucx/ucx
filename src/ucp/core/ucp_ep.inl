@@ -142,7 +142,7 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 
 static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
 {
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     if (!(ep->flags & UCP_EP_FLAG_DEST_EP)) {
         return 0; /* Let remote side assert if it gets NULL pointer */
     }
@@ -180,7 +180,7 @@ static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 {
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     return ep->peer_name;
 #else
     return "<no debug data>";

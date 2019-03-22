@@ -260,7 +260,7 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
 static void uct_cm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_ib_iface_t *iface = ucs_container_of(self, uct_ib_iface_t, release_desc);
-    ucs_free(desc - iface->config.rx_headroom_offset);
+    ucs_free((char *) desc - iface->config.rx_headroom_offset);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -440,9 +440,9 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
     .iface_flush              = uct_cm_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress_enable    = (void *)ucs_empty_function,
+    .iface_progress_disable   = (void *)ucs_empty_function,
+    .iface_progress           = (void *)ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
     .iface_query              = uct_cm_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,

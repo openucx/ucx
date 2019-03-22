@@ -76,8 +76,11 @@ static inline void ucs_mpool_put_inline(void *obj)
 
     elem = ucs_mpool_obj_to_elem(obj);
     mp   = elem->mpool;
-    ucs_mpool_add_to_freelist(mp, elem,
-                              ENABLE_DEBUG_DATA && ucs_global_opts.mpool_fifo);
+#ifdef ENABLE_DEBUG_DATA
+    ucs_mpool_add_to_freelist(mp, elem, ucs_global_opts.mpool_fifo);
+#else
+    ucs_mpool_add_to_freelist(mp, elem, 0);
+#endif
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
     VALGRIND_MEMPOOL_FREE(mp, obj);
 }

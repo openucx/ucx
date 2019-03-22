@@ -51,7 +51,7 @@ BEGIN_C_DECLS
                            "Fatal: " _fmt, ## __VA_ARGS__)
 
 
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
 
 /**
  * Generate a program bug report if assertions are enabled

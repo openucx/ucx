@@ -73,7 +73,7 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                 uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -91,7 +91,7 @@ uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned len
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                const void *payload, unsigned length)
 {
@@ -115,7 +115,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 }
 
 #if HAVE_IBV_EXP_DM
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         size_t hdr_len, const void *payload, unsigned length,
                         unsigned opcode, uint8_t fm_ce_se,
@@ -390,7 +390,7 @@ uct_rc_mlx5_ep_atomic_fop(uct_ep_h tl_ep, int opcode, void *result, int ext,
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                               uint64_t value, uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -420,7 +420,7 @@ uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_atomic_fop_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
                                uint64_t value, void *result,
                                uint64_t remote_addr, uct_rkey_t rkey,
@@ -577,7 +577,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 {
     uct_rc_mlx5_hdr_t *rch = data;
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     if (rch->tmh_opcode != IBV_TMH_NO_TAG) {
         struct ibv_tmh *tmh = ucs_unaligned_ptr(rch);
         struct ibv_rvh *rvh = (void*)(tmh + 1);
@@ -606,7 +606,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 
     data = &rch->rc_hdr;
     /* coverity[overrun-buffer-val] */
-    uct_rc_ep_packet_dump(iface, type, data, length - (data - (void *)rch),
+    uct_rc_ep_packet_dump(iface, type, data, length - ((char*)data - (char *)rch),
                           valid_length, buffer, max);
 }
 
@@ -652,7 +652,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 
 ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
 {
@@ -664,7 +664,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
     return UCS_OK;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                       const void *data, size_t length)
 {
@@ -920,7 +920,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
     uct_rc_mlx5_ep_clean_qp(self, self->super.txqp.qp);
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_mlx5_ep_clean_qp(self, self->tm_qp);
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp->qp_num);

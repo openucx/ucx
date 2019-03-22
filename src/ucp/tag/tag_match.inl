@@ -168,7 +168,7 @@ ucp_tag_unexp_list_next(ucp_recv_desc_t *rdesc, int i_list)
  */
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
 ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
-                     int remove, const char *title)
+                     int ucp_remove, const char *title)
 {
     ucp_recv_desc_t *rdesc;
     ucs_list_link_t *list;
@@ -200,7 +200,7 @@ ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
             ucs_trace_req("matched unexp rdesc " UCP_RECV_DESC_FMT " to "
                           "%s tag %"PRIx64"/%"PRIx64, UCP_RECV_DESC_ARG(rdesc),
                           title, tag, tag_mask);
-            if (remove) {
+            if (ucp_remove) {
                 ucp_tag_unexp_remove(rdesc);
             }
             return rdesc;
@@ -257,7 +257,7 @@ ucp_tag_recv_request_process_rdesc(ucp_request_t *req, ucp_recv_desc_t *rdesc,
 
      hdr_len  = rdesc->payload_offset;
      recv_len = rdesc->length - hdr_len;
-     status = ucp_tag_request_process_recv_data(req, (void*)(rdesc + 1) + hdr_len,
+     status = ucp_tag_request_process_recv_data(req, (char*)(rdesc + 1) + hdr_len,
                                                 recv_len, offset, 0);
      ucp_recv_desc_release(rdesc);
      return status;

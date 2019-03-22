@@ -137,6 +137,7 @@ UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
+void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm_fifo_element_t *elem);
 void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm_fifo_element_t *elem)
 {
     uct_mm_remote_seg_t *remote_seg, search;
@@ -252,7 +253,7 @@ retry:
         /* AM_SHORT */
         /* write to the remote FIFO */
         *(uint64_t*) (elem + 1) = header;
-        memcpy((void*) (elem + 1) + sizeof(header), payload, length);
+        memcpy((char*) (elem + 1) + sizeof(header), payload, length);
 
         elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
@@ -265,13 +266,13 @@ retry:
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
         base_address = uct_mm_ep_attach_remote_seg(ep, iface, elem);
-        length = pack_cb(base_address + elem->desc_offset, arg);
+        length = pack_cb((char*) base_address + elem->desc_offset, arg);
 
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length;
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           base_address + elem->desc_offset, length, "TX: AM_BCOPY");
+                           (char*) base_address + elem->desc_offset, length, "TX: AM_BCOPY");
 
         UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
     }

@@ -38,7 +38,7 @@ typedef int (*ucm_proc_maps_cb_t)(void *arg, void *addr, size_t length, int prot
 /**
  * @return Page size on the system.
  */
-size_t ucm_get_page_size();
+size_t ucm_get_page_size(void);
 
 
 /**

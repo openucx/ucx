@@ -3,7 +3,10 @@
 * See file LICENSE for terms.
 */
 
+#include <ucp/api/ucp.h>
 
+void ucp_get_version(unsigned *major_version, unsigned *minor_version,
+                     unsigned *release_number);
 void ucp_get_version(unsigned *major_version, unsigned *minor_version,
                      unsigned *release_number)
 {
@@ -12,7 +15,7 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
     *release_number = @PATCH_VERSION@;
 }
 
-const char *ucp_get_version_string()
+const char *ucp_get_version_string(void)
 {
 	return "@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@";
 }

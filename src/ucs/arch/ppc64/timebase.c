@@ -13,7 +13,7 @@
 
 #if defined(__powerpc64__)
 
-double ucs_arch_get_clocks_per_sec()
+double ucs_arch_get_clocks_per_sec(void)
 {
 #if HAVE_DECL___PPC_GET_TIMEBASE_FREQ
     return __ppc_get_timebase_freq();

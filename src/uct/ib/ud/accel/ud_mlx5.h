@@ -51,5 +51,7 @@ static inline unsigned uct_ud_mlx5_tx_moderation(uct_ud_mlx5_iface_t *iface)
     return 0;
 }
 
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_ud_mlx5_ep_t, uct_ep_t);
+
 #endif
 

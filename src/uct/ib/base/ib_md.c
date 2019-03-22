@@ -154,7 +154,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
     {NULL}
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_md_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_MD_STAT_LAST,
@@ -626,7 +626,7 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
     }
 
     ucs_debug("UMR registered memory %p..%p offset 0x%lx on %s lkey 0x%x rkey 0x%x",
-              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
+              mr->addr, (char *) mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
               umr->lkey, umr->rkey);
     memh->atomic_mr   = umr;
     memh->atomic_rkey = umr->rkey;
@@ -798,7 +798,7 @@ uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, si
 
     if ((memh->flags & UCT_IB_MEM_FLAG_ODP)) {
         if ((addr < memh->mr->addr) ||
-            (addr + length > memh->mr->addr + memh->mr->length)) {
+            ((char *) addr + length > (char *) memh->mr->addr + memh->mr->length)) {
             return UCS_ERR_INVALID_PARAM;
         }
         ucs_debug("memh %p prefetch %p length %llu", memh, addr, 
@@ -865,7 +865,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     }
 
     ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
-              memh->mr->addr, memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
+              memh->mr->addr, (char *) memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
 
     uct_ib_mem_init(memh, flags, exp_access);
@@ -934,7 +934,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     }
 
     ucs_debug("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
-              "exp_access 0x%lx flags 0x%x", address, address + length,
+              "exp_access 0x%lx flags 0x%x", address, (char *) address + length,
               uct_ib_device_name(&md->dev), memh->mr->lkey, memh->mr->rkey,
               exp_access, flags);
 
@@ -1269,13 +1269,13 @@ out:
     return status;
 }
 
-static void uct_ib_fork_warn()
+static void uct_ib_fork_warn(void)
 {
     ucs_warn("IB: ibv_fork_init() was disabled or failed, yet a fork() has been issued.");
     ucs_warn("IB: data corruption might occur when using registered memory.");
 }
 
-static void uct_ib_fork_warn_enable()
+static void uct_ib_fork_warn_enable(void)
 {
     static volatile uint32_t enabled = 0;
     int ret;
@@ -1764,7 +1764,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
 #if HAVE_DECL_IBV_EXP_QUERY_DEVICE
     ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
-#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
+#elif defined(HAVE_DECL_IBV_QUERY_DEVICE_EX)
     ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
 #else
     ret = ibv_query_device(dev->ibv_context, &dev->dev_attr);
@@ -1783,7 +1783,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
             dev->ext_atomic_arg_sizes = dev->dev_attr.ext_atom.log_atomic_arg_sizes;
         }
-#  if HAVE_MASKED_ATOMICS_ENDIANNESS
+#ifdef HAVE_MASKED_ATOMICS_ENDIANNESS
         if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
             dev->ext_atomic_arg_sizes |=
                 dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes;

@@ -16,6 +16,7 @@ UCS_CLASS_INIT_FUNC(void)
     return UCS_OK;
 }
 
+UCS_CLASS_CLEANUP_FUNC(void);
 UCS_CLASS_CLEANUP_FUNC(void)
 {
 }

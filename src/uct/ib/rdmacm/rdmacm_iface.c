@@ -140,12 +140,12 @@ static uct_iface_ops_t uct_rdmacm_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_ep_t),
     .ep_flush                 = uct_rdmacm_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_purge         = (void*)ucs_empty_function,
     .iface_accept             = uct_rdmacm_iface_accept,
     .iface_reject             = uct_rdmacm_iface_reject,
     .iface_progress_enable    = (void*)ucs_empty_function_return_success,
     .iface_progress_disable   = (void*)ucs_empty_function_return_success,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress           = (void*)ucs_empty_function_return_zero,
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_iface_t),
@@ -318,7 +318,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
             priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name,
-                                        (void*)(conn_param.private_data +
+                                        (void*)((char *) conn_param.private_data +
                                         sizeof(uct_rdmacm_priv_data_hdr_t)));
             if (priv_data_ret < 0) {
                 ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "

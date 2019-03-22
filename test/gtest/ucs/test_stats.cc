@@ -12,7 +12,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 #define NUM_DATA_NODES 20
 
 class stats_test : public ucs::test {

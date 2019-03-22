@@ -40,7 +40,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
     .name = "mlx5",
     .num_counters = UCT_RC_MLX5_IFACE_STAT_LAST,
@@ -191,11 +191,11 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     /* Create a copy of RC txwq for completion error reporting, since the QP
      * would be released by set_ep_failed()*/
     txwq_copy = ep->tx.wq;
-    txwq_size = ep->tx.wq.qend - ep->tx.wq.qstart;
+    txwq_size = (char*)ep->tx.wq.qend - (char*)ep->tx.wq.qstart;
     txwq_copy.qstart = ucs_malloc(txwq_size, "rc_txwq_copy");
     if (txwq_copy.qstart != NULL) {
         memcpy(txwq_copy.qstart, ep->tx.wq.qstart, txwq_size);
-        txwq_copy.qend = txwq_copy.qstart + txwq_size;
+        txwq_copy.qend = (char*)txwq_copy.qstart + txwq_size;
     }
 
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
@@ -265,7 +265,7 @@ static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 #endif
 }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 {
     uct_rc_mlx5_iface_common_t *iface = arg;
@@ -306,7 +306,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
                                       const uct_iface_params_t *params,
                                       uct_ib_iface_init_attr_t *init_attr)
 {
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint32_t cap_flags                = IBV_DEVICE_TM_FLAGS(dev);
     struct ibv_tmh tmh;
@@ -369,7 +369,7 @@ uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_config_t *rc_config)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     uct_rc_mlx5_iface_common_config_t *config = ucs_derived_of(rc_config,
                                                                uct_rc_mlx5_iface_common_config_t);
 
@@ -498,10 +498,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_common_t, uct_rc_iface_t);
 
-typedef struct {
-    uct_rc_mlx5_iface_common_t  super;
-} uct_rc_mlx5_iface_t;
-
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                     uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -575,7 +571,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_get_address           = uct_rc_mlx5_ep_get_address,
     .ep_connect_to_ep         = uct_rc_mlx5_ep_connect_to_ep,
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     .ep_tag_eager_short       = uct_rc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_rc_mlx5_ep_tag_eager_bcopy,
     .ep_tag_eager_zcopy       = uct_rc_mlx5_ep_tag_eager_zcopy,

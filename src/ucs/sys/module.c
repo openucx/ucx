@@ -43,7 +43,7 @@ static struct {
 };
 
 /* Should be called with lock held */
-static void ucs_module_loader_add_dl_dir()
+static void ucs_module_loader_add_dl_dir(void)
 {
     char *dlpath_dup = NULL;
     size_t max_length;
@@ -100,13 +100,13 @@ out:
 }
 
 /* Should be called with lock held */
-static void ucs_module_loader_add_install_dir()
+static void ucs_module_loader_add_install_dir(void)
 {
     ucs_module_loader_state.srch_path[ucs_module_loader_state.srchpath_cnt++] =
                     ucs_global_opts.module_dir;
 }
 
-static void ucs_module_loader_init_paths()
+static void ucs_module_loader_init_paths(void)
 {
     UCS_INIT_ONCE(&ucs_module_loader_state.init) {
         ucs_assert(ucs_module_loader_state.srchpath_cnt == 0);
@@ -170,7 +170,7 @@ static void ucs_module_init(const char *module_path, void *dl)
     const char *module_init_name =
                     UCS_PP_MAKE_STRING(UCS_MODULE_CONSTRUCTOR_NAME);
     char *fullpath, buffer[PATH_MAX];
-    ucs_status_t (*init_func)();
+    ucs_status_t (*init_func)(void);
     ucs_status_t status;
 
     fullpath = realpath(module_path, buffer);

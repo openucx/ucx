@@ -21,7 +21,7 @@ typedef struct {
 } resource_usage_t;
 
 
-static int get_num_fds()
+static int get_num_fds(void)
 {
     static const char *fds_dir = "/proc/self/fd";
     struct dirent *entry;

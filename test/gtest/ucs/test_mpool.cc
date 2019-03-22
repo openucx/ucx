@@ -89,7 +89,7 @@ UCS_TEST_F(test_mpool, basic) {
     push_config();
 
     for (int mpool_fifo = 0; mpool_fifo <= 1; ++mpool_fifo) {
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
         modify_config("MPOOL_FIFO", ucs::to_string(mpool_fifo).c_str());
 #else
         if (mpool_fifo == 1) {

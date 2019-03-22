@@ -50,11 +50,11 @@ ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
  * Operation for specific async event delivery method.
  */
 typedef struct ucs_async_ops {
-    void         (*init)();
-    void         (*cleanup)();
+    void         (*init)(void);
+    void         (*cleanup)(void);
 
-    void         (*block)();
-    void         (*unblock)();
+    void         (*block)(void);
+    void         (*unblock)(void);
 
     ucs_status_t (*context_init)(ucs_async_context_t *async);
     void         (*context_cleanup)(ucs_async_context_t *async);

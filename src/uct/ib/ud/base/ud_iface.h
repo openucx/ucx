@@ -155,10 +155,11 @@ struct uct_ud_iface {
     } async;
 };
 
-UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_md_h,
+UCS_CLASS_DECLARE(uct_ud_iface_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
                   const uct_ud_iface_config_t*,
-                  uct_ib_iface_init_attr_t*)
+                  uct_ib_iface_init_attr_t*);
 
 struct uct_ud_ctl_hdr {
     uint8_t                    type;

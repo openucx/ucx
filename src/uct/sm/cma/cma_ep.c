@@ -132,7 +132,7 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
                                       remote_addr,
                                       comp,
                                       process_vm_writev,
-                                      "process_vm_writev");
+                                      (char *)"process_vm_writev");
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
@@ -153,7 +153,7 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
                                       remote_addr,
                                       comp,
                                       process_vm_readv,
-                                      "process_vm_readv");
+                                      (char *)"process_vm_readv");
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));

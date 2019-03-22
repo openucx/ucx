@@ -200,7 +200,7 @@ enum {
                                                       is driven by remote side. */
 
     /* Endpoint is currently executing the pending queue */
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(8)
 #else
     UCT_UD_EP_FLAG_IN_PENDING        = 0
@@ -253,12 +253,13 @@ struct uct_ud_ep {
     ucs_time_t       close_time;   /* timestamp of closure */
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     uct_ud_peer_name_t  peer;
 #endif
 };
 
-UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
+UCS_CLASS_DECLARE(uct_ud_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t*);
 
 /**
  * UD pending request private data

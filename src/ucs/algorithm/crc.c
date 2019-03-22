@@ -21,7 +21,7 @@ uint16_t ucs_crc16(const void *buffer, size_t size)
     }
 
     result = -1;
-    for (p = buffer; p < (const uint8_t*)(buffer + size); ++p) {
+    for (p = buffer; p < (const uint8_t*)((char *) buffer + size); ++p) {
         data = *p;
         for (bit = 0; bit < 8; ++bit) {
             result >>= 1;

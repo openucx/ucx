@@ -22,6 +22,7 @@ static void vm_unmap_cb(ucm_event_type_t event_type, ucm_event_t *event,
 {
 }
 
+int test_ucm_set_event_handler(void *handle);
 int test_ucm_set_event_handler(void *handle)
 {
     ucs_status_t (*ucm_set_event_handler_f)(int events, int priority,

@@ -59,7 +59,7 @@ static char *ucm_log_ltoa(char *p, char *end, long n, int base, int flags,
                           int pad)
 {
     static const char digits[] = "0123456789abcdef";
-    long div;
+    long ddiv;
 
     if (((n < 0) || (flags & UCM_LOG_LTOA_FLAG_SIGN)) && (p < end)) {
         *(p++) = (n < 0 ) ? '-' : '+';
@@ -74,9 +74,9 @@ static char *ucm_log_ltoa(char *p, char *end, long n, int base, int flags,
 
     n = labs(n);
 
-    div = 1;
-    while ((n / div) != 0) {
-        div *= base;
+    ddiv = 1;
+    while ((n / ddiv) != 0) {
+        ddiv *= base;
         --pad;
     }
 
@@ -85,10 +85,10 @@ static char *ucm_log_ltoa(char *p, char *end, long n, int base, int flags,
                                 (flags & UCM_LOG_LTOA_FLAG_PAD0) ? '0' : ' ');
     }
 
-    div /= base;
-    while ((p < end) && (div > 0)) {
-        *(p++) = digits[(n / div + base) % base];
-        div /= base;
+    ddiv /= base;
+    while ((p < end) && (ddiv > 0)) {
+        *(p++) = digits[(n / ddiv + base) % base];
+        ddiv /= base;
     }
 
     if (flags & UCM_LOG_LTOA_PAD_LEFT) {
@@ -157,7 +157,7 @@ static void ucm_log_vsnprintf(char *buf, size_t max, const char *fmt, va_list ap
             case 's':
                 value.s = va_arg(ap, char *);
                 if (!value.s) {
-                    value.s = "(null)";
+                    value.s = (void *) "(null)";
                 }
                 pad -= strlen(value.s);
                 if (!(flags & UCM_LOG_LTOA_PAD_LEFT)) {

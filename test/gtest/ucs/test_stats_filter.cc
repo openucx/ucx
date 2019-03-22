@@ -14,7 +14,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class stats_filter_test : public ucs::test {
 public:

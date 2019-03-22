@@ -35,7 +35,7 @@ static UCS_F_NOOPTIMIZE inline void ucs_x86_cpuid(uint32_t level,
 #define ucs_x86_xgetbv(_index, _eax, _edx) \
 	asm volatile (".byte 0x0f, 0x01, 0xd0" : "=a"(_eax), "=d"(_edx) : "c" (_index))
 
-static int ucs_x86_invariant_tsc()
+static int ucs_x86_invariant_tsc(void)
 {
     uint32_t _eax, _ebx, _ecx, _edx;
 
@@ -57,7 +57,8 @@ warn:
     return 0;
 }
 
-double ucs_x86_tsc_freq_from_cpu_model()
+double ucs_x86_tsc_freq_from_cpu_model(void);
+double ucs_x86_tsc_freq_from_cpu_model(void)
 {
     char buf[256];
     char model[256];
@@ -107,7 +108,7 @@ double ucs_x86_tsc_freq_from_cpu_model()
     return max_ghz * 1e9;
 }
 
-double ucs_x86_init_tsc_freq()
+double ucs_x86_init_tsc_freq(void)
 {
     double result;
 
@@ -131,7 +132,7 @@ err_disable_rdtsc:
     return -1;
 }
 
-double ucs_arch_get_clocks_per_sec()
+double ucs_arch_get_clocks_per_sec(void)
 {
     double freq;
 
@@ -145,7 +146,7 @@ double ucs_arch_get_clocks_per_sec()
     return ucs_arch_generic_get_clocks_per_sec();
 }
 
-ucs_cpu_model_t ucs_arch_get_cpu_model()
+ucs_cpu_model_t ucs_arch_get_cpu_model(void)
 {
     uint32_t _eax, _ebx, _ecx, _edx;
     uint32_t model, family;
@@ -206,7 +207,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
 }
 
 
-int ucs_arch_get_cpu_flag()
+int ucs_arch_get_cpu_flag(void)
 {
     static int cpu_flag = UCS_CPU_FLAG_UNKNOWN;
 

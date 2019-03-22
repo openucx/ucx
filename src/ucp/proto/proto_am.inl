@@ -126,7 +126,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
         } else {
             iov[0].memh = UCT_MEM_HANDLE_NULL;
         }
-        iov[0].buffer = (void *)src_iov + state->offset;
+        iov[0].buffer = (char *)src_iov + state->offset;
         iov[0].length = length_max;
         iov[0].stride = 0;
         iov[0].count  = 1;
@@ -142,7 +142,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
         state->dt.iov.iov_offset    = 0;
         while ((dst_it < max_dst_iov) && (src_it < max_src_iov)) {
             if (src_iov[src_it].length) {
-                iov[dst_it].buffer  = src_iov[src_it].buffer + iov_offset;
+                iov[dst_it].buffer  = (char *)src_iov[src_it].buffer + iov_offset;
                 iov[dst_it].length  = src_iov[src_it].length - iov_offset;
                 iov[dst_it].memh    = state->dt.iov.dt_reg[src_it].memh[0];
                 iov[dst_it].stride  = 0;

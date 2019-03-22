@@ -77,7 +77,7 @@ unlock_and_return_i:
     return i;
 }
 
-void ucs_log_flush()
+void ucs_log_flush(void)
 {
     if (ucs_log_file != NULL) {
         fflush(ucs_log_file);
@@ -85,7 +85,7 @@ void ucs_log_flush()
     }
 }
 
-size_t ucs_log_get_buffer_size()
+size_t ucs_log_get_buffer_size(void)
 {
     return ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
                                    256, 2048);
@@ -165,14 +165,14 @@ void ucs_log_push_handler(ucs_log_func_t handler)
     }
 }
 
-void ucs_log_pop_handler()
+void ucs_log_pop_handler(void)
 {
     if (ucs_log_handlers_count > 0) {
         --ucs_log_handlers_count;
     }
 }
 
-unsigned ucs_log_num_handlers()
+unsigned ucs_log_num_handlers(void)
 {
     return ucs_log_handlers_count;
 }
@@ -181,16 +181,16 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
                       ucs_log_level_t level, const char *format, ...)
 {
     ucs_log_func_rc_t rc;
-    unsigned index;
+    unsigned idx;
     va_list ap;
 
     /* Call handlers in reverse order */
     rc    = UCS_LOG_FUNC_RC_CONTINUE;
-    index = ucs_log_handlers_count;
-    while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
-        --index;
+    idx = ucs_log_handlers_count;
+    while ((idx > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
+        --idx;
         va_start(ap, format);
-        rc = ucs_log_handlers[index](file, line, function, level, format, ap);
+        rc = ucs_log_handlers[idx](file, line, function, level, format, ap);
         va_end(ap);
     }
 }
@@ -306,7 +306,7 @@ const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
         if (((i % 4) == 0) && (i > 0)) {
             *(p++) = ':';
         }
-        value = *(uint8_t*)(data + i);
+        value = *(uint8_t*)((char *) data + i);
         p[0] = hexchars[value / 16];
         p[1] = hexchars[value % 16];
         p += 2;
@@ -316,7 +316,7 @@ const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
     return buf;
 }
 
-void ucs_log_early_init()
+void ucs_log_early_init(void)
 {
     ucs_log_initialized      = 0;
     ucs_log_hostname[0]      = 0;
@@ -327,7 +327,7 @@ void ucs_log_early_init()
     pthread_spin_init(&threads_lock, 0);
 }
 
-void ucs_log_init()
+void ucs_log_init(void)
 {
     const char *next_token;
 
@@ -349,7 +349,7 @@ void ucs_log_init()
     }
 }
 
-void ucs_log_cleanup()
+void ucs_log_cleanup(void)
 {
     ucs_log_flush();
     if (ucs_log_file_close) {

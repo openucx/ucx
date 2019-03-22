@@ -30,11 +30,11 @@ static ucs_status_t uct_tcp_md_open(const char *md_name, const uct_md_config_t *
                                     uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close        = ucs_empty_function,
+        .close        = (void*)ucs_empty_function,
         .query        = uct_tcp_md_query,
-        .mkey_pack    = ucs_empty_function_return_unsupported,
-        .mem_reg      = ucs_empty_function_return_unsupported,
-        .mem_dereg    = ucs_empty_function_return_unsupported,
+        .mkey_pack    = (void*)ucs_empty_function_return_unsupported,
+        .mem_reg      = (void*)ucs_empty_function_return_unsupported,
+        .mem_dereg    = (void*)ucs_empty_function_return_unsupported,
         .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
     };
     static uct_md_t md = {
@@ -48,6 +48,6 @@ static ucs_status_t uct_tcp_md_open(const char *md_name, const uct_md_config_t *
 
 UCT_MD_COMPONENT_DEFINE(uct_tcp_md, UCT_TCP_NAME,
                         uct_tcp_query_md_resources, uct_tcp_md_open, NULL,
-                        ucs_empty_function_return_unsupported,
-                        ucs_empty_function_return_success, "TCP_",
+                        (void*)ucs_empty_function_return_unsupported,
+                        (void*)ucs_empty_function_return_success, "TCP_",
                         uct_md_config_table, uct_md_config_t);

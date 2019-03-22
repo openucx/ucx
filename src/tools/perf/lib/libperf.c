@@ -639,10 +639,10 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     info.recv_buffer        = (uintptr_t)perf->recv_buffer;
 
     rkey_buffer             = buffer;
-    dev_addr                = (void*)rkey_buffer + info.rkey_size;
-    iface_addr              = (void*)dev_addr    + info.uct.dev_addr_len;
-    ep_addr                 = (void*)iface_addr  + info.uct.iface_addr_len;
-    ucs_assert_always((void*)ep_addr + info.uct.ep_addr_len <= buffer + buffer_size);
+    dev_addr                = (uct_device_addr_t *)((char*)rkey_buffer + info.rkey_size);
+    iface_addr              = (uct_iface_addr_t *)((char*)dev_addr    + info.uct.dev_addr_len);
+    ep_addr                 = (uct_ep_addr_t *)((char*)iface_addr  + info.uct.iface_addr_len);
+    ucs_assert_always((char*)ep_addr + info.uct.ep_addr_len <= (char *)buffer + buffer_size);
 
     status = uct_iface_get_device_address(perf->uct.iface, dev_addr);
     if (status != UCS_OK) {
@@ -716,9 +716,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
         remote_info = buffer;
         rkey_buffer = remote_info + 1;
-        dev_addr    = (void*)rkey_buffer + remote_info->rkey_size;
-        iface_addr  = (void*)dev_addr    + remote_info->uct.dev_addr_len;
-        ep_addr     = (void*)iface_addr  + remote_info->uct.iface_addr_len;
+        dev_addr    = (uct_device_addr_t *)((char*)rkey_buffer + remote_info->rkey_size);
+        iface_addr  = (uct_iface_addr_t *)((char*)dev_addr    + remote_info->uct.dev_addr_len);
+        ep_addr     = (uct_ep_addr_t *)((char*)iface_addr  + remote_info->uct.iface_addr_len);
         perf->uct.peers[i].remote_addr = remote_info->recv_buffer;
 
         if (!uct_iface_is_reachable(perf->uct.iface, dev_addr,
@@ -1124,7 +1124,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
 
         remote_info = buffer;
         address     = (void*)(remote_info + 1);
-        rkey_buffer = (void*)address + remote_info->ucp.addr_len;
+        rkey_buffer = (char*)address + remote_info->ucp.addr_len;
         perf->ucp.peers[i].remote_addr = remote_info->recv_buffer;
 
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
@@ -1605,8 +1605,8 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
     tctx[ti].statuses = statuses;
     tctx[ti].perf = *perf;
     /* Doctor the src and dst buffers to make them thread specific */
-    tctx[ti].perf.send_buffer += ti * message_size;
-    tctx[ti].perf.recv_buffer += ti * message_size;
+    tctx[ti].perf.send_buffer = (char *)tctx[ti].perf.send_buffer + ti * message_size;
+    tctx[ti].perf.recv_buffer = (char *)tctx[ti].perf.recv_buffer + ti * message_size;
     tctx[ti].perf.offset = ti * message_size;
     ucx_perf_thread_run_test((void*)&tctx[ti]);
 }
@@ -1633,10 +1633,10 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 }
 #endif /* _OPENMP */
 
-void ucx_perf_global_init()
+void ucx_perf_global_init(void)
 {
     static ucx_perf_allocator_t host_allocator = {
-        .init      = ucs_empty_function_return_success,
+        .init      = (void*)ucs_empty_function_return_success,
         .ucp_alloc = ucp_perf_test_alloc_host,
         .ucp_free  = ucp_perf_test_free_host,
         .memset    = memset

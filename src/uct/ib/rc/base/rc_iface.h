@@ -107,7 +107,7 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = UCS_BIT(13), /* zcopy */
     UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
     UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)  /* queued on a txqp */
@@ -233,7 +233,7 @@ struct uct_rc_iface {
         enum ibv_mtu         path_mtu;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
         int                  tx_cq_len;
 #endif
 
@@ -251,7 +251,8 @@ struct uct_rc_iface {
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
 };
-UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_rc_iface_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_rc_iface_config_t*,
                   uct_ib_iface_init_attr_t*);
 

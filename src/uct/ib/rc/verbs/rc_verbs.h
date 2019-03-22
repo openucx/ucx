@@ -65,7 +65,8 @@ typedef struct uct_rc_verbs_iface {
 } uct_rc_verbs_iface_t;
 
 
-UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE(uct_rc_verbs_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 

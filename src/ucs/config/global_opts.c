@@ -17,30 +17,30 @@
 ucs_global_opts_t ucs_global_opts = {
     .log_level             = UCS_LOG_LEVEL_WARN,
     .log_print_enable      = 0,
-    .log_file              = "",
+    .log_file              = (void *) "",
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
     .mpool_fifo            = 0,
     .handle_errors         = UCS_BIT(UCS_HANDLE_ERROR_BACKTRACE),
     .error_signals         = { NULL, 0 },
-    .error_mail_to         = "",
-    .error_mail_footer     = "",
-    .gdb_command           = "gdb",
+    .error_mail_to         = (void *) "",
+    .error_mail_footer     = (void *) "",
+    .gdb_command           = (void *) "gdb",
     .debug_signo           = SIGHUP,
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
     .async_max_events      = 64,
     .async_signo           = SIGALRM,
-    .stats_dest            = "",
-    .tuning_path           = "",
-    .memtrack_dest         = "",
-    .stats_trigger         = "exit",
+    .stats_dest            = (void *) "",
+    .tuning_path           = (void *) "",
+    .memtrack_dest         = (void *) "",
+    .stats_trigger         = (void *) "exit",
     .profile_mode          = 0,
-    .profile_file          = "",
+    .profile_file          = (void *) "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
     .rcache_check_pfn      = 0,
-    .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
+    .module_dir            = (void *) UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE
 };
 
@@ -83,7 +83,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Enable output of ucs_print(). This option is intended for use by the library developers.\n",
   ucs_offsetof(ucs_global_opts_t, log_print_enable), UCS_CONFIG_TYPE_BOOL},
 
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
  {"MPOOL_FIFO", "n",
   "Enable FIFO behavior for memory pool, instead of LIFO. Useful for\n"
   "debugging because object pointers are not recycled.",
@@ -91,7 +91,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #endif
 
  {"HANDLE_ERRORS",
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
   "bt,freeze",
 #else
   "bt",
@@ -138,7 +138,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Signal number used for async signaling.",
   ucs_offsetof(ucs_global_opts_t, async_signo), UCS_CONFIG_TYPE_SIGNO},
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
  {"STATS_DEST", "",
   "Destination to send statistics to. If the value is empty, statistics are\n"
   "not reported. Possible values are:\n"
@@ -176,7 +176,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 
 #endif
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
@@ -221,7 +221,7 @@ UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_table, "UCS global", NULL,
                           ucs_global_opts_t)
 
 
-void ucs_global_opts_init()
+void ucs_global_opts_init(void)
 {
     ucs_status_t status;
 
@@ -249,7 +249,7 @@ ucs_status_t ucs_global_opts_clone(void *dst)
     return ucs_config_parser_clone_opts(&ucs_global_opts, dst, ucs_global_opts_table);
 }
 
-void ucs_global_opts_release()
+void ucs_global_opts_release(void)
 {
     return ucs_config_parser_release_opts(&ucs_global_opts, ucs_global_opts_table);
 }

@@ -32,7 +32,8 @@ typedef struct ucp_proxy_ep {
 } ucp_proxy_ep_t;
 
 
-UCS_CLASS_DECLARE(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
+UCS_CLASS_DECLARE(ucp_proxy_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
                   uct_ep_h uct_ep, int is_owner);
 
 

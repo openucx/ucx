@@ -33,7 +33,7 @@ typedef struct {
 
 extern const ucp_proto_t ucp_stream_am_proto;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {
     .name           = "ucp_ep",
     .num_counters   = UCP_EP_STAT_LAST,
@@ -100,7 +100,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
         ep->uct_eps[lane] = NULL;
     }
 
-#if ENABLE_DEBUG_DATA
+#ifdef ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
 
@@ -1430,9 +1430,9 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
     if ((proxy_lane == lane) || (proxy_lane == UCP_NULL_LANE)) {
         if (key->lanes[lane].proxy_lane == lane) {
-            desc_str = " <proxy>";
+            desc_str = (char *) " <proxy>";
         } else {
-            desc_str = "";
+            desc_str = (char *) "";
         }
         snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
                  lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),

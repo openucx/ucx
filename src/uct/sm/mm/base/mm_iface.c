@@ -64,10 +64,12 @@ void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     void *mm_desc;
 
-    mm_desc = desc - sizeof(uct_mm_recv_desc_t);
+    mm_desc = (char *) desc - sizeof(uct_mm_recv_desc_t);
     ucs_mpool_put(mm_desc);
 }
 
+ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp);
 ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp)
 {
@@ -160,6 +162,9 @@ static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
 
 ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
                                              uct_mm_fifo_element_t *fifo_elem_p,
+                                             unsigned need_new_desc);
+ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
+                                             uct_mm_fifo_element_t *fifo_elem_p,
                                              unsigned need_new_desc)
 {
     uct_mm_recv_desc_t *desc;
@@ -173,7 +178,7 @@ ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
 
     fifo_elem_p->desc_mmid   = desc->key;
     fifo_elem_p->desc_offset = iface->rx_headroom +
-                               (ptrdiff_t) ((void*) (desc + 1) - desc->base_address);
+                               (ptrdiff_t) ((char *) (desc + 1) - (char *) desc->base_address);
     fifo_elem_p->desc_chunk_base_addr = desc->base_address;
     fifo_elem_p->desc_mpool_size      = desc->mpool_length;
 
@@ -197,7 +202,7 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
         VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
                                   elem->length);
 
-        data = elem->desc_chunk_base_addr + elem->desc_offset;
+        data = (char*) elem->desc_chunk_base_addr + elem->desc_offset;
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
                            data, elem->length, "RX: AM_BCOPY");
@@ -333,6 +338,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_is_reachable       = uct_sm_iface_is_reachable
 };
 
+void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_mm_recv_desc_t *desc = obj;
@@ -358,6 +364,8 @@ static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems
     }
 }
 
+ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
+                                      uct_mm_iface_config_t *config, uct_md_h md);
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
                                       uct_mm_iface_config_t *config, uct_md_h md)
 {

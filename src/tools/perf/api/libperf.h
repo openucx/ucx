@@ -200,7 +200,7 @@ extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
 /**
  * Initialize performance testing framework. May be called multiple times.
  */
-void ucx_perf_global_init();
+void ucx_perf_global_init(void);
 
 
 /**

@@ -78,10 +78,10 @@ static inline void ucs_list_insert_before(ucs_list_link_t *pos,
  *
  * @param link  Item to remove.
  */
-static inline void ucs_list_del(ucs_list_link_t *link)
+static inline void ucs_list_del(ucs_list_link_t *ucs_link)
 {
-    link->prev->next = link->next;
-    link->next->prev = link->prev;
+    ucs_link->prev->next = ucs_link->next;
+    ucs_link->next->prev = ucs_link->prev;
 }
 
 /**
@@ -185,9 +185,9 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  */
 #define ucs_list_extract_head(_head, _type, _member) \
     ({ \
-        ucs_list_link_t *tmp = (_head)->next; \
-        ucs_list_del(tmp); \
-        ucs_container_of(tmp, _type, _member); \
+        ucs_list_link_t *ucs_list_extract_head_tmp = (_head)->next; \
+        ucs_list_del(ucs_list_extract_head_tmp); \
+        ucs_container_of(ucs_list_extract_head_tmp, _type, _member); \
     })
 
 #endif

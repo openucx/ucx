@@ -97,7 +97,7 @@ struct mlx5_grh_av {
 
 #endif
 
-#if !(HAVE_MLX5_WQE_CTRL_SOLICITED)
+#if !defined(HAVE_MLX5_WQE_CTRL_SOLICITED) || !(HAVE_MLX5_WQE_CTRL_SOLICITED)
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
@@ -205,7 +205,7 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     uint16_t                    hw_ci;
 #endif
     uint16_t                    fence_beat;
@@ -304,7 +304,7 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
 
 typedef struct uct_ib_mlx5_iface_res_domain {
     uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain   *ibv_domain;
 #elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_td               *td;

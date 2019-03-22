@@ -17,7 +17,8 @@
 #include <ucp/core/ucp_request.inl>
 
 
-UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
+UCS_CLASS_DECLARE(ucp_wireup_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h);
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_wireup_ep_t, uct_ep_t);
@@ -484,6 +485,8 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     return status;
 }
 
+ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
+                                                void *priv_data);
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
                                                 void *priv_data)
 {

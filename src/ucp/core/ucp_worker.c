@@ -28,7 +28,7 @@
     (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
     .name           = "ucp_worker",
     .num_counters   = UCP_WORKER_STAT_LAST,
@@ -66,8 +66,8 @@ static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
-    .obj_init      = ucs_empty_function,
-    .obj_cleanup   = ucs_empty_function
+    .obj_init      = (void*)ucs_empty_function,
+    .obj_cleanup   = (void*)ucs_empty_function
 };
 
 
@@ -75,14 +75,14 @@ ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .chunk_alloc   = ucp_reg_mpool_malloc,
     .chunk_release = ucp_reg_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (void*)ucs_empty_function
 };
 
 ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .chunk_alloc   = ucp_frag_mpool_malloc,
     .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = (void*)ucs_empty_function
 };
 
 void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force);
@@ -741,6 +741,7 @@ void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
     }
 }
 
+void ucp_worker_iface_event(int fd, void *arg);
 void ucp_worker_iface_event(int fd, void *arg)
 {
     ucp_worker_iface_t *wiface = arg;

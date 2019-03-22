@@ -219,11 +219,13 @@ static void unload_file(struct backtrace_file *file)
     bfd_close(file->abfd);
 }
 
+#ifdef HAVE_CPLUS_DEMANGLE
+extern char *cplus_demangle(const char *, int);
+#endif
 static char *ucs_debug_demangle(const char *name)
 {
     char *demangled = NULL;
 #ifdef HAVE_CPLUS_DEMANGLE
-    extern char *cplus_demangle(const char *, int);
     demangled = cplus_demangle(name, 0);
 #endif
     return demangled ? demangled : strdup(name);
@@ -406,8 +408,8 @@ ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *i
  * NOTE: the file and function memory remains valid as long as the backtrace
  * object is not destroyed.
  */
-int backtrace_next(backtrace_h bckt, unsigned long *address, char const ** file,
-                   char const ** function, unsigned *lineno)
+static int backtrace_next(backtrace_h bckt, unsigned long *address, char const ** file,
+                          char const ** function, unsigned *lineno)
 {
     struct backtrace_line *line;
 
@@ -509,18 +511,18 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *info)
 {
-    Dl_info dlinfo;
+    Dl_info ucs_dlinfo;
     int ret;
 
-    ret = dladdr(address, &dlinfo);
+    ret = dladdr(address, &ucs_dlinfo);
     if (!ret) {
         return UCS_ERR_NO_ELEM;
     }
 
-    ucs_strncpy_safe(info->file.path, dlinfo.dli_fname, sizeof(info->file.path));
-    info->file.base = (uintptr_t)dlinfo.dli_fbase;
+    ucs_strncpy_safe(info->file.path, ucs_dlinfo.dli_fname, sizeof(info->file.path));
+    info->file.base = (uintptr_t)ucs_dlinfo.dli_fbase;
     ucs_strncpy_safe(info->function,
-                     (dlinfo.dli_sname != NULL) ? dlinfo.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
+                     (ucs_dlinfo.dli_sname != NULL) ? ucs_dlinfo.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
                      sizeof(info->function));
     ucs_strncpy_safe(info->source_file, UCS_DEBUG_UNKNOWN_SYM, sizeof(info->source_file));
     info->line_number = 0;
@@ -600,7 +602,7 @@ out:
     return sym ? sym : UCS_DEBUG_UNKNOWN_SYM;
 }
 
-static void ucs_debugger_attach()
+static void ucs_debugger_attach(void)
 {
     static const char *vg_cmds_fmt = "file %s\n"
                                      "target remote | vgdb\n";
@@ -642,7 +644,7 @@ static void ucs_debugger_attach()
 
         if (!RUNNING_ON_VALGRIND) {
             snprintf(pid_str, sizeof(pid_str), "%d", debug_pid);
-            argv[narg++] = "-p";
+            argv[narg++] = (void *) "-p";
             argv[narg++] = pid_str;
         }
 
@@ -669,7 +671,7 @@ static void ucs_debugger_attach()
             }
             close(fd);
 
-            argv[narg++] = "-x";
+            argv[narg++] = (void *) "-x";
             argv[narg++] = gdb_commands_file;
         } else {
             ucs_log_fatal_error("Unable to open '%s' for writing: %m",
@@ -689,7 +691,7 @@ static void ucs_debugger_attach()
     waitpid(pid, &ret, 0);
 }
 
-static void UCS_F_NOINLINE ucs_debug_freeze()
+static void UCS_F_NOINLINE ucs_debug_freeze(void)
 {
     static volatile int freeze = 1;
     while (freeze) {
@@ -702,7 +704,7 @@ static void ucs_debug_stop_handler(int signo)
     ucs_debug_freeze();
 }
 
-static void ucs_debug_stop_other_threads()
+static void ucs_debug_stop_other_threads(void)
 {
     static const char *task_dir = "/proc/self/task";
     struct dirent *entry;
@@ -1047,7 +1049,7 @@ static void ucs_debug_signal_handler(int signo)
     ucs_profile_dump();
 }
 
-static void ucs_debug_set_signal_alt_stack()
+static void ucs_debug_set_signal_alt_stack(void)
 {
     int ret;
 
@@ -1123,7 +1125,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            (address == ucs_debug_signal_restorer);
 }
 
-static struct dl_address_search *ucs_debug_get_lib_info()
+static struct dl_address_search *ucs_debug_get_lib_info(void)
 {
     static struct dl_address_search dl = {0, NULL, 0};
 
@@ -1139,7 +1141,7 @@ static struct dl_address_search *ucs_debug_get_lib_info()
     return (dl.filename == NULL || dl.base == 0) ? NULL : &dl;
 }
 
-const char *ucs_debug_get_lib_path()
+const char *ucs_debug_get_lib_path(void)
 {
     static char ucs_lib_path[256] = {0};
     struct dl_address_search *dl;
@@ -1154,13 +1156,13 @@ const char *ucs_debug_get_lib_path()
     return ucs_lib_path;
 }
 
-unsigned long ucs_debug_get_lib_base_addr()
+unsigned long ucs_debug_get_lib_base_addr(void)
 {
     struct dl_address_search *dl = ucs_debug_get_lib_info();
     return (dl == NULL) ? 0 : dl->base;
 }
 
-void ucs_debug_init()
+void ucs_debug_init(void)
 {
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     if (ucs_global_opts.handle_errors) {

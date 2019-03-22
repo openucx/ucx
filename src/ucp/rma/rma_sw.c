@@ -137,6 +137,8 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     ucp_request_send(req, 0);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -148,6 +150,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -189,7 +193,7 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
     payload_len = packed_len - sizeof(ucp_rma_rep_hdr_t);
     ucs_assert(payload_len >= 0);
 
-    req->send.buffer += payload_len;
+    req->send.buffer = (char *)req->send.buffer + payload_len;
     req->send.length -= payload_len;
 
     if (req->send.length == 0) {
@@ -200,6 +204,8 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
     }
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -222,6 +228,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags),
+                         void *arg, void *data, size_t length, unsigned am_flags);
 UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -277,7 +285,7 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     }
 
     p = buffer + strlen(buffer);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + header_len,
+    ucp_dump_payload(worker->context, p, buffer + max - p, (char *)data + header_len,
                      length - header_len);
 }
 

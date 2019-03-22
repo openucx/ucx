@@ -85,8 +85,8 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         }
         return UCS_OK;
     }
-    req->send.buffer          += frag_length;
-    req->send.rma.remote_addr += frag_length;
+    req->send.buffer          = (char *)req->send.buffer + frag_length;
+    req->send.rma.remote_addr = (size_t) ((char *)req->send.rma.remote_addr + frag_length);
     return UCS_INPROGRESS;
 }
 
@@ -134,7 +134,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                                  ucp_rma_request_bcopy_completion :
                                  ucp_rma_request_zcopy_completion,
                                  UCP_REQUEST_SEND_PROTO_RMA);
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
     if (length < zcopy_thresh) {

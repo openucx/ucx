@@ -73,7 +73,7 @@ static void ucm_reloc_file_lock(int fd, int l_type)
     }
 }
 
-static int ucm_reloc_get_aux_phsize()
+static int ucm_reloc_get_aux_phsize(void)
 {
 #define UCM_RELOC_AUXV_BUF_LEN 16
     static const char *proc_auxv_filename = "/proc/self/auxv";
@@ -165,7 +165,7 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     /* find PT_DYNAMIC */
     dphdr = NULL;
     for (i = 0; i < phnum; ++i) {
-        dphdr = (void*)phdr + phsize * i;
+        dphdr = (void*) ((char*)phdr + phsize * i);
         if (dphdr->p_type == PT_DYNAMIC) {
             break;
         }
@@ -175,13 +175,13 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     }
 
     /* Get ELF tables pointers */
-    jmprel   = (void*)ucm_reloc_get_entry(base, dphdr, DT_JMPREL);
-    symtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
-    strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
+    jmprel   = (void*)(intptr_t) ucm_reloc_get_entry(base, dphdr, DT_JMPREL);
+    symtab   = (void*)(intptr_t) ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
+    strtab   = (void*)(intptr_t) ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
     pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
 
     /* Find matching symbol and replace it */
-    for (reloc = jmprel; (void*)reloc < jmprel + pltrelsz; ++reloc) {
+    for (reloc = jmprel; (char*)reloc < (char*) jmprel + pltrelsz; ++reloc) {
         elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
         if (!strcmp(ctx->patch->symbol, elf_sym)) {
             entry = (void *)(base + reloc->r_offset);
@@ -332,7 +332,7 @@ void* ucm_reloc_get_orig(const char *symbol, void *replacement)
 }
 
 /* called with lock held */
-static ucs_status_t ucm_reloc_install_dlopen()
+static ucs_status_t ucm_reloc_install_dlopen(void)
 {
     static int installed = 0;
     ucs_status_t status;

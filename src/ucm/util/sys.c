@@ -36,7 +36,7 @@ ucm_global_config_t ucm_global_opts = {
     .alloc_alignment            = 16
 };
 
-size_t ucm_get_page_size()
+size_t ucm_get_page_size(void)
 {
     static long page_size = -1;
     long value;
@@ -55,7 +55,7 @@ size_t ucm_get_page_size()
 static void *ucm_sys_complete_alloc(void *ptr, size_t size)
 {
     *(size_t*)ptr = size;
-    return ptr + sizeof(size_t);
+    return (char *) ptr + sizeof(size_t);
 }
 
 void *ucm_sys_malloc(size_t size)
@@ -95,7 +95,7 @@ void ucm_sys_free(void *ptr)
         return;
     }
 
-    ptr -= sizeof(size_t);
+    ptr = (char *) ptr - sizeof(size_t);
     size = *(size_t*)ptr;
     munmap(ptr, size);
 }
@@ -109,7 +109,7 @@ void *ucm_sys_realloc(void *ptr, size_t size)
         return ucm_sys_malloc(size);
     }
 
-    oldptr   = ptr - sizeof(size_t);
+    oldptr   = (char *) ptr - sizeof(size_t);
     oldsize  = *(size_t*)oldptr;
     sys_size = ucs_align_up_pow2(size + sizeof(size_t), ucm_get_page_size());
 

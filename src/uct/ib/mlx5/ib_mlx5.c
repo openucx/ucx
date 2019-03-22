@@ -54,7 +54,7 @@ ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
                                    int comp_vector, int ignore_overrun,
                                    size_t *inl, struct ibv_cq **cq_p)
 {
-#if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+#if defined(HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE) && HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
     struct ibv_cq *cq;
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
@@ -116,7 +116,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
      * 64b when polling.
      */
-    mlx5_cq->cq_buf += cqe_size - sizeof(struct mlx5_cqe64);
+    mlx5_cq->cq_buf = (char*)mlx5_cq->cq_buf + cqe_size - sizeof(struct mlx5_cqe64);
 
     ret = ibv_exp_cq_ignore_overrun(cq);
     if (ret != 0) {
@@ -144,7 +144,7 @@ static int
 uct_ib_mlx5_iface_res_domain_cmp(uct_ib_mlx5_iface_res_domain_t *res_domain,
                                  uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     return res_domain->ibv_domain->context == md->dev.ibv_context;
 #elif HAVE_DECL_IBV_ALLOC_TD
     return res_domain->pd->context == md->dev.ibv_context;
@@ -157,7 +157,7 @@ static ucs_status_t
 uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
                                   uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain_init_attr attr;
 
     attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
@@ -216,7 +216,7 @@ uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
 
 static void uct_ib_mlx5_iface_res_domain_cleanup(uct_ib_mlx5_iface_res_domain_t *res_domain)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
     int ret;
 
@@ -362,10 +362,10 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->curr       = txwq->qstart;
     txwq->sw_pi      = 0;
     txwq->prev_sw_pi = -1;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
 #endif
-    memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
+    memset(txwq->qstart, 0, (char*)txwq->qend - (char*)txwq->qstart);
 }
 
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
@@ -417,7 +417,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
               uct_ib_mlx5_mmio_modes[mmio_mode]);
 
     txwq->qstart     = qp_info.dv.sq.buf;
-    txwq->qend       = qp_info.dv.sq.buf + (qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt);
+    txwq->qend       = (char*)qp_info.dv.sq.buf + (qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt);
     txwq->reg        = uct_worker_tl_data_get(worker,
                                               UCT_IB_MLX5_WORKER_BF_KEY,
                                               uct_ib_mlx5_mmio_reg_t,

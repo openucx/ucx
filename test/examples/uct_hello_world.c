@@ -350,7 +350,7 @@ close_md:
     goto release_md;
 }
 
-int print_err_usage()
+int print_err_usage(void)
 {
     const char func_template[] = "  -%c      Select \"%s\" function to send the message%s\n";
 

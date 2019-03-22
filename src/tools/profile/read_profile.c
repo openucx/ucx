@@ -73,7 +73,7 @@ static const char* time_units_str[] = {
 
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
-    struct stat stat;
+    struct stat read_stat;
     int ret, fd;
 
     fd = open(file_name, O_RDONLY);
@@ -83,14 +83,14 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto out;
     }
 
-    ret = fstat(fd, &stat);
+    ret = fstat(fd, &read_stat);
     if (ret < 0) {
         fprintf(stderr, "fstat(%s) failed: %m\n", file_name);
         goto out_close;
     }
 
-    data->length = stat.st_size;
-    data->mem    = mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    data->length = read_stat.st_size;
+    data->mem    = mmap(NULL, read_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data->mem == MAP_FAILED) {
         fprintf(stderr, "mmap(%s, length=%zd) failed: %m\n", file_name,
                 data->length);
@@ -346,7 +346,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     free(scope_ends);
 }
 
-static void close_pipes()
+static void close_pipes(void)
 {
     close(output_pipefds[0]);
     close(output_pipefds[1]);
@@ -354,8 +354,8 @@ static void close_pipes()
 
 static int redirect_output(const ucs_profile_header_t *hdr)
 {
-    char *less_argv[] = {LESS_COMMAND,
-                         "-R" /* show colors */,
+    char *less_argv[] = {(char *)(LESS_COMMAND),
+                         (char *)"-R" /* show colors */,
                          NULL};;
     struct winsize wsz;
     uint64_t num_lines;
@@ -455,7 +455,7 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
     return 0;
 }
 
-static void usage()
+static void usage(void)
 {
     printf("Usage: ucx_read_profile [options] [profile-file]\n");
     printf("Options are:\n");
@@ -468,6 +468,7 @@ static void usage()
     printf("  -h              Show this help message\n");
 }
 
+int parse_args(int argc, char **argv, options_t *opts);
 int parse_args(int argc, char **argv, options_t *opts)
 {
     int c;

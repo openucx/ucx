@@ -102,7 +102,7 @@ _UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, -1, void*
 
 void *ucm_brk_syscall(void *addr)
 {
-    return (void*)syscall(SYS_brk, addr);
+    return (void*)(size_t) syscall(SYS_brk, addr);
 }
 
 int ucm_orig_brk(void *addr)
@@ -133,7 +133,7 @@ void *ucm_orig_sbrk(intptr_t increment)
         return ucm_orig_dlsym_sbrk(increment);
     } else {
         prev = ucm_brk_syscall(0);
-        return ucm_orig_brk(prev + increment) ? (void*)-1 : prev;
+        return ucm_orig_brk((char *) prev + increment) ? (void*)-1 : prev;
     }
 }
 

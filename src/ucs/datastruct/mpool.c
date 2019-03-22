@@ -23,7 +23,7 @@ static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_data_t *data,
                                                      ucs_mpool_chunk_t *chunk,
                                                      unsigned elem_index)
 {
-    return chunk->elems + elem_index * ucs_mpool_elem_total_size(data);
+    return (ucs_mpool_elem_t *) ((char *) chunk->elems + elem_index * ucs_mpool_elem_total_size(data));
 }
 
 static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
@@ -192,7 +192,7 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     chunk            = ptr;
     chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
                                    data->alignment);
-    chunk->elems     = (void*)(chunk + 1) + chunk_padding;
+    chunk->elems     = (char*)(chunk + 1) + chunk_padding;
     chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
                        ucs_mpool_elem_total_size(data));
 
@@ -259,8 +259,15 @@ ucs_status_t ucs_mpool_chunk_mmap(ucs_mpool_t *mp, size_t *size_p, void **chunk_
     size_t real_size;
 
     real_size = ucs_align_up(*size_p + sizeof(*chunk), ucs_get_page_size());
+#ifdef MAP_ANONYMOUS
     chunk = ucs_mmap(NULL, real_size, PROT_READ|PROT_WRITE,
                      MAP_PRIVATE|MAP_ANONYMOUS, -1, 0, ucs_mpool_name(mp));
+#else
+    int fd = open("/dev/zero", O_RDWR);
+    chunk = ucs_mmap(NULL, real_size, PROT_READ|PROT_WRITE,
+                     MAP_PRIVATE, fd, 0, ucs_mpool_name(mp));
+    close(fd);
+#endif
     if (chunk == MAP_FAILED) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -295,8 +302,13 @@ ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **ch
 
     /* First, try hugetlb */
     real_size = *size_p;
+#ifdef SHM_HUGETLB
     status = ucs_sysv_alloc(&real_size, real_size * 2, (void**)&ptr, SHM_HUGETLB,
                             ucs_mpool_name(mp), &shmid);
+#else
+    status = ucs_sysv_alloc(&real_size, real_size * 2, (void**)&ptr, 0,
+                            ucs_mpool_name(mp), &shmid);
+#endif
     if (status == UCS_OK) {
         chunk = ptr;
         chunk->hugetlb = 1;

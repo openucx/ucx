@@ -56,9 +56,14 @@ struct ucs_class {
  *
  * @param _type     Class type.
  */
-#define UCS_CLASS_DECLARE(_type, ...) \
-    extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
+#define UCS_CLASS_DECLARE(_type) \
+    extern ucs_class_t _UCS_CLASS_DECL_NAME(_type);
+
+#define UCS_CLASS_DECLARE_INIT_FUNC(_type, ...) \
     UCS_CLASS_INIT_FUNC(_type, ## __VA_ARGS__);
+
+#define UCS_CLASS_DECLARE_CLEANUP_FUNC(_type) \
+    UCS_CLASS_CLEANUP_FUNC(_type);
 
 #define UCS_CLASS_NAME(_type) \
     _UCS_CLASS_DECL_NAME(_type)
@@ -70,7 +75,6 @@ struct ucs_class {
  * @param _super    Superclass type (may be void to indicate top-level class)
  */
 #define UCS_CLASS_DEFINE(_type, _super) \
-    extern ucs_class_t _UCS_CLASS_DECL_NAME(_super); \
     ucs_class_t _UCS_CLASS_DECL_NAME(_type) = { \
         UCS_PP_QUOTE(_type), \
         sizeof(_type), \
@@ -91,19 +95,18 @@ struct ucs_class {
  */
 #define UCS_CLASS_INIT(_type, _obj, ...) \
     ({ \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
         int init_count = 1; \
-        ucs_status_t status; \
+        ucs_status_t class_init_status; \
         \
-        status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
+        class_init_status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
                                              ## __VA_ARGS__); \
-        if ((status != UCS_OK) && (status != UCS_INPROGRESS)) { \
+        if ((class_init_status != UCS_OK) && (class_init_status != UCS_INPROGRESS)) { \
             ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
                                          (_obj), init_count); \
         } \
         \
-        (status); \
+        (class_init_status); \
     })
 
 
@@ -125,7 +128,6 @@ struct ucs_class {
  */
 #define UCS_CLASS_CLEANUP(_type, _obj) \
     { \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         UCS_CLASS_CLEANUP_CALL(&_UCS_CLASS_DECL_NAME(_type), _obj); \
     }
 
@@ -143,24 +145,23 @@ struct ucs_class {
     _UCS_CLASS_NEW (_type, _obj, ## __VA_ARGS__)
 #define _UCS_CLASS_NEW(_type, _obj, ...) \
     ({ \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
-        ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
-        ucs_status_t status; \
+        ucs_class_t *_ucs_class_new_cls = &_UCS_CLASS_DECL_NAME(_type); \
+        ucs_status_t _ucs_class_new_status; \
         void *obj; \
         \
-        obj = ucs_class_malloc(cls); \
+        obj = ucs_class_malloc(_ucs_class_new_cls); \
         if (obj != NULL) { \
-            status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
-            if (status == UCS_OK) { \
+            _ucs_class_new_status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
+            if (_ucs_class_new_status == UCS_OK) { \
                 *(_obj) = (typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
                 ucs_class_free(obj); /* Initialization failure */ \
             } \
         } else { \
-            status = UCS_ERR_NO_MEMORY; /* Allocation failure */ \
+            _ucs_class_new_status = UCS_ERR_NO_MEMORY; /* Allocation failure */ \
         } \
         \
-        (status); \
+        (_ucs_class_new_status); \
     })
 
 
@@ -187,10 +188,10 @@ struct ucs_class {
 #define UCS_CLASS_CALL_SUPER_INIT(_superclass, ...) \
     { \
         { \
-            ucs_status_t status = _UCS_CLASS_INIT_NAME(_superclass)\
+            ucs_status_t ucs_class_call_super_init_status = _UCS_CLASS_INIT_NAME(_superclass)\
                     (&self->super, _myclass->superclass, _init_count, ## __VA_ARGS__); \
-            if (status != UCS_OK) { \
-                return status; \
+            if (ucs_class_call_super_init_status != UCS_OK) { \
+                return ucs_class_call_super_init_status; \
             } \
             if (_myclass->superclass != &_UCS_CLASS_DECL_NAME(void)) { \
                 ++(*_init_count); \
@@ -303,6 +304,7 @@ void ucs_class_free(void *obj);
  * The empty class.
  */
 UCS_CLASS_DECLARE(void);
+UCS_CLASS_DECLARE_INIT_FUNC(void);
 
 END_C_DECLS
 

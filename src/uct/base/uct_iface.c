@@ -13,7 +13,7 @@
 #include <ucs/time/time.h>
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ep_stats_class = {
     .name = "uct_ep",
     .num_counters = UCT_EP_STAT_LAST,
@@ -22,7 +22,7 @@ static ucs_stats_class_t uct_ep_stats_class = {
         [UCT_EP_STAT_PUT]         = "put",
         [UCT_EP_STAT_GET]         = "get",
         [UCT_EP_STAT_ATOMIC]      = "atomic",
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
         [UCT_EP_STAT_TAG]         = "tag",
 #endif
         [UCT_EP_STAT_BYTES_SHORT] = "bytes_short",
@@ -371,6 +371,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     return status;
 }
 
+UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops);
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
     ucs_assert_always(ops->ep_flush                 != NULL);
@@ -390,6 +391,7 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     return UCS_OK;
 }
 
+UCS_CLASS_CLEANUP_FUNC(uct_iface_t);
 UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 {
 }
@@ -508,6 +510,7 @@ UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
     return UCS_OK;
 }
 
+UCS_CLASS_CLEANUP_FUNC(uct_ep_t);
 UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 {
 }

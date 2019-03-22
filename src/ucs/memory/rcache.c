@@ -47,7 +47,7 @@ typedef struct ucs_rcache_inv_entry {
 } ucs_rcache_inv_entry_t;
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_rcache_stats_class = {
     .name = "rcache",
     .num_counters = UCS_RCACHE_STAT_LAST,
@@ -117,8 +117,15 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
     void *ptr;
 
     size = ucs_align_up_pow2(sizeof(size_t) + *size_p, ucs_get_page_size());
+#ifdef MAP_ANONYMOUS
     ptr = ucm_orig_mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS,
                         -1, 0);
+#else
+    int fd = open("/dev/zero", O_RDWR);
+    ptr = ucm_orig_mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE,
+                        fd, 0);
+    close(fd);
+#endif
     if (ptr == MAP_FAILED) {
         ucs_error("mmmap(size=%zu) failed: %m", size);
         return UCS_ERR_NO_MEMORY;
@@ -126,7 +133,7 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
 
     /* Store the size in the first bytes of the chunk */
     *(size_t*)ptr = size;
-    *chunk_p = ptr  + sizeof(size_t);
+    *chunk_p = (void *) ((char *) ptr  + sizeof(size_t));
     *size_p  = size - sizeof(size_t);
     return UCS_OK;
 }
@@ -137,7 +144,7 @@ static void ucs_rcache_mp_chunk_release(ucs_mpool_t *mp, void *chunk)
     void *ptr;
     int ret;
 
-    ptr = chunk - sizeof(size_t);
+    ptr = (void *) ((char *) chunk - sizeof(size_t));
     size = *(size_t*)ptr;
     ret = ucm_orig_munmap(ptr, size);
     if (ret) {

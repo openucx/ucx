@@ -80,7 +80,7 @@ ucs_config_field_t uct_rc_fc_config_table[] = {
 };
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_iface_stats_class = {
     .name = "rc_iface",
     .num_counters = UCT_RC_IFACE_STAT_LAST,
@@ -535,7 +535,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                               UCT_RC_QP_MAX_RETRY_COUNT);
     self->config.max_rd_atomic      = config->max_rd_atomic;
     self->config.ooo_rw             = config->ooo_rw;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
 

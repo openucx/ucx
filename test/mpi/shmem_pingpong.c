@@ -99,7 +99,7 @@ static void run_pingpong(char *mem, size_t msg_size, long num_iters, int use_wai
     free(msg);
 }
 
-static void usage()
+static void usage(void)
 {
     printf("Usage:   shmem_pingpong [options]\n");
     printf("\n");

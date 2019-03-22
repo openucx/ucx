@@ -22,7 +22,7 @@ extern "C" {
 #if HAVE_TL_RC
 #  include <uct/ib/rc/verbs/rc_verbs.h>
 #endif
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
 #  include <uct/ib/dc/dc_mlx5_ep.h>
 #  include <uct/ib/dc/dc_mlx5.h>
 #endif
@@ -39,11 +39,11 @@ class test_obj_size : public ucs::test {
 
 UCS_TEST_F(test_obj_size, size) {
 
-#if ENABLE_DEBUG_DATA
+#if defined(ENABLE_DEBUG_DATA)
     UCS_TEST_SKIP_R("Debug data");
-#elif ENABLE_STATS
+#elif defined(ENABLE_STATS)
     UCS_TEST_SKIP_R("Statistic enabled");
-#elif ENABLE_ASSERT
+#elif defined(ENABLE_ASSERT)
     UCS_TEST_SKIP_R("Assert enabled");
 #else
     EXPECTED_SIZE(ucp_ep_t, 64);

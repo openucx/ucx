@@ -13,14 +13,14 @@
 #include <sys/uio.h>
 #include <string.h>
 
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
 #  include <sys/capability.h>
 #endif
 
 
 uct_md_component_t uct_cma_md_component;
 
-static int uct_cma_test_ptrace_scope()
+static int uct_cma_test_ptrace_scope(void)
 {
     static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
     const char *extra_info_str;
@@ -63,7 +63,7 @@ static int uct_cma_test_ptrace_scope()
 #endif
     } else if (!strcmp(value, "2")) {
         /* ptrace scope 2 means only a process with CAP_SYS_PTRACE can attach */
-#if HAVE_SYS_CAPABILITY_H
+#ifdef HAVE_SYS_CAPABILITY_H
         ucs_status_t status;
         uint32_t ecap;
 
@@ -86,7 +86,7 @@ static int uct_cma_test_ptrace_scope()
     return cma_supported;
 }
 
-static int uct_cma_test_writev()
+static int uct_cma_test_writev(void)
 {
     uint64_t test_dst       = 0;
     uint64_t test_src       = 0;
@@ -157,7 +157,7 @@ static ucs_status_t uct_cma_md_open(const char *md_name, const uct_md_config_t *
 UCT_MD_COMPONENT_DEFINE(uct_cma_md_component, "cma",
                         uct_cma_query_md_resources, uct_cma_md_open, NULL,
                         uct_md_stub_rkey_unpack,
-                        ucs_empty_function_return_success, "CMA_",
+                        (void*)ucs_empty_function_return_success, "CMA_",
                         uct_md_config_table, uct_md_config_t)
 
 ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)

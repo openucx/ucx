@@ -287,7 +287,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 struct ibv_qp **qp_p)
 {
     uct_dc_mlx5_iface_t *iface         = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
-#if HAVE_DC_DV
+#ifdef HAVE_DC_DV
     uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
@@ -314,7 +314,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 #endif
 }
 
-#if HAVE_DC_DV
+#ifdef HAVE_DC_DV
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_rc_txqp_t *dci)
 {
@@ -524,7 +524,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
     return uct_rc_iface_init_rx(rc_iface, rc_config);
 }
 
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
 ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
 {
     struct ibv_exp_dct_init_attr init_attr;
@@ -684,7 +684,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
         iface->tx.dcis_stack[i] = i;
         iface->tx.dcis[i].ep    = NULL;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
         iface->tx.dcis[i].flags = 0;
 #endif
     }

@@ -53,13 +53,28 @@ typedef struct {
 } uct_dc_mlx5_pending_req_priv_t;
 
 
-UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *, const uct_dc_mlx5_iface_addr_t *,
+UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *, const uct_dc_mlx5_iface_addr_t *,
                   uct_ib_mlx5_base_av_t *);
 
-UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
+UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t);
+UCS_CLASS_DECLARE_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   const uct_dc_mlx5_iface_addr_t *,
                   uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
 
+UCS_CLASS_DECLARE_NEW_FUNC(uct_dc_mlx5_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
+                           const uct_dc_mlx5_iface_addr_t *,
+                           uct_ib_mlx5_base_av_t *);
+
+UCS_CLASS_DECLARE_CLEANUP_FUNC(uct_dc_mlx5_grh_ep_t);
+
+UCS_CLASS_DECLARE_NEW_FUNC(uct_dc_mlx5_grh_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
+                           const uct_dc_mlx5_iface_addr_t *,
+                           uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
+
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
+                                           ucs_arbiter_elem_t *elem);
 
 ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
                                       unsigned length, uint64_t remote_addr,
@@ -351,7 +366,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     }
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     iface->tx.dcis[dci].flags = 0;
 #endif
 
@@ -413,7 +428,7 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
     iface->tx.dcis[dci].ep                    = NULL;
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     iface->tx.dcis[ep->dci].flags             = 0;
 #endif
 
@@ -499,10 +514,10 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
-        ucs_status_t status; \
-        status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
-        if (ucs_unlikely(status != UCS_OK)) { \
-            return status; \
+        ucs_status_t dci_get_status; \
+        dci_get_status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+        if (ucs_unlikely(dci_get_status != UCS_OK)) { \
+            return dci_get_status; \
         } \
         UCT_RC_CHECK_CQE(&(_iface)->super.super, _ep, \
                          &(_iface)->tx.dcis[(_ep)->dci].txqp); \
@@ -530,15 +545,15 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
                          (_iface)->super.super.config.fc_hard_thresh)) { \
-            ucs_status_t status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
-            if (ucs_unlikely(status != UCS_OK)) { \
+            ucs_status_t check_status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
+            if (ucs_unlikely(check_status != UCS_OK)) { \
                 if (((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) && \
                     !uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
                     ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, (_ep)->dci), \
                                        "iface (%p) ep (%p) dci leak detected: dci=%d", \
                                        _iface, _ep, (_ep)->dci); \
                 } \
-                return status; \
+                return check_status; \
             } \
         } \
         UCT_DC_MLX5_CHECK_RES(_iface, _ep) \

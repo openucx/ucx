@@ -14,7 +14,7 @@
 #include <ucs/type/class.h>
 #include <endian.h>
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
     .name = "rc_fc",
     .num_counters = UCT_RC_FC_STAT_LAST,
@@ -432,6 +432,7 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 
     return UCS_INPROGRESS;
 }
+
 
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \

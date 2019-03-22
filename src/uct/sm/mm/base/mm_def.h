@@ -36,7 +36,7 @@ enum {
           (_iface)->config.fifo_elem_size));
 
 #define UCT_MM_IFACE_GET_DESC_START(_iface, _fifo_elem_p) \
-          (uct_mm_recv_desc_t *) ((_fifo_elem_p)->desc_chunk_base_addr +  \
+          (uct_mm_recv_desc_t *) ((char*)(_fifo_elem_p)->desc_chunk_base_addr +  \
           (_fifo_elem_p)->desc_offset - (_iface)->rx_headroom) - 1;
 
 

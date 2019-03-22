@@ -39,9 +39,11 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {
     int mm_flags = 0;
 
+#ifdef MAP_NONBLOCK
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
         mm_flags |= MAP_NONBLOCK;
     }
+#endif
 
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
         mm_flags |= MAP_FIXED;
@@ -211,8 +213,13 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             /* Allocate huge pages */
             alloc_length = min_length;
             address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
+#ifdef SHM_HUGETLB
             status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
                                     SHM_HUGETLB, alloc_name, &shmid);
+#else
+            status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
+                                    0, alloc_name, &shmid);
+#endif
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }
@@ -330,6 +337,8 @@ static inline uct_iface_mp_priv_t* uct_iface_mp_priv(ucs_mpool_t *mp)
     return (uct_iface_mp_priv_t*)ucs_mpool_priv(mp);
 }
 
+UCS_PROFILE_DECLARE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
+                         ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
                  ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
@@ -359,6 +368,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
     return UCS_OK;
 }
 
+UCS_PROFILE_DECLARE_FUNC_VOID(uct_iface_mp_chunk_release, (mp, chunk),
+                              ucs_mpool_t *mp, void *chunk);
 UCS_PROFILE_FUNC_VOID(uct_iface_mp_chunk_release, (mp, chunk),
                       ucs_mpool_t *mp, void *chunk)
 {
@@ -366,7 +377,7 @@ UCS_PROFILE_FUNC_VOID(uct_iface_mp_chunk_release, (mp, chunk),
     uct_iface_mp_chunk_hdr_t *hdr;
     uct_allocated_memory_t mem;
 
-    hdr = chunk - sizeof(*hdr);
+    hdr = (uct_iface_mp_chunk_hdr_t *)((char *)chunk - sizeof(*hdr));
 
     mem.address = hdr;
     mem.method  = hdr->method;
@@ -384,7 +395,7 @@ static void uct_iface_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
     uct_iface_mp_chunk_hdr_t *hdr;
 
     init_obj_cb = uct_iface_mp_priv(mp)->init_obj_cb;
-    hdr = chunk - sizeof(*hdr);
+    hdr = (uct_iface_mp_chunk_hdr_t *)((char *)chunk - sizeof(*hdr));
     if (init_obj_cb != NULL) {
         init_obj_cb(&iface->super, obj, hdr->memh);
     }

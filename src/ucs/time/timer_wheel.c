@@ -16,9 +16,11 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution,
                              ucs_time_t current_time)
 {
     unsigned i;
+    double res_order_double;
 
     twheel->res         = ucs_roundup_pow2(resolution);
-    twheel->res_order   = (unsigned) ucs_log2(twheel->res);
+    res_order_double    = ucs_log2(twheel->res);
+    twheel->res_order   = (unsigned) (uint64_t) res_order_double;
     twheel->num_slots   = 1024;
     twheel->current     = 0;
     twheel->now         = current_time;

@@ -165,7 +165,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which pkey value to use. Should be between 0 and 0x7fff.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#if defined(HAVE_IBV_EXP_RES_DOMAIN) && HAVE_IBV_EXP_RES_DOMAIN
   {"RESOURCE_DOMAIN", "y",
    "Enable multiple resource domains (experimental).",
    ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
@@ -217,7 +217,7 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ib_iface_t *iface = ucs_container_of(self, uct_ib_iface_t, release_desc);
     void *ib_desc;
 
-    ib_desc = desc - iface->config.rx_headroom_offset;
+    ib_desc = (void *) ((char *) desc - iface->config.rx_headroom_offset);
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -262,13 +262,13 @@ void uct_ib_address_pack(uct_ib_iface_t *iface,
         ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
                          UCT_IB_ADDRESS_FLAG_LID;
         *(uint16_t*) ptr = lid;
-        ptr += sizeof(uint16_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint16_t));
 
         if ((gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) ||
             iface->is_global_addr) {
             ib_addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
             *(uint64_t*) ptr = gid->global.interface_id;
-            ptr += sizeof(uint64_t);
+            ptr = (void *) ((char *) ptr + sizeof(uint64_t));
 
             if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
                                               UCT_IB_SITE_LOCAL_PREFIX) &&
@@ -300,23 +300,23 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
         *lid = *(uint16_t*)ptr;
-        ptr += sizeof(uint16_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint16_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
         gid->global.interface_id = *(uint64_t*)ptr;
-        ptr += sizeof(uint64_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint64_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
         gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
                                     ((uint64_t) *(uint16_t*) ptr << 48);
-        ptr += sizeof(uint16_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint16_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
         gid->global.subnet_prefix = *(uint64_t*) ptr;
-        ptr += sizeof(uint64_t);
+        ptr = (void *) ((char *) ptr + sizeof(uint64_t));
     }
 }
 
@@ -608,7 +608,8 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_status_t status;
-#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+#if defined(HAVE_DECL_IBV_EXP_SETENV) && HAVE_DECL_IBV_EXP_SETENV &&    \
+    (!defined(HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE) || !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE)
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     const char *cqe_size_env_value;
     size_t cqe_size = 64;
@@ -652,7 +653,8 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
     status = UCS_OK;
 
 out_unsetenv:
-#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+#if defined(HAVE_DECL_IBV_EXP_SETENV) && HAVE_DECL_IBV_EXP_SETENV &&    \
+    (!defined(HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE) || !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE)
     *inl = cqe_size / 2;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
@@ -919,11 +921,13 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 {
     uct_ib_iface_recv_desc_t *desc;
     unsigned count;
+    void *tmp;
 
     count = 0;
     while (count < n) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
-        wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
+        tmp = uct_ib_iface_recv_desc_hdr(iface, desc);
+        wrs[count].sg.addr   = (uintptr_t) tmp;
         wrs[count].sg.length = iface->config.rx_payload_offset + iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;
         wrs[count].ibwr.num_sge = 1;

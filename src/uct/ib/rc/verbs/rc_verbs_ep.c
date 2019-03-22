@@ -11,6 +11,7 @@
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
 
+void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 {
     txcnt->pi = txcnt->ci = 0;
@@ -46,7 +47,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
 #if HAVE_DECL_IBV_EXP_POST_SEND && (HAVE_DECL_IBV_EXP_WR_NOP || HAVE_IB_EXT_ATOMICS)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
-                           uint64_t signal, int max_log_sge)
+                           uint64_t uct_signal, int max_log_sge)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
@@ -55,9 +56,9 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
     struct ibv_exp_send_wr *bad_wr;
     int ret;
 
-    signal |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
+    uct_signal |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                          IBV_EXP_SEND_SIGNALED);
-    wr->exp_send_flags = signal;
+    wr->exp_send_flags = uct_signal;
     wr->wr_id          = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
     uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
@@ -69,7 +70,7 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
         ucs_fatal("ibv_exp_post_send() returned %d (%m)", ret);
     }
 
-    uct_rc_verbs_txqp_posted(&ep->super.txqp, &ep->txcnt, &iface->super, signal);
+    uct_rc_verbs_txqp_posted(&ep->super.txqp, &ep->txcnt, &iface->super, uct_signal);
 }
 #endif
 
@@ -155,9 +156,9 @@ uct_rc_verbs_ep_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t leng
                                uct_rc_iface_send_desc_t *desc, uint64_t force_sig)
 {
     struct ibv_exp_send_wr wr;
-    struct ibv_sge sge;
+    struct ibv_sge uct_sge;
 
-    uct_rc_verbs_fill_ext_atomic_wr(&wr, &sge, opcode, length, compare_mask,
+    uct_rc_verbs_fill_ext_atomic_wr(&wr, &uct_sge, opcode, length, compare_mask,
                                     compare_add, swap, remote_addr, rkey, ep->super.atomic_mr_offset);
     UCT_RC_VERBS_FILL_DESC_WR(&wr, desc);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
@@ -194,7 +195,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
+    UCT_CHECK_LENGTH((int) length, 0, iface->config.max_inline, "put_short");
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);

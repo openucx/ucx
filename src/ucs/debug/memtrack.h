@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <stdio.h>
+#include <string.h>
 
 
 BEGIN_C_DECLS
@@ -41,7 +42,7 @@ typedef struct ucs_memtrack_entry {
 
 
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
 
 #define UCS_MEMTRACK_ARG        , const char* alloc_name
 #define UCS_MEMTRACK_VAL        , alloc_name

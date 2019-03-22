@@ -22,7 +22,7 @@ static inline uint64_t ucs_arch_generic_read_hres_clock(void)
     return ((((uint64_t)(tv.tv_sec)) * 1000000ULL) + ((uint64_t)(tv.tv_usec)));
 }
 
-static inline double ucs_arch_generic_get_clocks_per_sec()
+static inline double ucs_arch_generic_get_clocks_per_sec(void)
 {
     return 1.0E6;
 }

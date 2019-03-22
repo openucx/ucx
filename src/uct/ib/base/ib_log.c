@@ -16,7 +16,7 @@ const char *uct_ib_qp_type_str(int qp_type)
         return "RC";
     case IBV_QPT_UD:
         return "UD";
-#if HAVE_TL_DC
+#ifdef HAVE_TL_DC
     case UCT_IB_QPT_DCI:
         return "DCI";
 #endif
@@ -26,11 +26,11 @@ const char *uct_ib_qp_type_str(int qp_type)
     }
 }
 
-void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int signal, int fence, int se,
+void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int uct_signal, int fence, int se,
                             char *buf, size_t max)
 {
     snprintf(buf, max, "%s %c%c%c", op->name,
-             signal ? 's' : '-',
+             uct_signal ? 's' : '-',
              fence  ? 'f' : '-',
              se     ? 'e' : '-');
 }
@@ -61,10 +61,10 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
         s               += strlen(s);
 
         if (data_dump) {
-            len = ucs_min(sg_list[i].length, (void*)data + sizeof(data) - md);
+            len = ucs_min(sg_list[i].length, (size_t)((char *) data + sizeof(data) - (char *) md));
             memcpy(md, (void*)sg_list[i].addr, len);
 
-            md              += len;
+            md              = (void *) ((char *) md + len);
             total_len       += len;
             total_valid_len += sg_list[i].length;
         }
@@ -236,7 +236,7 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
     len = length;
     if (iface->config.qp_type == IBV_QPT_UD) {
         len  -= UCT_IB_GRH_LEN;
-        data += UCT_IB_GRH_LEN;
+        data = (void *) ((char *) data + UCT_IB_GRH_LEN);
     }
     uct_ib_log_dump_recv_completion(iface, l_qp, r_qp, slid, data, len,
                                     packet_dump_cb, buf, sizeof(buf) - 1);

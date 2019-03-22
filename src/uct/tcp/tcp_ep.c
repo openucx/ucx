@@ -7,6 +7,39 @@
 
 #include <ucs/async/async.h>
 
+#define UCT_TCP_AM_SHORT_PACK_DATA(_pack_f, _target_buf, _target_length, \
+                                   _am_payload, _payload_length,  _am_header) \
+    do { \
+        *((uint64_t*)(_target_buf)) = (_am_header); \
+        _pack_f((uint8_t*)(_target_buf) + sizeof(_am_header), \
+                _am_payload, _payload_length); \
+        _target_length = sizeof(_am_header) + _payload_length; \
+    } while (0)
+
+#define UCT_TCP_AM_BCOPY_PACK_DATA(_pack_f, _target_buf, _target_length, \
+                                   _am_arg, ...) \
+    _target_length = _pack_f(_target_buf, _am_arg)
+
+#define UCT_TCP_AM_PREPARE(_ep, _id, _len_thr, _hdr, \
+                           _pack_f, _am_payload, _payload_length, \
+                           _am_header, _method, _name) \
+    do { \
+        UCT_CHECK_AM_ID(_id); \
+        \
+        if (!uct_tcp_ep_can_send(_ep)) { \
+            return UCS_ERR_NO_RESOURCE; \
+        } \
+        \
+        (_hdr)        = (_ep)->tx.buf; \
+        (_hdr)->am_id = _id; \
+        \
+        UCT_TCP_AM_ ## _method ## _PACK_DATA(_pack_f, (_hdr) + 1, (_hdr)->length, \
+                                             _am_payload, _payload_length, \
+                                             _am_header); \
+        \
+        UCT_CHECK_LENGTH((int16_t) ((_hdr)->length), 0, _len_thr, _name); \
+        UCT_TL_EP_STAT_OP(&(_ep)->super, AM, _method, (_hdr)->length); \
+    } while (0)
 
 static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 {
@@ -260,10 +293,10 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
     return status;
 }
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t uct_remove)
 {
     int old_events = ep->events;
-    int new_events = (ep->events | add) & ~remove;
+    int new_events = (ep->events | add) & ~uct_remove;
 
     if (new_events != ep->events) {
         ep->events = new_events;
@@ -300,7 +333,7 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     send_length = ep->tx.length - ep->tx.offset;
     ucs_assert(send_length > 0);
 
-    status = uct_tcp_send(ep->fd, ep->tx.buf + ep->tx.offset, &send_length);
+    status = uct_tcp_send(ep->fd, (char *)ep->tx.buf + ep->tx.offset, &send_length);
     if (status < 0) {
         return 0;
     }
@@ -322,7 +355,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 
     ucs_assertv(*recv_length, "ep=%p", ep);
 
-    status = uct_tcp_recv(ep->fd, ep->rx.buf + ep->rx.length, recv_length);
+    status = uct_tcp_recv(ep->fd, (char *) ep->rx.buf + ep->rx.length, recv_length);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_CANCELED) {
             uct_tcp_ep_handle_disconnected(ep, &ep->rx);
@@ -376,7 +409,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
                                             uct_tcp_iface_t);
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
-    size_t remainder;
+    size_t uct_remainder;
 
     ucs_trace_func("ep=%p", ep);
 
@@ -401,7 +434,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         ucs_assert(ep->rx.buf != NULL);
 
         /* do partial receive of the remaining user data */
-        hdr         = ep->rx.buf + ep->rx.offset;
+        hdr         = (uct_tcp_am_hdr_t *) ((char *) ep->rx.buf + ep->rx.offset);
         recv_length = hdr->length - (ep->rx.length - ep->rx.offset - sizeof(*hdr));
     }
 
@@ -411,19 +444,19 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
 
     /* Parse received active messages */
     while (uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
-        remainder = ep->rx.length - ep->rx.offset;
-        if (remainder < sizeof(*hdr)) {
+        uct_remainder = ep->rx.length - ep->rx.offset;
+        if (uct_remainder < sizeof(*hdr)) {
             /* Move the partially received hdr to the beginning of the buffer */
-            memmove(ep->rx.buf, ep->rx.buf + ep->rx.offset, remainder);
+            memmove(ep->rx.buf, (char *) ep->rx.buf + ep->rx.offset, uct_remainder);
             ep->rx.offset = 0;
-            ep->rx.length = remainder;
+            ep->rx.length = uct_remainder;
             goto out;
         }
 
-        hdr = ep->rx.buf + ep->rx.offset;
+        hdr = (uct_tcp_am_hdr_t *) ((char *) ep->rx.buf + ep->rx.offset);
         ucs_assert(hdr->length <= (iface->am_buf_size - sizeof(uct_tcp_am_hdr_t)));
 
-        if (remainder < sizeof(*hdr) + hdr->length) {
+        if (uct_remainder < sizeof(*hdr) + hdr->length) {
             goto out;
         }
 

@@ -8,7 +8,11 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/sys/sock.h>
+#ifdef __linux__
+#include <linux/if.h>
+#else
 #include <net/if.h>
+#endif
 
 #define UCT_TCP_NAME "tcp"
 
@@ -16,6 +20,10 @@
 /* How many events to wait for in epoll_wait */
 #define UCT_TCP_MAX_EVENTS        16
 
+/* If IFNAMSIZ is not found, set it to a large number */
+#ifndef IFNAMSIZ
+#define IFNAMSIZ 256
+#endif
 
 /* Forward declaration */
 typedef struct uct_tcp_ep uct_tcp_ep_t;

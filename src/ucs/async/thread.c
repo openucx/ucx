@@ -220,7 +220,7 @@ out_unlock:
     return status;
 }
 
-static void ucs_async_thread_stop()
+static void ucs_async_thread_stop(void)
 {
     ucs_async_thread_t *thread = NULL;
 
@@ -412,7 +412,7 @@ static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
     return UCS_OK;
 }
 
-static void ucs_async_signal_global_cleanup()
+static void ucs_async_signal_global_cleanup(void)
 {
     if (ucs_async_thread_global_context.thread != NULL) {
         ucs_info("async thread still running (use count %d)",

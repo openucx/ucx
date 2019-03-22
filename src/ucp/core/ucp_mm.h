@@ -164,30 +164,30 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 
 #define UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type) \
     ({ \
-        ucs_status_t status = UCS_OK; \
+        ucs_status_t ucp_rkey_resolve_nocheck_status = UCS_OK; \
         if (ucs_unlikely((_ep)->cfg_index != (_rkey)->cache.ep_cfg_index)) { \
             ucp_rkey_resolve_inner(_rkey, _ep); \
         } \
         if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
             ucs_error("remote memory is unreachable (remote md_map 0x%lx)", \
                       (_rkey)->md_map); \
-            status = UCS_ERR_UNREACHABLE; \
+            ucp_rkey_resolve_nocheck_status = UCS_ERR_UNREACHABLE; \
         } \
-        status; \
+        ucp_rkey_resolve_nocheck_status; \
     })
 
 
 #if ENABLE_PARAMS_CHECK
 #define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
     ({ \
-        ucs_status_t status; \
+        ucs_status_t ucp_rkey_resolve_status; \
         if ((_rkey)->ep != (_ep)) { \
             ucs_error("cannot use a remote key on a different endpoint than it was unpacked on"); \
-            status = UCS_ERR_INVALID_PARAM; \
+            ucp_rkey_resolve_status = UCS_ERR_INVALID_PARAM; \
         } else { \
-            status = UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type); \
+            ucp_rkey_resolve_status = UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type); \
         } \
-        status; \
+        ucp_rkey_resolve_status; \
     })
 #else
 #define UCP_RKEY_RESOLVE  UCP_RKEY_RESOLVE_NOCHECK

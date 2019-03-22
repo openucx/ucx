@@ -18,12 +18,12 @@ BEGIN_C_DECLS
 
 /** @file stats.h */
 
-void ucs_stats_init();
-void ucs_stats_cleanup();
-void ucs_stats_dump();
-int ucs_stats_is_active();
+void ucs_stats_init(void);
+void ucs_stats_cleanup(void);
+void ucs_stats_dump(void);
+int ucs_stats_is_active(void);
 #include "stats_fwd.h"
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 #include "libstats.h"
 

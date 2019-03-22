@@ -291,7 +291,7 @@ UCS_TEST_P(test_rc_flow_control, fc_disabled_flush)
 UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
                                               int hard_thresh)

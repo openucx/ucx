@@ -8,7 +8,7 @@
 #include <ucs/debug/log.h>
 
 
-double ucs_get_cpu_clocks_per_sec()
+double ucs_get_cpu_clocks_per_sec(void)
 {
     static double clocks_per_sec = 0.0;
     static int initialized = 0;

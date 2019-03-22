@@ -144,8 +144,8 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 
-#if IBV_HW_TM
-#  if ENABLE_STATS
+#ifdef IBV_HW_TM
+#  ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
     .name = "tag",
     .num_counters = UCT_RC_MLX5_STAT_TAG_LAST,
@@ -249,7 +249,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
                                   uct_rc_mlx5_iface_common_config_t *config)
 {
     ucs_status_t status = UCS_OK;
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     struct ibv_qp *cmd_qp;
     int i;
 
@@ -328,7 +328,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     }
 }
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 static void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_rc_mlx5_release_desc_t *release = ucs_derived_of(self,
@@ -501,7 +501,7 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 }
 #endif
 
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     const uct_rc_mlx5_iface_common_config_t *config,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
@@ -596,7 +596,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
         UCS_STATS_NODE_FREE(iface->tm.stats);
@@ -608,7 +608,7 @@ static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
                                   uct_iface_attr_t *iface_attr,
                                   size_t max_inline, size_t max_iov)
 {
-#if IBV_HW_TM
+#ifdef IBV_HW_TM
     unsigned eager_hdr_size = sizeof(struct ibv_tmh);
     struct ibv_exp_port_attr* port_attr;
 
@@ -819,7 +819,7 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         } else if (nfreed) {
             dest = uct_ib_mlx5_get_cqe(mlx5_cq, pi + nfreed);
             owner_bit = dest->op_own & MLX5_CQE_OWNER_MASK;
-            memcpy((void*)(dest + 1) - cqe_sz, (void*)(cqe + 1) - cqe_sz, cqe_sz);
+            memcpy((char*)(dest + 1) - cqe_sz, (char*)(cqe + 1) - cqe_sz, cqe_sz);
             dest->op_own = (dest->op_own & ~MLX5_CQE_OWNER_MASK) | owner_bit;
         }
     }
