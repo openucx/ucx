@@ -11,7 +11,7 @@
 
 class test_ucp_rma : public test_ucp_memheap {
 private:
-    // TODO: need to investigate the slownees of the disabled tests
+    // TODO: need to investigate the slowness of the disabled tests
     std::vector<std::string> disabled_tests;
 
     static void send_completion(void *request, ucs_status_t status){}
