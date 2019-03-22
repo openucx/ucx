@@ -5,9 +5,9 @@
 
 #include "tcp.h"
 
-#include <uct/base/uct_worker.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <ucs/config/types.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <netinet/tcp.h>
@@ -32,8 +32,12 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
 
   {"SNDBUF", "64k",
-   "Socket send buffer size.",
+   "Socket send buffer size",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RCVBUF", "auto",
+   "Socket receive buffer size",
+   ucs_offsetof(uct_tcp_iface_config_t, sockopt_rcvbuf), UCS_CONFIG_TYPE_MEMUNITS},
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
@@ -231,20 +235,31 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 {
-    int ret;
+    ucs_status_t status;
 
-    ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void*)&iface->sockopt.nodelay,
-                     sizeof(int));
-    if (ret < 0) {
-        ucs_error("Failed to set TCP_NODELAY on fd %d: %m", fd);
-        return UCS_ERR_IO_ERROR;
+    status = ucs_socket_setopt(fd, IPPROTO_TCP, TCP_NODELAY,
+                               (const void*)&iface->sockopt.nodelay,
+                               sizeof(int));
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (void*)&iface->sockopt.sndbuf,
-                     sizeof(int));
-    if (ret < 0) {
-        ucs_error("Failed to set SO_SNDBUF on fd %d: %m", fd);
-        return UCS_ERR_IO_ERROR;
+    if (iface->sockopt.sndbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
+                                   (const void*)&iface->sockopt.sndbuf,
+                                   sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (iface->sockopt.rcvbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
+                                   (const void*)&iface->sockopt.rcvbuf,
+                                   sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
@@ -377,6 +392,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_poll       = config->max_poll;
     self->sockopt.nodelay       = config->sockopt_nodelay;
     self->sockopt.sndbuf        = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
 
     self->am_buf_size = ucs_max(self->config.buf_size, self->config.short_size);

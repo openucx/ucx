@@ -870,6 +870,38 @@ test_unused_env_var() {
 	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
 }
 
+test_env_var_aliases() {
+	echo "==== Running MLX5 env var aliases test ===="
+	vars=( "TM_ENABLE" "TM_MAX_BCOPY" "TM_LIST_SIZE" "TX_MAX_BB" )
+	for var in "${vars[@]}"
+	do
+		for tl in "RC_MLX5" "DC_MLX5"
+		do
+			val=$(./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+			if [ -z $val ]
+			then
+				echo "UCX_${tl}_${var} does not exist in UCX config"
+				exit 1
+			fi
+			# To check that changing env var takes an effect,
+			# create some value, which is different from the default.
+			magic_val=`echo $val | sed -e ' s/inf\|auto/15/; s/n/swap/; s/y/n/; s/swap/y/; s/\([0-9]\)/\11/'`
+
+			# Check that both (tl name and common RC) aliases work
+			for var_alias in "RC" $tl
+			do
+				var_name=UCX_${var_alias}_${var}
+				val_set=$(export $var_name=$magic_val; ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+				if [ "$val_set" != "$magic_val" ]
+				then
+					echo "Can't set $var_name"
+					exit 1
+				fi
+			done
+		done
+	done
+}
+
 test_malloc_hook() {
 	echo "==== Running malloc hooks test ===="
 	if [ -x ./test/apps/test_tcmalloc ]
@@ -937,14 +969,17 @@ run_coverity() {
 }
 
 run_gtest_watchdog_test() {
-	expected_run_time=$1
+	watchdog_timeout=$1
+	sleep_time=$2
+	expected_runtime=$3
 	expected_err_str="Connection timed out - abort testing"
 
 	make -C test/gtest
 
 	start_time=`date +%s`
 
-	env WATCHDOG_GTEST_TIMEOUT_=$expected_run_time \
+	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
+		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
 		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
 	pid=$!
@@ -962,13 +997,12 @@ run_gtest_watchdog_test() {
 		exit 1
 	fi
 
-	run_time=$(($end_time-$start_time))
-	expected_run_time=$(($expected_run_time*2))
+	runtime=$(($end_time-$start_time))
 
-	if [ $run_time -gt $expected_run_time ]
+	if [ $run_time -gt $expected_runtime ]
 	then
-		echo "Watchdog timeout test takes $run_time seconds that" \
-			"is greater than expected $expected_run_time seconds"
+		echo "Watchdog timeout test takes $runtime seconds that" \
+			"is greater than expected $expected_runtime seconds"
 		exit 1
 	fi
 }
@@ -985,7 +1019,7 @@ run_gtest() {
 	$MAKEP
 
 	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
-	run_gtest_watchdog_test 5
+	run_gtest_watchdog_test 5 60 300
 
 	export GTEST_SHARD_INDEX=$worker
 	export GTEST_TOTAL_SHARDS=$nworkers
@@ -1168,6 +1202,7 @@ run_tests() {
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
+	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
 	do_distributed_task 0 3 test_jucx
 

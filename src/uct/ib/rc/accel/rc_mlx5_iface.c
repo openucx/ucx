@@ -26,7 +26,7 @@ typedef struct uct_rc_mlx5_iface_config {
 
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"", "", NULL,
+  {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 

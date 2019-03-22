@@ -18,8 +18,8 @@ public:
 protected:
 
     static ucs_log_func_rc_t
-    unknown_socket_error_handler(const char *file, unsigned line, const char *function,
-                                 ucs_log_level_t level, const char *message, va_list ap)
+    socket_error_handler(const char *file, unsigned line, const char *function,
+                         ucs_log_level_t level, const char *message, va_list ap)
     {
         // Ignore errors that invalid input parameters as it is expected
         if (level == UCS_LOG_LEVEL_ERROR) {
@@ -64,7 +64,7 @@ UCS_TEST_F(test_socket, sockaddr_sizeof) {
     /* Check with wrong address family */
     {
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(unknown_socket_error_handler);
+        scoped_log_handler log_handler(socket_error_handler);
 
         size = 0;
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
@@ -106,7 +106,7 @@ UCS_TEST_F(test_socket, sockaddr_get_port) {
     /* Check with wrong address family */
     {
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(unknown_socket_error_handler);
+        scoped_log_handler log_handler(socket_error_handler);
 
         port = sin_port;
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
@@ -151,7 +151,7 @@ UCS_TEST_F(test_socket, sockaddr_get_inet_addr) {
     /* Check with wrong address family */
     {
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(unknown_socket_error_handler);
+        scoped_log_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(NULL, ucs_sockaddr_get_inet_addr((const struct sockaddr*)&sa_un));
     }
@@ -226,4 +226,45 @@ UCS_TEST_F(test_socket, sockaddr_str) {
             EXPECT_EQ(NULL, str);
         }
     }
+}
+
+UCS_TEST_F(test_socket, socket_setopt) {
+    socklen_t optlen;
+    int optname;
+    int optval;
+    int level;
+    ucs_status_t status;
+    int fd;
+
+    optlen = sizeof(optval);
+
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
+    EXPECT_UCS_OK(status);
+    EXPECT_GE(fd, 0);
+
+    /* with acceptable parameters */
+    {
+        level   = SOL_SOCKET;
+        optname = SO_REUSEADDR;
+        optval  = 1;
+
+        status = ucs_socket_setopt(fd, level, optname, &optval, optlen);
+        EXPECT_UCS_OK(status);
+    }
+
+    /* with bad parameters */
+    {
+        level   = IPPROTO_TCP;
+        optname = SO_REUSEADDR;
+        optval  = 1;
+
+        socket_err_exp_str = "failed to set " + ucs::to_string(optname) + " option for " +
+                             ucs::to_string(level) + " level on fd " + ucs::to_string(fd) +
+                             + ": " + strerror(EINVAL);
+        scoped_log_handler log_handler(socket_error_handler);
+        status = ucs_socket_setopt(fd, level, optname, &optval, optlen);
+        EXPECT_EQ(status, UCS_ERR_IO_ERROR);
+    }
+
+    close(fd);
 }

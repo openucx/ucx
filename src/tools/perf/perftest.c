@@ -17,7 +17,9 @@
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/sock.h>
 #include <ucs/debug/log.h>
+
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -888,10 +890,9 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
     if (ctx->server_addr == NULL) {
         optval = 1;
-        ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-        if (ret < 0) {
-            ucs_error("setsockopt(SO_REUSEADDR) failed: %m");
-            status = UCS_ERR_INVALID_PARAM;
+        status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
+                                   &optval, sizeof(optval));
+        if (status != UCS_OK) {
             goto err_close_sockfd;
         }
 
