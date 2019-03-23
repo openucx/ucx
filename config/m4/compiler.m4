@@ -149,6 +149,55 @@ AC_DEFUN([DETECT_UARCH],
 
 
 #
+# CHECK_COMPILER_FLAG
+# Usage: CHECK_COMPILER_FLAG([name], [flag], [program], [if-true], [if-false])
+#
+# The macro checks if program may be compiled using specified flag
+#
+AC_DEFUN([CHECK_COMPILER_FLAG],
+[
+#
+# Force ICC treat command line warnings as errors.
+# This evaluation should be called prior to all other compiler flags evals
+#
+         AS_IF([test "x$icc_cmd_diag_to_error" = "x"],
+               [icc_cmd_diag_to_error=1
+                AC_MSG_CHECKING([compiler flag -diag-error 10006])
+                SAVE_CFLAGS="$CFLAGS"
+                CFLAGS="$BASE_CFLAGS $CFLAGS -diag-error 10006"
+                AC_COMPILE_IFELSE([AC_LANG_SOURCE([[int main(){return 0;}]])],
+                                  [BASE_CFLAGS="$BASE_CFLAGS -diag-error 10006"
+                                   AC_MSG_RESULT([yes])],
+                                  [AC_MSG_RESULT([no])])
+                CFLAGS="$SAVE_CFLAGS"
+               ],
+               [])
+         AC_MSG_CHECKING([compiler flag $1])
+         SAVE_CFLAGS="$CFLAGS"
+         CFLAGS="$BASE_CFLAGS $CFLAGS $2"
+         AC_COMPILE_IFELSE([$3],
+                           [AC_MSG_RESULT([yes])
+                            $4],
+                           [AC_MSG_RESULT([no])
+                            $5])
+         CFLAGS="$SAVE_CFLAGS"
+])
+
+#
+# ADD_COMPILER_FLAG_IF_SUPPORTED
+# Usage: ADD_COMPILER_FLAG_IF_SUPPORTED([name], [flag], [program], [if-true], [if-false])
+#
+# The macro checks if program may be compiled using specified flag and adds
+# this flag if it is supported
+#
+AC_DEFUN([ADD_COMPILER_FLAG_IF_SUPPORTED],
+[
+         CHECK_COMPILER_FLAG([$1], [$2], [$3],
+                             [BASE_CFLAGS="$BASE_CFLAGS $2" $4],
+                             [$5])
+])
+
+#
 # CHECK_DEPRECATED_DECL_FLAG (flag, variable)
 #
 # The macro checks if the given compiler flag enables usig deprecated declarations.
@@ -169,6 +218,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
          CFLAGS="$SAVE_CFLAGS"
 ])
 
+
 CHECK_DEPRECATED_DECL_FLAG([-diag-disable 1478], CFLAGS_NO_DEPRECATED) # icc
 CHECK_DEPRECATED_DECL_FLAG([-Wno-deprecated-declarations], CFLAGS_NO_DEPRECATED) # gcc
 AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
@@ -177,22 +227,34 @@ AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
 #
 # Disable format-string warning on ICC
 #
-SAVE_CFLAGS="$CFLAGS"
-CFLAGS="$BASE_CFLAGS $CFLAGS -diag-disable 269"
-AC_MSG_CHECKING([-diag-disable 269])
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-                     #include <stdlib.h>
-                     #include <stdio.h>
-                     int main() {
-                         char *p = NULL;
-                         scanf("%m[^.]", &p);
-                         free(p);
-                         return 0;
-                     }
-                 ]])],
-               [AC_MSG_RESULT([yes])],
-               [AC_MSG_RESULT([no])
-                CFLAGS="$SAVE_CFLAGS"])
+ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
+                               [-diag-disable 269],
+                               [AC_LANG_SOURCE([[#include <stdlib.h>
+                                                 #include <stdio.h>
+                                                 int main() {
+                                                     char *p = NULL;
+                                                     scanf("%m[^.]", &p);
+                                                     free(p);
+                                                     return 0;
+                                                 }]])],
+                               [],
+                               [])
+
+
+#
+# Set default datatype alignment to 16 bytes.
+# Some compilers (LLVM based, clang) expects allocation of datatypes by 32 bytes
+# to optimize operations memset/memcpy/etc using vectorized processor instructions
+# which requires aligment of memory buffer by 32 or higer bytes. Default malloc method
+# guarantee alignment for 16 bytes only. Force using compiler 16-bytes alignment
+# by default if option is supported.
+#
+UCX_ALLOC_ALIGN=16
+ADD_COMPILER_FLAG_IF_SUPPORTED([-fmax-type-align=$UCX_ALLOC_ALIGN],
+                               [-fmax-type-align=$UCX_ALLOC_ALIGN],
+                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                               [AC_DEFINE_UNQUOTED([UCX_ALLOC_ALIGN], $UCX_ALLOC_ALIGN, [Set aligment assumption for compiler])],
+                               [])
 
 
 #
