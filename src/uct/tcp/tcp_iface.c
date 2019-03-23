@@ -48,7 +48,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {NULL}
 };
 
-const static uct_tcp_ep_progress_t uct_tcp_ep_progress_cb_table[][UCT_TCP_EP_CTX_TYPE_MAX] = {
+const uct_tcp_ep_progress_t uct_tcp_ep_progress_cb_table[][UCT_TCP_EP_CTX_TYPE_MAX] = {
     UCT_TCP_EP_CONN_STATES(UCT_TCP_EP_CONN_STATE_CTX_PROGRESS)
 };
 
@@ -141,12 +141,10 @@ uct_tcp_iface_handle_events(uct_tcp_ep_t *ep, uint32_t epoll_events)
     unsigned count = 0;
 
     if (epoll_events & EPOLLIN) {
-        count += uct_tcp_ep_progress_cb_table
-            [ep->conn_state][UCT_TCP_EP_CTX_TYPE_RX](ep);
+        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_RX);
     }
     if (epoll_events & EPOLLOUT) {
-        count += uct_tcp_ep_progress_cb_table
-            [ep->conn_state][UCT_TCP_EP_CTX_TYPE_TX](ep);
+        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
     }
 
     return count;
@@ -188,11 +186,6 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     } while ((read_events < iface->config.max_poll) && (nevents == max_events));
 
     return count;
-}
-
-unsigned uct_tcp_iface_invoke_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
-{
-    return uct_tcp_ep_progress_cb_table[ep->conn_state][ctx_type](ep);
 }
 
 static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,

@@ -35,7 +35,7 @@ unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep)
     ucs_assertv((ep->tx.length == 0) && (ep->tx.offset == 0) &&
                 (ep->tx.buf == NULL), "ep=%p", ep);
 
-    return uct_tcp_iface_invoke_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
+    return uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
 
 err:
     iface->outstanding--;

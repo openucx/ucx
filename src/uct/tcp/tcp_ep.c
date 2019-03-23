@@ -484,7 +484,7 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     UCT_CHECK_AM_ID(am_id);
 
     status = uct_tcp_ep_can_send(ep);
-    if (ucs_likely(status != UCS_OK)) {
+    if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
             goto err_no_res;
         } else {

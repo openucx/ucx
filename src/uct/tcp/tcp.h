@@ -160,6 +160,7 @@ typedef struct uct_tcp_iface_config {
 
 extern uct_md_component_t uct_tcp_md;
 extern const char *uct_tcp_address_type_names[];
+extern const uct_tcp_ep_progress_t uct_tcp_ep_progress_cb_table[][UCT_TCP_EP_CTX_TYPE_MAX];
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
@@ -181,8 +182,6 @@ ucs_status_t uct_tcp_send_blocking(int fd, const void *data, size_t length);
 ucs_status_t uct_tcp_recv_blocking(int fd, void *data, size_t length);
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
-
-unsigned uct_tcp_iface_invoke_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr *dest_addr,
@@ -231,5 +230,12 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr *peer_addr, int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
+
+static inline unsigned
+uct_tcp_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
+{
+    return uct_tcp_ep_progress_cb_table[ep->conn_state][ctx_type](ep);
+}
+
 
 #endif
