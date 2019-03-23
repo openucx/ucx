@@ -82,6 +82,9 @@ rm -f %{buildroot}%{_libdir}/*.la
 %postun -p /sbin/ldconfig
 
 %changelog
+* Sat Mar 23 2019 Yossi Itigin <yosefe@mellanox.com> 1.5.1-1
+- Bump version to 1.5.1
+- See NEWS for details
 * Tue Nov 6 2018 Andrey Maslennikov <andreyma@mellanox.com> 1.5.0-1
 - Bump version to 1.5.0
 - See NEWS for details
