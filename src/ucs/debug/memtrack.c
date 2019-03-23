@@ -109,6 +109,12 @@ void ucs_memtrack_allocated(void *ptr, size_t size, const char *name)
     khiter_t iter;
     int ret;
 
+#ifdef UCX_ALLOC_ALIGN
+    UCS_STATIC_ASSERT(UCX_ALLOC_ALIGN >= 16);
+    UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCX_ALLOC_ALIGN));
+    ucs_assert(!ucs_check_if_align_pow2((uintptr_t)ptr, UCX_ALLOC_ALIGN));
+#endif
+
     if ((ptr == NULL) || !ucs_memtrack_is_enabled()) {
         return;
     }
