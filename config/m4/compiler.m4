@@ -112,7 +112,7 @@ AC_DEFUN([DETECT_UARCH],
     ax_arch=""
     
     AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
-    AC_MSG_NOTICE(Detected CPU arhitecture: ${cpuarch})
+    AC_MSG_NOTICE(Detected CPU architecture: ${cpuarch})
     AC_MSG_NOTICE(Detected CPU variant: ${cpuvar})
     AC_MSG_NOTICE(Detected CPU part: ${cpupart})
    
