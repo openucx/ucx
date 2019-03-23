@@ -70,4 +70,7 @@ size_t ucm_get_shm_seg_size(const void *shmaddr);
 void ucm_strerror(int eno, char *buf, size_t max);
 
 
+void ucm_prevent_dl_unload();
+
+
 #endif
