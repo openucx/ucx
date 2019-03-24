@@ -119,7 +119,7 @@ typedef struct uct_md_resource_desc {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief UCT component attributres field mask
+ * @brief UCT component attributes field mask
  *
  * The enumeration allows specifying which fields in @ref uct_component_attr_t
  * are present. It is used for backward compatibility support.
@@ -150,7 +150,7 @@ typedef struct uct_component_attr {
     /** Component name */
     char                   name[UCT_COMPONENT_NAME_MAX];
 
-    /** Amount of memory-domain resources */
+    /** Number of memory-domain resources */
     unsigned               md_resource_count;
 
     /**
