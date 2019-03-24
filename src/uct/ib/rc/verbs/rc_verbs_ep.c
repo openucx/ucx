@@ -29,6 +29,11 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                  IBV_SEND_SIGNALED);
     }
+    if (wr->opcode == IBV_WR_RDMA_READ) {
+        send_flags |= uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                             IBV_SEND_FENCE);
+    }
+
     wr->send_flags = send_flags;
     wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
@@ -143,7 +148,9 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                           desc, iface->super.config.atomic64_handler,
                                           result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
-                                rkey, desc, IBV_SEND_SIGNALED);
+                                rkey, desc, IBV_SEND_SIGNALED |
+                                uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                                       IBV_SEND_FENCE));
     return UCS_INPROGRESS;
 }
 
@@ -182,7 +189,9 @@ uct_rc_verbs_ep_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                           desc, handler, result, comp);
     uct_rc_verbs_ep_ext_atomic_post(ep, opcode, length, compare_mask, compare_add,
                                     swap, remote_addr, rkey, desc,
-                                    IBV_EXP_SEND_SIGNALED);
+                                    IBV_EXP_SEND_SIGNALED |
+                                    uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
+                                                           IBV_EXP_SEND_FENCE));
     return UCS_INPROGRESS;
 }
 #endif
@@ -531,6 +540,13 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       &ep->super.txqp, comp, ep->txcnt.pi);
 }
 
+ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
+{
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    return uct_rc_ep_fence(tl_ep, &ep->fi, 1);
+}
+
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req)
 {
@@ -582,6 +598,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
+    uct_ib_fence_info_init(&self->fi);
 
     return UCS_OK;
 }

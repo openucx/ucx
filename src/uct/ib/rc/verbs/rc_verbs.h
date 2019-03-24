@@ -32,6 +32,7 @@ typedef struct uct_rc_verbs_txcnt {
 typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
+    uct_ib_fence_info_t    fi;
 } uct_rc_verbs_ep_t;
 
 
@@ -43,6 +44,7 @@ typedef struct uct_rc_verbs_iface_config {
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
     uct_rc_fc_config_t                 fc;
+    int                                fence;
 } uct_rc_verbs_iface_config_t;
 
 
@@ -131,6 +133,8 @@ ucs_status_t uct_rc_verbs_ep_atomic32_fetch(uct_ep_h tl_ep, uct_atomic_op_t opco
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp);
+
+ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req);

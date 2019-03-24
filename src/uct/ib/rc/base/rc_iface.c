@@ -150,39 +150,52 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_RECV;
 
-    if (dev->atomic_arg_sizes & sizeof(uint64_t)) {
-        /* TODO: remove deprecated flags */
-        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+    if (uct_ib_device_has_pci_atomics(dev)) {
+        if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {
+            iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        }
+        if (dev->pci_cswap_arg_sizes & sizeof(uint64_t)) {
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+        }
+#if HAVE_IB_EXT_ATOMICS
+        if (dev->pci_fadd_arg_sizes & sizeof(uint32_t)) {
+            iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        }
+        if (dev->pci_cswap_arg_sizes & sizeof(uint32_t)) {
+            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+        }
+#endif
+        iface_attr->cap.flags                  |= UCT_IFACE_FLAG_ATOMIC_CPU;
+    } else {
+        if (dev->atomic_arg_sizes & sizeof(uint64_t)) {
+            /* TODO: remove deprecated flags */
+            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-        iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
-        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
-    }
+            iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                                                  UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+        }
 
 #if HAVE_IB_EXT_ATOMICS
-    if (dev->ext_atomic_arg_sizes & sizeof(uint64_t)) {
-        /* TODO: remove deprecated flags */
-        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        if (dev->ext_atomic_arg_sizes & sizeof(uint64_t)) {
+            /* TODO: remove deprecated flags */
+            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
-    }
+            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
+        }
 
-    if (dev->ext_atomic_arg_sizes & sizeof(uint32_t)) {
-        /* TODO: remove deprecated flags */
-        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        if (dev->ext_atomic_arg_sizes & sizeof(uint32_t)) {
+            /* TODO: remove deprecated flags */
+            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-        iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
-        iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
-                                              UCS_BIT(UCT_ATOMIC_OP_SWAP) |
-                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
-    }
+            iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                                                  UCS_BIT(UCT_ATOMIC_OP_SWAP) |
+                                                  UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+        }
 #endif
-
-    if (dev->pci_fadd_arg_sizes || dev->pci_cswap_arg_sizes) {
-        iface_attr->cap.atomic32.op_flags  = 0;
-        iface_attr->cap.atomic32.fop_flags = 0;
-        iface_attr->cap.atomic64.op_flags  = 0;
-        iface_attr->cap.atomic64.fop_flags = 0;
     }
 
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
@@ -539,6 +552,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
 
+    uct_ib_fence_info_init(&self->tx.fi);
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
@@ -863,3 +877,17 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     return uct_rc_iface_common_event_arm(tl_iface, events, 0);
 }
+
+ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+
+    if (iface->config.fence) {
+        iface->tx.fi.fence_flag = 1;
+        iface->tx.fi.fence_beat++;
+    }
+
+    UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
+    return UCS_OK;
+}
+

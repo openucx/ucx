@@ -34,6 +34,10 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
+  {"FENCE", "y",
+   "Request IB fence when API fence requested.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, fence), UCS_CONFIG_TYPE_BOOL},
+
   {"", "", NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, fc),
    UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
@@ -199,6 +203,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->config.tx_max_wr / 4);
+    self->super.config.fence         = config->fence;
 
     self->super.progress = uct_rc_verbs_iface_progress;
 
@@ -355,13 +360,13 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_verbs_ep_flush,
-    .ep_fence                 = uct_base_ep_fence,
+    .ep_fence                 = uct_rc_verbs_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_get_address           = uct_rc_ep_get_address,
     .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
+    .iface_fence              = uct_rc_iface_fence,
     .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,

@@ -214,29 +214,13 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                       &iface->super.super.release_desc);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_add_fence(uct_ib_md_t *md, uct_ib_mlx5_txwq_t *wq)
-{
-    if (md->dev.pci_fadd_arg_sizes || md->dev.pci_cswap_arg_sizes) {
-        wq->next_fm = UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_mlx5_ep_fm(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq)
 {
     uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
 
-    fm_ce_se     |= txwq->next_fm;
-    txwq->next_fm = 0;
-
-    /* a call to iface_fence increases beat, so if endpoint beat is not in
-     * sync with iface beat it means the endpoint did not post any WQE with
-     * fence flag yet */
-    if (txwq->fence_beat != iface->tx.fence_beat) {
-        txwq->fence_beat = iface->tx.fence_beat;
-        fm_ce_se        |= iface->tx.next_fm;
-    }
+    fm_ce_se |= uct_rc_ep_atomic_fence(&iface->super, &txwq->fi,
+                                       UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC);
 
     return fm_ce_se;
 }
@@ -1330,5 +1314,4 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     }
     return UCS_OK;
 }
-
 
