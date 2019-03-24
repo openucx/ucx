@@ -4,6 +4,8 @@
  * See file LICENSE for terms.
  */
 
+#define _GNU_SOURCE /* for dladdr */
+
 #include "sys.h"
 
 #ifdef HAVE_CONFIG_H
@@ -21,6 +23,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dlfcn.h>
 
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
@@ -255,4 +258,35 @@ void ucm_strerror(int eno, char *buf, size_t max)
 #else
     (void)strerror_r(eno, buf, max);
 #endif
+}
+
+void ucm_prevent_dl_unload()
+{
+    Dl_info info;
+    void *dl;
+    int ret;
+
+    /* Get the path to current library by current function pointer */
+    (void)dlerror();
+    ret = dladdr(ucm_prevent_dl_unload, &info);
+    if (ret == 0) {
+        ucm_warn("could not find address of current library: %s", dlerror());
+        return;
+    }
+
+    /* Load the current library with NODELETE flag, to prevent it from being
+     * unloaded. This will create extra reference to the library, but also add
+     * NODELETE flag to the dynamic link map.
+     */
+    (void)dlerror();
+    dl = dlopen(info.dli_fname, RTLD_LOCAL|RTLD_LAZY|RTLD_NODELETE);
+    if (dl == NULL) {
+        ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
+        return;
+    }
+
+    ucm_debug("reloaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
+
+    /* Now we drop our reference to the lib, and it won't be unloaded anymore */
+    dlclose(dl);
 }
