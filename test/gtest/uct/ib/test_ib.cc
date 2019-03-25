@@ -329,6 +329,55 @@ UCS_TEST_P(test_uct_ib, address_pack) {
     test_address_pack(0xdeadfeedbeefa880ul);
 }
 
+UCS_TEST_P(test_uct_ib, sec_to_qp_time) {
+    uint8_t qp_val;
+
+    qp_val = uct_ib_to_qp_fabric_time(0);
+    EXPECT_EQ(1, qp_val);
+
+    for (uint8_t i = 1; i < 32; i++) {
+        qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, i) / UCS_USEC_PER_SEC);
+        EXPECT_EQ(i % 31, qp_val);
+    }
+
+    qp_val = uct_ib_to_qp_fabric_time(10000);
+    EXPECT_EQ(0, qp_val);
+}
+
+UCS_TEST_P(test_uct_ib, sec_to_rnr_time) {
+    uint8_t rnr_val;
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0);
+    EXPECT_EQ(1, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0.01 / UCS_MSEC_PER_SEC);
+    EXPECT_EQ(1, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0.01 / UCS_MSEC_PER_SEC * 0.5);
+    EXPECT_EQ(1, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0.04 / UCS_MSEC_PER_SEC);
+    EXPECT_EQ(4, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0.05 / UCS_MSEC_PER_SEC);
+    EXPECT_EQ(5, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(1. / UCS_MSEC_PER_SEC);
+    EXPECT_EQ(13, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(30. / UCS_MSEC_PER_SEC);
+    EXPECT_EQ(23, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0.5);
+    EXPECT_EQ(31, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(0.6);
+    EXPECT_EQ(0, rnr_val);
+
+    rnr_val = uct_ib_to_rnr_fabric_time(1.);
+    EXPECT_EQ(0, rnr_val);
+}
+
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
 

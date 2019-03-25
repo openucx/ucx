@@ -221,9 +221,15 @@ int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
 
 
 /**
- * Convert time-in-seconds to IB fabric time value
+ * Convert time-in-seconds to IB fabric QP time value
  */
-uint8_t uct_ib_to_fabric_time(double time);
+uint8_t uct_ib_to_qp_fabric_time(double time);
+
+
+/**
+ * Convert time-in-seconds to IB fabric RNR time value
+ */
+uint8_t uct_ib_to_rnr_fabric_time(double time);
 
 
 /**

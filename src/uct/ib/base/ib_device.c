@@ -629,7 +629,7 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-uint8_t uct_ib_to_fabric_time(double time)
+uint8_t uct_ib_to_qp_fabric_time(double time)
 {
     double to;
     long t;
@@ -644,6 +644,41 @@ uint8_t uct_ib_to_fabric_time(double time)
         ucs_assert(t >= 1 && t < 31);
         return t;
     }
+}
+
+uint8_t uct_ib_to_rnr_fabric_time(double time)
+{
+    const uint8_t max_rnr = 32;
+    double rnr_time_ms[max_rnr];
+    double avg_ms;
+    uint8_t t;
+
+    for (t = 0; t < max_rnr; t++) {
+        if (t >= 4) {
+            if (ucs_is_even(t + 1)) {
+                rnr_time_ms[t] = rnr_time_ms[t - 1] + rnr_time_ms[t - 4];
+            } else {
+                rnr_time_ms[t] = rnr_time_ms[t - 1] + rnr_time_ms[t - 3];
+            }
+        } else {
+            rnr_time_ms[t] = 0.01 * (t + 1);
+        }
+
+        if (time * UCS_MSEC_PER_SEC <= rnr_time_ms[t]) {
+            avg_ms = t > 1 ? ((rnr_time_ms[t - 1] + rnr_time_ms[t]) / 2.) : 0.;
+
+            if (time * UCS_MSEC_PER_SEC < avg_ms) {
+                /* return previous value (it's already incremented) */
+                return t;
+            } else {
+                /* return current value (increment and adjust for
+                 * the maximum rnr value) */
+                return (t + 1) % max_rnr;
+            }
+        }
+    }
+
+    return 0; /* this is a special value that means the maximum value */
 }
 
 ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
