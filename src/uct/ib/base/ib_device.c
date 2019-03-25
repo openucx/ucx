@@ -649,13 +649,14 @@ uint8_t uct_ib_to_qp_fabric_time(double time)
 uint8_t uct_ib_to_rnr_fabric_time(double time)
 {
     const uint8_t max_rnr = 32;
+    double time_ms        = time * UCS_MSEC_PER_SEC; 
     double rnr_time_ms[max_rnr];
     double avg_ms;
     uint8_t t;
 
     for (t = 0; t < max_rnr; t++) {
         if (t >= 4) {
-            if (ucs_is_even(t + 1)) {
+            if (ucs_is_odd(t)) {
                 rnr_time_ms[t] = rnr_time_ms[t - 1] + rnr_time_ms[t - 4];
             } else {
                 rnr_time_ms[t] = rnr_time_ms[t - 1] + rnr_time_ms[t - 3];
@@ -664,10 +665,10 @@ uint8_t uct_ib_to_rnr_fabric_time(double time)
             rnr_time_ms[t] = 0.01 * (t + 1);
         }
 
-        if (time * UCS_MSEC_PER_SEC <= rnr_time_ms[t]) {
-            avg_ms = t > 1 ? ((rnr_time_ms[t - 1] + rnr_time_ms[t]) / 2.) : 0.;
+        if (time_ms <= rnr_time_ms[t]) {
+            avg_ms = (t > 1) ? ((rnr_time_ms[t - 1] + rnr_time_ms[t]) / 2.) : 0.;
 
-            if (time * UCS_MSEC_PER_SEC < avg_ms) {
+            if (time_ms < avg_ms) {
                 /* return previous value (it's already incremented) */
                 return t;
             } else {

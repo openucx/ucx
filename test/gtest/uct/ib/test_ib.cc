@@ -353,7 +353,7 @@ UCS_TEST_P(test_uct_ib, sec_to_rnr_time) {
     rnr_val = uct_ib_to_rnr_fabric_time(0.01 / UCS_MSEC_PER_SEC);
     EXPECT_EQ(1, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0.01 / UCS_MSEC_PER_SEC * 0.5);
+    rnr_val = uct_ib_to_rnr_fabric_time(0.005 / UCS_MSEC_PER_SEC);
     EXPECT_EQ(1, rnr_val);
 
     rnr_val = uct_ib_to_rnr_fabric_time(0.04 / UCS_MSEC_PER_SEC);

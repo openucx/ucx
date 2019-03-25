@@ -79,7 +79,9 @@ BEGIN_C_DECLS
 /* Return values: off-set from the alignment */
 #define ucs_padding_pow2(_n, _p) ucs_check_if_align_pow2(_n, _p)
 
-#define ucs_is_even(_n) !((_n) % 2)
+#define ucs_is_odd(_n)  ((_n) % 2)
+
+#define ucs_is_even(_n) !ucs_is_odd(_n)
 
 #define UCS_MASK_SAFE(_i) \
     (((_i) >= 64) ? ((uint64_t)(-1)) : UCS_MASK(_i))
