@@ -455,13 +455,31 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .cleanup_res_domain       = (void*)ucs_empty_function,
 };
 
+static int uct_cm_is_module_loaded(uct_md_h md)
+{
+    struct ib_cm_device *cmdev = NULL;
+
+    cmdev = ib_cm_open_device(ucs_derived_of(md, uct_ib_md_t)->dev.ibv_context);
+    if (cmdev == NULL) {
+        ucs_debug("ib_cm_open_device() failed: %m. Check if ib_ucm.ko module is loaded.");
+        return 0;
+    }
+
+    ib_cm_close_device(cmdev);
+    return 1;
+}
+
 static ucs_status_t uct_cm_query_resources(uct_md_h md,
                                            uct_tl_resource_desc_t **resources_p,
                                            unsigned *num_resources_p)
 {
-    return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                            "cm", UCT_IB_DEVICE_FLAG_LINK_IB,
-                                            resources_p, num_resources_p);
+    if (uct_cm_is_module_loaded(md)) {
+        return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
+                                                "cm", UCT_IB_DEVICE_FLAG_LINK_IB,
+                                                resources_p, num_resources_p);
+    } else {
+        return UCS_ERR_NO_DEVICE;
+    }
 }
 
 UCT_TL_COMPONENT_DEFINE(uct_cm_tl,
