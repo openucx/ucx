@@ -143,4 +143,9 @@
    ...
    fun:ucma_init_device
 }
-
+{
+   ucm_get_dev_index
+   Memcheck:Leak
+   ...
+   fun:ib_cm_open_device
+}
