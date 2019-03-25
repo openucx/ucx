@@ -22,27 +22,10 @@
     _FUNC(CONNECTING, "connection in progress", \
           UCT_TCP_EP_CTX_PROGRESS(TX, uct_tcp_cm_conn_progress),      /* TX */ \
           UCT_TCP_EP_CTX_PROGRESS(RX, UCT_TCP_EP_EMPTY_CTX_PROGRESS)  /* RX */ ), \
-    _FUNC(CONNECTED, "connected", \
+    _FUNC(CONNECTED, "connection established", \
           UCT_TCP_EP_CTX_PROGRESS(TX, uct_tcp_ep_progress_tx),        /* TX */ \
           UCT_TCP_EP_CTX_PROGRESS(RX, uct_tcp_ep_progress_rx)         /* RX */ )
 
-#define UCT_TCP_EP_EMPTY_CTX_PROGRESS (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
-
-#define UCT_TCP_EP_CTX_PROGRESS(_ctx_type, _ctx_progress) \
-    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CTX_TYPE_, _ctx_type)] = _ctx_progress \
-
-#define UCT_TCP_EP_CONN_STATE_STR(_state, _description, ...) \
-    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)] = { \
-        [UCT_TCP_EP_CONN_STATE_STR_NAME]  = UCS_PP_MAKE_STRING(_state), \
-        [UCT_TCP_EP_CONN_STATE_STR_DESCR] = _description \
-    }
-
-#define UCT_TCP_EP_CONN_STATE_CTX_PROGRESS(_state, _description, \
-                                           _tx_progress_table, _rx_progress_table) \
-    [UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)] = { _tx_progress_table, _rx_progress_table }
-
-#define UCT_TCP_EP_CONN_STATE_ENUM(_state, ...) \
-    UCS_PP_TOKENPASTE(UCT_TCP_EP_CONN_, _state)
 
 /**
  * TCP context type
@@ -50,23 +33,17 @@
 typedef enum uct_tcp_ep_ctx_type {
     UCT_TCP_EP_CTX_TYPE_TX,
     UCT_TCP_EP_CTX_TYPE_RX,
-    UCT_TCP_EP_CTX_TYPE_MAX
+    UCT_TCP_EP_CTX_TYPE_LAST
 } uct_tcp_ep_ctx_type_t;
 
-/**
- * TCP connection state string representation switch
- */
-typedef enum uct_tcp_ep_conn_state_str_switch {
-    UCT_TCP_EP_CONN_STATE_STR_NAME,
-    UCT_TCP_EP_CONN_STATE_STR_DESCR,
-    UCT_TCP_EP_CONN_STATE_STR_MAX
-} uct_tcp_ep_conn_state_str_switch_t;
 
 /**
  * TCP endpoint connection state
  */
 typedef enum uct_tcp_ep_conn_state {
-    UCT_TCP_EP_CONN_STATES(UCT_TCP_EP_CONN_STATE_ENUM)
+    UCT_TCP_EP_CONN_CLOSED,
+    UCT_TCP_EP_CONN_CONNECTING,
+    UCT_TCP_EP_CONN_CONNECTED
 } uct_tcp_ep_conn_state_t;
 
 /* Forward declaration */
@@ -74,6 +51,15 @@ typedef struct uct_tcp_ep uct_tcp_ep_t;
 
 typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
 
+
+/**
+ * TCP Connection Manager state
+ */
+typedef struct uct_tcp_cm_state {
+    const char            *name;                              /* CM state name */
+    const char            *description;                       /* CM state description */
+    uct_tcp_ep_progress_t progress[UCT_TCP_EP_CTX_TYPE_LAST]; /* TX and RX progress functions */
+} uct_tcp_cm_state_t;
 
 /**
  * TCP active message header
@@ -160,7 +146,7 @@ typedef struct uct_tcp_iface_config {
 
 extern uct_md_component_t uct_tcp_md;
 extern const char *uct_tcp_address_type_names[];
-extern const uct_tcp_ep_progress_t uct_tcp_ep_progress_cb_table[][UCT_TCP_EP_CTX_TYPE_MAX];
+extern const uct_tcp_cm_state_t uct_tcp_ep_cm_state[];
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
@@ -234,7 +220,7 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
 static inline unsigned
 uct_tcp_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
 {
-    return uct_tcp_ep_progress_cb_table[ep->conn_state][ctx_type](ep);
+    return uct_tcp_ep_cm_state[ep->conn_state].progress[ctx_type](ep);
 }
 
 

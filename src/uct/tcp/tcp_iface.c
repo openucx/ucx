@@ -48,10 +48,6 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {NULL}
 };
 
-const uct_tcp_ep_progress_t uct_tcp_ep_progress_cb_table[][UCT_TCP_EP_CTX_TYPE_MAX] = {
-    UCT_TCP_EP_CONN_STATES(UCT_TCP_EP_CONN_STATE_CTX_PROGRESS)
-};
-
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);
 
@@ -76,9 +72,9 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_iface_addr_t *iface_addr)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    uct_tcp_iface_t *iface         = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     const in_addr_t *remote_inaddr = (const in_addr_t*)dev_addr;
-    in_addr_t netmask = iface->config.netmask.sin_addr.s_addr;
+    in_addr_t netmask              = iface->config.netmask.sin_addr.s_addr;
 
     return (*remote_inaddr & netmask) ==
            (iface->config.ifaddr.sin_addr.s_addr & netmask);
@@ -217,7 +213,6 @@ static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
-    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr_in peer_addr;
     socklen_t addrlen;
     ucs_status_t status;
@@ -249,10 +244,6 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
             close(fd);
             return;
         }
-
-        ucs_debug("tcp_iface %p: accepted connection on %s to fd %d", iface,
-                  ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
-                                   str_local_addr, UCS_SOCKADDR_STRING_LEN), fd);
     }
 }
 

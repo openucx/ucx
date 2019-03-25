@@ -8,6 +8,33 @@
 #include <ucs/async/async.h>
 
 
+const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
+    [UCT_TCP_EP_CONN_CLOSED] = {
+        .name        = "CLOSED",
+        .description = "connection closed",
+        .progress    = {
+            [UCT_TCP_EP_CTX_TYPE_TX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+            [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+        },
+    },
+    [UCT_TCP_EP_CONN_CONNECTING] = {
+        .name        = "CONNECTING",
+        .description = "connection in progress",
+        .progress    = {
+            [UCT_TCP_EP_CTX_TYPE_TX] = uct_tcp_cm_conn_progress,
+            [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+        },
+    },
+    [UCT_TCP_EP_CONN_CONNECTED] = {
+        .name        = "CONNECTED",
+        .description = "connection established",
+        .progress    = {
+            [UCT_TCP_EP_CTX_TYPE_TX] = uct_tcp_ep_progress_tx,
+            [UCT_TCP_EP_CTX_TYPE_RX] = uct_tcp_ep_progress_rx
+        },
+    }
+};
+
 static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 {
     uct_tcp_iface_t *iface         = ucs_derived_of(ep->super.super.iface,
@@ -39,7 +66,7 @@ static inline int uct_tcp_ep_ctx_buf_need_progress(uct_tcp_ep_ctx_t *ctx)
     return ctx->offset < ctx->length;
 }
 
-static inline ucs_status_t uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
+static inline ucs_status_t uct_tcp_ep_check_tx_res(uct_tcp_ep_t *ep)
 {
     if (ucs_unlikely(ep->conn_state != UCT_TCP_EP_CONN_CONNECTED)) {
         if (ep->conn_state == UCT_TCP_EP_CONN_CLOSED) {
@@ -48,7 +75,6 @@ static inline ucs_status_t uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
 
         ucs_assertv(ep->conn_state == UCT_TCP_EP_CONN_CONNECTING,
                     "ep=%p", ep);
-
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -483,7 +509,7 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
 
     UCT_CHECK_AM_ID(am_id);
 
-    status = uct_tcp_ep_can_send(ep);
+    status = uct_tcp_ep_check_tx_res(ep);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
             goto err_no_res;
@@ -589,7 +615,7 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
-    if (uct_tcp_ep_can_send(ep) == UCS_OK) {
+    if (uct_tcp_ep_check_tx_res(ep) == UCS_OK) {
         return UCS_ERR_BUSY;
     }
 
@@ -610,12 +636,11 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp)
 {
-    uct_tcp_ep_t *ep    = ucs_derived_of(tl_ep, uct_tcp_ep_t);
-    ucs_status_t status = uct_tcp_ep_can_send(ep);
+    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
-    if (ucs_unlikely(status != UCS_OK)) {
+    if (uct_tcp_ep_check_tx_res(ep) == UCS_ERR_NO_RESOURCE) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
-        return status;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     UCT_TL_EP_STAT_FLUSH(&ep->super);

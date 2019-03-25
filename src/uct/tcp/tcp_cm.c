@@ -8,16 +8,10 @@
 #include <ucs/async/async.h>
 
 
-const static char *uct_tcp_cm_conn_state_str[][UCT_TCP_EP_CONN_STATE_STR_MAX] = {
-    UCT_TCP_EP_CONN_STATES(UCT_TCP_EP_CONN_STATE_STR)
-};
-
-
 unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
-    char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
     status = ucs_socket_connect_nb_get_status(ep->fd);
@@ -39,9 +33,6 @@ unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep)
 
 err:
     iface->outstanding--;
-    ucs_error("non-blocking connect(%s) failed",
-              ucs_sockaddr_str(ep->peer_addr.addr, str_remote_addr,
-                               UCS_SOCKADDR_STRING_LEN));
     uct_tcp_ep_set_failed(ep, UCT_TCP_EP_CTX_TYPE_TX);
     return 0;
 }
@@ -65,9 +56,9 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_ty
     ucs_sockaddr_str(ep->peer_addr.addr, str_remote_addr, UCS_SOCKADDR_STRING_LEN);
 
     ucs_debug("[%s -> %s] tcp_ep %p: %s ([%s]<->[%s])",
-              uct_tcp_cm_conn_state_str[old_conn_state][UCT_TCP_EP_CONN_STATE_STR_NAME],
-              uct_tcp_cm_conn_state_str[ep->conn_state][UCT_TCP_EP_CONN_STATE_STR_NAME],
-              ep, uct_tcp_cm_conn_state_str[ep->conn_state][UCT_TCP_EP_CONN_STATE_STR_DESCR],
+              uct_tcp_ep_cm_state[old_conn_state].name,
+              uct_tcp_ep_cm_state[ep->conn_state].name,
+              ep, uct_tcp_ep_cm_state[ep->conn_state].description,
               str_local_addr, str_remote_addr);
 }
 
@@ -94,13 +85,13 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
 
     uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CTX_TYPE_TX,
                                  new_conn_state);
-
     return status;
 }
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr *peer_addr, int fd)
 {
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN], str_remote_addr[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     uct_tcp_ep_t *ep;
 
@@ -113,5 +104,9 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                  UCT_TCP_EP_CONN_CONNECTED);
     uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
 
+    ucs_debug("tcp_iface %p: accepted connection from %s on %s to tcp_ep %p (fd %d)", iface,
+              ucs_sockaddr_str(peer_addr, str_remote_addr, UCS_SOCKADDR_STRING_LEN),
+              ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                               str_local_addr, UCS_SOCKADDR_STRING_LEN), ep, fd);
     return UCS_OK;
 }
