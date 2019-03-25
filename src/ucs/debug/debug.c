@@ -640,6 +640,11 @@ static void ucs_debugger_attach()
             argv[narg] = strtok(NULL, " \t");
         }
 
+        /* Make coverity know that argv[0] will not be affected by TMPDIR */
+        if (narg == 0) {
+            return;
+        }
+
         if (!RUNNING_ON_VALGRIND) {
             snprintf(pid_str, sizeof(pid_str), "%d", debug_pid);
             argv[narg++] = "-p";
@@ -649,7 +654,7 @@ static void ucs_debugger_attach()
         /* Generate a file name for gdb commands */
         memset(gdb_commands_file, 0, sizeof(gdb_commands_file));
         snprintf(gdb_commands_file, sizeof(gdb_commands_file) - 1,
-                 "/tmp/.gdbcommands.uid-%d", geteuid());
+                 "%s/.gdbcommands.uid-%d", ucs_get_tmpdir(), geteuid());
 
         /* Write gdb commands and add the file to argv is successful */
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);
@@ -679,6 +684,7 @@ static void ucs_debugger_attach()
         argv[narg++] = NULL;
 
         /* Execute GDB */
+        /* coverity[tainted_string] */
         ret = execvp(argv[0], argv);
         if (ret < 0) {
             ucs_log_fatal_error("Failed to execute %s: %m", argv[0]);
