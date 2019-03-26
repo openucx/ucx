@@ -15,17 +15,6 @@
 /* How many events to wait for in epoll_wait */
 #define UCT_TCP_MAX_EVENTS        16
 
-#define UCT_TCP_EP_CONN_STATES(_FUNC) \
-    _FUNC(CLOSED, "connection closed", \
-          UCT_TCP_EP_CTX_PROGRESS(TX, UCT_TCP_EP_EMPTY_CTX_PROGRESS), /* TX */ \
-          UCT_TCP_EP_CTX_PROGRESS(RX, UCT_TCP_EP_EMPTY_CTX_PROGRESS)  /* RX */ ), \
-    _FUNC(CONNECTING, "connection in progress", \
-          UCT_TCP_EP_CTX_PROGRESS(TX, uct_tcp_cm_conn_progress),      /* TX */ \
-          UCT_TCP_EP_CTX_PROGRESS(RX, UCT_TCP_EP_EMPTY_CTX_PROGRESS)  /* RX */ ), \
-    _FUNC(CONNECTED, "connection established", \
-          UCT_TCP_EP_CTX_PROGRESS(TX, uct_tcp_ep_progress_tx),        /* TX */ \
-          UCT_TCP_EP_CTX_PROGRESS(RX, uct_tcp_ep_progress_rx)         /* RX */ )
-
 
 /**
  * TCP context type
@@ -41,9 +30,9 @@ typedef enum uct_tcp_ep_ctx_type {
  * TCP endpoint connection state
  */
 typedef enum uct_tcp_ep_conn_state {
-    UCT_TCP_EP_CONN_CLOSED,
-    UCT_TCP_EP_CONN_CONNECTING,
-    UCT_TCP_EP_CONN_CONNECTED
+    UCT_TCP_EP_CONN_STATE_CLOSED,
+    UCT_TCP_EP_CONN_STATE_CONNECTING,
+    UCT_TCP_EP_CONN_STATE_CONNECTED
 } uct_tcp_ep_conn_state_t;
 
 /* Forward declaration */
@@ -178,7 +167,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
-void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type);
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_ep_addr_init(ucs_sock_addr_t *sock_addr,
                                   const struct sockaddr *addr);
@@ -209,8 +198,7 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
 unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep);
 
-void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type,
-                                  uct_tcp_ep_conn_state_t new_conn_state);
+void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep, uct_tcp_ep_conn_state_t new_conn_state);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr *peer_addr, int fd);

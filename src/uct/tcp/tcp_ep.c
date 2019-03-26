@@ -9,7 +9,7 @@
 
 
 const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
-    [UCT_TCP_EP_CONN_CLOSED] = {
+    [UCT_TCP_EP_CONN_STATE_CLOSED] = {
         .name        = "CLOSED",
         .description = "connection closed",
         .progress    = {
@@ -17,7 +17,7 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
             [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
         },
     },
-    [UCT_TCP_EP_CONN_CONNECTING] = {
+    [UCT_TCP_EP_CONN_STATE_CONNECTING] = {
         .name        = "CONNECTING",
         .description = "connection in progress",
         .progress    = {
@@ -25,7 +25,7 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
             [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
         },
     },
-    [UCT_TCP_EP_CONN_CONNECTED] = {
+    [UCT_TCP_EP_CONN_STATE_CONNECTED] = {
         .name        = "CONNECTED",
         .description = "connection established",
         .progress    = {
@@ -68,12 +68,12 @@ static inline int uct_tcp_ep_ctx_buf_need_progress(uct_tcp_ep_ctx_t *ctx)
 
 static inline ucs_status_t uct_tcp_ep_check_tx_res(uct_tcp_ep_t *ep)
 {
-    if (ucs_unlikely(ep->conn_state != UCT_TCP_EP_CONN_CONNECTED)) {
-        if (ep->conn_state == UCT_TCP_EP_CONN_CLOSED) {
+    if (ucs_unlikely(ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED)) {
+        if (ep->conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
             return UCS_ERR_UNREACHABLE;
         }
 
-        ucs_assertv(ep->conn_state == UCT_TCP_EP_CONN_CONNECTING,
+        ucs_assertv(ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING,
                     "ep=%p", ep);
         return UCS_ERR_NO_RESOURCE;
     }
@@ -199,7 +199,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
 
     self->events     = 0;
     self->fd         = fd; 
-    self->conn_state = UCT_TCP_EP_CONN_CLOSED;
+    self->conn_state = UCT_TCP_EP_CONN_STATE_CLOSED;
 
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
@@ -249,13 +249,13 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_tcp_ep_init, uct_tcp_ep_t, uct_tcp_ep_t,
                                 const struct sockaddr*)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_tcp_ep_destroy, uct_tcp_ep_t, uct_ep_t)
 
-void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
 
-    if (ep->conn_state != UCT_TCP_EP_CONN_CLOSED) {
-        uct_tcp_cm_change_conn_state(ep, ctx_type, UCT_TCP_EP_CONN_CLOSED);
+    if (ep->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED) {
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
     }
 
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
