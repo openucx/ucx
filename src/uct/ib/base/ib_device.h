@@ -147,6 +147,9 @@ typedef struct uct_ib_roce_version_desc {
 } uct_ib_roce_version_desc_t;
 
 
+extern const double uct_ib_qp_rnr_time_ms[];
+
+
 /**
  * Check if a port on a device is active and supports the given flags.
  */

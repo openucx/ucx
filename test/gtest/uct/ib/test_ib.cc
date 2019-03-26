@@ -352,34 +352,34 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_qp_time) {
 }
 
 UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
+    double avg;
     uint8_t rnr_val;
 
     rnr_val = uct_ib_to_rnr_fabric_time(0);
     EXPECT_EQ(1, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0.01 / UCS_MSEC_PER_SEC);
+    rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[0] / UCS_MSEC_PER_SEC);
     EXPECT_EQ(1, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0.005 / UCS_MSEC_PER_SEC);
+    avg = uct_ib_qp_rnr_time_ms[0] * 0.5;
+    rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
     EXPECT_EQ(1, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0.04 / UCS_MSEC_PER_SEC);
-    EXPECT_EQ(4, rnr_val);
+    for (uint8_t i = 1; i < 2; i++) {
+        avg = (uct_ib_qp_rnr_time_ms[i - 1] + uct_ib_qp_rnr_time_ms[i]) * 0.5;
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0.05 / UCS_MSEC_PER_SEC);
-    EXPECT_EQ(5, rnr_val);
+        rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[i] / UCS_MSEC_PER_SEC);
+        EXPECT_EQ((i + 1) % 32, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(1. / UCS_MSEC_PER_SEC);
-    EXPECT_EQ(13, rnr_val);
+        rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
+        EXPECT_EQ((i + 1) % 32, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(30. / UCS_MSEC_PER_SEC);
-    EXPECT_EQ(23, rnr_val);
+        rnr_val = uct_ib_to_rnr_fabric_time((uct_ib_qp_rnr_time_ms[i - 1] + avg) * 0.5 / UCS_MSEC_PER_SEC);
+        EXPECT_EQ(i % 32, rnr_val);
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0.5);
-    EXPECT_EQ(31, rnr_val);
-
-    rnr_val = uct_ib_to_rnr_fabric_time(0.6);
-    EXPECT_EQ(0, rnr_val);
+        rnr_val = uct_ib_to_rnr_fabric_time((avg + uct_ib_qp_rnr_time_ms[i]) * 0.5 / UCS_MSEC_PER_SEC);
+        EXPECT_EQ((i + 1) % 32, rnr_val);
+    }
 
     rnr_val = uct_ib_to_rnr_fabric_time(1.);
     EXPECT_EQ(0, rnr_val);

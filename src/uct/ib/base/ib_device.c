@@ -27,6 +27,16 @@ typedef struct {
 } uct_ib_device_gid_info_t;
 
 
+/* this table is according to Table "Encoding for RNR
+ * NAK Timer Field" IBTA spec  */
+const double uct_ib_qp_rnr_time_ms[] = {
+     0.01,  0.02,   0.03,   0.04,  0.06,    0.08,   0.12,   0.16,
+     0.24,  0.32,   0.48,   0.64,  0.96,    1.28,   1.92,   2.56,
+     3.84,  5.12,   7.68,  10.24,  15.36,  20.48,  30.72,  40.96,
+    61.44, 81.92, 122.88, 163.84, 245.76, 327.68, 491.52, 655.36
+};
+
+
 /* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
 static UCS_F_ALWAYS_INLINE
 khint32_t uct_ib_kh_ah_hash_func(struct ibv_ah_attr attr)
@@ -650,23 +660,17 @@ uint8_t uct_ib_to_rnr_fabric_time(double time)
 {
     const uint8_t max_rnr = 32;
     double time_ms        = time * UCS_MSEC_PER_SEC; 
-    double rnr_time_ms[max_rnr];
     double avg_ms;
     uint8_t t;
 
-    for (t = 0; t < max_rnr; t++) {
-        if (t >= 4) {
-            if (ucs_is_odd(t)) {
-                rnr_time_ms[t] = rnr_time_ms[t - 1] + rnr_time_ms[t - 4];
-            } else {
-                rnr_time_ms[t] = rnr_time_ms[t - 1] + rnr_time_ms[t - 3];
-            }
-        } else {
-            rnr_time_ms[t] = 0.01 * (t + 1);
-        }
+    if (time_ms <= uct_ib_qp_rnr_time_ms[0]) {
+        return 1;
+    }
 
-        if (time_ms <= rnr_time_ms[t]) {
-            avg_ms = (t > 1) ? ((rnr_time_ms[t - 1] + rnr_time_ms[t]) / 2.) : 0.;
+    for (t = 1; t < max_rnr; t++) {
+        if (time_ms <= uct_ib_qp_rnr_time_ms[t]) {
+            avg_ms = (uct_ib_qp_rnr_time_ms[t - 1] +
+                      uct_ib_qp_rnr_time_ms[t]) * 0.5;
 
             if (time_ms < avg_ms) {
                 /* return previous value (it's already incremented) */
