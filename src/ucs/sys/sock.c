@@ -153,42 +153,47 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
 {
-    ucs_status_t status = UCS_OK;
-
     switch (addr->sa_family) {
     case AF_INET:
         *size_p = sizeof(struct sockaddr_in);
-        break;
+        return UCS_OK;
     case AF_INET6:
         *size_p = sizeof(struct sockaddr_in6);
-        break;
+        return UCS_OK;
     default:
         ucs_error("unknown address family: %d", addr->sa_family);
-        status = UCS_ERR_INVALID_PARAM;
-        break;
+        return UCS_ERR_INVALID_PARAM;
     }
-
-    return status;
 }
 
 ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p)
 {
-    ucs_status_t status = UCS_OK;
-
     switch (addr->sa_family) {
     case AF_INET:
         *port_p = ntohs(UCS_SOCKET_INET_PORT(addr));
-        break;
+        return UCS_OK;
     case AF_INET6:
         *port_p = ntohs(UCS_SOCKET_INET6_PORT(addr));
-        break;
+        return UCS_OK;
     default:
         ucs_error("unknown address family: %d", addr->sa_family);
-        status = UCS_ERR_INVALID_PARAM;
-        break;
+        return UCS_ERR_INVALID_PARAM;
     }
+}
 
-    return status;
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        UCS_SOCKET_INET_PORT(addr) = htons(port);
+        return UCS_OK;
+    case AF_INET6:
+        UCS_SOCKET_INET6_PORT(addr) = htons(port);
+        return UCS_OK;
+    default:
+        ucs_error("unknown address family: %d", addr->sa_family);
+        return UCS_ERR_INVALID_PARAM;
+    }
 }
 
 const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
