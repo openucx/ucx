@@ -11,7 +11,6 @@
 const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     [UCT_TCP_EP_CONN_STATE_CLOSED] = {
         .name        = "CLOSED",
-        .description = "connection closed",
         .progress    = {
             [UCT_TCP_EP_CTX_TYPE_TX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
             [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
@@ -19,7 +18,6 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     },
     [UCT_TCP_EP_CONN_STATE_CONNECTING] = {
         .name        = "CONNECTING",
-        .description = "connection in progress",
         .progress    = {
             [UCT_TCP_EP_CTX_TYPE_TX] = uct_tcp_cm_conn_progress,
             [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
@@ -27,7 +25,6 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     },
     [UCT_TCP_EP_CONN_STATE_CONNECTED] = {
         .name        = "CONNECTED",
-        .description = "connection established",
         .progress    = {
             [UCT_TCP_EP_CTX_TYPE_TX] = uct_tcp_ep_progress_tx,
             [UCT_TCP_EP_CTX_TYPE_RX] = uct_tcp_ep_progress_rx

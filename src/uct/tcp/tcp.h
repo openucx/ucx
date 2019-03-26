@@ -46,9 +46,9 @@ typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
  */
 typedef struct uct_tcp_cm_state {
     const char            *name;                              /* CM state name */
-    const char            *description;                       /* CM state description */
     uct_tcp_ep_progress_t progress[UCT_TCP_EP_CTX_TYPE_LAST]; /* TX and RX progress functions */
 } uct_tcp_cm_state_t;
+
 
 /**
  * TCP active message header

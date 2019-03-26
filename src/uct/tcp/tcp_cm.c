@@ -53,10 +53,9 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep, uct_tcp_ep_conn_state_t new_
                      str_local_addr, UCS_SOCKADDR_STRING_LEN);
     ucs_sockaddr_str(ep->peer_addr.addr, str_remote_addr, UCS_SOCKADDR_STRING_LEN);
 
-    ucs_debug("[%s -> %s] tcp_ep %p: %s ([%s]<->[%s])",
-              uct_tcp_ep_cm_state[old_conn_state].name,
+    ucs_debug("tcp_ep %p: %s -> %s for the [%s]<->[%s] connection",
+              ep, uct_tcp_ep_cm_state[old_conn_state].name,
               uct_tcp_ep_cm_state[ep->conn_state].name,
-              ep, uct_tcp_ep_cm_state[ep->conn_state].description,
               str_local_addr, str_remote_addr);
 }
 
