@@ -329,7 +329,14 @@ UCS_TEST_P(test_uct_ib, address_pack) {
     test_address_pack(0xdeadfeedbeefa880ul);
 }
 
-UCS_TEST_P(test_uct_ib, sec_to_qp_time) {
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
+
+
+class test_uct_ib_utils : public ucs::test {
+};
+
+UCS_TEST_F(test_uct_ib_utils, sec_to_qp_time) {
     uint8_t qp_val;
 
     qp_val = uct_ib_to_qp_fabric_time(0);
@@ -344,7 +351,7 @@ UCS_TEST_P(test_uct_ib, sec_to_qp_time) {
     EXPECT_EQ(0, qp_val);
 }
 
-UCS_TEST_P(test_uct_ib, sec_to_rnr_time) {
+UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     uint8_t rnr_val;
 
     rnr_val = uct_ib_to_rnr_fabric_time(0);
@@ -377,9 +384,6 @@ UCS_TEST_P(test_uct_ib, sec_to_rnr_time) {
     rnr_val = uct_ib_to_rnr_fabric_time(1.);
     EXPECT_EQ(0, rnr_val);
 }
-
-
-UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
 
 
 class test_uct_event_ib : public test_uct_ib {
