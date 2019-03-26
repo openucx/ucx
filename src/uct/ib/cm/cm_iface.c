@@ -461,7 +461,9 @@ static int uct_cm_is_module_loaded(uct_md_h md)
 
     cmdev = ib_cm_open_device(ucs_derived_of(md, uct_ib_md_t)->dev.ibv_context);
     if (cmdev == NULL) {
-        ucs_debug("ib_cm_open_device() failed: %m. Check if ib_ucm.ko module is loaded.");
+        ucs_debug("ib_cm_open_device() for %s failed: %m. "
+                  "Check if ib_ucm.ko module is loaded.",
+                  uct_ib_device_name(&ucs_derived_of(md, uct_ib_md_t)->dev));
         return 0;
     }
 
@@ -478,7 +480,9 @@ static ucs_status_t uct_cm_query_resources(uct_md_h md,
                                                 "cm", UCT_IB_DEVICE_FLAG_LINK_IB,
                                                 resources_p, num_resources_p);
     } else {
-        return UCS_ERR_NO_DEVICE;
+        *num_resources_p = 0;
+        *resources_p     = NULL;
+        return UCS_OK;
     }
 }
 
