@@ -65,7 +65,7 @@ public:
 UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
 
     /* connect from sender side only and send */
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     uint64_t send_data = ucs::rand();
     ucp::data_type_desc_t dt_desc(ucp_dt_make_contig(sizeof(uint64_t)),
                                   &send_data, sizeof(send_data));
@@ -83,7 +83,7 @@ UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
     ucp_ep_params_t recv_ep_param = get_ep_params();
     recv_ep_param.field_mask |= UCP_EP_PARAM_FIELD_USER_DATA;
     recv_ep_param.user_data   = reinterpret_cast<void*>(static_cast<uintptr_t>(ucs::rand()));
-    receiver().connect(&sender(), recv_ep_param);
+    connect(receiver(), sender(), recv_ep_param);
 
     /* expect ep to be ready */
     ucs_time_t deadline = ucs_get_time() +
@@ -119,9 +119,9 @@ public:
     virtual void init() {
         ucp_test::init();
 
-        sender().connect(&receiver(), get_ep_params());
+        connect(sender(), receiver(), get_ep_params());
         if (!is_loopback()) {
-            receiver().connect(&sender(), get_ep_params());
+            connect(receiver(), sender(), get_ep_params());
         }
     }
 
@@ -620,12 +620,13 @@ void test_ucp_stream_many2one::init()
     }
 
     for (size_t i = 0; i < m_nsenders; ++i) {
-        e(i).connect(&e(m_receiver_idx), get_ep_params(), i);
+        connect(e(i), e(m_receiver_idx), get_ep_params(), i);
 
         ucp_ep_params_t recv_ep_param = get_ep_params();
         recv_ep_param.field_mask |= UCP_EP_PARAM_FIELD_USER_DATA;
         recv_ep_param.user_data   = (void *)uintptr_t(i);
-        e(m_receiver_idx).connect(&e(i), recv_ep_param, i);
+        
+        connect(e(m_receiver_idx), e(i), recv_ep_param, i);
     }
 
     for (size_t i = 0; i < m_nsenders; ++i) {
@@ -939,11 +940,11 @@ UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
     EXPECT_LE(others.size(), m_nsenders - 1);
 
     /* reconnect */
-    m_entities.at(0).connect(&m_entities.at(m_receiver_idx), get_ep_params(), 0);
+    connect(m_entities.at(0), m_entities.at(m_receiver_idx), get_ep_params(), 0);
     ucp_ep_params_t recv_ep_param = get_ep_params();
     recv_ep_param.field_mask |= UCP_EP_PARAM_FIELD_USER_DATA;
     recv_ep_param.user_data   = (void *)uintptr_t(0xdeadbeef);
-    e(m_receiver_idx).connect(&e(0), recv_ep_param, 0);
+    connect(e(m_receiver_idx), e(0), recv_ep_param, 0);
 
     /* send again */
     send_all(DATATYPE, 10);

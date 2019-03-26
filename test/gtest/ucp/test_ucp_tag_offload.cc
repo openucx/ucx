@@ -309,7 +309,7 @@ public:
             params.transports.clear();
             params.transports.push_back(*i);
             create_entity(true, params);
-            sender().connect(&receiver(), get_ep_params());
+            connect(sender(), receiver(), get_ep_params());
             check_offload_support(true);
         }
     }
@@ -328,7 +328,7 @@ public:
 
     void activate_offload_hashing(entity &se, ucp_tag_t tag)
     {
-        se.connect(&receiver(), get_ep_params());
+        connect(se, receiver(), get_ep_params());
         // Need to send twice, since the first message may not enable hashing
         // (num_active_iface on worker is increased after unexpected offload handler)
         send_recv(se, tag, 2048);

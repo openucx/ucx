@@ -27,7 +27,7 @@ UCS_TEST_P(test_ucp_mem_type, detect_host) {
     void *ptr;
     size_t size = 256;
 
-    sender().connect(&sender(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     ptr = malloc(size);
     EXPECT_TRUE(ptr != NULL);

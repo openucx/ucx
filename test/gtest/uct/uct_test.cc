@@ -15,11 +15,6 @@
 #include <ifaddrs.h>
 
 
-#define FOR_EACH_ENTITY(_iter) \
-    for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
-         _iter != m_entities.end(); ++_iter) \
-
-
 std::string resource::name() const {
     std::stringstream ss;
     ss << tl_name << "/" << dev_name;

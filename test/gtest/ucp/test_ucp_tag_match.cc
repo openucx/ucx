@@ -172,7 +172,7 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") 
 
     entity &sender2 = sender();
     create_entity(true);
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     for (int is_exp = 0; is_exp <= 1; ++is_exp) {
 

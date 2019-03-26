@@ -158,6 +158,13 @@
             } \
         }
 
+#define FOR_EACH_ENTITY_VECTOR(_iter, _entities) \
+    for (ucs::ptr_vector<entity>::const_iterator _iter = (_entities).begin(); \
+         _iter != (_entities).end(); ++_iter)
+
+#define FOR_EACH_ENTITY(_iter) \
+        FOR_EACH_ENTITY_VECTOR(_iter, m_entities)
+
 
 namespace ucs {
 
@@ -404,6 +411,12 @@ public:
 
     void push_front(T* ptr) {
         m_vec.insert(m_vec.begin(), ptr);
+    }
+
+    T* pop_back() {
+        T* ptr = m_vec.back();
+        m_vec.pop_back();
+        return ptr;
     }
 
     virtual void clear() {

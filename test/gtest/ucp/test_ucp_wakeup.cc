@@ -57,7 +57,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     int recv_efd;
     void *req;
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     recv_worker = receiver().worker();
     ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
@@ -117,7 +117,7 @@ UCS_TEST_P(test_ucp_wakeup, tx_wait, "ZCOPY_THRESH=10000")
     std::string send_data(COUNT, '2'), recv_data(COUNT, '1');
     void *sreq, *rreq;
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     rreq = ucp_tag_recv_nb(receiver().worker(), &recv_data[0], COUNT, DATATYPE,
                            TAG, (ucp_tag_t)-1, recv_completion);
@@ -210,7 +210,7 @@ UCS_TEST_P(test_ucp_wakeup_external_epollfd, epoll_wait)
     const uint64_t TAG = 0xdeadbeef;
     void *req;
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     uint64_t send_data = 0x12121212;
     req = ucp_tag_send_nb(sender().ep(), &send_data, sizeof(send_data), DATATYPE,

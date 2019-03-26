@@ -50,7 +50,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
     memheap_size = max_iter * size + alignment;
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
@@ -157,10 +157,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         zero_offset = 1;
     }
 
-    sender().connect(&receiver(), get_ep_params());
-
-    /* avoid deadlock for blocking rma/amo */
-    flush_worker(sender());
+    connect(sender(), receiver(), get_ep_params());
 
     ucp_mem_h memh;
     void *memheap = NULL;

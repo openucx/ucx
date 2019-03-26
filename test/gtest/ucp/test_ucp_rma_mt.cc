@@ -26,11 +26,7 @@ public:
     void init()
     {
         ucp_test::init();
-        sender().connect(&receiver(), get_ep_params());
-        for (int i = 0; i < sender().get_num_workers(); i++) {
-            /* avoid deadlock for blocking rma */
-            flush_worker(sender(), i);
-        }
+        connect(sender(), receiver(), get_ep_params());
     }
 
     static void send_cb(void *req, ucs_status_t status)

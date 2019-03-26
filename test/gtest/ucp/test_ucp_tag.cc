@@ -30,7 +30,7 @@ ucp_params_t test_ucp_tag::get_ctx_params() {
 void test_ucp_tag::init()
 {
     ucp_test::init();
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     ctx_attr.field_mask = 0;
     ctx_attr.field_mask |= UCP_ATTR_FIELD_REQUEST_SIZE;

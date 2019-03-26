@@ -437,13 +437,13 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
     flush_worker(sender());
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);
     if (is_loopback() && (GetParam().variant & TEST_TAG)) {
         /* expect the endpoint to be connected to itself */
@@ -465,15 +465,17 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
     for (size_t i = 0; i < count; ++i) {
         sender().connect(&entities().at(i), get_ep_params(), i);
     }
+    /* ensure all connections are established  */
+    flush();
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
     for (int i = 0; i < 30; ++i) {
-        sender().connect(&receiver(), get_ep_params());
+        connect(sender(), receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1,
                   10000 / ucs::test_time_multiplier());
         if (!is_loopback()) {
-            receiver().connect(&sender(), get_ep_params());
+            connect(receiver(), sender(), get_ep_params());
         }
 
         disconnect(sender());
@@ -486,10 +488,10 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
     int count = ucs_min(1000 / ucs::test_time_multiplier(), max_connections() / 2);
     for (int i = 0; i < count; ++i) {
-        sender().connect(&receiver(), get_ep_params());
+        connect(sender(), receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
         if (&sender() != &receiver()) {
-            receiver().connect(&sender(), get_ep_params());
+            connect(receiver(), sender(), get_ep_params());
         }
 
         disconnect(sender());
@@ -501,40 +503,40 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
 
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
     skip_loopback();
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     disconnect(sender());
     receiver().destroy_worker();
     sender().destroy_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_reconnect) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
     disconnect(sender());
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
     disconnect(sender());
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
     disconnect(sender());
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_nozcopy, "ZCOPY_THRESH=-1") {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
     disconnect(sender());
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_wait) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 8, 1);
     send_b(sender().ep(), 1000, 200);
     disconnect(sender());
@@ -542,9 +544,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_wait) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     if (!is_loopback()) {
-        receiver().connect(&sender(), get_ep_params());
+        connect(receiver(), sender(), get_ep_params());
     }
 
     send_b(sender().ep(), 8, 1);
@@ -559,7 +561,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
     if (!is_loopback()) {
@@ -568,7 +570,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     recv_b(receiver().worker(), receiver().ep(),  8, 1);
 
     if (!is_loopback()) {
-        receiver().connect(&sender(), get_ep_params());
+        connect(receiver(), sender(), get_ep_params());
     }
 
     send_b(receiver().ep(), 8, 1);
@@ -577,7 +579,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     std::vector<void*> sreqs;
     send_nb(sender().ep(), 1000, 1000, sreqs);
@@ -597,7 +599,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
     const unsigned count = 10;
 
     for (unsigned i = 0; i < count; ++i) {
-        sender().connect(&receiver(), get_ep_params(), i);
+        connect(sender(), receiver(), get_ep_params(), i);
     }
 
     for (unsigned i = 0; i < count; ++i) {
@@ -623,9 +625,9 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_wireup_2sided, two_sided_wireup) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     if (!is_loopback()) {
-        receiver().connect(&sender(), get_ep_params());
+        connect(receiver(), sender(), get_ep_params());
     }
 
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
@@ -644,7 +646,7 @@ void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
 
     for (int i = 0; i < 5; ++i) {
         int base_index = i * 2;
-        sender().connect(&sender(), params, base_index);
+        connect(sender(), sender(), params, base_index);
         ucp_ep_h ep1 = sender().ep(0, base_index);
 
         if (delay_before_connect) {
@@ -652,7 +654,7 @@ void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
             short_progress_loop(0);
         }
 
-        sender().connect(&sender(), params, base_index + 1);
+        connect(sender(), sender(), params, base_index + 1);
         ucp_ep_h ep2 = sender().ep(0, base_index + 1);
 
         EXPECT_NE(ep1, ep2);
@@ -698,7 +700,7 @@ UCS_TEST_P(test_ucp_wireup_2sided, async_connect) {
     if (!(GetParam().ctx_params.features & UCP_FEATURE_TAG)) {
         UCS_TEST_SKIP_R("The test requires UCP_FEATURE_TAG");
     }
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     ucp_ep_h send_ep = sender().ep();
     std::vector<void *> reqs;
 
@@ -719,9 +721,9 @@ UCS_TEST_P(test_ucp_wireup_2sided, async_connect) {
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     if (!is_loopback()) {
-        receiver().connect(&sender(), get_ep_params());
+        connect(receiver(), sender(), get_ep_params());
     }
     disconnect(sender());
     if (!is_loopback()) {
@@ -738,9 +740,9 @@ UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
 
         for (unsigned i = 0; i < count; ++i) {
             unsigned ep_idx = offset + i;
-            sender().connect(&receiver(), get_ep_params(), ep_idx);
+            connect(sender(), receiver(), get_ep_params(), ep_idx);
             if (!is_loopback()) {
-                receiver().connect(&sender(), get_ep_params(), ep_idx);
+                connect(receiver(), sender(), get_ep_params(), ep_idx);
             }
             UCS_TEST_MESSAGE << "iteration " << j << " pair " << i << ": " <<
                             sender().ep(0, ep_idx) << " <--> " << receiver().ep(0, ep_idx);
@@ -754,7 +756,7 @@ UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
                       sender().ep(0, ep_idx), 8, 1);
         }
 
-        short_progress_loop(0);
+        flush();
     }
 }
 
@@ -782,20 +784,20 @@ public:
 };
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
-    receiver().connect(&sender(), get_ep_params());
+    connect(receiver(), sender(), get_ep_params());
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
     flush_worker(sender());
 }
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_before_ep_create) {
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
     flush_worker(sender());
 
-    receiver().connect(&sender(), get_ep_params());
+    connect(receiver(), sender(), get_ep_params());
 
     send_recv(receiver().ep(), sender().worker(), receiver().ep(), 1, 1);
     flush_worker(receiver());

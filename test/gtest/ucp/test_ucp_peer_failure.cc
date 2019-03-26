@@ -264,8 +264,8 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     /* connect 2 ep's from sender() to 2 receiver entities */
     create_entity();
-    sender().connect(&stable_receiver(),  get_ep_params(), STABLE_EP_INDEX);
-    sender().connect(&failing_receiver(), get_ep_params(), FAILING_EP_INDEX);
+    connect(sender(), stable_receiver(), get_ep_params(), STABLE_EP_INDEX);
+    connect(sender(), failing_receiver(), get_ep_params(), FAILING_EP_INDEX);
 
     set_rkeys();
 
@@ -395,7 +395,7 @@ UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
         UCS_TEST_SKIP_R("Skip non-tagged variant");
     }
 
-    sender().connect(&receiver(), get_ep_params());
+    connect(sender(), receiver(), get_ep_params());
 
     /* Make sure API is disabled for any size and data type */
     for (size_t size = 1; size <= max_size; size *= 2) {

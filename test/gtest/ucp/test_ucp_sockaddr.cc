@@ -323,7 +323,7 @@ public:
         ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = connect_addr;
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
-        sender().connect(&receiver(), ep_params);
+        connect(sender(), receiver(), ep_params);
     }
 
     void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)

@@ -178,6 +178,10 @@ protected:
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
+    void flush(ucs::ptr_vector<ucp_test_base::entity> *entities = NULL);
+    void connect(entity &from, const entity &to,
+                 const ucp_ep_params_t& ep_params,
+                 int ep_idx = 0, int do_set_ep = 1);
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);
     void set_ucp_config(ucp_config_t *config);

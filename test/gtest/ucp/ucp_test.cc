@@ -9,6 +9,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
 #include <queue>
+#include <list>
 
 
 namespace ucp {
@@ -157,7 +158,81 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     wait(request, worker_index);
 }
 
-void ucp_test::disconnect(const entity& entity) {
+void ucp_test::flush(ucs::ptr_vector<ucp_test_base::entity> *entities)
+{
+    ucs::ptr_vector<ucp_test_base::entity> &entities_vector =
+        (entities != NULL) ? *entities : m_entities;
+    std::list<std::pair<void*, ucp_worker_h> > req_list;
+
+    FOR_EACH_ENTITY_VECTOR(iter, entities_vector) {
+        for (int i = 0; i < (*iter)->get_num_workers(); i++) {
+            (*iter)->progress(i);
+
+            void *request = (*iter)->flush_worker_nb(i);
+            if (request == NULL) {
+            } else if (UCS_PTR_IS_ERR(request)) {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(request));
+            } else {
+                (*iter)->progress(i);
+                ucs_status_t status = ucp_request_check_status(request);
+                if (status == UCS_OK) {
+                    ucp_request_release(request);
+                } else {
+                    ASSERT_EQ(UCS_INPROGRESS, status);
+                    req_list.push_back(std::make_pair(request, (*iter)->worker(i)));
+                }
+            }
+        }
+    }
+
+    while (!req_list.empty()) {
+        // call progress for all workers
+        FOR_EACH_ENTITY_VECTOR(iter, entities_vector) {
+            for (int i = 0; i < (*iter)->get_num_workers(); i++) {
+                (*iter)->progress(i);
+            }
+        }
+
+        std::list<std::pair<void*, ucp_worker_h> >::iterator req_iter = req_list.begin();
+
+        while (req_iter != req_list.end()) {
+            ucp_worker_h worker = (*req_iter).second;
+            ucp_worker_progress(worker);
+
+            void *request = (*req_iter).first;
+            ucs_status_t status = ucp_request_check_status(request);
+            if (status == UCS_OK) {
+                ucp_request_release(request);
+                req_iter = req_list.erase(req_iter);
+            } else {
+                ASSERT_EQ(UCS_INPROGRESS, status);
+                ++req_iter;
+            }
+        }
+    }
+}
+
+void ucp_test::connect(entity &from, const entity &to,
+                        const ucp_ep_params_t& ep_params,
+                        int ep_idx, int do_set_ep)
+{
+    from.connect(&to, ep_params, ep_idx, do_set_ep);
+
+    ucs::ptr_vector<ucp_test_base::entity> entities;
+
+    entities.push_back(&from);
+    entities.push_back(const_cast<entity*>(&to));
+
+    /* Ensure the connections are established, i.e.
+     * `ucp_worker_flush_nb` successfull for all workers */
+    flush(&entities);
+
+    entities.pop_back();
+    entities.pop_back();
+}
+
+void ucp_test::disconnect(const entity& entity)
+{
     for (int i = 0; i < entity.get_num_workers(); i++) {
         if (m_err_handler_count == 0) {
             flush_worker(entity, i);
