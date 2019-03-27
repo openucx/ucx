@@ -261,12 +261,12 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, int dci)
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->super,
                                            &iface->super.super.super);
-    status = uct_ib_modify_qp(iface->tx.dcis[dci].txqp.qp, IBV_QPS_RESET);
+    status = uct_ib_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
                                          &iface->super.super.super);
 
     uct_rc_mlx5_iface_commom_clean(&iface->super.cq[UCT_IB_DIR_TX], NULL,
-                                   iface->tx.dcis[dci].txqp.qp->qp_num);
+                                   iface->tx.dcis[dci].txqp.qp_num);
 
     /* Resume posting from to the beginning of the QP */
     uct_ib_mlx5_txwq_reset(&iface->tx.dci_wqs[dci]);
@@ -316,7 +316,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
 #if HAVE_DC_DV
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                           uct_rc_txqp_t *dci)
+                                           uint8_t dci)
 {
     struct ibv_qp_attr attr;
     long attr_mask;
@@ -329,7 +329,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                            IBV_QP_PKEY_INDEX |
                            IBV_QP_PORT;
 
-    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+    if (ibv_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to INIT : %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -346,7 +346,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                       IBV_QP_PATH_MTU  |
                                       IBV_QP_AV;
 
-    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+    if (ibv_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, &attr, attr_mask)) {
         ucs_error("error modifying DCI QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -365,7 +365,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                           IBV_QP_RNR_RETRY  |
                           IBV_QP_MAX_QP_RD_ATOMIC;
 
-    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+    if (ibv_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, &attr, attr_mask)) {
         ucs_error("error modifying DCI QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -465,9 +465,10 @@ static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface,
 
     bb_max = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
+        iface->tx.dcis[i].qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                        mmio_mode, &iface->tx.dci_wqs[i],
-                                       iface->tx.dcis[i].txqp.qp);
+                                       iface->tx.dcis[i].qp.verbs.qp);
         if (status != UCS_OK) {
             return status;
         }
@@ -486,7 +487,7 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        uct_ib_mlx5_txwq_cleanup(&iface->tx.dci_wqs[i]);
+        uct_ib_mlx5_txwq_cleanup(&iface->tx.dcis[i].qp, &iface->tx.dci_wqs[i]);
     }
 }
 
@@ -585,7 +586,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
 
 /* take dc qp to rts state */
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                           uct_rc_txqp_t *dci)
+                                           uint8_t dci)
 {
     struct ibv_exp_qp_attr attr;
     long attr_mask;
@@ -601,7 +602,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                            IBV_EXP_QP_PORT       |
                            IBV_EXP_QP_DC_KEY;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
+    if (ibv_exp_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to INIT : %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -609,7 +610,8 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     /* Move QP to the RTR state */
     ooo_qp_flag = uct_dc_mlx5_iface_ooo_flag(iface,
                                              IBV_EXP_QP_OOO_RW_DATA_PLACEMENT,
-                                             "DCI QP 0x", dci->qp->qp_num);
+                                             "DCI QP 0x",
+                                             iface->tx.dcis[dci].txqp.qp_num);
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
     attr.path_mtu                   = iface->super.super.config.path_mtu;
@@ -620,7 +622,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                       IBV_EXP_QP_AV        |
                                       ooo_qp_flag;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
+    if (ibv_exp_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -638,7 +640,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                           IBV_EXP_QP_RNR_RETRY  |
                           IBV_EXP_QP_MAX_QP_RD_ATOMIC;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
+    if (ibv_exp_modify_qp(iface->tx.dcis[dci].qp.verbs.qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -665,6 +667,7 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
     int i;
     for (i = 0; i < max; i++) {
         uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
+        ibv_destroy_qp(iface->tx.dcis[i].qp.verbs.qp);
     }
 }
 
@@ -680,15 +683,27 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
         ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
-        status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super.super,
-                                  &cap UCS_STATS_ARG(iface->super.super.stats));
+
+        status = uct_rc_iface_qp_create(&iface->super.super,
+                                        &iface->tx.dcis[i].qp.verbs.qp, &cap,
+                                        iface->super.super.config.tx_qp_len);
         if (status != UCS_OK) {
             goto err;
         }
 
-        status = uct_dc_mlx5_iface_dci_connect(iface, &iface->tx.dcis[i].txqp);
+        iface->tx.dcis[i].txqp.qp_num = iface->tx.dcis[i].qp.verbs.qp->qp_num;
+
+        status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super.super
+                                  UCS_STATS_ARG(iface->super.super.stats));
+        if (status != UCS_OK) {
+            ibv_destroy_qp(iface->tx.dcis[i].qp.verbs.qp);
+            goto err;
+        }
+
+        status = uct_dc_mlx5_iface_dci_connect(iface, i);
         if (status != UCS_OK) {
             uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
+            ibv_destroy_qp(iface->tx.dcis[i].qp.verbs.qp);
             goto err;
         }
 

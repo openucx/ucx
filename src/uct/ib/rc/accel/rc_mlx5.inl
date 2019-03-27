@@ -240,11 +240,11 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
         uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
-                                          txqp->qp->qp_num, fm_ce_se, wqe_size,
+                                          txqp->qp_num, fm_ce_se, wqe_size,
                                           imm);
     } else {
         uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
-                                 txqp->qp->qp_num, fm_ce_se, wqe_size);
+                                 txqp->qp_num, fm_ce_se, wqe_size);
     }
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);
@@ -764,7 +764,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_wq_t *cmd_wq,
+uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_qp_t *cmd_wq,
                                      unsigned extra_wqe_size, unsigned op_code,
                                      uint16_t next_idx, unsigned unexp_cnt,
                                      uct_tag_t tag, uct_tag_t tag_mask,
@@ -870,7 +870,7 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_handle_tm_list_op(uct_rc_mlx5_iface_common_t *iface, int opcode)
 {
-    uct_rc_mlx5_cmd_wq_t *cmd_wq;
+    uct_rc_mlx5_cmd_qp_t *cmd_wq;
     uct_rc_mlx5_srq_op_t *op;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
