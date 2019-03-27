@@ -20,12 +20,12 @@
  * RC remote endpoint
  */
 typedef struct uct_rc_mlx5_ep {
-    uct_rc_ep_t      super;
-    unsigned         qp_num;
+    uct_rc_ep_t             super;
     struct {
+        uct_ib_mlx5_qp_t    qp;
         uct_ib_mlx5_txwq_t  wq;
     } tx;
-    struct ibv_qp    *tm_qp;
+    uct_ib_mlx5_qp_t        tm_qp;
 } uct_rc_mlx5_ep_t;
 
 typedef struct uct_rc_mlx5_ep_address {

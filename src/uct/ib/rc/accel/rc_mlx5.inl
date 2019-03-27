@@ -240,11 +240,11 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
         uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
-                                          txqp->qp->qp_num, fm_ce_se, wqe_size,
+                                          txqp->qp_num, fm_ce_se, wqe_size,
                                           imm);
     } else {
         uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
-                                 txqp->qp->qp_num, fm_ce_se, wqe_size);
+                                 txqp->qp_num, fm_ce_se, wqe_size);
     }
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);

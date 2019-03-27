@@ -33,6 +33,7 @@ typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
     uct_ib_fence_info_t    fi;
+    struct ibv_qp          *qp;
 } uct_rc_verbs_ep_t;
 
 
@@ -138,5 +139,9 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req);
+
+ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                                           const uct_device_addr_t *dev_addr,
+                                           const uct_ep_addr_t *ep_addr);
 
 #endif

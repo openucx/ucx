@@ -698,7 +698,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
-
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap, unsigned max_send_wr)
 {
@@ -718,10 +717,15 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     qp_init_attr.max_inl_recv        = iface->config.rx_inline;
 
     status = iface->super.ops->create_qp(&iface->super, &qp_init_attr, qp_p);
-    if (status == UCS_OK) {
-        *cap = qp_init_attr.cap;
+    if (status != UCS_OK) {
+        goto err;
     }
 
+    *cap = qp_init_attr.cap;
+    return status;
+
+err:
+    ibv_destroy_qp(*qp_p);
     return status;
 }
 

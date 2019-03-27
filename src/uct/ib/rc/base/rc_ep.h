@@ -166,7 +166,7 @@ enum {
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
-    struct ibv_qp       *qp;
+    uint32_t            qp_num;
     ucs_queue_head_t    outstanding;
     /* RC_UNSIGNALED_INF value forces signaled in moderation logic when
      * CQ credits are close to zero (less tx_moderation value) */
@@ -260,8 +260,7 @@ void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op,
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);
 
-ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
-                              struct ibv_qp_cap *cap
+ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
 
@@ -283,12 +282,6 @@ static inline void uct_rc_txqp_available_set(uct_rc_txqp_t *txqp, int16_t val)
 static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp)
 {
     return txqp->unsignaled;
-}
-
-static UCS_F_ALWAYS_INLINE void uct_rc_txqp_check(uct_rc_txqp_t *txqp)
-{
-    ucs_assertv(txqp->qp->state == IBV_QPS_RTS, "QP 0x%x state is %d",
-                txqp->qp->qp_num, txqp->qp->state);
 }
 
 static UCS_F_ALWAYS_INLINE
