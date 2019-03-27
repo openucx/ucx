@@ -764,9 +764,6 @@ run_mpi_tests() {
 		# our local library path first
 		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
 
-		# Load CUDA modules for running perftest with CUDA
-		try_load_cuda_env
-
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		$MAKEP clean
 		$MAKEP install
@@ -788,7 +785,6 @@ run_mpi_tests() {
 
 		$MAKEP distclean
 
-		unload_cuda_env
 		module unload hpcx-gcc
 	else
 		echo "==== Not running MPI tests ===="
