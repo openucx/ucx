@@ -42,8 +42,7 @@ static ucs_stats_class_t uct_rc_txqp_stats_class = {
 };
 #endif
 
-ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
-                              struct ibv_qp_cap *cap
+ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
     ucs_status_t status;
@@ -54,35 +53,17 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
     txqp->available  = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
-    status = uct_rc_iface_qp_create(iface, &txqp->qp, cap,
-                                    iface->config.tx_qp_len);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
     status = UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
-                                  stats_parent, "-0x%x", txqp->qp->qp_num);
+                                  stats_parent, "-0x%x", txqp->qp_num);
     if (status != UCS_OK) {
-        goto err_destroy_qp;
+        return status;
     }
 
     return UCS_OK;
-
-err_destroy_qp:
-    ibv_destroy_qp(txqp->qp);
-err:
-    return status;
 }
 
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
 {
-    int ret;
-
-    ret = ibv_destroy_qp(txqp->qp);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-    }
-
     uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_CANCELED, 1);
     UCS_STATS_NODE_FREE(txqp->stats);
 }
@@ -113,26 +94,20 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
-    struct ibv_qp_cap cap;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    status = uct_rc_txqp_init(&self->txqp, iface, &cap
+    status = uct_rc_txqp_init(&self->txqp, iface
                               UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = uct_rc_iface_qp_init(iface, self->txqp.qp);
-    if (status != UCS_OK) {
-        goto err_txqp_cleanup;
+        return status;
     }
 
     status = uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size
                             UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
-        goto err_txqp_cleanup;
+        return status;
     }
 
     self->sl                = iface->super.config.sl;    /* TODO multi-rail */
@@ -144,14 +119,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     ucs_arbiter_group_init(&self->arb_group);
 
-    uct_rc_iface_add_qp(iface, self, self->txqp.qp->qp_num);
+    uct_rc_iface_add_qp(iface, self, self->txqp.qp_num);
     ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
-
-err_txqp_cleanup:
-    uct_rc_txqp_cleanup(&self->txqp);
-err:
-    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
@@ -161,7 +131,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ucs_debug("destroy rc ep %p", self);
 
     ucs_list_del(&self->list);
-    uct_rc_iface_remove_qp(iface, self->txqp.qp->qp_num);
+    uct_rc_iface_remove_qp(iface, self->txqp.qp_num);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
@@ -174,29 +144,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
 
-    uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
-
-    return UCS_OK;
-}
-
-ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
-                                     const uct_ep_addr_t *ep_addr)
-{
-    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
-    const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
-    uint32_t qp_num;
-    struct ibv_ah_attr ah_attr;
-    ucs_status_t status;
-
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
-    qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
-
-    status = uct_rc_iface_qp_connect(iface, ep->txqp.qp, qp_num, &ah_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
+    uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp_num);
 
     return UCS_OK;
 }

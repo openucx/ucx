@@ -765,6 +765,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
+    self->qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
     status = uct_ib_mlx5_txwq_init(self->super.super.super.worker,
                                    config->mlx5_common.mmio_mode, &self->tx.wq,
                                    self->super.qp);
@@ -810,7 +811,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
     uct_ud_enter(&self->super);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
     ucs_twheel_cleanup(&self->super.async.slow_timer);
-    uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
+    uct_ib_mlx5_txwq_cleanup(&self->qp, &self->tx.wq);
     uct_ud_leave(&self->super);
 }
 

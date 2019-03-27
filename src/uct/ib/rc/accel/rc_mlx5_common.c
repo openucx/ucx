@@ -162,6 +162,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
 #if HAVE_STRUCT_MLX5_SRQ_CMD_QP
     iface->tm.cmd_qp = NULL;
+    iface->tm.cmd_wq.qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
     return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
 #else
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
@@ -175,6 +176,8 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
     port_num  = ibdev->first_port;
     port_attr = uct_ib_device_port_attr(ibdev, port_num);
+
+    iface->tm.cmd_wq.qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
 
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.send_cq             = iface->super.super.cq[UCT_IB_DIR_RX];
@@ -315,7 +318,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
         if (iface->tm.cmd_qp) {
             ibv_destroy_qp(iface->tm.cmd_qp);
         }
-        uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
+        uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.qp, &iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);
         uct_rc_mlx5_tag_cleanup(iface);

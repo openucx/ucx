@@ -1281,12 +1281,12 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     status = uct_dc_mlx5_iface_reset_dci(iface, dci);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+                  iface, dci, txqp->qp_num, ucs_status_string(status));
     }
 
-    status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
+    status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+                  iface, dci, txqp->qp_num, ucs_status_string(status));
     }
 }
