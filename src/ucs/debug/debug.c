@@ -116,6 +116,8 @@ static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
+static pthread_spinlock_t ucs_kh_lock;
+
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
@@ -1090,9 +1092,10 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     khiter_t hash_it;
     int hash_extra_status;
 
+    pthread_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     if (hash_it != kh_end(&ucs_signal_orig_action_map)) {
-        return;
+        goto out;
     }
 
     oact_copy = (struct sigaction *)ucs_malloc(sizeof(*orig_handler), "orig_sighandler");
@@ -1102,6 +1105,8 @@ static inline void ucs_debug_save_original_sighandler(int signum,
                      signum, &hash_extra_status);
     kh_value(&ucs_signal_orig_action_map, hash_it) = oact_copy;
 
+out:
+    pthread_spin_unlock(&ucs_kh_lock);
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
@@ -1188,6 +1193,7 @@ void ucs_debug_init()
 {
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
+    pthread_spin_init(&ucs_kh_lock, 0);
     if (ucs_global_opts.handle_errors) {
         ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
@@ -1219,6 +1225,7 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
+    pthread_spin_destroy(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signal(int signum)
@@ -1227,12 +1234,13 @@ void ucs_debug_disable_signal(int signum)
     struct sigaction *original_action, ucs_action;
     int ret;
 
+    pthread_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map,
                      signum);
     if (hash_it == kh_end(&ucs_signal_orig_action_map)) {
         ucs_warn("ucs_debug_disable_signal: signal %d was not set in ucs",
                  signum);
-        return;
+        goto out;
     }
 
     original_action = kh_val(&ucs_signal_orig_action_map, hash_it);
@@ -1243,6 +1251,9 @@ void ucs_debug_disable_signal(int signum)
 
     kh_del(ucs_signal_orig_action, &ucs_signal_orig_action_map, hash_it);
     ucs_free(original_action);
+
+out:
+    pthread_spin_unlock(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signals()
