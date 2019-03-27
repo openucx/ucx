@@ -479,9 +479,10 @@ int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
     return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
 }
 
-int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
+ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
+                                       uct_memory_type_t *mem_type)
 {
-    return md->ops->is_mem_type_owned(md, addr, length);
+    return md->ops->detect_memory_type(md, addr, length, mem_type);
 }
 
 int uct_md_is_hugetlb(uct_md_h md, uct_mem_h memh)

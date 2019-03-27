@@ -18,6 +18,7 @@ int uct_rocm_base_get_dev_num(hsa_agent_t agent);
 hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
                                         void **base_ptr, size_t *base_size,
                                         hsa_agent_t *agent);
-int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
+ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, void *addr, size_t length,
+                                              uct_memory_type_t *mem_type);
 
 #endif

@@ -338,15 +338,16 @@ UCT_MD_REGISTER_TL(&uct_self_md, &uct_self_tl);
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->cap.flags         = UCT_MD_FLAG_REG |
-                              UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
-    attr->cap.max_alloc     = 0;
-    attr->cap.max_reg       = ULONG_MAX;
-    attr->rkey_packed_size  = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
-    attr->reg_cost.overhead = 0;
-    attr->reg_cost.growth   = 0;
+    attr->cap.flags            = UCT_MD_FLAG_REG |
+                                 UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
+    attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    attr->cap.detect_mem_types = 0;
+    attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    attr->cap.max_alloc        = 0;
+    attr->cap.max_reg          = ULONG_MAX;
+    attr->rkey_packed_size     = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
+    attr->reg_cost.overhead    = 0;
+    attr->reg_cost.growth      = 0;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
@@ -369,12 +370,12 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
                                      uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close        = (void*)ucs_empty_function,
-        .query        = uct_self_md_query,
-        .mkey_pack    = ucs_empty_function_return_success,
-        .mem_reg      = uct_self_mem_reg,
-        .mem_dereg    = ucs_empty_function_return_success,
-        .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
+        .close              = (void*)ucs_empty_function,
+        .query              = uct_self_md_query,
+        .mkey_pack          = ucs_empty_function_return_success,
+        .mem_reg            = uct_self_mem_reg,
+        .mem_dereg          = ucs_empty_function_return_success,
+        .detect_memory_type = (void *)ucs_empty_function_return_zero,
     };
     static uct_md_t md = {
         .ops          = &md_ops,

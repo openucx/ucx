@@ -11,6 +11,9 @@ extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/arch/bitops.h>
+#include <ucs/arch/atomic.h>
+#include <ucs/sys/math.h>
 }
 #include <linux/sockios.h>
 #include <net/if_arp.h>
@@ -124,6 +127,15 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
         if(fill_buffer) {
             cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
             ASSERT_TRUE(cerr == cudaSuccess);
+        }
+    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
+        cudaError_t cerr;
+
+        cerr = cudaMallocManaged(address, size);
+        ASSERT_TRUE(cerr == cudaSuccess);
+
+        if(fill_buffer) {
+            memcpy(*address, fill_buffer, size);
         }
 #endif
     } else {
@@ -262,24 +274,27 @@ UCS_TEST_P(test_md, alloc) {
     }
 }
 
-UCS_TEST_P(test_md, mem_type_owned) {
+UCS_TEST_P(test_md, mem_type_detect_mds) {
 
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    int ret;
+    uct_memory_type_t mem_type;
+    int mem_type_id;
     void *address;
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
 
-    if (md_attr.cap.mem_type == UCT_MD_MEM_TYPE_HOST) {
-        UCS_TEST_SKIP_R("MD owns only host memory");
+    if (!md_attr.cap.detect_mem_types) {
+        UCS_TEST_SKIP_R("MD can't detect any memory types");
     }
 
-    alloc_memory(&address, UCS_KBYTE, NULL, md_attr.cap.mem_type);
-
-    ret = uct_md_is_mem_type_owned(md(), address, UCS_KBYTE);
-    EXPECT_TRUE(ret > 0);
+    ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
+        alloc_memory(&address, UCS_KBYTE, NULL, mem_type_id);
+        status = uct_md_detect_memory_type(md(), address, 1024, &mem_type);
+        ASSERT_UCS_OK(status);
+        EXPECT_TRUE(mem_type == mem_type_id);
+    }
 }
 
 UCS_TEST_P(test_md, reg) {

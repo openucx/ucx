@@ -214,7 +214,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.detect_mem_types = 0;
 
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
@@ -235,7 +237,6 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
         }
     }
 
-    md_attr->cap.mem_type     = UCT_MD_MEM_TYPE_HOST;
     md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
 
     md_attr->reg_cost      = md->reg_cost;
@@ -613,13 +614,13 @@ static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
 }
 
 static uct_md_ops_t uct_ib_md_ops = {
-    .close             = uct_ib_md_close,
-    .query             = uct_ib_md_query,
-    .mem_reg           = uct_ib_mem_reg,
-    .mem_dereg         = uct_ib_mem_dereg,
-    .mem_advise        = uct_ib_mem_advise,
-    .mkey_pack         = uct_ib_mkey_pack,
-    .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
+    .close              = uct_ib_md_close,
+    .query              = uct_ib_md_query,
+    .mem_reg            = uct_ib_mem_reg,
+    .mem_dereg          = uct_ib_mem_dereg,
+    .mem_advise         = uct_ib_mem_advise,
+    .mkey_pack          = uct_ib_mkey_pack,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
 static inline uct_ib_rcache_region_t* uct_ib_rcache_region_from_memh(uct_mem_h memh)
@@ -665,13 +666,13 @@ static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t uct_ib_md_rcache_ops = {
-    .close             = uct_ib_md_close,
-    .query             = uct_ib_md_query,
-    .mem_reg           = uct_ib_mem_rcache_reg,
-    .mem_dereg         = uct_ib_mem_rcache_dereg,
-    .mem_advise        = uct_ib_mem_advise,
-    .mkey_pack         = uct_ib_mkey_pack,
-    .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
+    .close              = uct_ib_md_close,
+    .query              = uct_ib_md_query,
+    .mem_reg            = uct_ib_mem_rcache_reg,
+    .mem_dereg          = uct_ib_mem_rcache_dereg,
+    .mem_advise         = uct_ib_mem_advise,
+    .mkey_pack          = uct_ib_mkey_pack,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
@@ -768,13 +769,13 @@ static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
-    .close             = uct_ib_md_close,
-    .query             = uct_ib_md_odp_query,
-    .mem_reg           = uct_ib_mem_global_odp_reg,
-    .mem_dereg         = uct_ib_mem_global_odp_dereg,
-    .mem_advise        = uct_ib_mem_advise,
-    .mkey_pack         = uct_ib_mkey_pack,
-    .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
+    .close              = uct_ib_md_close,
+    .query              = uct_ib_md_odp_query,
+    .mem_reg            = uct_ib_mem_global_odp_reg,
+    .mem_dereg          = uct_ib_mem_global_odp_dereg,
+    .mem_advise         = uct_ib_mem_advise,
+    .mkey_pack          = uct_ib_mkey_pack,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
 void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)

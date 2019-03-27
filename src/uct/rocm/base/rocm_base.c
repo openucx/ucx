@@ -143,13 +143,15 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
     return HSA_STATUS_SUCCESS;
 }
 
-int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
+ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, void *addr, size_t length,
+                                              uct_memory_type_t *mem_type)
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
 
     if (addr == NULL) {
-        return 0;
+        *mem_type = UCT_MD_MEM_TYPE_HOST;
+        return UCS_OK;
     }
 
     info.size = sizeof(hsa_amd_pointer_info_t);
@@ -160,11 +162,13 @@ int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
 
         status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
         if ((status == HSA_STATUS_SUCCESS) &&
-            (dev_type == HSA_DEVICE_TYPE_GPU))
-            return 1;
+            (dev_type == HSA_DEVICE_TYPE_GPU)) {
+            *mem_type = UCT_MD_MEM_TYPE_ROCM;
+            return UCS_OK;
+        }
     }
 
-    return 0;
+    return UCS_ERR_INVALID_ADDR;
 }
 
 UCS_MODULE_INIT() {

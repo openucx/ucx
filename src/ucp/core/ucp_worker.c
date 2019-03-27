@@ -1106,8 +1106,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
     }
 
-    context->mem_type_tls[context->tl_mds[resource->md_index].
-                          attr.cap.mem_type] |= UCS_BIT(tl_id);
+    context->mem_type_access_tls[context->tl_mds[resource->md_index].
+                                 attr.cap.access_mem_type] |= UCS_BIT(tl_id);
 
     return UCS_OK;
 

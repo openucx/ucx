@@ -904,8 +904,9 @@ struct uct_md_attr {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
-        uint64_t             reg_mem_types; /** UCS_BIT(uct_memory_type_t) */
-        uct_memory_type_t    mem_type;  /**< Supported(owned) memory type */
+        uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
+        uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
+        uct_memory_type_t    access_mem_type; /**< Memory type MD can access */
     } cap;
 
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
@@ -1703,16 +1704,19 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
 /**
  * @ingroup UCT_MD
- * @brief Check if memory type is owned by MD
+ * @brief Detect memory type
  *
- *  Check memory type.
- *  @return Nonzero if memory is owned, 0 if not owned
  *
- * @param [in]     md        Memory domain to detect if memory belongs to.
- * @param [in]     addr      Memory address to detect.
- * @param [in]     length    Size of memory
+ * @param [in]     md           Memory domain to detect memory type
+ * @param [in]     addr         Memory address to detect.
+ * @param [in]     length       Size of memory
+ * @param [out]    mem_type     Filled with memory type of the address range if
+                                function succeeds
+ * @return UCS_OK               If memory type is succussfully detected
+ *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
-int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
+ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
+                                       uct_memory_type_t *mem_type);
 
 
 /**
