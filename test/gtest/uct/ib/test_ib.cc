@@ -337,48 +337,77 @@ class test_uct_ib_utils : public ucs::test {
 };
 
 UCS_TEST_F(test_uct_ib_utils, sec_to_qp_time) {
+    double avg;
     uint8_t qp_val;
 
+    // 0 sec
     qp_val = uct_ib_to_qp_fabric_time(0);
     EXPECT_EQ(1, qp_val);
 
-    for (uint8_t i = 1; i < 32; i++) {
-        qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, i) / UCS_USEC_PER_SEC);
-        EXPECT_EQ(i % 31, qp_val);
-    }
+    // the average time defined for the [0, 1st element]
+    qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, 0) / UCS_USEC_PER_SEC);
+    EXPECT_EQ(1, qp_val);
 
-    qp_val = uct_ib_to_qp_fabric_time(10000);
-    EXPECT_EQ(0, qp_val);
+    // the time defined for the 1st element
+    qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, 1) / UCS_USEC_PER_SEC);
+    EXPECT_EQ(1, qp_val);
+
+    for (uint8_t i = 2; i <= uct_ib_fabric_time_max; i++) {
+        // the time defined for the (i)th element
+        qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, i) / UCS_USEC_PER_SEC);
+        EXPECT_EQ(i % uct_ib_fabric_time_max, qp_val);
+
+        // avg = (the average time defined for the [(i - 1)th element, (i)th element])
+        avg = (4.096 * pow(2, i - 1) + 4.096 * pow(2, i)) * 0.5;
+        qp_val = uct_ib_to_qp_fabric_time(avg / UCS_USEC_PER_SEC);
+        EXPECT_EQ(i % uct_ib_fabric_time_max, qp_val);
+
+        // the average time defined for the [(i - 1)th element, avg]
+        qp_val = uct_ib_to_qp_fabric_time((4.096 * pow(2, i - 1) + avg) * 0.5 / UCS_USEC_PER_SEC);
+        EXPECT_EQ((i - 1) % uct_ib_fabric_time_max, qp_val);
+
+        // the average time defined for the [avg, (i)th element]
+        qp_val = uct_ib_to_qp_fabric_time((avg +  4.096 * pow(2, i)) * 0.5 / UCS_USEC_PER_SEC);
+        EXPECT_EQ(i % uct_ib_fabric_time_max, qp_val);
+    }
 }
 
 UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     double avg;
     uint8_t rnr_val;
 
-    rnr_val = uct_ib_to_rnr_fabric_time(0);
-    EXPECT_EQ(1, rnr_val);
-
+    // the time defined for the 1st element
     rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[0] / UCS_MSEC_PER_SEC);
     EXPECT_EQ(1, rnr_val);
 
-    avg = uct_ib_qp_rnr_time_ms[0] * 0.5;
-    rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
-    EXPECT_EQ(1, rnr_val);
+    if (uct_ib_qp_rnr_time_ms[0] != 0) {
+        // 0 sec
+        rnr_val = uct_ib_to_rnr_fabric_time(0);
+        EXPECT_EQ(1, rnr_val);
 
-    for (uint8_t i = 1; i < 2; i++) {
-        avg = (uct_ib_qp_rnr_time_ms[i - 1] + uct_ib_qp_rnr_time_ms[i]) * 0.5;
-
-        rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[i] / UCS_MSEC_PER_SEC);
-        EXPECT_EQ((i + 1) % 32, rnr_val);
-
+        // the average time defined for the [0, 1st element]
+        avg = uct_ib_qp_rnr_time_ms[0] * 0.5;
         rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
-        EXPECT_EQ((i + 1) % 32, rnr_val);
+        EXPECT_EQ(1, rnr_val);
+    }
 
+    for (uint8_t i = 1; i < uct_ib_fabric_time_max; i++) {
+        // the time defined for the (i + 1)th element
+        rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[i] / UCS_MSEC_PER_SEC);
+        EXPECT_EQ((i + 1) % uct_ib_fabric_time_max, rnr_val);
+
+        // avg = (the average time defined for the [(i)th element, (i + 1)th element])
+        avg = (uct_ib_qp_rnr_time_ms[i - 1] + uct_ib_qp_rnr_time_ms[i]) * 0.5;
+        rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
+        EXPECT_EQ((i + 1) % uct_ib_fabric_time_max, rnr_val);
+
+        // the average time defined for the [(i)th element, avg]
         rnr_val = uct_ib_to_rnr_fabric_time((uct_ib_qp_rnr_time_ms[i - 1] + avg) * 0.5 / UCS_MSEC_PER_SEC);
-        EXPECT_EQ(i % 32, rnr_val);
+        EXPECT_EQ(i % uct_ib_fabric_time_max, rnr_val);
 
+        // the average time defined for the [avg, (i + 1)th element]
         rnr_val = uct_ib_to_rnr_fabric_time((avg + uct_ib_qp_rnr_time_ms[i]) * 0.5 / UCS_MSEC_PER_SEC);
-        EXPECT_EQ((i + 1) % 32, rnr_val);
+        EXPECT_EQ((i + 1) % uct_ib_fabric_time_max, rnr_val);
     }
 
     rnr_val = uct_ib_to_rnr_fabric_time(1.);
