@@ -281,32 +281,6 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
     return UCS_OK;
 }
 
-//static void uct_tcp_iface_handle_failure(uct_tcp_iface_t *tcp_iface, void *arg,
-//                                         ucs_status_t status)
-//{
-//    ucs_log_level_t log_lvl = UCS_LOG_LEVEL_FATAL;
-//    uct_tcp_ep_t    *ep     = ucs_derived_of(uct_ep, uct_tcp_ep_t);
-//
-//    if (!ep) {
-//        return;
-//    }
-//
-//    if (tcp_iface->ops->set_ep_failed(tcp_iface, &ep->super.super.super,
-//                                     status) == UCS_OK) {
-//        log_lvl = iface->super.super.config.failure_level;
-//    }
-//
-//    ucs_log(log_lvl, "send completion with error: %s",
-//            ibv_wc_status_str(wc->status));
-//}
-//
-//static ucs_status_t uct_tcp_iface_ep_set_failed(uct_tcp_iface_t *iface,
-//                                                uct_ep_h ep, ucs_status_t status)
-//{
-//    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t), ep,
-//                             &iface->super.super, status);
-//}
-
 static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_am_short              = uct_tcp_ep_am_short,
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
@@ -328,8 +302,6 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_get_device_address = uct_tcp_iface_get_device_address,
     .iface_is_reachable       = uct_tcp_iface_is_reachable,
-    //.handle_failure           = uct_tcp_iface_handle_failure,
-    //.set_ep_failed            = uct_tcp_iface_ep_set_failed
 };
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
