@@ -33,7 +33,11 @@ noinst_HEADERS = \
 	sm/mm/base/mm_def.h \
 	sm/mm/base/mm_md.h \
 	sm/self/self.h \
-	tcp/tcp.h
+	tcp/tcp.h \
+	tcp/tcpcm/tcpcm_md.h \
+	tcp/tcpcm/tcpcm_iface.h \
+	tcp/tcpcm/tcpcm_ep.h \
+	tcp/tcpcm/tcpcm_def.h
 
 libuct_la_SOURCES = \
 	base/uct_md.c \
@@ -52,4 +56,7 @@ libuct_la_SOURCES = \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
 	tcp/tcp_net.c \
-	tcp/tcp_cm.c
+	tcp/tcp_cm.c \
+	tcp/tcpcm/tcpcm_md.c \
+	tcp/tcpcm/tcpcm_iface.c \
+	tcp/tcpcm/tcpcm_ep.c
