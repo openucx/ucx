@@ -19,8 +19,8 @@ enum {
     PRINT_DEVICES        = UCS_BIT(4),
     PRINT_UCP_CONTEXT    = UCS_BIT(5),
     PRINT_UCP_WORKER     = UCS_BIT(6),
-    PRINT_UCP_EP         = UCS_BIT(7)
-
+    PRINT_UCP_EP         = UCS_BIT(7),
+    PRINT_MEM_MAP        = UCS_BIT(8)
 };
 
 
@@ -37,6 +37,7 @@ void print_type_info(const char * tl_name);
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                     uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
-                    size_t estimated_num_eps, unsigned dev_type_bitmap);
+                    size_t estimated_num_eps, unsigned dev_type_bitmap,
+                    const char *mem_size);
 
 #endif

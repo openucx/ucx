@@ -50,7 +50,7 @@ typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*alloc)(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                           unsigned flags, const char *alloc_name, void **address_p,
-                          uct_mm_id_t *mmid_p, const char **path_p);
+                          uct_mm_id_t *mmid_p, const char **path_p, int *is_hugetlb_used);
 
     ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length,
                            void *remote_address, void **address, uint64_t *cookie,
@@ -117,7 +117,8 @@ typedef struct uct_mm_seg {
     uct_mm_id_t      mmid;      /* Shared memory ID */
     void             *address;  /* Virtual address */
     size_t           length;    /* Size of the memory */
-    const char      *path;      /* path to the backing file when using posix */
+    const char       *path;     /* Path to the backing file when using posix */
+    int              is_hugetlb_used;   /* If hugetlb was used for memory allocation */
 } uct_mm_seg_t;
 
 
@@ -163,5 +164,7 @@ ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void 
 
 ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_config,
                             uct_md_h *md_p, uct_md_component_t *_var);
+
+int uct_mm_is_hugetlb_used(uct_md_h md, uct_mem_h memh);
 
 #endif

@@ -1632,6 +1632,17 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  */
 int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Check if the memory allocated by the md was allocated with hugetlb.
+ *
+ * @param [in]  md           Memory domain to check
+ * @param [in]  memh         Memory handle to the allocated memory
+ */
+int uct_md_is_hugetlb_used(uct_md_h md, uct_mem_h memh);
+
+
 /**
  * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy communications and remote access.

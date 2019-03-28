@@ -11,6 +11,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <string.h>
 #include <inttypes.h>
@@ -641,4 +642,48 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
 
     ucp_mpool_free(worker, mp, chunk);
+}
+
+void ucp_mem_print_info(ucp_mem_h memh, ucp_context_h context, FILE *stream)
+{
+    unsigned md_index;
+    char buf[256];
+    uct_mem_h uct_memh;
+
+    fprintf(stream, "#\n");
+    fprintf(stream, "# UCP memory handle\n");
+    fprintf(stream, "#\n");
+
+    ucs_memunits_to_str(memh->length, buf, sizeof(buf));
+    fprintf(stream, "#  allocated %s at address %p with: ", buf, memh->address);
+
+    if (memh->alloc_md == NULL) {
+        fprintf(stream, "%s ", uct_alloc_method_names[memh->alloc_method]);
+    } else {
+        for (md_index = 0; md_index < context->num_mds; ++md_index) {
+            if (memh->alloc_md == context->tl_mds[md_index].md) {
+                fprintf(stream, "%s ",context->tl_mds[md_index].rsc.md_name);
+
+                uct_memh = ucp_memh2uct(memh, md_index);
+                if (uct_memh != NULL) {
+                    if (uct_md_is_hugetlb_used(context->tl_mds[md_index].md, uct_memh)) {
+                        fprintf(stream, "hugetlb on");
+                    } else {
+                        fprintf(stream, "hugetlb off");
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    fprintf(stream, "\n");
+
+    fprintf(stream, "#  registered on: ");
+    ucs_for_each_bit(md_index, memh->md_map) {
+        fprintf(stream, "%s ", context->tl_mds[md_index].rsc.md_name);
+    }
+    fprintf(stream, "\n");
+
+    fprintf(stream, "#\n");
 }

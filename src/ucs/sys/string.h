@@ -76,6 +76,24 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max);
 
 
 /**
+ * Convert a string holding memory units to a numeric value.
+ *
+ *  @param buf   String to convert
+ *  @param dest  Numeric value of the string
+ *  @param arg   Argument to use
+ */
+int ucs_str_to_memunits(const char *buf, void *dest, const void *arg);
+
+
+/**
+ *  Return the numeric value of the memunits prefix.
+ *  For example:
+ *  'M' -> 1048576
+ */
+size_t ucs_string_quantity_prefix_value(char prefix);
+
+
+/**
  * Copy string limited by len bytes. Destination string is always ended by '\0'
  *
  * @param dst Destination buffer

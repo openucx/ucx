@@ -29,6 +29,8 @@ static void usage() {
     printf("  -p              Show UCP context information\n");
     printf("  -w              Show UCP worker information\n");
     printf("  -e              Show UCP endpoint configuration\n");
+    printf("  -m              Show UCP memory map configuration\n");
+    printf("  -l              Memory size to map (used with -m)\n");
     printf("  -u <features>   UCP context features to use. String of one or more of:\n");
     printf("                    'a' : atomic operations\n");
     printf("                    'r' : remote memory access\n");
@@ -56,7 +58,7 @@ int main(int argc, char **argv)
     uint64_t ucp_features;
     size_t ucp_num_eps;
     unsigned print_opts;
-    char *tl_name;
+    char *tl_name, *mem_size;
     const char *f;
     int c;
 
@@ -65,9 +67,10 @@ int main(int argc, char **argv)
     tl_name                  = NULL;
     ucp_features             = 0;
     ucp_num_eps              = 1;
+    mem_size                 = NULL;
     dev_type_bitmap          = -1;
     ucp_ep_params.field_mask = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpmet:n:u:D:l:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -101,6 +104,9 @@ int main(int argc, char **argv)
             break;
         case 'e':
             print_opts |= PRINT_UCP_EP;
+            break;
+        case 'm':
+            print_opts |= PRINT_MEM_MAP;
             break;
         case 't':
             tl_name = optarg;
@@ -147,6 +153,9 @@ int main(int argc, char **argv)
                 return -1;
             }
             break;
+        case 'l':
+            mem_size = optarg;
+            break;
         case 'h':
             usage();
             return 0;
@@ -188,14 +197,14 @@ int main(int argc, char **argv)
         ucs_config_parser_print_all_opts(stdout, print_flags);
     }
 
-    if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP)) {
+    if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
         if (ucp_features == 0) {
             printf("Please select UCP features using -u switch: a|r|t|w\n");
             usage();
             return -1;
         }
         print_ucp_info(print_opts, print_flags, ucp_features, &ucp_ep_params,
-                       ucp_num_eps, dev_type_bitmap);
+                       ucp_num_eps, dev_type_bitmap, mem_size);
     }
 
     return 0;

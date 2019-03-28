@@ -22,9 +22,6 @@
 #include <ctype.h>
 
 
-/* configuration value which specifies "infinity" for a numeric variable */
-#define UCS_CONFIG_PARSER_NUMERIC_INF_STR      "inf"
-
 /* width of titles in docstring */
 #define UCP_CONFIG_PARSER_DOCSTR_WIDTH         10
 
@@ -81,24 +78,6 @@ static int __find_string_in_list(const char *str, const char **list)
     return -1;
 }
 
-static size_t ucs_config_parser_quantity_prefix_value(char prefix)
-{
-    switch (prefix) {
-    case 'B':
-        return 1;
-    case 'K':
-        return UCS_KBYTE;
-    case 'M':
-        return UCS_MBYTE;
-    case 'G':
-        return UCS_GBYTE;
-    case 'T':
-        return UCS_TBYTE;
-    default:
-        return 0;
-    }
-}
-
 int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg)
 {
     *((char**)dest) = strdup(buf);
@@ -145,7 +124,7 @@ int ucs_config_sprintf_int(char *buf, size_t max, void *src, const void *arg)
 
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
 {
-    if (!strcasecmp(buf, UCS_CONFIG_PARSER_NUMERIC_INF_STR)) {
+    if (!strcasecmp(buf, UCS_CONFIG_NUMERIC_INF_STR)) {
         *(unsigned*)dest = UINT_MAX;
         return 1;
     } else {
@@ -163,7 +142,7 @@ int ucs_config_sprintf_uint(char *buf, size_t max, void *src, const void *arg)
 {
     unsigned value = *(unsigned*)src;
     if (value == UINT_MAX) {
-        snprintf(buf, max, UCS_CONFIG_PARSER_NUMERIC_INF_STR);
+        snprintf(buf, max, UCS_CONFIG_NUMERIC_INF_STR);
         return 1;
     } else {
         return snprintf(buf, max, "%u", value);
@@ -415,7 +394,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
 
     ucs_assert(num_fields == 2);
 
-    units = (str[0] == 'b') ? 1 : ucs_config_parser_quantity_prefix_value(str[0]);
+    units = (str[0] == 'b') ? 1 : ucs_string_quantity_prefix_value(str[0]);
     if (!units) {
         return 0;
     }
@@ -529,38 +508,7 @@ int ucs_config_sprintf_signo(char *buf, size_t max, void *src, const void *arg)
 
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
 {
-    char units[3];
-    int num_fields;
-    size_t value;
-    size_t bytes;
-
-    /* Special value: infinity */
-    if (!strcasecmp(buf, UCS_CONFIG_PARSER_NUMERIC_INF_STR)) {
-        *(size_t*)dest = UCS_CONFIG_MEMUNITS_INF;
-        return 1;
-    }
-
-    /* Special value: auto */
-   if (!strcasecmp(buf, "auto")) {
-        *(size_t*)dest = UCS_CONFIG_MEMUNITS_AUTO;
-        return 1;
-    }
-
-    memset(units, 0, sizeof(units));
-    num_fields = sscanf(buf, "%ld%c%c", &value, &units[0], &units[1]);
-    if (num_fields == 1) {
-        bytes = 1;
-    } else if (num_fields == 2 || num_fields == 3) {
-        bytes = ucs_config_parser_quantity_prefix_value(toupper(units[0]));
-        if (!bytes || ((num_fields == 3) && tolower(units[1]) != 'b')) {
-            return 0;
-        }
-    } else {
-        return 0;
-    }
-
-    *(size_t*)dest = value * bytes;
-    return 1;
+    return ucs_str_to_memunits(buf, dest, arg);
 }
 
 int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *arg)
@@ -568,7 +516,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     size_t sz = *(size_t*)src;
 
     if (sz == UCS_CONFIG_MEMUNITS_INF) {
-        snprintf(buf, max, UCS_CONFIG_PARSER_NUMERIC_INF_STR);
+        snprintf(buf, max, UCS_CONFIG_NUMERIC_INF_STR);
     } else if (sz == UCS_CONFIG_MEMUNITS_AUTO) {
         snprintf(buf, max, "auto");
     } else {

@@ -1861,6 +1861,21 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
 
 /**
  * @ingroup UCP_MEM
+ * @brief Print context information.
+ *
+ * This routine prints information about the memory handle configuration: including
+ * the mapped memory length, the allocation method, and other useful information
+ * associated with the memory handle.
+ *
+ * @param [in] memh         Print this memory handle's configuration.
+ * @param [in] context      The context on which the memory was mapped.
+ * @param [in] stream       Output stream on which to print the information.
+ */
+void ucp_mem_print_info(const ucp_mem_h memh, ucp_context_h context, FILE *stream);
+
+
+/**
+ * @ingroup UCP_MEM
  * @brief list of UCP memory use advice.
  *
  * The enumeration list describes memory advice supported by @ref

@@ -552,3 +552,10 @@ int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
     return md->ops->is_mem_type_owned(md, addr, length);
 }
 
+int uct_md_is_hugetlb_used(uct_md_h md, uct_mem_h memh)
+{
+    if (md->ops->is_hugetlb_used != NULL) {
+        return md->ops->is_hugetlb_used(md, memh);
+    }
+    return 0;
+}
