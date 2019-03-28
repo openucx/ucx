@@ -3,6 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (c) The University of Tennesse and the University of Tennessee
 #               Research Foundation. 2016.  ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA Corporation 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
