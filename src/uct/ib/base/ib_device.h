@@ -38,6 +38,7 @@
 #define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
 #define UCT_IB_DEV_MAX_PORTS        2
+#define UCT_IB_FABRIC_TIME_MAX      32
 #define UCT_IB_INVALID_RKEY         0xffffffffu
 #define UCT_IB_KEY                  0x1ee7a330
 #define UCT_IB_LINK_LOCAL_PREFIX    be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
@@ -148,7 +149,7 @@ typedef struct uct_ib_roce_version_desc {
 
 
 extern const double uct_ib_qp_rnr_time_ms[];
-extern const uint8_t uct_ib_fabric_time_max;
+
 
 /**
  * Check if a port on a device is active and supports the given flags.

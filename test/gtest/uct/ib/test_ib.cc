@@ -352,23 +352,23 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_qp_time) {
     qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, 1) / UCS_USEC_PER_SEC);
     EXPECT_EQ(1, qp_val);
 
-    for (uint8_t i = 2; i <= uct_ib_fabric_time_max; i++) {
+    for (uint8_t i = 2; i <= UCT_IB_FABRIC_TIME_MAX; i++) {
         // the time defined for the (i)th element
         qp_val = uct_ib_to_qp_fabric_time(4.096 * pow(2, i) / UCS_USEC_PER_SEC);
-        EXPECT_EQ(i % uct_ib_fabric_time_max, qp_val);
+        EXPECT_EQ(i % UCT_IB_FABRIC_TIME_MAX, qp_val);
 
         // avg = (the average time defined for the [(i - 1)th element, (i)th element])
         avg = (4.096 * pow(2, i - 1) + 4.096 * pow(2, i)) * 0.5;
         qp_val = uct_ib_to_qp_fabric_time(avg / UCS_USEC_PER_SEC);
-        EXPECT_EQ(i % uct_ib_fabric_time_max, qp_val);
+        EXPECT_EQ(i % UCT_IB_FABRIC_TIME_MAX, qp_val);
 
         // the average time defined for the [(i - 1)th element, avg]
         qp_val = uct_ib_to_qp_fabric_time((4.096 * pow(2, i - 1) + avg) * 0.5 / UCS_USEC_PER_SEC);
-        EXPECT_EQ((i - 1) % uct_ib_fabric_time_max, qp_val);
+        EXPECT_EQ((i - 1) % UCT_IB_FABRIC_TIME_MAX, qp_val);
 
         // the average time defined for the [avg, (i)th element]
         qp_val = uct_ib_to_qp_fabric_time((avg +  4.096 * pow(2, i)) * 0.5 / UCS_USEC_PER_SEC);
-        EXPECT_EQ(i % uct_ib_fabric_time_max, qp_val);
+        EXPECT_EQ(i % UCT_IB_FABRIC_TIME_MAX, qp_val);
     }
 }
 
@@ -391,23 +391,23 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
         EXPECT_EQ(1, rnr_val);
     }
 
-    for (uint8_t i = 1; i < uct_ib_fabric_time_max; i++) {
+    for (uint8_t i = 1; i < UCT_IB_FABRIC_TIME_MAX; i++) {
         // the time defined for the (i + 1)th element
         rnr_val = uct_ib_to_rnr_fabric_time(uct_ib_qp_rnr_time_ms[i] / UCS_MSEC_PER_SEC);
-        EXPECT_EQ((i + 1) % uct_ib_fabric_time_max, rnr_val);
+        EXPECT_EQ((i + 1) % UCT_IB_FABRIC_TIME_MAX, rnr_val);
 
         // avg = (the average time defined for the [(i)th element, (i + 1)th element])
         avg = (uct_ib_qp_rnr_time_ms[i - 1] + uct_ib_qp_rnr_time_ms[i]) * 0.5;
         rnr_val = uct_ib_to_rnr_fabric_time(avg / UCS_MSEC_PER_SEC);
-        EXPECT_EQ((i + 1) % uct_ib_fabric_time_max, rnr_val);
+        EXPECT_EQ((i + 1) % UCT_IB_FABRIC_TIME_MAX, rnr_val);
 
         // the average time defined for the [(i)th element, avg]
         rnr_val = uct_ib_to_rnr_fabric_time((uct_ib_qp_rnr_time_ms[i - 1] + avg) * 0.5 / UCS_MSEC_PER_SEC);
-        EXPECT_EQ(i % uct_ib_fabric_time_max, rnr_val);
+        EXPECT_EQ(i % UCT_IB_FABRIC_TIME_MAX, rnr_val);
 
         // the average time defined for the [avg, (i + 1)th element]
         rnr_val = uct_ib_to_rnr_fabric_time((avg + uct_ib_qp_rnr_time_ms[i]) * 0.5 / UCS_MSEC_PER_SEC);
-        EXPECT_EQ((i + 1) % uct_ib_fabric_time_max, rnr_val);
+        EXPECT_EQ((i + 1) % UCT_IB_FABRIC_TIME_MAX, rnr_val);
     }
 
     rnr_val = uct_ib_to_rnr_fabric_time(1.);

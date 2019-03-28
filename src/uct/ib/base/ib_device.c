@@ -27,8 +27,6 @@ typedef struct {
 } uct_ib_device_gid_info_t;
 
 
-const uint8_t uct_ib_fabric_time_max = 32;
-
 /* this table is according to Table "Encoding for RNR
  * NAK Timer Field" IBTA spec  */
 const double uct_ib_qp_rnr_time_ms[] = {
@@ -648,7 +646,7 @@ uint8_t uct_ib_to_qp_fabric_time(double time)
     to = log(time / 4.096e-6) / log(2.0);
     if (to < 1) {
         return 1; /* Very small timeout */
-    } else if ((long)(to + 0.5) >= uct_ib_fabric_time_max) {
+    } else if ((long)(to + 0.5) >= UCT_IB_FABRIC_TIME_MAX) {
         return 0; /* No timeout */
     } else {
         return (long)(to + 0.5);
@@ -665,7 +663,7 @@ uint8_t uct_ib_to_rnr_fabric_time(double time)
         return 1;
     }
 
-    for (t = 1; t < uct_ib_fabric_time_max; t++) {
+    for (t = 1; t < UCT_IB_FABRIC_TIME_MAX; t++) {
         if (time_ms <= uct_ib_qp_rnr_time_ms[t]) {
             avg_ms = (uct_ib_qp_rnr_time_ms[t - 1] +
                       uct_ib_qp_rnr_time_ms[t]) * 0.5;
@@ -676,7 +674,7 @@ uint8_t uct_ib_to_rnr_fabric_time(double time)
             } else {
                 /* return current value (increment and adjust for
                  * the maximum rnr value) */
-                return (t + 1) % uct_ib_fabric_time_max;
+                return (t + 1) % UCT_IB_FABRIC_TIME_MAX;
             }
         }
     }
