@@ -45,8 +45,6 @@ ucs_status_t uct_tcpcm_ep_set_sock_id(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t *
         iface->sock_id_quota--;
         ucs_debug("ep %p, new sock_id %d. sock_id_in_quota %d", ep,
                    ep->sock_id_ctx->sock_id, iface->sock_id_quota);
-        printf("ep %p, new sock_id %d. sock_id_in_quota %d\n", ep,
-               ep->sock_id_ctx->sock_id, iface->sock_id_quota);
         status = UCS_OK;
         goto out;
     } else {
@@ -200,11 +198,6 @@ out:
                iface, iface->sock_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
-    printf("created an TCPCM endpoint on iface %p, "
-           "iface sock_id: %d remote addr: %s\n",
-           iface, iface->sock_id,
-           ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
-                            ip_port_str, UCS_SOCKADDR_STRING_LEN));
     self->status = UCS_OK;
     return UCS_OK;
 
