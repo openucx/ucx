@@ -540,8 +540,6 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed,
-    .init_res_domain          = (void*)ucs_empty_function_return_success,
-    .cleanup_res_domain       = (void*)ucs_empty_function,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
