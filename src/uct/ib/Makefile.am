@@ -45,8 +45,12 @@ libuct_ib_la_SOURCES += \
 	mlx5/ib_mlx5.c
 
 if HAVE_EXP
+noinst_HEADERS += \
+	mlx5/exp/ib_exp.h
+
 libuct_ib_la_SOURCES += \
 	mlx5/exp/ib_mlx5_hw.c \
+	mlx5/exp/ib_exp.c \
 	mlx5/exp/ib_exp_md.c
 endif # HAVE_EXP
 

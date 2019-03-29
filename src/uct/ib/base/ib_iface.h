@@ -129,6 +129,7 @@ typedef struct uct_ib_qp_attr {
 #else
     struct ibv_qp_init_attr     ibv;
 #endif
+    uint32_t                    *qp_num_p;
 } uct_ib_qp_attr_t;
 
 
@@ -147,8 +148,6 @@ struct uct_ib_iface_ops {
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
                                              ucs_status_t status);
-    ucs_status_t            (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
-                                         struct ibv_qp **qp_p);
     ucs_status_t            (*init_res_domain)(uct_ib_iface_t *iface);
     void                    (*cleanup_res_domain)(uct_ib_iface_t *iface);
 };

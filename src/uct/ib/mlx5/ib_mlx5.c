@@ -7,7 +7,7 @@
 #include "ib_mlx5.h"
 #include "ib_mlx5.inl"
 #include "ib_mlx5_log.h"
-
+#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/base/ib_device.h>
 #include <ucs/arch/bitops.h>
@@ -272,6 +272,7 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          struct ibv_qp **qp_p)
 {
     uct_ib_mlx5_iface_fill_attr(iface, mlx5, attr);
+    uct_ib_exp_qp_fill_attr(iface, attr);
     return uct_ib_iface_create_qp(iface, attr, qp_p);
 }
 
