@@ -222,12 +222,25 @@ typedef enum {
 } uct_ib_mlx5_qp_type_t;
 
 
+/* resource domain */
+typedef struct uct_ib_mlx5_res_domain {
+    uct_worker_tl_data_t        super;
+#if HAVE_IBV_EXP_RES_DOMAIN
+    struct ibv_exp_res_domain   *ibv_domain;
+#elif HAVE_DECL_IBV_ALLOC_TD
+    struct ibv_td               *td;
+    struct ibv_pd               *pd;
+#endif
+} uct_ib_mlx5_res_domain_t;
+
+
 /* MLX5 QP wrapper */
 typedef struct uct_ib_mlx5_qp {
-    uct_ib_mlx5_qp_type_t       type;
+    uct_ib_mlx5_qp_type_t              type;
     union {
         struct {
-            struct ibv_qp       *qp;
+            struct ibv_qp              *qp;
+            uct_ib_mlx5_res_domain_t   *rd;
         } verbs;
     };
 } uct_ib_mlx5_qp_t;
@@ -340,33 +353,13 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
 } UCS_S_PACKED;
 
 
-typedef struct uct_ib_mlx5_iface_res_domain {
-    uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
-    struct ibv_exp_res_domain   *ibv_domain;
-#elif HAVE_DECL_IBV_ALLOC_TD
-    struct ibv_td               *td;
-    struct ibv_pd               *pd;
-#endif
-} uct_ib_mlx5_iface_res_domain_t;
-
-
-/**
- *  MLX5 common iface part
- */
-typedef struct uct_ib_mlx5_iface_common {
-    uct_ib_mlx5_iface_res_domain_t   *res_domain;
-} uct_ib_mlx5_iface_common_t;
-
-
 ucs_status_t uct_ib_mlx5_iface_init_res_domain(uct_ib_iface_t *iface,
-                                               uct_ib_mlx5_iface_common_t *mlx5);
+                                               uct_ib_mlx5_qp_t *txwq);
 
-void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_iface_common_t *mlx5);
-
+void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_qp_t *qp);
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
-                                         uct_ib_mlx5_iface_common_t *mlx5,
+                                         uct_ib_mlx5_qp_t *qp,
                                          uct_ib_qp_attr_t *attr,
                                          struct ibv_qp **qp_p);
 

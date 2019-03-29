@@ -902,6 +902,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.verbs.qp->qp_num);
+        uct_ib_mlx5_iface_cleanup_res_domain(&self->tm_qp);
         uct_rc_mlx5_ep_clean_qp(self, self->tm_qp.verbs.qp);
     }
 #endif
