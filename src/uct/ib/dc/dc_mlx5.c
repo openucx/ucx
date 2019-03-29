@@ -298,7 +298,11 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     uct_rc_iface_fill_attr(&iface->super.super, &attr,
                            iface->super.super.config.tx_qp_len);
 
-    uct_ib_mlx5_iface_fill_attr(ib_iface, &iface->super.mlx5_common, &attr);
+    status = uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->qp, &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_ib_iface_fill_attr(ib_iface, &attr);
     attr.ibv.cap.max_recv_sge          = 0;
 
@@ -317,8 +321,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     attr.qp_num_p = &dci->txqp.qp_num;
     uct_rc_iface_fill_attr(&iface->super.super, &attr,
                            iface->super.super.config.tx_qp_len);
-    status = uct_ib_mlx5_iface_create_qp(ib_iface, &iface->super.mlx5_common,
-                                         &attr, &dci->qp.verbs.qp);
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, &dci->qp, &attr,
+                                         &dci->qp.verbs.qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -339,7 +343,6 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
 #if ENABLE_ASSERT
     dci->flags   = 0;
 #endif
-    dci->qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                    iface->super.tx.mmio_mode, &dci->txwq,
                                    dci->qp.verbs.qp);
@@ -1054,8 +1057,6 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
-    .init_res_domain          = uct_rc_mlx5_init_res_domain,
-    .cleanup_res_domain       = uct_rc_mlx5_cleanup_res_domain,
     },
     .init_rx                  = uct_dc_mlx5_init_rx,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,

@@ -815,11 +815,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = self->ops->init_res_domain(self);
-    if (status != UCS_OK) {
-        goto err_free_path_bits;
-    }
-
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
         ucs_error("ibv_create_comp_channel() failed: %m");
@@ -889,8 +884,6 @@ err_destroy_send_cq:
 err_destroy_comp_channel:
     ibv_destroy_comp_channel(self->comp_channel);
 err_cleanup:
-    self->ops->cleanup_res_domain(self);
-err_free_path_bits:
     ucs_free(self->path_bits);
 err:
     return status;
@@ -915,7 +908,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
-    self->ops->cleanup_res_domain(self);
     ucs_free(self->path_bits);
 }
 
