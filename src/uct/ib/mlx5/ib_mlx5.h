@@ -401,7 +401,7 @@ void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_iface_common_t *mlx5);
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_iface_common_t *mlx5,
                                          uct_ib_qp_attr_t *attr,
-                                         struct ibv_qp **qp_p);
+                                         uct_ib_mlx5_qp_t *qp);
 
 /**
  * Create CQ with DV

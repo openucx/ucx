@@ -485,7 +485,11 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
     attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
-    attr->ibv.pd              = mlx5->res_domain->pd;
+    if (mlx5->res_domain->pd != NULL) {
+        attr->ibv.pd          = mlx5->res_domain->pd;
+    } else {
+        attr->ibv.pd          = uct_ib_iface_md(iface)->pd;
+    }
 #endif
 
 #if HAVE_IBV_EXP_RES_DOMAIN

@@ -528,22 +528,13 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
         return;
     }
 
-#if HAVE_IB_EXT_ATOMICS
-    attr->ibv.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
-    attr->ibv.max_atomic_arg      = UCT_IB_MAX_ATOMIC_SIZE;
-#endif
-
+    /* MOFED requires this to enable IB spec atomic */
 #if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
     if (uct_ib_iface_device(iface)->dev_attr.exp_atomic_cap ==
                                      IBV_EXP_ATOMIC_HCA_REPLY_BE) {
         attr->ibv.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
         attr->ibv.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
     }
-#endif
-
-#if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    attr->ibv.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    attr->ibv.max_inl_recv         = attr->max_inl_recv;
 #endif
 }
 

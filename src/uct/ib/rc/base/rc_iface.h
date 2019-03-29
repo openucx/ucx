@@ -323,10 +323,14 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 /**
- * Creates an RC or DCI QP and fills 'cap' with QP capabilities;
+ * Creates an RC or DCI QP
  */
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
-                                    struct ibv_qp_cap *cap, unsigned max_send_wr);
+                                    uct_ib_qp_attr_t *attr, unsigned max_send_wr);
+
+void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
+                            uct_ib_qp_attr_t *qp_init_attr,
+                            unsigned max_send_wr);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 

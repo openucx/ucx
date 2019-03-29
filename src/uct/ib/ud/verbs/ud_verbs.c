@@ -539,13 +539,13 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp,
     .init_res_domain          = (void*)ucs_empty_function_return_success,
     .cleanup_res_domain       = (void*)ucs_empty_function,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t)
+    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
+    .create_qp                = uct_ib_iface_create_qp,
 };
 
 static UCS_F_NOINLINE void
