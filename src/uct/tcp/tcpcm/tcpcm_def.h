@@ -25,14 +25,14 @@ typedef struct uct_tcpcm_iface   uct_tcpcm_iface_t;
 typedef struct uct_tcpcm_ep      uct_tcpcm_ep_t;
 
 typedef struct uct_tcpcm_priv_data_hdr {
-    unsigned int length;     /* length of the private data */
     int8_t       status;
+    unsigned int length;     /* length of the private data */
 } uct_tcpcm_priv_data_hdr_t;
 
 typedef struct uct_tcpcm_conn_param {
+    unsigned int              private_data_len;
     uct_tcpcm_priv_data_hdr_t hdr;
     char                      private_data[UCT_TCPCM_UDP_PRIV_DATA_LEN];
-    unsigned int              private_data_len;
 } uct_tcpcm_conn_param_t;
 
 typedef struct uct_tcpcm_ctx {

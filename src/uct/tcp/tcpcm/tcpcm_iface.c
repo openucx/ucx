@@ -17,10 +17,6 @@ enum uct_tcpcm_process_event_flags {
 };
 
 static ucs_config_field_t uct_tcpcm_iface_config_table[] = {
-    {"BACKLOG", "1024",
-     "Maximum number of pending connections for a (listening?) socket.",
-     ucs_offsetof(uct_tcpcm_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
-
     {"SOCK_ID_QUOTA", "64",
      "How many tcpcm connections can progress simultaneously.",
      ucs_offsetof(uct_tcpcm_iface_config_t, sock_id_quota), UCS_CONFIG_TYPE_UINT},
@@ -404,9 +400,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_close_sock;
         }
 
-        ret = listen(self->listen_fd, config->backlog);
+        ret = listen(self->listen_fd, SOMAXCONN);
         if (ret < 0) {
-            ucs_error("listen(fd=%d; backlog=%d)", self->listen_fd, config->backlog);
+            ucs_error("listen(fd=%d; backlog=%d)", self->listen_fd, SOMAXCONN);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
         }

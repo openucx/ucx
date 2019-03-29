@@ -562,7 +562,6 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
         memcpy(client_data + 1, worker_address, address_length);
     }
 
-
     ucp_worker_release_address(worker, worker_address);
     return conn_priv_len;
 

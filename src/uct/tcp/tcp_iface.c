@@ -95,9 +95,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_PENDING          |
                              UCT_IFACE_FLAG_CB_SYNC          |
                              UCT_IFACE_FLAG_EVENT_SEND_COMP  |
-                             UCT_IFACE_FLAG_EVENT_RECV;
-
-    attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+                             UCT_IFACE_FLAG_EVENT_RECV       |
+                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     attr->cap.am.max_bcopy = iface->config.buf_size - sizeof(uct_tcp_am_hdr_t);
     attr->cap.am.max_short = iface->config.short_size - sizeof(uct_tcp_am_hdr_t);
@@ -301,7 +300,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_get_device_address = uct_tcp_iface_get_device_address,
-    .iface_is_reachable       = uct_tcp_iface_is_reachable,
+    .iface_is_reachable       = uct_tcp_iface_is_reachable
 };
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)

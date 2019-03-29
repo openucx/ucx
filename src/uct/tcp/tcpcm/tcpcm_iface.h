@@ -15,7 +15,6 @@
 
 typedef struct uct_tcpcm_iface_config {
     uct_iface_config_t       super;
-    unsigned                 backlog;
     unsigned                 sock_id_quota;
 } uct_tcpcm_iface_config_t;
 
