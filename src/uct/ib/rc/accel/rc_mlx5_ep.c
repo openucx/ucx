@@ -816,68 +816,31 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 }
 #endif /* IBV_HW_TM */
 
-static ucs_status_t uct_rc_mlx5_ep_tag_qp_create(uct_rc_mlx5_iface_common_t *iface,
-                                                 uct_rc_mlx5_ep_t *ep)
-{
-    struct ibv_qp_cap cap;
-    ucs_status_t status;
-    int ret;
-
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
-         * such a QP to be initialized with zero send queue length. */
-        status = uct_rc_iface_qp_create(&iface->super, &ep->tm_qp.verbs.qp, &cap, 0);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = uct_rc_iface_qp_init(&iface->super, ep->tm_qp.verbs.qp);
-        if (status != UCS_OK) {
-            ret = ibv_destroy_qp(ep->tm_qp.verbs.qp);
-            if (ret) {
-                ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-            }
-            return status;
-        }
-        uct_rc_iface_add_qp(&iface->super, &ep->super, ep->tm_qp.verbs.qp->qp_num);
-    }
-    return UCS_OK;
-}
-
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(params->iface,
                                                        uct_rc_mlx5_iface_common_t);
-    struct ibv_qp_cap cap;
     ucs_status_t status;
 
-    status = uct_rc_iface_qp_create(&iface->super, &self->tx.qp.verbs.qp,
-                                    &cap, iface->super.config.tx_qp_len);
+    status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.qp, &self->tx.wq,
+                                         iface->super.config.tx_qp_len);
     if (status != UCS_OK) {
         return status;
     }
 
     self->super.txqp.qp_num = self->tx.qp.verbs.qp->qp_num;
 
-    status = uct_rc_iface_qp_init(&iface->super, self->tx.qp.verbs.qp);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    status = uct_rc_mlx5_ep_tag_qp_create(iface, self);
-    if (status != UCS_OK) {
-        goto err;
-    }
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
+         * such a QP to be initialized with zero send queue length. */
+        status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, &self->tx.wq, 0);
+        if (status != UCS_OK) {
+            goto err;
+        }
 
-    self->tx.qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
-    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode, &self->tx.wq,
-                                   self->tx.qp.verbs.qp);
-    if (status != UCS_OK) {
-        ucs_error("Failed to get mlx5 QP information");
-        goto err;
+        uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.verbs.qp->qp_num);
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);

@@ -100,6 +100,7 @@ typedef enum {
 typedef struct uct_dc_dci {
     uct_ib_mlx5_qp_t              qp;
     uct_rc_txqp_t                 txqp; /* DCI qp */
+    uct_ib_mlx5_txwq_t            txwq; /* DCI mlx5 wq */
     union {
         uct_dc_mlx5_ep_t          *ep;  /* points to an endpoint that currently
                                            owns the dci. Relevant only for dcs
@@ -140,7 +141,6 @@ struct uct_dc_mlx5_iface {
     struct {
         /* Array of dcis */
         uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
-        uct_ib_mlx5_txwq_t        dci_wqs[UCT_DC_MLX5_IFACE_MAX_DCIS];
 
         uint8_t                   ndci;                        /* Number of DCIs */
         uct_dc_tx_policy_t        policy;                      /* dci selection algorithm */
@@ -216,7 +216,10 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
-ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *dc_mlx5_iface, int dci);
+ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, int dci);
+
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                           uct_dc_dci_t *dci);
 
 ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_mlx5_iface_config_t *config);

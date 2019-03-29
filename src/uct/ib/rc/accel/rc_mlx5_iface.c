@@ -234,35 +234,61 @@ static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
                                       iface->super.progress, flags);
 }
 
-static ucs_status_t uct_rc_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
-                                                uct_ib_qp_attr_t *attr,
-                                                struct ibv_qp **qp_p)
+ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uct_ib_mlx5_txwq_t *txwq,
+                                         unsigned max_send_wr)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_iface_t *ib_iface           = &iface->super.super;
+    uct_ib_qp_attr_t attr              = {};
+    ucs_status_t status;
 #if HAVE_DECL_MLX5DV_CREATE_QP
     uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
     struct mlx5dv_qp_init_attr dv_attr = {};
-    struct ibv_qp *qp;
 
-    uct_ib_iface_fill_attr(ib_iface, attr);
-    uct_ib_mlx5_iface_fill_attr(ib_iface, &iface->mlx5_common, attr);
+    uct_rc_iface_fill_attr(&iface->super, &attr, max_send_wr);
+
+    uct_ib_mlx5_iface_fill_attr(ib_iface, &iface->mlx5_common, &attr);
+    uct_ib_iface_fill_attr(ib_iface, &attr);
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     dv_attr.comp_mask    = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     dv_attr.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
 #endif
-    qp = mlx5dv_create_qp(dev->ibv_context, &attr->ibv, &dv_attr);
-    if (qp == NULL) {
+    qp->verbs.qp = mlx5dv_create_qp(dev->ibv_context, &attr.ibv, &dv_attr);
+    if (qp->verbs.qp == NULL) {
         ucs_error("iface=%p: failed to create QP: %m", iface);
         return UCS_ERR_IO_ERROR;
     }
+#else
+    uct_rc_iface_fill_attr(&iface->super, &attr, max_send_wr);
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common,
+                                         &attr, &qp->verbs.qp);
+    if (status != UCS_OK) {
+        return status;
+    }
+#endif
 
-    attr->cap = attr->ibv.cap;
-    *qp_p     = qp;
+    status = uct_rc_iface_qp_init(&iface->super, qp->verbs.qp);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    if (max_send_wr) {
+        qp->type = UCT_IB_MLX5_QP_TYPE_VERBS;
+        status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+                                       iface->tx.mmio_mode, txwq,
+                                       qp->verbs.qp);
+        if (status != UCS_OK) {
+            ucs_error("Failed to get mlx5 QP information");
+            goto err;
+        }
+    }
 
     return UCS_OK;
-#else
-    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common, attr, qp_p);
-#endif
+
+err:
+    ibv_destroy_qp(qp->verbs.qp);
+    return status;
 }
 
 #if IBV_HW_TM
@@ -604,7 +630,6 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .event_cq                 = uct_rc_mlx5_iface_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
-    .create_qp                = uct_rc_mlx5_iface_create_qp,
     .init_res_domain          = uct_rc_mlx5_init_res_domain,
     .cleanup_res_domain       = uct_rc_mlx5_cleanup_res_domain,
     },

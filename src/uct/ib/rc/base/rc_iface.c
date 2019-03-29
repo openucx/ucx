@@ -698,30 +698,38 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
+void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
+                            uct_ib_qp_attr_t *qp_init_attr,
+                            unsigned max_send_wr)
+{
+    if (iface->super.config.qp_type == IBV_QPT_RC) {
+        qp_init_attr->srq             = iface->rx.srq.srq;
+    }
+    qp_init_attr->cap.max_send_wr     = max_send_wr;
+    qp_init_attr->cap.max_recv_wr     = 0;
+    qp_init_attr->cap.max_send_sge    = iface->config.tx_min_sge;
+    qp_init_attr->cap.max_recv_sge    = 1;
+    qp_init_attr->cap.max_inline_data = iface->config.tx_min_inline;
+    qp_init_attr->qp_type             = iface->super.config.qp_type;
+    qp_init_attr->sq_sig_all          = !iface->config.tx_moderation;
+    qp_init_attr->max_inl_recv        = iface->config.rx_inline;
+}
+
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap, unsigned max_send_wr)
 {
-    uct_ib_qp_attr_t qp_init_attr    = {};
-    static ucs_status_t status;
+    uct_ib_qp_attr_t qp_init_attr = {};
+    ucs_status_t status;
 
-    if (iface->super.config.qp_type == IBV_QPT_RC) {
-        qp_init_attr.srq             = iface->rx.srq.srq;
-    }
-    qp_init_attr.cap.max_send_wr     = max_send_wr;
-    qp_init_attr.cap.max_recv_wr     = 0;
-    qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
-    qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
-    qp_init_attr.qp_type             = iface->super.config.qp_type;
-    qp_init_attr.sq_sig_all          = !iface->config.tx_moderation;
-    qp_init_attr.max_inl_recv        = iface->config.rx_inline;
+    uct_rc_iface_fill_attr(iface, &qp_init_attr, max_send_wr);
+    uct_ib_iface_fill_attr(&iface->super, &qp_init_attr);
 
-    status = iface->super.ops->create_qp(&iface->super, &qp_init_attr, qp_p);
+    status = uct_ib_iface_create_qp(&iface->super, &qp_init_attr, qp_p);
     if (status != UCS_OK) {
         goto err;
     }
 
-    *cap = qp_init_attr.cap;
+    *cap = qp_init_attr.ibv.cap;
     return status;
 
 err:

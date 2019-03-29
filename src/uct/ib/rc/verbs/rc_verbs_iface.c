@@ -383,7 +383,6 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp,
     .init_res_domain          = (void*)ucs_empty_function_return_success,
     .cleanup_res_domain       = (void*)ucs_empty_function,
     },
