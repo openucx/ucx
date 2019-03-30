@@ -5,6 +5,7 @@
 */
 
 #include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
@@ -149,6 +150,74 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
     }
 
     return UCS_OK;
+}
+
+static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
+                                               ucs_socket_io_func_t io_func, const char *name)
+{
+    ssize_t ret;
+
+    ucs_assert(*length_p > 0);
+
+    ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
+    if (ret == 0) {
+        ucs_trace("fd %d is closed", fd);
+        return UCS_ERR_CANCELED; /* Connection closed */
+    } else if (ret < 0) {
+        if ((errno == EINTR) || (errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+            *length_p = 0;
+            return UCS_OK;
+        } else {
+            ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
+                      name, fd, data, *length_p);
+            return UCS_ERR_IO_ERROR;
+        }
+    } else {
+        *length_p = ret;
+        return UCS_OK;
+    }
+}
+
+static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
+                                              ucs_socket_io_func_t io_func, const char *name)
+{
+    ucs_status_t status;
+    size_t done_cnt = 0, cur_cnt = length;
+
+    do {
+        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
+        if (status == UCS_OK) {
+            done_cnt += cur_cnt;
+        } else {
+            return status;
+        }
+
+        cur_cnt = length - done_cnt;
+    } while (done_cnt < length);
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
+{
+    return ucs_socket_do_io_nb(fd, (void*)data, length_p,
+                               (ucs_socket_io_func_t)send, "send");
+}
+
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
+{
+    return ucs_socket_do_io_nb(fd, data, length_p, recv, "recv");
+}
+
+ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
+{
+    return ucs_socket_do_io_b(fd, (void*)data, length,
+                              (ucs_socket_io_func_t)send, "send");
+}
+
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t length)
+{
+    return ucs_socket_do_io_b(fd, data, length, recv, "recv");
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
