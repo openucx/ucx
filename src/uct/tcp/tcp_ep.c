@@ -357,7 +357,7 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     send_length = ep->tx.length - ep->tx.offset;
     ucs_assert(send_length > 0);
 
-    status = uct_tcp_send(ep->fd, ep->tx.buf + ep->tx.offset, &send_length);
+    status = ucs_socket_send_nb(ep->fd, ep->tx.buf + ep->tx.offset, &send_length);
     if (status < 0) {
         return 0;
     }
@@ -376,7 +376,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 
     ucs_assertv(*recv_length, "ep=%p", ep);
 
-    status = uct_tcp_recv(ep->fd, ep->rx.buf + ep->rx.length, recv_length);
+    status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length, recv_length);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_CANCELED) {
             uct_tcp_ep_handle_disconnected(ep, &ep->rx);
