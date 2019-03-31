@@ -157,15 +157,14 @@ typedef struct uct_component_attr {
      * Array of memory domain resources. When used, it should be initialized
      * prior to calling @ref uct_component_query with a pointer to an array,
      * which is large enough to hold all memory domain resource entries. After
-     * the call, this array would be filled with information about existing
+     * the call, this array will be filled with information about existing
      * memory domain resources.
-     * In order to allocate such array, it's possible to call
-     * @ref uct_component_query twice: The first time would only obtain the
-     * amount of entries required, by specifying
-     * @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT in field_mask. Then the
-     * array could be allocated with such number of entries, and passed to a
-     * second call to @ref uct_component_query, this time setting field_mask to
-     * @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES.
+     * In order to allocate this array, you can call @ref uct_component_query
+     * twice: The first time would only obtain the amount of entries required,
+     * by specifying @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT in
+     * field_mask. Then the array could be allocated with the returned number of
+     * entries, and passed to a second call to @ref uct_component_query, this
+     * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES.
      */
     uct_md_resource_desc_t *md_resources;
 
@@ -1898,7 +1897,7 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  *
  * @param [in]  worker        Handle to worker.
  *
- * @return Non-zero if any communication was progressed, zero otherwise.
+ * @return Nonzero if any communication was progressed, zero otherwise.
  */
 UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
 {
@@ -2349,7 +2348,7 @@ UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
  * The data is provided as buffer and its length,and must not be larger than the
  * corresponding @a max_short value in @ref uct_iface_attr.
  * The immediate value delivered to the receiver is implicitly equal to 0.
- * If it's required to pass non-zero imm value, @ref uct_ep_tag_eager_bcopy
+ * If it's required to pass nonzero imm value, @ref uct_ep_tag_eager_bcopy
  * should be used.
  *
  * @param [in]  ep        Destination endpoint handle.
