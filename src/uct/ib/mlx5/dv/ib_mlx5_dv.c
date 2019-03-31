@@ -30,6 +30,7 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 #endif
 
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                                        uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_qp_attr_t *attr)
 {
@@ -41,7 +42,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
     uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
     ucs_status_t status = UCS_ERR_NO_MEMORY;
-    uct_ib_mlx5_qp_t *qp = &tx->super;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_cq dvscq = {};
     struct mlx5dv_cq dvrcq = {};
@@ -53,19 +53,29 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     void *qpc;
     int ret;
 
-    ucs_assert_always(qp->type == UCT_IB_MLX5_QP_TYPE_DEVX);
-    ucs_assert_always(tx->reg != NULL);
+    uct_ib_iface_fill_attr(iface, attr);
+
+    uar = uct_worker_tl_data_get(iface->super.worker,
+                                 UCT_IB_MLX5_DEVX_UAR_KEY,
+                                 uct_ib_mlx5_devx_uar_t,
+                                 uct_ib_mlx5_devx_uar_cmp,
+                                 uct_ib_mlx5_devx_uar_init,
+                                 md, UCT_IB_MLX5_MMIO_MODE_BF_POST);
+    if (UCS_PTR_IS_ERR(uar)) {
+        status = UCS_PTR_STATUS(uar);
+        goto err;
+    }
 
     max_tx = ucs_roundup_pow2_or0(attr->cap.max_send_wr);
     max_rx = ucs_roundup_pow2_or0(attr->cap.max_recv_wr);
     len_tx = max_tx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
-    if (len) {
+    if (tx) {
         qp->devx.wq_buf = ucs_memalign(ucs_get_page_size(), len, "qp umem");
         if (qp->devx.wq_buf == NULL) {
             ucs_error("failed to allocate QP buffer of %d bytes: %m", len);
-            goto err;
+            goto err_uar;
         }
 
         qp->devx.mem = mlx5dv_devx_umem_reg(dev->ibv_context, qp->devx.wq_buf, len, 0);
@@ -82,7 +92,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err_free_mem;
     }
 
-    uar                 = ucs_derived_of(tx->reg, uct_ib_mlx5_devx_uar_t);
     dv.pd.in            = attr->ibv.pd;
     dv.pd.out           = &dvpd;
     dv.cq.in            = attr->ibv.send_cq;
@@ -126,6 +135,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     if (qp->devx.mem == NULL) {
         UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, 1);
+        UCT_IB_MLX5DV_SET(qpc, qpc, offload_type, 1);
     } else {
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem->umem_id);
     }
@@ -157,20 +167,18 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err_free;
     }
 
+    qp->type = UCT_IB_MLX5_QP_TYPE_DEVX;
+
     attr->cap.max_send_wr = max_tx;
     attr->cap.max_recv_wr = max_rx;
 
-    if (len) {
+    if (tx) {
+        tx->reg    = &uar->super;
         tx->qstart = qp->devx.wq_buf;
         tx->qend   = qp->devx.wq_buf + len_tx;
         tx->dbrec  = &qp->devx.dbrec->db[MLX5_SND_DBR];
         tx->bb_max = max_tx - 2 * UCT_IB_MLX5_MAX_BB;
         uct_ib_mlx5_txwq_reset(tx);
-    } else {
-        tx->qstart = NULL;
-        tx->qend   = NULL;
-        tx->dbrec  = NULL;
-        tx->bb_max = 0;
     }
 
     return UCS_OK;
@@ -185,6 +193,8 @@ err_free_mem:
     }
 err_free_buf:
     ucs_free(qp->devx.wq_buf);
+err_uar:
+    uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
 err:
     return status;
 #else
@@ -202,6 +212,7 @@ ucs_status_t uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
     uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
     uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
     uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    uint8_t mac[6], *gid = ah_attr->grh.dgid.raw;
     void *qpc;
     int ret;
 
@@ -214,8 +225,18 @@ ucs_status_t uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, mtu, 5);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, 30);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
+    if (uct_ib_iface_is_roce(iface)) {
+        mac[0] = gid[8] ^ 0x02;
+        memcpy(mac + 1, gid + 9, 2);
+        memcpy(mac + 3, gid + 13, 3);
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32), mac, 6);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, 1);
+    } else {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid, ah_attr->src_path_bits & 0x7f);
+    }
+
     memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
             &ah_attr->grh.dgid,
             UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));

@@ -505,3 +505,13 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
 
     return UCS_OK;
 }
+
+static void UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_destroy_qp(uct_ib_mlx5_qp_t *qp)
+{
+    if (qp->type == UCT_IB_MLX5_QP_TYPE_VERBS) {
+        uct_ib_destroy_qp(qp->verbs.qp);
+    } else {
+        uct_ib_mlx5_devx_destroy_qp(qp);
+    }
+}
