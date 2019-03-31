@@ -204,9 +204,8 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
              * throughout life time of the process */
             if (ctx->def_dlinfo.dli_fbase == entry_dlinfo.dli_fbase) {
                 ctx->patch->prev_value = *entry;
-                ucm_trace("'%s' by address %p in '%s' is stored as original for %p",
-                          ctx->patch->symbol, *entry,
-                          basename(entry_dlinfo.dli_fname), ctx->patch->value);
+                ucm_trace("'%s' prev_value is %p from '%s'", ctx->patch->symbol,
+                          *entry, basename(entry_dlinfo.dli_fname));
             }
 
             *entry = ctx->patch->value;

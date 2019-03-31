@@ -404,6 +404,46 @@ static void ucm_operator_vec_delete(void* ptr)
     ucm_free_impl(ptr, orig_vec_delete, "operator delete[]");
 }
 
+static int ucm_vasprintf(char **strp, const char *fmt, va_list ap)
+{
+    va_list ap_copy;
+    size_t length;
+    char *str;
+    int ret;
+
+    va_copy(ap_copy, ap);
+    ret = vsnprintf(NULL, 0, fmt, ap_copy);
+    va_end(ap_copy);
+    if (ret < 0) {
+        return ret;
+    }
+
+    length = ret + 1;
+    str = ucm_malloc(length, NULL);
+    if (str == NULL) {
+        return -1;
+    }
+
+    ret = vsnprintf(str, length, fmt, ap);
+    if (ret < 0) {
+        ucm_free(str, NULL);
+    } else {
+        *strp = str;
+    }
+    return ret;
+}
+
+static int ucm_asprintf(char **strp, const char *fmt, ...)
+{
+    va_list ap;
+    int ret;
+
+    va_start(ap, fmt);
+    ret = ucm_vasprintf(strp, fmt, ap);
+    va_end(ap);
+    return ret;
+}
+
 /*
  * We remember the string we pass to putenv() so we would be able to release them
  * during library destructor (and thus avoid leaks). Also, if a variable is replaced,
@@ -643,6 +683,9 @@ static ucm_reloc_patch_t ucm_malloc_symbol_patches[] = {
     { .symbol = UCM_OPERATOR_DELETE_SYMBOL, .value = ucm_operator_delete, .blacklist = ucm_malloc_blacklist },
     { .symbol = UCM_OPERATOR_VEC_NEW_SYMBOL, .value = ucm_operator_vec_new, .blacklist = ucm_malloc_blacklist },
     { .symbol = UCM_OPERATOR_VEC_DELETE_SYMBOL, .value = ucm_operator_vec_delete, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "asprintf", .value = ucm_asprintf, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "__asprintf", .value = ucm_asprintf, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "vasprintf", .value = ucm_vasprintf, .blacklist = ucm_malloc_blacklist },
     { .symbol = NULL, .value = NULL }
 };
 
