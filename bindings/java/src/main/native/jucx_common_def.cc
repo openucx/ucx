@@ -68,6 +68,11 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  sock
     field = env->GetFieldID(inet_addr_holder_cls, "family", "I");
     jint family = env->GetIntField(inet_addr_holder, field);
 
+    field = env->GetStaticFieldID(inetaddr_cls, "IPv4", "I");
+    const int JAVA_IPV4_FAMILY = env->GetStaticIntField(inetaddr_cls, field);
+    field = env->GetStaticFieldID(inetaddr_cls, "IPv6", "I");
+    const int JAVA_IPV6_FAMILY = env->GetStaticIntField(inetaddr_cls, field);
+
     // Get the byte array that stores the IP address bytes in the InetAddress.
     jmethodID get_addr_bytes = env->GetMethodID(inetaddr_cls, "getAddress", "()[B");
     jobject ip_byte_array = env->CallObjectMethod(inet_address, get_addr_bytes);
@@ -79,7 +84,7 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  sock
 
     jbyteArray addressBytes = static_cast<jbyteArray>(ip_byte_array);
 
-    if (family == 1) {
+    if (family == JAVA_IPV4_FAMILY) {
         // Deal with Inet4Address instances.
         // We should represent this Inet4Address as an IPv4 sockaddr_in.
         ss.ss_family = AF_INET;
@@ -89,7 +94,7 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  sock
         env->GetByteArrayRegion(addressBytes, 0, 4, dst);
         sa_len = sizeof(sockaddr_in);
         return true;
-    } else if (family == 2) {
+    } else if (family == JAVA_IPV6_FAMILY) {
         jclass inet6_addr_cls = env->FindClass("java/net/Inet6Address");
         ss.ss_family = AF_INET6;
         sockaddr_in6& sin6 = reinterpret_cast<sockaddr_in6&>(ss);
@@ -103,5 +108,6 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  sock
         sa_len = sizeof(sockaddr_in6);
         return true;
     }
+    JNU_ThrowException(env, "Unknown InetAddress family");
     return false;
 }
