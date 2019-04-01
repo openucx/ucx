@@ -1,6 +1,6 @@
 # The UCX code style
 
-* ## Style
+## Style
   * 4 spaces, no tabs
   * up to 80 columns
   * single space around operators
@@ -13,7 +13,7 @@
   * 1 space line between functions (source files) 
 
 
-* ## Naming convention:
+## Naming convention:
   * lower case, underscores
   * names must begin with ucp_/uct_/ucs_/ucm_
   * macro names must begin with UCP_/UCT_/UCS_/UCM_
@@ -29,12 +29,12 @@
      * _def.h   with a preprocessor macros
 
 
-* ## C++
+## C++
   * used only for unit testing
   * lower-case class names (same as stl/boost)
  
 
-* ## Include order:
+## Include order:
    1. config.h
    2. specific internal header
    3. UCX headers
@@ -57,23 +57,20 @@
     error message.
 
 
-* ## Testing
+## Testing
   * every major feature or bugfix must be accompanied with a unit test. In case
     of a fix, the test should fail without the fix.
 
 
-* ## Logging
+## Examples
 
-* ## Examples
-
-* ### if style
+### if style
 
 Good
-
 ```C
     if (val != XXX) {
         /* snip */
-    } else if (val == YYY) {}
+    } else if (val == YYY) {
         /* code here */
     } else {
         /* code here */
@@ -81,17 +78,15 @@ Good
 ```
 
 Bad
-
 ```C
   if(val != XXX) {   /* Require space after if */
   if (val != XXX){   /* Require space after )  */
   if ( val != XXX) { /* Remove space after (   */
 ```
 
-* ### goto style
+### goto style
 
 Good
-
 ```C
 err_free:
     ucs_free(thread);
@@ -103,7 +98,6 @@ out_unlock:
 ```
 
 Bad
-
 ```C
 err_free:
     ucs_free(thread);
@@ -112,7 +106,7 @@ err:
     --ucs_async_thread_global_context.use_count;
 ```
 
-* ### structure assignment
+### structure assignment
 
 Good
 
@@ -124,7 +118,6 @@ Good
 ```
 
 Bad
-
 ```C
     /* Align = position */
     event.events = events;
@@ -132,10 +125,9 @@ Bad
     event.data.ptr = udata;
 ```
 
-* ### Comment in C file
+### Comment in C file
 
 Good
-
 ```C
 /* run-time CPU detection */
 ```
@@ -146,16 +138,14 @@ Bad: require C style `/* .. */` comment.
 // run-time CPU detection
 ```
 
-* ### no spaces in the end-of-line
+### no spaces in the end-of-line
 
 Good
-
 ```C
     int fd;
 ```
 
 Bad
-
 ```
     int fd;  
         /* ^^ Remove trailing space */
