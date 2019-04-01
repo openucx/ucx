@@ -160,11 +160,14 @@ static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *lengt
     ucs_assert(*length_p > 0);
 
     ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
-    if (ucs_unlikely(ret == 0)) {
+    if (ucs_likely(ret > 0)) {
+        *length_p = ret;
+    } else if (ucs_unlikely(ret == 0)) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
-    } else if (ret < 0) {
-        if ((errno == EINTR) || (errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+    } else {
+        if (ucs_likely((errno == EINTR) || (errno == EAGAIN) ||
+                       (errno == EWOULDBLOCK))) {
             *length_p = 0;
             return UCS_OK;
         } else {
@@ -174,7 +177,6 @@ static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *lengt
         }
     }
 
-    *length_p = ret;
     return UCS_OK;
 }
 
@@ -192,6 +194,7 @@ static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
             return status;
         }
 
+        ucs_assert(done_cnt <= length);
         cur_cnt = length - done_cnt;
     } while (done_cnt < length);
 
