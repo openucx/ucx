@@ -63,39 +63,24 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
 {
     hsa_status_t status;
     hsa_agent_t agent;
-    void *lock_ptr, *base_ptr = NULL;
-    size_t size = 0;
+    void *base_ptr;
+    size_t size;
 
-    status = uct_rocm_base_lock_ptr(address, length, &lock_ptr, &base_ptr, &size, &agent);
-    if (status != HSA_STATUS_SUCCESS)
+    status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size, &agent);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("pack none ROCM ptr %p/%lx", address, length);
         return status;
-
-    key->address = (uintptr_t)address;
-    key->lock_address = (uintptr_t)lock_ptr;
-    key->length = length;
-    key->dev_num = uct_rocm_base_get_dev_num(agent);
-    key->ipc_valid = 0;
-
-    /* IPC does not support locked ptr yet */
-    if (lock_ptr)
-        return HSA_STATUS_SUCCESS;
+    }
 
     status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
-    if (status == HSA_STATUS_SUCCESS) {
-        key->address = (uintptr_t)base_ptr;
-        key->length = size;
-        key->ipc_valid = 1;
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("Failed to create ipc for %p/%lx", address, length);
+        return status;
     }
-    else {
-        static int once = 1;
-        /* when HSA_USERPTR_FOR_PAGED_MEM=1, system bo is allocated with
-         * userptr mem, but type is still HSA_EXT_POINTER_TYPE_HSA */
-        key->ipc_valid = 0;
-        if (once) {
-            ucs_warn("Failed to create ipc for %p, fallback to CMA for P2D", address);
-            once = 0;
-        }
-    }
+
+    key->address = (uintptr_t)base_ptr;
+    key->length = size;
+    key->dev_num = uct_rocm_base_get_dev_num(agent);
 
     return HSA_STATUS_SUCCESS;
 }
@@ -126,9 +111,6 @@ static ucs_status_t uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t leng
 static ucs_status_t uct_rocm_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
     uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t *)memh;
-
-    if (key->lock_address)
-        hsa_amd_memory_unlock((void *)key->lock_address);
 
     ucs_free(key);
     return UCS_OK;
