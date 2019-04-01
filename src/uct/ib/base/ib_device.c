@@ -27,8 +27,8 @@ typedef struct {
 } uct_ib_device_gid_info_t;
 
 
-/* this table is according to Table "Encoding for RNR
- * NAK Timer Field" IBTA spec  */
+/* This table is according to "Encoding for RNR NAK Timer Field"
+ * in IBTA specification */
 const double uct_ib_qp_rnr_time_ms[] = {
      0.01,  0.02,   0.03,   0.04,  0.06,    0.08,   0.12,   0.16,
      0.24,  0.32,   0.48,   0.64,  0.96,    1.28,   1.92,   2.56,
