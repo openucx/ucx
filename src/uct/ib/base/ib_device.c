@@ -30,10 +30,10 @@ typedef struct {
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
 const double uct_ib_qp_rnr_time_ms[] = {
-     0.01,  0.02,   0.03,   0.04,  0.06,    0.08,   0.12,   0.16,
-     0.24,  0.32,   0.48,   0.64,  0.96,    1.28,   1.92,   2.56,
-     3.84,  5.12,   7.68,  10.24,  15.36,  20.48,  30.72,  40.96,
-    61.44, 81.92, 122.88, 163.84, 245.76, 327.68, 491.52, 655.36
+    655.36,  0.01,  0.02,   0.03,   0.04,   0.06,   0.08,   0.12,
+      0.16,  0.24,  0.32,   0.48,   0.64,   0.96,   1.28,   1.92,
+      2.56,  3.84,  5.12,   7.68,  10.24,  15.36,  20.48,  30.72,
+     40.96, 61.44, 81.92, 122.88, 163.84, 245.76, 327.68, 491.52
 };
 
 
@@ -659,21 +659,16 @@ uint8_t uct_ib_to_rnr_fabric_time(double time)
     double avg_ms;
     uint8_t t;
 
-    if (time_ms <= uct_ib_qp_rnr_time_ms[0]) {
-        return 1;
-    }
-
     for (t = 1; t < UCT_IB_FABRIC_TIME_MAX; t++) {
-        if (time_ms <= uct_ib_qp_rnr_time_ms[t]) {
-            avg_ms = (uct_ib_qp_rnr_time_ms[t - 1] +
-                      uct_ib_qp_rnr_time_ms[t]) * 0.5;
+        if (time_ms <= uct_ib_qp_rnr_time_ms[(t + 1) % UCT_IB_FABRIC_TIME_MAX]) {
+            avg_ms = (uct_ib_qp_rnr_time_ms[t] +
+                      uct_ib_qp_rnr_time_ms[(t + 1) % UCT_IB_FABRIC_TIME_MAX]) * 0.5;
 
             if (time_ms < avg_ms) {
-                /* return previous value (it's already incremented) */
+                /* return previous value */
                 return t;
             } else {
-                /* return current value (increment and adjust for
-                 * the maximum rnr value) */
+                /* return current value */
                 return (t + 1) % UCT_IB_FABRIC_TIME_MAX;
             }
         }
