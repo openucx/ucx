@@ -32,8 +32,7 @@ ucs_status_t uct_tcpcm_ep_set_sock_id(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t *
             goto out;
         }
 
-        /* FIXME: Review */
-        dest_addr = (struct sockaddr *) &(ep->remote_addr);
+        dest_addr = (struct sockaddr *) &(ep->remote_addr); // FIXME
 
         status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
                                    &ep->sock_id_ctx->sock_id);
@@ -73,7 +72,6 @@ ucs_status_t uct_tcpcm_send_client_info(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t
     memset(&conn_param.private_data, 0, UCT_TCPCM_UDP_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
 
-    /* pack worker address into private data */
     hdr->length = ep->pack_cb(ep->pack_cb_arg, "eth0",
                               (void*)conn_param.private_data);
     if (hdr->length < 0) {
@@ -84,13 +82,6 @@ ucs_status_t uct_tcpcm_send_client_info(uct_tcpcm_iface_t *iface, uct_tcpcm_ep_t
     }
     hdr->status = UCS_OK;
     conn_param.private_data_len = sizeof(uct_tcpcm_conn_param_t);
-
-    // send all of the connection info
-
-    //if (UCS_OK != ucs_sys_fcntl_modfl(ep->sock_id_ctx->sock_id, O_NONBLOCK, 0)) {
-    //    ucs_error("fcntl() failed: %m");
-    //    return UCS_ERR_IO_ERROR;
-    //}
 
     recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &connect_confirm,
                     sizeof(int), 0);
@@ -130,7 +121,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
     if (iface->is_server) {
-        /* TODO allow an interface to be used both for server and client */
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -154,7 +144,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
     pthread_mutex_init(&self->ops_mutex, NULL);
     ucs_queue_head_init(&self->ops);
 
-    /* Save the remote address */
     if (sockaddr->addr->sa_family == AF_INET) {
         memcpy(&self->remote_addr, sockaddr->addr, sizeof(struct sockaddr_in));
     } else if (sockaddr->addr->sa_family == AF_INET6) {
@@ -176,7 +165,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
 
     self->is_on_pending = 0;
 
-    /* FIXME: review do we need to resolve tcp addr? */
     status = ucs_socket_connect(self->sock_id_ctx->sock_id, sockaddr->addr);
     if (status != UCS_OK) {
         goto err;
@@ -190,8 +178,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcpcm_ep_t, const uct_ep_params_t *params)
     goto out;
 
 add_to_pending:
-    /* Add the ep to the pending queue of eps since there is no
-     * available cm_id for it */
     uct_tcpcm_ep_add_to_pending(iface, self);
 out:
     ucs_debug("created an TCPCM endpoint on iface %p, "
@@ -221,8 +207,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_ep_t)
         self->is_on_pending = 0;
     }
 
-    /* remove the slow progress function in case it was placed on the slow progress
-     * chain but wasn't invoked yet */
     uct_worker_progress_unregister_safe(&iface->super.worker->super,
                                         &self->slow_prog_id);
 
@@ -231,10 +215,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcpcm_ep_t)
         ucs_warn("destroying endpoint %p with not completed operations", self);
     }
 
-    /* mark this ep as destroyed so that arriving events on it won't try to
-     * use it */
     if (self->sock_id_ctx != NULL) {
-        sock_id_ctx     = self->sock_id_ctx; // FIXME!
+        sock_id_ctx     = self->sock_id_ctx;
         sock_id_ctx->ep = NULL;
         ucs_debug("ep destroy: sock_id %d", sock_id_ctx->sock_id);
     }
@@ -280,9 +262,6 @@ void uct_tcpcm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t statu
     }
 }
 
-/**
- * Caller must lock ep->ops_mutex
- */
 void uct_tcpcm_ep_invoke_completions(uct_tcpcm_ep_t *ep, ucs_status_t status)
 {
     uct_tcpcm_ep_op_t *op;

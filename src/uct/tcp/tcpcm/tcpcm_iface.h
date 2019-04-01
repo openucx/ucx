@@ -36,8 +36,7 @@ struct uct_tcpcm_iface {
     ucs_list_link_t                      used_sock_ids_list;
     int                                  sock_id_quota; /* num of cm_ids in the quota*/
 
-    /* *FIXME* // do we need resolve timeout in tcp?
-    */
+    /* FIXME - do we need timeout? */
     struct {
         double                           addr_resolve_timeout;
     } config;

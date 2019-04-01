@@ -12,11 +12,6 @@ static ucs_config_field_t uct_tcpcm_md_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_tcpcm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-  /* FIXME: do we need a timeout for tcp?
-  {"ADDR_RESOLVE_TIMEOUT", "500ms",
-   "Time to wait for address resolution to complete",
-   ucs_offsetof(uct_tcpcm_md_config_t, addr_resolve_timeout), UCS_CONFIG_TYPE_TIME},*/
-
   {NULL}
 };
 

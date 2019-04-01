@@ -60,72 +60,18 @@ static ucs_status_t uct_tcpcm_iface_get_address(uct_iface_h tl_iface, uct_iface_
     return UCS_OK;
 }
 
-#if 0
-static ucs_status_t uct_tcpcm_accept(int sock_id)
-{
-    /* The server will not send any reply data back to the client */
-    //struct tcp_conn_param conn_param = {0};
-
-    /* FIXME:
-    accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-    if (accept(id, &conn_param)) {
-        ucs_error("rdma_accept(to id=%p) failed: %m", id);
-        return UCS_ERR_IO_ERROR;
-    }
-    */
-
-    return UCS_OK;
-}
-#endif
-
 static ucs_status_t uct_tcpcm_iface_accept(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-#if 0
-    struct sockaddr peer_addr;
-    socklen_t addrlen;
-    int accept_fd;
-    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    ucs_status_t         status = UCS_OK;
-    uct_tcpcm_iface_t *iface = ucs_derived_of(tl_iface, uct_tcpcm_iface_t);
-
-    accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-    if (accept_fd < 0) {
-        if ((errno != EAGAIN) && (errno != EINTR)) {
-            ucs_error("accept() failed: %m");
-            return UCS_ERR_IO_ERROR;
-            // FIXME uct_tcp_iface_listen_close(iface);
-            //close(iface->sock_id);
-        }
-    }
-
-    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d", iface,
-              ucs_sockaddr_str(&peer_addr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN), accept_fd);
-
-    return status;
-#endif
     return UCS_OK;
 }
 
 static ucs_status_t uct_tcpcm_iface_reject(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-    // struct rdma_cm_event       *event = conn_request; FIXME
     ucs_status_t               status = UCS_OK;
-    //uct_tcpcm_priv_data_hdr_t hdr    = {
-    //    .length = 0,
-    //    .status = UCS_ERR_REJECTED
-    //};
 
-    ucs_trace("rejecting at FIXME");
-    /* FIXME
-    if (rdma_reject(event->id, &hdr, sizeof(hdr))) {
-        ucs_warn("rdma_reject(id=%p) failed: %m", event->id);
-        status = UCS_ERR_IO_ERROR;
-    }
-    */
-
+    ucs_trace("rejecting"); // FIXME
     return status;
 }
 
@@ -179,7 +125,6 @@ void uct_tcpcm_iface_client_start_next_ep(uct_tcpcm_iface_t *iface)
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
-    /* try to start an ep from the pending eps list */
     ucs_list_for_each_safe(ep, tmp, &iface->pending_eps_list, list_elem) {
         status = uct_tcpcm_ep_set_sock_id(iface, ep);
         if (status != UCS_OK) {
@@ -195,73 +140,22 @@ void uct_tcpcm_iface_client_start_next_ep(uct_tcpcm_iface_t *iface)
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
-#if 0
-static void uct_tcpcm_client_handle_failure(uct_tcpcm_iface_t *iface,
-                                             uct_tcpcm_ep_t *ep,
-                                             ucs_status_t status)
-{
-    ucs_assert(!iface->is_server);
-    if (ep != NULL) {
-        pthread_mutex_lock(&ep->ops_mutex);
-        uct_tcpcm_ep_set_failed(&iface->super.super, &ep->super.super, status);
-        uct_tcpcm_ep_invoke_completions(ep, status);
-        pthread_mutex_unlock(&ep->ops_mutex);
-    }
-}
-
-/**
- * Release sock_id. This function should be called when the async context
- * is locked.
- */
-static void uct_tcpcm_iface_release_sock_id(uct_tcpcm_iface_t *iface,
-                                            uct_tcpcm_ctx_t *sock_id_ctx)
-{
-    ucs_trace("destroying sock_id %d", sock_id_ctx->sock_id);
-
-    ucs_list_del(&sock_id_ctx->list);
-    if (sock_id_ctx->ep != NULL) {
-        sock_id_ctx->ep->sock_id_ctx = NULL;
-    }
-    close(sock_id_ctx->sock_id); // FIXME review
-    ucs_free(sock_id_ctx);
-    iface->sock_id_quota++;
-}
-
-static void uct_tcpcm_iface_sock_id_to_dev_name(int *sock_id, char *dev_name)
-{
-    ucs_snprintf_zero(dev_name, UCT_DEVICE_NAME_MAX, "%s:%d",
-                      "42"/*ibv_get_device_name(cm_id->verbs->device) FIXME*/,
-                      42); //FIXME
-}
-
-#endif
-
 /* FIXME review this */
-
 static void uct_tcpcm_iface_process_conn_req(uct_tcpcm_iface_t *iface,
                                              uct_tcpcm_conn_param_t conn_param)
 {
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg,
-                           /* connection request*/
-                           NULL,
-                           /* private data */
-                           conn_param.private_data,
-                           /* length */
-                           conn_param.private_data_len);
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, NULL,
+                           conn_param.private_data, conn_param.private_data_len);
 }
 
 
 static void uct_tcpcm_iface_event_handler(int fd, void *arg)
 {
-    //uct_tcpcm_ctx_t               *sock_id_ctx = NULL;
-    //int                            ret;
     uct_tcpcm_iface_t *iface = arg;
     struct sockaddr peer_addr;
     socklen_t addrlen;
     int accept_fd;
-    //uct_tcpcm_priv_data_hdr_t *hdr;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    //ucs_status_t         status = UCS_OK;
     ssize_t recv_len = 0;
     ssize_t sent_len = 0;
     uct_tcpcm_conn_param_t conn_param;
@@ -282,7 +176,7 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
               ucs_sockaddr_str(&peer_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN), accept_fd);
 
-    // extract client information FIXME: what if not all data arrives?
+    /*FIXME: what if not all data arrives?*/
 
     sent_len = send(accept_fd, (char *) &connect_confirm, sizeof(int), 0);
     ucs_debug("send_len = %d bytes %m", (int) sent_len);
@@ -291,46 +185,12 @@ static void uct_tcpcm_iface_event_handler(int fd, void *arg)
                     sizeof(uct_tcpcm_conn_param_t), 0);
     ucs_debug("recv len = %d\n", (int) recv_len);
 
-    // schedule connection req callback
+    /*schedule connection req callback*/
     if (recv_len == sizeof(uct_tcpcm_conn_param_t)) {
         uct_tcpcm_iface_process_conn_req(iface, conn_param);
     }
 
     return;
-
-#if 0
-    for (;;) {
-
-        /* FIXME
-        ret = rdma_get_cm_event(iface->event_ch, &event);
-        if (ret) {
-            if (errno != EAGAIN) {
-                ucs_warn("rdma_get_cm_event() failed: %m");
-            }
-            return;
-        }
-
-        proc_event_flags = uct_tcpcm_iface_process_event(iface, event);
-        if (!iface->is_server) {
-            cm_id_ctx = (uct_tcpcm_ctx_t *)event->id->context;
-        }
-
-        if (proc_event_flags & UCT_TCPCM_PROCESS_EVENT_ACK_EVENT_FLAG) {
-            ret = rdma_ack_cm_event(event);
-            if (ret) {
-                ucs_warn("rdma_ack_cm_event() failed: %m");
-            }
-        }
-
-        if ((proc_event_flags & UCT_TCPCM_PROCESS_EVENT_DESTROY_CM_ID_FLAG) &&
-            (cm_id_ctx != NULL)) {
-            uct_tcpcm_iface_release_cm_id(iface, cm_id_ctx);
-            uct_tcpcm_iface_client_start_next_ep(iface);
-        }
-        */
-    }
-#endif
-
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcpcm_iface_t, uct_md_h md, uct_worker_h worker,
