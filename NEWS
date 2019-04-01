@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.5.1-rc1 (March 22, 2019)
+## 1.5.1 (April 1, 2019)
 Bugfixes:
 - Fix dc_mlx5 transport support check for inbox libmlx5 drivers - issue #3301
 - Fix compilation warnings with gcc9 and clang
