@@ -915,9 +915,12 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
+		jucx_port=$((20000 + EXECUTOR_NUMBER))
+		export JUCX_TEST_PORT=jucx_port
 		export UCX_ERROR_SIGNALS=""
 		JUCX_INST=$ucx_inst $MAKE -C bindings/java/src/main/native test
 		unset UCX_ERROR_SIGNALS
+		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
