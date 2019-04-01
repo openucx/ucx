@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <string.h>
 #include <errno.h>
-#include <malloc.h>
 
 
 typedef struct {
@@ -142,8 +141,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     if (mem_size != NULL) {
         ucs_str_to_memunits(mem_size, &mem_size_value, NULL);
         mem_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                        UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
-                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
         mem_params.address    = NULL;
         mem_params.length     = mem_size_value;
         mem_params.flags      = UCP_MEM_MAP_ALLOCATE;

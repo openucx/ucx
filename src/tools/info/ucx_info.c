@@ -107,6 +107,9 @@ int main(int argc, char **argv)
             break;
         case 'm':
             print_opts |= PRINT_MEM_MAP;
+            if (mem_size == NULL) {
+                mem_size = "1M";
+            }
             break;
         case 't':
             tl_name = optarg;

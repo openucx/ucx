@@ -647,15 +647,15 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 void ucp_mem_print_info(ucp_mem_h memh, ucp_context_h context, FILE *stream)
 {
     unsigned md_index;
-    char buf[256];
+    char memunits_str[32];
     uct_mem_h uct_memh;
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP memory handle\n");
     fprintf(stream, "#\n");
 
-    ucs_memunits_to_str(memh->length, buf, sizeof(buf));
-    fprintf(stream, "#  allocated %s at address %p with: ", buf, memh->address);
+    ucs_memunits_to_str(memh->length, memunits_str, sizeof(memunits_str));
+    fprintf(stream, "#  allocated %s at address %p with: ", memunits_str, memh->address);
 
     if (memh->alloc_md == NULL) {
         fprintf(stream, "%s ", uct_alloc_method_names[memh->alloc_method]);
@@ -678,12 +678,10 @@ void ucp_mem_print_info(ucp_mem_h memh, ucp_context_h context, FILE *stream)
     }
 
     fprintf(stream, "\n");
-
     fprintf(stream, "#  registered on: ");
     ucs_for_each_bit(md_index, memh->md_map) {
         fprintf(stream, "%s ", context->tl_mds[md_index].rsc.md_name);
     }
     fprintf(stream, "\n");
-
     fprintf(stream, "#\n");
 }
