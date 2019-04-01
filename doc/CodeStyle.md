@@ -63,3 +63,100 @@
 
 
 * ## Logging
+
+* ## Examples
+
+* ### if style
+
+Good
+
+```C
+    if (val != XXX) {
+        /* snip */
+    } else if (val == YYY) {}
+        /* code here */
+    } else {
+        /* code here */
+    }
+```
+
+Bad
+
+```C
+  if(val != XXX) {   /* Require space after if */
+  if (val != XXX){   /* Require space after )  */
+  if ( val != XXX) { /* Remove space after (   */
+```
+
+* ### goto style
+
+Good
+
+```C
+err_free:
+    ucs_free(thread);
+err:
+    --ucs_async_thread_global_context.use_count;
+out_unlock:
+    ucs_assert_always(ucs_async_thread_global_context.thread != NULL);
+    *thread_p = ucs_async_thread_global_context.thread;
+```
+
+Bad
+
+```C
+err_free:
+    ucs_free(thread);
+/*    !!!Remove this line!!!    */
+err:
+    --ucs_async_thread_global_context.use_count;
+```
+
+* ### structure assignment
+
+Good
+
+```C
+    event.events   = events;
+    event.data.fd  = event_fd;
+    event.data.ptr = udata;
+
+```
+
+Bad
+
+```C
+    /* Align = position */
+    event.events = events;
+    event.data.fd = event_fd;
+    event.data.ptr = udata;
+```
+
+* ### Comment in C file
+
+Good
+
+```C
+/* run-time CPU detection */
+```
+
+Bad: require C style `/* .. */` comment.
+
+```C
+// run-time CPU detection
+```
+
+* ### no spaces in the end-of-line
+
+Good
+
+```C
+    int fd;
+```
+
+Bad
+
+```
+    int fd;  
+        /* ^^ Remove trailing space */
+```
