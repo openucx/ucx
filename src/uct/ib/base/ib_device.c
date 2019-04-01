@@ -655,21 +655,23 @@ uint8_t uct_ib_to_qp_fabric_time(double time)
 
 uint8_t uct_ib_to_rnr_fabric_time(double time)
 {
-    double time_ms = time * UCS_MSEC_PER_SEC; 
+    double time_ms = time * UCS_MSEC_PER_SEC;
+    uint8_t index, next_index;
     double avg_ms;
-    uint8_t t;
 
-    for (t = 1; t < UCT_IB_FABRIC_TIME_MAX; t++) {
-        if (time_ms <= uct_ib_qp_rnr_time_ms[(t + 1) % UCT_IB_FABRIC_TIME_MAX]) {
-            avg_ms = (uct_ib_qp_rnr_time_ms[t] +
-                      uct_ib_qp_rnr_time_ms[(t + 1) % UCT_IB_FABRIC_TIME_MAX]) * 0.5;
+    for (index = 1; index < UCT_IB_FABRIC_TIME_MAX; index++) {
+        next_index = (index + 1) % UCT_IB_FABRIC_TIME_MAX;
+
+        if (time_ms <= uct_ib_qp_rnr_time_ms[next_index]) {
+            avg_ms = (uct_ib_qp_rnr_time_ms[index] +
+                      uct_ib_qp_rnr_time_ms[next_index]) * 0.5;
 
             if (time_ms < avg_ms) {
-                /* return previous value */
-                return t;
+                /* return previous index */
+                return index;
             } else {
-                /* return current value */
-                return (t + 1) % UCT_IB_FABRIC_TIME_MAX;
+                /* return current index */
+                return next_index;
             }
         }
     }
