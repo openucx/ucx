@@ -116,7 +116,7 @@ static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
-static pthread_spinlock_t ucs_kh_lock;
+static pthread_mutex_t ucs_kh_lock;
 
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
@@ -992,14 +992,18 @@ void ucs_handle_error(const char *message)
 static int ucs_debug_is_error_signal(int signum)
 {
     khiter_t hash_it;
+    int result;
 
     if (!ucs_global_opts.handle_errors) {
         return 0;
     }
 
     /* If this signal is error, but was disabled. */
+    pthread_mutex_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
-    return hash_it != kh_end(&ucs_signal_orig_action_map);
+    result = (hash_it != kh_end(&ucs_signal_orig_action_map));
+    pthread_mutex_unlock(&ucs_kh_lock);
+    return result;
 }
 
 static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
@@ -1092,7 +1096,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     khiter_t hash_it;
     int hash_extra_status;
 
-    pthread_spin_lock(&ucs_kh_lock);
+    pthread_mutex_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     if (hash_it != kh_end(&ucs_signal_orig_action_map)) {
         goto out;
@@ -1106,7 +1110,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     kh_value(&ucs_signal_orig_action_map, hash_it) = oact_copy;
 
 out:
-    pthread_spin_unlock(&ucs_kh_lock);
+    pthread_mutex_unlock(&ucs_kh_lock);
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
@@ -1191,9 +1195,17 @@ unsigned long ucs_debug_get_lib_base_addr()
 
 void ucs_debug_init()
 {
+    pthread_mutexattr_t attr;
+    int ret;
+
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
-    pthread_spin_init(&ucs_kh_lock, 0);
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    ret = pthread_mutex_init(&ucs_kh_lock, &attr);
+    if (ret != 0) {
+         ucs_error("failed to initialize recursive lock: %s", strerror(ret));
+    }
     if (ucs_global_opts.handle_errors) {
         ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
@@ -1225,7 +1237,7 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
-    pthread_spin_destroy(&ucs_kh_lock);
+    pthread_mutex_destroy(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signal(int signum)
@@ -1234,7 +1246,7 @@ void ucs_debug_disable_signal(int signum)
     struct sigaction *original_action, ucs_action;
     int ret;
 
-    pthread_spin_lock(&ucs_kh_lock);
+    pthread_mutex_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map,
                      signum);
     if (hash_it == kh_end(&ucs_signal_orig_action_map)) {
@@ -1253,12 +1265,14 @@ void ucs_debug_disable_signal(int signum)
     ucs_free(original_action);
 
 out:
-    pthread_spin_unlock(&ucs_kh_lock);
+    pthread_mutex_unlock(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signals()
 {
     int signum;
+    pthread_mutex_lock(&ucs_kh_lock);
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal(signum));
+    pthread_mutex_unlock(&ucs_kh_lock);
 }
