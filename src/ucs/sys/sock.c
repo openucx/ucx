@@ -163,7 +163,7 @@ static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *lengt
     if (ucs_unlikely(ret == 0)) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
-    } else if (ucs_unlikely(ret < 0)) {
+    } else if (ret < 0) {
         if ((errno == EINTR) || (errno == EAGAIN) || (errno == EWOULDBLOCK)) {
             *length_p = 0;
             return UCS_OK;
