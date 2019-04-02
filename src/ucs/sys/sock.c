@@ -187,14 +187,13 @@ static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
 
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
-        if (ucs_unlikely(status != UCS_OK)) {
+        if (ucs_likely(status == UCS_OK)) {
+            done_cnt += cur_cnt;
+            ucs_assert(done_cnt <= length);
+            cur_cnt = length - done_cnt;
+        } else if (status != UCS_ERR_NO_PROGRESS) {
             return status;
         }
-
-        done_cnt += cur_cnt;
-
-        ucs_assert(done_cnt <= length);
-        cur_cnt = length - done_cnt;
     } while (done_cnt < length);
 
     return UCS_OK;
