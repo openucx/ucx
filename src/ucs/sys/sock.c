@@ -162,22 +162,21 @@ static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *lengt
     ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
     if (ucs_likely(ret > 0)) {
         *length_p = ret;
-    } else if (ucs_unlikely(ret == 0)) {
-        ucs_trace("fd %d is closed", fd);
-        return UCS_ERR_CANCELED; /* Connection closed */
-    } else {
-        if (ucs_likely((errno == EINTR) || (errno == EAGAIN) ||
-                       (errno == EWOULDBLOCK))) {
-            *length_p = 0;
-            return UCS_OK;
-        } else {
-            ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
-                      name, fd, data, *length_p);
-            return UCS_ERR_IO_ERROR;
-        }
+        return UCS_OK;
     }
 
-    return UCS_OK;
+    if (ret == 0) {
+        ucs_trace("fd %d is closed", fd);
+        return UCS_ERR_CANCELED; /* Connection closed */
+    }
+
+    if ((errno == EINTR) || (errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+        return UCS_ERR_NO_PROGRESS;
+    }
+
+    ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
+              name, fd, data, *length_p);
+    return UCS_ERR_IO_ERROR;
 }
 
 static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
@@ -188,11 +187,11 @@ static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
 
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
-        if (ucs_likely(status == UCS_OK)) {
-            done_cnt += cur_cnt;
-        } else {
+        if (ucs_unlikely(status != UCS_OK)) {
             return status;
         }
+
+        done_cnt += cur_cnt;
 
         ucs_assert(done_cnt <= length);
         cur_cnt = length - done_cnt;
