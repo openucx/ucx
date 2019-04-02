@@ -9,11 +9,14 @@
 #include "ib_mlx5_log.h"
 #include "ib_mlx5_ifc.h"
 
+#if HAVE_DEVX
 typedef struct uct_ib_mlx5_mem {
     uct_ib_mem_t             super;
     struct mlx5dv_devx_obj   *atomic_dvmr;
 } uct_ib_mlx5_mem_t;
-
+#else
+typedef struct uct_ib_mem uct_ib_mlx5_mem_t;
+#endif
 
 typedef struct uct_ib_mlx5_dbrec_page {
     struct mlx5dv_devx_umem *mem;
@@ -35,12 +38,12 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
-#if HAVE_DEVX
 
-static ucs_status_t uct_ib_mlx5dv_create_ksm(uct_ib_md_t *ibmd,
-                                             uct_ib_mem_t *ib_memh,
-                                             off_t offset)
+static ucs_status_t uct_ib_mlx5dv_memh_reg(uct_ib_md_t *ibmd,
+                                           uct_ib_mem_t *ib_memh,
+                                           off_t offset)
 {
+#if HAVE_DEVX
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {};
@@ -122,11 +125,15 @@ static ucs_status_t uct_ib_mlx5dv_create_ksm(uct_ib_md_t *ibmd,
 out:
     ucs_free(in);
     return status;
+#else
+    return uct_ib_verbs_reg_atomic_key(ibmd, ib_memh, offset);
+#endif
 }
 
 static ucs_status_t uct_ib_mlx5dv_memh_dereg(uct_ib_md_t *ibmd,
                                              uct_ib_mem_t *ib_memh)
 {
+#if HAVE_DEVX
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     int ret;
 
@@ -135,7 +142,12 @@ static ucs_status_t uct_ib_mlx5dv_memh_dereg(uct_ib_md_t *ibmd,
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;
+#else
+    return uct_ib_verbs_dereg_atomic_key(ibmd, ib_memh);
+#endif
 }
+
+#if HAVE_DEVX
 
 static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void **page_p)
 {
@@ -339,21 +351,12 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     return UCS_OK;
 }
 
-static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
-    .open             = uct_ib_mlx5dv_md_open,
-    .cleanup          = uct_ib_mlx5dv_md_cleanup,
-    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key   = uct_ib_mlx5dv_create_ksm,
-    .dereg_atomic_key = uct_ib_mlx5dv_memh_dereg,
-};
-
-UCT_IB_MD_OPS(uct_ib_mlx5dv_md_ops, 1);
-
-#elif HAVE_DC_DV
+#else
 
 static ucs_status_t uct_ib_mlx5_check_dc(uct_ib_device_t *dev)
 {
     ucs_status_t status = UCS_OK;
+#if HAVE_DC_DV
     struct ibv_srq_init_attr srq_attr = {};
     struct ibv_context *ctx = dev->ibv_context;
     struct ibv_qp_init_attr_ex qp_attr = {};
@@ -438,6 +441,11 @@ err_srq:
     ibv_destroy_cq(cq);
 err_cq:
     ibv_dealloc_pd(pd);
+#elif HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
+    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+#endif
     return status;
 }
 
@@ -467,7 +475,13 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->ibv_context = ctx;
 
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
+#if HAVE_DECL_IBV_EXP_QUERY_DEVICE
+    ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
+#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
     ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
+#else
+#  error accel TL missconfigured
+#endif
     if (ret != 0) {
         ucs_error("ibv_query_device() returned %d: %m", ret);
         status = UCS_ERR_IO_ERROR;
@@ -491,16 +505,19 @@ err:
     return status;
 }
 
+void uct_ib_mlx5dv_md_cleanup(uct_ib_md_t *ibmd) { }
+
+#endif
+
 static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
     .open             = uct_ib_mlx5dv_md_open,
-    .cleanup          = (void*)ucs_empty_function,
-    .memh_struct_size = sizeof(uct_ib_mem_t),
-    .reg_atomic_key   = (void *)ucs_empty_function_return_unsupported,
+    .cleanup          = uct_ib_mlx5dv_md_cleanup,
+    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key   = uct_ib_mlx5dv_memh_reg,
+    .dereg_atomic_key = uct_ib_mlx5dv_memh_dereg,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5dv_md_ops, 1);
-
-#endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {

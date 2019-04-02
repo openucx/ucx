@@ -138,10 +138,6 @@ typedef struct uct_ib_mlx5_md {
 } uct_ib_mlx5_md_t;
 
 
-#define UCT_IB_MLX5_MD_FLAGS(_md) ( \
-    ucs_derived_of(_md, uct_ib_md_t)->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM ? \
-    ucs_derived_of(_md, uct_ib_mlx5_md_t)->flags : 0)
-
 typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
                                          one thread */

@@ -478,9 +478,9 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
-                                             uct_ib_mem_t *memh,
-                                             off_t offset)
+ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
+                                         uct_ib_mem_t *memh,
+                                         off_t offset)
 {
 #if HAVE_EXP_UMR
     struct ibv_exp_mem_region *mem_reg = NULL;
@@ -892,8 +892,8 @@ err:
 #endif
 }
 
-static ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
-                                                  uct_ib_mem_t *memh)
+ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
+                                           uct_ib_mem_t *memh)
 {
 #if HAVE_EXP_UMR
     return uct_ib_dereg_mr(memh->atomic_mr);
@@ -1794,12 +1794,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         }
     }
 
-#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
-    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
-    }
-#endif
-
 #if HAVE_DECL_IBV_EXP_DEVICE_ATTR_PCI_ATOMIC_CAPS
     dev->pci_fadd_arg_sizes  = dev->dev_attr.pci_atomic_caps.fetch_add << 2;
     dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
@@ -1819,7 +1813,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .open              = uct_ib_verbs_md_open,
     .cleanup           = (void*)ucs_empty_function,
     .memh_struct_size  = sizeof(uct_ib_mem_t),
-    .reg_atomic_key    = uct_ib_verbs_md_post_umr,
+    .reg_atomic_key    = uct_ib_verbs_reg_atomic_key,
     .dereg_atomic_key  = uct_ib_verbs_dereg_atomic_key,
 };
 

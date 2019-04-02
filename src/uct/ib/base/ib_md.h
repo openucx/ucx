@@ -239,4 +239,11 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
 
 void uct_ib_md_close(uct_md_h uct_md);
 
+ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
+                                         uct_ib_mem_t *memh,
+                                         off_t offset);
+
+ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
+                                           uct_ib_mem_t *memh);
+
 #endif
