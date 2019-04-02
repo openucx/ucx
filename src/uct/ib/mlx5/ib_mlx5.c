@@ -26,7 +26,7 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
 };
 
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     {"DM_SIZE", "2k",
      "Device Memory segment size (0 - disabled)",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},

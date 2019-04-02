@@ -173,6 +173,12 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t obj_type)
                 ucs_container_of(obj->dv.srq.out, uct_ib_mlx5dv_srq_t, dv));
     }
 
+#if HAVE_IBV_EXP_DM
+    if (!ret && (obj_type & MLX5DV_OBJ_DM)) {
+        ret = uct_ib_mlx5_get_dm_info(obj->dv_dm.in, obj->dv_dm.out);
+    }
+#endif
+
     return ret;
 }
 #endif

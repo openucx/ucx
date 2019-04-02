@@ -258,7 +258,7 @@ uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     return UCS_OK;
 }
 
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_ep_short_dm(uct_dc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         size_t hdr_len, const void *payload, unsigned length,
@@ -290,7 +290,7 @@ uct_dc_mlx5_ep_short_dm(uct_dc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
 ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                      const void *buffer, unsigned length)
 {
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     ucs_status_t status;
@@ -301,7 +301,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                    !iface->super.dm.dm)) {
 #endif
         return uct_dc_mlx5_ep_am_short_inline(tl_ep, id, hdr, buffer, length);
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     }
 
     UCT_CHECK_AM_ID(id);
@@ -405,7 +405,7 @@ ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
                                       unsigned length, uint64_t remote_addr,
                                       uct_rkey_t rkey)
 {
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     ucs_status_t status;
@@ -414,7 +414,7 @@ ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
                    !iface->super.dm.dm)) {
 #endif
         return uct_dc_mlx5_ep_put_short_inline(tl_ep, payload, length, remote_addr, rkey);
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     }
 
     UCT_CHECK_LENGTH(length, 0, iface->super.dm.seg_len, "put_short");
@@ -596,7 +596,7 @@ uct_dc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
 ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length)
 {
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uct_rc_mlx5_dm_copy_data_t cache;
@@ -607,7 +607,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                    !iface->super.dm.dm)) {
 #endif
         return uct_dc_mlx5_ep_tag_eager_short_inline(tl_ep, tag, data, length);
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
     }
 
     UCT_CHECK_LENGTH(length + sizeof(struct ibv_exp_tmh), 0,

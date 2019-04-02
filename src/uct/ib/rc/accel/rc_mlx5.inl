@@ -1143,7 +1143,7 @@ done:
     return count;
 }
 
-#if HAVE_IBV_EXP_DM
+#if HAVE_IBV_DM
 /* DM memory should be written by 8 bytes to eliminate
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
