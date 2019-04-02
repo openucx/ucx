@@ -10,6 +10,8 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <ucm/util/log.h>
+#include <dlfcn.h>
 
 
 /**
@@ -39,12 +41,32 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
 /**
  * Get the original implementation of 'symbol', which is not equal to 'replacement'.
  *
+ * This function is set to inline to make sure that the symbol search done here
+ * is done from within the shared object it was invoked from.
+ *
  * @param [in]  symbol       Symbol name,
  * @param [in]  replacement  Symbol replacement, which should be ignored.
  *
  * @return Original function pointer for 'symbol'.
  */
-void* ucm_reloc_get_orig(const char *symbol, void *replacement);
+static inline void* ucm_reloc_get_orig(const char *symbol, void *replacement)
+{
+    const char *error;
+    void *func_ptr;
 
+    func_ptr = dlsym(RTLD_NEXT, symbol);
+    if (func_ptr == NULL) {
+        (void)dlerror();
+        func_ptr = dlsym(RTLD_DEFAULT, symbol);
+        if (func_ptr == replacement) {
+            error = dlerror();
+            ucm_fatal("could not find address of original %s(): %s", symbol,
+                      error ? error : "Unknown error");
+        }
+    }
+
+    ucm_debug("original %s() is at %p", symbol, func_ptr);
+    return func_ptr;
+}
 
 #endif
