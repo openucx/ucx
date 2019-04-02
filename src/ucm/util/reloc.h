@@ -41,7 +41,7 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
 /**
  * Get the original implementation of 'symbol', which is not equal to 'replacement'.
  *
- * This function is set to inline to make sure that the symbol search done here
+ * This function is set to static to make sure that the symbol search done here
  * is done from within the shared object it was invoked from.
  *
  * @param [in]  symbol       Symbol name,
@@ -49,7 +49,7 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
  *
  * @return Original function pointer for 'symbol'.
  */
-static UCS_F_ALWAYS_INLINE void*
+static void* UCS_F_MAYBE_UNUSED
 ucm_reloc_get_orig(const char *symbol, void *replacement)
 {
     const char *error;
