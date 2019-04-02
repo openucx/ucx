@@ -615,7 +615,13 @@ void ucs_async_poll(ucs_async_context_t *async)
 
 void ucs_async_global_init()
 {
-    pthread_rwlock_init(&ucs_async_global_context.handlers_lock, NULL);
+    int ret;
+
+    ret = pthread_rwlock_init(&ucs_async_global_context.handlers_lock, NULL);
+    if (ret) {
+        ucs_fatal("pthread_rwlock_init() failed: %m");
+    }
+
     kh_init_inplace(ucs_async_handler, &ucs_async_global_context.handlers);
     ucs_async_method_call_all(init);
 }
