@@ -26,7 +26,7 @@ typedef struct uct_rc_mlx5_iface_config {
 
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"", "", NULL,
+  {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
@@ -400,6 +400,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_mlx5_iface_common_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
+    uct_ib_device_t *dev;
     ucs_status_t status;
 
     uct_rc_mlx5_iface_preinit(self, md, config, params, init_attr);
@@ -407,12 +408,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               &config->super, init_attr);
 
+    dev                              = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode               = config->mlx5_common.mmio_mode;
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
-    self->tx.next_fm                 = 0;
-    self->tx.fence_beat              = 0;
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
@@ -446,6 +446,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
+    self->super.config.fence = uct_ib_device_has_pci_atomics(dev);
     self->super.rx.srq.quota = self->rx.srq.mask + 1;
 
     /* By default set to something that is always in cache */
@@ -586,7 +587,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_tag_recv_cancel    = uct_rc_mlx5_iface_tag_recv_cancel,
 #endif
     .iface_flush              = uct_rc_iface_flush,
-    .iface_fence              = uct_rc_mlx5_iface_fence,
+    .iface_fence              = uct_rc_iface_fence,
     .iface_progress_enable    = uct_rc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,

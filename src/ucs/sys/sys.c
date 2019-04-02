@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
-* Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -35,6 +35,18 @@
 #define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
 
+
+const char *ucs_get_tmpdir()
+{
+    char *env_tmpdir;
+
+    env_tmpdir = getenv("TMPDIR");
+    if (env_tmpdir) {
+        return env_tmpdir;
+    } else {
+        return "/tmp/";
+    }
+}
 
 const char *ucs_get_host_name()
 {
@@ -946,8 +958,10 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
 
     new_length = ucs_align_up_pow2(new_length, ucs_get_page_size());
     if (old_ptr == NULL) {
-        ptr = mmap(NULL, new_length, PROT_READ|PROT_WRITE,
-                       MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+        /* Note: Must pass the 0 offset as "long", otherwise it will be
+         * partially undefined when converted to syscall arguments */
+        ptr = (void*)syscall(__NR_mmap, NULL, new_length, PROT_READ|PROT_WRITE,
+                             MAP_PRIVATE|MAP_ANONYMOUS, -1, 0ul);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
                                 new_length);
@@ -955,7 +969,8 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
         }
     } else {
         old_length = ucs_align_up_pow2(old_length, ucs_get_page_size());
-        ptr = mremap(old_ptr, old_length, new_length, MREMAP_MAYMOVE);
+        ptr = (void*)syscall(__NR_mremap, old_ptr, old_length, new_length,
+                             MREMAP_MAYMOVE);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mremap(%p, %zu, %zu, MAYMOVE) failed: %m",
                                 old_ptr, old_length, new_length);
@@ -972,7 +987,7 @@ void ucs_sys_free(void *ptr, size_t length)
 
     if (ptr != NULL) {
         length = ucs_align_up_pow2(length, ucs_get_page_size());
-        ret = munmap(ptr, length);
+        ret = syscall(__NR_munmap, ptr, length);
         if (ret) {
             ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
         }

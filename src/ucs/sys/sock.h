@@ -15,7 +15,6 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 
-
 BEGIN_C_DECLS
 
 
@@ -66,7 +65,24 @@ ucs_status_t ucs_socket_create(int domain, int type, int *fd_p);
 
 
 /**
- * Connects the socket referred to by the file descriptor `fd`
+ * Set options on socket.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [in]   level       The level at which the option is defined.
+ * @param [in]   optname     The socket option for which the value is to be set.
+ * @param [in]   optval      A pointer to the buffer in which the value for the
+ *                           requested option is specified.
+ * @param [in]   optlen      The size, in bytes, of the buffer pointed to by the
+ *                           optval and def_optval parameters.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
+ */
+ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
+                               const void *optval, socklen_t optlen);
+
+
+/**
+ * Connect the socket referred to by the file descriptor `fd`
  * to the address specified by `dest_addr`.
  *
  * @param [in]  fd                Socket fd.
@@ -79,7 +95,7 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
 
 
 /**
- * Reports information about non-blocking connection status for
+ * Report information about non-blocking connection status for
  * the socket referred to by the file descriptor `fd`.
  *
  * @param [in]  fd          Socket fd.
@@ -91,7 +107,7 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd);
 
 
 /**
- * Returns size of a given sockaddr structure.
+ * Return size of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  size_p     Pointer to variable where size of
@@ -103,7 +119,7 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p);
 
 
 /**
- * Returns port of a given sockaddr structure.
+ * Return port of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  port_p     Pointer to variable where port (host notation)
@@ -115,7 +131,17 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
 
 
 /**
- * Returns IP addr of a given sockaddr structure.
+ * Set port to a given sockaddr structure.
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ * @param [in]   port       Port (host notation) that will be written
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port);
+
+/**
+ * Return IP addr of a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  *

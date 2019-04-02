@@ -17,6 +17,7 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/module.h>
+#include <ucs/type/init_once.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
@@ -468,10 +469,15 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler)
 
 static ucs_status_t ucm_event_install(int events)
 {
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INIITIALIZER;
     UCS_MODULE_FRAMEWORK_DECLARE(ucm);
     ucm_event_installer_t *event_installer;
     int native_events, malloc_events;
     ucs_status_t status;
+
+    UCS_INIT_ONCE(&init_once) {
+        ucm_prevent_dl_unload();
+    }
 
     /* Replace aggregate events with the native events which make them */
     native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |

@@ -10,13 +10,16 @@ MVNCMD=$(MVN) -B -f $(javadir)/pom.xml -Dmaven.repo.local=$(topdir)/.deps/
 BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
                 org_ucx_jucx_ucp_UcpContext.h \
                 org_ucx_jucx_ucp_UcpWorker.h \
-                org_ucx_jucx_ucs_UcsConstants.h
+                org_ucx_jucx_ucs_UcsConstants.h \
+                org_ucx_jucx_ucp_UcpListener.h
 
 DISTCLEANFILES = org_ucx_jucx_ucp_UcpConstants.h \
                  org_ucx_jucx_ucp_UcpContext.h \
                  org_ucx_jucx_ucp_UcpWorker.h \
-                 org_ucx_jucx_ucs_UcsConstants.h
+                 org_ucx_jucx_ucs_UcsConstants.h \
+                 org_ucx_jucx_ucp_UcpListener.h
 
+org_ucx_jucx_ucp_UcpListener.h:
 org_ucx_jucx_ucp_UcpConstants.h:
 org_ucx_jucx_ucp_UcpWorker.h:
 org_ucx_jucx_ucs_UcsConstants.h:
@@ -30,6 +33,7 @@ libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
 
 libjucx_la_SOURCES = context.cc \
                      jucx_common_def.cc \
+                     listener.cc \
                      ucp_constants.cc \
                      ucs_constants.cc \
                      worker.cc

@@ -29,7 +29,7 @@ static const char *uct_dc_tx_policy_names[] = {
 
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
-    {"", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
+    {"RC_", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
@@ -766,24 +766,15 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    int is_flush_done = 1;
-    uct_dc_mlx5_ep_t *ep;
     int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        /* TODO: Remove this check - no need to wait for grant, because we
-         * use gc_list for removed eps */
-        if (!uct_dc_mlx5_iface_is_dci_rand(iface)) {
-            ep = uct_dc_mlx5_ep_from_dci(iface, i);
-            if ((ep != NULL) && uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
-                return UCS_INPROGRESS;
-            }
-        }
         if (uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
-            is_flush_done = 0;
+            return UCS_INPROGRESS;
         }
     }
-    return is_flush_done ? UCS_OK : UCS_INPROGRESS;
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp)
@@ -1054,7 +1045,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_tag_recv_cancel    = uct_dc_mlx5_iface_tag_recv_cancel,
 #endif
     .iface_flush              = uct_dc_mlx5_iface_flush,
-    .iface_fence              = uct_rc_mlx5_iface_fence,
+    .iface_fence              = uct_rc_iface_fence,
     .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,

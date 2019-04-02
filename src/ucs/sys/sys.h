@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -52,6 +52,12 @@
 BEGIN_C_DECLS
 
 /** @file sys.h */
+
+
+/**
+ * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
+ */
+const char *ucs_get_tmpdir();
 
 /**
  * @return Host name.

@@ -226,17 +226,9 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uct_ib_md_t *md            = uct_ib_iface_md(&iface->super.super.super);
 
-    /* in case PCI Atomics are enabled atomic/read operation on target
-     * are unordered according to PCI specification so we need to
-     * request atomic fence for next such operation */
-    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
-        uct_rc_mlx5_add_fence(md, &iface->tx.dci_wqs[ep->dci]);
-    }
-
-    UCT_TL_EP_STAT_FENCE(&ep->super);
-    return UCS_OK;
+    return uct_rc_ep_fence(tl_ep, &iface->tx.dci_wqs[ep->dci].fi,
+                           ep->dci != UCT_DC_MLX5_EP_NO_DCI);
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE

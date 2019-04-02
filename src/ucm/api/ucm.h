@@ -58,6 +58,7 @@ typedef enum ucm_mem_type {
     UCM_MEM_TYPE_CUDA_MANAGED = UCS_BIT(1),
     /* rocm memory */
     UCM_MEM_TYPE_ROCM         = UCS_BIT(2),
+    UCM_MEM_TYPE_ROCM_MANAGED = UCS_BIT(3),
 } ucm_mem_type_t;
 
 

@@ -63,5 +63,12 @@ public class UcpConstants {
     public static long UCP_WAKEUP_RX;
     public static long UCP_WAKEUP_EDGE;
 
+    /**
+     * UCP listener parameters field mask.
+     */
+    public static long UCP_LISTENER_PARAM_FIELD_SOCK_ADDR;
+    public static long UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+    public static long UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+
     private static native void loadConstants();
 }

@@ -365,6 +365,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 #if ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
 #endif
+    uct_ib_fence_info_init(&txwq->fi);
     memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
 }
 
@@ -438,8 +439,6 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
      */
     txwq->bb_max     = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(txwq->bb_max > 0);
-    txwq->next_fm    = 0;
-    txwq->fence_beat = 0;
 
     uct_ib_mlx5_txwq_reset(txwq);
     return UCS_OK;

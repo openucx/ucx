@@ -870,6 +870,38 @@ test_unused_env_var() {
 	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
 }
 
+test_env_var_aliases() {
+	echo "==== Running MLX5 env var aliases test ===="
+	vars=( "TM_ENABLE" "TM_MAX_BCOPY" "TM_LIST_SIZE" "TX_MAX_BB" )
+	for var in "${vars[@]}"
+	do
+		for tl in "RC_MLX5" "DC_MLX5"
+		do
+			val=$(./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+			if [ -z $val ]
+			then
+				echo "UCX_${tl}_${var} does not exist in UCX config"
+				exit 1
+			fi
+			# To check that changing env var takes an effect,
+			# create some value, which is different from the default.
+			magic_val=`echo $val | sed -e ' s/inf\|auto/15/; s/n/swap/; s/y/n/; s/swap/y/; s/\([0-9]\)/\11/'`
+
+			# Check that both (tl name and common RC) aliases work
+			for var_alias in "RC" $tl
+			do
+				var_name=UCX_${var_alias}_${var}
+				val_set=$(export $var_name=$magic_val; ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+				if [ "$val_set" != "$magic_val" ]
+				then
+					echo "Can't set $var_name"
+					exit 1
+				fi
+			done
+		done
+	done
+}
+
 test_malloc_hook() {
 	echo "==== Running malloc hooks test ===="
 	if [ -x ./test/apps/test_tcmalloc ]
@@ -883,7 +915,12 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	if module_load dev/jdk && module_load dev/mvn
 	then
+		jucx_port=$((20000 + EXECUTOR_NUMBER))
+		export JUCX_TEST_PORT=jucx_port
+		export UCX_ERROR_SIGNALS=""
 		JUCX_INST=$ucx_inst $MAKE -C bindings/java/src/main/native test
+		unset UCX_ERROR_SIGNALS
+		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
@@ -934,6 +971,45 @@ run_coverity() {
 	fi
 }
 
+run_gtest_watchdog_test() {
+	watchdog_timeout=$1
+	sleep_time=$2
+	expected_runtime=$3
+	expected_err_str="Connection timed out - abort testing"
+
+	make -C test/gtest
+
+	start_time=`date +%s`
+
+	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
+		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
+		GTEST_FILTER=test_watchdog.watchdog_timeout \
+		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
+	pid=$!
+	wait $pid
+
+	end_time=`date +%s`
+
+	res="$(grep -x "$expected_err_str" watchdog_timeout_test)" || true
+
+	rm -f watchdog_timeout_test
+
+	if [ "$res" != "$expected_err_str" ]
+	then
+		echo "didn't find [$expected_err_str] string in the test output"
+		exit 1
+	fi
+
+	runtime=$(($end_time-$start_time))
+
+	if [ $run_time -gt $expected_runtime ]
+	then
+		echo "Watchdog timeout test takes $runtime seconds that" \
+			"is greater than expected $expected_runtime seconds"
+		exit 1
+	fi
+}
+
 #
 # Run the test suite (gtest)
 # Arguments: <compiler-name> [configure-flags]
@@ -944,6 +1020,9 @@ run_gtest() {
 	../contrib/configure-devel --prefix=$ucx_inst $@
 	$MAKEP clean
 	$MAKEP
+
+	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
+	run_gtest_watchdog_test 5 60 300
 
 	export GTEST_SHARD_INDEX=$worker
 	export GTEST_TOTAL_SHARDS=$nworkers
@@ -1012,6 +1091,16 @@ run_gtest() {
 		echo "1..1"                                          > vg_skipped.tap
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
+
+	unset GTEST_SHARD_INDEX
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_RANDOM_SEED
+	unset GTEST_SHUFFLE
+	unset GTEST_TAP
+	unset GTEST_REPORT_DIR
+	unset GTEST_EXTRA_ARGS
+	unset VALGRIND_EXTRA_ARGS
+	unset CUDA_VISIBLE_DEVICES
 }
 
 run_gtest_default() {
@@ -1052,6 +1141,13 @@ run_gtest_release() {
 	echo "==== Running unit tests (release configuration) ===="
 	env GTEST_FILTER=\*test_obj_size\* $AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
+
+	unset GTEST_SHARD_INDEX
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_RANDOM_SEED
+	unset GTEST_SHUFFLE
+	unset GTEST_TAP
+	unset GTEST_REPORT_DIR
 }
 
 run_ucx_tl_check() {
@@ -1109,6 +1205,7 @@ run_tests() {
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
+	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
 	do_distributed_task 0 3 test_jucx
 

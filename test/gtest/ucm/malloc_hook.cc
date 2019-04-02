@@ -422,6 +422,11 @@ UCS_TEST_F(malloc_hook, multi_threads) {
     pthread_barrier_destroy(&barrier);
 }
 
+UCS_TEST_F(malloc_hook, asprintf) {
+    /* Install memory hooks */
+    (void)dlerror();
+}
+
 UCS_TEST_F(malloc_hook, fork) {
     static const int num_processes = 4;
     pthread_barrier_t barrier;
@@ -739,14 +744,12 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     if (p == NULL) {
         UCS_TEST_SKIP_R("MALLOC_TRIM_THRESHOLD_ is not set");
     }
-    ASSERT_TRUE(p != NULL);
     trim_thresh = atoi(p);
 
     p = getenv("MALLOC_MMAP_THRESHOLD_");
     if (p == NULL) {
         UCS_TEST_SKIP_R("MALLOC_MMAP_THRESHOLD_ is not set");
     }
-    ASSERT_TRUE(p != NULL);
     mmap_thresh = atoi(p);
 
     /* make sure that rcache is explicitly disabled so

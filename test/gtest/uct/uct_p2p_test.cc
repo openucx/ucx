@@ -87,10 +87,12 @@ void uct_p2p_test::init() {
 
     /* Allocate completion handle and set the callback */
     m_completion_count = 0;
+
+    /* Give a chance to finish connection for some transports (ib/ud, tcp) */
+    flush();
 }
 
 void uct_p2p_test::cleanup() {
-
     flush();
     uct_test::cleanup();
 }

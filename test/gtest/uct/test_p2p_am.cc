@@ -457,27 +457,21 @@ public:
     static const unsigned RX_MAX_BUFS;
     static const unsigned RX_QUEUE_LEN;
 
-    template<typename T>
-    std::string to_string(T v) {
-        std::stringstream ss;
-        ss << v;
-        return ss.str();
-    }
-
-    uct_p2p_am_misc() :
-        uct_p2p_am_test() {
+    uct_p2p_am_misc() : uct_p2p_am_test() {
         ucs_status_t status_ib_bufs, status_ib_qlen, status_bufs;
-        m_rx_buf_limit_failed = 0;
-        status_ib_bufs = uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS" , to_string(RX_MAX_BUFS).c_str());
-        status_ib_qlen = uct_config_modify(m_iface_config, "IB_RX_QUEUE_LEN", to_string(RX_QUEUE_LEN).c_str());
-        status_bufs    = uct_config_modify(m_iface_config, "RX_MAX_BUFS"    , to_string(RX_MAX_BUFS).c_str());
+        m_rx_buf_limit_failed = false;
+        status_ib_bufs = uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS",
+                                           ucs::to_string(RX_MAX_BUFS).c_str());
+        status_ib_qlen = uct_config_modify(m_iface_config, "IB_RX_QUEUE_LEN",
+                                           ucs::to_string(RX_QUEUE_LEN).c_str());
+        status_bufs    = uct_config_modify(m_iface_config, "RX_MAX_BUFS",
+                                           ucs::to_string(RX_MAX_BUFS).c_str());
         if ((status_ib_bufs != UCS_OK) && (status_ib_qlen != UCS_OK) &&
             (status_bufs != UCS_OK)) {
             /* none of the above environment parameters were set successfully
              * (for UCTs that don't have them) */
-            m_rx_buf_limit_failed = 1;
+            m_rx_buf_limit_failed = true;
         }
-
     }
 
     ucs_status_t send_with_timeout(uct_ep_h ep, const mapped_buffer& sendbuf,
@@ -512,17 +506,8 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    unsigned m_rx_buf_limit_failed;
+    bool m_rx_buf_limit_failed;
 };
-
-
-UCS_TEST_P(uct_p2p_am_test, am_short) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
-    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
-                    sizeof(uint64_t),
-                    sender().iface_attr().cap.am.max_short,
-                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
-}
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
     check_caps(UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_DUP);
@@ -646,6 +631,14 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
         status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
     } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
     EXPECT_EQ(UCS_OK, status);
+}
+
+UCS_TEST_P(uct_p2p_am_misc, am_short, "MAX_SHORT=" + ucs::to_string(USHRT_MAX + 1)) {
+    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                    sizeof(uint64_t),
+                    sender().iface_attr().cap.am.max_short,
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)

@@ -116,9 +116,9 @@ int uct_rocm_base_is_gpu_agent(hsa_agent_t agent)
     return 0;
 }
 
-hsa_status_t uct_rocm_base_lock_ptr(void *ptr, size_t size, void **lock_ptr,
-                                    void **base_ptr, size_t *base_size,
-                                    hsa_agent_t *agent)
+hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
+                                        void **base_ptr, size_t *base_size,
+                                        hsa_agent_t *agent)
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
@@ -130,23 +130,17 @@ hsa_status_t uct_rocm_base_lock_ptr(void *ptr, size_t size, void **lock_ptr,
         return status;
     }
 
+    if (info.type != HSA_EXT_POINTER_TYPE_HSA)
+        return HSA_STATUS_ERROR;
+
     *agent = info.agentOwner;
 
-    if (info.type != HSA_EXT_POINTER_TYPE_UNKNOWN &&
-        info.type != HSA_EXT_POINTER_TYPE_LOCKED) {
-        *lock_ptr = NULL;
-        if (base_ptr)
-            *base_ptr = info.agentBaseAddress;
-        if (base_size)
-            *base_size = info.sizeInBytes;
-        return HSA_STATUS_SUCCESS;
-    }
+    if (base_ptr)
+        *base_ptr = info.agentBaseAddress;
+    if (base_size)
+        *base_size = info.sizeInBytes;
 
-    status = hsa_amd_memory_lock(ptr, size, NULL, 0, lock_ptr);
-    if (status != HSA_STATUS_SUCCESS)
-        ucs_error("lock user mem fail");
-
-    return status;
+    return HSA_STATUS_SUCCESS;
 }
 
 int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
@@ -160,7 +154,17 @@ int uct_rocm_base_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
 
     info.size = sizeof(hsa_amd_pointer_info_t);
     status = hsa_amd_pointer_info(addr, &info, NULL, NULL, NULL);
-    return status == HSA_STATUS_SUCCESS && info.type != HSA_EXT_POINTER_TYPE_UNKNOWN;
+    if ((status == HSA_STATUS_SUCCESS) &&
+        (info.type == HSA_EXT_POINTER_TYPE_HSA)) {
+        hsa_device_type_t dev_type;
+
+        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
+        if ((status == HSA_STATUS_SUCCESS) &&
+            (dev_type == HSA_DEVICE_TYPE_GPU))
+            return 1;
+    }
+
+    return 0;
 }
 
 UCS_MODULE_INIT() {

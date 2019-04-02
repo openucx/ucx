@@ -168,7 +168,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.17</version>
+            <version>8.18</version>
           </dependency>
         </dependencies>
         <executions>
@@ -198,6 +198,7 @@
           <javahClassNames>
             <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpListener</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpWorker</javahClassName>
             <javahClassName>org.ucx.jucx.ucs.UcsConstants</javahClassName>
           </javahClassNames>

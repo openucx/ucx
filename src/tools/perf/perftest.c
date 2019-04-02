@@ -17,7 +17,9 @@
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/sock.h>
 #include <ucs/debug/log.h>
+
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -796,6 +798,8 @@ static unsigned sock_rte_group_index(void *rte_group)
 static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
                              void *arg)
 {
+#pragma omp barrier
+
 #pragma omp master
   {
     sock_rte_group_t *group = rte_group;
@@ -886,10 +890,9 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
     if (ctx->server_addr == NULL) {
         optval = 1;
-        ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-        if (ret < 0) {
-            ucs_error("setsockopt(SO_REUSEADDR) failed: %m");
-            status = UCS_ERR_INVALID_PARAM;
+        status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
+                                   &optval, sizeof(optval));
+        if (status != UCS_OK) {
             goto err_close_sockfd;
         }
 
@@ -1019,6 +1022,8 @@ static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
     int nreqs = 0;
     int dummy;
     int flag;
+
+#pragma omp barrier
 
 #pragma omp master
 
@@ -1156,6 +1161,8 @@ static unsigned ext_rte_group_index(void *rte_group)
 static void ext_rte_barrier(void *rte_group, void (*progress)(void *arg),
                             void *arg)
 {
+#pragma omp barrier
+
 #pragma omp master
   {
     rte_group_t group = (rte_group_t)rte_group;

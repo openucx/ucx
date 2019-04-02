@@ -19,6 +19,8 @@
 
 #include <unistd.h>
 #include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
 UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
                               HSA_STATUS_ERROR, hsa_amd_memory_pool_t,
@@ -57,6 +59,8 @@ static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
 {
     size_t size;
     hsa_status_t status;
+    hsa_device_type_t dev_type;
+    int mem_type = UCM_MEM_TYPE_ROCM;
     hsa_amd_pointer_info_t info = {
         .size = sizeof(hsa_amd_pointer_info_t),
     };
@@ -74,7 +78,19 @@ static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
         size = info.sizeInBytes;
     }
 
-    ucm_dispatch_mem_type_free(ptr, size, UCM_MEM_TYPE_ROCM);
+    status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
+    if (status == HSA_STATUS_SUCCESS) {
+        if (info.type != HSA_EXT_POINTER_TYPE_HSA) {
+            ucm_warn("ucm free non HSA managed memory %p", ptr);
+            return;
+        }
+
+        if (dev_type != HSA_DEVICE_TYPE_GPU) {
+            mem_type= UCM_MEM_TYPE_ROCM_MANAGED;
+        }
+    }
+
+    ucm_dispatch_mem_type_free(ptr, size, mem_type);
 }
 
 hsa_status_t ucm_hsa_amd_memory_pool_free(void* ptr)
@@ -98,13 +114,23 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     uint32_t flags, void** ptr)
 {
     hsa_status_t status;
+    uint32_t pool_flags = 0;
+    int type = UCM_MEM_TYPE_ROCM;
+
+    status = hsa_amd_memory_pool_get_info(memory_pool,
+                                          HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS,
+                                          &pool_flags);
+    if (status == HSA_STATUS_SUCCESS &&
+        !(pool_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED)) {
+        type = UCM_MEM_TYPE_ROCM_MANAGED;
+    }
 
     ucm_event_enter();
 
     status = ucm_orig_hsa_amd_memory_pool_allocate(memory_pool, size, flags, ptr);
     if (status == HSA_STATUS_SUCCESS) {
         ucm_trace("ucm_hsa_amd_memory_pool_allocate(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type_alloc(*ptr, size, UCM_MEM_TYPE_ROCM);
+        ucm_dispatch_mem_type_alloc(*ptr, size, type);
     }
 
     ucm_event_leave();

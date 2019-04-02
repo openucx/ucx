@@ -5,17 +5,16 @@
 
 #include "tcp.h"
 
-#include <uct/base/uct_worker.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <ucs/config/types.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <netinet/tcp.h>
 #include <dirent.h>
 
-
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
-  {"", "MAX_SHORT=8192", NULL,
+  {"", "MAX_SHORT=8k", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -23,7 +22,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Give higher priority to the default network interface on the host",
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
 
-  {"MAX_POLL", "16",
+  {"MAX_POLL", UCS_PP_MAKE_STRING(UCT_TCP_MAX_EVENTS),
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
@@ -33,11 +32,22 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
 
   {"SNDBUF", "64k",
-   "Socket send buffer size.",
+   "Socket send buffer size",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RCVBUF", "auto",
+   "Socket receive buffer size",
+   ucs_offsetof(uct_tcp_iface_config_t, sockopt_rcvbuf), UCS_CONFIG_TYPE_MEMUNITS},
+
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
+                                ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
+
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 8, "receive",
+                                ucs_offsetof(uct_tcp_iface_config_t, rx_mpool), ""),
 
   {NULL}
 };
+
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);
 
@@ -62,9 +72,9 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_iface_addr_t *iface_addr)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    uct_tcp_iface_t *iface         = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     const in_addr_t *remote_inaddr = (const in_addr_t*)dev_addr;
-    in_addr_t netmask = iface->config.netmask.sin_addr.s_addr;
+    in_addr_t netmask              = iface->config.netmask.sin_addr.s_addr;
 
     return (*remote_inaddr & netmask) ==
            (iface->config.ifaddr.sin_addr.s_addr & netmask);
@@ -121,35 +131,56 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return UCS_OK;
 }
 
+static inline unsigned
+uct_tcp_iface_handle_events(uct_tcp_ep_t *ep, uint32_t epoll_events)
+{
+    unsigned count = 0;
+
+    if (epoll_events & EPOLLIN) {
+        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_RX);
+    }
+    if (epoll_events & EPOLLOUT) {
+        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
+    }
+
+    return count;
+}
+
 unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    unsigned read_events   = 0;
+    unsigned count         = 0;
     struct epoll_event events[UCT_TCP_MAX_EVENTS];
-    uct_tcp_ep_t *ep;
-    unsigned count;
-    int i, nevents;
-    int max_events;
+    int i, nevents, max_events;
 
-    ucs_trace_poll("iface=%p", iface);
+    do {
+        max_events = ucs_min(iface->config.max_poll - read_events,
+                             UCT_TCP_MAX_EVENTS);
 
-    max_events = ucs_min(UCT_TCP_MAX_EVENTS, iface->config.max_poll);
-    nevents = epoll_wait(iface->epfd, events, max_events, 0);
-    if ((nevents < 0) && (errno != EINTR)) {
-        ucs_error("epoll_wait(epfd=%d max=%d) failed: %m", iface->epfd,
-                  max_events);
-        return 0;
-    }
-
-    count = 0;
-    for (i = 0; i < nevents; ++i) {
-        ep = events[i].data.ptr;
-        if (events[i].events & EPOLLIN) {
-            count += ep->rx.progress(ep);
+        nevents = epoll_wait(iface->epfd, events, max_events, 0);
+        if (ucs_unlikely((nevents < 0))) {
+            if (errno == EINTR) {
+                /* force a new loop iteration */
+                nevents = max_events;
+                continue;
+            }
+            ucs_error("epoll_wait(epfd=%d max=%d) failed: %m",
+                      iface->epfd, max_events);
+            return 0;
         }
-        if (events[i].events & EPOLLOUT) {
-            count += ep->tx.progress(ep);
+
+        for (i = 0; i < nevents; ++i) {
+            count += uct_tcp_iface_handle_events(events[i].data.ptr,
+                                                 events[i].events);
         }
-    }
+
+        read_events += nevents;
+
+        ucs_trace_poll("iface=%p epoll_wait()=%d, total=%u",
+                       iface, nevents, read_events);
+    } while ((read_events < iface->config.max_poll) && (nevents == max_events));
+
     return count;
 }
 
@@ -185,49 +216,64 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
     struct sockaddr_in peer_addr;
     socklen_t addrlen;
     ucs_status_t status;
-    uct_tcp_ep_t *ep;
     int fd;
 
     ucs_assert(listen_fd == iface->listen_fd);
 
-    addrlen = sizeof(peer_addr);
-    fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-    if (fd < 0) {
-        if ((errno != EAGAIN) && (errno != EINTR)) {
-            ucs_error("accept() failed: %m");
-            uct_tcp_iface_listen_close(iface);
+    for (;;) {
+        addrlen = sizeof(peer_addr);
+
+        fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
+        if (fd < 0) {
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
+                ucs_error("accept() failed: %m");
+                uct_tcp_iface_listen_close(iface);
+            }
+            return;
         }
-        return;
+
+        /* This will be replaced by exact iface <address:port> information */
+        status = ucs_sockaddr_set_port((struct sockaddr*)&peer_addr, 0);
+        if (status != UCS_OK) {
+            close(fd);
+            return;
+        }
+
+        status = uct_tcp_cm_handle_incoming_conn(iface, (const struct sockaddr*)&peer_addr, fd);
+        if (status != UCS_OK) {
+            close(fd);
+            return;
+        }
     }
-
-    ucs_debug("tcp_iface %p: accepted connection from %s:%d to fd %d", iface,
-              inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port), fd);
-
-    status = uct_tcp_ep_create(iface, fd, NULL, &ep);
-    if (status != UCS_OK) {
-        close(fd);
-        return;
-    }
-
-    uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
 }
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 {
-    int ret;
+    ucs_status_t status;
 
-    ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void*)&iface->sockopt.nodelay,
-                     sizeof(int));
-    if (ret < 0) {
-        ucs_error("Failed to set TCP_NODELAY on fd %d: %m", fd);
-        return UCS_ERR_IO_ERROR;
+    status = ucs_socket_setopt(fd, IPPROTO_TCP, TCP_NODELAY,
+                               (const void*)&iface->sockopt.nodelay,
+                               sizeof(int));
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (void*)&iface->sockopt.sndbuf,
-                     sizeof(int));
-    if (ret < 0) {
-        ucs_error("Failed to set SO_SNDBUF on fd %d: %m", fd);
-        return UCS_ERR_IO_ERROR;
+    if (iface->sockopt.sndbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
+                                   (const void*)&iface->sockopt.sndbuf,
+                                   sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (iface->sockopt.rcvbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
+                                   (const void*)&iface->sockopt.rcvbuf,
+                                   sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
@@ -240,7 +286,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create                = uct_tcp_ep_create_connected,
+    .ep_create                = uct_tcp_ep_create,
     .ep_destroy               = uct_tcp_ep_destroy,
     .iface_flush              = uct_tcp_iface_flush,
     .iface_fence              = uct_base_iface_fence,
@@ -320,11 +366,19 @@ err_close_sock:
     return status;
 }
 
+static ucs_mpool_ops_t uct_tcp_mpool_ops = {
+    ucs_mpool_chunk_malloc,
+    ucs_mpool_chunk_free,
+    NULL,
+    NULL
+};
+
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_tcp_iface_config_t *config = ucs_derived_of(tl_config, uct_tcp_iface_config_t);
+    uct_tcp_iface_config_t *config = ucs_derived_of(tl_config,
+                                                    uct_tcp_iface_config_t);
     ucs_status_t status;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
@@ -352,7 +406,30 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_poll       = config->max_poll;
     self->sockopt.nodelay       = config->sockopt_nodelay;
     self->sockopt.sndbuf        = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
+
+    self->am_buf_size = ucs_max(self->config.buf_size, self->config.short_size);
+
+    status = ucs_mpool_init(&self->tx_mpool, 0, self->am_buf_size,
+                            0, UCS_SYS_CACHE_LINE_SIZE,
+                            (config->tx_mpool.bufs_grow == 0) ?
+                            32 : config->tx_mpool.bufs_grow,
+                            config->tx_mpool.max_bufs,
+                            &uct_tcp_mpool_ops, "uct_tcp_iface_tx_buf_mp");
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucs_mpool_init(&self->rx_mpool, 0, self->am_buf_size * 2,
+                            0, UCS_SYS_CACHE_LINE_SIZE,
+                            (config->rx_mpool.bufs_grow == 0) ?
+                            32 : config->rx_mpool.bufs_grow,
+                            config->rx_mpool.max_bufs,
+                            &uct_tcp_mpool_ops, "uct_tcp_iface_rx_buf_mp");
+    if (status != UCS_OK) {
+        goto err_cleanup_tx_mpool;
+    }
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("TCP transport does not support multi-threaded worker");
@@ -362,14 +439,14 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
                                   &self->config.netmask);
     if (status != UCS_OK) {
-        goto err;
+        goto err_cleanup_rx_mpool;
     }
 
     self->epfd = epoll_create(1);
     if (self->epfd < 0) {
         ucs_error("epoll_create() failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err;
+        goto err_cleanup_rx_mpool;
     }
 
     status = uct_tcp_iface_listener_init(self);
@@ -381,6 +458,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
 err_close_epfd:
     close(self->epfd);
+err_cleanup_rx_mpool:
+    ucs_mpool_cleanup(&self->rx_mpool, 1);
+err_cleanup_tx_mpool:
+    ucs_mpool_cleanup(&self->tx_mpool, 1);
 err:
     return status;
 }
@@ -403,6 +484,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
     ucs_list_for_each_safe(ep, tmp, &self->ep_list, list) {
         uct_tcp_ep_destroy(&ep->super.super);
     }
+
+    ucs_mpool_cleanup(&self->rx_mpool, 1);
+    ucs_mpool_cleanup(&self->tx_mpool, 1);
 
     uct_tcp_iface_listen_close(self);
     close(self->epfd);
