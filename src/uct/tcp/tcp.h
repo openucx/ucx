@@ -148,14 +148,6 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);
 
-ucs_status_t uct_tcp_send(int fd, const void *data, size_t *length_p);
-
-ucs_status_t uct_tcp_recv(int fd, void *data, size_t *length_p);
-
-ucs_status_t uct_tcp_send_blocking(int fd, const void *data, size_t length);
-
-ucs_status_t uct_tcp_recv_blocking(int fd, void *data, size_t length);
-
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
