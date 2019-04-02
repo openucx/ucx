@@ -165,6 +165,76 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size);
 
 
+/**
+ * Return a value indicating the relationships between passed sockaddr's addresses.
+ * 
+ * @param [in]   sa1        Pointer to sockaddr structure #1.
+ * @param [in]   sa2        Pointer to sockaddr structure #2.
+ * @param [out]  result_p   Pointer to the result
+ *                          > 1 - the first byte that doesn't match in both sockaddr's
+ *                                addresses has a lower value in `sa1` than in `sa2`.
+ *                            0 - the contents of both sockaddr's addresses are equal.
+ *                          < 1 - the first byte that doesn't match in both sockaddr's
+ *                                addresses has a greater value in `sa1` than in `sa2`.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_addr_cmp(const struct sockaddr *sa1,
+                                   const struct sockaddr *sa2,
+                                   int *result_p);
+
+
+/**
+ * Return a value indicating the relationships between passed sockaddr's ports.
+ * 
+ * @param [in]   sa1        Pointer to sockaddr structure #1.
+ * @param [in]   sa2        Pointer to sockaddr structure #2.
+ * @param [out]  result_p   Pointer to the result
+ *                          > 1 - the first byte that doesn't match in both sockaddr's
+ *                                ports has a lower value in `sa1` than in `sa2`.
+ *                            0 - the contents of both sockaddr's ports are equal.
+ *                          < 1 - the first byte that doesn't match in both sockaddr's
+ *                                ports has a greater value in `sa1` than in `sa2`.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_port_cmp(const struct sockaddr *sa1,
+                                   const struct sockaddr *sa2,
+                                   int *result_p);
+
+
+/**
+ * Return a value indicating the relationships between passed sockaddr structures.
+ * 
+ * @param [in]   sa1        Pointer to sockaddr structure #1.
+ * @param [in]   sa2        Pointer to sockaddr structure #2.
+ * @param [out]  result_p   Pointer to the result
+ *                          > 1 - the first byte that doesn't match in both sockaddr
+ *                                structures has a lower value in `sa1` than in `sa2`.
+ *                            0 - the contents of both sockaddr structures are equal.
+ *                          < 1 - the first byte that doesn't match in both sockaddr
+ *                                structures has a greater value in `sa1` than in `sa2`.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_cmp(const struct sockaddr *sa1,
+                              const struct sockaddr *sa2,
+                              int *result_p);
+
+/**
+ * Copy the socket address from the location pointed to by `from` argument
+ * directly to the memory block pointed to by `to` argument.
+ *
+ * @param [in/out]   to        Pointer to sockaddr structure #1 where the content
+ *                             is to be copied.
+ * @param [in]       from      Pointer to sockaddr structure #2 of the socket address
+ *                             to be copied
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_copy(struct sockaddr *to, const struct sockaddr *from);
+
+
 END_C_DECLS
 
 #endif

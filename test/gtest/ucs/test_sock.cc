@@ -268,3 +268,434 @@ UCS_TEST_F(test_socket, socket_setopt) {
 
     close(fd);
 }
+
+UCS_TEST_F(test_socket, sockaddr_addr_v4_cmp) {
+    const unsigned port1       = 65534;
+    const unsigned port2       = 65533;
+    const char *ipv4_addr1     = "192.168.122.157";
+    const char *ipv4_addr2     = "192.168.123.157";
+    struct sockaddr_in sa_in_1 = {
+        .sin_family            = AF_INET,
+    };
+    struct sockaddr_in sa_in_2 = {
+        .sin_family            = AF_INET,
+    };
+    ucs_status_t status;
+    int result;
+    
+    // Different ports shouldn't have any effect
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port2);
+
+    // Same addresses
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+    status = ucs_sockaddr_addr_cmp((const struct sockaddr*)&sa_in_1,
+                                   (const struct sockaddr*)&sa_in_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, result);
+
+    // Different addresses
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr2, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+    status = ucs_sockaddr_addr_cmp((const struct sockaddr*)&sa_in_1,
+                                   (const struct sockaddr*)&sa_in_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET_ADDR(&sa_in_1),
+                             &UCS_SOCKET_INET_ADDR(&sa_in_2),
+                             sizeof(UCS_SOCKET_INET_ADDR(&sa_in_1))));
+}
+
+UCS_TEST_F(test_socket, sockaddr_port_v4_cmp) {
+    const unsigned port1       = 65534;
+    const unsigned port2       = 65533;
+    const char *ipv4_addr1     = "192.168.122.157";
+    const char *ipv4_addr2     = "192.168.123.157";
+    struct sockaddr_in sa_in_1 = {
+        .sin_family            = AF_INET,
+    };
+    struct sockaddr_in sa_in_2 = {
+        .sin_family            = AF_INET,
+    };
+    ucs_status_t status;
+    int result;
+
+    // Different addresses shouldn't have any effect
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr2, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+
+    // Same ports
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port1);
+    status = ucs_sockaddr_port_cmp((const struct sockaddr*)&sa_in_1,
+                                   (const struct sockaddr*)&sa_in_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, result);
+
+    // Different ports
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port2);
+    status = ucs_sockaddr_port_cmp((const struct sockaddr*)&sa_in_1,
+                                   (const struct sockaddr*)&sa_in_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET_PORT(&sa_in_1),
+                             &UCS_SOCKET_INET_PORT(&sa_in_2),
+                             sizeof(UCS_SOCKET_INET_PORT(&sa_in_1))));
+}
+
+UCS_TEST_F(test_socket, sockaddr_v4_cmp) {    
+    const unsigned port1       = 65534;
+    const unsigned port2       = 65533;
+    const char *ipv4_addr1     = "192.168.122.157";
+    const char *ipv4_addr2     = "192.168.123.157";
+    struct sockaddr_in sa_in_1 = {
+        .sin_family            = AF_INET,
+    };
+    struct sockaddr_in sa_in_2 = {
+        .sin_family            = AF_INET,
+    };
+    ucs_status_t status;
+    int result;
+
+    // Same addresses; same ports
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port1);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in_1,
+                              (const struct sockaddr*)&sa_in_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, result);
+
+    // Same addresses; different ports
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port2);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in_1,
+                              (const struct sockaddr*)&sa_in_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET_PORT(&sa_in_1),
+                             &UCS_SOCKET_INET_PORT(&sa_in_2),
+                             sizeof(UCS_SOCKET_INET_PORT(&sa_in_1))));
+
+    // Different addresses; same ports
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr2, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port1);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in_1,
+                              (const struct sockaddr*)&sa_in_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET_ADDR(&sa_in_1),
+                             &UCS_SOCKET_INET_ADDR(&sa_in_2),
+                             sizeof(UCS_SOCKET_INET_ADDR(&sa_in_1))));
+
+    // Different addresses; different ports
+    inet_pton(AF_INET, ipv4_addr1, &UCS_SOCKET_INET_ADDR(&sa_in_1));
+    inet_pton(AF_INET, ipv4_addr2, &UCS_SOCKET_INET_ADDR(&sa_in_2));
+    sa_in_1.sin_port = htons(port1);
+    sa_in_2.sin_port = htons(port2);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in_1,
+                              (const struct sockaddr*)&sa_in_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET_ADDR(&sa_in_1),
+                             &UCS_SOCKET_INET_ADDR(&sa_in_2),
+                             sizeof(UCS_SOCKET_INET_ADDR(&sa_in_1))));
+}
+
+UCS_TEST_F(test_socket, sockaddr_addr_v6_cmp) {
+    const unsigned port1         = 65534;
+    const unsigned port2         = 65533;
+    const char *ipv6_addr1       = "fe80::218:e7ff:fe16:fb97";
+    const char *ipv6_addr2       = "fe80::219:e7ff:fe16:fb97";
+    struct sockaddr_in6 sa_in6_1 = {
+        .sin6_family             = AF_INET6,
+    };
+    struct sockaddr_in6 sa_in6_2 = {
+        .sin6_family             = AF_INET6,
+    };
+    ucs_status_t status;
+    int result;
+
+    // Different ports shouldn't have any effect
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port2);
+
+    // Same addresses
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+    status = ucs_sockaddr_addr_cmp((const struct sockaddr*)&sa_in6_1,
+                                   (const struct sockaddr*)&sa_in6_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, result);
+
+    // Different addresses
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr2, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+    status = ucs_sockaddr_addr_cmp((const struct sockaddr*)&sa_in6_1,
+                                   (const struct sockaddr*)&sa_in6_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET6_ADDR(&sa_in6_1),
+                             &UCS_SOCKET_INET6_ADDR(&sa_in6_2),
+                             sizeof(UCS_SOCKET_INET6_ADDR(&sa_in6_1))));
+}
+
+UCS_TEST_F(test_socket, sockaddr_port_v6_cmp) {
+    const unsigned port1         = 65534;
+    const unsigned port2         = 65533;
+    const char *ipv6_addr1       = "fe80::218:e7ff:fe16:fb97";
+    const char *ipv6_addr2       = "fe80::219:e7ff:fe16:fb97";
+    struct sockaddr_in6 sa_in6_1 = {
+        .sin6_family             = AF_INET6,
+    };
+    struct sockaddr_in6 sa_in6_2 = {
+        .sin6_family             = AF_INET6,
+    };
+    ucs_status_t status;
+    int result;
+
+    // Different addresses shouldn't have any effect
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr2, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+
+    // Same ports
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port1);
+    status = ucs_sockaddr_port_cmp((const struct sockaddr*)&sa_in6_1,
+                                   (const struct sockaddr*)&sa_in6_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, result);
+
+    // Different ports
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port2);
+    status = ucs_sockaddr_port_cmp((const struct sockaddr*)&sa_in6_1,
+                                   (const struct sockaddr*)&sa_in6_2,
+                                   &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET6_PORT(&sa_in6_1),
+                             &UCS_SOCKET_INET6_PORT(&sa_in6_2),
+                             sizeof(UCS_SOCKET_INET6_PORT(&sa_in6_1))));
+}
+
+UCS_TEST_F(test_socket, sockaddr_v6_cmp) {
+    const unsigned port1         = 65534;
+    const unsigned port2         = 65533;
+    const char *ipv6_addr1       = "fe80::218:e7ff:fe16:fb97";
+    const char *ipv6_addr2       = "fe80::219:e7ff:fe16:fb97";
+    struct sockaddr_in6 sa_in6_1 = {
+        .sin6_family             = AF_INET6,
+    };
+    struct sockaddr_in6 sa_in6_2 = {
+        .sin6_family             = AF_INET6,
+    };
+    ucs_status_t status;
+    int result;
+
+    // Same addresses; same ports
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port1);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in6_1,
+                              (const struct sockaddr*)&sa_in6_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, result);
+
+    // Same addresses; different ports
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port2);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in6_1,
+                              (const struct sockaddr*)&sa_in6_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET6_PORT(&sa_in6_1),
+                             &UCS_SOCKET_INET6_PORT(&sa_in6_2),
+                             sizeof(UCS_SOCKET_INET6_PORT(&sa_in6_1))));
+
+    // Different addresses; same ports
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr2, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port1);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in6_1,
+                              (const struct sockaddr*)&sa_in6_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET6_ADDR(&sa_in6_1),
+                             &UCS_SOCKET_INET6_ADDR(&sa_in6_2),
+                             sizeof(UCS_SOCKET_INET6_ADDR(&sa_in6_1))));
+
+    // Different addresses; different ports
+    inet_pton(AF_INET6, ipv6_addr1, &UCS_SOCKET_INET6_ADDR(&sa_in6_1));
+    inet_pton(AF_INET6, ipv6_addr2, &UCS_SOCKET_INET6_ADDR(&sa_in6_2));
+    sa_in6_1.sin6_port = htons(port1);
+    sa_in6_2.sin6_port = htons(port2);
+    status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in6_1,
+                              (const struct sockaddr*)&sa_in6_2,
+                              &result);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(result, memcmp(&UCS_SOCKET_INET6_ADDR(&sa_in6_1),
+                             &UCS_SOCKET_INET6_ADDR(&sa_in6_2),
+                             sizeof(UCS_SOCKET_INET6_ADDR(&sa_in6_1))));
+}
+
+UCS_TEST_F(test_socket, sockaddr_cmp_err) {
+    const unsigned port        = 65534;
+    const char *ipv4_addr      = "192.168.122.157";
+    const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
+    struct sockaddr_in sa_in   = {
+        .sin_family            = AF_INET,
+        .sin_port              = htons(port),
+    };
+    struct sockaddr_in6 sa_in6 = {
+        .sin6_family           = AF_INET6,
+        .sin6_port             = htons(port),
+    };
+    ucs_status_t status;
+    int result;
+
+    inet_pton(AF_INET, ipv4_addr, &UCS_SOCKET_INET6_ADDR(&sa_in));
+    inet_pton(AF_INET6, ipv6_addr, &UCS_SOCKET_INET6_ADDR(&sa_in6));
+
+    // Check with wrong sa_family
+    {
+        struct sockaddr_un sa_un = {
+            .sun_family          = AF_UNIX,
+        };
+
+        socket_err_exp_str = "unknown address family:";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        // When fails, shouldn't touch the `result` argument
+        result = 100;
+
+        status = ucs_sockaddr_addr_cmp((const struct sockaddr*)&sa_un,
+                                       (const struct sockaddr*)&sa_un,
+                                       &result);
+        EXPECT_EQ(status, UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(100, result);
+
+        status = ucs_sockaddr_port_cmp((const struct sockaddr*)&sa_un,
+                                       (const struct sockaddr*)&sa_un,
+                                       &result);
+        EXPECT_EQ(status, UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(100, result);
+
+        status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_un,
+                                  (const struct sockaddr*)&sa_un,
+                                  &result);
+        EXPECT_EQ(status, UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(100, result);
+    }
+
+    // Check with different sa_family's
+    {
+        socket_err_exp_str = "unable to compare socket addresses with " \
+            "different address families:";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        // When fails, shouldn't touch the `result` argument
+        result = 100;
+
+        status = ucs_sockaddr_addr_cmp((const struct sockaddr*)&sa_in,
+                                       (const struct sockaddr*)&sa_in6,
+                                       &result);
+        EXPECT_EQ(status, UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(100, result);
+
+        // When fails, shouldn't touch the `result` argument
+        result = 100;
+
+        status = ucs_sockaddr_port_cmp((const struct sockaddr*)&sa_in,
+                                       (const struct sockaddr*)&sa_in6,
+                                       &result);
+        EXPECT_EQ(status, UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(100, result);
+
+        // When fails, shouldn't touch the `result` argument
+        result = 100;
+
+        status = ucs_sockaddr_cmp((const struct sockaddr*)&sa_in,
+                                  (const struct sockaddr*)&sa_in6,
+                                  &result);
+        EXPECT_EQ(status, UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(100, result);
+    }
+}
+
+UCS_TEST_F(test_socket, sockaddr_v4_copy) {
+    const unsigned port      = 65534;
+    const char *ipv4_addr    = "192.168.122.157";
+    struct sockaddr_in sa_in = {
+        .sin_family          = AF_INET,
+        .sin_port            = htons(port),
+    };
+    struct sockaddr_in sa_in_res = { 0 };
+    ucs_status_t status;
+    size_t length;
+
+    inet_pton(AF_INET, ipv4_addr, &UCS_SOCKET_INET6_ADDR(&sa_in));
+
+    status = ucs_sockaddr_sizeof((const struct sockaddr*)&sa_in, &length);
+    EXPECT_EQ(UCS_OK, status);
+
+    status = ucs_sockaddr_copy((struct sockaddr*)&sa_in_res,
+                               (const struct sockaddr*)&sa_in);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, memcmp(&sa_in, &sa_in_res, length));
+}
+
+UCS_TEST_F(test_socket, sockaddr_v6_copy) {
+    const unsigned port        = 65534;
+    const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
+    struct sockaddr_in6 sa_in6 = {
+        .sin6_family           = AF_INET6,
+        .sin6_port             = htons(port),
+    };
+    struct sockaddr_in6 sa_in6_res = { 0 };
+    ucs_status_t status;
+    size_t length;
+
+    inet_pton(AF_INET6, ipv6_addr, &UCS_SOCKET_INET6_ADDR(&sa_in6));
+
+    status = ucs_sockaddr_sizeof((const struct sockaddr*)&sa_in6, &length);
+    EXPECT_EQ(UCS_OK, status);
+
+    status = ucs_sockaddr_copy((struct sockaddr*)&sa_in6_res,
+                               (const struct sockaddr*)&sa_in6);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, memcmp(&sa_in6, &sa_in6_res, length));
+}
+
+UCS_TEST_F(test_socket, sockaddr_copy_err) {
+    struct sockaddr_un sa_un       = {
+        .sun_family                = AF_UNIX,
+    };
+    struct sockaddr_un sa_un_res   = { 0 };
+    struct sockaddr_un sa_un_check = { 0 };
+    ucs_status_t status;
+
+    socket_err_exp_str = "unknown address family:";
+    scoped_log_handler log_handler(socket_error_handler);
+    status = ucs_sockaddr_copy((struct sockaddr*)&sa_un_res,
+                               (const struct sockaddr*)&sa_un);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    // When fails, shouldn't touch the `to` argument
+    EXPECT_EQ(0, memcmp(&sa_un_check, &sa_un_res, sizeof(sa_un)));
+}
