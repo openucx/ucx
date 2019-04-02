@@ -445,9 +445,8 @@ static int ucm_asprintf(char **strp, const char *fmt, ...)
 }
 
 /*
- * We remember the string we pass to putenv() so we would be able to release them
- * during library destructor (and thus avoid leaks). Also, if a variable is replaced,
- * we release the old string.
+ * We remember the string we pass to putenv() so we would be able to release
+ * them if they are overwritten (and thus avoid leaks).
  */
 static int ucm_add_to_environ(char *env_str)
 {
@@ -831,15 +830,4 @@ void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh)
 UCS_STATIC_INIT {
     pthread_spin_init(&ucm_malloc_hook_state.lock, 0);
     kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
-}
-
-static void UCS_F_DTOR ucm_clear_env()
-{
-    unsigned i;
-
-    clearenv();
-    for (i = 0; i < ucm_malloc_hook_state.num_env_strs; ++i) {
-        ucm_free(ucm_malloc_hook_state.env_strs[i], NULL);
-    }
-    ucm_free(ucm_malloc_hook_state.env_strs, NULL);
 }
