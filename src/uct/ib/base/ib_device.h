@@ -38,6 +38,7 @@
 #define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
 #define UCT_IB_DEV_MAX_PORTS        2
+#define UCT_IB_FABRIC_TIME_MAX      32
 #define UCT_IB_INVALID_RKEY         0xffffffffu
 #define UCT_IB_KEY                  0x1ee7a330
 #define UCT_IB_LINK_LOCAL_PREFIX    be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
@@ -147,6 +148,9 @@ typedef struct uct_ib_roce_version_desc {
 } uct_ib_roce_version_desc_t;
 
 
+extern const double uct_ib_qp_rnr_time_ms[];
+
+
 /**
  * Check if a port on a device is active and supports the given flags.
  */
@@ -221,9 +225,15 @@ int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
 
 
 /**
- * Convert time-in-seconds to IB fabric time value
+ * Convert time-in-seconds to IB fabric QP time value
  */
-uint8_t uct_ib_to_fabric_time(double time);
+uint8_t uct_ib_to_qp_fabric_time(double time);
+
+
+/**
+ * Convert time-in-seconds to IB fabric RNR time value
+ */
+uint8_t uct_ib_to_rnr_fabric_time(double time);
 
 
 /**

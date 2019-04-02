@@ -33,7 +33,7 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "Transport retries",
    ucs_offsetof(uct_rc_iface_config_t, tx.retry_count), UCS_CONFIG_TYPE_UINT},
 
-  {"RNR_TIMEOUT", "30ms",
+  {"RNR_TIMEOUT", "1ms",
    "RNR timeout",
    ucs_offsetof(uct_rc_iface_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
 
@@ -540,8 +540,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                               config->super.tx.queue_len / 4);
     self->config.tx_ops_count       = init_attr->tx_cq_len;
     self->config.rx_inline          = config->super.rx.inl;
-    self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
-    self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);
+    self->config.min_rnr_timer      = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
+    self->config.timeout            = uct_ib_to_qp_fabric_time(config->tx.timeout);
     self->config.rnr_retry          = ucs_min(config->tx.rnr_retry_count,
                                               UCT_RC_QP_MAX_RETRY_COUNT);
     self->config.retry_cnt          = ucs_min(config->tx.retry_count,

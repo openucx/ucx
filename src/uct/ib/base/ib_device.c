@@ -27,6 +27,16 @@ typedef struct {
 } uct_ib_device_gid_info_t;
 
 
+/* This table is according to "Encoding for RNR NAK Timer Field"
+ * in IBTA specification */
+const double uct_ib_qp_rnr_time_ms[] = {
+    655.36,  0.01,  0.02,   0.03,   0.04,   0.06,   0.08,   0.12,
+      0.16,  0.24,  0.32,   0.48,   0.64,   0.96,   1.28,   1.92,
+      2.56,  3.84,  5.12,   7.68,  10.24,  15.36,  20.48,  30.72,
+     40.96, 61.44, 81.92, 122.88, 163.84, 245.76, 327.68, 491.52
+};
+
+
 /* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
 static UCS_F_ALWAYS_INLINE
 khint32_t uct_ib_kh_ah_hash_func(struct ibv_ah_attr attr)
@@ -629,21 +639,44 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-uint8_t uct_ib_to_fabric_time(double time)
+uint8_t uct_ib_to_qp_fabric_time(double time)
 {
     double to;
-    long t;
 
     to = log(time / 4.096e-6) / log(2.0);
     if (to < 1) {
         return 1; /* Very small timeout */
-    } else if (to > 30) {
+    } else if ((long)(to + 0.5) >= UCT_IB_FABRIC_TIME_MAX) {
         return 0; /* No timeout */
     } else {
-        t = (long)(to + 0.5);
-        ucs_assert(t >= 1 && t < 31);
-        return t;
+        return (long)(to + 0.5);
     }
+}
+
+uint8_t uct_ib_to_rnr_fabric_time(double time)
+{
+    double time_ms = time * UCS_MSEC_PER_SEC;
+    uint8_t index, next_index;
+    double avg_ms;
+
+    for (index = 1; index < UCT_IB_FABRIC_TIME_MAX; index++) {
+        next_index = (index + 1) % UCT_IB_FABRIC_TIME_MAX;
+
+        if (time_ms <= uct_ib_qp_rnr_time_ms[next_index]) {
+            avg_ms = (uct_ib_qp_rnr_time_ms[index] +
+                      uct_ib_qp_rnr_time_ms[next_index]) * 0.5;
+
+            if (time_ms < avg_ms) {
+                /* return previous index */
+                return index;
+            } else {
+                /* return current index */
+                return next_index;
+            }
+        }
+    }
+
+    return 0; /* this is a special value that means the maximum value */
 }
 
 ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
