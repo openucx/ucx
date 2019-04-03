@@ -4,10 +4,18 @@
  */
 
 #include "jucx_common_def.h"
+extern "C" {
+  #include <ucs/debug/debug.h>
+}
 
 #include <string.h>    /* memset */
 #include <arpa/inet.h> /* inet_addr */
 
+
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
+   ucs_debug_disable_signals();
+   return JNI_VERSION_1_1;
+}
 
 static inline void log_error(const char *error)
 {

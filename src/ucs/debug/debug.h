@@ -41,7 +41,18 @@ void ucs_debug_init();
  */
 void ucs_debug_cleanup(int on_error);
 
+/**
+ * Disable signal handling in UCS for signal.
+ * Previous signal handler is set.
+ */
+void ucs_debug_disable_signal(int signum);
 
+/**
+ * Disable signal handling in UCS for all signals
+ * that was set in ucs_global_opts.error_signals.
+ * Previous signal handlers are set.
+ */
+void ucs_debug_disable_signals();
 /**
  * Get information about an address in the code of the current program.
  * @param address   Address to look up.
