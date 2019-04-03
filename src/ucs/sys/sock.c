@@ -238,15 +238,59 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     return str;
 }
 
-ucs_status_t ucs_sockaddr_addr_cmp(const struct sockaddr *sa1,
-                                   const struct sockaddr *sa2,
-                                   int *result_p)
+static ucs_status_t ucs_sockaddr_cmp_check_family(const struct sockaddr *sa)
+{
+    if ((sa->sa_family != AF_INET) && (sa->sa_family != AF_INET6)) {
+        ucs_error("unknown address family: %d", sa->sa_family);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t ucs_sockaddr_cmp_family_equal(const struct sockaddr *sa1,
+                                                  const struct sockaddr *sa2)
 {
     if (sa1->sa_family != sa2->sa_family) {
         ucs_error("unable to compare socket addresses with "
                   "different address families: %d vs %d",
                   sa1->sa_family, sa2->sa_family);
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_sockaddr_family_cmp(const struct sockaddr *sa1,
+                                     const struct sockaddr *sa2,
+                                     int *result_p)
+{
+    ucs_status_t status;
+
+    status = ucs_sockaddr_cmp_check_family(sa1);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_sockaddr_cmp_check_family(sa2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *result_p = memcmp(&sa1->sa_family, &sa2->sa_family,
+                       sizeof(sa1->sa_family));
+    return UCS_OK;
+}
+
+ucs_status_t ucs_sockaddr_addr_cmp(const struct sockaddr *sa1,
+                                   const struct sockaddr *sa2,
+                                   int *result_p)
+{
+    ucs_status_t status;
+
+    status = ucs_sockaddr_cmp_family_equal(sa1, sa2);
+    if (status != UCS_OK) {
+        return status;
     }
 
     switch (sa1->sa_family) {
@@ -270,11 +314,11 @@ ucs_status_t ucs_sockaddr_port_cmp(const struct sockaddr *sa1,
                                    const struct sockaddr *sa2,
                                    int *result_p)
 {
-    if (sa1->sa_family != sa2->sa_family) {
-        ucs_error("unable to compare socket addresses with "
-                  "different address families: %d vs %d",
-                  sa1->sa_family, sa2->sa_family);
-        return UCS_ERR_INVALID_PARAM;
+    ucs_status_t status;
+
+    status = ucs_sockaddr_cmp_family_equal(sa1, sa2);
+    if (status != UCS_OK) {
+        return status;
     }
 
     switch (sa1->sa_family) {
@@ -301,11 +345,13 @@ ucs_status_t ucs_sockaddr_cmp(const struct sockaddr *sa1,
     ucs_status_t status;
     int result;
 
-    if (sa1->sa_family != sa2->sa_family) {
-        ucs_error("unable to compare socket addresses with "
-                  "different address families: %d vs %d",
-                  sa1->sa_family, sa2->sa_family);
-        return UCS_ERR_INVALID_PARAM;
+    status = ucs_sockaddr_family_cmp(sa1, sa2, &result);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (result) {
+        goto out;
     }
 
     status = ucs_sockaddr_addr_cmp(sa1, sa2, &result);

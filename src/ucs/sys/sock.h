@@ -166,6 +166,25 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
 
 /**
+ * Return a value indicating the relationships between passed sockaddr's families.
+ * 
+ * @param [in]   sa1        Pointer to sockaddr structure #1.
+ * @param [in]   sa2        Pointer to sockaddr structure #2.
+ * @param [out]  result_p   Pointer to the result
+ *                          > 1 - the first byte that doesn't match in both sockaddr's
+ *                                families has a lower value in `sa1` than in `sa2`.
+ *                            0 - the contents of both sockaddr's families are equal.
+ *                          < 1 - the first byte that doesn't match in both sockaddr's
+ *                                families has a greater value in `sa1` than in `sa2`.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_family_cmp(const struct sockaddr *sa1,
+                                     const struct sockaddr *sa2,
+                                     int *result_p);
+
+
+/**
  * Return a value indicating the relationships between passed sockaddr's addresses.
  * 
  * @param [in]   sa1        Pointer to sockaddr structure #1.
