@@ -33,6 +33,7 @@ protected:
     struct arb_elem {
         unsigned           group_idx;
         unsigned           elem_idx;
+        int                count;
         bool               last;
         bool               release;
         ucs_arbiter_elem_t elem;
@@ -60,7 +61,7 @@ protected:
     }
 
     void prepare_groups(ucs_arbiter_group_t *groups, ucs_arbiter_elem_t *elems,
-                        const int N, const int nelems_per_group) 
+                        const int N, const int nelems_per_group, bool push_head)
     {
         int i, j;
 
@@ -68,7 +69,16 @@ protected:
             ucs_arbiter_group_init(&groups[i]);
             for (j = 0; j < nelems_per_group; j++) {
                 ucs_arbiter_elem_init(&elems[nelems_per_group*i+j]);
-                ucs_arbiter_group_push_elem(&groups[i], &elems[nelems_per_group*i+j]);
+            }
+            for (j = 0; j < nelems_per_group; j++) {
+                if (push_head) {
+                    int rev_j = nelems_per_group - 1 - j;
+                    ucs_arbiter_group_push_head_elem(NULL, &groups[i],
+                                                     &elems[nelems_per_group*i+rev_j]);
+                } else {
+                    ucs_arbiter_group_push_elem(&groups[i],
+                                                &elems[nelems_per_group*i+j]);
+                }
             }
             ucs_arbiter_group_schedule(&m_arb1, &groups[i]);
         }
@@ -170,6 +180,18 @@ protected:
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
+    static ucs_arbiter_cb_result_t count_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_elem_t *elem,
+                                            void *arg)
+    {
+        test_arbiter *self = static_cast<test_arbiter*>(arg);
+        arb_elem *e = ucs_container_of(elem, arb_elem, elem);
+
+        ++e->count;
+        ++self->m_count;
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+
     static ucs_arbiter_cb_result_t purge_cond_cb(ucs_arbiter_t *arbiter,
                                                  ucs_arbiter_elem_t *elem,
                                                  void *arg)
@@ -195,7 +217,7 @@ protected:
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
-    void test_move_groups(int N, int nelems)
+    void test_move_groups(int N, int nelems, bool push_head = false)
     {
 
         ucs_arbiter_group_t *groups;
@@ -207,7 +229,7 @@ protected:
         groups = new ucs_arbiter_group_t [N];
         elems  = new ucs_arbiter_elem_t [nelems*N];
 
-        prepare_groups(groups, elems, N, nelems);
+        prepare_groups(groups, elems, N, nelems, push_head);
 
         m_count = 0;
         ucs_arbiter_dispatch(&m_arb1, 1, desched_cb, this);
@@ -521,12 +543,67 @@ UCS_TEST_F(test_arbiter, move_group) {
     ucs_arbiter_cleanup(&m_arb2);
 }
 
+UCS_TEST_F(test_arbiter, push_head_scheduled) {
+
+    ucs_arbiter_group_t group1;
+    ucs_arbiter_group_t group2;
+    arb_elem elem1;
+    arb_elem elem2;
+    arb_elem elem3;
+
+    ucs_arbiter_init(&m_arb1);
+
+    ucs_arbiter_group_init(&group1);
+    ucs_arbiter_group_init(&group2);
+    ucs_arbiter_elem_init(&elem1.elem);
+    ucs_arbiter_elem_init(&elem2.elem);
+    ucs_arbiter_elem_init(&elem3.elem);
+    elem1.count = elem2.count = elem3.count = 0;
+
+    ucs_arbiter_group_push_head_elem(&m_arb1, &group1, &elem1.elem);
+    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem2.elem);
+
+    ucs_arbiter_group_schedule(&m_arb1, &group1);
+    ucs_arbiter_group_schedule(&m_arb1, &group2);
+
+    m_count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 1, count_cb, this);
+    EXPECT_EQ(2, m_count);
+    EXPECT_EQ(1, elem1.count);
+    EXPECT_EQ(1, elem2.count);
+    EXPECT_EQ(0, elem3.count);
+
+    /* Adding new head elem to group2 */
+    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem3.elem);
+
+    m_count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 1, count_cb, this);
+    EXPECT_EQ(2, m_count);
+    EXPECT_EQ(2, elem1.count);
+    EXPECT_EQ(1, elem2.count);
+    EXPECT_EQ(1, elem3.count);
+
+    m_count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 2, remove_cb, this);
+    EXPECT_EQ(3, m_count);
+
+    ucs_arbiter_cleanup(&m_arb1);
+}
+
 UCS_TEST_F(test_arbiter, move_groups1) {
     test_move_groups(42, 3);
 }
 
 UCS_TEST_F(test_arbiter, move_groups2) {
     test_move_groups(42, 1);
+}
+
+UCS_TEST_F(test_arbiter, move_groups1_push_head) {
+    test_move_groups(42, 3, true);
+}
+
+UCS_TEST_F(test_arbiter, move_groups2_push_head) {
+    test_move_groups(42, 1, true);
 }
 
 UCS_TEST_F(test_arbiter, desched_group) {
@@ -572,7 +649,7 @@ UCS_TEST_F(test_arbiter, desched_groups) {
     groups = new ucs_arbiter_group_t [N];
     elems  = new ucs_arbiter_elem_t [3*N];
 
-    prepare_groups(groups, elems, N, 3);
+    prepare_groups(groups, elems, N, 3, false);
 
     ucs_arbiter_group_desched(&m_arb1, &groups[N-1]);
     ucs_arbiter_group_desched(&m_arb1, &groups[0]);
@@ -613,7 +690,7 @@ UCS_TEST_F(test_arbiter, result_stop) {
     elems  = new ucs_arbiter_elem_t [nelems*N];
     ucs_arbiter_init(&m_arb1);
 
-    prepare_groups(groups, elems, N, nelems);
+    prepare_groups(groups, elems, N, nelems, false);
 
     for (int i = 0; i < N + 3; i++) {
        ucs_arbiter_dispatch(&m_arb1, 1, stop_cb, this);
