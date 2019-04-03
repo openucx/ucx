@@ -275,7 +275,7 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     return uct_ib_iface_create_qp(iface, attr, qp_p);
 }
 
-#if !HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+#if !HAVE_DEVX
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
@@ -355,6 +355,59 @@ static ucs_status_t uct_ib_mlx5_mmio_init(uct_ib_mlx5_mmio_reg_t *reg,
 
 static void uct_ib_mlx5_mmio_cleanup(uct_ib_mlx5_mmio_reg_t *reg)
 {
+}
+
+static int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
+                                    uct_ib_mlx5_md_t *md,
+                                    uct_ib_mlx5_mmio_mode_t mmio_mode)
+{
+    return uar->ctx == md->super.dev.ibv_context;
+}
+
+static ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
+                                              uct_ib_mlx5_md_t *md,
+                                              uct_ib_mlx5_mmio_mode_t mmio_mode)
+{
+#if HAVE_DEVX
+    uar->uar            = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, 0);
+    uar->super.addr.ptr = uar->uar->reg_addr;
+    uar->super.mode     = mmio_mode;
+    uar->ctx            = md->super.dev.ibv_context;
+
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+static void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
+{
+#if HAVE_DEVX
+    mlx5dv_devx_free_uar(uar->uar);
+#endif
+}
+
+ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
+                                        uct_ib_mlx5_md_t *md,
+                                        uct_ib_mlx5_txwq_t *txwq,
+                                        uct_ib_mlx5_mmio_mode_t mode)
+{
+    uct_ib_mlx5_devx_uar_t *uar;
+
+    uar = uct_worker_tl_data_get(worker,
+                                 UCT_IB_MLX5_DEVX_UAR_KEY,
+                                 uct_ib_mlx5_devx_uar_t,
+                                 uct_ib_mlx5_devx_uar_cmp,
+                                 uct_ib_mlx5_devx_uar_init,
+                                 md, mode);
+    if (UCS_PTR_IS_ERR(uar)) {
+        return UCS_PTR_STATUS(uar);
+    }
+
+    txwq->reg      = &uar->super;
+    txwq->type     = UCT_IB_MLX5_QP_TYPE_DEVX;
+
+    return UCS_OK;
 }
 
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
@@ -440,13 +493,24 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     txwq->bb_max     = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(txwq->bb_max > 0);
 
+    txwq->type = UCT_IB_MLX5_QP_TYPE_VERBS;
+
     uct_ib_mlx5_txwq_reset(txwq);
     return UCS_OK;
 }
 
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 {
-    uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+    uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
+                                                 uct_ib_mlx5_devx_uar_t);
+
+    if (txwq->type == UCT_IB_MLX5_QP_TYPE_DEVX) {
+        uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+    }
+
+    if (txwq->type == UCT_IB_MLX5_QP_TYPE_VERBS) {
+        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+    }
 }
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *rxwq)

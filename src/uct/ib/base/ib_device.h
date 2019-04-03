@@ -62,7 +62,7 @@ enum {
     UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
     UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
-                                  UCT_IB_DEVICE_FLAG_DC_V2 /* Device supports DC */
+                                  UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
 };
 
 

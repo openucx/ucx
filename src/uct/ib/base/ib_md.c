@@ -198,7 +198,7 @@ static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
     },
 };
 
-UCS_LIST_HEAD(uct_ib_md_open_list);
+UCS_LIST_HEAD(uct_ib_md_ops_list);
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
                                           const char *file, int mem_type,
@@ -478,9 +478,9 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
-                                             uct_ib_mem_t *memh,
-                                             off_t offset)
+ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
+                                         uct_ib_mem_t *memh,
+                                         off_t offset)
 {
 #if HAVE_EXP_UMR
     struct ibv_exp_mem_region *mem_reg = NULL;
@@ -892,8 +892,8 @@ err:
 #endif
 }
 
-static ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
-                                                  uct_ib_mem_t *memh)
+ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
+                                           uct_ib_mem_t *memh)
 {
 #if HAVE_EXP_UMR
     return uct_ib_dereg_mr(memh->atomic_mr);
@@ -1057,12 +1057,6 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mem_advise        = uct_ib_mem_advise,
     .mkey_pack         = uct_ib_mkey_pack,
     .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
-};
-
-uct_ib_md_ops_t uct_ib_verbs_md_ops = {
-    .memh_struct_size  = sizeof(uct_ib_mem_t),
-    .reg_atomic_key    = uct_ib_verbs_md_post_umr,
-    .dereg_atomic_key  = uct_ib_verbs_dereg_atomic_key,
 };
 
 static inline uct_ib_rcache_region_t* uct_ib_rcache_region_from_memh(uct_mem_h memh)
@@ -1561,7 +1555,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
-    uct_ib_md_open_entry_t *md_open_entry;
+    uct_ib_md_ops_entry_t *md_ops_entry;
     char tmp_md_name[UCT_MD_NAME_MAX];
     int i, num_devices, ret;
     uct_md_attr_t md_attr;
@@ -1591,9 +1585,10 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
-    ucs_list_for_each(md_open_entry, &uct_ib_md_open_list, list) {
-        status = md_open_entry->md_open(ib_device, &md);
+    ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
+        status = md_ops_entry->ops->open(ib_device, &md);
         if (status == UCS_OK) {
+            md->ops = md_ops_entry->ops;
             break;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;
@@ -1727,6 +1722,7 @@ void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
+    md->ops->cleanup(md);
     uct_ib_md_release_device_config(md);
     uct_ib_md_release_reg_method(md);
     uct_ib_md_umr_qp_destroy(md);
@@ -1749,7 +1745,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
-    md->ops          = &uct_ib_verbs_md_ops;
     dev              = &md->dev;
 
     /* Open verbs context */
@@ -1799,12 +1794,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         }
     }
 
-#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
-    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
-    }
-#endif
-
 #if HAVE_DECL_IBV_EXP_DEVICE_ATTR_PCI_ATOMIC_CAPS
     dev->pci_fadd_arg_sizes  = dev->dev_attr.pci_atomic_caps.fetch_add << 2;
     dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
@@ -1820,7 +1809,15 @@ err:
     return status;
 }
 
-UCT_IB_MD_OPEN(uct_ib_verbs_md_open, 0);
+static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
+    .open              = uct_ib_verbs_md_open,
+    .cleanup           = (void*)ucs_empty_function,
+    .memh_struct_size  = sizeof(uct_ib_mem_t),
+    .reg_atomic_key    = uct_ib_verbs_reg_atomic_key,
+    .dereg_atomic_key  = uct_ib_verbs_dereg_atomic_key,
+};
+
+UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
 
 UCT_MD_COMPONENT_DEFINE(uct_ib_mdc, UCT_IB_MD_PREFIX,
                         uct_ib_query_md_resources, uct_ib_md_open, NULL,

@@ -75,6 +75,10 @@ AC_ARG_WITH([dm],
             [],
             [with_dm=yes])
 
+#
+# DEVX Support
+#
+AC_ARG_WITH([devx], [], [], [with_devx=check])
 
 #
 # Check basic IB support: User wanted at least one IB transport, and we found
@@ -203,8 +207,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                            mlx5dv_create_qp,
                            mlx5dv_is_supported,
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
-                           MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
-                           MLX5DV_CONTEXT_FLAGS_DEVX],
+                           MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
@@ -217,6 +220,11 @@ AS_IF([test "x$with_ib" = "xyes"],
 
               AC_CHECK_DECLS([ibv_alloc_td],
                       [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
+
+       AS_IF([test "x$with_devx" != xno], [
+            AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
+                 AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
+            ], [], [[#include <infiniband/mlx5dv.h>]])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_hw=no])
