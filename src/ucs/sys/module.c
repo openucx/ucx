@@ -133,7 +133,6 @@ static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
 
     addr = dlsym(dl, symbol);
     if (addr == NULL) {
-        ucs_module_trace("could not find symbol '%s' in %s", symbol, module_path);
         return NULL;
     }
 
@@ -178,6 +177,8 @@ static void ucs_module_init(const char *module_path, void *dl)
 
     init_func = ucs_module_dlsym_shallow(module_path, dl, module_init_name);
     if (init_func == NULL) {
+        ucs_module_trace("not calling constructor '%s' in %s", module_init_name,
+                         module_path);
         return;
     }
 
