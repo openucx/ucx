@@ -124,6 +124,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     }
     ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+    uct_rc_iface_flush_fc_hard_reqs(&iface->super);
     return num_wcs;
 }
 

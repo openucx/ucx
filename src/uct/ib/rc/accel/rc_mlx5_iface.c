@@ -88,6 +88,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX]);
     if (cqe == NULL) {
+        uct_rc_iface_flush_fc_hard_reqs(&iface->super);
         return 0;
     }
 

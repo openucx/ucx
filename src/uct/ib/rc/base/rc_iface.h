@@ -133,6 +133,7 @@ typedef struct uct_rc_hdr {
 typedef struct uct_rc_fc_request {
     uct_pending_req_t super;
     uct_ep_t          *ep;
+    ucs_list_link_t   list;
 } uct_rc_fc_request_t;
 
 
@@ -200,6 +201,7 @@ struct uct_rc_iface {
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
         uct_ib_fence_info_t     fi;
+        ucs_list_link_t         fc_reqs;  /* fc requests list */
     } tx;
 
     struct {
@@ -440,5 +442,19 @@ uct_rc_iface_atomic_handler(uct_rc_iface_t *iface, int ext, unsigned length)
                      iface->config.atomic64_handler;
     }
     return NULL;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_flush_fc_hard_reqs(uct_rc_iface_t *iface)
+{
+    uct_rc_fc_request_t *fc_req, *telem;
+
+    ucs_list_for_each_safe(fc_req, telem, &iface->tx.fc_reqs, list) {
+        if (fc_req->super.func(&fc_req->super) == UCS_OK) {
+            ucs_list_del(&fc_req->list);
+        } else {
+            return;
+        }
+    }
 }
 #endif
