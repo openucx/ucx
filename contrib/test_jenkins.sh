@@ -1030,6 +1030,8 @@ run_gtest() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+	# Run the gtest for TCP over fastest device on;y 
+	export GTEST_UCT_TCP_DEVS=fastest
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1092,6 +1094,7 @@ run_gtest() {
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 
+	unset GTEST_UCT_TCP_DEVS
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED

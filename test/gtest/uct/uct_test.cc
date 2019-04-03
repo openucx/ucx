@@ -147,6 +147,10 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
                                                       bool loopback) {
+    // Run the tests for all devices for TCP by default
+    static char *env = getenv("GTEST_UCT_TCP_DEVS");
+    static std::string tcp_devs = env ? env : "all";
+    static bool tcp_dev_set = false;
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
@@ -183,6 +187,18 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             ASSERT_UCS_OK(status);
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
+                if ((tl_resources[j].tl_name == static_cast<std::string>("tcp")) &&
+                    (tcp_devs != "all")) {
+                    if (tcp_dev_set) {
+                        continue;
+                    } else {
+                        if ((tcp_devs == "") || (tcp_devs == "fastest") ||
+                            (tcp_devs == tl_resources[j].dev_name)) {
+                            tcp_dev_set = 1;
+                        }
+                    }
+                }
+
                 resource rsc;
                 rsc.md_name    = md_resources[i].md_name;
                 rsc.local_cpus = md_attr.local_cpus;
