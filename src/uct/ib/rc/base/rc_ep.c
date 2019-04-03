@@ -154,6 +154,21 @@ err:
     return status;
 }
 
+static void uct_rc_ep_iface_fc_cleanup(uct_rc_ep_t *ep)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
+    uct_rc_fc_request_t *fc_req;
+
+    ucs_list_for_each(fc_req, &iface->tx.fc_reqs, list) {
+        if (fc_req->ep == &ep->super.super) {
+            ucs_list_del(&fc_req->list);
+            ucs_mpool_put(fc_req);
+            return;
+        }
+    }
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
     uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface,
@@ -163,6 +178,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ucs_list_del(&self->list);
     uct_rc_iface_remove_qp(iface, self->txqp.qp->qp_num);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
+    uct_rc_ep_iface_fc_cleanup(self);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
 }
