@@ -429,10 +429,15 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         status = uct_rc_ep_fc_grant(&fc_req->super);
 
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &fc_req->super, 0);
+            /* force add request to group & schedule group to eliminate
+             * FC deadlock */
+            uct_pending_req_arb_group_push_head(&iface->tx.arbiter,
+                                                &ep->arb_group, &fc_req->super);
+            ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
+        } else {
+            ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
+                               ucs_status_string(status));
         }
-        ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
-                           ucs_status_string(status));
     }
 
     return uct_iface_invoke_am(&iface->super.super,
