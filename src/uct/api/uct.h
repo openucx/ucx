@@ -913,7 +913,7 @@ struct uct_completion {
  * @ingroup UCT_RESOURCE
  * @brief Pending request.
  *
- * This structure should be passed to uct_pending_add() and is used to signal
+ * This structure should be passed to @ref uct_ep_pending_add() and is used to signal
  * new available resources back to user.
  */
 struct uct_pending_req {

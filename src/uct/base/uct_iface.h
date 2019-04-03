@@ -401,6 +401,17 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 
 
 /**
+ * Add a pending request to the head of group in arbiter.
+ */
+#define uct_pending_req_arb_group_push_head(_arbiter, _arbiter_group, _req) \
+    do { \
+        ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
+        ucs_arbiter_group_push_head_elem(_arbiter, _arbiter_group, \
+                                         uct_pending_req_priv_arb_elem(_req)); \
+    } while (0)
+
+
+/**
  * Base structure for private data held inside a pending request for TLs
  * which use ucs_queue_t to progress pending requests.
  */

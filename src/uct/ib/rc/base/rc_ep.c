@@ -310,15 +310,15 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
         ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
-        if (! uct_rc_ep_has_tx_resources(ep)) {
-            /* No ep resources */
-            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-        } else {
-            /* No iface resources */
             iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
-            ucs_assertv(!uct_rc_iface_has_tx_resources(iface),
-                        "pending callback returned error but send resources are available");
+        if (!uct_rc_iface_has_tx_resources(iface)) {
+            /* No iface resources */
             return UCS_ARBITER_CB_RESULT_STOP;
+        } else {
+            /* No ep resources */
+            ucs_assertv(!uct_rc_ep_has_tx_resources(ep),
+                        "pending callback returned error but send resources are available");
+            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
         }
     }
 }
