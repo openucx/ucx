@@ -171,6 +171,17 @@ void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group);
 
 
 /**
+ * Initialize an element object.
+ *
+ * @param [in]  elem    Element to initialize.
+ */
+static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
+{
+    elem->next = NULL;
+}
+
+
+/**
  * Add a new work element to a group - internal function
  */
 void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
@@ -270,17 +281,6 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
         ucs_arbiter_group_head_desched(arbiter, head);
         head->list.next = NULL;
     }
-}
-
-
-/**
- * Initialize an element object.
- *
- * @param [in]  elem    Element to initialize.
- */
-static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
-{
-    elem->next = NULL;
 }
 
 
