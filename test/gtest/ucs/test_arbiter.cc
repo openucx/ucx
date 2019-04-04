@@ -587,6 +587,22 @@ UCS_TEST_F(test_arbiter, push_head_scheduled) {
     ucs_arbiter_dispatch(&m_arb1, 2, remove_cb, this);
     EXPECT_EQ(3, m_count);
 
+    /* Add to single scheduled group */
+    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem2.elem);
+    ucs_arbiter_group_schedule(&m_arb1, &group2);
+    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem3.elem);
+
+    m_count = 0;
+    elem2.count = elem3.count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 2, count_cb, this);
+    EXPECT_EQ(0, elem2.count);
+    EXPECT_EQ(1, elem3.count);
+    EXPECT_EQ(1, m_count);
+
+    m_count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 2, remove_cb, this);
+    EXPECT_EQ(2, m_count);
+
     ucs_arbiter_cleanup(&m_arb1);
 }
 
