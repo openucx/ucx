@@ -3,6 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (c) The University of Tennesse and the University of Tennessee
 #               Research Foundation. 2016.  ALL RIGHTS RESERVED.
+# Copyright (C) NVIDIA Corporation. 2019.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -34,7 +35,12 @@ noinst_HEADERS = \
 	sm/mm/base/mm_def.h \
 	sm/mm/base/mm_md.h \
 	sm/self/self.h \
-	tcp/tcp.h
+	tcp/tcp.h \
+	tcp/sockcm/sockcm_def.h \
+	tcp/sockcm/sockcm_iface.h \
+	tcp/sockcm/sockcm_ep.h \
+	tcp/sockcm/sockcm_md.h
+
 
 libuct_la_SOURCES = \
 	base/uct_md.c \
@@ -54,4 +60,7 @@ libuct_la_SOURCES = \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
 	tcp/tcp_net.c \
-	tcp/tcp_cm.c
+	tcp/tcp_cm.c \
+	tcp/sockcm/sockcm_iface.c \
+	tcp/sockcm/sockcm_ep.c \
+	tcp/sockcm/sockcm_md.c

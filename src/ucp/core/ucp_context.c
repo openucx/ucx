@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) NVIDIA Corporation. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -247,15 +248,13 @@ UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
-  { "sm",    { "mm", "knem", "cma", "rdmacm", NULL } },
-  { "shm",   { "mm", "knem", "cma", "rdmacm", NULL } },
+  { "sm",    { "mm", "knem", "cma", "rdmacm", "sockcm", NULL } },
+  { "shm",   { "mm", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
-  { "ud_v",  { "ud", "rdmacm", NULL } },
+  { "ud",    { "ud", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
-  { "ud",    { "ud_mlx5", "ud", "rdmacm", NULL } },
-  { "rc_v",  { "rc", "ud:aux", "rdmacm", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
-  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc", "ud:aux", "rdmacm", NULL } },
+  { "rc",    { "rc", "ud:aux", "rdmacm", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", NULL } },
   { "dc",    { "dc_mlx5", "rdmacm", NULL } },
   { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
