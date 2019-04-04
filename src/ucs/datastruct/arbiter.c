@@ -72,12 +72,12 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
     ucs_arbiter_elem_t *tail = group->tail;
     ucs_arbiter_elem_t *head;
 
-    elem->group = group;  /* Always point to group */
+    elem->group     = group;  /* Always point to group */
+    elem->list.next = NULL;   /* Not scheduled yet */
 
     if (tail == NULL) {
-        elem->list.next = NULL;   /* Not scheduled yet */
-        elem->next      = elem;   /* Connect to itself */
-        group->tail     = elem;   /* Update group tail */
+        elem->next  = elem;   /* Connect to itself */
+        group->tail = elem;   /* Update group tail */
         return;
     }
 
@@ -88,8 +88,6 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
     if (head->list.next != NULL) {
         ucs_assert(arbiter != NULL);
         ucs_arbiter_group_head_replaced(arbiter, head, elem);
-    } else {
-        elem->list.next = NULL; /* Mark the new head as un-scheduled */
     }
 }
 
