@@ -292,7 +292,7 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
         if (shmflg & SHM_RND) {
             attach_addr -= attach_addr % SHMLBA;
         }
-        ucm_dispatch_vm_munmap((void*)shmaddr, size);
+        ucm_dispatch_vm_munmap((void*)attach_addr, size);
     }
 
     event.shmat.result  = MAP_FAILED;

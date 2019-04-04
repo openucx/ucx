@@ -553,22 +553,29 @@ class mmap_hooks {
 public:
     mmap_hooks(const std::string& name, int num_threads, pthread_barrier_t *barrier):
         m_num_threads(num_threads), m_mapped_size(0), m_unmapped_size(0),
-        m_name(name), m_barrier(barrier), m_event(this)
+        m_search_ptr(NULL), m_is_ptr_found(false), m_name(name),
+        m_barrier(barrier), m_event(this)
     {
+        pthread_spin_init(&m_lock,0);
     }
 
     void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     {
+        pthread_spin_lock(&m_lock);
         switch (event_type) {
         case UCM_EVENT_VM_MAPPED:
-            m_mapped_size   += event->vm_mapped.size;
+            m_mapped_size += event->vm_mapped.size;
             break;
         case UCM_EVENT_VM_UNMAPPED:
             m_unmapped_size += event->vm_unmapped.size;
+            if (m_search_ptr == event->vm_unmapped.address) {
+                m_is_ptr_found = true;
+            }
             break;
         default:
             break;
         }
+        pthread_spin_unlock(&m_lock);
     }
 
     void test()
@@ -625,9 +632,23 @@ public:
          *    Expected behavior: unmap event on the old buffer
          */
         {
-            void *shmaddr = shmat(shmid, buffer, SHM_REMAP);
+            m_is_ptr_found = false;
+            m_search_ptr   = buffer;
+
+            /* Make sure every thread will have a unique value of 'buffer' - no
+             * thread will release its buffer before all others already
+             * allocated theirs */
+            pthread_barrier_wait(m_barrier);
+
+            /* adding 0x1 to 'buffer' with SHM_RND flag should still send event
+             * for 'buffer', because it aligns to SHMLBA
+             */
+            void *shmaddr = shmat(shmid, (char*)buffer + 0x1, SHM_REMAP | SHM_RND);
             ASSERT_EQ(buffer, shmaddr) << m_name;
 
+            if (SHMLBA > 0x1) {
+                EXPECT_TRUE(m_is_ptr_found);
+            }
             EXPECT_INCREASED(m_mapped_size, mapped_size, size, m_name);
             EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
         }
@@ -675,6 +696,9 @@ protected:
     int                     m_num_threads;
     size_t                  m_mapped_size;
     size_t                  m_unmapped_size;
+    void                    *m_search_ptr;
+    bool                    m_is_ptr_found;
+    pthread_spinlock_t      m_lock;
     std::string             m_name;
     pthread_barrier_t       *m_barrier;
     mmap_event<mmap_hooks>  m_event;
