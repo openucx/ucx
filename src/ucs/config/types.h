@@ -79,14 +79,6 @@ typedef enum {
     UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(3)
 } ucs_config_print_flags_t;
 
-/* configuration value which specifies "infinity" for a numeric variable */
-#define UCS_CONFIG_NUMERIC_INF_STR "inf"
-
-#define UCS_CONFIG_MEMUNITS_INF    SIZE_MAX
-#define UCS_CONFIG_MEMUNITS_AUTO   (SIZE_MAX - 1)
-
-#define UCS_CONFIG_ULUNITS_AUTO    (SIZE_MAX - 1)
-
 
 /**
  * Structure type for array configuration. Should be used inside the configuration

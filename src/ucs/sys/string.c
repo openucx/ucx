@@ -146,7 +146,7 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
     }
 }
 
-int ucs_str_to_memunits(const char *buf, void *dest, const void *arg)
+ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
 {
     char units[3];
     int num_fields;
@@ -154,32 +154,32 @@ int ucs_str_to_memunits(const char *buf, void *dest, const void *arg)
     size_t bytes;
 
     /* Special value: infinity */
-    if (!strcasecmp(buf, UCS_CONFIG_NUMERIC_INF_STR)) {
-        *(size_t*)dest = UCS_CONFIG_MEMUNITS_INF;
-        return 1;
+    if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
+        *(size_t*)dest = UCS_MEMUNITS_INF;
+        return UCS_OK;
     }
 
     /* Special value: auto */
     if (!strcasecmp(buf, "auto")) {
-        *(size_t*)dest = UCS_CONFIG_MEMUNITS_AUTO;
-        return 1;
+        *(size_t*)dest = UCS_MEMUNITS_AUTO;
+        return UCS_OK;
     }
 
     memset(units, 0, sizeof(units));
     num_fields = sscanf(buf, "%ld%c%c", &value, &units[0], &units[1]);
     if (num_fields == 1) {
         bytes = 1;
-    } else if (num_fields == 2 || num_fields == 3) {
+    } else if ((num_fields == 2) || (num_fields == 3)) {
         bytes = ucs_string_quantity_prefix_value(toupper(units[0]));
         if (!bytes || ((num_fields == 3) && tolower(units[1]) != 'b')) {
-            return 0;
+            return UCS_ERR_INVALID_PARAM;
         }
     } else {
-        return 0;
+        return UCS_ERR_INVALID_PARAM;
     }
 
     *(size_t*)dest = value * bytes;
-    return 1;
+    return UCS_OK;
 }
 
 char* ucs_strncpy_safe(char *dst, const char *src, size_t len)

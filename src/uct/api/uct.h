@@ -1640,7 +1640,7 @@ int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
  * @param [in]  md           Memory domain to check
  * @param [in]  memh         Memory handle to the allocated memory
  */
-int uct_md_is_hugetlb_used(uct_md_h md, uct_mem_h memh);
+int uct_md_is_hugetlb(uct_md_h md, uct_mem_h memh);
 
 
 /**

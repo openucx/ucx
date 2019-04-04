@@ -8,6 +8,7 @@
 #define UCS_STRING_H_
 
 #include "compiler_def.h"
+#include <ucs/type/status.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,6 +17,14 @@
 BEGIN_C_DECLS
 
 /** @file string.h */
+
+/* value which specifies "infinity" for a numeric variable */
+#define UCS_NUMERIC_INF_STR "inf"
+
+#define UCS_MEMUNITS_INF    SIZE_MAX
+#define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
+
+#define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
 
 /**
  * Expand a partial path to full path.
@@ -80,9 +89,10 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max);
  *
  *  @param buf   String to convert
  *  @param dest  Numeric value of the string
- *  @param arg   Argument to use
+ *
+ *  @return UCS_OK if successful, or error code otherwise.
  */
-int ucs_str_to_memunits(const char *buf, void *dest, const void *arg);
+ucs_status_t ucs_str_to_memunits(const char *buf, void *dest);
 
 
 /**

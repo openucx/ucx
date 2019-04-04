@@ -101,12 +101,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     ucp_worker_h worker;
     ucp_params_t params;
     ucp_worker_params_t worker_params;
-    ucp_mem_map_params_t mem_params;
     ucp_ep_params_t ep_params;
     ucp_address_t *address;
-    size_t address_length, mem_size_value;
+    size_t address_length;
     resource_usage_t usage;
-    ucp_mem_h memh;
     ucp_ep_h ep;
 
     status = ucp_config_read(NULL, NULL, &config);
@@ -138,24 +136,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         goto out_release_config;
     }
 
-    if (mem_size != NULL) {
-        ucs_str_to_memunits(mem_size, &mem_size_value, NULL);
-        mem_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
-                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        mem_params.address    = NULL;
-        mem_params.length     = mem_size_value;
-        mem_params.flags      = UCP_MEM_MAP_ALLOCATE;
-
-        status = ucp_mem_map(context, &mem_params, &memh);
-        if (status != UCS_OK) {
-            printf("<Failed to map memory of size %s>\n", mem_size);
-            goto out_cleanup_context;
-        }
-
-        if (print_opts & PRINT_MEM_MAP) {
-            ucp_mem_print_info(memh, context, stdout);
-        }
+    if ((print_opts & PRINT_MEM_MAP) && (mem_size != NULL)) {
+        ucp_mem_print_info(mem_size, context, stdout);
     }
 
     if (print_opts & PRINT_UCP_CONTEXT) {
@@ -164,7 +146,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     }
 
     if (!(print_opts & (PRINT_UCP_WORKER|PRINT_UCP_EP))) {
-        goto out_mem_unmap;
+        goto out_cleanup_context;
     }
 
     worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
@@ -175,7 +157,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     status = ucp_worker_create(context, &worker_params, &worker);
     if (status != UCS_OK) {
         printf("<Failed to create UCP worker>\n");
-        goto out_mem_unmap;
+        goto out_cleanup_context;
     }
 
     if (print_opts & PRINT_UCP_WORKER) {
@@ -216,13 +198,6 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
 
 out_destroy_worker:
     ucp_worker_destroy(worker);
-out_mem_unmap:
-    if (mem_size != NULL) {
-        status = ucp_mem_unmap(context, memh);
-        if (status != UCS_OK) {
-            printf("<Failed to unmap memory of size %s>\n", mem_size);
-        }
-    }
 out_cleanup_context:
     ucp_cleanup(context);
 out_release_config:

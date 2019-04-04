@@ -124,7 +124,7 @@ int ucs_config_sprintf_int(char *buf, size_t max, void *src, const void *arg)
 
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
 {
-    if (!strcasecmp(buf, UCS_CONFIG_NUMERIC_INF_STR)) {
+    if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
         *(unsigned*)dest = UINT_MAX;
         return 1;
     } else {
@@ -142,7 +142,7 @@ int ucs_config_sprintf_uint(char *buf, size_t max, void *src, const void *arg)
 {
     unsigned value = *(unsigned*)src;
     if (value == UINT_MAX) {
-        snprintf(buf, max, UCS_CONFIG_NUMERIC_INF_STR);
+        snprintf(buf, max, UCS_NUMERIC_INF_STR);
         return 1;
     } else {
         return snprintf(buf, max, "%u", value);
@@ -508,16 +508,19 @@ int ucs_config_sprintf_signo(char *buf, size_t max, void *src, const void *arg)
 
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
 {
-    return ucs_str_to_memunits(buf, dest, arg);
+    if (ucs_str_to_memunits(buf, dest) != UCS_OK) {
+        return 0;
+    }
+    return 1;
 }
 
 int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *arg)
 {
     size_t sz = *(size_t*)src;
 
-    if (sz == UCS_CONFIG_MEMUNITS_INF) {
-        snprintf(buf, max, UCS_CONFIG_NUMERIC_INF_STR);
-    } else if (sz == UCS_CONFIG_MEMUNITS_AUTO) {
+    if (sz == UCS_MEMUNITS_INF) {
+        snprintf(buf, max, UCS_NUMERIC_INF_STR);
+    } else if (sz == UCS_MEMUNITS_AUTO) {
         snprintf(buf, max, "auto");
     } else {
         ucs_memunits_to_str(sz, buf, max);
@@ -529,7 +532,7 @@ int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg)
 {
     /* Special value: auto */
     if (!strcasecmp(buf, "auto")) {
-        *(size_t*)dest = UCS_CONFIG_ULUNITS_AUTO;
+        *(size_t*)dest = UCS_ULUNITS_AUTO;
         return 1;
     }
 
@@ -540,7 +543,7 @@ int ucs_config_sprintf_ulunits(char *buf, size_t max, void *src, const void *arg
 {
     size_t val = *(size_t*)src;
 
-    if (val == UCS_CONFIG_ULUNITS_AUTO) {
+    if (val == UCS_ULUNITS_AUTO) {
         return snprintf(buf, max, "auto");
     }
 
@@ -1440,7 +1443,7 @@ void ucs_config_parser_warn_unused_env_vars()
 size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
                                size_t max_size)
 {
-    if (config_size == UCS_CONFIG_MEMUNITS_AUTO) {
+    if (config_size == UCS_MEMUNITS_AUTO) {
         return auto_size;
     } else {
         return ucs_min(config_size, max_size);

@@ -28,7 +28,7 @@ static ucs_config_field_t uct_sysv_md_config_table[] = {
 static ucs_status_t
 uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                unsigned md_map_flags, const char *alloc_name, void **address_p,
-               uct_mm_id_t *mmid_p, const char **path_p, int *is_hugetlb_used)
+               uct_mm_id_t *mmid_p, const char **path_p, int *is_hugetlb)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     int flags, shmid = 0;
@@ -49,7 +49,7 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
         status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
                                 flags | SHM_HUGETLB, alloc_name, &shmid);
         if (status == UCS_OK) {
-            *is_hugetlb_used = 1;
+            *is_hugetlb = 1;
             goto out_ok;
         }
 

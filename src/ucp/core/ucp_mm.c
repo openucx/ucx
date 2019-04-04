@@ -644,11 +644,34 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_mpool_free(worker, mp, chunk);
 }
 
-void ucp_mem_print_info(ucp_mem_h memh, ucp_context_h context, FILE *stream)
+void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
 {
-    unsigned md_index;
+    ucp_mem_map_params_t mem_params;
+    size_t mem_size_value;
     char memunits_str[32];
+    ucs_status_t status;
     uct_mem_h uct_memh;
+    unsigned md_index;
+    ucp_mem_h memh;
+
+    status = ucs_str_to_memunits(mem_size, &mem_size_value);
+    if (status != UCS_OK) {
+        printf("<Failed to convert a memunits string>\n");
+        return;
+    }
+
+    mem_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_params.address    = NULL;
+    mem_params.length     = mem_size_value;
+    mem_params.flags      = UCP_MEM_MAP_ALLOCATE;
+
+    status = ucp_mem_map(context, &mem_params, &memh);
+    if (status != UCS_OK) {
+        printf("<Failed to map memory of size %s>\n", mem_size);
+        return;
+    }
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP memory handle\n");
@@ -666,7 +689,7 @@ void ucp_mem_print_info(ucp_mem_h memh, ucp_context_h context, FILE *stream)
 
                 uct_memh = ucp_memh2uct(memh, md_index);
                 if (uct_memh != NULL) {
-                    if (uct_md_is_hugetlb_used(context->tl_mds[md_index].md, uct_memh)) {
+                    if (uct_md_is_hugetlb(context->tl_mds[md_index].md, uct_memh)) {
                         fprintf(stream, "hugetlb on");
                     } else {
                         fprintf(stream, "hugetlb off");
@@ -684,4 +707,9 @@ void ucp_mem_print_info(ucp_mem_h memh, ucp_context_h context, FILE *stream)
     }
     fprintf(stream, "\n");
     fprintf(stream, "#\n");
+
+    status = ucp_mem_unmap(context, memh);
+    if (status != UCS_OK) {
+        printf("<Failed to unmap memory of size %s>\n", mem_size);
+    }
 }

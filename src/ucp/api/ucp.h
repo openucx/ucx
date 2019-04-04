@@ -1863,15 +1863,15 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
  * @ingroup UCP_MEM
  * @brief Print memory mapping information.
  *
- * This routine prints information about the memory handle configuration: including
- * the mapped memory length, the allocation method, and other useful information
- * associated with the memory handle.
+ * This routine maps memory and prints information about the created memory handle:
+ * including the mapped memory length, the allocation method, and other useful
+ * information associated with the memory handle.
  *
- * @param [in] memh         Print this memory handle's configuration.
- * @param [in] context      The context on which the memory was mapped.
+ * @param [in] mem_size     Size of the memory to map.
+ * @param [in] context      The context on which the memory is mapped.
  * @param [in] stream       Output stream on which to print the information.
  */
-void ucp_mem_print_info(const ucp_mem_h memh, ucp_context_h context, FILE *stream);
+void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream);
 
 
 /**

@@ -12,9 +12,9 @@
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/compiler.h>
-#include <ucs/config/parser.h>
-#include <ucs/datastruct/mpool.inl>
+#include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
+#include <ucs/datastruct/mpool.inl>
 
 #define UCT_IB_MAX_IOV                     8UL
 #define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u

@@ -29,8 +29,7 @@ static void usage() {
     printf("  -p              Show UCP context information\n");
     printf("  -w              Show UCP worker information\n");
     printf("  -e              Show UCP endpoint configuration\n");
-    printf("  -m              Show UCP memory map configuration (default memory size is 1MB. Can be set with -l)\n");
-    printf("  -l              Memory size to map (used with -m). Default is 1MB\n");
+    printf("  -m              Show UCP memory map configuration (requires memory size as an argument)\n");
     printf("  -u <features>   UCP context features to use. String of one or more of:\n");
     printf("                    'a' : atomic operations\n");
     printf("                    'r' : remote memory access\n");
@@ -70,7 +69,7 @@ int main(int argc, char **argv)
     mem_size                 = NULL;
     dev_type_bitmap          = -1;
     ucp_ep_params.field_mask = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpmet:n:u:D:l:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -107,9 +106,7 @@ int main(int argc, char **argv)
             break;
         case 'm':
             print_opts |= PRINT_MEM_MAP;
-            if (mem_size == NULL) {
-                mem_size = "1M";
-            }
+            mem_size = optarg;
             break;
         case 't':
             tl_name = optarg;
@@ -155,9 +152,6 @@ int main(int argc, char **argv)
                 usage();
                 return -1;
             }
-            break;
-        case 'l':
-            mem_size = optarg;
             break;
         case 'h':
             usage();

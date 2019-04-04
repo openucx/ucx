@@ -240,7 +240,7 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ((unsigned)COLOR_RED, opts->coach.driver_seat.color);
     EXPECT_EQ((unsigned)COLOR_BLUE, opts->coach.passenger_seat.color);
     EXPECT_EQ((unsigned)COLOR_BLACK, opts->coach.rear_seat.color);
-    EXPECT_EQ(UCS_CONFIG_ULUNITS_AUTO, opts->vin);
+    EXPECT_EQ(UCS_ULUNITS_AUTO, opts->vin);
     EXPECT_EQ(200UL, opts->engine.power);
 
     EXPECT_EQ(1024.0, opts->bw_bytes);

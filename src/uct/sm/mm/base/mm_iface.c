@@ -364,7 +364,7 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     uct_mm_fifo_ctl_t *ctl;
     size_t size_to_alloc;
     ucs_status_t status;
-    int is_hugetlb_used;
+    int is_hugetlb;
 
     /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
@@ -372,7 +372,7 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     status = uct_mm_md_mapper_ops(md)->alloc(md, &size_to_alloc, config->hugetlb_mode,
                                              0, "mm fifo", &iface->shared_mem,
                                              &iface->fifo_mm_id, &iface->path,
-                                             &is_hugetlb_used);
+                                             &is_hugetlb);
     if (status != UCS_OK) {
         ucs_error("Failed to allocate memory for the receive FIFO in mm. size: %zu : %m",
                    size_to_alloc);

@@ -278,7 +278,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
      */
     if ((events & UCP_WAKEUP_TAG_SEND) ||
         ((events & UCP_WAKEUP_TAG_RECV) &&
-         (context->config.ext.rndv_thresh != UCS_CONFIG_MEMUNITS_INF)))
+         (context->config.ext.rndv_thresh != UCS_MEMUNITS_INF)))
     {
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
