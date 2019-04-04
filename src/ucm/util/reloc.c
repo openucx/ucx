@@ -17,7 +17,6 @@
 #include "reloc.h"
 
 #include <ucs/sys/compiler.h>
-#include <ucm/util/log.h>
 #include <ucm/util/sys.h>
 
 #include <sys/fcntl.h>
@@ -26,7 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <link.h>
 
@@ -309,26 +307,6 @@ static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
     .symbol = "dlopen",
     .value  = ucm_dlopen
 };
-
-void* ucm_reloc_get_orig(const char *symbol, void *replacement)
-{
-    const char *error;
-    void *func_ptr;
-
-    func_ptr = dlsym(RTLD_NEXT, symbol);
-    if (func_ptr == NULL) {
-        (void)dlerror();
-        func_ptr = dlsym(RTLD_DEFAULT, symbol);
-        if (func_ptr == replacement) {
-            error = dlerror();
-            ucm_fatal("could not find address of original %s(): %s", symbol,
-                      error ? error : "Unknown error");
-        }
-    }
-
-    ucm_debug("original %s() is at %p", symbol, func_ptr);
-    return func_ptr;
-}
 
 /* called with lock held */
 static ucs_status_t ucm_reloc_install_dlopen()
