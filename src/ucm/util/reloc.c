@@ -17,7 +17,6 @@
 #include "reloc.h"
 
 #include <ucs/sys/compiler.h>
-#include <ucm/util/log.h>
 #include <ucm/util/sys.h>
 
 #include <sys/fcntl.h>
@@ -26,7 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <link.h>
 

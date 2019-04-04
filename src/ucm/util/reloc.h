@@ -41,10 +41,12 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
 /**
  * Get the original implementation of 'symbol', which is not equal to 'replacement'.
  *
- * This function is set to static to make sure that the symbol search done here
- * is done from within the shared object it was invoked from.
+ * This function is static to make sure the symbol search is done from the context
+ * of the shared object which defines the replacement function.
+ * If the replacement function is defined in a loadbale module, the symbols it
+ * imports from other libraries may not be available in global scope.
  *
- * @param [in]  symbol       Symbol name,
+ * @param [in]  symbol       Symbol name.
  * @param [in]  replacement  Symbol replacement, which should be ignored.
  *
  * @return Original function pointer for 'symbol'.
