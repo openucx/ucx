@@ -9,7 +9,7 @@
 
   <groupId>org.ucx</groupId>
   <artifactId>jucx</artifactId>
-  <version>@VERSION@-SNAPSHOT</version>
+  <version>@VERSION@</version>
   <packaging>jar</packaging>
 
   <name>jucx</name>
@@ -36,12 +36,12 @@
     <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>
     <jucx.src.dir>${ucx.src.dir}/../bindings/java</jucx.src.dir>
     <ucx.build.dir>@abs_top_builddir@</ucx.build.dir>
-    <native.dir>${ucx.build.dir}/bindings/java/src/main/native/</native.dir>
+    <native.dir>${ucx.build.dir}/bindings/java/src/main/native</native.dir>
     <ucm.lib.path>${ucx.build.dir}/src/ucm/.libs</ucm.lib.path>
     <ucs.lib.path>${ucx.build.dir}/src/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.build.dir}/src/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.build.dir}/src/ucp/.libs</ucp.lib.path>
-    <ucx.inst.dir>@prefix@/lib</ucx.inst.dir>
+    <ucx.inst.dir>@libdir@</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -216,7 +216,7 @@
           </javahClassNames>
           <sources>
             <source>
-              <directory>${jucx.src.dir}/src/main/native/</directory>
+              <directory>${jucx.src.dir}/src/main/native</directory>
             </source>
           </sources>
         </configuration>
