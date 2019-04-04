@@ -422,6 +422,11 @@ UCS_TEST_F(malloc_hook, multi_threads) {
     pthread_barrier_destroy(&barrier);
 }
 
+UCS_TEST_F(malloc_hook, asprintf) {
+    /* Install memory hooks */
+    (void)dlerror();
+}
+
 UCS_TEST_F(malloc_hook, fork) {
     static const int num_processes = 4;
     pthread_barrier_t barrier;
