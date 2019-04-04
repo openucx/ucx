@@ -58,10 +58,17 @@ static void ucs_arbiter_group_head_replaced(ucs_arbiter_t *arbiter,
     ucs_assert(old_head->list.next != NULL);
     ucs_assert(old_head != new_head);
 
-    ucs_list_insert_replace(old_head->list.prev, old_head->list.next,
-                            &new_head->list);
-    if (arbiter->current == old_head) {
+    if (old_head->list.next == &old_head->list) {
+        /* single group which was scheduled */
+        ucs_assert(arbiter->current == old_head);
+        ucs_list_head_init(&new_head->list);
         arbiter->current = new_head;
+    } else {
+        ucs_list_insert_replace(old_head->list.prev, old_head->list.next,
+                                &new_head->list);
+        if (arbiter->current == old_head) {
+            arbiter->current = new_head;
+        }
     }
 }
 
@@ -168,28 +175,22 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
     } while (ptr != tail);
 
     if (is_scheduled) {
-        if (orig_head == prev_group) {
-            /* this is the only group which was scheduled */
-            if (group->tail == NULL) {
+        if (group->tail == NULL) {
+            /* group became empty */
+            if (orig_head == prev_group) {
                 /* group became empty - no more groups scheduled */
                 arbiter->current = NULL;
-            } else if (orig_head != head) {
-                /* keep the group scheduled, but with new head element */
-                arbiter->current = head;
-                ucs_list_head_init(&head->list);
-            }
-        } else {
-            if (group->tail == NULL) {
+            } else {
                 /* group became empty - deschedule it */
                 prev_group->list.next = &next_group->list;
                 next_group->list.prev = &prev_group->list;
                 if (arbiter->current == orig_head) {
                     arbiter->current = next_group;
                 }
-            } else if (orig_head != head) {
-                /* keep the group scheduled, but with new head element */
-                ucs_arbiter_group_head_replaced(arbiter, orig_head, head);
             }
+        } else if (orig_head != head) {
+            /* head changed, and group is non-empty */
+            ucs_arbiter_group_head_replaced(arbiter, orig_head, head);
         }
     } else if ((orig_head != head) && (group->tail != NULL)) {
         /* Mark new head as unscheduled */
