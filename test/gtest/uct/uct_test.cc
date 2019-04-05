@@ -145,8 +145,24 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
     freeifaddrs(ifaddr);
 }
 
+static void filter_tcp_non_rdma_devs(std::vector<const resource*>& resources,
+                                     const resource* const &res,
+                                     std::vector<const resource*>& rdma_dev_resources)
+{
+    if (res->tl_name == "tcp") {
+        if (ucs::is_rdmacm_netdev(res->dev_name.c_str())) {
+            rdma_dev_resources.push_back(&*res);
+        } else {
+            return;
+        }
+    }
+
+    resources.push_back(&*res);
+}
+
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
-                                                      bool loopback) {
+                                                      bool loopback)
+{
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
@@ -204,7 +220,23 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
         uct_release_md_resource_list(md_resources);
     }
 
-    return filter_resources(all_resources, tl_name);
+    std::vector<const resource*> result =
+        filter_resources(all_resources, filter_by_name, tl_name);
+
+    if ((getenv("GTEST_UCT_TCP_RDMA_DEVS_ONLY") != NULL) && !result.empty()) {
+        std::vector<const resource*> rdma_dev_resources;
+
+        std::vector<const resource*> without_tcp_non_rdma_devs =
+            filter_resources(result, filter_tcp_non_rdma_devs, rdma_dev_resources);
+
+        /* If there are no IP interfaces configured on RDMA devices found,
+         * it returns all resources at the end of the function */
+        if (!rdma_dev_resources.empty()) {
+            return without_tcp_non_rdma_devs;
+        }
+    }
+
+    return result;
 }
 
 void uct_test::init() {

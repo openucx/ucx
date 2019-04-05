@@ -187,16 +187,24 @@ protected:
     };
 
     template <typename T>
-    static std::vector<const resource*> filter_resources(const std::vector<T>& resources,
-                                                         const std::string& tl_name)
+    static void filter_by_name(std::vector<const resource*> &result,
+                               const T& res, const std::string& tl_name)
+    {
+        if ((tl_name.empty() || (res.tl_name == tl_name))) {
+            result.push_back(&res);
+        }
+    }
+
+    template <typename T, typename M> static std::vector<const resource*>
+    filter_resources(const std::vector<T>& resources,
+                     void (*filter_cond)(std::vector<const resource*> &result,
+                                         const T& res, M& arg), M& arg)
     {
         std::vector<const resource*> result;
-        for (typename std::vector<T>::const_iterator iter = resources.begin();
-                        iter != resources.end(); ++iter)
-        {
-            if (tl_name.empty() || (iter->tl_name == tl_name)) {
-                result.push_back(&*iter);
-            }
+        typename std::vector<T>::const_iterator iter;
+
+        for (iter = resources.begin(); iter != resources.end(); ++iter) {
+            filter_cond(result, *iter, arg);
         }
         return result;
     }
