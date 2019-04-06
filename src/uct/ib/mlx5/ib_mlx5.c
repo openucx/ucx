@@ -370,6 +370,11 @@ static ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 {
 #if HAVE_DEVX
     uar->uar            = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, 0);
+    if (uar->uar == NULL) {
+        ucs_error("mlx5dv_devx_alloc_uar() failed: %m");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     uar->super.addr.ptr = uar->uar->reg_addr;
     uar->super.mode     = mmio_mode;
     uar->ctx            = md->super.dev.ibv_context;
