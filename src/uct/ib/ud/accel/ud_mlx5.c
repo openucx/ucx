@@ -748,7 +748,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    self->qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
     status = uct_ib_mlx5_txwq_init(self->super.super.super.worker,
                                    config->mlx5_common.mmio_mode, &self->tx.wq,
                                    self->super.qp);

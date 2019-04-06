@@ -298,7 +298,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     uct_rc_iface_fill_attr(&iface->super.super, &attr,
                            iface->super.super.config.tx_qp_len);
 
-    status = uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->qp, &attr);
+    status = uct_ib_mlx5_iface_set_verbs(ib_iface, &dci->qp, &attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -343,7 +343,6 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
 #if ENABLE_ASSERT
     dci->flags   = 0;
 #endif
-    dci->qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                    iface->super.tx.mmio_mode, &dci->txwq,
                                    dci->qp.verbs.qp);

@@ -475,11 +475,13 @@ static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
-uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
+uct_ib_mlx5_iface_set_verbs(uct_ib_iface_t *iface,
                             uct_ib_mlx5_qp_t *qp,
                             uct_ib_qp_attr_t *attr)
 {
     ucs_status_t status;
+
+    qp->type                  = UCT_IB_MLX5_QP_TYPE_VERBS;
 
     status = uct_ib_mlx5_iface_init_res_domain(iface, qp);
     if (status) {
