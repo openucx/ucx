@@ -416,19 +416,22 @@ void test_uct_peer_failure_multiple::init()
 
 size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
 {
-    const std::string   &tl_name = GetParam()->tl_name;
-    std::string         name, val;
-    size_t              tx_queue_len;
+    const std::string &tl_name = GetParam()->tl_name;
+    std::string       name     = "";
+    std::string       val;
+    size_t            tx_queue_len;
 
-    if ((tl_name == "rc") || (tl_name == "rc_mlx5")) {
-        name = "RC_RC_IB_TX_QUEUE_LEN";
+    if (tl_name == "rc") {
+        name = "RC_IB_";
+    } else if (tl_name == "rc_mlx5") {
+        name = "RC_RC_IB_";
     } else if (tl_name == "dc_mlx5") {
-        name = "DC_RC_RC_IB_TX_QUEUE_LEN";
+        name = "DC_RC_IB_";
     } else if ((tl_name == "ud") || (tl_name == "ud_mlx5")) {
-        name = "UD_IB_TX_QUEUE_LEN";
-    } else {
-        name = "TX_QUEUE_LEN";
+        name = "UD_IB_";
     }
+
+    name += "TX_QUEUE_LEN";
 
     if (get_config(name, val)) {
         tx_queue_len = ucs::from_string<size_t>(val);
