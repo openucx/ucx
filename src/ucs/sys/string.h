@@ -21,7 +21,9 @@ BEGIN_C_DECLS
 /* value which specifies "infinity" for a numeric variable */
 #define UCS_NUMERIC_INF_STR "inf"
 
+/* the numeric value of "infinity" */
 #define UCS_MEMUNITS_INF    SIZE_MAX
+/* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
 
 #define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)

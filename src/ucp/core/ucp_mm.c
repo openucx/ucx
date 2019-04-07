@@ -674,7 +674,7 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
     }
 
     fprintf(stream, "#\n");
-    fprintf(stream, "# UCP memory handle\n");
+    fprintf(stream, "# UCP memory allocation\n");
     fprintf(stream, "#\n");
 
     ucs_memunits_to_str(memh->length, memunits_str, sizeof(memunits_str));
@@ -688,12 +688,8 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
                 fprintf(stream, "%s ",context->tl_mds[md_index].rsc.md_name);
 
                 uct_memh = ucp_memh2uct(memh, md_index);
-                if (uct_memh != NULL) {
-                    if (uct_md_is_hugetlb(context->tl_mds[md_index].md, uct_memh)) {
+                if ((uct_memh != NULL) && (uct_md_is_hugetlb(context->tl_mds[md_index].md, uct_memh))) {
                         fprintf(stream, "hugetlb on");
-                    } else {
-                        fprintf(stream, "hugetlb off");
-                    }
                 }
                 break;
             }
