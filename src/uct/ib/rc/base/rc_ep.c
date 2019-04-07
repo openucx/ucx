@@ -309,8 +309,8 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
-        ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
-            iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+        ep    = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
+        iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
         if (!uct_rc_iface_has_tx_resources(iface)) {
             /* No iface resources */
             return UCS_ARBITER_CB_RESULT_STOP;
