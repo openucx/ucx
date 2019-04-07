@@ -29,9 +29,6 @@ BuildRequires: automake autoconf libtool gcc-c++ numactl-devel
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
 %endif
-%if %{with cuda}
-BuildRequires: xorg-x11-drv-nvidia-devel
-%endif
 %if %{with gdrcopy}
 BuildRequires: gdrcopy
 %endif
