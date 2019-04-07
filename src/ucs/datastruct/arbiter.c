@@ -94,14 +94,7 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
 
     if (head->list.next != NULL) {
         ucs_assert(arbiter != NULL);
-        if (ucs_list_prev(&head->list, ucs_arbiter_elem_t, list) == head) {
-            arbiter->current = elem;
-            ucs_list_head_init(&elem->list);
-        } else {
-            ucs_arbiter_group_head_replaced(arbiter, head, elem);
-        }
-    } else {
-        elem->list.next = NULL; /* Mark the new head as un-scheduled */
+        ucs_arbiter_group_head_replaced(arbiter, head, elem);
     }
 }
 
