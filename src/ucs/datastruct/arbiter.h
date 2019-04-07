@@ -169,6 +169,7 @@ void ucs_arbiter_cleanup(ucs_arbiter_t *arbiter);
 void ucs_arbiter_group_init(ucs_arbiter_group_t *group);
 void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group);
 
+
 /**
  * Initialize an element object.
  *
@@ -179,11 +180,21 @@ static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
     elem->next = NULL;
 }
 
+
 /**
  * Add a new work element to a group - internal function
  */
 void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem);
+
+
+/**
+ * Add a new work element to the head of a group - internal function
+ */
+void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
+                                             ucs_arbiter_group_t *group,
+                                             ucs_arbiter_elem_t *elem);
+
 
 /**
  * Call the callback for each element from a group. If the callback returns
@@ -197,6 +208,7 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg);
 
+
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
 
 
@@ -204,9 +216,11 @@ void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
 void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
                                          ucs_arbiter_group_t *group);
 
+
 /* Internal function */
 void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg);
+
 
 /* Internal function */
 void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
@@ -248,6 +262,7 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
     }
 }
 
+
 /**
  * Deschedule already scheduled group. If the group is not scheduled, the operation
  * will have no effect
@@ -267,6 +282,7 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
         head->list.next = NULL;
     }
 }
+
 
 /**
  * @return Whether the element is queued in an arbiter group.
@@ -294,6 +310,28 @@ ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
     }
 
     ucs_arbiter_group_push_elem_always(group, elem);
+}
+
+
+/**
+ * Add a new work element to the head of a group if it is not already there
+ *
+ * @param [in]  arbiter  Arbiter object the group is on (since we modify the head
+ *                       element of a potentially scheduled group). If the group
+ *                       is not scheduled, arbiter may be NULL.
+ * @param [in]  group    Group to add the element to.
+ * @param [in]  elem     Work element to add.
+ */
+static inline void
+ucs_arbiter_group_push_head_elem(ucs_arbiter_t *arbiter,
+                                 ucs_arbiter_group_t *group,
+                                 ucs_arbiter_elem_t *elem)
+{
+    if (ucs_arbiter_elem_is_scheduled(elem)) {
+        return;
+    }
+
+    ucs_arbiter_group_push_head_elem_always(arbiter, group, elem);
 }
 
 
@@ -327,6 +365,7 @@ static inline ucs_arbiter_group_t* ucs_arbiter_elem_group(ucs_arbiter_elem_t *el
 {
     return elem->group;
 }
+
 
 /**
  * @return true if element is the last one in the group
