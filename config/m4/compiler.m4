@@ -142,6 +142,13 @@ AC_DEFUN([DETECT_UARCH],
           ax_cpu="thunderxt88" ;;
         esac
         ;;
+      0x48) case $cpupart in
+        0xd01 | 0x0d01)
+          AC_DEFINE([HAVE_AARCH64_HI1620], 1, [Huawei Kunpeng 920])
+          ax_cpu="tsv110"
+          ax_arch="armv8.2-a" ;;
+        esac
+        ;;
       *) ax_cpu="native"
          ;;
     esac 
