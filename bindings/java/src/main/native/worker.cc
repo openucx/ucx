@@ -73,3 +73,32 @@ Java_org_ucx_jucx_ucp_UcpWorker_releaseWorkerNative(JNIEnv *env, jclass cls,
 {
     ucp_worker_destroy((ucp_worker_h)ucp_worker_ptr);
 }
+
+
+JNIEXPORT jobject JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_workerGetAddressNative(JNIEnv *env, jclass cls,
+                                                       jlong ucp_worker_ptr)
+{
+    ucp_address_t *addr;
+    size_t len;
+    ucs_status_t status;
+
+    status = ucp_worker_get_address((ucp_worker_h)ucp_worker_ptr, &addr, &len);
+
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+        return NULL;
+    }
+
+    return env->NewDirectByteBuffer(addr, len);
+}
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_releaseAddressNative(JNIEnv *env, jclass cls,
+                                                     jlong ucp_worker_ptr,
+                                                     jobject ucp_address)
+{
+
+    ucp_worker_release_address((ucp_worker_h)ucp_worker_ptr,
+                               (ucp_address_t *)env->GetDirectBufferAddress(ucp_address));
+}

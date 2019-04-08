@@ -6,6 +6,7 @@
 package org.ucx.jucx.ucp;
 
 import java.io.Closeable;
+import java.nio.ByteBuffer;
 
 import org.ucx.jucx.UcxNativeStruct;
 
@@ -40,7 +41,29 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         setNativeId(null);
     }
 
+    /**
+     * This routine returns the address of the worker object. This address can be
+     * passed to remote instances of the UCP library in order to connect to this
+     * worker. Ucp worker address - is an opaque object that is used as an
+     * identifier for a {@link UcpWorker} instance.
+     */
+    public ByteBuffer getAddress() {
+        ByteBuffer nativeUcpAddress = workerGetAddressNative(getNativeId());
+        // 1. Allocating java native ByteBuffer (managed by java's reference count cleaner).
+        ByteBuffer result = ByteBuffer.allocateDirect(nativeUcpAddress.capacity());
+        // 2. Copy content of native ucp address to java's buffer.
+        result.put(nativeUcpAddress);
+        result.clear();
+        // 3. Release an address of the worker object. Memory allocated in JNI must be freed by JNI.
+        releaseAddressNative(getNativeId(), nativeUcpAddress);
+        return result;
+    }
+
     private static native long createWorkerNative(UcpWorkerParams params, long ucpContextId);
 
     private static native void releaseWorkerNative(long workerId);
+
+    private static native ByteBuffer workerGetAddressNative(long workerId);
+
+    private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
 }

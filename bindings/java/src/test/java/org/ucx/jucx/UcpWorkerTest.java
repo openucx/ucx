@@ -6,16 +6,12 @@
 package org.ucx.jucx;
 
 import org.junit.Test;
-import org.ucx.jucx.ucp.UcpContext;
-import org.ucx.jucx.ucp.UcpParams;
-import org.ucx.jucx.ucp.UcpWorker;
-import org.ucx.jucx.ucp.UcpWorkerParams;
+import org.ucx.jucx.ucp.*;
 import org.ucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.*;
 
 public class UcpWorkerTest {
     static int numWorkers = Runtime.getRuntime().availableProcessors();
@@ -75,5 +71,16 @@ public class UcpWorkerTest {
         }
         tcpContext.close();
         rdmaContext.close();
+    }
+
+    @Test
+    public void testGetWorkerAddress() {
+        UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
+        UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
+        ByteBuffer workerAddress = worker.getAddress();
+        assertNotNull(workerAddress);
+        assertTrue(workerAddress.capacity() > 0);
+        worker.close();
+        context.close();
     }
 }
