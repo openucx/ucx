@@ -48,36 +48,6 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     uct_rc_verbs_txqp_posted(&ep->super.txqp, &ep->txcnt, &iface->super, send_flags & IBV_SEND_SIGNALED);
 }
 
-#if HAVE_DECL_IBV_EXP_POST_SEND && (HAVE_DECL_IBV_EXP_WR_NOP || HAVE_IB_EXT_ATOMICS)
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
-                           uint64_t signal, int max_log_sge)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                 uct_rc_verbs_iface_t);
-    uct_rc_txqp_check(&ep->super.txqp);
-
-    struct ibv_exp_send_wr *bad_wr;
-    int ret;
-
-    signal |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
-                                         IBV_EXP_SEND_SIGNALED);
-    wr->exp_send_flags = signal;
-    wr->wr_id          = uct_rc_txqp_unsignaled(&ep->super.txqp);
-
-    uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
-                             (wr->exp_opcode == IBV_EXP_WR_SEND) ?
-                             uct_rc_ep_packet_dump : NULL);
-
-    ret = ibv_exp_post_send(ep->super.txqp.qp, wr, &bad_wr);
-    if (ret != 0) {
-        ucs_fatal("ibv_exp_post_send() returned %d (%m)", ret);
-    }
-
-    uct_rc_verbs_txqp_posted(&ep->super.txqp, &ep->txcnt, &iface->super, signal);
-}
-#endif
-
 /*
  * Helper function for posting sends with a descriptor.
  * User needs to fill: wr.opcode, wr.sg_list, wr.num_sge, first sge length, and
@@ -153,48 +123,6 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                                        IBV_SEND_FENCE));
     return UCS_INPROGRESS;
 }
-
-#if HAVE_IB_EXT_ATOMICS
-static inline void
-uct_rc_verbs_ep_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
-                               uint64_t compare_mask, uint64_t compare_add,
-                               uint64_t swap, uint64_t remote_addr, uct_rkey_t rkey,
-                               uct_rc_iface_send_desc_t *desc, uint64_t force_sig)
-{
-    struct ibv_exp_send_wr wr;
-    struct ibv_sge sge;
-
-    uct_rc_verbs_fill_ext_atomic_wr(&wr, &sge, opcode, length, compare_mask,
-                                    compare_add, swap, remote_addr, rkey, ep->super.atomic_mr_offset);
-    UCT_RC_VERBS_FILL_DESC_WR(&wr, desc);
-    UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
-    uct_rc_verbs_exp_post_send(ep, &wr, force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE, INT_MAX);
-    uct_rc_txqp_add_send_op_sn(&ep->super.txqp, &desc->super, ep->txcnt.pi);
-}
-
-static inline ucs_status_t
-uct_rc_verbs_ep_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
-                           uint32_t length, uint64_t compare_mask,
-                           uint64_t compare_add, uint64_t swap, uint64_t remote_addr,
-                           uct_rkey_t rkey, uct_completion_t *comp)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                 uct_rc_verbs_iface_t);
-    uct_rc_send_handler_t handler = uct_rc_iface_atomic_handler(&iface->super, 1,
-                                                                length);
-    uct_rc_iface_send_desc_t *desc;
-
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->short_desc_mp,
-                                          desc, handler, result, comp);
-    uct_rc_verbs_ep_ext_atomic_post(ep, opcode, length, compare_mask, compare_add,
-                                    swap, remote_addr, rkey, desc,
-                                    IBV_EXP_SEND_SIGNALED |
-                                    uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
-                                                           IBV_EXP_SEND_FENCE));
-    return UCS_INPROGRESS;
-}
-#endif
 
 ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        unsigned length, uint64_t remote_addr,
@@ -398,76 +326,18 @@ ucs_status_t uct_rc_verbs_ep_atomic64_post(uct_ep_h tl_ep, unsigned opcode, uint
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_atomic32_post(uct_ep_h tl_ep, unsigned opcode, uint32_t value,
-                                           uint64_t remote_addr, uct_rkey_t rkey)
-{
-#if HAVE_IB_EXT_ATOMICS
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_iface_send_desc_t *desc;
-
-    if (opcode != UCT_ATOMIC_OP_ADD) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->short_desc_mp, desc);
-
-    uct_rc_verbs_ep_ext_atomic_post(ep, IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,
-                                    sizeof(uint32_t), 0, value, 0, remote_addr,
-                                    rkey, desc, IBV_EXP_SEND_SIGNALED);
-    return UCS_OK;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
 ucs_status_t uct_rc_verbs_ep_atomic64_fetch(uct_ep_h tl_ep, uct_atomic_op_t opcode,
                                             uint64_t value, uint64_t *result,
                                             uint64_t remote_addr, uct_rkey_t rkey,
                                             uct_completion_t *comp)
 {
-    switch (opcode) {
-    case UCT_ATOMIC_OP_ADD:
-        return uct_rc_verbs_ep_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
-                                      IBV_WR_ATOMIC_FETCH_AND_ADD, result, value, 0,
-                                      remote_addr, rkey, comp);
-#if HAVE_IB_EXT_ATOMICS
-    case UCT_ATOMIC_OP_SWAP:
-        return uct_rc_verbs_ep_ext_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
-                                          IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP,
-                                          result, sizeof(uint64_t), 0, 0, value, remote_addr,
-                                          rkey, comp);
-#endif
-    default:
-        break;
+    if (opcode != UCT_ATOMIC_OP_ADD) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
-    return UCS_ERR_UNSUPPORTED;
-}
-
-ucs_status_t uct_rc_verbs_ep_atomic32_fetch(uct_ep_h tl_ep, uct_atomic_op_t opcode,
-                                            uint32_t value, uint32_t *result,
-                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                            uct_completion_t *comp)
-{
-#if HAVE_IB_EXT_ATOMICS
-    int op;
-    uint32_t add;
-    uint32_t swap;
-    ucs_status_t status;
-
-    status = uct_rc_verbs_ep_atomic32_data(opcode, value, &op, &add, &swap);
-    if (UCS_STATUS_IS_ERR(status)) {
-        return status;
-    }
-
-    return uct_rc_verbs_ep_ext_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t), op,
-                                      result, sizeof(uint32_t), 0, add, swap,
-                                      remote_addr, rkey, comp);
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
+    return uct_rc_verbs_ep_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
+            IBV_WR_ATOMIC_FETCH_AND_ADD, result, value, 0,
+            remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
@@ -477,40 +347,6 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, ui
     return uct_rc_verbs_ep_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
                                   IBV_WR_ATOMIC_CMP_AND_SWP, result, compare, swap,
                                   remote_addr, rkey, comp);
-}
-
-ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
-                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                            uint32_t *result, uct_completion_t *comp)
-{
-#if HAVE_IB_EXT_ATOMICS
-    return uct_rc_verbs_ep_ext_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
-                                      IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP,
-                                      result, sizeof(uint32_t), (uint32_t)(-1),
-                                      compare, swap, remote_addr, rkey, comp);
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
-static ucs_status_t uct_rc_verbs_ep_nop(uct_rc_verbs_ep_t *ep)
-{
-#if HAVE_DECL_IBV_EXP_WR_NOP
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                 uct_rc_verbs_iface_t);
-    struct ibv_exp_send_wr wr;
-
-    wr.next           = NULL;
-    wr.num_sge        = 0;
-    wr.exp_opcode     = IBV_EXP_WR_NOP;
-    wr.exp_send_flags = IBV_EXP_SEND_FENCE;
-    wr.comp_mask      = 0;
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    uct_rc_verbs_exp_post_send(ep, &wr, IBV_EXP_SEND_SIGNALED, INT_MAX);
-    return UCS_OK;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
@@ -526,11 +362,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        if (IBV_DEVICE_HAS_NOP(&uct_ib_iface_device(&iface->super.super)->dev_attr)) {
-            status = uct_rc_verbs_ep_nop(ep);
-        } else {
-            status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
-        }
+        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
         if (status != UCS_OK) {
             return status;
         }

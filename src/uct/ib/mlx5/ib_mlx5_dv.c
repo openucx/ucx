@@ -493,6 +493,35 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
+        IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||
+        IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr))
+    {
+#ifdef HAVE_IB_EXT_ATOMICS
+        if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
+            dev->ext_atomic_arg_sizes = dev->dev_attr.ext_atom.log_atomic_arg_sizes;
+        }
+#  if HAVE_MASKED_ATOMICS_ENDIANNESS
+        if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
+            dev->ext_atomic_arg_sizes |=
+                dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes;
+            dev->ext_atomic_arg_sizes_be =
+                dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes_network_endianness;
+        }
+#  endif
+        dev->ext_atomic_arg_sizes &= UCS_MASK(dev->dev_attr.ext_atom.log_max_atomic_inline + 1);
+#endif
+        dev->atomic_arg_sizes = sizeof(uint64_t);
+        if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr)) {
+            dev->atomic_arg_sizes_be = sizeof(uint64_t);
+        }
+    }
+
+#if HAVE_DECL_IBV_EXP_DEVICE_ATTR_PCI_ATOMIC_CAPS
+    dev->pci_fadd_arg_sizes  = dev->dev_attr.pci_atomic_caps.fetch_add << 2;
+    dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
+#endif
+
     status = uct_ib_mlx5_check_dc(dev);
     if (status != UCS_OK) {
         goto err_free;
