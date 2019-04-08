@@ -44,7 +44,20 @@ struct resource {
     uct_device_type_t       dev_type;
     struct sockaddr_storage listen_if_addr;     /* sockaddr to listen on */
     struct sockaddr_storage connect_if_addr;    /* sockaddr to connect to */
-    double                  bw;
+
+    resource();
+    resource(const std::string& _md_name, const cpu_set_t& _local_cpus,
+             const std::string& _tl_name, const std::string& _dev_name,
+             uct_device_type_t _dev_type);
+};
+
+struct resource_speed : public resource {
+    double bw;
+
+    resource_speed() : resource(), bw(0) { }
+    resource_speed(const uct_md_h& md, const std::string& _md_name,
+                   const cpu_set_t& _local_cpus, const std::string& _tl_name,
+                   const std::string& _dev_name, uct_device_type_t _dev_type);
 };
 
 
@@ -56,8 +69,7 @@ class uct_test : public testing::TestWithParam<const resource*>,
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<const resource*> enum_resources(const std::string& tl_name,
-                                                       bool loopback = false);
+    static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
     uct_test();
     virtual ~uct_test();
@@ -188,34 +200,17 @@ protected:
     };
 
     template <typename T>
-    static void filter_by_name(std::vector<const resource*> &result,
-                               const T& res, const std::string& tl_name)
-    {
-        if ((tl_name.empty() || (res.tl_name == tl_name))) {
-            result.push_back(&res);
-        }
-    }
-
-    template <typename T>
-    static void commit_noop(std::vector<const resource*> &result,
-                            T& arg) { }
-
-    template <typename T, typename M> static std::vector<const resource*>
-    filter_resources(const std::vector<T>& resources,
-                     M& arg,
-                     void (*filter)(std::vector<const resource*> &result,
-                                    const T& res, M& arg),
-                     void (*commit)(std::vector<const resource*> &result,
-                                    M& arg) = commit_noop)
+    static std::vector<const resource*> filter_resources(const std::vector<T>& resources,
+                                                         const std::string& tl_name)
     {
         std::vector<const resource*> result;
-        typename std::vector<T>::const_iterator iter;
-
-        for (iter = resources.begin(); iter != resources.end(); ++iter) {
-            filter(result, *iter, arg);
+        for (typename std::vector<T>::const_iterator iter = resources.begin();
+                        iter != resources.end(); ++iter)
+        {
+            if (tl_name.empty() || (iter->tl_name == tl_name)) {
+                result.push_back(&*iter);
+            }
         }
-
-        commit(result, arg);
         return result;
     }
 
