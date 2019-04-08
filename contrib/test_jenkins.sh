@@ -953,7 +953,8 @@ run_coverity() {
 			cov-format-errors --dir $cov_build --emacs-style
 			echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
 		else
-		echo "ok 1 Coverity found no issues" >> coverity.tap
+			echo "ok 1 Coverity found no issues" >> coverity.tap
+			rm -rf $cov_build
 		fi
 
 		echo Coverity report: $cov_url
