@@ -44,6 +44,7 @@ struct resource {
     uct_device_type_t       dev_type;
     struct sockaddr_storage listen_if_addr;     /* sockaddr to listen on */
     struct sockaddr_storage connect_if_addr;    /* sockaddr to connect to */
+    double                  bw;
 };
 
 
@@ -195,17 +196,26 @@ protected:
         }
     }
 
+    template <typename T>
+    static void commit_noop(std::vector<const resource*> &result,
+                            T& arg) { }
+
     template <typename T, typename M> static std::vector<const resource*>
     filter_resources(const std::vector<T>& resources,
-                     void (*filter_cond)(std::vector<const resource*> &result,
-                                         const T& res, M& arg), M& arg)
+                     M& arg,
+                     void (*filter)(std::vector<const resource*> &result,
+                                    const T& res, M& arg),
+                     void (*commit)(std::vector<const resource*> &result,
+                                    M& arg) = commit_noop)
     {
         std::vector<const resource*> result;
         typename std::vector<T>::const_iterator iter;
 
         for (iter = resources.begin(); iter != resources.end(); ++iter) {
-            filter_cond(result, *iter, arg);
+            filter(result, *iter, arg);
         }
+
+        commit(result, arg);
         return result;
     }
 

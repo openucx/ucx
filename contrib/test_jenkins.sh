@@ -1027,7 +1027,7 @@ run_gtest() {
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 	# Run UCT tests for TCP over RDMA devices only
-	export GTEST_UCT_TCP_RDMA_DEVS_ONLY=1
+	export GTEST_UCT_TCP_FASTEST_DEV=1
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1090,7 +1090,7 @@ run_gtest() {
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 
-	unset GTEST_UCT_TCP_RDMA_DEVS_ONLY
+	unset GTEST_UCT_TCP_FASTEST_DEV
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED

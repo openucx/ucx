@@ -145,19 +145,26 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
     freeifaddrs(ifaddr);
 }
 
-static void filter_tcp_non_rdma_devs(std::vector<const resource*>& resources,
-                                     const resource* const &res,
-                                     std::vector<const resource*>& rdma_dev_resources)
+static void filter_tcp_fastest_dev(std::vector<const resource*>& resources,
+                                   const resource* const &res,
+                                   resource* &fastest_res)
 {
     if (res->tl_name == "tcp") {
-        if (ucs::is_rdmacm_netdev(res->dev_name.c_str())) {
-            rdma_dev_resources.push_back(&*res);
-        } else {
-            return;
+        if ((fastest_res == NULL) || res->bw > fastest_res->bw) {
+            fastest_res = const_cast<resource*>(&*res);
         }
+    } else {
+        resources.push_back(&*res);
     }
+}
 
-    resources.push_back(&*res);
+static void commit_tcp_fastest_dev(std::vector<const resource*>& resources,
+                                   resource* &fastest_res)
+{
+    if (fastest_res != NULL) {
+        ucs_assert(fastest_res->tl_name == "tcp");
+        resources.push_back(fastest_res);
+    }
 }
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
@@ -166,17 +173,30 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
+        uct_iface_params_t params;
         uct_md_resource_desc_t *md_resources;
         unsigned num_md_resources;
         uct_tl_resource_desc_t *tl_resources;
         unsigned num_tl_resources;
         ucs_status_t status;
+        ucs_async_context_t *async;
+        uct_worker_h worker;
+
+        status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+        ASSERT_UCS_OK(status);
+
+        status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
+        ASSERT_UCS_OK(status);
 
         status = uct_query_md_resources(&md_resources, &num_md_resources);
         ASSERT_UCS_OK(status);
 
+        params.field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                            UCT_IFACE_PARAM_FIELD_DEVICE;
+        params.open_mode  = UCT_IFACE_OPEN_MODE_DEVICE;
+
         for (unsigned i = 0; i < num_md_resources; ++i) {
-            uct_md_h pd;
+            uct_md_h md;
             uct_md_config_t *md_config;
             status = uct_md_config_read(md_resources[i].md_name, NULL, NULL,
                                         &md_config);
@@ -184,7 +204,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             {
                 scoped_log_handler slh(hide_errors_logger);
-                status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+                status = uct_md_open(md_resources[i].md_name, md_config, &md);
             }
             uct_config_release(md_config);
             if (status != UCS_OK) {
@@ -192,48 +212,66 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             }
 
             uct_md_attr_t md_attr;
-            status = uct_md_query(pd, &md_attr);
+            status = uct_md_query(md, &md_attr);
             ASSERT_UCS_OK(status);
 
-            status = uct_md_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+            status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
             ASSERT_UCS_OK(status);
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
+                uct_iface_config_t *iface_config;
+                uct_iface_attr_t iface_attr;
+                uct_iface_h iface;
                 resource rsc;
+
+                status = uct_md_iface_config_read(md, tl_resources[j].tl_name,
+                                                  NULL, NULL, &iface_config);
+                ASSERT_UCS_OK(status);
+
+                params.mode.device.tl_name  = tl_resources[j].tl_name;
+                params.mode.device.dev_name = tl_resources[j].dev_name;
+
+                status = uct_iface_open(md, worker, &params, iface_config, &iface);
+                ASSERT_UCS_OK(status);
+
+                status = uct_iface_query(iface, &iface_attr);
+                ASSERT_UCS_OK(status);
+
                 rsc.md_name    = md_resources[i].md_name;
                 rsc.local_cpus = md_attr.local_cpus;
                 rsc.tl_name    = tl_resources[j].tl_name;
                 rsc.dev_name   = tl_resources[j].dev_name;
                 rsc.dev_type   = tl_resources[j].dev_type;
+                rsc.bw         = iface_attr.bandwidth;
+
                 all_resources.push_back(rsc);
+
+                uct_iface_close(iface);
+                uct_config_release(iface_config);
             }
 
             if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                uct_test::set_sockaddr_resources(pd, md_resources[i].md_name,
+                uct_test::set_sockaddr_resources(md, md_resources[i].md_name,
                                                  md_attr.local_cpus, all_resources);
             }
 
             uct_release_tl_resource_list(tl_resources);
-            uct_md_close(pd);
+            uct_md_close(md);
         }
 
         uct_release_md_resource_list(md_resources);
+        uct_worker_destroy(worker);
+        ucs_async_context_destroy(async);
     }
 
     std::vector<const resource*> result =
-        filter_resources(all_resources, filter_by_name, tl_name);
+        filter_resources(all_resources, tl_name, filter_by_name);
 
-    if ((getenv("GTEST_UCT_TCP_RDMA_DEVS_ONLY") != NULL) && !result.empty()) {
-        std::vector<const resource*> rdma_dev_resources;
-
-        std::vector<const resource*> without_tcp_non_rdma_devs =
-            filter_resources(result, filter_tcp_non_rdma_devs, rdma_dev_resources);
-
-        /* If there are no IP interfaces configured on RDMA devices found,
-         * it returns all resources at the end of the function */
-        if (!rdma_dev_resources.empty()) {
-            return without_tcp_non_rdma_devs;
-        }
+    if ((getenv("GTEST_UCT_TCP_FASTEST_DEV") != NULL) && !result.empty()) {
+        resource *tcp_fastest_rsc = NULL;
+        return filter_resources(result, tcp_fastest_rsc,
+                                filter_tcp_fastest_dev,
+                                commit_tcp_fastest_dev);
     }
 
     return result;
