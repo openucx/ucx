@@ -329,7 +329,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                 elem->list.next = elem_list_next;
                 /* make sure that next dispatch() will continue
                  * from the current group */
-                arbiter->current = group_head;
+                arbiter->current = elem;
                 goto out;
             } else {
                 elem->next = next_elem;
