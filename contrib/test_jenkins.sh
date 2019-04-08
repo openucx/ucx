@@ -914,7 +914,7 @@ test_jucx() {
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=jucx_port
 		export UCX_ERROR_SIGNALS=""
-		JUCX_INST=$ucx_inst $MAKE -C bindings/java/src/main/native test
+		$MAKE -C bindings/java/src/main/native test
 		unset UCX_ERROR_SIGNALS
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
