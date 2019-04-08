@@ -150,7 +150,8 @@ void test_base::push_debug_message_with_limit(std::vector<std::string>& vec,
                                               const std::string& message,
                                               const size_t limit) {
     if (vec.size() >= limit) {
-        UCS_TEST_ABORT("too many errors/warnings; bailing out (" + message + ")");
+        UCS_TEST_ABORT("aborting after " + ucs::to_string(vec.size()) +
+                       " error messages (" + message + ")");
     }
 
     vec.push_back(message);
