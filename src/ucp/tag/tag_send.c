@@ -84,7 +84,12 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         } else {
             return UCS_STATUS_PTR(status);
         }
+    } else if ((req->send.uct.func == proto->zcopy_multi) ||
+               (req->send.uct.func == proto->bcopy_multi)) {
+        req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
+        req->send.tag.am_bw_index = 1;
     }
+
 
     if (req->flags & UCP_REQUEST_FLAG_SYNC) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
