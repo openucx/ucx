@@ -12,17 +12,18 @@ class log_test : public ucs::test {
 
 public:
     virtual void init() {
-        char ucs_log_spec[70];
-        const char *default_tmp_dir = "/tmp";
-        const char *tmp_dir;
-        ucs::test::init();
-
         /* skip because logger does not support file
          * output on valgrind
          */
         if (RUNNING_ON_VALGRIND) {
             UCS_TEST_SKIP_R("skipping on valgrind");
         }
+
+        char ucs_log_spec[70];
+        const char *default_tmp_dir = "/tmp";
+        const char *tmp_dir;
+
+        ucs::test::init();
 
         ucs_log_cleanup();
         push_config();

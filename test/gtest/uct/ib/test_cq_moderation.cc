@@ -24,11 +24,11 @@ class test_uct_cq_moderation : public uct_test {
 protected:
 
     void init() {
-        uct_test::init();
-
         if (RUNNING_ON_VALGRIND) {
             UCS_TEST_SKIP_R("skipping on valgrind");
         }
+
+        uct_test::init();
 
         set_config("IB_TX_CQ_MODERATION=1");
         if ((GetParam()->tl_name == "rc") || (GetParam()->tl_name == "rc_mlx5") ||

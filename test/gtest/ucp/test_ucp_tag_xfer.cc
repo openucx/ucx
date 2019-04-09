@@ -39,6 +39,7 @@ public:
         if (RUNNING_ON_VALGRIND) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MAX_BCOPY", "8k"));
         }
+        
         test_ucp_tag::init();
     }
 
@@ -263,10 +264,8 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     ucp_tag_recv_info_t info;
     request             *rreq, *sreq;
 
-    if (&sender() == &receiver()) {
-        /* the self transport doesn't do rndv and completes the send immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* the self transport doesn't do rndv and completes the send immediately */
+    skip_loopback();
 
     ucp::dt_gen_start_count  = 0;
     ucp::dt_gen_finish_count = 0;
