@@ -171,7 +171,7 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
  * 
  * @param [in]     sa1        Pointer to sockaddr structure #1.
  * @param [in]     sa2        Pointer to sockaddr structure #2.
- * @param [un/out] status_p   Pointer (can be NULL) to a statrus: UCS_OK on success
+ * @param [un/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
  *                            or UCS_ERR_INVALID_PARAM on failure.
  *
  * @return 0 - not equal, != 0 - equal

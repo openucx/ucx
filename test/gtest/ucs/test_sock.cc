@@ -297,7 +297,7 @@ static bool sockaddr_is_equal(int sa_family, const char *ip_addr1,
     result2 = ucs_sockaddr_is_equal(sa1, sa2, NULL);
     EXPECT_EQ(result1, result2);
 
-    return (result1 != 0);
+    return result1;
 }
 
 UCS_TEST_F(test_socket, sockaddr_is_equal) {
