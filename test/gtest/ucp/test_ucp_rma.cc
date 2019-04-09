@@ -135,12 +135,8 @@ UCS_TEST_P(test_ucp_rma, nbi_med) {
                        sizes, 100, 1);
 }
 
-UCS_TEST_P(test_ucp_rma, nbi_large) {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, nbi_large, RUNNING_ON_VALGRIND) {
     size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        sizes, 3, 1);
@@ -166,12 +162,8 @@ UCS_TEST_P(test_ucp_rma, nb_med) {
                        sizes, 100, 1);
 }
 
-UCS_TEST_P(test_ucp_rma, nb_large) {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, nb_large, RUNNING_ON_VALGRIND) {
     size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nb),
                        sizes, 3, 1);

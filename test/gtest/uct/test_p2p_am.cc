@@ -549,15 +549,11 @@ const unsigned uct_p2p_am_misc::RX_MAX_BUFS = 1024; /* due to hard coded 'grow'
                                                        parameter in uct_ib_iface_recv_mpool_init */
 const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
-UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
+UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND) {
 
     mapped_buffer sendbuf(10 * sizeof(uint64_t), SEED1, sender());
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     ucs_status_t status;
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     if (&sender() == &receiver()) {
         UCS_TEST_SKIP_R("skipping on loopback");

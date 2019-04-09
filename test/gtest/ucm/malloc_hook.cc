@@ -151,14 +151,6 @@ protected:
         return res;
     }
 
-    void skip_on_bistro() {
-        /* BISTRO is disabled under valgrind, we may run tests */
-        if ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
-             !RUNNING_ON_VALGRIND) {
-            UCS_TEST_SKIP_R("skipping on BISTRO hooks");
-        }
-    }
-
 public:
     static int            small_alloc_count;
     static const size_t   small_alloc_size = 10000;
@@ -166,6 +158,12 @@ public:
     int                   m_got_event;
     static volatile int   bistro_call_counter;
 };
+
+bool skip_on_bistro() {
+    /* BISTRO is disabled under valgrind, we may run tests */
+    return ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
+            !RUNNING_ON_VALGRIND);
+}
 
 int malloc_hook::small_alloc_count            = 1000 / ucs::test_time_multiplier();
 volatile int malloc_hook::bistro_call_counter = 0;
@@ -389,9 +387,7 @@ void test_thread::test() {
     m_event.unset();
 }
 
-UCS_TEST_F(malloc_hook, single_thread) {
-    skip_on_bistro();
-
+UCS_TEST_SKIP_COND_F(malloc_hook, single_thread, skip_on_bistro()) {
     pthread_barrier_t barrier;
     pthread_barrier_init(&barrier, NULL, 1);
     {
@@ -400,14 +396,12 @@ UCS_TEST_F(malloc_hook, single_thread) {
     pthread_barrier_destroy(&barrier);
 }
 
-UCS_TEST_F(malloc_hook, multi_threads) {
+UCS_TEST_SKIP_COND_F(malloc_hook, multi_threads, skip_on_bistro()) {
     typedef mhook_thread<test_thread> thread_t;
 
     static const int num_threads = 8;
     ucs::ptr_vector<thread_t> threads;
     pthread_barrier_t barrier;
-
-    skip_on_bistro();
 
     malloc_trim(0);
 
@@ -427,14 +421,11 @@ UCS_TEST_F(malloc_hook, asprintf) {
     (void)dlerror();
 }
 
-UCS_TEST_F(malloc_hook, fork) {
+UCS_TEST_SKIP_COND_F(malloc_hook, fork, 1 /* broken */) {
     static const int num_processes = 4;
     pthread_barrier_t barrier;
     std::vector<pid_t> pids;
     pid_t pid;
-
-    UCS_TEST_SKIP_R("broken");
-    /* coverity[unreachable] */
 
     for (int i = 0; i < num_processes; ++i) {
         pid = fork();
@@ -730,18 +721,14 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
     unset();
 }
 
-UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
-    skip_on_bistro();
+UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, dynamic_mmap_enable,
+                     skip_on_bistro()) {
     EXPECT_TRUE(ucm_global_opts.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
 
-UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_disable) {
-    skip_on_bistro();
-
+UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, dynamic_mmap_disable,
+                     skip_on_bistro()) {
     ucm_global_opts.enable_dynamic_mmap_thresh = 0;
 
     test_dynamic_mmap_thresh();
@@ -751,14 +738,12 @@ extern "C" {
     int ucm_dlmallopt_get(int);
 };
 
-UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
+UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, mallopt, skip_on_bistro()) {
 
     int v;
     int trim_thresh, mmap_thresh;
     char *p;
     size_t size;
-
-    skip_on_bistro();
 
     /* This test can not be run with the other
      * tests because it assumes that malloc hooks
@@ -814,12 +799,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     unset();
 }
 
-UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
-
+UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, mmap_ptrs, RUNNING_ON_VALGRIND) {
     ucm_global_opts.enable_dynamic_mmap_thresh = 0;
     set();
 
@@ -912,7 +892,7 @@ UCS_TEST_F(malloc_hook_cplusplus, remap_override_multi_threads) {
 
 typedef int (munmap_f_t)(void *addr, size_t len);
 
-UCS_TEST_F(malloc_hook, bistro_patch) {
+UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
     ucs_status_t status;
@@ -921,10 +901,6 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
     int res;
     uint64_t UCS_V_UNUSED patched;
     uint64_t UCS_V_UNUSED origin;
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     /* set hook to mmap call */
     status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
@@ -967,13 +943,9 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
 #endif
 }
 
-UCS_TEST_F(malloc_hook, test_event) {
+UCS_TEST_SKIP_COND_F(malloc_hook, test_event, RUNNING_ON_VALGRIND) {
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     status = event.set(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
@@ -982,19 +954,11 @@ UCS_TEST_F(malloc_hook, test_event) {
     ASSERT_UCS_OK(status);
 }
 
-UCS_TEST_F(malloc_hook, test_event_failed) {
+UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed, skip_on_bistro()) {
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
-
-    if (ucm_global_opts.mmap_hook_mode != UCM_MMAP_HOOK_BISTRO) {
-        UCS_TEST_SKIP_R("skipping on non-BISTRO hooks");
-    }
 
     status = event.set(UCM_EVENT_MUNMAP);
     ASSERT_UCS_OK(status);

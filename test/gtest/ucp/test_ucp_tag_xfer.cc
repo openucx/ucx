@@ -507,9 +507,6 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     ucs::detail::message_stream *ms;
 
     skip_err_handling();
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("valgrind");
-    }
 
     EXPECT_EQ(posix_memalign(&send_buf, 8192, buf_size), 0);
     EXPECT_EQ(posix_memalign(&recv_buf, 8192, buf_size), 0);
@@ -952,7 +949,8 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RN
     test_xfer_probe(true, false, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, test_xfer_len_offset, "RNDV_THRESH=1000") {
+UCS_TEST_SKIP_COND_P(test_ucp_tag_xfer, test_xfer_len_offset,
+                     RUNNING_ON_VALGRIND, "RNDV_THRESH=1000") {
     test_xfer_len_offset();
 }
 
