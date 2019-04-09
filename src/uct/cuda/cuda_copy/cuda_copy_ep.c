@@ -50,9 +50,9 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     }
 
     cuda_event = ucs_mpool_get(&iface->cuda_event_desc);
-    if (ucs_unlikely(cuda_event == NULL)) {
-        ucs_error("Failed to allocate cuda event object");
-        return UCS_ERR_NO_MEMORY;
+    while (ucs_unlikely(cuda_event == NULL)) {
+        uct_iface_progress(tl_ep->iface);
+        cuda_event = ucs_mpool_get(&iface->cuda_event_desc);
     }
 
     status = UCT_CUDA_FUNC(cudaMemcpyAsync(dst, src, length, direction, stream));
