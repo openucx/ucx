@@ -11,6 +11,7 @@
 #include "string.h"
 #include "math.h"
 #include "sys.h"
+#include <ucs/config/parser.h>
 
 #include <string.h>
 #include <ctype.h>
@@ -109,6 +110,24 @@ uint64_t ucs_string_to_id(const char* str)
     return id;
 }
 
+size_t ucs_string_quantity_prefix_value(char prefix)
+{
+    switch (prefix) {
+    case 'B':
+        return 1;
+    case 'K':
+        return UCS_KBYTE;
+    case 'M':
+        return UCS_MBYTE;
+    case 'G':
+        return UCS_GBYTE;
+    case 'T':
+        return UCS_TBYTE;
+    default:
+        return 0;
+    }
+}
+
 void ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
     static const char * suffixes[] = {"", "K", "M", "G", "T", NULL};
@@ -125,6 +144,42 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
         }
         snprintf(buf, max, "%zu%s", value, *suffix);
     }
+}
+
+ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
+{
+    char units[3];
+    int num_fields;
+    size_t value;
+    size_t bytes;
+
+    /* Special value: infinity */
+    if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
+        *(size_t*)dest = UCS_MEMUNITS_INF;
+        return UCS_OK;
+    }
+
+    /* Special value: auto */
+    if (!strcasecmp(buf, "auto")) {
+        *(size_t*)dest = UCS_MEMUNITS_AUTO;
+        return UCS_OK;
+    }
+
+    memset(units, 0, sizeof(units));
+    num_fields = sscanf(buf, "%ld%c%c", &value, &units[0], &units[1]);
+    if (num_fields == 1) {
+        bytes = 1;
+    } else if ((num_fields == 2) || (num_fields == 3)) {
+        bytes = ucs_string_quantity_prefix_value(toupper(units[0]));
+        if (!bytes || ((num_fields == 3) && tolower(units[1]) != 'b')) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    } else {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *(size_t*)dest = value * bytes;
+    return UCS_OK;
 }
 
 char* ucs_strncpy_safe(char *dst, const char *src, size_t len)

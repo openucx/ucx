@@ -8,6 +8,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/string.h>
 #include <sys/resource.h>
 #include <dirent.h>
 #include <string.h>
@@ -90,7 +91,8 @@ static void print_resource_usage(const resource_usage_t *usage_before,
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                     uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
-                    size_t estimated_num_eps, unsigned dev_type_bitmap)
+                    size_t estimated_num_eps, unsigned dev_type_bitmap,
+                    const char *mem_size)
 {
     ucp_config_t *config;
     ucs_status_t status;
@@ -132,6 +134,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     if (status != UCS_OK) {
         printf("<Failed to create UCP context>\n");
         goto out_release_config;
+    }
+
+    if ((print_opts & PRINT_MEM_MAP) && (mem_size != NULL)) {
+        ucp_mem_print_info(mem_size, context, stdout);
     }
 
     if (print_opts & PRINT_UCP_CONTEXT) {

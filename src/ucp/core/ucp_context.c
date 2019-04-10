@@ -1073,7 +1073,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
 
-    if (context->config.ext.estimated_num_eps != UCS_CONFIG_ULUNITS_AUTO) {
+    if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
         /* num_eps were set via the env variable. Override current value */
         context->config.est_num_eps = context->config.ext.estimated_num_eps;
     }

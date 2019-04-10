@@ -147,6 +147,8 @@ struct uct_md_ops {
                                            uct_sockaddr_accessibility_t mode);
 
     int          (*is_mem_type_owned)(uct_md_h md, void *addr, size_t length);
+
+    int          (*is_hugetlb)(uct_md_h md, uct_mem_h memh);
 };
 
 

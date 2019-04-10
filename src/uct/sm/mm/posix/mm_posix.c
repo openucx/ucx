@@ -251,7 +251,7 @@ out:
 static ucs_status_t
 uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                 unsigned md_map_flags, const char *alloc_name, void **address_p,
-                uct_mm_id_t *mmid_p, const char **path_p)
+                uct_mm_id_t *mmid_p, const char **path_p, int *is_hugetlb)
 {
     ucs_status_t status;
     int shm_fd = -1;
@@ -347,6 +347,7 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
        if ((*address_p) !=  MAP_FAILED) {
            /* indicate that the memory was mapped with hugepages */
            uuid |= UCT_MM_POSIX_HUGETLB;
+           *is_hugetlb = 1;
            goto out_ok;
        }
 

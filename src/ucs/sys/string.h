@@ -8,6 +8,7 @@
 #define UCS_STRING_H_
 
 #include "compiler_def.h"
+#include <ucs/type/status.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,6 +17,16 @@
 BEGIN_C_DECLS
 
 /** @file string.h */
+
+/* value which specifies "infinity" for a numeric variable */
+#define UCS_NUMERIC_INF_STR "inf"
+
+/* the numeric value of "infinity" */
+#define UCS_MEMUNITS_INF    SIZE_MAX
+/* value which specifies "auto" for a numeric variable */
+#define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
+
+#define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
 
 /**
  * Expand a partial path to full path.
@@ -73,6 +84,25 @@ uint64_t ucs_string_to_id(const char *str);
  * @param max    Maximal length of the buffer.
  */
 void ucs_memunits_to_str(size_t value, char *buf, size_t max);
+
+
+/**
+ * Convert a string holding memory units to a numeric value.
+ *
+ *  @param buf   String to convert
+ *  @param dest  Numeric value of the string
+ *
+ *  @return UCS_OK if successful, or error code otherwise.
+ */
+ucs_status_t ucs_str_to_memunits(const char *buf, void *dest);
+
+
+/**
+ *  Return the numeric value of the memunits prefix.
+ *  For example:
+ *  'M' -> 1048576
+ */
+size_t ucs_string_quantity_prefix_value(char prefix);
 
 
 /**

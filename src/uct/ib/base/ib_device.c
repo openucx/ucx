@@ -388,7 +388,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 
 static size_t uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 {
-    if (md->config.gid_index == UCS_CONFIG_ULUNITS_AUTO) {
+    if (md->config.gid_index == UCS_ULUNITS_AUTO) {
         return UCT_IB_MD_DEFAULT_GID_INDEX;
     } else {
         return md->config.gid_index;
@@ -604,7 +604,7 @@ ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
 {
     ucs_status_t status = UCS_OK;
 
-    if (md_config_index == UCS_CONFIG_ULUNITS_AUTO) {
+    if (md_config_index == UCS_ULUNITS_AUTO) {
         if (uct_ib_device_is_port_roce(dev, port_num)) {
             status = uct_ib_device_set_roce_gid_index(dev, port_num, gid_index);
         } else {

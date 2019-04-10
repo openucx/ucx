@@ -954,7 +954,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
     if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         /* Disable RNDV */
         rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
-    } else if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+    } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
         rndv_thresh     = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                          config->key.am_bw_lanes,
@@ -1004,7 +1004,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
     ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
 
-    if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
         rndv_thresh     = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                          config->key.am_bw_lanes,
@@ -1064,7 +1064,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     config->max_zcopy = max_zcopy;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
-    if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+    if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
         config->zcopy_auto_thresh = 1;
         for (it = 0; it < UCP_MAX_IOV; ++it) {
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(it + 1,
@@ -1295,7 +1295,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
                 rma_config->max_put_zcopy    = iface_attr->cap.put.max_zcopy;
                 /* TODO: formula */
-                if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
                     rma_config->put_zcopy_thresh = 16384; 
                 } else {
                     rma_config->put_zcopy_thresh = context->config.ext.zcopy_thresh; 
@@ -1316,7 +1316,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
                 /* TODO: formula */
                 rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
-                if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
                     rma_config->get_zcopy_thresh = 16384;
                 } else {
                     rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh; 

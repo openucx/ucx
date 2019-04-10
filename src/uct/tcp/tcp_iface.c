@@ -258,7 +258,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         return status;
     }
 
-    if (iface->sockopt.sndbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+    if (iface->sockopt.sndbuf != UCS_MEMUNITS_AUTO) {
         status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
                                    (const void*)&iface->sockopt.sndbuf,
                                    sizeof(int));
@@ -267,7 +267,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         }
     }
 
-    if (iface->sockopt.rcvbuf != UCS_CONFIG_MEMUNITS_AUTO) {
+    if (iface->sockopt.rcvbuf != UCS_MEMUNITS_AUTO) {
         status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
                                    (const void*)&iface->sockopt.rcvbuf,
                                    sizeof(int));
