@@ -57,7 +57,6 @@ void frag_list::init_pkts(pkt *packets, int n)
 
 void frag_list::init()
 {
-    ::srand(::time(NULL));
     ucs_stats_cleanup();
 #if ENABLE_STATS
     push_config();
