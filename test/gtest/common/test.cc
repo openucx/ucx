@@ -146,6 +146,17 @@ std::string test_base::format_message(const char *message, va_list ap)
     return std::string(buf);
 }
 
+void test_base::push_debug_message_with_limit(std::vector<std::string>& vec,
+                                              const std::string& message,
+                                              const size_t limit) {
+    if (vec.size() >= limit) {
+        UCS_TEST_ABORT("aborting after " + ucs::to_string(vec.size()) +
+                       " error messages (" + message + ")");
+    }
+
+    vec.push_back(message);
+}
+
 ucs_log_func_rc_t
 test_base::hide_errors_logger(const char *file, unsigned line, const char *function,
                               ucs_log_level_t level, const char *message, va_list ap)
@@ -192,7 +203,7 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
         std::istringstream iss(format_message(message, ap));
         std::string text;
         while (getline(iss, text, '\n')) {
-            m_errors.push_back(text);
+            push_debug_message_with_limit(m_errors, text, 1000);
             UCS_TEST_MESSAGE << "< " << text << " >";
         }
         pthread_mutex_unlock(&m_logger_mutex);

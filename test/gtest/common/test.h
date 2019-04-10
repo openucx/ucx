@@ -101,6 +101,10 @@ protected:
 private:
     void skipped(const test_skip_exception& e);
     void run();
+    static void push_debug_message_with_limit(std::vector<std::string>& vec,
+                                              const std::string& message,
+                                              const size_t limit);
+
     static void *thread_func(void *arg);
 
     pthread_barrier_t    m_barrier;
