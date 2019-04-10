@@ -300,6 +300,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                         ucs_list_head_init(&next_elem->list);
                     } else {
                         /* Insert the next element to the arbiter list */
+                        /* coverity reports issue on second iteration of inner loop,
+                         * it assumes that group_head or prev_group are changes during
+                         * loop iteration which is incorrect. just suppress error */
                         /* coverity[deref_after_free] */
                         ucs_list_insert_replace(&prev_group->list,
                                                 &next_group->list,
