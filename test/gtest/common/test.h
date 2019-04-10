@@ -182,17 +182,18 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
   GTEST_DISALLOW_COPY_AND_ASSIGN_(\
       GTEST_TEST_CLASS_NAME_(test_case_name, test_name));\
     static int AddToRegistry() { \
-        if (!(skip_cond)) { \
-            ::testing::internal::MakeAndRegisterTestInfo(\
-                #test_case_name, \
-                (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
-                "", "", \
-                (parent_id), \
-                parent_class::SetUpTestCase, \
-                parent_class::TearDownTestCase, \
-                new ::testing::internal::TestFactoryImpl<\
-                    GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
+        if (skip_cond) { \
+            return 0; \
         } \
+        ::testing::internal::MakeAndRegisterTestInfo(\
+            #test_case_name, \
+            (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
+            "", "", \
+            (parent_id), \
+            parent_class::SetUpTestCase, \
+            parent_class::TearDownTestCase, \
+            new ::testing::internal::TestFactoryImpl<\
+                GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
         return 0; \
     } \
     static int gtest_registering_dummy_; \
@@ -241,15 +242,16 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
     virtual void test_body(); \
    private: \
     static int AddToRegistry() { \
-        if (!(skip_cond)) { \
-            ::testing::UnitTest::GetInstance()->parameterized_test_registry(). \
-                GetTestCasePatternHolder<test_case_name>( \
-                    #test_case_name, __FILE__, __LINE__)->AddTestPattern( \
-                        #test_case_name, \
-                        (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
-                        new ::testing::internal::TestMetaFactory< \
-                            GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>()); \
+        if (skip_cond) { \
+            return 0; \
         } \
+        ::testing::UnitTest::GetInstance()->parameterized_test_registry(). \
+            GetTestCasePatternHolder<test_case_name>( \
+                #test_case_name, __FILE__, __LINE__)->AddTestPattern( \
+                    #test_case_name, \
+                    (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
+                    new ::testing::internal::TestMetaFactory< \
+                        GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>()); \
         return 0; \
     } \
     static int gtest_registering_dummy_; \
