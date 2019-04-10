@@ -42,11 +42,9 @@ protected:
         virtual std::string name() const;
         bool loopback;
 
-        p2p_resource(const std::string& _md_name, const cpu_set_t& _local_cpus,
-                     const std::string& _tl_name, const std::string& _dev_name,
-                     uct_device_type_t _dev_type) :
-                     resource(_md_name, _local_cpus, _tl_name, _dev_name, _dev_type),
-                     loopback(false) { }
+        p2p_resource(const resource& res) :
+                     resource(res.md_name, res.local_cpus, res.tl_name,
+                              res.dev_name, res.dev_type), loopback(false) { }
     };
 
     virtual void test_xfer(send_func_t send, size_t length, unsigned flags,

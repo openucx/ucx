@@ -46,18 +46,22 @@ struct resource {
     struct sockaddr_storage connect_if_addr;    /* sockaddr to connect to */
 
     resource();
-    resource(const std::string& _md_name, const cpu_set_t& _local_cpus,
-             const std::string& _tl_name, const std::string& _dev_name,
-             uct_device_type_t _dev_type);
+    resource(const std::string& md_name, const cpu_set_t& local_cpus,
+             const std::string& tl_name, const std::string& dev_name,
+             uct_device_type_t dev_type);
+    resource(const uct_md_attr_t& md_attr,
+             const uct_md_resource_desc_t& md_resource,
+             const uct_tl_resource_desc_t& tl_resource);
 };
 
 struct resource_speed : public resource {
     double bw;
 
     resource_speed() : resource(), bw(0) { }
-    resource_speed(const uct_md_h& md, const std::string& _md_name,
-                   const cpu_set_t& _local_cpus, const std::string& _tl_name,
-                   const std::string& _dev_name, uct_device_type_t _dev_type);
+    resource_speed(const uct_worker_h& worker, const uct_md_h& md,
+                   const uct_md_attr_t& md_attr,
+                   const uct_md_resource_desc_t& md_resource,
+                   const uct_tl_resource_desc_t& tl_resource);
 };
 
 

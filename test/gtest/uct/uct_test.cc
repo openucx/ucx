@@ -34,40 +34,46 @@ resource::resource() : md_name(""), tl_name(""), dev_name(""),
     memset(&connect_if_addr, 0, sizeof(connect_if_addr));
 }
 
-resource::resource(const std::string& _md_name, const cpu_set_t& _local_cpus,
-                   const std::string& _tl_name, const std::string& _dev_name,
-                   uct_device_type_t _dev_type) :
-                   md_name(_md_name), local_cpus(_local_cpus), tl_name(_tl_name),
-                   dev_name(_dev_name), dev_type(_dev_type)
+resource::resource(const std::string& md_name, const cpu_set_t& local_cpus,
+                   const std::string& tl_name, const std::string& dev_name,
+                   uct_device_type_t dev_type) :
+                   md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
+                   dev_name(dev_name), dev_type(dev_type)
 {
     memset(&listen_if_addr, 0, sizeof(listen_if_addr));
     memset(&connect_if_addr, 0, sizeof(connect_if_addr));
 }
 
-resource_speed::resource_speed(const uct_md_h& md, const std::string& _md_name,
-                               const cpu_set_t& _local_cpus, const std::string& _tl_name,
-                               const std::string& _dev_name, uct_device_type_t _dev_type) :
-                               resource(_md_name, _local_cpus, _tl_name, _dev_name, _dev_type) {
+resource::resource(const uct_md_attr_t& md_attr,
+                   const uct_md_resource_desc_t& md_resource,
+                   const uct_tl_resource_desc_t& tl_resource) :
+                   md_name(md_resource.md_name),
+                   local_cpus(md_attr.local_cpus),
+                   tl_name(tl_resource.tl_name),
+                   dev_name(tl_resource.dev_name),
+                   dev_type(tl_resource.dev_type)
+{
+    memset(&listen_if_addr, 0, sizeof(listen_if_addr));
+    memset(&connect_if_addr, 0, sizeof(connect_if_addr));
+}
+
+resource_speed::resource_speed(const uct_worker_h& worker,
+                               const uct_md_h& md, const uct_md_attr_t& md_attr,
+                               const uct_md_resource_desc_t& md_resource,
+                               const uct_tl_resource_desc_t& tl_resource) :
+                               resource(md_attr, md_resource, tl_resource) {
     ucs_status_t status;
-    ucs_async_context_t *async;
-    uct_worker_h worker;
     uct_iface_params_t iface_params = { 0 };
     uct_iface_config_t *iface_config;
     uct_iface_attr_t iface_attr;
     uct_iface_h iface;
 
-    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+    status = uct_md_iface_config_read(md, tl_name.c_str(), NULL,
+                                      NULL, &iface_config);
     ASSERT_UCS_OK(status);
-
-    status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
-    ASSERT_UCS_OK(status);
-
-    status = uct_md_iface_config_read(md, tl_name.c_str(), NULL, NULL, &iface_config);
-    ASSERT_UCS_OK(status);
-
 
     iface_params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
-        UCT_IFACE_PARAM_FIELD_DEVICE;
+                                        UCT_IFACE_PARAM_FIELD_DEVICE;
     iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.mode.device.tl_name  = tl_name.c_str();
     iface_params.mode.device.dev_name = dev_name.c_str();
@@ -82,8 +88,6 @@ resource_speed::resource_speed(const uct_md_h& md, const std::string& _md_name,
 
     uct_iface_close(iface);
     uct_config_release(iface_config);
-    uct_worker_destroy(worker);
-    ucs_async_context_destroy(async);
 }
 
 const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
@@ -207,11 +211,19 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
+        ucs_async_context_t *async;
+        uct_worker_h worker;
         uct_md_resource_desc_t *md_resources;
         unsigned num_md_resources;
         uct_tl_resource_desc_t *tl_resources;
         unsigned num_tl_resources;
         ucs_status_t status;
+
+        status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+        ASSERT_UCS_OK(status);
+
+        status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
+        ASSERT_UCS_OK(status);
 
         status = uct_query_md_resources(&md_resources, &num_md_resources);
         ASSERT_UCS_OK(status);
@@ -243,18 +255,13 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
                 if (tcp_fastest_dev && (std::string("tcp") == tl_resources[j].tl_name)) {
-                    resource_speed rsc(md, std::string(md_resources[i].md_name), md_attr.local_cpus,
-                                       std::string(tl_resources[j].tl_name),
-                                       std::string(tl_resources[j].dev_name),
-                                       tl_resources[j].dev_type);
+                    resource_speed rsc(worker, md, md_attr,
+                                       md_resources[i], tl_resources[j]);
                     if (!tcp_fastest_rsc.bw || (rsc.bw > tcp_fastest_rsc.bw)) {
                         tcp_fastest_rsc = rsc;
                     }
                 } else {
-                    resource rsc(std::string(md_resources[i].md_name), md_attr.local_cpus,
-                                 std::string(tl_resources[j].tl_name),
-                                 std::string(tl_resources[j].dev_name),
-                                 tl_resources[j].dev_type);
+                    resource rsc(md_attr, md_resources[i], tl_resources[j]);
                     all_resources.push_back(rsc);
                 }
             }
@@ -273,6 +280,8 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
         }
 
         uct_release_md_resource_list(md_resources);
+        uct_worker_destroy(worker);
+        ucs_async_context_destroy(async);
     }
 
     return filter_resources(all_resources, tl_name);
