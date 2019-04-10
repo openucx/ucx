@@ -489,6 +489,7 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     }
 }
 
+#if IBV_EXP_HW_TM_DC || HAVE_DC_EXP
 static uint64_t
 uct_dc_mlx5_iface_ooo_flag(uct_dc_mlx5_iface_t *iface, uint64_t flag,
                            char *str, uint32_t qp_num)
@@ -506,7 +507,7 @@ uct_dc_mlx5_iface_ooo_flag(uct_dc_mlx5_iface_t *iface, uint64_t flag,
 #endif
     return 0;
 }
-
+#endif
 
 static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,

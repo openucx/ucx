@@ -134,6 +134,14 @@
 #  define UCX_IB_DEV_IS_OOO_SUPPORTED(_ibdev, _transport)   0
 #endif
 
+#if !HAVE_DECL_IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT
+#  define IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT         0
+#endif
+
+#if !HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+#  define IBV_EXP_QP_OOO_RW_DATA_PLACEMENT          0
+#endif
+
 
 /*
  * Safe setenv
