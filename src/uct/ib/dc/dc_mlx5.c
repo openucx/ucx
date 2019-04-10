@@ -531,7 +531,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
          dc_op.dct_key    = UCT_IB_KEY;
          dc_op.ooo_caps   = uct_dc_mlx5_iface_ooo_flag(iface,
                                                        IBV_EXP_OOO_SUPPORT_RW_DATA_PLACEMENT,
-                                                       "internal TM DCI QP", 0);
+                                                       "TM XRQ", 0);
 
          srq_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
          srq_attr.dc_offload_params = &dc_op;
@@ -571,7 +571,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     init_attr.pkey_index       = iface->super.super.super.pkey_index;
     init_attr.create_flags    |= uct_dc_mlx5_iface_ooo_flag(iface,
                                                             IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT,
-                                                            "DC target", 0);
+                                                            "DCT", 0);
     iface->rx_dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super.super)->ibv_context,
                                        &init_attr);
     if (iface->rx_dct == NULL) {
