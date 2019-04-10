@@ -52,7 +52,7 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
         memset(&worker_addr, 0, sizeof(struct sockaddr_storage));
 
         field = env->GetFieldID(ucp_ep_params_class,
-                            "socketAddress", "Ljava/net/InetSocketAddress;");
+                                "socketAddress", "Ljava/net/InetSocketAddress;");
         jobject sock_addr = env->GetObjectField(ucp_ep_params, field);
 
         if (j2cInetSockAddr(env, sock_addr, worker_addr, addrlen)) {

@@ -27,7 +27,7 @@ public class UcpEndpointTest {
             new UcpListenerParams().setSockAddr(listenerSocket));
 
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
-            .setPeerErrorHadnlingMode();
+            .setPeerErrorHadnlingMode().setNoLoopbackMode();
         UcpEndpoint endpoint = new UcpEndpoint(worker, epParams);
         assertNotNull(endpoint.getNativeId());
 
@@ -45,8 +45,7 @@ public class UcpEndpointTest {
         // And pass this sockaddr to endpoint.
         Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
         boolean success = false;
-        while (!success && interfaces.hasMoreElements())
-        {
+        while (!success && interfaces.hasMoreElements()) {
             NetworkInterface networkInterface = interfaces.nextElement();
             Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
             while (inetAddresses.hasMoreElements()) {
@@ -54,11 +53,11 @@ public class UcpEndpointTest {
                 if (!inetAddress.isLoopbackAddress()) {
                     try {
                         InetSocketAddress addr = new InetSocketAddress(inetAddress,
-                          UcpListenerTest.port);
+                            UcpListenerTest.port);
                         UcpListener ucpListener = new UcpListener(worker,
-                          new UcpListenerParams().setSockAddr(addr));
-                        UcpEndpointParams epParams = new UcpEndpointParams().setSocketAddress(
-                          addr);
+                            new UcpListenerParams().setSockAddr(addr));
+                        UcpEndpointParams epParams =
+                            new UcpEndpointParams().setSocketAddress(addr);
                         UcpEndpoint endpoint = new UcpEndpoint(worker, epParams);
                         assertNotNull(endpoint.getNativeId());
                         success = true;
