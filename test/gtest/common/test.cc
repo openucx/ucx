@@ -213,6 +213,7 @@ void test_base::SetUpProxy() {
     ucs_log_push_handler(count_warns_logger);
 
     try {
+        check_skip_test();
         init();
         m_initialized = true;
         m_state = RUNNING;

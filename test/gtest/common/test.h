@@ -32,6 +32,7 @@ public:
 
     void get_config(const std::string& name, std::string& value,
                             size_t max);
+
     virtual void set_config(const std::string& config_str);
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional = false);
@@ -63,6 +64,8 @@ protected:
     virtual void cleanup();
     virtual void init();
     bool barrier();
+
+    virtual void check_skip_test() = 0;
 
     virtual void test_body() = 0;
 
@@ -170,21 +173,23 @@ public:
  * Helper macro
  */
 #define UCS_TEST_(test_case_name, test_name, parent_class, parent_id, num_threads, skip_cond, ...) \
-class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
- public:\
-  GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {\
+class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class { \
+ public: \
+  GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() { \
      set_num_threads(num_threads); \
      UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__) \
   } \
- private:\
-  virtual void test_body();\
-  static ::testing::TestInfo* const test_info_;\
-  GTEST_DISALLOW_COPY_AND_ASSIGN_(\
-      GTEST_TEST_CLASS_NAME_(test_case_name, test_name));\
+ private: \
+  virtual void check_skip_test() { \
+     if (skip_cond) { \
+         UCS_TEST_SKIP_R(UCS_PP_MAKE_STRING(skip_cond)); \
+     } \
+  } \
+  virtual void test_body(); \
+  static ::testing::TestInfo* const test_info_; \
+  GTEST_DISALLOW_COPY_AND_ASSIGN_( \
+      GTEST_TEST_CLASS_NAME_(test_case_name, test_name)); \
     static int AddToRegistry() { \
-        if (skip_cond) { \
-            return 0; \
-        } \
         ::testing::internal::MakeAndRegisterTestInfo(\
             #test_case_name, \
             (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
@@ -235,16 +240,18 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
   class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) \
       : public test_case_name { \
    public: \
-    GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {\
+    GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() { \
        set_num_threads(num_threads); \
        UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__); \
     } \
     virtual void test_body(); \
    private: \
-    static int AddToRegistry() { \
+    virtual void check_skip_test() { \
         if (skip_cond) { \
-            return 0; \
+            UCS_TEST_SKIP_R(UCS_PP_MAKE_STRING(skip_cond)); \
         } \
+    } \
+    static int AddToRegistry() { \
         ::testing::UnitTest::GetInstance()->parameterized_test_registry(). \
             GetTestCasePatternHolder<test_case_name>( \
                 #test_case_name, __FILE__, __LINE__)->AddTestPattern( \

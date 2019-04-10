@@ -423,7 +423,7 @@ UCS_TEST_F(malloc_hook, asprintf) {
     (void)dlerror();
 }
 
-UCS_TEST_SKIP_COND_F(malloc_hook, fork, 1 /* broken */) {
+UCS_TEST_SKIP_COND_F(malloc_hook, fork, "broken") {
     static const int num_processes = 4;
     pthread_barrier_t barrier;
     std::vector<pid_t> pids;

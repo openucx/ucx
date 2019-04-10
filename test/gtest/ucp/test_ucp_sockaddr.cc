@@ -324,7 +324,7 @@ public:
         return ep_params;
     }
 
-    void client_ep_connect(struct sockaddr *connect_addr)
+    void client_ep_connect(const struct sockaddr *connect_addr)
     {
         ucp_ep_params_t ep_params = get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
@@ -335,7 +335,7 @@ public:
         sender().connect(&receiver(), ep_params);
     }
 
-    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
+    void connect_and_send_recv(const struct sockaddr *connect_addr, bool wakeup)
     {
         {
             scoped_log_handler slh(detect_error_logger);
@@ -350,7 +350,7 @@ public:
                   SEND_RECV_TAG, wakeup, cb_type());
     }
 
-    void connect_and_reject(struct sockaddr *connect_addr, bool wakeup)
+    void connect_and_reject(const struct sockaddr *connect_addr, bool wakeup)
     {
         {
             scoped_log_handler slh(detect_error_logger);
@@ -366,26 +366,22 @@ public:
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
                                 bool wakeup)
     {
-        struct sockaddr_in connect_addr = test_addr;
-
         UCS_TEST_MESSAGE << "Testing "
                          << ucs::sockaddr_to_str(
-                                (const struct sockaddr*)&connect_addr);
+                                (const struct sockaddr*)&test_addr);
 
-        start_listener(cb_type, (const struct sockaddr*)&connect_addr);
-        connect_and_send_recv((struct sockaddr*)&connect_addr, wakeup);
+        start_listener(cb_type, (const struct sockaddr*)&test_addr);
+        connect_and_send_recv((const struct sockaddr*)&test_addr, wakeup);
     }
 
     void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
                            bool wakeup)
     {
-        struct sockaddr_in connect_addr = test_addr;
-
         UCS_TEST_MESSAGE << "Testing "
                          << ucs::sockaddr_to_str(
-                                (const struct sockaddr*)&connect_addr);
-        start_listener(cb_type, (const struct sockaddr*)&connect_addr);
-        connect_and_reject((struct sockaddr*)&connect_addr, wakeup);
+                                (const struct sockaddr*)&test_addr);
+        start_listener(cb_type, (const struct sockaddr*)&test_addr);
+        connect_and_reject((const struct sockaddr*)&test_addr, wakeup);
     }
 
 
@@ -426,16 +422,16 @@ UCS_TEST_P(test_ucp_sockaddr, listen) {
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
 
-    struct sockaddr_in connect_addr = test_addr, inaddr_any_listen_addr;
+    struct sockaddr_in inaddr_any_listen_addr;
 
-    inaddr_any_addr(&inaddr_any_listen_addr, connect_addr.sin_port);
+    inaddr_any_addr(&inaddr_any_listen_addr, test_addr.sin_port);
 
     UCS_TEST_MESSAGE << "Testing "
                      << ucs::sockaddr_to_str(
                         (const struct sockaddr*)&inaddr_any_listen_addr);
 
     start_listener(cb_type(), (const struct sockaddr*)&inaddr_any_listen_addr);
-    connect_and_send_recv((struct sockaddr*)&connect_addr, false);
+    connect_and_send_recv((const struct sockaddr*)&test_addr, false);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, reject) {
@@ -461,7 +457,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
     {
         scoped_log_handler slh(wrap_errors_logger);
-        client_ep_connect((struct sockaddr*)&listen_addr);
+        client_ep_connect((const struct sockaddr*)&listen_addr);
         /* allow for the unreachable event to arrive before restoring errors */
         wait_for_flag(&m_err_handler_count);
     }
@@ -515,16 +511,15 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
     /* This test makes sure that the client-server flow works when the required
      * features are RMA/ATOMIC. With these features, need to make sure that
      * there is a lane for ucp-wireup (an am_lane should be created and used) */
-    struct sockaddr_in connect_addr = test_addr;
+    UCS_TEST_MESSAGE << "Testing " <<
+        ucs::sockaddr_to_str((const struct sockaddr*)&test_addr);
 
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
-
-    start_listener(cb_type(), (const struct sockaddr*)&connect_addr);
+    start_listener(cb_type(), (const struct sockaddr*)&test_addr);
 
     {
         scoped_log_handler slh(wrap_errors_logger);
 
-        client_ep_connect((struct sockaddr*)&connect_addr);
+        client_ep_connect((struct sockaddr*)&test_addr);
 
         /* allow the err_handler callback to be invoked if needed */
         if (!wait_for_server_ep(false)) {
