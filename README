@@ -36,14 +36,55 @@ shared memory mechanisms for efficient intra-node communication.
 
 ## Using UCX
 
-### Building and Running Internal Unit Tests
+### Release Builds
+
+Building UCX is typically a combination of running "configure" and "make".
+Execute the following commands to install the UCX system from within the
+directory at the top of the tree:
 
 ```sh
 $ ./autogen.sh
-$ ./contrib/configure-devel
-$ make
+$ ./contrib/configure-release --prefix=/where/to/install
+$ make -j8
+$ make install
+```
+
+NOTE: Compiling support for various networks or other specific hardware may
+require additional command line flags when running configure.
+
+### Developer Builds
+
+```bash
+$ ./autogen.sh
+$ ./contrib/configure-devel --prefix=$PWD/install-debug
+```
+
+*** NOTE: Developer builds of UCX typically include a large performance 
+penalty at run-time because of extra debugging code.
+
+### Running internal unit tests
+
+```sh
 $ make -C test/gtest test
 ```
+
+### Build RPM package
+```bash
+$ contrib/buildrpm.sh -s -b
+```
+
+### Build DEB package
+```bash
+$ dpkg-buildpackage -us -uc
+```
+
+### Build Doxygen documentation
+```bash
+$ make docs
+```
+
+### OpenMPI and OpenSHMEM installation with UCX
+[Wiki page](http://github.com/openucx/ucx/wiki/OpenMPI-and-OpenSHMEM-installation-with-UCX)
 
 ### UCX Performance Test
 
