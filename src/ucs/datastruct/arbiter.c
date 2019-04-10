@@ -175,22 +175,33 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
     } while (ptr != tail);
 
     if (is_scheduled) {
-        if (group->tail == NULL) {
-            /* group became empty */
-            if (orig_head == prev_group) {
+        if (orig_head == prev_group) {
+            /* this is the only group which was scheduled */
+            if (group->tail == NULL) {
                 /* group became empty - no more groups scheduled */
                 arbiter->current = NULL;
-            } else {
+            } else if (orig_head != head) {
+                /* keep the group scheduled, but with new head element */
+                arbiter->current = head;
+                ucs_list_head_init(&head->list);
+            }
+        } else {
+            if (group->tail == NULL) {
                 /* group became empty - deschedule it */
                 prev_group->list.next = &next_group->list;
                 next_group->list.prev = &prev_group->list;
                 if (arbiter->current == orig_head) {
                     arbiter->current = next_group;
                 }
+            } else if (orig_head != head) {
+                /* keep the group scheduled, but with new head element */
+                ucs_list_insert_replace(&prev_group->list,
+                                        &next_group->list,
+                                        &head->list);
+                if (arbiter->current == orig_head) {
+                    arbiter->current = head;
+                }
             }
-        } else if (orig_head != head) {
-            /* head changed, and group is non-empty */
-            ucs_arbiter_group_head_replaced(arbiter, orig_head, head);
         }
     } else if ((orig_head != head) && (group->tail != NULL)) {
         /* Mark new head as unscheduled */
