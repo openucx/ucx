@@ -336,8 +336,8 @@ ucs_status_t uct_rc_verbs_ep_atomic64_fetch(uct_ep_h tl_ep, uct_atomic_op_t opco
     }
 
     return uct_rc_verbs_ep_atomic(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
-            IBV_WR_ATOMIC_FETCH_AND_ADD, result, value, 0,
-            remote_addr, rkey, comp);
+                                  IBV_WR_ATOMIC_FETCH_AND_ADD, result, value, 0,
+                                  remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
