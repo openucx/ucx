@@ -364,30 +364,37 @@ UCS_TEST_F(test_socket, sockaddr_is_equal_err) {
     ucs_status_t status;
     int result;
 
-    socket_err_exp_str = "unknown address family: ";
-    scoped_log_handler log_handler(socket_error_handler);
+    {
+        socket_err_exp_str = "unknown address family: ";
+        scoped_log_handler log_handler(socket_error_handler);
 
-    result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
-                                   (const struct sockaddr*)&sa_un,
-                                   &status);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-    EXPECT_EQ(0, result);
+        result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
+                                       (const struct sockaddr*)&sa_un,
+                                       &status);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        EXPECT_EQ(0, result);
+    }
 
     result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
                                    (const struct sockaddr*)&sa_in,
                                    &status);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    EXPECT_EQ(UCS_OK, status);
     EXPECT_EQ(0, result);
 
     result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_in,
                                    (const struct sockaddr*)&sa_un,
                                    &status);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    EXPECT_EQ(UCS_OK, status);
     EXPECT_EQ(0, result);
 
     // Call w/o `status` provided
-    result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
-                                   (const struct sockaddr*)&sa_un,
-                                   NULL);
-    EXPECT_EQ(0, result);
+    {
+        socket_err_exp_str = "unknown address family: ";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
+                                       (const struct sockaddr*)&sa_un,
+                                       NULL);
+        EXPECT_EQ(0, result);
+    }
 }

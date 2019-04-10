@@ -238,16 +238,6 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     return str;
 }
 
-static ucs_status_t ucs_sockaddr_check_family(const struct sockaddr *sa)
-{
-    if ((sa->sa_family != AF_INET) && (sa->sa_family != AF_INET6)) {
-        ucs_error("unknown address family: %d", sa->sa_family);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
 int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
                           const struct sockaddr *sa2,
                           ucs_status_t *status_p)
@@ -255,36 +245,24 @@ int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
     ucs_status_t status = UCS_OK;
     int result          = 0;
 
-    status = ucs_sockaddr_check_family(sa1);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    status = ucs_sockaddr_check_family(sa2);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     if (sa1->sa_family != sa2->sa_family) {
         goto out;
     }
 
     switch (sa1->sa_family) {
     case AF_INET:
-        if ((UCS_SOCKET_INET_PORT(sa1) == UCS_SOCKET_INET_PORT(sa2)) &&
-            (memcmp(&UCS_SOCKET_INET_ADDR(sa1), &UCS_SOCKET_INET_ADDR(sa2),
-                    sizeof(UCS_SOCKET_INET_ADDR(sa1))) == 0)) {
-            result = 1;
-            goto out;
-        }
+        result = ((UCS_SOCKET_INET_PORT(sa1) == UCS_SOCKET_INET_PORT(sa2)) &&
+                  (memcmp(&UCS_SOCKET_INET_ADDR(sa1), &UCS_SOCKET_INET_ADDR(sa2),
+                          sizeof(UCS_SOCKET_INET_ADDR(sa1))) == 0));
         break;
     case AF_INET6:
-        if ((UCS_SOCKET_INET6_PORT(sa1) == UCS_SOCKET_INET6_PORT(sa2)) &&
-            (memcmp(&UCS_SOCKET_INET6_ADDR(sa1), &UCS_SOCKET_INET6_ADDR(sa2),
-                    sizeof(UCS_SOCKET_INET6_ADDR(sa1))) == 0)) {
-            result = 1;
-            goto out;
-        }
+        result = ((UCS_SOCKET_INET6_PORT(sa1) == UCS_SOCKET_INET6_PORT(sa2)) &&
+                  (memcmp(&UCS_SOCKET_INET6_ADDR(sa1), &UCS_SOCKET_INET6_ADDR(sa2),
+                          sizeof(UCS_SOCKET_INET6_ADDR(sa1))) == 0));
+        break;
+    default:
+        ucs_error("unknown address family: %d", sa1->sa_family);
+        status = UCS_ERR_INVALID_PARAM;
         break;
     }
 
