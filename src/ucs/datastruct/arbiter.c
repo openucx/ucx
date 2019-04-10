@@ -163,7 +163,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
             } else if (ptr == tail) {
                 group->tail = prev;
                 /* tail->next should point to head, make sure next is head
-                 * (it is assinged 2 lines below) */
+                 * (it is assigned 2 lines below) */
                 ucs_assert_always(next == head);
             }
             prev->next = next;

@@ -233,6 +233,7 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
                            &send_dt, &recv_dt);
 
     /* coverity[var_deref_model] */
+    /* coverity[var_deref_op] */
     recvd = do_xfer(&sendbuf[0], &recvbuf[0], count, send_dt, recv_dt, expected,
                     sync, truncated);
     if (!truncated) {
