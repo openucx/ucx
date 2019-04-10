@@ -300,6 +300,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                         ucs_list_head_init(&next_elem->list);
                     } else {
                         /* Insert the next element to the arbiter list */
+                        /* coverity[deref_after_free] */
                         ucs_list_insert_replace(&prev_group->list,
                                                 &next_group->list,
                                                 &next_elem->list);
