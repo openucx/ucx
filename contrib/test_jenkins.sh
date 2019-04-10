@@ -1058,7 +1058,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR) || true
+	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT \
@@ -1067,7 +1067,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR) || true
+	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
 	then
