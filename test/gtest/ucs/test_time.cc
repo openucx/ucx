@@ -63,7 +63,6 @@ UCS_TEST_F(test_time, timerq) {
     ucs_timer_queue_t timerq;
     ucs_status_t status;
 
-    ::srand(::time(NULL));
     for (unsigned test_count = 0; test_count < 500; ++test_count) {
 
         const ucs_time_t interval1 = (ucs::rand() % 20) + 1;

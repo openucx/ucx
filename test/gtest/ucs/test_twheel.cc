@@ -49,7 +49,6 @@ void twheel::init()
 {
     ucs_twheel_init(&m_wheel, ucs_time_from_usec(32) * ucs::test_time_multiplier(),
                     ucs_get_time());
-    ::srand(::time(NULL));
 }
 
 void twheel::cleanup()
@@ -213,7 +212,6 @@ UCS_TEST_F(twheel, add_overflow) {
 #if 0
     struct hr_timer t;
     init_timer(&t, 0);
-    ::srand(::time(NULL));
 
     t.total_time = 0;
     set_timer_delta(&t, -2);
