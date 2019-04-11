@@ -159,10 +159,15 @@ public:
     static volatile int   bistro_call_counter;
 };
 
-bool skip_on_bistro_without_valgrind() {
+static bool skip_on_bistro_without_valgrind() {
     /* BISTRO is disabled under valgrind, we may run tests */
     return ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
             !RUNNING_ON_VALGRIND);
+}
+
+static bool skip_on_bistro_or_valgrind() {
+    return ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) ||
+            RUNNING_ON_VALGRIND);
 }
 
 int malloc_hook::small_alloc_count            = 1000 / ucs::test_time_multiplier();
@@ -724,7 +729,7 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
 }
 
 UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, dynamic_mmap_enable,
-                     skip_on_bistro_without_valgrind()) {
+                     skip_on_bistro_or_valgrind()) {
     EXPECT_TRUE(ucm_global_opts.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
