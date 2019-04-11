@@ -41,11 +41,11 @@
    4. system headers
 
 
-* ## Doxygen
+## Doxygen
   * all interface H/C files should have doxygen documentation.
  
 
-* ## Error handling
+## Error handling
   * all internal error codes must be ucs_status_t
   * a function which returns error should print a log message
   * the function which prints the log message is the first one which decides which
