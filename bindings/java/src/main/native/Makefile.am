@@ -34,6 +34,7 @@ libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
 libjucx_la_SOURCES = context.cc \
                      jucx_common_def.cc \
                      listener.cc \
+                     memory.cc \
                      ucp_constants.cc \
                      ucs_constants.cc \
                      worker.cc
