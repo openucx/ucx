@@ -185,27 +185,23 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class { 
      } \
   } \
   virtual void test_body(); \
-  static ::testing::TestInfo* const test_info_; \
-  GTEST_DISALLOW_COPY_AND_ASSIGN_( \
-      GTEST_TEST_CLASS_NAME_(test_case_name, test_name)); \
-    static int AddToRegistry() { \
-        ::testing::internal::MakeAndRegisterTestInfo(\
-            #test_case_name, \
-            (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
-            "", "", \
-            (parent_id), \
-            parent_class::SetUpTestCase, \
-            parent_class::TearDownTestCase, \
-            new ::testing::internal::TestFactoryImpl<\
-                GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
-        return 0; \
-    } \
-    static int gtest_registering_dummy_; \
-  };\
-  int GTEST_TEST_CLASS_NAME_(test_case_name, \
-                             test_name)::gtest_registering_dummy_ = \
-      GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::AddToRegistry(); \
-  void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
+    static ::testing::TestInfo* const test_info_;\
+  GTEST_DISALLOW_COPY_AND_ASSIGN_(\
+      GTEST_TEST_CLASS_NAME_(test_case_name, test_name));\
+};\
+\
+::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\
+  ::test_info_ =\
+    ::testing::internal::MakeAndRegisterTestInfo(\
+        #test_case_name, \
+        (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
+        "", "", \
+        (parent_id), \
+        parent_class::SetUpTestCase, \
+        parent_class::TearDownTestCase, \
+        new ::testing::internal::TestFactoryImpl<\
+            GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>);\
+void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 
 
 /*
