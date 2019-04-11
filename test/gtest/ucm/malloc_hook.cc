@@ -159,15 +159,13 @@ public:
     static volatile int   bistro_call_counter;
 };
 
-static bool skip_on_bistro_without_valgrind() {
-    /* BISTRO is disabled under valgrind, we may run tests */
-    return ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
-            !RUNNING_ON_VALGRIND);
+static bool skip_on_bistro() {
+    return (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO);
 }
 
-static bool skip_on_bistro_or_valgrind() {
-    return ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) ||
-            RUNNING_ON_VALGRIND);
+static bool skip_on_bistro_without_valgrind() {
+    /* BISTRO is disabled under valgrind, we may run tests */
+    return (skip_on_bistro() && !RUNNING_ON_VALGRIND);
 }
 
 int malloc_hook::small_alloc_count            = 1000 / ucs::test_time_multiplier();
@@ -729,7 +727,7 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
 }
 
 UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, dynamic_mmap_enable,
-                     skip_on_bistro_or_valgrind()) {
+                     RUNNING_ON_VALGRIND || skip_on_bistro()) {
     EXPECT_TRUE(ucm_global_opts.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
@@ -963,7 +961,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event, RUNNING_ON_VALGRIND) {
 }
 
 UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
-                     skip_on_bistro_without_valgrind()) {
+                     RUNNING_ON_VALGRIND || !skip_on_bistro()) {
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;
     const char *symbol = "munmap";
