@@ -33,7 +33,8 @@ void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group)
     ucs_assert(group->tail == NULL);
 }
 
-void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
+                                        ucs_arbiter_elem_t *elem)
 {
     ucs_arbiter_elem_t *tail = group->tail;
 
@@ -47,6 +48,54 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, ucs_arbiter_
 
     elem->group = group;  /* Always point to group */
     group->tail = elem;   /* Update group tail */
+}
+
+static void ucs_arbiter_group_head_replaced(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_elem_t *old_head,
+                                            ucs_arbiter_elem_t *new_head)
+{
+    ucs_assert(old_head->list.prev != NULL);
+    ucs_assert(old_head->list.next != NULL);
+    ucs_assert(old_head != new_head);
+
+    if (old_head->list.next == &old_head->list) {
+        /* single group which was scheduled */
+        ucs_assert(arbiter->current == old_head);
+        ucs_list_head_init(&new_head->list);
+        arbiter->current = new_head;
+    } else {
+        ucs_list_insert_replace(old_head->list.prev, old_head->list.next,
+                                &new_head->list);
+        if (arbiter->current == old_head) {
+            arbiter->current = new_head;
+        }
+    }
+}
+
+void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
+                                             ucs_arbiter_group_t *group,
+                                             ucs_arbiter_elem_t *elem)
+{
+    ucs_arbiter_elem_t *tail = group->tail;
+    ucs_arbiter_elem_t *head;
+
+    elem->group     = group;  /* Always point to group */
+    elem->list.next = NULL;   /* Not scheduled yet */
+
+    if (tail == NULL) {
+        elem->next  = elem;   /* Connect to itself */
+        group->tail = elem;   /* Update group tail */
+        return;
+    }
+
+    head       = tail->next;
+    elem->next = head;        /* Point to first element */
+    tail->next = elem;        /* Point previous element to new one */
+
+    if (head->list.next != NULL) {
+        ucs_assert(arbiter != NULL);
+        ucs_arbiter_group_head_replaced(arbiter, head, elem);
+    }
 }
 
 void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
