@@ -15,6 +15,7 @@
 #include <sys/types.h>
 
 
+#define UCT_COMPONENT_NAME_MAX     16
 #define UCT_TL_NAME_MAX            10
 #define UCT_MD_COMPONENT_NAME_MAX  16
 #define UCT_MD_NAME_MAX            16
@@ -67,6 +68,7 @@ enum uct_cb_param_flags {
  * @addtogroup UCT_RESOURCE
  * @{
  */
+typedef struct uct_md_component  *uct_component_h;
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_md_config     uct_md_config_t;
