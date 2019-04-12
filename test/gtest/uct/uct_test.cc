@@ -276,6 +276,15 @@ bool uct_test::get_config(const std::string& name, std::string& value) const
     return (status == UCS_OK);
 }
 
+bool uct_test::has_transport(const std::string& tl_name) const {
+    return (GetParam()->tl_name == tl_name);
+}
+
+bool uct_test::has_transport(const std::vector<std::string>& tl_names) const {
+    return (std::find(tl_names.begin(), tl_names.end(),
+                      GetParam()->tl_name) != tl_names.end());
+}
+
 void uct_test::stats_activate()
 {
     ucs_stats_cleanup();
@@ -372,7 +381,7 @@ void uct_test::twait(int delta_ms) const {
 
 int uct_test::max_connections()
 {
-    if (GetParam()->tl_name == "tcp") {
+    if (has_transport("tcp")) {
         return ucs::max_tcp_connections();
     } else {
         return std::numeric_limits<int>::max();

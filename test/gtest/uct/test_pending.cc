@@ -467,7 +467,7 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     }
 
     /* TODO: need to investigate the slowness of the test with TCP */
-    if (GetParam()->tl_name == "tcp") {
+    if (has_transport("tcp")) {
         ucs::watchdog_set(ucs::watchdog_timeout_default * 2.0);
     }
 

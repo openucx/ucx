@@ -31,8 +31,7 @@ protected:
         }
 
         set_config("IB_TX_CQ_MODERATION=1");
-        if ((GetParam()->tl_name == "rc") || (GetParam()->tl_name == "rc_mlx5") ||
-            (GetParam()->tl_name == "dc") || (GetParam()->tl_name == "dc_mlx5")) {
+        if (has_transport(tl_names.get_ib_rc_dc())) {
             set_config("RC_FC_ENABLE=n");
         }
 

@@ -132,7 +132,9 @@ test_perf::test_spec test_uct_perf::tests[] =
 UCS_TEST_P(test_uct_perf, envelope) {
     bool check_perf;
 
-    if (GetParam()->tl_name == "cm" || GetParam()->tl_name == "ugni_udt" || GetParam()->tl_name == "cuda_ipc") {
+    if (has_transport("cm") ||
+        has_transport("ugni_udt") ||
+        has_transport("cuda_ipc")) {
         UCS_TEST_SKIP;
     }
 
@@ -149,7 +151,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
         }
     }
 
-    if (GetParam()->tl_name == "tcp") {
+    if (has_transport("tcp")) {
         check_perf = false; /* TODO calibrate expected performance based on transport */
     }
 

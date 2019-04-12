@@ -66,6 +66,8 @@ protected:
 
     virtual void test_body() = 0;
 
+    virtual bool has_transport(const std::string& tl_name) const;
+
     static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level, const char *message, va_list ap);

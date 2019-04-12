@@ -652,8 +652,7 @@ public:
         /* can not reduce mpool size below retransmission window
          * for ud
          */
-        if ((GetParam()->tl_name.compare("ud") == 0) || 
-            (GetParam()->tl_name.compare("ud_mlx5") == 0)) { 
+        if (has_transport(tl_names.get_ib_ud())) {
             m_inited = false;
             return;
         }
@@ -682,11 +681,10 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
     if (!m_inited) { 
         UCS_TEST_SKIP_R("Test does not apply to the current transport");
     }
-    if (GetParam()->tl_name.compare("cm") == 0) { 
+    if (has_transport("cm")) { 
         UCS_TEST_SKIP_R("Test does not work with IB CM transport");
     }
-    if ((GetParam()->tl_name.compare("rc") == 0) ||
-        (GetParam()->tl_name.compare("rc_mlx5") == 0)) { 
+    if (has_transport(tl_names.get_ib_rc())) { 
         UCS_TEST_SKIP_R("Test does not work with IB RC transports");
     }
     do {
