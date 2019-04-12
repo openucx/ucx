@@ -197,13 +197,13 @@ protected:
 
             ib_rc_dc_tl_names.push_back("dc_mlx5");
         }
-        std::vector<std::string> get_ib_ud() const {
+        std::vector<std::string>& get_ib_ud() {
             return ib_ud_tl_names;
         }
-        std::vector<std::string> get_ib_rc() const {
+        std::vector<std::string>& get_ib_rc() {
             return ib_rc_tl_names;
         }
-        std::vector<std::string> get_ib_rc_dc() const {
+        std::vector<std::string>& get_ib_rc_dc() {
             return ib_rc_dc_tl_names;
         }
     private:
