@@ -369,9 +369,10 @@ sock_addr_storage::sock_addr_storage() : m_size(0), m_is_valid(false) {
 }
 
 sock_addr_storage::sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr) :
-    m_size(ucs_sock_addr.addrlen) {
+    m_size(ucs_sock_addr.addrlen), m_is_valid(false) {
 
     if (sizeof(m_storage) < m_size) {
+        memset(&m_storage, 0, sizeof(m_storage));
         return;
     }
     memcpy(&m_storage, ucs_sock_addr.addr, m_size);
@@ -388,11 +389,11 @@ void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
 }
 
 void sock_addr_storage::set_port(uint16_t port) {
-    if (get_addr().sa_family == AF_INET) {
+    if (get_sock_addr().sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
         addr_in->sin_port = port;
     } else {
-        ASSERT_TRUE(get_addr().sa_family == AF_INET6);
+        ASSERT_TRUE(get_sock_addr().sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
         addr_in->sin6_port = port;
@@ -400,19 +401,19 @@ void sock_addr_storage::set_port(uint16_t port) {
 }
 
 uint16_t sock_addr_storage::get_port() const {
-    if (get_addr().sa_family == AF_INET) {
+    if (get_sock_addr().sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
         return addr_in->sin_port;
     } else {
-        EXPECT_TRUE(get_addr().sa_family == AF_INET6);
+        EXPECT_TRUE(get_sock_addr().sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
         return addr_in->sin6_port;
     }
 }
 
-const struct sockaddr& sock_addr_storage::get_addr() const {
-    return *get_addr_ptr();
+const struct sockaddr& sock_addr_storage::get_sock_addr() const {
+    return *get_sock_addr_ptr();
 }
 
 size_t sock_addr_storage::get_addr_size() const {
@@ -426,13 +427,13 @@ std::string sock_addr_storage::to_str() const {
 ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
     ucs_sock_addr_t addr;
 
-    addr.addr    = get_addr_ptr();
+    addr.addr    = get_sock_addr_ptr();
     addr.addrlen = m_size;
     return addr;
 }
 
-const struct sockaddr* sock_addr_storage::get_addr_ptr() const {
-    return m_is_valid ? (const struct sockaddr *)(&m_storage) : NULL;
+struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
+    return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
 }
 
 namespace detail {

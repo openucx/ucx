@@ -10,6 +10,7 @@
 
 #include "gtest.h"
 
+#include <ucs/config/types.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
@@ -309,11 +310,11 @@ public:
 
     void set_sock_addr(const struct sockaddr &addr, const size_t size);
 
+    const struct sockaddr& get_sock_addr() const;
+
     void set_port(uint16_t port);
 
     uint16_t get_port() const;
-
-    const struct sockaddr& get_addr() const;
 
     size_t get_addr_size() const;
 
@@ -322,7 +323,7 @@ public:
     ucs_sock_addr_t to_ucs_sock_addr() const;
 
 private:
-    const struct sockaddr* get_addr_ptr() const;
+    struct sockaddr* get_sock_addr_ptr() const;
 
     struct sockaddr_storage m_storage;
     size_t                  m_size;
