@@ -86,6 +86,15 @@
     } while (0)
 
 
+#define ASSERT_UCS_OK_OR_BUSY(_expr) \
+    do { \
+        ucs_status_t _status = (_expr); \
+        if (((_status) != UCS_OK) && ((_status) != UCS_ERR_BUSY)) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
+        } \
+    } while (0)
+
+
 #define ASSERT_UCS_PTR_OK(_expr) \
     do { \
         ucs_status_ptr_t _status = (_expr); \
@@ -288,6 +297,37 @@ std::string sockaddr_to_str(const S *saddr) {
     return ::ucs_sockaddr_str(reinterpret_cast<const struct sockaddr*>(saddr),
                               buffer, UCS_SOCKADDR_STRING_LEN);
 }
+
+/**
+ * Wrapper for struct sockaddr_storage to unify work flow for IPv4 and IPv6
+ */
+class sock_addr_storage {
+public:
+    sock_addr_storage();
+
+    sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr);
+
+    void set_sock_addr(const struct sockaddr &addr, const size_t size);
+
+    void set_port(uint16_t port);
+
+    uint16_t get_port() const;
+
+    const struct sockaddr& get_addr() const;
+
+    size_t get_addr_size() const;
+
+    std::string to_str() const;
+
+    ucs_sock_addr_t to_ucs_sock_addr() const;
+
+private:
+    const struct sockaddr* get_addr_ptr() const;
+
+    struct sockaddr_storage m_storage;
+    size_t                  m_size;
+    bool                    m_is_valid;
+};
 
 
 /*
@@ -589,12 +629,15 @@ private:
 };
 
 #define UCS_TEST_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \
-    { \
+    ({ \
         _t h; \
         ucs_status_t status = _ctor(__VA_ARGS__, &h); \
-        ASSERT_UCS_OK(status); \
-        _handle.reset(h, _dtor); \
-    }
+        ASSERT_UCS_OK_OR_BUSY(status); \
+        if (status == UCS_OK) { \
+            _handle.reset(h, _dtor); \
+        } \
+        status; \
+    })
 
 
 class size_value {
