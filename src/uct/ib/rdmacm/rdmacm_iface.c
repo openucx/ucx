@@ -521,10 +521,15 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         }
 
         if (rdma_bind_addr(self->cm_id, (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr)) {
+            int err = errno;
+            if ((err == EADDRNOTAVAIL) || (err == EADDRINUSE)) {
+                status = UCS_ERR_BUSY;
+            } else {
+                status = UCS_ERR_IO_ERROR;
+            }
             ucs_error("rdma_bind_addr(addr=%s) failed: %m",
                       ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
-            status = UCS_ERR_IO_ERROR;
             goto err_destroy_id;
         }
 
