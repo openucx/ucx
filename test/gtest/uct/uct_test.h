@@ -195,6 +195,9 @@ protected:
             ib_rc_tl_names.push_back("rc");
             ib_rc_tl_names.push_back("rc_mlx5");
 
+            ib_rc_dc_tl_names.insert(ib_rc_dc_tl_names.end(),
+                                     ib_rc_tl_names.begin(),
+                                     ib_rc_tl_names.end());
             ib_rc_dc_tl_names.push_back("dc_mlx5");
         }
         std::vector<std::string>& get_ib_ud() {
