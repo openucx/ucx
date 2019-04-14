@@ -70,5 +70,27 @@ public class UcpConstants {
     public static long UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
     public static long UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
 
+    /**
+     * UCP endpoint parameters field mask.
+     */
+    public static long UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    public static long UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+    public static long UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    public static long UCP_EP_PARAM_FIELD_USER_DATA;
+    public static long UCP_EP_PARAM_FIELD_SOCK_ADDR;
+    public static long UCP_EP_PARAM_FIELD_FLAGS;
+    public static long UCP_EP_PARAM_FIELD_CONN_REQUEST;
+
+    /**
+     * UCP error handling mode.
+     */
+    public static int UCP_ERR_HANDLING_MODE_PEER;
+
+    /**
+     * The enumeration list describes the endpoint's parameters flags.
+     */
+    public static long UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+    public static long UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+
     private static native void loadConstants();
 }

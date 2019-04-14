@@ -8,6 +8,7 @@ package org.ucx.jucx.ucp;
 import java.nio.ByteBuffer;
 import java.util.BitSet;
 
+import org.ucx.jucx.UcxException;
 import org.ucx.jucx.UcxParams;
 import org.ucx.jucx.ucs.UcsConstants;
 
@@ -131,6 +132,9 @@ public class UcpWorkerParams extends UcxParams {
      * User data associated with the current worker.
      */
     public UcpWorkerParams setUserData(ByteBuffer userData) {
+        if (!userData.isDirect()) {
+            throw new UcxException("User data must be of type DirectByteBuffer.");
+        }
         this.fieldMask |= UcpConstants.UCP_WORKER_PARAM_FIELD_USER_DATA;
         this.userData = userData;
         return this;

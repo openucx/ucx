@@ -7,20 +7,12 @@ package org.ucx.jucx;
 import org.junit.Test;
 import org.ucx.jucx.ucp.*;
 
-import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.nio.ByteBuffer;
-import java.util.Enumeration;
-import java.util.LinkedList;
-import java.util.List;
 
 import static org.junit.Assert.*;
 
 public class UcpListenerTest {
-    private static final int port = Integer.parseInt(
+    public static final int port = Integer.parseInt(
         System.getenv().getOrDefault("JUCX_TEST_PORT", "55321"));
 
     @Test
