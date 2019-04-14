@@ -14,7 +14,7 @@
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
         UCP_INSTANTIATE_TEST_CASE (_test_case) \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,ud,ud_x,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,ud_v,ud_x,mm") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,mm") \
         /* dc_ud case is for testing handling of a large worker address on
          * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc_x) */

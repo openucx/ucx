@@ -58,7 +58,7 @@ UCS_TEST_P(test_ucp_aliases, aliases) {
     create_entity();
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rc, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rc_x, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud, "ud")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud_mlx5, "ud_mlx5")
