@@ -73,6 +73,12 @@ void ucp_test::init() {
     }
 }
 
+bool ucp_test::has_transport(const std::string& tl_name) const {
+    return (std::find(GetParam().transports.begin(),
+                      GetParam().transports.end(),
+                      tl_name) != GetParam().transports.end());
+}
+
 bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }
@@ -207,8 +213,7 @@ void ucp_test::set_ucp_config(ucp_config_t *config) {
 }
 
 int ucp_test::max_connections() {
-    std::vector<std::string>::const_iterator end = GetParam().transports.end();
-    if (std::find(GetParam().transports.begin(), end, "tcp") != end) {
+    if (has_transport("tcp")) {
         return ucs::max_tcp_connections();
     } else {
         return std::numeric_limits<int>::max();

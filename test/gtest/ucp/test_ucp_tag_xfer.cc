@@ -586,7 +586,7 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
 #if HAVE_DC_DV
-    if (GetParam().transports.front().compare("dc_x") == 0) {
+    if (has_transport("dc_x")) {
         UCS_TEST_SKIP_R("DCI stuck bug");
     }
 #endif

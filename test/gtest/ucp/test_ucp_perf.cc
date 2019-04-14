@@ -166,13 +166,13 @@ test_perf::test_spec test_ucp_perf::tests[] =
 
 UCS_TEST_P(test_ucp_perf, envelope) {
     /* Run all tests */
-    std::stringstream ss;
-    ss << GetParam();
     bool check_perf = true;
-    if (ss.str().find("tcp") != std::string::npos) {
+    if (has_transport("tcp")) {
         check_perf = false;
     }
 
+    std::stringstream ss;
+    ss << GetParam();
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");

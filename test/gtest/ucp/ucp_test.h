@@ -167,10 +167,18 @@ public:
     void stats_activate();
     void stats_restore();
 
+private:
+    static void set_ucp_config(ucp_config_t *config,
+                               const ucp_test_param& test_param);
+    static bool check_test_param(const std::string& name,
+                                 const std::string& test_case_name,
+                                 const ucp_test_param& test_param);
+
 protected:
     virtual void init();
     bool is_self() const;
     virtual void cleanup();
+    virtual bool has_transport(const std::string& tl_name) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     entity* get_entity_by_ep(ucp_ep_h ep);
@@ -196,14 +204,6 @@ protected:
         }
     }
 
-private:
-    static void set_ucp_config(ucp_config_t *config,
-                               const ucp_test_param& test_param);
-    static bool check_test_param(const std::string& name,
-                                 const std::string& test_case_name,
-                                 const ucp_test_param& test_param);
-
-protected:
     volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;

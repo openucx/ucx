@@ -31,8 +31,7 @@ protected:
         uct_test::init();
 
         set_config("IB_TX_CQ_MODERATION=1");
-        if ((GetParam()->tl_name == "rc") || (GetParam()->tl_name == "rc_mlx5") ||
-            (GetParam()->tl_name == "dc") || (GetParam()->tl_name == "dc_mlx5")) {
+        if (has_rc_or_dc()) {
             set_config("RC_FC_ENABLE=n");
         }
 

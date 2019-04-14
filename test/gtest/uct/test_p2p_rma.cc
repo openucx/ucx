@@ -71,7 +71,7 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
 {
     uct_memory_type_t src_mem_type = UCT_MD_MEM_TYPE_HOST;
 
-    if ((GetParam()->tl_name.compare("cuda_ipc") == 0)) {
+    if (has_transport("cuda_ipc")) {
         src_mem_type = mem_type;
     }
 

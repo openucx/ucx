@@ -463,7 +463,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
     ucs_status_t status;
 
     /* TODO: need to investigate the slowness of the test with TCP */
-    if (GetParam()->tl_name == "tcp") {
+    if (has_transport("tcp")) {
         ucs::watchdog_set(ucs::watchdog_timeout_default * 2.0);
     }
 
