@@ -39,7 +39,7 @@ typedef struct ucs_init_once {
  * but "return" and "continue" statements may lead to unexpected behavior.
  *
  * How does it work? First, lock the mutex. Then check if already initialized,
- * if yes unlock then mutex and exit the loop (pthread_mutex_unlock is expected
+ * if yes unlock the mutex and exit the loop (pthread_mutex_unlock is expected
  * to return 0). Otherwise, perform the "body" of the for loop, and then set
  * "initialized" to 1. On the next condition check, unlock the mutex and exit.
  */

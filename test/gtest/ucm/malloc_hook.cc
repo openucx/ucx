@@ -249,6 +249,7 @@ void test_thread::test() {
     const size_t small_alloc_size = malloc_hook::small_alloc_size;
     int num_ptrs_in_range;
     static volatile uint32_t total_ptrs_in_range = 0;
+    char *test_str;
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
@@ -311,7 +312,12 @@ void test_thread::test() {
     /* Test setenv */
     pthread_mutex_lock(&lock);
     setenv("TEST", "VALUE", 1);
-    EXPECT_EQ(std::string("VALUE"), getenv("TEST"));
+    test_str = getenv("TEST");
+    if (test_str != NULL) {
+        EXPECT_EQ(std::string("VALUE"), test_str);
+    } else {
+        UCS_TEST_ABORT("getenv(\"TEST\") returned NULL");
+    }
     pthread_mutex_unlock(&lock);
 
     /* Test username */
