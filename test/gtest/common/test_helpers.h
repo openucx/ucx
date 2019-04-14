@@ -97,7 +97,7 @@
 
 #define EXPECT_UD_CHECK(_val1, _val2, _exp_ud, _exp_non_ud) \
     do { \
-        if (has_transport(tl_names.get_ib_ud())) { \
+        if (has_ud()) { \
             EXPECT_##_exp_ud(_val1, _val2); \
         } else { \
             EXPECT_##_exp_non_ud(_val1, _val2); \

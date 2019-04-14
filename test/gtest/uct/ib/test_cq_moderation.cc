@@ -31,7 +31,7 @@ protected:
         }
 
         set_config("IB_TX_CQ_MODERATION=1");
-        if (has_transport(tl_names.get_ib_rc_dc())) {
+        if (has_rc_or_dc()) {
             set_config("RC_FC_ENABLE=n");
         }
 

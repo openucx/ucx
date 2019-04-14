@@ -335,10 +335,6 @@ void test_base::skipped(const test_skip_exception& e) {
     m_state = SKIPPED;
 }
 
-bool test_base::has_transport(const std::string& tl_name) const {
-    return false;
-}
-
 void test_base::init() {
 }
 

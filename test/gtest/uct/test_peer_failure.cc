@@ -186,10 +186,10 @@ void test_uct_peer_failure::init()
 
     /* To reduce test execution time decrease retransmition timeouts
      * where it is relevant */
-    if (has_transport(tl_names.get_ib_rc_dc())) {
+    if (has_rc_or_dc()) {
         set_config("RC_TIMEOUT=100us"); /* 100 us should be enough */
         set_config("RC_RETRY_COUNT=4");
-    } else if (has_transport(tl_names.get_ib_ud())) {
+    } else if (has_ud()) {
         set_config("UD_TIMEOUT=3s");
     }
 

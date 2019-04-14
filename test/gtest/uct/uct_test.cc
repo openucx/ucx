@@ -280,9 +280,16 @@ bool uct_test::has_transport(const std::string& tl_name) const {
     return (GetParam()->tl_name == tl_name);
 }
 
-bool uct_test::has_transport(const std::vector<std::string>& tl_names) const {
-    return (std::find(tl_names.begin(), tl_names.end(),
-                      GetParam()->tl_name) != tl_names.end());
+bool uct_test::has_ud() const {
+    return (has_transport("ud") || has_transport("ud_mlx5"));
+}
+
+bool uct_test::has_rc() const {
+    return (has_transport("rc") || has_transport("rc_mlx5"));
+}
+
+bool uct_test::has_rc_or_dc() const {
+    return (has_rc() || has_transport("dc_mlx5"));
 }
 
 void uct_test::stats_activate()
