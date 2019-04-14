@@ -13,14 +13,14 @@ class test_ucp_rma : public test_ucp_memheap {
 private:
     static void send_completion(void *request, ucs_status_t status){}
 public:
-    void init() {
-        ucp_test::init();
-
+    void init() {        
         // TODO: need to investigate the slowness of the disabled tests
         if ((GetParam().transports.front().compare("dc_x") == 0) &&
             (GetParam().variant == UCP_MEM_MAP_NONBLOCK)) {
             UCS_TEST_SKIP_R("skipping this test until the slowness is resolved");
         }
+
+        ucp_test::init();
     }
 
     static ucp_params_t get_ctx_params() {
@@ -135,12 +135,8 @@ UCS_TEST_P(test_ucp_rma, nbi_med) {
                        sizes, 100, 1);
 }
 
-UCS_TEST_P(test_ucp_rma, nbi_large) {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, nbi_large, RUNNING_ON_VALGRIND) {
     size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        sizes, 3, 1);
@@ -166,12 +162,8 @@ UCS_TEST_P(test_ucp_rma, nb_med) {
                        sizes, 100, 1);
 }
 
-UCS_TEST_P(test_ucp_rma, nb_large) {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, nb_large, RUNNING_ON_VALGRIND) {
     size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nb),
                        sizes, 3, 1);

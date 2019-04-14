@@ -608,12 +608,12 @@ protected:
 
 void test_ucp_stream_many2one::init()
 {
-    /* Skip entities creation */
-    test_base::init();
-
     if (is_self()) {
         UCS_TEST_SKIP_R("self");
     }
+
+    /* Skip entities creation */
+    test_base::init();
 
     for (size_t i = 0; i < m_nsenders + 1; ++i) {
         create_entity();
