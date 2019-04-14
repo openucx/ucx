@@ -338,12 +338,13 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
     attr.path_mtu                   = iface->super.super.config.path_mtu;
-    attr.min_rnr_timer              = iface->super.super.config.min_rnr_timer;
-    attr.max_dest_rd_atomic         = 1;
     attr.ah_attr.is_global          = iface->super.super.super.is_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
+    /* ib_core expects valied ah_attr::port_num when IBV_QP_AV is set */
+    attr.ah_attr.port_num           = iface->super.super.super.config.port_num;
     attr_mask                       = IBV_QP_STATE     |
-                                      IBV_QP_PATH_MTU;
+                                      IBV_QP_PATH_MTU  |
+                                      IBV_QP_AV;
 
     if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
         ucs_error("error modifying DCI QP to RTR: %m");
@@ -612,7 +613,6 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
     attr.path_mtu                   = iface->super.super.config.path_mtu;
-    attr.max_dest_rd_atomic         = 1;
     attr.ah_attr.is_global          = iface->super.super.super.is_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
     attr_mask                       = IBV_EXP_QP_STATE     |
