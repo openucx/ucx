@@ -44,6 +44,24 @@ struct resource {
     uct_device_type_t       dev_type;
     struct sockaddr_storage listen_if_addr;     /* sockaddr to listen on */
     struct sockaddr_storage connect_if_addr;    /* sockaddr to connect to */
+
+    resource();
+    resource(const std::string& md_name, const cpu_set_t& local_cpus,
+             const std::string& tl_name, const std::string& dev_name,
+             uct_device_type_t dev_type);
+    resource(const uct_md_attr_t& md_attr,
+             const uct_md_resource_desc_t& md_resource,
+             const uct_tl_resource_desc_t& tl_resource);
+};
+
+struct resource_speed : public resource {
+    double bw;
+
+    resource_speed() : resource(), bw(0) { }
+    resource_speed(const uct_worker_h& worker, const uct_md_h& md,
+                   const uct_md_attr_t& md_attr,
+                   const uct_md_resource_desc_t& md_resource,
+                   const uct_tl_resource_desc_t& tl_resource);
 };
 
 
@@ -55,8 +73,7 @@ class uct_test : public testing::TestWithParam<const resource*>,
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<const resource*> enum_resources(const std::string& tl_name,
-                                                       bool loopback = false);
+    static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
     uct_test();
     virtual ~uct_test();
