@@ -50,7 +50,7 @@ if [ $opt_no_dist -eq 1 ]; then
 fi
 
 if [ $opt_no_deps -eq 1 ]; then
-    rpmopts="$rpmopts '--nodeps'"
+    rpmopts="$rpmopts --nodeps"
 fi
 
 mkdir -p rpm-dist
