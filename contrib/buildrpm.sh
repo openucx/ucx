@@ -5,7 +5,7 @@ PACKAGE=ucx
 WS=$PWD
 rpmspec=${PACKAGE}.spec
 rpmmacros="--define='_rpmdir ${WS}/rpm-dist' --define='_srcrpmdir ${WS}/rpm-dist' --define='_sourcedir ${WS}' --define='_specdir ${WS}' --define='_builddir ${WS}'"
-rpmopts="--nodeps --buildroot='${WS}/_rpm'"
+rpmopts="--buildroot='${WS}/_rpm'"
 
 
 
@@ -13,6 +13,7 @@ opt_tarball=0
 opt_srcrpm=0
 opt_binrpm=0
 opt_no_dist=0
+opt_no_deps=0
 defines=""
 
 while test "$1" != ""; do
@@ -21,6 +22,7 @@ while test "$1" != ""; do
         --srcrpm|-s)  opt_srcrpm=1 ;;
         --binrpm|-b)  opt_binrpm=1 ;;
         --no-dist)    opt_no_dist=1 ;;
+        --nodeps)     opt_no_deps=1 ;;
         --define|-d)  defines="$defines --define '$2'"; shift ;;
         *)
             cat <<EOF
@@ -32,6 +34,7 @@ Valid arguments:
 --srcrpm|-s         Create src.rpm
 --binrpm|-b         Create bin.rpm
 --no-dist           Undefine %{dist} tag
+--nodeps            Ignore build-time dependencies
 --define|-d <arg>   Add a define to rpmbuild
 
 
@@ -44,6 +47,10 @@ done
 
 if [ $opt_no_dist -eq 1 ]; then
     rpmmacros="$rpmmacros '--undefine=dist'"
+fi
+
+if [ $opt_no_deps -eq 1 ]; then
+    rpmopts="$rpmopts --nodeps"
 fi
 
 mkdir -p rpm-dist

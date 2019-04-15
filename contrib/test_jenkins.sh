@@ -289,7 +289,7 @@ build_release_pkg() {
 		dpkg-buildpackage -us -uc
 	else
 		echo "==== Build RPM ===="
-		../contrib/buildrpm.sh -s -b
+		../contrib/buildrpm.sh -s -b --nodeps
 	fi
 
 	# check that UCX version is present in spec file
