@@ -117,11 +117,6 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
 
-    {"CONTIG_PAGES", "n",
-     "Enable allocation with contiguous pages. Warning: enabling this option may\n"
-     "cause stack smashing.\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.enable_contig_pages), UCS_CONFIG_TYPE_BOOL},
-
     {"INDIRECT_ATOMIC", "y",
      "Use indirect atomic\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
@@ -246,12 +241,6 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 
     md_attr->cap.mem_type     = UCT_MD_MEM_TYPE_HOST;
     md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
-
-    if (md->config.enable_contig_pages &&
-        IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr))
-    {
-        md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
-    }
 
     md_attr->reg_cost      = md->reg_cost;
     md_attr->local_cpus    = md->dev.local_cpus;
@@ -835,63 +824,6 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
     }
 }
 
-static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
-                                     void **address_p, unsigned flags,
-                                     const char *alloc_name, uct_mem_h *memh_p)
-{
-#if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    ucs_status_t status;
-    uint64_t exp_access;
-    uct_ib_mem_t *memh;
-    size_t length;
-
-    if (!md->config.enable_contig_pages) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    memh = uct_ib_memh_alloc(md);
-    if (memh == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    length     = *length_p;
-    exp_access = uct_ib_md_access_flags(md, flags, length) |
-                 IBV_EXP_ACCESS_ALLOCATE_MR;
-    status = uct_ib_md_reg_mr(md, NULL, length, exp_access, 0, &memh->mr);
-    if (status != UCS_OK) {
-        goto err_free_memh;
-    }
-
-    ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
-              memh->mr->addr, memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
-              memh->mr->lkey, memh->mr->rkey);
-
-    uct_ib_mem_init(memh, flags, exp_access);
-    uct_ib_mem_set_numa_policy(md, memh);
-
-    if (md->config.odp.prefetch) {
-        uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
-    }
-
-    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
-    ucs_memtrack_allocated(memh->mr->addr, memh->mr->length UCS_MEMTRACK_VAL);
-
-    *address_p = memh->mr->addr;
-    *length_p  = memh->mr->length;
-    *memh_p    = memh;
-    return UCS_OK;
-
-err_free_memh:
-    uct_ib_memh_free(memh);
-err:
-    return status;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
 ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
                                            uct_ib_mem_t *memh)
 {
@@ -900,23 +832,6 @@ ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
 #else
     return UCS_ERR_UNSUPPORTED;
 #endif
-}
-
-static ucs_status_t uct_ib_mem_free(uct_md_h uct_md, uct_mem_h memh)
-{
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_mem_t *ib_memh = memh;
-    ucs_status_t status;
-
-    ucs_memtrack_releasing(ib_memh->mr->addr);
-
-    status = UCS_PROFILE_CALL(uct_ib_memh_dereg, md, memh);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    uct_ib_memh_free(ib_memh);
-    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
@@ -1050,8 +965,6 @@ static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
 static uct_md_ops_t uct_ib_md_ops = {
     .close             = uct_ib_md_close,
     .query             = uct_ib_md_query,
-    .mem_alloc         = uct_ib_mem_alloc,
-    .mem_free          = uct_ib_mem_free,
     .mem_reg           = uct_ib_mem_reg,
     .mem_dereg         = uct_ib_mem_dereg,
     .mem_advise        = uct_ib_mem_advise,
@@ -1104,8 +1017,6 @@ static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 static uct_md_ops_t uct_ib_md_rcache_ops = {
     .close             = uct_ib_md_close,
     .query             = uct_ib_md_query,
-    .mem_alloc         = uct_ib_mem_alloc,
-    .mem_free          = uct_ib_mem_free,
     .mem_reg           = uct_ib_mem_rcache_reg,
     .mem_dereg         = uct_ib_mem_rcache_dereg,
     .mem_advise        = uct_ib_mem_advise,
@@ -1209,8 +1120,6 @@ static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh)
 static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .close             = uct_ib_md_close,
     .query             = uct_ib_md_odp_query,
-    .mem_alloc         = uct_ib_mem_alloc,
-    .mem_free          = uct_ib_mem_free,
     .mem_reg           = uct_ib_mem_global_odp_reg,
     .mem_dereg         = uct_ib_mem_global_odp_dereg,
     .mem_advise        = uct_ib_mem_advise,
@@ -1635,11 +1544,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_release_stats;
     }
 
-    /* Disable contig pages allocator for IB transport objects */
-    if (!md->config.enable_contig_pages) {
-        ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
-        ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
-    }
+    ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
+    ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         /* Must be done after we open and query the device */

@@ -47,7 +47,6 @@ typedef struct uct_ib_md_ext_config {
                                                 enabled on the Ethernet network */
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
-    int                      enable_contig_pages; /** Enable contiguous pages */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
     int                      enable_gpudirect_rdma; /** Enable GPUDirect RDMA */
 #if HAVE_EXP_UMR
