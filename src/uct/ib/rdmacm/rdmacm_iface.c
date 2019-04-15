@@ -465,6 +465,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_rdmacm_md_t *rdmacm_md;
     ucs_status_t status;
+    int err;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -521,7 +522,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         }
 
         if (rdma_bind_addr(self->cm_id, (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr)) {
-            int err = errno;
+            err = errno;
             if ((err == EADDRNOTAVAIL) || (err == EADDRINUSE)) {
                 status = UCS_ERR_BUSY;
             } else {
