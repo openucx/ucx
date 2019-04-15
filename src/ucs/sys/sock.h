@@ -208,6 +208,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
  */
 ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port);
 
+
 /**
  * Return IP addr of a given sockaddr structure.
  * 
@@ -231,6 +232,21 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr);
  */
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size);
+
+
+/**
+ * Return a value indicating the relationships between passed sockaddr structures.
+ * 
+ * @param [in]     sa1        Pointer to sockaddr structure #1.
+ * @param [in]     sa2        Pointer to sockaddr structure #2.
+ * @param [un/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
+ *                            or UCS_ERR_INVALID_PARAM on failure.
+ *
+ * @return 0 - not equal, != 0 - equal
+ */
+int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
+                          const struct sockaddr *sa2,
+                          ucs_status_t *status_p);
 
 
 END_C_DECLS

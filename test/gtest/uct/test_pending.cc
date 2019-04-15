@@ -455,19 +455,15 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     EXPECT_EQ(0, n_pending);
 }
 
-UCS_TEST_P(test_uct_pending, pending_fairness)
+UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
 {
     int N = 16;
     uint64_t send_data = 0xdeadbeef;
     int i, iters;
     ucs_status_t status;
 
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
-
     /* TODO: need to investigate the slowness of the test with TCP */
-    if (GetParam()->tl_name == "tcp") {
+    if (has_transport("tcp")) {
         ucs::watchdog_set(ucs::watchdog_timeout_default * 2.0);
     }
 

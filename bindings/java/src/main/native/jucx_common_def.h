@@ -26,6 +26,11 @@ void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
     env->SetStaticLongField(cls, field, _name); \
 } while(0)
 
+#define JUCX_DEFINE_INT_CONSTANT(_name) do { \
+    jfieldID field = env->GetStaticFieldID(cls, #_name, "I"); \
+    env->SetStaticIntField(cls, field, _name); \
+} while(0)
+
 /**
  * @brief Utility to convert Java InetSocketAddress class (corresponds to the Network Layer 4
  * and consists of an IP address and a port number) to corresponding sockaddr_storage struct.

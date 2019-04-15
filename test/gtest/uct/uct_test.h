@@ -42,8 +42,26 @@ struct resource {
     std::string             tl_name;
     std::string             dev_name;
     uct_device_type_t       dev_type;
-    ucs::sock_addr_storage   listen_sock_addr;     /* sockaddr to listen on */
-    ucs::sock_addr_storage   connect_sock_addr;    /* sockaddr to connect to */
+    ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
+    ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
+
+    resource();
+    resource(const std::string& md_name, const cpu_set_t& local_cpus,
+             const std::string& tl_name, const std::string& dev_name,
+             uct_device_type_t dev_type);
+    resource(const uct_md_attr_t& md_attr,
+             const uct_md_resource_desc_t& md_resource,
+             const uct_tl_resource_desc_t& tl_resource);
+};
+
+struct resource_speed : public resource {
+    double bw;
+
+    resource_speed() : resource(), bw(0) { }
+    resource_speed(const uct_worker_h& worker, const uct_md_h& md,
+                   const uct_md_attr_t& md_attr,
+                   const uct_md_resource_desc_t& md_resource,
+                   const uct_tl_resource_desc_t& tl_resource);
 };
 
 
@@ -55,8 +73,7 @@ class uct_test : public testing::TestWithParam<const resource*>,
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<const resource*> enum_resources(const std::string& tl_name,
-                                                       bool loopback = false);
+    static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
     uct_test();
     virtual ~uct_test();
@@ -235,6 +252,11 @@ protected:
     void stats_activate();
     void stats_restore();
 
+    virtual bool has_transport(const std::string& tl_name) const;
+    virtual bool has_ud() const;
+    virtual bool has_rc() const;
+    virtual bool has_rc_or_dc() const;
+
     bool is_caps_supported(uint64_t required_flags);
     void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_caps(const entity& e, uint64_t required_flags, uint64_t invalid_flags = 0);
@@ -263,7 +285,6 @@ protected:
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
     uct_md_config_t         *m_md_config;
-
 };
 
 std::ostream& operator<<(std::ostream& os, const resource* resource);

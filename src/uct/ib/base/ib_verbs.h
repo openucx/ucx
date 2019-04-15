@@ -115,15 +115,6 @@
 #define IBV_DEVICE_HAS_DC(dev)                      (dev->flags & UCT_IB_DEVICE_FLAG_DC)
 
 /*
- * NOP support
- */
-#if HAVE_DECL_IBV_EXP_WR_NOP
-#  define IBV_DEVICE_HAS_NOP(_attr)                 ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_NOP)
-#else
-#  define IBV_DEVICE_HAS_NOP(_attr)                 0
-#endif /* HAVE_DECL_IBV_EXP_WR_NOP */
-
-/*
  * Adaptive Routing support
  */
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT

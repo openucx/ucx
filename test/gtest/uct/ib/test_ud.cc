@@ -548,18 +548,15 @@ UCS_TEST_P(test_ud, ca_ai) {
     }
 }
 
-UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
+/* skip valgrind for now */
+UCS_TEST_SKIP_COND_P(test_ud, ca_md, RUNNING_ON_VALGRIND,
+                     "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
     ucs_status_t status;
     int prev_cwnd, new_cwnd;
     int i;
 
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
-    if (RUNNING_ON_VALGRIND) {
-        /* skip valgrind for now */
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
 
     connect();
 
@@ -604,7 +601,7 @@ UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_W
     } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
 }
 
-UCS_TEST_P(test_ud, ca_resend) {
+UCS_TEST_SKIP_COND_P(test_ud, ca_resend, RUNNING_ON_VALGRIND) {
 
     int max_window = 10;
     int i;
@@ -612,9 +609,6 @@ UCS_TEST_P(test_ud, ca_resend) {
 
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("skipping on valgrind");
-    }
     connect();
     set_tx_win(m_e1, max_window);
 

@@ -24,15 +24,14 @@ class test_uct_cq_moderation : public uct_test {
 protected:
 
     void init() {
-        uct_test::init();
-
         if (RUNNING_ON_VALGRIND) {
             UCS_TEST_SKIP_R("skipping on valgrind");
         }
 
+        uct_test::init();
+
         set_config("IB_TX_CQ_MODERATION=1");
-        if ((GetParam()->tl_name == "rc") || (GetParam()->tl_name == "rc_mlx5") ||
-            (GetParam()->tl_name == "dc") || (GetParam()->tl_name == "dc_mlx5")) {
+        if (has_rc_or_dc()) {
             set_config("RC_FC_ENABLE=n");
         }
 

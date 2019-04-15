@@ -158,15 +158,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
         if (dev->pci_cswap_arg_sizes & sizeof(uint64_t)) {
             iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_CSWAP);
         }
-#if HAVE_IB_EXT_ATOMICS
-        if (dev->pci_fadd_arg_sizes & sizeof(uint32_t)) {
-            iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
-            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD);
-        }
-        if (dev->pci_cswap_arg_sizes & sizeof(uint32_t)) {
-            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_CSWAP);
-        }
-#endif
         iface_attr->cap.flags                  |= UCT_IFACE_FLAG_ATOMIC_CPU;
     } else {
         if (dev->atomic_arg_sizes & sizeof(uint64_t)) {
@@ -177,25 +168,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
             iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
                                                   UCS_BIT(UCT_ATOMIC_OP_CSWAP);
         }
-
-#if HAVE_IB_EXT_ATOMICS
-        if (dev->ext_atomic_arg_sizes & sizeof(uint64_t)) {
-            /* TODO: remove deprecated flags */
-            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
-
-            iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
-        }
-
-        if (dev->ext_atomic_arg_sizes & sizeof(uint32_t)) {
-            /* TODO: remove deprecated flags */
-            iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
-
-            iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
-            iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
-                                                  UCS_BIT(UCT_ATOMIC_OP_SWAP) |
-                                                  UCS_BIT(UCT_ATOMIC_OP_CSWAP);
-        }
-#endif
     }
 
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;

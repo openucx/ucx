@@ -26,6 +26,64 @@ std::string resource::name() const {
     return ss.str();
 }
 
+resource::resource() : md_name(""), tl_name(""), dev_name(""),
+                       dev_type(UCT_DEVICE_TYPE_LAST)
+{
+    CPU_ZERO(&local_cpus);
+}
+
+resource::resource(const std::string& md_name, const cpu_set_t& local_cpus,
+                   const std::string& tl_name, const std::string& dev_name,
+                   uct_device_type_t dev_type) :
+                   md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
+                   dev_name(dev_name), dev_type(dev_type)
+{
+}
+
+resource::resource(const uct_md_attr_t& md_attr,
+                   const uct_md_resource_desc_t& md_resource,
+                   const uct_tl_resource_desc_t& tl_resource) :
+                   md_name(md_resource.md_name),
+                   local_cpus(md_attr.local_cpus),
+                   tl_name(tl_resource.tl_name),
+                   dev_name(tl_resource.dev_name),
+                   dev_type(tl_resource.dev_type)
+{
+}
+
+resource_speed::resource_speed(const uct_worker_h& worker,
+                               const uct_md_h& md, const uct_md_attr_t& md_attr,
+                               const uct_md_resource_desc_t& md_resource,
+                               const uct_tl_resource_desc_t& tl_resource) :
+                               resource(md_attr, md_resource, tl_resource) {
+    ucs_status_t status;
+    uct_iface_params_t iface_params = { 0 };
+    uct_iface_config_t *iface_config;
+    uct_iface_attr_t iface_attr;
+    uct_iface_h iface;
+
+    status = uct_md_iface_config_read(md, tl_name.c_str(), NULL,
+                                      NULL, &iface_config);
+    ASSERT_UCS_OK(status);
+
+    iface_params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                                        UCT_IFACE_PARAM_FIELD_DEVICE;
+    iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.mode.device.tl_name  = tl_name.c_str();
+    iface_params.mode.device.dev_name = dev_name.c_str();
+
+    status = uct_iface_open(md, worker, &iface_params, iface_config, &iface);
+    ASSERT_UCS_OK(status);
+
+    status = uct_iface_query(iface, &iface_attr);
+    ASSERT_UCS_OK(status);
+
+    bw = iface_attr.bandwidth;
+
+    uct_iface_close(iface);
+    uct_config_release(iface_config);
+}
+
 const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
 
 uct_test::uct_test() {
@@ -75,12 +133,8 @@ void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
     /* Create two resources on the same interface. the first one will have the
      * ip of the interface and the second one will have INADDR_ANY */
     for (i = 0; i < 2; i++) {
-        resource rsc;
-        rsc.md_name    = md_name,
-        rsc.local_cpus = local_cpus,
-        rsc.tl_name    = "sockaddr",
-        rsc.dev_name   = ifa->ifa_name;
-        rsc.dev_type   = UCT_DEVICE_TYPE_NET;
+        resource rsc(std::string(md_name), local_cpus, "sockaddr",
+                     std::string(ifa->ifa_name), UCT_DEVICE_TYPE_NET);
 
         if (i == 0) {
             /* first rsc */
@@ -145,22 +199,31 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
     freeifaddrs(ifaddr);
 }
 
-std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
-                                                      bool loopback) {
+std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name)
+{
+    static bool tcp_fastest_dev = (getenv("GTEST_UCT_TCP_FASTEST_DEV") != NULL);
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
+        ucs_async_context_t *async;
+        uct_worker_h worker;
         uct_md_resource_desc_t *md_resources;
         unsigned num_md_resources;
         uct_tl_resource_desc_t *tl_resources;
         unsigned num_tl_resources;
         ucs_status_t status;
 
+        status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+        ASSERT_UCS_OK(status);
+
+        status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
+        ASSERT_UCS_OK(status);
+
         status = uct_query_md_resources(&md_resources, &num_md_resources);
         ASSERT_UCS_OK(status);
 
         for (unsigned i = 0; i < num_md_resources; ++i) {
-            uct_md_h pd;
+            uct_md_h md;
             uct_md_config_t *md_config;
             status = uct_md_config_read(md_resources[i].md_name, NULL, NULL,
                                         &md_config);
@@ -168,7 +231,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             {
                 scoped_log_handler slh(hide_errors_logger);
-                status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+                status = uct_md_open(md_resources[i].md_name, md_config, &md);
             }
             uct_config_release(md_config);
             if (status != UCS_OK) {
@@ -176,32 +239,43 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             }
 
             uct_md_attr_t md_attr;
-            status = uct_md_query(pd, &md_attr);
+            status = uct_md_query(md, &md_attr);
             ASSERT_UCS_OK(status);
 
-            status = uct_md_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+            status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
             ASSERT_UCS_OK(status);
+
+            resource_speed tcp_fastest_rsc;
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
-                resource rsc;
-                rsc.md_name    = md_resources[i].md_name;
-                rsc.local_cpus = md_attr.local_cpus;
-                rsc.tl_name    = tl_resources[j].tl_name;
-                rsc.dev_name   = tl_resources[j].dev_name;
-                rsc.dev_type   = tl_resources[j].dev_type;
-                all_resources.push_back(rsc);
+                if (tcp_fastest_dev && (std::string("tcp") == tl_resources[j].tl_name)) {
+                    resource_speed rsc(worker, md, md_attr,
+                                       md_resources[i], tl_resources[j]);
+                    if (!tcp_fastest_rsc.bw || (rsc.bw > tcp_fastest_rsc.bw)) {
+                        tcp_fastest_rsc = rsc;
+                    }
+                } else {
+                    resource rsc(md_attr, md_resources[i], tl_resources[j]);
+                    all_resources.push_back(rsc);
+                }
+            }
+
+            if (tcp_fastest_dev && tcp_fastest_rsc.bw) {
+                all_resources.push_back(tcp_fastest_rsc);
             }
 
             if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                uct_test::set_sockaddr_resources(pd, md_resources[i].md_name,
+                uct_test::set_sockaddr_resources(md, md_resources[i].md_name,
                                                  md_attr.local_cpus, all_resources);
             }
 
             uct_release_tl_resource_list(tl_resources);
-            uct_md_close(pd);
+            uct_md_close(md);
         }
 
         uct_release_md_resource_list(md_resources);
+        uct_worker_destroy(worker);
+        ucs_async_context_destroy(async);
     }
 
     return filter_resources(all_resources, tl_name);
@@ -274,6 +348,22 @@ bool uct_test::get_config(const std::string& name, std::string& value) const
     }
 
     return (status == UCS_OK);
+}
+
+bool uct_test::has_transport(const std::string& tl_name) const {
+    return (GetParam()->tl_name == tl_name);
+}
+
+bool uct_test::has_ud() const {
+    return (has_transport("ud") || has_transport("ud_mlx5"));
+}
+
+bool uct_test::has_rc() const {
+    return (has_transport("rc") || has_transport("rc_mlx5"));
+}
+
+bool uct_test::has_rc_or_dc() const {
+    return (has_rc() || has_transport("dc_mlx5"));
 }
 
 void uct_test::stats_activate()
@@ -372,7 +462,7 @@ void uct_test::twait(int delta_ms) const {
 
 int uct_test::max_connections()
 {
-    if (GetParam()->tl_name == "tcp") {
+    if (has_transport("tcp")) {
         return ucs::max_tcp_connections();
     } else {
         return std::numeric_limits<int>::max();

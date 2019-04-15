@@ -1064,9 +1064,11 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
+    ucs_trace_data("progressing pending request %p", req);
     status = req->func(req);
-    ucs_trace_data("progress pending request %p returned: %s", req,
+    ucs_trace_data("status returned from progress pending: %s",
                    ucs_status_string(status));
+
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {

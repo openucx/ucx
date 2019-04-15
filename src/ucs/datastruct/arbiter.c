@@ -159,7 +159,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
             } else if (ptr == tail) {
                 group->tail = prev;
                 /* tail->next should point to head, make sure next is head
-                 * (it is assinged 2 lines below) */
+                 * (it is assigned 2 lines below) */
                 ucs_assert_always(next == head);
             }
             prev->next = next;
@@ -245,6 +245,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
     ucs_arbiter_group_t *group;
     ucs_arbiter_cb_result_t result;
     unsigned group_dispatch_count;
+    int is_single_group;
     UCS_LIST_HEAD(resched_groups);
 
     next_group = arbiter->current;
@@ -261,9 +262,10 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
         ucs_assert(next_group->list.prev == &group_head->list);
 
         group_dispatch_count = 0;
-        group         = group_head->group;
-        last_elem     = group->tail;
-        next_elem     = group_head;
+        group                = group_head->group;
+        last_elem            = group->tail;
+        next_elem            = group_head;
+        is_single_group      = group_head == prev_group;
 
         do {
             elem            = next_elem;
@@ -290,7 +292,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                  if (elem == last_elem) {
                     /* Only element */
                     group->tail = NULL; /* Group is empty now */
-                    if (group_head == prev_group) {
+                    if (is_single_group) {
                         next_group = NULL; /* No more groups */
                     } else {
                         /* Remove the group */
@@ -300,12 +302,11 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                 } else {
                     /* Not only element */
                     ucs_assert(elem == last_elem->next); /* first element should be removed */
-                    if (group_head == prev_group) {
+                    if (is_single_group) {
                         next_group = next_elem; /* No more groups, point arbiter
                                                    to next element in this group */
                         ucs_list_head_init(&next_elem->list);
                     } else {
-                        /* Insert the next element to the arbiter list */
                         ucs_list_insert_replace(&prev_group->list,
                                                 &next_group->list,
                                                 &next_elem->list);
@@ -320,7 +321,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             } else if ((result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) ||
                        (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP)) {
                 elem->next = next_elem;
-                if (group_head == prev_group) {
+                if (is_single_group) {
                     next_group = NULL; /* No more groups */
                 } else {
                     prev_group->list.next = &next_group->list;
@@ -335,7 +336,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                 elem->list.next = elem_list_next;
                 /* make sure that next dispatch() will continue
                  * from the current group */
-                arbiter->current = group_head;
+                arbiter->current = elem;
                 goto out;
             } else {
                 elem->next = next_elem;

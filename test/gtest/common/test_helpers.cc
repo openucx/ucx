@@ -421,7 +421,7 @@ size_t sock_addr_storage::get_addr_size() const {
 }
 
 std::string sock_addr_storage::to_str() const {
-    return ucs::sockaddr_to_str(this);
+    return ucs::sockaddr_to_str(&this->m_storage);
 }
 
 ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {

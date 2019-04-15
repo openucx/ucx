@@ -186,11 +186,10 @@ void test_uct_peer_failure::init()
 
     /* To reduce test execution time decrease retransmition timeouts
      * where it is relevant */
-    if (GetParam()->tl_name == "rc" || GetParam()->tl_name == "rc_mlx5" ||
-        GetParam()->tl_name == "dc" || GetParam()->tl_name == "dc_mlx5") {
+    if (has_rc_or_dc()) {
         set_config("RC_TIMEOUT=100us"); /* 100 us should be enough */
         set_config("RC_RETRY_COUNT=4");
-    } else if (GetParam()->tl_name == "ud" || GetParam()->tl_name == "ud_mlx5") {
+    } else if (has_ud()) {
         set_config("UD_TIMEOUT=3s");
     }
 
@@ -416,17 +415,16 @@ void test_uct_peer_failure_multiple::init()
 
 size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
 {
-    const std::string &tl_name = GetParam()->tl_name;
-    std::string       name, val;
-    size_t            tx_queue_len;
+    std::string name, val;
+    size_t      tx_queue_len;
 
-    if (tl_name == "rc") {
+    if (has_transport("rc")) {
         name = "RC_IB_TX_QUEUE_LEN";
-    } else if (tl_name == "rc_mlx5") {
+    } else if (has_transport("rc_mlx5")) {
         name = "RC_RC_IB_TX_QUEUE_LEN";
-    } else if (tl_name == "dc_mlx5") {
+    } else if (has_transport("dc_mlx5")) {
         name = "DC_RC_RC_IB_TX_QUEUE_LEN";
-    } else if ((tl_name == "ud") || (tl_name == "ud_mlx5")) {
+    } else if (has_transport("ud")) {
         name = "UD_IB_TX_QUEUE_LEN";
     } else {
         name = "TX_QUEUE_LEN";

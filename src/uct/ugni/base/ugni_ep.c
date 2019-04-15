@@ -34,9 +34,10 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
     ucs_status_t rc;
 
     ep->arb_sched = 1;
+    ucs_trace_data("progressing pending request %p", req);
     rc = req->func(req);
     ep->arb_sched = 0;
-    ucs_trace_data("progress pending request %p returned %s", req,
+    ucs_trace_data("status returned from progress pending: %s",
                    ucs_status_string(rc));
 
     if (UCS_OK == rc) {

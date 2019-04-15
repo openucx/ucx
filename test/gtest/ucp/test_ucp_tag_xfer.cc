@@ -39,6 +39,7 @@ public:
         if (RUNNING_ON_VALGRIND) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MAX_BCOPY", "8k"));
         }
+        
         test_ucp_tag::init();
     }
 
@@ -233,6 +234,7 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
                            &send_dt, &recv_dt);
 
     /* coverity[var_deref_model] */
+    /* coverity[var_deref_op] */
     recvd = do_xfer(&sendbuf[0], &recvbuf[0], count, send_dt, recv_dt, expected,
                     sync, truncated);
     if (!truncated) {
@@ -263,10 +265,8 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     ucp_tag_recv_info_t info;
     request             *rreq, *sreq;
 
-    if (&sender() == &receiver()) {
-        /* the self transport doesn't do rndv and completes the send immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* the self transport doesn't do rndv and completes the send immediately */
+    skip_loopback();
 
     ucp::dt_gen_start_count  = 0;
     ucp::dt_gen_finish_count = 0;
@@ -508,9 +508,6 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     ucs::detail::message_stream *ms;
 
     skip_err_handling();
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("valgrind");
-    }
 
     EXPECT_EQ(posix_memalign(&send_buf, 8192, buf_size), 0);
     EXPECT_EQ(posix_memalign(&recv_buf, 8192, buf_size), 0);
@@ -589,7 +586,7 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
 #if HAVE_DC_DV
-    if (GetParam().transports.front().compare("dc_x") == 0) {
+    if (has_transport("dc_x")) {
         UCS_TEST_SKIP_R("DCI stuck bug");
     }
 #endif
@@ -953,7 +950,8 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RN
     test_xfer_probe(true, false, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, test_xfer_len_offset, "RNDV_THRESH=1000") {
+UCS_TEST_SKIP_COND_P(test_ucp_tag_xfer, test_xfer_len_offset,
+                     RUNNING_ON_VALGRIND, "RNDV_THRESH=1000") {
     test_xfer_len_offset();
 }
 
