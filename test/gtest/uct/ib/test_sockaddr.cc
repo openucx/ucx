@@ -44,15 +44,16 @@ public:
     }
 
     void init() {
-        uct_test::init();
-
         uct_iface_params_t server_params, client_params;
+        uint16_t port;
+
+        uct_test::init();
 
         /* This address is accessible, as it was tested at the resource creation */
         m_listen_addr  = GetParam()->listen_sock_addr;
         m_connect_addr = GetParam()->connect_sock_addr;
 
-        uint16_t port = ucs::get_port();
+        port = ucs::get_port();
         m_listen_addr.set_port(port);
         m_connect_addr.set_port(port);
 
@@ -74,12 +75,12 @@ public:
         server = uct_test::create_entity(server_params);
         m_entities.push_back(server);
 
-        uint16_t actual_port = ucs::sock_addr_storage(server->iface_params()
-                                                      .mode.sockaddr
-                                                      .listen_sockaddr)
-                               .get_port();
-        m_listen_addr.set_port(actual_port);
-        m_connect_addr.set_port(actual_port);
+        /* if origin port is busy create_entity will retry with other one */
+        port = ucs::sock_addr_storage(server->iface_params().mode.sockaddr
+                                                            .listen_sockaddr)
+                                      .get_port();
+        m_listen_addr.set_port(port);
+        m_connect_addr.set_port(port);
 
         /* open iface for the client side */
         client_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
