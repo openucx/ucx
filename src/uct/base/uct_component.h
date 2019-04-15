@@ -81,6 +81,4 @@ struct uct_md_component {
                               _cfg_struct)
 
 
-
-
 #endif
