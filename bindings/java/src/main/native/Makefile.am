@@ -38,6 +38,7 @@ libjucx_la_SOURCES = context.cc \
                      endpoint.cc \
                      jucx_common_def.cc \
                      listener.cc \
+                     memory.cc \
                      ucp_constants.cc \
                      ucs_constants.cc \
                      worker.cc
