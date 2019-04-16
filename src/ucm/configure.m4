@@ -5,7 +5,7 @@
 #
 
 AC_SUBST([UCM_MODULE_LDFLAGS],
-         ["-Xlinker -z -Xlinker interpose"])
+         ["-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"])
 
 ucm_modules=""
 m4_include([src/ucm/cuda/configure.m4])
