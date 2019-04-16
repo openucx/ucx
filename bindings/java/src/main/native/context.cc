@@ -62,52 +62,14 @@ Java_org_ucx_jucx_ucp_UcpContext_cleanupContextNative(JNIEnv *env, jclass cls,
     ucp_cleanup((ucp_context_h)ucp_context_ptr);
 }
 
-/**
- * @brief Converts ucp_mem_h structure to Jucs UcpMemory Class
- */
-inline jobject ucpMem2JucxMem(JNIEnv *env, jobject jucx_ctx, const ucp_mem_h memh)
-{
-    jfieldID field;
-
-    jobject data_buf = env->NewDirectByteBuffer(memh->address, memh->length);
-    jclass jucx_mem_cls = env->FindClass("org/ucx/jucx/ucp/UcpMemory");
-    jmethodID constructor = env->GetMethodID(jucx_mem_cls, "<init>", "(J)V");
-    jobject jucx_mem = env->NewObject(jucx_mem_cls, constructor, (native_ptr)memh);
-
-    field = env->GetFieldID(jucx_mem_cls, "context", "Lorg/ucx/jucx/ucp/UcpContext;");
-    env->SetObjectField(jucx_mem, field, jucx_ctx);
-    field = env->GetFieldID(jucx_mem_cls, "data", "Ljava/nio/ByteBuffer;");
-    env->SetObjectField(jucx_mem, field, data_buf);
-    return jucx_mem;
-}
-
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpContext_allocateMemoryNative(JNIEnv *env, jobject ctx,
+Java_org_ucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
                                                       jlong ucp_context_ptr,
-                                                      jint size)
+                                                      jobject maped_buf)
 {
     ucp_mem_map_params_t params;
     ucp_mem_h memh;
-
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.length     = size;
-    params.flags      = UCP_MEM_MAP_NONBLOCK | UCP_MEM_MAP_ALLOCATE;
-
-    ucs_status_t status = ucp_mem_map((ucp_context_h)ucp_context_ptr, &params, &memh);
-    if (status != UCS_OK) {
-        JNU_ThrowExceptionByStatus(env, status);
-    }
-
-    return ucpMem2JucxMem(env, ctx, memh);
-}
-
-JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpContext_memoryMapFileNative(JNIEnv *env, jobject ctx,
-                                                     jlong ucp_context_ptr,
-                                                     jobject maped_buf)
-{
-    ucp_mem_map_params_t params;
-    ucp_mem_h memh;
+    jfieldID field;
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_ADDRESS;
     params.address    = env->GetDirectBufferAddress(maped_buf);
@@ -118,5 +80,19 @@ Java_org_ucx_jucx_ucp_UcpContext_memoryMapFileNative(JNIEnv *env, jobject ctx,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
-    return ucpMem2JucxMem(env, ctx, memh);
+    // Construct UcpMemory class
+    jclass jucx_mem_cls = env->FindClass("org/ucx/jucx/ucp/UcpMemory");
+    jmethodID constructor = env->GetMethodID(jucx_mem_cls, "<init>", "(J)V");
+    jobject jucx_mem = env->NewObject(jucx_mem_cls, constructor, (native_ptr)memh);
+
+    // Set UcpContext pointer
+    field = env->GetFieldID(jucx_mem_cls, "context", "Lorg/ucx/jucx/ucp/UcpContext;");
+    env->SetObjectField(jucx_mem, field, ctx);
+
+    // Set data buffer
+    jobject data_buf = env->NewDirectByteBuffer(memh->address, memh->length);
+    field = env->GetFieldID(jucx_mem_cls, "data", "Ljava/nio/ByteBuffer;");
+    env->SetObjectField(jucx_mem, field, data_buf);
+
+    return jucx_mem;
 }

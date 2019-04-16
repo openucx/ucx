@@ -28,19 +28,6 @@ public class UcpMemoryTest {
     private static String RANDOM_TEXT = UUID.randomUUID().toString();
 
     @Test
-    public void testContextMemalloc() {
-        UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
-        UcpMemory mem = context.allocateMemory(MEM_SIZE);
-        assertNotNull(mem.getNativeId());
-        assertEquals(mem.getData().capacity(), MEM_SIZE);
-        mem.getData().asCharBuffer().put(RANDOM_TEXT);
-        assertEquals(mem.getData().asCharBuffer().toString().trim(), RANDOM_TEXT);
-        mem.free();
-        assertNull(mem.getData());
-        context.close();
-    }
-
-    @Test
     public void testMmapFile() throws IOException {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
         Path tempFile = Files.createTempFile("jucx", "test");
@@ -61,7 +48,7 @@ public class UcpMemoryTest {
         ByteBuffer memBuffer = mem.getData();
         // 6. Make sure registered buffer is the same as mapped buffer.
         assertEquals(RANDOM_TEXT, memBuffer.asCharBuffer().toString().trim());
-        mem.free();
+        mem.deregister();
         fileChannel.close();
         context.close();
     }
@@ -69,10 +56,11 @@ public class UcpMemoryTest {
     @Test
     public void testGetRkey() {
         UcpContext context = new UcpContext(new UcpParams().requestRmaFeature());
-        UcpMemory mem = context.allocateMemory(MEM_SIZE);
-        ByteBuffer rkeyBuffer = mem.getrKeyBuffer();
+        ByteBuffer buf = ByteBuffer.allocateDirect(MEM_SIZE);
+        UcpMemory mem = context.registerMemory(buf);
+        ByteBuffer rkeyBuffer = mem.getRemoteKeyBuffer();
         assertTrue(rkeyBuffer.capacity() > 0);
-        mem.free();
+        mem.deregister();
         context.close();
     }
 }

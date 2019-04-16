@@ -38,7 +38,7 @@ public class UcpMemory extends UcxNativeStruct {
      * library de-registers the memory the available hardware so it can be returned
      * back to the operation system.
      */
-    public void free() {
+    public void deregister() {
         unmapMemoryNative(context.getNativeId(), getNativeId());
         setNativeId(null);
         data = null;
@@ -57,7 +57,7 @@ public class UcpMemory extends UcxNativeStruct {
      * with the memory handle the application is responsible for sharing the RKEY with
      * the peers that will initiate the access.
      */
-    public ByteBuffer getrKeyBuffer() {
+    public ByteBuffer getRemoteKeyBuffer() {
         ByteBuffer rKeyBuffer = getRkeyBufferNative(context.getNativeId(), getNativeId());
         // 1. Allocating java native ByteBuffer (managed by java's reference count cleaner).
         ByteBuffer result = ByteBuffer.allocateDirect(rKeyBuffer.capacity());
