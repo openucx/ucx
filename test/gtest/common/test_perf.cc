@@ -172,7 +172,8 @@ void* test_perf::thread_func(void *arg)
     return result;
 }
 
-test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,
+test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
+                                                     size_t max_iter, unsigned flags,
                                                      const std::string &tl_name,
                                                      const std::string &dev_name,
                                                      const std::vector<int> &cpus)
@@ -193,20 +194,20 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
     if (ucs::test_time_multiplier() == 1) {
-        params.warmup_iter     = test.iters / 10;
-        params.max_iter        = test.iters;
+        params.warmup_iter = test.iters / 10;
+        params.max_iter    = test.iters;
     } else {
-        params.warmup_iter     = 0;
-        params.max_iter        = ucs_min(20u,
-                                         test.iters / ucs::test_time_multiplier());
+        params.warmup_iter = 0;
+        params.max_iter    = ucs_min(20u, test.iters / ucs::test_time_multiplier());
     }
+    params.max_iter        = ucs_min(params.max_iter, max_iter);
     params.max_time        = 0.0;
     params.report_interval = 1.0;
     params.rte_group       = NULL;
     params.rte             = &rte::test_rte;
     params.report_arg      = NULL;
     ucs_strncpy_zero(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
-    ucs_strncpy_zero(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
+    ucs_strncpy_zero(params.uct.tl_name , tl_name.c_str(), sizeof(params.uct.tl_name));
     params.uct.data_layout = (uct_perf_data_layout_t)test.data_layout;
     params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params.msg_size_cnt    = test.msglencnt;
@@ -254,8 +255,9 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     return result;
 }
 
-void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
-                         const std::string &tl_name, const std::string &dev_name)
+void test_perf::run_test(const test_spec& test, size_t max_iter, unsigned flags,
+                         bool check_perf, const std::string &tl_name,
+                         const std::string &dev_name)
 {
     std::vector<int> cpus = get_affinity();
     if (cpus.size() < 2) {
@@ -268,8 +270,8 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
                  (ucs::test_time_multiplier() == 1) &&
                  (ucs::perf_retry_count > 0);
     for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
-        test_result result = run_multi_threaded(test, flags, tl_name, dev_name,
-                                                cpus);
+        test_result result = run_multi_threaded(test, max_iter, flags,
+                                                tl_name, dev_name, cpus);
         if ((result.status == UCS_ERR_UNSUPPORTED) ||
             (result.status == UCS_ERR_UNREACHABLE))
         {
