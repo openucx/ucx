@@ -414,15 +414,11 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
 
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        uct_rc_txqp_purge_outstanding(&ep->txqp, UCS_ERR_CANCELED, 0);
-        uct_ep_pending_purge(&ep->super.super, NULL, 0);
-        return UCS_OK;
-    }
-
-    if (!uct_rc_iface_has_tx_resources(iface) || !uct_rc_ep_has_tx_resources(ep)) {
+    if (!uct_rc_iface_has_tx_resources(iface) ||
+        !uct_rc_ep_has_tx_resources(ep)) {
         return UCS_ERR_NO_RESOURCE;
     }
 

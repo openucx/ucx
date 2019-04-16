@@ -363,10 +363,15 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
 
     if (iface->err_handler) {
         return iface->err_handler(iface->err_handler_arg, tl_ep, status);
+    } else if (status == UCS_ERR_CANCELED) {
+        ucs_debug("error %s was suppressed for ep %p",
+                  ucs_status_string(UCS_ERR_CANCELED), tl_ep);
+        /* Suppress this since the cancellation is initiated by user. */
+        status = UCS_OK;
+    } else {
+        ucs_debug("error %s was not handled for ep %p",
+                  ucs_status_string(status), tl_ep);
     }
-
-    ucs_debug("error %s was not handled for ep %p", ucs_status_string(status),
-              tl_ep);
 
     return status;
 }

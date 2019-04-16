@@ -244,6 +244,10 @@ enum uct_dc_mlx5_ep_flags {
 
 #define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
+
+void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
+                                   ucs_status_t status);
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
@@ -327,13 +331,6 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     ucs_assert(iface->tx.stack_top > 0);
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
-        if (ep == NULL) {
-            /* The EP was destroyed after flush cancel */
-            ucs_assert(ucs_test_all_flags(iface->tx.dcis[dci].flags,
-                                          (UCT_DC_DCI_FLAG_EP_CANCELED |
-                                           UCT_DC_DCI_FLAG_EP_DESTROYED)));
-            return;
-        }
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
             /* in tx_wait state:
              * -  if there are no eps are waiting for dci allocation
