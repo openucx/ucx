@@ -9,6 +9,8 @@
 #include "ib_mlx5_log.h"
 #include "ib_mlx5_ifc.h"
 
+#define UCT_IB_MLX5_MD_PREFIX         "ibx"
+
 #if HAVE_DEVX
 typedef struct uct_ib_mlx5_mem {
     uct_ib_mem_t             super;
@@ -151,6 +153,8 @@ static ucs_status_t uct_ib_mlx5dv_memh_dereg(uct_ib_md_t *ibmd,
     return uct_ib_verbs_dereg_atomic_key(ibmd, ib_memh);
 #endif
 }
+
+static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops;
 
 #if HAVE_DEVX
 
@@ -332,7 +336,10 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags |= UCT_IB_MLX5_MD_FLAG_DEVX;
+    md->super.super.component = &uct_ib_mlx5_mdc;
+    md->super.ops = &uct_ib_mlx5dv_md_ops;
     *p_md = &md->super;
+
     return status;
 
 err_free:
@@ -354,6 +361,25 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     *compact_av = !!(uct_ib_iface_device(iface)->flags & UCT_IB_DEVICE_FLAG_AV);
     return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mlx5dv_check_dev(struct ibv_device *dev) {
+    ucs_status_t status = UCS_OK;
+#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+    if (!mlx5dv_is_supported(dev)) {
+       status = UCS_ERR_UNSUPPORTED;
+    }
+#else
+    struct mlx5dv_context_attr dv_attr = {};
+    ucs_status_t status = UCS_OK;
+
+    ctx = mlx5dv_open_device(dev, &dv_attr);
+    if (ctx == NULL) {
+        status = UCS_ERR_UNSUPPORTED;
+    }
+    ibv_close_device(dev);
+#endif
+    return status;
 }
 
 #else
@@ -454,8 +480,8 @@ err_cq:
     return status;
 }
 
-static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
-                                          uct_ib_md_t **p_md)
+static ucs_status_t uct_ib_mlx5dv_open_dev(struct ibv_device *ibv_device,
+                                           uct_ib_mlx5_md_t **p_md)
 {
     ucs_status_t status = UCS_OK;
     struct ibv_context *ctx;
@@ -466,8 +492,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
         ucs_debug("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
-        status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        return UCS_ERR_IO_ERROR;
     }
 
     md = ucs_calloc(1, sizeof(*md), "ib_mlx5_md");
@@ -492,6 +517,35 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         status = UCS_ERR_IO_ERROR;
         goto err_free;
     }
+
+    if (!(uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free;
+    }
+
+    *p_md = md;
+    return UCS_OK;
+
+err_free:
+    ucs_free(md);
+err_free_context:
+    ibv_close_device(ctx);
+    return status;
+}
+
+static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
+                                          uct_ib_md_t **p_md)
+{
+    uct_ib_mlx5_md_t *md;
+    uct_ib_device_t *dev;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5dv_open_dev(ibv_device, &md);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    dev = &md->super.dev;
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||
@@ -528,23 +582,36 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     }
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+    md->super.super.component = &uct_ib_mlx5_mdc;
+    md->super.ops = &uct_ib_mlx5dv_md_ops;
     *p_md = &md->super;
-    return status;
+    return UCS_OK;
 
 err_free:
+    ibv_close_device(dev->ibv_context);
     ucs_free(md);
-err_free_context:
-    ibv_close_device(ctx);
-err:
     return status;
 }
 
 void uct_ib_mlx5dv_md_cleanup(uct_ib_md_t *ibmd) { }
 
+static ucs_status_t uct_ib_mlx5dv_check_dev(struct ibv_device *ibv_device) {
+    uct_ib_mlx5_md_t *md;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5dv_open_dev(ibv_device, &md);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ibv_close_device(md->super.dev.ibv_context);
+    ucs_free(md);
+    return UCS_OK;
+}
+
 #endif
 
 static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
-    .open             = uct_ib_mlx5dv_md_open,
     .cleanup          = uct_ib_mlx5dv_md_cleanup,
     .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
     .reg_atomic_key   = uct_ib_mlx5dv_memh_reg,
@@ -552,6 +619,47 @@ static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5dv_md_ops, 1);
+
+static ucs_status_t
+uct_ib_mlx5_query_md_resources(uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p) {
+    return uct_ib_query_md_resources(resources_p, num_resources_p,
+                                     UCT_IB_MLX5_MD_PREFIX,
+                                     uct_ib_mlx5dv_check_dev);
+}
+
+static ucs_status_t
+uct_ib_mlx5_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+{
+    struct ibv_device *ib_device;
+    ucs_status_t status;
+    uct_ib_md_t *md;
+
+    ib_device = uct_ib_md_find_dev(md_name, UCT_IB_MLX5_MD_PREFIX);
+    if (ib_device == NULL) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    status = uct_ib_mlx5dv_md_open(ib_device, &md);
+    if (status != UCS_OK) {
+        ucs_debug("Unsupported IB device %s", md_name);
+        return status;
+    }
+
+    status = uct_ib_md_open_common(md, uct_md_config, ib_device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *md_p = &md->super;
+    return UCS_OK;
+}
+
+UCT_MD_COMPONENT_DEFINE(uct_ib_mlx5_mdc, UCT_IB_MLX5_MD_PREFIX,
+                        uct_ib_mlx5_query_md_resources, uct_ib_mlx5_md_open, NULL,
+                        uct_ib_rkey_unpack,
+                        (void*)ucs_empty_function_return_success /* release */,
+                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t);
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {

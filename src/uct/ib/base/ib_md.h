@@ -78,10 +78,7 @@ typedef struct uct_ib_mem {
 struct uct_ib_md;
 
 typedef struct uct_ib_md_ops {
-    ucs_status_t            (*open)(struct ibv_device *ibv_device,
-                                    struct uct_ib_md **p_md);
     void                    (*cleanup)(struct uct_ib_md *);
-
     size_t                  memh_struct_size;
     ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
                                               uct_ib_mem_t *memh,
@@ -178,7 +175,7 @@ typedef struct uct_ib_md_ops_entry {
 
 
 extern uct_md_component_t uct_ib_mdc;
-
+extern ucs_config_field_t uct_ib_md_config_table[];
 
 /**
  * Calculate unique id for atomic
@@ -231,13 +228,30 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
     return 8 * atomic_mr_id;
 }
 
-
-void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device);
+void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX],
+                         struct ibv_device *device,
+                         const char *prefix);
 
 ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 
 void uct_ib_md_close(uct_md_h uct_md);
+
+ucs_status_t
+uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
+                          unsigned *num_resources_p,
+                          const char *prefix,
+                          ucs_status_t (*checker)(struct ibv_device *dev));
+
+struct ibv_device *uct_ib_md_find_dev(const char *md_name, const char* prefix);
+
+ucs_status_t
+uct_ib_md_open_common(uct_ib_md_t *md, const uct_md_config_t *uct_md_config,
+                      struct ibv_device *ib_device);
+
+ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p);
 
 ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
                                          uct_ib_mem_t *memh,

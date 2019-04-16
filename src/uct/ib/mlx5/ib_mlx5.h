@@ -341,6 +341,11 @@ typedef struct uct_ib_mlx5_iface_res_domain {
 } uct_ib_mlx5_iface_res_domain_t;
 
 
+extern uct_md_component_t uct_ib_mlx5_mdc;
+extern uct_tl_component_t uct_rc_verbs_tl;
+extern uct_tl_component_t uct_ud_verbs_tl;
+
+
 /**
  *  MLX5 common iface part
  */

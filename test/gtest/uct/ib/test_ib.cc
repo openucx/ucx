@@ -96,7 +96,7 @@ public:
         /* no pkeys for Ethernet */
         port_desc->have_pkey = 0;
 
-        uct_ib_make_md_name(md_name, device);
+        uct_ib_make_md_name(md_name, device, "ibv");
 
         status = uct_ib_md_open(md_name, m_md_config, &uct_md);
         ASSERT_UCS_OK(status);

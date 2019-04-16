@@ -620,4 +620,5 @@ UCT_TL_COMPONENT_DEFINE(uct_rc_mlx5_tl,
                         "RC_MLX5_",
                         uct_rc_mlx5_iface_config_table,
                         uct_rc_mlx5_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_rc_mlx5_tl);
+UCT_MD_REGISTER_TL(&uct_ib_mlx5_mdc, &uct_rc_mlx5_tl);
+UCT_MD_REGISTER_TL(&uct_ib_mlx5_mdc, &uct_rc_verbs_tl);

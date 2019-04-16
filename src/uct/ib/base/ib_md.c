@@ -20,7 +20,7 @@
 #include <float.h>
 
 
-#define UCT_IB_MD_PREFIX         "ib"
+#define UCT_IB_MD_PREFIX         "ibv"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
@@ -46,7 +46,7 @@ static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                UCS_CONFIG_TYPE_BW_SPEC);
 
 
-static ucs_config_field_t uct_ib_md_config_table[] = {
+ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
@@ -1033,9 +1033,9 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
-                                       const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                       void **handle_p)
+ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p)
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
@@ -1218,16 +1218,22 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
 };
 
-void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
+void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX],
+                         struct ibv_device *device,
+                         const char *prefix)
 {
-    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", UCT_IB_MD_PREFIX,
+    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", prefix,
              ibv_get_device_name(device));
 }
 
-static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
+ucs_status_t
+uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
+                          unsigned *num_resources_p,
+                          const char *prefix,
+                          ucs_status_t (*checker)(struct ibv_device *dev))
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
+    int num_resources = 0;
     uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
@@ -1250,11 +1256,16 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
     }
 
     for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_md_name(resources[i].md_name, device_list[i]);
+        if (checker(device_list[i]) != UCS_OK) {
+            continue;
+        }
+        uct_ib_make_md_name(resources[num_resources].md_name,
+                            device_list[i], prefix);
+        num_resources++;
     }
 
     *resources_p     = resources;
-    *num_resources_p = num_devices;
+    *num_resources_p = num_resources;
     status = UCS_OK;
 
 out_free_device_list:
@@ -1548,17 +1559,11 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
     return uct_ib_md_read_pci_bw(ib_device);
 }
 
-ucs_status_t
-uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+struct ibv_device *uct_ib_md_find_dev(const char *md_name, const char* prefix)
 {
-    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
-    ucs_status_t status = UCS_ERR_UNSUPPORTED;
-    uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
-    uct_ib_md_ops_entry_t *md_ops_entry;
     char tmp_md_name[UCT_MD_NAME_MAX];
-    int i, num_devices, ret;
-    uct_md_attr_t md_attr;
+    int i, num_devices;
 
     ucs_trace("opening IB device %s", md_name);
 
@@ -1566,13 +1571,12 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     ib_device_list = ibv_get_device_list(&num_devices);
     if (ib_device_list == NULL) {
         ucs_debug("Failed to get IB device list, assuming no devices are present");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
+        return NULL;
     }
 
     ib_device = NULL;
     for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_md_name(tmp_md_name, ib_device_list[i]);
+        uct_ib_make_md_name(tmp_md_name, ib_device_list[i], prefix);
         if (!strcmp(tmp_md_name, md_name)) {
             ib_device = ib_device_list[i];
             break;
@@ -1581,29 +1585,23 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
 
     if (ib_device == NULL) {
         ucs_debug("IB device %s not found", md_name);
-        status = UCS_ERR_NO_DEVICE;
-        goto out_free_dev_list;
     }
 
-    ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
-        status = md_ops_entry->ops->open(ib_device, &md);
-        if (status == UCS_OK) {
-            md->ops = md_ops_entry->ops;
-            break;
-        } else if (status != UCS_ERR_UNSUPPORTED) {
-            goto out_free_dev_list;
-        }
-    }
+    ibv_free_device_list(ib_device_list);
+    return ib_device;
+}
 
-    if (status != UCS_OK) {
-        ucs_assert(status == UCS_ERR_UNSUPPORTED);
-        ucs_debug("Unsupported IB device %s", md_name);
-        goto out_free_dev_list;
-    }
+ucs_status_t
+uct_ib_md_open_common(uct_ib_md_t *md, const uct_md_config_t *uct_md_config,
+                      struct ibv_device *ib_device)
+{
+    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
+    uct_md_attr_t md_attr;
+    ucs_status_t status;
+    int ret;
 
     ucs_assert(md != NULL);
     md->super.ops             = &uct_ib_md_ops;
-    md->super.component       = &uct_ib_mdc;
     md->config                = md_config->ext;
 
     /* Create statistics */
@@ -1694,14 +1692,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     md->pci_bw = uct_ib_md_pci_bw(md_config, ib_device);
-
-    *md_p = &md->super;
-    status = UCS_OK;
-
-out_free_dev_list:
-    ibv_free_device_list(ib_device_list);
-out:
-    return status;
+    return UCS_OK;
 
 err_release_reg_method:
     uct_ib_md_release_reg_method(md);
@@ -1715,7 +1706,7 @@ err_release_stats:
     UCS_STATS_NODE_FREE(md->stats);
 err_free_md:
     ucs_free(md);
-    goto out_free_dev_list;
+    return status;
 }
 
 void uct_ib_md_close(uct_md_h uct_md)
@@ -1732,6 +1723,8 @@ void uct_ib_md_close(uct_md_h uct_md)
     UCS_STATS_NODE_FREE(md->stats);
     ucs_free(md);
 }
+
+static uct_ib_md_ops_t uct_ib_verbs_md_ops;
 
 static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
                                          uct_ib_md_t **p_md)
@@ -1774,6 +1767,11 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         dev->atomic_arg_sizes = sizeof(uint64_t);
     }
 
+    dev->flags  = uct_ib_device_spec(dev)->flags;
+    dev->flags &= ~UCT_IB_DEVICE_FLAG_MLX5_PRM;
+    md->super.component = &uct_ib_mdc;
+    md->ops = &uct_ib_verbs_md_ops;
+
     *p_md = md;
     return UCS_OK;
 
@@ -1785,7 +1783,6 @@ err:
 }
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
-    .open              = uct_ib_verbs_md_open,
     .cleanup           = (void*)ucs_empty_function,
     .memh_struct_size  = sizeof(uct_ib_mem_t),
     .reg_atomic_key    = uct_ib_verbs_reg_atomic_key,
@@ -1794,8 +1791,63 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
 
 UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
 
+static ucs_status_t uct_ib_verbs_check_dev(struct ibv_device *ibv_device)
+{
+    ucs_status_t status = UCS_OK;
+#ifdef HAVE_MLX5_HW
+    uct_ib_md_t *md;
+
+    status = uct_ib_verbs_md_open(ibv_device, &md);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (!(md->dev.flags & UCT_IB_DEVICE_FLAG_MLX4_PRM)) {
+        status = UCS_ERR_UNSUPPORTED;
+    }
+
+    ibv_close_device(md->dev.ibv_context);
+    ucs_free(md);
+#endif
+    return status;
+}
+
+static ucs_status_t
+uct_ib_verbs_query_md_resources(uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p) {
+    return uct_ib_query_md_resources(resources_p, num_resources_p,
+                                     UCT_IB_MD_PREFIX, uct_ib_verbs_check_dev);
+}
+
+ucs_status_t
+uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+{
+    struct ibv_device *ib_device;
+    ucs_status_t status;
+    uct_ib_md_t *md;
+
+    ib_device = uct_ib_md_find_dev(md_name, UCT_IB_MD_PREFIX);
+    if (ib_device == NULL) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    status = uct_ib_verbs_md_open(ib_device, &md);
+    if (status != UCS_OK) {
+        ucs_debug("Unsupported IB device %s", md_name);
+        return status;
+    }
+
+    status = uct_ib_md_open_common(md, uct_md_config, ib_device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *md_p = &md->super;
+    return UCS_OK;
+}
+
 UCT_MD_COMPONENT_DEFINE(uct_ib_mdc, UCT_IB_MD_PREFIX,
-                        uct_ib_query_md_resources, uct_ib_md_open, NULL,
+                        uct_ib_verbs_query_md_resources, uct_ib_md_open, NULL,
                         uct_ib_rkey_unpack,
                         (void*)ucs_empty_function_return_success /* release */,
                         "IB_", uct_ib_md_config_table, uct_ib_md_config_t);

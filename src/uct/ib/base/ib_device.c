@@ -404,7 +404,6 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
-    const uct_ib_device_spec_t *dev_info;
     uint8_t required_dev_flags;
     ucs_status_t status;
     union ibv_gid gid;
@@ -440,12 +439,11 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     /* check generic device flags */
-    dev_info           = uct_ib_device_spec(dev);
     required_dev_flags = flags & (UCT_IB_DEVICE_FLAG_MLX4_PRM |
                                   UCT_IB_DEVICE_FLAG_MLX5_PRM);
-    if (!ucs_test_all_flags(dev_info->flags, required_dev_flags)) {
-        ucs_trace("%s:%d (%s) does not support flags 0x%x", uct_ib_device_name(dev),
-                  port_num, dev_info->name, required_dev_flags);
+    if (!ucs_test_all_flags(dev->flags, required_dev_flags)) {
+        ucs_trace("%s:%d does not support flags 0x%x", uct_ib_device_name(dev),
+                  port_num, required_dev_flags);
         return UCS_ERR_UNSUPPORTED;
     }
 
