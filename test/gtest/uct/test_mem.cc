@@ -4,14 +4,13 @@
 * See file LICENSE for terms.
 */
 
-extern "C" {
-#include <uct/api/uct.h>
+#include "uct_test.h"
+
 #include <ucs/sys/sys.h>
-}
-#include <common/test.h>
+
 
 class test_mem : public testing::TestWithParam<uct_alloc_method_t>,
-public ucs::test_base {
+                 public uct_test_base {
 public:
     UCS_TEST_BASE_IMPL;
 
@@ -53,27 +52,25 @@ UCS_TEST_P(test_mem, nopd_alloc) {
 UCS_TEST_P(test_mem, pd_alloc) {
     uct_alloc_method_t methods[3];
     uct_allocated_memory mem;
-    uct_md_resource_desc_t *md_resources;
+    std::vector<md_resource> md_resources;
     uct_md_attr_t md_attr;
-    unsigned i, num_md_resources;
     ucs_status_t status;
     uct_md_h pd;
     uct_md_config_t *md_config;
     int nonblock;
 
-    status = uct_query_md_resources(&md_resources, &num_md_resources);
-    ASSERT_UCS_OK(status);
-
     methods[0] = UCT_ALLOC_METHOD_MD;
     methods[1] = GetParam();
     methods[2] = UCT_ALLOC_METHOD_HEAP;
 
-    for (i = 0; i < num_md_resources; ++i) {
+    md_resources = enum_md_resources();
+    for (std::vector<md_resource>::iterator iter = md_resources.begin();
+         iter != md_resources.end(); ++iter) {
 
-        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
+        status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+        status = uct_md_open(iter->rsc_desc.md_name, md_config, &pd);
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
@@ -100,16 +97,14 @@ UCS_TEST_P(test_mem, pd_alloc) {
 
         uct_md_close(pd);
     }
-
-    uct_release_md_resource_list(md_resources);
 }
 
 UCS_TEST_P(test_mem, md_fixed) {
-    uct_md_resource_desc_t  *md_resources;
+    std::vector<md_resource> md_resources;
     uct_md_attr_t           md_attr;
     uct_md_config_t         *md_config;
     uct_md_h                pd;
-    unsigned                num_md_resources, i, j;
+    unsigned                j;
 
     const size_t            page_size   = ucs_get_page_size();
     const size_t            n_tryes     = 101;
@@ -120,14 +115,14 @@ UCS_TEST_P(test_mem, md_fixed) {
     uct_allocated_memory_t  uct_mem;
     ucs_status_t            status;
 
-    status = uct_query_md_resources(&md_resources, &num_md_resources);
-    ASSERT_UCS_OK(status);
+    md_resources = enum_md_resources();
+    for (std::vector<md_resource>::iterator iter = md_resources.begin();
+         iter != md_resources.end(); ++iter) {
 
-    for (i = 0; i < num_md_resources; ++i) {
-        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
+        status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+        status = uct_md_open(iter->rsc_desc.md_name, md_config, &pd);
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
@@ -166,8 +161,6 @@ UCS_TEST_P(test_mem, md_fixed) {
 
         uct_md_close(pd);
     }
-
-    uct_release_md_resource_list(md_resources);
 }
 
 

@@ -8,12 +8,11 @@
 #ifndef UCT_TEST_MD
 #define UCT_TEST_MD
 
-#include <common/test.h>
-#include <uct/api/uct.h>
+#include "uct_test.h"
 
 
 class test_md : public testing::TestWithParam<std::string>,
-                public ucs::test_base
+                public uct_test_base
 {
 public:
     UCS_TEST_BASE_IMPL;

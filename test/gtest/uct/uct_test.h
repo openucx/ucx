@@ -66,10 +66,25 @@ struct resource_speed : public resource {
 
 
 /**
+ * UCT test, without parameterization
+ */
+class uct_test_base : public ucs::test_base {
+protected:
+    struct md_resource {
+        uct_component_h        cmpt;
+        uct_component_attr_t   cmpt_attr;
+        uct_md_resource_desc_t rsc_desc;
+    };
+
+    static std::vector<md_resource> enum_md_resources();
+};
+
+
+/**
  * UCT test, parametrized on a transport/device.
  */
 class uct_test : public testing::TestWithParam<const resource*>,
-                 public ucs::test_base {
+                 public uct_test_base {
 public:
     UCS_TEST_BASE_IMPL;
 
