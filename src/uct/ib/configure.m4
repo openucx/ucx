@@ -224,6 +224,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        AS_IF([test "x$with_devx" != xno], [
             AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
                  AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
+                 have_devx=yes
             ], [], [[#include <infiniband/mlx5dv.h>]])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
@@ -404,6 +405,7 @@ AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
+AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])
 

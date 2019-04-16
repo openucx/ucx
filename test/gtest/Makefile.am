@@ -160,7 +160,6 @@ gtest_SOURCES = \
 if HAVE_IB
 gtest_SOURCES += \
 	uct/ib/test_ib.cc \
-	uct/ib/test_ib_md.cc \
 	uct/ib/test_cq_moderation.cc \
 	uct/ib/test_ib_xfer.cc
 gtest_CPPFLAGS += \
@@ -168,8 +167,14 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(IBVERBS_LDFLAGS) \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
+if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_devx.cc
+endif
+if HAVE_MLX5_HW
+gtest_SOURCES += \
+    uct/ib/test_ib_md.cc
+endif
 if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/ib/ud_base.cc \
