@@ -127,12 +127,22 @@ typedef struct ucp_tl_alias {
 
 
 /**
+ * UCT component
+ */
+typedef struct ucp_tl_cmpt {
+    uct_component_h               cmpt;      /* UCT component handle */
+    uct_component_attr_t          attr;      /* UCT component attributes */
+} ucp_tl_cmpt_t;
+
+
+/**
  * Memory domain.
  */
 typedef struct ucp_tl_md {
-    uct_md_h                      md;       /* Memory domain handle */
-    uct_md_resource_desc_t        rsc;      /* Memory domain resource */
-    uct_md_attr_t                 attr;     /* Memory domain attributes */
+    uct_md_h                      md;         /* Memory domain handle */
+    ucp_rsc_index_t               cmpt_index; /* Index of owning component */
+    uct_md_resource_desc_t        rsc;        /* Memory domain resource */
+    uct_md_attr_t                 attr;       /* Memory domain attributes */
 } ucp_tl_md_t;
 
 
@@ -140,6 +150,10 @@ typedef struct ucp_tl_md {
  * UCP context
  */
 typedef struct ucp_context {
+
+    ucp_tl_cmpt_t                 *tl_cmpts;  /* UCT components */
+    ucp_rsc_index_t               num_cmpts;  /* Number of UCT components */
+
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
 
