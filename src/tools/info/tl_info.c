@@ -148,7 +148,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         return;
     }
 
-    printf("#   Device: %s\n", resource->dev_name);
+    printf("#   Transport: %s\n", resource->tl_name);
+    printf("#      Device: %s\n", resource->dev_name);
 
     status = uct_iface_open(md, worker, &iface_params, iface_config, &iface);
     uct_config_release(iface_config);
@@ -351,8 +352,6 @@ static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
     }
 
     printf("#\n");
-    printf("#   Transport: %s\n", tl_name);
-    printf("#\n");
 
     if (num_resources == 0) {
         printf("# (No supported devices found)\n");
@@ -368,7 +367,8 @@ out:
     return status;
 }
 
-static void print_md_info(const char *md_name, int print_opts,
+static void print_md_info(const uct_component_attr_t *component_attr,
+                          const char *md_name, int print_opts,
                           ucs_config_print_flags_t print_flags,
                           const char *req_tl_name)
 {
@@ -419,7 +419,7 @@ static void print_md_info(const char *md_name, int print_opts,
     } else {
         printf("#\n");
         printf("# Memory domain: %s\n", md_name);
-        printf("#            component: %s\n", md_attr.component_name);
+        printf("#     Component: %s\n", component_attr->name);
         if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
             printf("#             allocate: %s\n",
                    size_limit_to_str(0, md_attr.cap.max_alloc));
@@ -479,25 +479,58 @@ out:
     ;
 }
 
+static void print_uct_component_info(uct_component_h component,
+                                     int print_opts,
+                                     ucs_config_print_flags_t print_flags,
+                                     const char *req_tl_name)
+{
+    uct_component_attr_t component_attr;
+    ucs_status_t status;
+    unsigned i;
+
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME  |
+                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+    status = uct_component_query(component, &component_attr);
+    if (status != UCS_OK) {
+        printf("#   < failed to query component >\n");
+        return;
+    }
+
+    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
+                                         component_attr.md_resource_count);
+    status = uct_component_query(component, &component_attr);
+    if (status != UCS_OK) {
+        printf("#   < failed to query component resources >\n");
+        return;
+    }
+
+    for (i = 0; i < component_attr.md_resource_count; ++i) {
+        print_md_info(&component_attr, component_attr.md_resources[i].md_name,
+                      print_opts, print_flags, req_tl_name);
+    }
+}
+
 void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
                     const char *req_tl_name)
 {
-    uct_md_resource_desc_t *resources;
-    unsigned i, num_resources;
+    uct_component_h *components;
+    unsigned i, num_components;
     ucs_status_t status;
 
-    status = uct_query_md_resources(&resources, &num_resources);
+    status = uct_query_components(&components, &num_components);
     if (status != UCS_OK) {
-        printf("#   < failed to query MD resources >\n");
+        printf("#   < failed to query UCT components >\n");
         return;
     }
 
     if (print_opts & PRINT_DEVICES) {
-        for (i = 0; i < num_resources; ++i) {
-            print_md_info(resources[i].md_name, print_opts, print_flags, req_tl_name);
+        for (i = 0; i < num_components; ++i) {
+            print_uct_component_info(components[i], print_opts, print_flags,
+                                     req_tl_name);
         }
     }
 
-    uct_release_md_resource_list(resources);
+    uct_release_component_list(components);
 }
 
