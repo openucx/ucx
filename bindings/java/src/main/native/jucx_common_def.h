@@ -10,8 +10,6 @@
 
 #include <jni.h>
 
-#include <cstdint>
-
 
 typedef uintptr_t native_ptr;
 
