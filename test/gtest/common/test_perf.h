@@ -34,9 +34,8 @@ protected:
 
     static std::vector<int> get_affinity();
 
-    void run_test(const test_spec& test, size_t max_iter, unsigned flags,
-                  bool check_perf, const std::string &tl_name,
-                  const std::string &dev_name);
+    void run_test(const test_spec& test, unsigned flags, bool check_perf,
+                  const std::string &tl_name, const std::string &dev_name);
 
 private:
     class rte_comm {
@@ -99,8 +98,7 @@ private:
 
     static void* thread_func(void *arg);
 
-    test_result run_multi_threaded(const test_spec &test,
-                                   size_t max_iter, unsigned flags,
+    test_result run_multi_threaded(const test_spec &test, unsigned flags,
                                    const std::string &tl_name,
                                    const std::string &dev_name,
                                    const std::vector<int> &cpus);

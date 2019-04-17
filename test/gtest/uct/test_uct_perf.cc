@@ -18,11 +18,11 @@ extern "C" {
 
 class test_uct_perf : public uct_test, public test_perf {
 protected:
-    static test_spec tests[];
+    const static test_spec tests[];
 };
 
 
-test_perf::test_spec test_uct_perf::tests[] =
+const test_perf::test_spec test_uct_perf::tests[] =
 {
   { "am latency", "usec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
@@ -157,16 +157,18 @@ UCS_TEST_P(test_uct_perf, envelope) {
     }
 
     /* Run all tests */
-    for (test_spec *test = tests; test->title != NULL; ++test) {
+    for (const test_spec *test_iter = tests; test_iter->title != NULL; ++test_iter) {
+        test_spec test = *test_iter;
+
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-            test->max *= UCT_ARM_PERF_TEST_MULTIPLIER;
-            test->min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+            test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
         } else {
-            test->max *= UCT_PERF_TEST_MULTIPLIER;
-            test->min /= UCT_PERF_TEST_MULTIPLIER;
+            test.max *= UCT_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_PERF_TEST_MULTIPLIER;
         }
-        run_test(*test, max_iter, 0, check_perf,
-                 GetParam()->tl_name, GetParam()->dev_name);
+        test.iters = ucs_min(test.iters, max_iter);
+        run_test(test, 0, check_perf, GetParam()->tl_name, GetParam()->dev_name);
     }
 }
 

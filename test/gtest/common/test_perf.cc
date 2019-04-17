@@ -172,8 +172,7 @@ void* test_perf::thread_func(void *arg)
     return result;
 }
 
-test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
-                                                     size_t max_iter, unsigned flags,
+test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,
                                                      const std::string &tl_name,
                                                      const std::string &dev_name,
                                                      const std::vector<int> &cpus)
@@ -200,7 +199,6 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
         params.warmup_iter = 0;
         params.max_iter    = ucs_min(20u, test.iters / ucs::test_time_multiplier());
     }
-    params.max_iter        = ucs_min(params.max_iter, max_iter);
     params.max_time        = 0.0;
     params.report_interval = 1.0;
     params.rte_group       = NULL;
@@ -255,9 +253,8 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
     return result;
 }
 
-void test_perf::run_test(const test_spec& test, size_t max_iter, unsigned flags,
-                         bool check_perf, const std::string &tl_name,
-                         const std::string &dev_name)
+void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
+                         const std::string &tl_name, const std::string &dev_name)
 {
     std::vector<int> cpus = get_affinity();
     if (cpus.size() < 2) {
@@ -270,8 +267,8 @@ void test_perf::run_test(const test_spec& test, size_t max_iter, unsigned flags,
                  (ucs::test_time_multiplier() == 1) &&
                  (ucs::perf_retry_count > 0);
     for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
-        test_result result = run_multi_threaded(test, max_iter, flags,
-                                                tl_name, dev_name, cpus);
+        test_result result = run_multi_threaded(test, flags, tl_name, dev_name,
+                                                cpus);
         if ((result.status == UCS_ERR_UNSUPPORTED) ||
             (result.status == UCS_ERR_UNREACHABLE))
         {

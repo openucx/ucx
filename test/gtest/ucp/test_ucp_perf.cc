@@ -39,11 +39,11 @@ protected:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    static test_spec tests[];
+    const static test_spec tests[];
 };
 
 
-test_perf::test_spec test_ucp_perf::tests[] =
+const test_perf::test_spec test_ucp_perf::tests[] =
 {
   { "tag latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
@@ -180,12 +180,15 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
 
     /* Run all tests */
-    for (test_spec *test = tests; test->title != NULL; ++test) {
+    for (const test_spec *test_iter = tests; test_iter->title != NULL; ++test_iter) {
+        test_spec test = *test_iter;
+
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-            test->max *= UCP_ARM_PERF_TEST_MULTIPLIER;
-            test->min /= UCP_ARM_PERF_TEST_MULTIPLIER;
+            test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
+            test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
         }
-        run_test(*test, max_iter, 0, check_perf, "", "");
+        test.iters = ucs_min(test.iters, max_iter);
+        run_test(test, 0, check_perf, "", "");
     }
 }
 
