@@ -416,14 +416,17 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     init_attr->rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
     init_attr->tx_cq_len   = config->super.tx.queue_len;
     init_attr->rx_cq_len   = config->super.rx.queue_len;
-    init_attr->seg_size    = ucs_min(mtu, config->super.super.max_bcopy);
+    init_attr->seg_size    = ucs_min(mtu,
+                                     ucs_max(config->super.super.max_short,
+                                             config->super.super.max_bcopy));
     init_attr->qp_type     = IBV_QPT_UD;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker,
                               params, &config->super, init_attr);
 
     if (self->super.super.worker->async == NULL) {
-        ucs_error("%s ud iface must have valid async context", params->mode.device.dev_name);
+        ucs_error("%s ud iface must have valid async context",
+                  params->mode.device.dev_name);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -470,7 +473,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;
     data_size = ucs_max(data_size, self->super.config.seg_size);
-    data_size = ucs_max(data_size, sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline);
+    data_size = ucs_max(data_size,
+                        sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline);
 
     status = uct_iface_mpool_init(&self->super.super, &self->tx.mp,
                                   sizeof(uct_ud_send_skb_t) + data_size,
@@ -585,12 +589,17 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
                                          UCT_IFACE_FLAG_EVENT_RECV       |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
-    iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
-                                                               sizeof(uct_ud_neth_t));
-    iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_short       =
+        uct_ib_iface_hdr_size(ucs_min(iface->super.config.max_short,
+                                      iface->config.max_inline),
+                              sizeof(uct_ud_neth_t));
+    iface_attr->cap.am.max_bcopy       =
+        uct_ib_iface_hdr_size(iface->super.config.max_bcopy,
+                              sizeof(uct_ud_neth_t));
     iface_attr->cap.am.min_zcopy       = 0;
-    iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
+    iface_attr->cap.am.max_zcopy       = iface_attr->cap.am.max_bcopy;
+    iface_attr->cap.am.align_mtu       =
+        uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
     iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     /* The first iov is reserved for the header */
     iface_attr->cap.am.max_iov         = uct_ib_iface_get_max_iov(&iface->super) - 1;

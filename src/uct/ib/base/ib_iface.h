@@ -175,6 +175,8 @@ struct uct_ib_iface {
         unsigned            rx_max_poll;
         unsigned            tx_max_poll;
         unsigned            seg_size;
+        unsigned            max_bcopy;
+        unsigned            max_short;
         uint8_t             max_inl_resp;
         uint8_t             port_num;
         uint8_t             sl;
@@ -531,9 +533,9 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE
-size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
+size_t uct_ib_iface_hdr_size(size_t threshold, size_t min_size)
 {
-    return (size_t)ucs_max((ssize_t)(max_inline - min_size), 0);
+    return (size_t)ucs_max((ssize_t)(threshold - min_size), 0);
 }
 
 static UCS_F_ALWAYS_INLINE void

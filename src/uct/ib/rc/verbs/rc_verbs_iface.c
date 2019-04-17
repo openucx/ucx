@@ -184,11 +184,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
-    init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
-    init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
-    init_attr.qp_type        = IBV_QPT_RC;
-    init_attr.rx_cq_len      = config->super.super.rx.queue_len;
-    init_attr.seg_size       = config->super.super.super.max_bcopy;
+    init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
+    init_attr.rx_hdr_len  = sizeof(uct_rc_hdr_t);
+    init_attr.qp_type     = IBV_QPT_RC;
+    init_attr.rx_cq_len   = config->super.super.rx.queue_len;
+    init_attr.seg_size    = ucs_max(config->super.super.super.max_short,
+                                    config->super.super.super.max_bcopy);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super, &init_attr);

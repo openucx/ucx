@@ -134,8 +134,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
 #if HAVE_IBV_DM
     if (iface->dm.dm != NULL) {
-        max_am_inline  = ucs_max(iface->dm.dm->seg_len, UCT_IB_MLX5_AM_MAX_SHORT(0));
-        max_put_inline = ucs_max(iface->dm.dm->seg_len, UCT_IB_MLX5_PUT_MAX_SHORT(0));
+        max_am_inline  = ucs_max(iface->dm.seg_len, UCT_IB_MLX5_AM_MAX_SHORT(0));
+        max_put_inline = ucs_max(iface->dm.seg_len, UCT_IB_MLX5_PUT_MAX_SHORT(0));
     }
 #endif
 
@@ -330,6 +330,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     iface->tm.num_outstanding = 0;
     iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
                                         config->tm.list_size);
+    iface->tm.max_bcopy       = config->tm.max_bcopy;
 
     /* There can be:
      * - up to rx.queue_len RX CQEs
@@ -340,7 +341,8 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
                            config->super.super.rx.queue_len /
                            IBV_DEVICE_MAX_UNEXP_COUNT;
     init_attr->seg_size  = ucs_max(config->tm.max_bcopy,
-                                   config->super.super.super.max_bcopy);
+                                   ucs_max(config->super.super.super.max_bcopy,
+                                           config->super.super.super.max_short));
     return;
 
 out_tm_disabled:
@@ -348,7 +350,8 @@ out_tm_disabled:
     iface->tm.enabled         = 0;
 #endif
     init_attr->rx_cq_len = config->super.super.rx.queue_len;
-    init_attr->seg_size  = config->super.super.super.max_bcopy;
+    init_attr->seg_size  = ucs_max(config->super.super.super.max_bcopy,
+                                   config->super.super.super.max_short);
 }
 
 static ucs_status_t

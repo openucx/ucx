@@ -256,6 +256,7 @@ typedef struct uct_rc_mlx5_iface_common {
         unsigned                     num_tags;
         unsigned                     num_outstanding;
         unsigned                     max_rndv_data;
+        unsigned                     max_bcopy;
         uint16_t                     unexpected_cnt;
         uint16_t                     cmd_qp_len;
         uint8_t                      enabled;

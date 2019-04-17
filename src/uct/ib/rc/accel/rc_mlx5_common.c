@@ -615,14 +615,16 @@ static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
                              UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
 
     if (max_inline >= eager_hdr_size) {
-        iface_attr->cap.tag.eager.max_short = max_inline - eager_hdr_size;
+        iface_attr->cap.tag.eager.max_short =
+            uct_ib_iface_hdr_size(ucs_min(max_inline,
+                                          iface->super.super.config.max_short),
+                                  eager_hdr_size);
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
     }
 
-    iface_attr->cap.tag.eager.max_bcopy = iface->super.super.config.seg_size -
-                                          eager_hdr_size;
-    iface_attr->cap.tag.eager.max_zcopy = iface->super.super.config.seg_size -
-                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_bcopy =
+        uct_ib_iface_hdr_size(iface->tm.max_bcopy, eager_hdr_size);
+    iface_attr->cap.tag.eager.max_zcopy = iface_attr->cap.tag.eager.max_bcopy;
     iface_attr->cap.tag.eager.max_iov   = max_iov;
 
     port_attr = uct_ib_iface_port_attr(&iface->super.super);

@@ -53,7 +53,9 @@ static const char *uct_ib_iface_addr_types[] = {
 };
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
-  {"", "", NULL,
+  /* set MAX_SHORT to big enough value, it will be adjusted by maximum
+   * supported inline size and device memory segment size (accel tls) */
+  {"", "MAX_SHORT=8k", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
   {"TX_QUEUE_LEN", "256",
@@ -712,7 +714,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     const uct_ib_iface_config_t *config,
                     const uct_ib_iface_init_attr_t *init_attr)
 {
-    uct_ib_md_t *ib_md    = ucs_derived_of(md, uct_ib_md_t);
+    uct_ib_md_t *ib_md   = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
     size_t rx_headroom   = (params->field_mask &
                             UCT_IFACE_PARAM_FIELD_CPU_MASK) ?
@@ -762,6 +764,10 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
+    self->config.max_short          = ucs_min(config->super.max_short,
+                                              init_attr->seg_size);
+    self->config.max_bcopy          = ucs_min(config->super.max_bcopy,
+                                              init_attr->seg_size);
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,

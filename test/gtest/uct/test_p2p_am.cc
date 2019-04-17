@@ -637,6 +637,16 @@ UCS_TEST_P(uct_p2p_am_misc, am_short, "MAX_SHORT=" + ucs::to_string(USHRT_MAX + 
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
+UCS_TEST_P(uct_p2p_am_misc, am_short_greater_bcopy,
+           "MAX_SHORT=" + ucs::to_string(USHRT_MAX + 1),
+           "MAX_BCOPY=" + ucs::to_string(CHAR_BIT)) {
+    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                    sizeof(uint64_t),
+                    sender().iface_attr().cap.am.max_short,
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
+}
+
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)
 
 class uct_p2p_am_tx_bufs : public uct_p2p_am_test
