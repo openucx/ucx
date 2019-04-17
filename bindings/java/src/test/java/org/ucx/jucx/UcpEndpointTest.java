@@ -22,17 +22,12 @@ public class UcpEndpointTest {
     public void testConnectToListenerByWorkerAddr() {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
-        InetSocketAddress listenerSocket = new InetSocketAddress("0.0.0.0", UcpListenerTest.port);
-        UcpListener ucpListener = new UcpListener(worker,
-            new UcpListenerParams().setSockAddr(listenerSocket));
-
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
             .setPeerErrorHadnlingMode().setNoLoopbackMode();
         UcpEndpoint endpoint = new UcpEndpoint(worker, epParams);
         assertNotNull(endpoint.getNativeId());
 
         endpoint.close();
-        ucpListener.close();
         worker.close();
         context.close();
     }
