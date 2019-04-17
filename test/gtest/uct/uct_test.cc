@@ -510,8 +510,9 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
             }
         }
         EXPECT_EQ(UCS_ERR_BUSY, status);
-        EXPECT_EQ(UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER, params->open_mode)
-            << "any different UCT_IFACE_OPEN_MODE must go with status UCS_OK";
+        if (params->open_mode != UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
+            UCS_TEST_ABORT("any mode different from UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER must go with status UCS_OK");
+        }
 
         const struct sockaddr* c_ifa_addr =
             params->mode.sockaddr.listen_sockaddr.addr;
