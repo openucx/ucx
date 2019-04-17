@@ -36,16 +36,14 @@ protected:
 };
 
 UCS_TEST_F(test_socket, sockaddr_sizeof) {
-    struct sockaddr_in sa_in   = {
-        .sin_family            = AF_INET,
-    };
-    struct sockaddr_in6 sa_in6 = {
-        .sin6_family           = AF_INET6,
-    };
-    struct sockaddr_un sa_un = {
-        .sun_family            = AF_UNIX,
-    };
+    struct sockaddr_in sa_in;
+    struct sockaddr_in6 sa_in6;
+    struct sockaddr_un sa_un;
     size_t size;
+
+    sa_in.sin_family   = AF_INET;
+    sa_in6.sin6_family = AF_INET6;
+    sa_un.sun_family   = AF_UNIX;
 
     /* Check with wrong IPv4 */
     {
@@ -76,18 +74,16 @@ UCS_TEST_F(test_socket, sockaddr_sizeof) {
 
 UCS_TEST_F(test_socket, sockaddr_get_port) {
     const unsigned sin_port    = 5555;
-    struct sockaddr_in sa_in   = {
-        .sin_family            = AF_INET,
-        .sin_port              = htons(sin_port),
-    };
-    struct sockaddr_in6 sa_in6 = {
-        .sin6_family           = AF_INET6,
-        .sin6_port             = htons(sin_port),
-    };
-    struct sockaddr_un sa_un = {
-        .sun_family            = AF_UNIX,
-    };
+    struct sockaddr_in sa_in;
+    struct sockaddr_in6 sa_in6;
+    struct sockaddr_un sa_un;
     unsigned port = 0;
+
+    sa_in.sin_family   = AF_INET;
+    sa_in.sin_port     = htons(sin_port);
+    sa_in6.sin6_family = AF_INET6;
+    sa_in6.sin6_port   = htons(sin_port);
+    sa_un.sun_family   = AF_UNIX;
 
     /* Check with wrong IPv4 */
     {
@@ -117,17 +113,15 @@ UCS_TEST_F(test_socket, sockaddr_get_port) {
 }
 
 UCS_TEST_F(test_socket, sockaddr_get_inet_addr) {
-    struct sockaddr_in sa_in   = {
-        .sin_family            = AF_INET,
-    };
-    struct sockaddr_in6 sa_in6 = {
-        .sin6_family           = AF_INET6,
-    };
-    struct sockaddr_un sa_un   = {
-        .sun_family            = AF_UNIX,
-    };
+    struct sockaddr_in sa_in;
+    struct sockaddr_in6 sa_in6;
+    struct sockaddr_un sa_un;
     struct in_addr sin_addr;
     struct in6_addr sin6_addr;
+
+    sa_in.sin_family   = AF_INET;
+    sa_in6.sin6_family = AF_INET6;
+    sa_un.sun_family   = AF_UNIX;
 
     sin_addr.s_addr = sa_in.sin_addr.s_addr = htonl(INADDR_ANY);
     sin6_addr       = sa_in6.sin6_addr      = in6addr_any;
@@ -161,15 +155,14 @@ UCS_TEST_F(test_socket, sockaddr_str) {
     const unsigned port        = 65534;
     const char *ipv4_addr      = "192.168.122.157";
     const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
-    struct sockaddr_in sa_in   = {
-        .sin_family            = AF_INET,
-        .sin_port              = htons(port),
-    };
-    struct sockaddr_in6 sa_in6 = {
-        .sin6_family           = AF_INET6,
-        .sin6_port             = htons(port),
-    };
+    struct sockaddr_in sa_in;
+    struct sockaddr_in6 sa_in6;
     char ipv4_addr_out[128], ipv6_addr_out[128], *str, test_str[1024];
+
+    sa_in.sin_family   = AF_INET;
+    sa_in.sin_port     = htons(port);
+    sa_in6.sin6_family = AF_INET6;
+    sa_in6.sin6_port   = htons(port);
 
     sprintf(ipv4_addr_out, "%s:%d", ipv4_addr, port);
     sprintf(ipv6_addr_out, "%s:%d", ipv6_addr, port);
@@ -207,9 +200,8 @@ UCS_TEST_F(test_socket, sockaddr_str) {
 
     /* Check with wrong sa_family */
     {
-        struct sockaddr_un sa_un = {
-            .sun_family          = AF_UNIX,
-        };
+        struct sockaddr_un sa_un;
+        sa_un.sun_family = AF_UNIX;
 
         /* with big enough string */
         {
@@ -355,14 +347,13 @@ UCS_TEST_F(test_socket, sockaddr_is_equal) {
 
 UCS_TEST_F(test_socket, sockaddr_is_equal_err) {
     // Check with wrong sa_family
-    struct sockaddr_un sa_un = {
-        .sun_family          = AF_UNIX,
-    };
-    struct sockaddr_in sa_in = {
-        .sin_family          = AF_INET,
-    };
+    struct sockaddr_un sa_un;
+    struct sockaddr_in sa_in;
     ucs_status_t status;
     int result;
+
+    sa_un.sun_family = AF_UNIX;
+    sa_in.sin_family = AF_INET;
 
     {
         socket_err_exp_str = "unknown address family: ";
