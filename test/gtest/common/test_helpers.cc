@@ -368,15 +368,14 @@ sock_addr_storage::sock_addr_storage() : m_size(0), m_is_valid(false) {
     memset(&m_storage, 0, sizeof(m_storage));
 }
 
-sock_addr_storage::sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr) :
-    m_size(ucs_sock_addr.addrlen), m_is_valid(false) {
-
-    if (sizeof(m_storage) < m_size) {
+sock_addr_storage::sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr) {
+    if (sizeof(m_storage) < ucs_sock_addr.addrlen) {
         memset(&m_storage, 0, sizeof(m_storage));
-        return;
+        m_size     = 0;
+        m_is_valid = false;
+    } else {
+        set_sock_addr(*ucs_sock_addr.addr, ucs_sock_addr.addrlen);
     }
-    memcpy(&m_storage, ucs_sock_addr.addr, m_size);
-    m_is_valid = true;
 }
 
 void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
@@ -420,10 +419,6 @@ size_t sock_addr_storage::get_addr_size() const {
     return m_size;
 }
 
-std::string sock_addr_storage::to_str() const {
-    return ucs::sockaddr_to_str(&this->m_storage);
-}
-
 ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
     ucs_sock_addr_t addr;
 
@@ -432,8 +427,13 @@ ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
     return addr;
 }
 
-struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
+const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
     return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
+}
+
+std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
+{
+    return os << ucs::sockaddr_to_str(&sa_storage.get_sock_addr());
 }
 
 namespace detail {

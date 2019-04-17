@@ -488,15 +488,12 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     params->stats_root = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 
-    status = UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
-                                    uct_worker_create, &m_async.m_async,
-                                    UCS_THREAD_MODE_SINGLE);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
+                           uct_worker_create, &m_async.m_async,
+                           UCS_THREAD_MODE_SINGLE);
 
-    status = UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
-                                    uct_md_open, resource.md_name.c_str(),
-                                    md_config);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
+                           resource.md_name.c_str(), md_config);
 
     status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
@@ -504,9 +501,10 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     for (;;) {
         {
             scoped_log_handler slh(wrap_errors_logger);
-            status = UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
-                                            uct_iface_open, m_md, m_worker, params,
-                                            iface_config);
+            status = UCS_TEST_TRY_CREATE_HANDLE(uct_iface_h, m_iface,
+                                                uct_iface_close, uct_iface_open,
+                                                m_md, m_worker, params,
+                                                iface_config);
             if (status == UCS_OK) {
                 break;
             }

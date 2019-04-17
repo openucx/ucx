@@ -318,17 +318,18 @@ public:
 
     size_t get_addr_size() const;
 
-    std::string to_str() const;
-
     ucs_sock_addr_t to_ucs_sock_addr() const;
 
 private:
-    struct sockaddr* get_sock_addr_ptr() const;
+    const struct sockaddr* get_sock_addr_ptr() const;
 
     struct sockaddr_storage m_storage;
     size_t                  m_size;
     bool                    m_is_valid;
 };
+
+
+std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage);
 
 
 /*
@@ -629,7 +630,7 @@ private:
     ArgT           m_dtor_arg;
 };
 
-#define UCS_TEST_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \
+#define UCS_TEST_TRY_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \
     ({ \
         _t h; \
         ucs_status_t status = _ctor(__VA_ARGS__, &h); \
@@ -640,6 +641,13 @@ private:
         status; \
     })
 
+#define UCS_TEST_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \
+    { \
+        _t h; \
+        ucs_status_t status = _ctor(__VA_ARGS__, &h); \
+        ASSERT_UCS_OK(status); \
+        _handle.reset(h, _dtor); \
+    }
 
 class size_value {
 public:

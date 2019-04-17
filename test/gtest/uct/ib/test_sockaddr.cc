@@ -135,7 +135,7 @@ protected:
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     client->connect(0, *server, 0, m_connect_addr);
@@ -157,7 +157,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
     client->connect(0, *server, 0, m_connect_addr);
@@ -187,7 +187,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
     client->connect(0, *server, 0, m_connect_addr);
@@ -211,7 +211,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     uct_iface_params_t client_params;
@@ -246,7 +246,7 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     int i, num_conns_on_client = 100;
@@ -266,7 +266,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     client->connect(0, *server, 0, m_connect_addr);
@@ -289,7 +289,7 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr.to_str()
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     m_connect_addr.set_port(1);
