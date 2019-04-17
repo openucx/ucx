@@ -170,7 +170,7 @@ UCS_TEST_P(test_ucp_perf, envelope) {
 
     if (has_transport("tcp")) {
         check_perf = false;
-        max_iter   = 100000lu;
+        max_iter   = 1000lu;
     }
 
     std::stringstream ss;

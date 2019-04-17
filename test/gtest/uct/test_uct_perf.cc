@@ -153,7 +153,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     if (has_transport("tcp")) {
         check_perf = false; /* TODO calibrate expected performance based on transport */
-        max_iter   = 100000lu;
+        max_iter   = 1000lu;
     }
 
     /* Run all tests */
