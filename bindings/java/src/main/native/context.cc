@@ -94,5 +94,9 @@ Java_org_ucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
     field = env->GetFieldID(jucx_mem_cls, "data", "Ljava/nio/ByteBuffer;");
     env->SetObjectField(jucx_mem, field, data_buf);
 
+    // Set address
+    field =  env->GetFieldID(jucx_mem_cls, "address", "J");
+    env->SetLongField(jucx_mem, field, (native_ptr)memh->address);
+
     return jucx_mem;
 }
