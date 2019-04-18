@@ -41,35 +41,21 @@ public:
 
     test_uct_sockaddr() : server(NULL), client(NULL), err_count(0),
                           server_recv_req(0), delay_conn_reply(false) {
-        memset(&listen_sock_addr,  0, sizeof(listen_sock_addr));
-        memset(&connect_sock_addr, 0, sizeof(connect_sock_addr));
     }
 
     void init() {
+        uct_iface_params_t server_params, client_params;
+        uint16_t port;
+
         uct_test::init();
 
-        uct_iface_params_t server_params, client_params;
-        struct sockaddr_in *listen_addr_in, *connect_addr_in;
-
-        /* If we reached here, the interface is active, as it was tested at the
-         * resource creation */
-        if (!ucs::is_inet_addr((struct sockaddr *)&(GetParam()->connect_if_addr))) {
-            UCS_TEST_SKIP_R("There is no IP on the interface");
-        }
-
         /* This address is accessible, as it was tested at the resource creation */
-        listen_sock_addr.addr = (struct sockaddr *)&(GetParam()->listen_if_addr);
-        ASSERT_TRUE(listen_sock_addr.addr != NULL);
+        m_listen_addr  = GetParam()->listen_sock_addr;
+        m_connect_addr = GetParam()->connect_sock_addr;
 
-        listen_addr_in = (struct sockaddr_in *) (listen_sock_addr.addr);
-
-        /* Get a usable port on the host */
-        listen_addr_in->sin_port = ucs::get_port();
-
-        connect_sock_addr.addr = (struct sockaddr *)&(GetParam()->connect_if_addr);
-        ASSERT_TRUE(connect_sock_addr.addr != NULL);
-        connect_addr_in = (struct sockaddr_in *)connect_sock_addr.addr;
-        connect_addr_in->sin_port = listen_addr_in->sin_port;
+        port = ucs::get_port();
+        m_listen_addr.set_port(port);
+        m_connect_addr.set_port(port);
 
         /* open iface for the server side */
         server_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
@@ -81,13 +67,20 @@ public:
         server_params.err_handler                    = err_handler;
         server_params.err_handler_arg                = reinterpret_cast<void*>(this);
         server_params.err_handler_flags              = 0;
-        server_params.mode.sockaddr.listen_sockaddr  = listen_sock_addr;
+        server_params.mode.sockaddr.listen_sockaddr  = m_listen_addr.to_ucs_sock_addr();
         server_params.mode.sockaddr.cb_flags         = UCT_CB_FLAG_ASYNC;
         server_params.mode.sockaddr.conn_request_cb  = conn_request_cb;
         server_params.mode.sockaddr.conn_request_arg = reinterpret_cast<void*>(this);
 
         server = uct_test::create_entity(server_params);
         m_entities.push_back(server);
+
+        /* if origin port is busy create_entity will retry with other one */
+        port = ucs::sock_addr_storage(server->iface_params().mode.sockaddr
+                                                            .listen_sockaddr)
+                                      .get_port();
+        m_listen_addr.set_port(port);
+        m_connect_addr.set_port(port);
 
         /* open iface for the client side */
         client_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
@@ -134,7 +127,7 @@ public:
 
 protected:
     entity *server, *client;
-    ucs_sock_addr_t listen_sock_addr, connect_sock_addr;
+    ucs::sock_addr_storage m_listen_addr, m_connect_addr;
     volatile int err_count, server_recv_req;
     std::queue<uct_conn_request_h> delayed_conn_reqs;
     bool delay_conn_reply;
@@ -142,10 +135,10 @@ protected:
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 {
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
 
-    client->connect(0, *server, 0, &connect_sock_addr);
+    client->connect(0, *server, 0, m_connect_addr);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -164,10 +157,10 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
-    client->connect(0, *server, 0, &connect_sock_addr);
+    client->connect(0, *server, 0, m_connect_addr);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -194,10 +187,10 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
-    client->connect(0, *server, 0, &connect_sock_addr);
+    client->connect(0, *server, 0, m_connect_addr);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -218,8 +211,8 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
 
     uct_iface_params_t client_params;
     entity *client_test;
@@ -241,7 +234,7 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         m_entities.push_back(client_test);
 
         client_test->client_cb_arg = server->iface_attr().max_conn_priv;
-        client_test->connect(i, *server, 0, &connect_sock_addr);
+        client_test->connect(i, *server, 0, m_connect_addr);
     }
 
     while (server_recv_req < num_clients){
@@ -253,14 +246,14 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
 
     int i, num_conns_on_client = 100;
 
     /* multiple clients, on the same iface, connecting to the same server */
     for (i = 0; i < num_conns_on_client; ++i) {
-        client->connect(i, *server, 0, &connect_sock_addr);
+        client->connect(i, *server, 0, m_connect_addr);
     }
 
     while (server_recv_req < num_conns_on_client) {
@@ -273,10 +266,10 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
 
-    client->connect(0, *server, 0, &connect_sock_addr);
+    client->connect(0, *server, 0, m_connect_addr);
 
     scoped_log_handler slh(wrap_errors_logger);
     /* kill the server */
@@ -286,7 +279,9 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
      * test error handling */
     if (server_recv_req == 0) {
         wait_for_flag(&err_count);
-        EXPECT_EQ(1, err_count);
+        /* Double check for server_recv_req if it's not delivered from NIC to
+         * host memory under hight load */
+        EXPECT_TRUE((err_count == 1) || (server_recv_req == 1));
     }
 }
 
@@ -294,21 +289,17 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
-    struct sockaddr_in *connect_addr_in;
-    connect_addr_in = (struct sockaddr_in *) (connect_sock_addr.addr);
-    in_port_t orig_port = connect_addr_in->sin_port;
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
 
-    connect_addr_in->sin_port = 1;
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
-                     << " Interface: " << GetParam()->dev_name.c_str();
-
+    m_connect_addr.set_port(1);
     err_count = 0;
 
     /* wrap errors now since the client will try to connect to a non existing port */
     {
         scoped_log_handler slh(wrap_errors_logger);
         /* client - try to connect to a non-existing port on the server side */
-        client->connect(0, *server, 0, &connect_sock_addr);
+        client->connect(0, *server, 0, m_connect_addr);
         completion comp;
         ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
         if (status == UCS_INPROGRESS) {
@@ -320,8 +311,6 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
         /* destroy the client's ep. this ep shouldn't be accessed anymore */
         client->destroy_ep(0);
     }
-    /* restore the previous existing port */
-    connect_addr_in->sin_port = orig_port;
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)

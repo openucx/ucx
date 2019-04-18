@@ -30,8 +30,6 @@ resource::resource() : md_name(""), tl_name(""), dev_name(""),
                        dev_type(UCT_DEVICE_TYPE_LAST)
 {
     CPU_ZERO(&local_cpus);
-    memset(&listen_if_addr, 0, sizeof(listen_if_addr));
-    memset(&connect_if_addr, 0, sizeof(connect_if_addr));
 }
 
 resource::resource(const std::string& md_name, const cpu_set_t& local_cpus,
@@ -40,8 +38,6 @@ resource::resource(const std::string& md_name, const cpu_set_t& local_cpus,
                    md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
                    dev_name(dev_name), dev_type(dev_type)
 {
-    memset(&listen_if_addr, 0, sizeof(listen_if_addr));
-    memset(&connect_if_addr, 0, sizeof(connect_if_addr));
 }
 
 resource::resource(const uct_md_attr_t& md_attr,
@@ -53,8 +49,6 @@ resource::resource(const uct_md_attr_t& md_attr,
                    dev_name(tl_resource.dev_name),
                    dev_type(tl_resource.dev_type)
 {
-    memset(&listen_if_addr, 0, sizeof(listen_if_addr));
-    memset(&connect_if_addr, 0, sizeof(connect_if_addr));
 }
 
 resource_speed::resource_speed(const uct_worker_h& worker,
@@ -126,8 +120,8 @@ uct_test::~uct_test() {
 void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                  struct sockaddr *connect_addr, size_t size)
 {
-    memcpy(&rsc->listen_if_addr,  listen_addr,  size);
-    memcpy(&rsc->connect_if_addr, connect_addr, size);
+    rsc->listen_sock_addr.set_sock_addr(*listen_addr, size);
+    rsc->connect_sock_addr.set_sock_addr(*connect_addr, size);
 }
 
 void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
@@ -489,22 +483,50 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
         params->mode.device.dev_name = resource.dev_name.c_str();
     }
 
-    params->field_mask          |= UCT_IFACE_PARAM_FIELD_STATS_ROOT |
-                                   UCT_IFACE_PARAM_FIELD_CPU_MASK;
-    params->stats_root = ucs_stats_get_root();
+    params->field_mask |= UCT_IFACE_PARAM_FIELD_STATS_ROOT |
+                          UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    params->stats_root  = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
-                           uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_SINGLE);
+                           uct_worker_create, &m_async.m_async,
+                           UCS_THREAD_MODE_SINGLE);
 
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
-                           uct_md_open, resource.md_name.c_str(), md_config);
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
+                           resource.md_name.c_str(), md_config);
 
     status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
-                           uct_iface_open, m_md, m_worker, params, iface_config);
+    for (;;) {
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+            status = UCS_TEST_TRY_CREATE_HANDLE(uct_iface_h, m_iface,
+                                                uct_iface_close, uct_iface_open,
+                                                m_md, m_worker, params,
+                                                iface_config);
+            if (status == UCS_OK) {
+                break;
+            }
+        }
+        EXPECT_EQ(UCS_ERR_BUSY, status);
+        if (params->open_mode != UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
+            UCS_TEST_ABORT("any mode different from UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER must go with status UCS_OK");
+        }
+
+        const struct sockaddr* c_ifa_addr =
+            params->mode.sockaddr.listen_sockaddr.addr;
+        struct sockaddr* ifa_addr = const_cast<struct sockaddr*>(c_ifa_addr);
+        if (ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in *addr =
+                reinterpret_cast<struct sockaddr_in *>(ifa_addr);
+            addr->sin_port = ucs::get_port();
+        } else {
+            struct sockaddr_in6 *addr =
+                reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
+            addr->sin6_port = ucs::get_port();
+        }
+    }
 
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
@@ -782,7 +804,7 @@ ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
 }
 
 void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
-                                           ucs_sock_addr_t *remote_addr)
+                                           const ucs::sock_addr_storage &remote_addr)
 {
     uct_ep_h ep;
     ucs_status_t status;
@@ -793,6 +815,7 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     }
 
     /* Connect to the server */
+    ucs_sock_addr_t ucs_remote_addr = remote_addr.to_ucs_sock_addr();
     uct_ep_params_t params;
     params.field_mask        = UCT_EP_PARAM_FIELD_IFACE             |
                                UCT_EP_PARAM_FIELD_USER_DATA         |
@@ -801,7 +824,7 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
     params.iface             = iface();
     params.user_data         = &client_cb_arg;
-    params.sockaddr          = remote_addr;
+    params.sockaddr          = &ucs_remote_addr;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
     params.sockaddr_pack_cb  = client_priv_data_cb;
     status = uct_ep_create(&params, &ep);
@@ -882,13 +905,9 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
-                               ucs_sock_addr_t *remote_addr)
+                               const ucs::sock_addr_storage &remote_addr)
 {
-    if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-        connect_to_ep(index, other, other_index);
-    } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-        connect_to_iface(index, other);
-    } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
+    if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
         connect_to_sockaddr(index, other, remote_addr);
     } else {
         UCS_TEST_SKIP_R("cannot connect");
@@ -897,7 +916,13 @@ void uct_test::entity::connect(unsigned index, entity& other,
 
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index)
 {
-    connect(index, other, other_index, NULL);
+    if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        connect_to_ep(index, other, other_index);
+    } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        connect_to_iface(index, other);
+    } else {
+        UCS_TEST_SKIP_R("cannot connect");
+    }
 }
 
 void uct_test::entity::flush() const {

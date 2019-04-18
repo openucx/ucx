@@ -42,8 +42,8 @@ struct resource {
     std::string             tl_name;
     std::string             dev_name;
     uct_device_type_t       dev_type;
-    struct sockaddr_storage listen_if_addr;     /* sockaddr to listen on */
-    struct sockaddr_storage connect_if_addr;    /* sockaddr to connect to */
+    ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
+    ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
 
     resource();
     resource(const std::string& md_name, const cpu_set_t& local_cpus,
@@ -126,11 +126,12 @@ protected:
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
-                     ucs_sock_addr_t *remote_addr);
+                     const ucs::sock_addr_storage &remote_addr);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
-        void connect_to_sockaddr(unsigned index, entity& other, ucs_sock_addr_t *remote_addr);
+        void connect_to_sockaddr(unsigned index, entity& other,
+                                 const ucs::sock_addr_storage &remote_addr);
 
         void flush() const;
 
