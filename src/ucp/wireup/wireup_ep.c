@@ -198,6 +198,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
     }
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
+    /* coverity[leaked_storage] */
     return status;
 }
 

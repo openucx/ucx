@@ -404,6 +404,8 @@ ucs_status_t ucs_pgtable_insert(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
         if (status != UCS_OK) {
             goto err;
         }
+        ucs_assert(order < 64);
+        /* coverity[large_shift] */
         address += 1ul << order;
     }
     ++pgtable->num_regions;
@@ -418,6 +420,8 @@ err:
     while (address < end) {
         order = ucs_pgtable_get_next_page_order(address, end);
         ucs_pgtable_remove_page(pgtable, address, order, region);
+        ucs_assert(order < 64);
+        /* coverity[large_shift] */
         address += 1ul << order;
     }
     return status;
@@ -445,6 +449,8 @@ ucs_status_t ucs_pgtable_remove(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
             ucs_assert(address == region->start); /* Cannot be partially removed */
             return status;
         }
+        ucs_assert(order < 64);
+        /* coverity[large_shift] */
         address += 1ul << order;
     }
 
@@ -567,6 +573,9 @@ void ucs_pgtable_search_range(const ucs_pgtable_t *pgtable,
         if ((address & pgtable->mask) == pgtable->base) {
             ucs_pgtable_search_recurs(pgtable, address, order, &pgtable->root,
                                       pgtable->shift, cb, arg, &last);
+        }
+        if (order == UCS_PGT_ADDR_ORDER) {
+            break;
         }
         address += 1ul << order;
     }
