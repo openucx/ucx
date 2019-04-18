@@ -102,3 +102,9 @@ Java_org_ucx_jucx_ucp_UcpWorker_releaseAddressNative(JNIEnv *env, jclass cls,
     ucp_worker_release_address((ucp_worker_h)ucp_worker_ptr,
                                (ucp_address_t *)env->GetDirectBufferAddress(ucp_address));
 }
+
+JNIEXPORT jint JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_progressWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+{
+    return ucp_worker_progress((ucp_worker_h)ucp_worker_ptr);
+}

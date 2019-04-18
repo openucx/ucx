@@ -22,9 +22,10 @@ public class UcpWorkerTest {
         assertEquals(2, UcsConstants.ThreadMode.UCS_THREAD_MODE_MULTI);
         assertNotEquals(context.getNativeId(), null);
         UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
-        assertNotEquals(worker.getNativeId(), null);
+        assertNotNull(worker.getNativeId());
+        assertEquals(worker.progress(), 0); // No communications was submitted.
         worker.close();
-        assertEquals(worker.getNativeId(), null);
+        assertNull(worker.getNativeId());
         context.close();
     }
 
@@ -37,7 +38,7 @@ public class UcpWorkerTest {
         for (int i = 0; i < numWorkers; i++) {
             workerParam.clear().setCpu(i).requestThreadSafety();
             workers[i] = new UcpWorker(context, workerParam);
-            assertNotEquals(workers[i].getNativeId(), null);
+            assertNotNull(workers[i].getNativeId());
         }
         for (int i = 0; i < numWorkers; i++) {
             workers[i].close();

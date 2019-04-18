@@ -42,6 +42,14 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * This routine explicitly progresses all communication operations on a worker.
+     * @return Non-zero if any communication was progressed, zero otherwise.
+     */
+    public int progress() {
+        return progressWorkerNative(getNativeId());
+    }
+
+    /**
      * This routine returns the address of the worker object. This address can be
      * passed to remote instances of the UCP library in order to connect to this
      * worker. Ucp worker address - is an opaque object that is used as an
@@ -66,4 +74,6 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native ByteBuffer workerGetAddressNative(long workerId);
 
     private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
+
+    private static native int progressWorkerNative(long workerId);
 }
