@@ -64,7 +64,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     ucp_request_t *req = (ucp_request_t*)request - 1;
     ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req),
                                                         ucp_worker_t, req_mp);
-    uint16_t flags;
+    uint32_t flags;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -328,6 +328,14 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
         } else {
             req->send.uct.func        = proto->bcopy_multi;
+            
+            if (req->flags & UCP_REQUEST_FLAG_SEND_AM) {
+                req->send.am.message_id = req->send.ep->worker->am_message_id++;
+            } else if (req->flags & UCP_REQUEST_FLAG_SEND_TAG) {
+                req->send.tag.message_id  = req->send.ep->worker->am_message_id++;
+                req->send.tag.am_bw_index = 1;
+            }
+            
             req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_multi", req->send.length);
         }
@@ -356,6 +364,14 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
         if (multi) {
             req->send.uct.func        = proto->zcopy_multi;
+            
+            if (req->flags & UCP_REQUEST_FLAG_SEND_AM) {
+                req->send.am.message_id = req->send.ep->worker->am_message_id++;
+            } else if (req->flags & UCP_REQUEST_FLAG_SEND_TAG) {
+                req->send.tag.message_id  = req->send.ep->worker->am_message_id++;
+                req->send.tag.am_bw_index = 1;
+            } 
+
             req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
         } else {

@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -40,10 +41,11 @@ enum {
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
-
+    UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
+    UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
 #if ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(14),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
 #else
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
 #endif
@@ -71,7 +73,15 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
     UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
     UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
-    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5)  /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5), /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(6), /* Descriptor was allocated with malloc 
+                                                       and must be freed, not returned to the
+                                                       memory pool */
+    UCP_RECV_DESC_FLAG_AM_HDR         = UCS_BIT(7), /* Descriptor was orignally allocated by
+                                                       uct and the ucp level am header must
+                                                       be accounted for when releasing 
+                                                       descriptors */
+    UCP_RECV_DESC_FLAG_AM_REPLY       = UCS_BIT(8)  /* AM that needed a reply */
 };
 
 
@@ -89,7 +99,7 @@ enum {
  */
 struct ucp_request {
     ucs_status_t                  status;  /* Operation status */
-    uint16_t                      flags;   /* Request flags */
+    uint32_t                      flags;   /* Request flags */
 
     union {
 
@@ -195,6 +205,13 @@ struct ucp_request {
                     uintptr_t              req;  /* Remote atomic request pointer */
                     ucp_atomic_reply_t     data; /* Atomic reply data */
                 } atomic_reply;
+                
+                struct {
+                    uint16_t am_id;
+                    uint64_t message_id;  /* used to identify matching parts
+                                             of a large message */
+                    unsigned flags;
+                } am;
             };
 
             /* This structure holds all mutable fields, and everything else

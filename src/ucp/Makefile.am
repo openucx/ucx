@@ -1,6 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
+# Copyright (C) Los Alamos National Security, LLC. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -20,6 +21,8 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp.h
 
 noinst_HEADERS = \
+	core/ucp_am.h \
+	core/ucp_am.inl \
 	core/ucp_context.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
@@ -59,6 +62,7 @@ endif
 
 libucp_la_SOURCES = \
 	core/ucp_context.c \
+	core/ucp_am.c \
 	core/ucp_ep.c \
 	core/ucp_listener.c \
 	core/ucp_mm.c \

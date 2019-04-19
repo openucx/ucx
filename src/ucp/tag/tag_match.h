@@ -98,10 +98,6 @@ typedef struct ucp_tag_match {
                                                    'thresh' configuration. */
     } offload;
 
-    struct {
-        uint64_t              message_id;       /* Unique ID for active messages */
-    } am;
-
 } ucp_tag_match_t;
 
 
