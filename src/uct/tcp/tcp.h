@@ -104,8 +104,6 @@ typedef struct uct_tcp_iface {
     struct {
         struct sockaddr_in        ifaddr;            /* Network address */
         struct sockaddr_in        netmask;           /* Network address mask */
-        size_t                    buf_size;          /* Maximal bcopy size */
-        size_t                    short_size;        /* Maximal short size */
         int                       prefer_default;    /* Prefer default gateway */
         unsigned                  max_poll;          /* Number of events to poll per socket*/
     } config;

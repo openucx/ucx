@@ -551,7 +551,8 @@ const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND) {
 
-    mapped_buffer sendbuf(10 * sizeof(uint64_t), SEED1, sender());
+    mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short,
+                                  10 * sizeof(uint64_t)), SEED1, sender());
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     ucs_status_t status;
 
@@ -627,14 +628,6 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
         status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
     } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
     EXPECT_EQ(UCS_OK, status);
-}
-
-UCS_TEST_P(uct_p2p_am_misc, am_short, "MAX_SHORT=" + ucs::to_string(USHRT_MAX + 1)) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
-    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
-                    sizeof(uint64_t),
-                    sender().iface_attr().cap.am.max_short,
-                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)

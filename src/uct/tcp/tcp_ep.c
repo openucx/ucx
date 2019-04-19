@@ -560,7 +560,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     uct_tcp_am_hdr_t *hdr;
 
     UCT_CHECK_LENGTH(length + sizeof(header), 0,
-                     iface->config.short_size - sizeof(uct_tcp_am_hdr_t),
+                     iface->am_buf_size - sizeof(uct_tcp_am_hdr_t),
                      "am_short");
 
     status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);

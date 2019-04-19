@@ -27,8 +27,6 @@ BEGIN_C_DECLS
 
 /** @file ud_iface.h */
 
-#define UCT_UD_MIN_INLINE   48
-
 enum {
     UCT_UD_IFACE_STAT_RX_DROP,
     UCT_UD_IFACE_STAT_LAST

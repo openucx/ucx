@@ -32,7 +32,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
 
     {"FIFO_RELEASE_FACTOR", "0.5",
      "Frequency of resource releasing on the receiver's side in the MM UCT.\n"
-     "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1)",
+     "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1).",
      ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor), UCS_CONFIG_TYPE_DOUBLE},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 512, "receive",
@@ -43,8 +43,12 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      "Possible values are:\n"
      " y   - Allocate memory using huge pages only.\n"
      " n   - Allocate memory using regular pages only.\n"
-     " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.\n",
+     " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.",
      ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
+
+    {"FIFO_ELEM_SIZE", "128",
+     "Size of the FIFO element size (dtat + header) in the MM UCTs.",
+     ucs_offsetof(uct_mm_iface_config_t, fifo_elem_size), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -494,7 +498,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     /* check the value defining the size of the FIFO element */
-    if (mm_config->super.max_short <= sizeof(uct_mm_fifo_element_t)) {
+    if (mm_config->fifo_elem_size <= sizeof(uct_mm_fifo_element_t)) {
         ucs_error("The UCT_MM_MAX_SHORT parameter must be larger than the FIFO "
                   "element header size. ( > %ld bytes).",
                   sizeof(uct_mm_fifo_element_t));
@@ -503,7 +507,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     self->config.fifo_size         = mm_config->fifo_size;
-    self->config.fifo_elem_size    = mm_config->super.max_short;
+    self->config.fifo_elem_size    = mm_config->fifo_elem_size;
     self->config.seg_size          = mm_config->super.max_bcopy;
     self->fifo_release_factor_mask = UCS_MASK(ucs_ilog2(ucs_max((int)
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
