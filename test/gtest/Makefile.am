@@ -200,6 +200,8 @@ endif # HAVE_IB
 if HAVE_CUDA
 gtest_SOURCES += \
 	ucm/cuda_hooks.cc
+gtest_CPPFLAGS += \
+	$(CUDA_CPPFLAGS)
 gtest_LDADD += \
 	$(CUDA_LDFLAGS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
