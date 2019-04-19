@@ -208,9 +208,9 @@ void watchdog_stop()
     pthread_mutex_destroy(&watchdog.mutex);
 }
 
-int test_time_multiplier(int multiplier)
+int test_time_multiplier()
 {
-    int factor = 1 * multiplier;
+    int factor = 1;
 #if _BullseyeCoverage
     factor *= 10;
 #endif
