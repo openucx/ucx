@@ -471,7 +471,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
     for (int i = 0; i < 30; ++i) {
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1,
-                  10000 / ucs::test_time_multiplier());
+                  10000 / ucs::test_time_multiplier(10));
         if (!is_loopback()) {
             receiver().connect(&sender(), get_ep_params());
         }
@@ -488,7 +488,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
     for (int i = 0; i < count; ++i) {
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
-        if (&sender() != &receiver()) {
+        if (!is_loopback()) {
             receiver().connect(&sender(), get_ep_params());
         }
 

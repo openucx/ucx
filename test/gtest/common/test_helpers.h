@@ -234,7 +234,7 @@ private:
 /**
  * @return Time multiplier for performance tests.
  */
-int test_time_multiplier();
+int test_time_multiplier(int multiplier = 1);
 
 
 /**
