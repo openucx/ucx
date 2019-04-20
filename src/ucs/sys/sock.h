@@ -17,6 +17,7 @@
 
 BEGIN_C_DECLS
 
+/** @file sock.h */
 
 /* A string to hold the IP address and port from a sockaddr */
 #define UCS_SOCKADDR_STRING_LEN          60
@@ -247,6 +248,15 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
                           const struct sockaddr *sa2,
                           ucs_status_t *status_p);
+
+/**
+ * Calculates hash code using Jenkins hash function
+ *
+ * @param [in]     sa         Pointer to sockaddr structure.
+ *
+ * @return hash code
+ */
+uint32_t ucs_sockaddr_khash_jenkin(const struct sockaddr *sa);
 
 
 END_C_DECLS

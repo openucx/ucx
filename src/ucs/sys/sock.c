@@ -342,3 +342,104 @@ out:
     }
     return result;
 }
+
+static void ucs_sockaddr_khash_jenkin_mix(uint32_t *hj_i,
+                                          uint32_t *hj_j,
+                                          uint32_t *hj_val)
+{
+    uint32_t a = *hj_i;
+    uint32_t b = *hj_j;
+    uint32_t c = *hj_val;
+    
+    a -= b; a -= c; a ^= (c >> 13);
+    b -= c; b -= a; b ^= (a << 8);
+    c -= a; c -= b; c ^= (b >> 13);
+    a -= b; a -= c; a ^= (c >> 12);
+    b -= c; b -= a; b ^= (a << 16);
+    c -= a; c -= b; c ^= (b >> 5);
+    a -= b; a -= c; a ^= (c >> 3);
+    b -= c; b -= a; b ^= (a << 10);
+    c -= a; c -= b; c ^= (b >> 15);
+
+    *hj_i   = a;
+    *hj_j   = b;
+    *hj_val = c;
+}
+
+uint32_t ucs_sockaddr_hash_jenkin(const struct sockaddr *sa)
+{
+    unsigned const char *hj_key =(unsigned const char*)sa;
+    uint32_t hashv              = 0xfeedbeefu;
+    uint32_t hj_i, hj_j, hj_k;
+    ucs_status_t status;
+    size_t length;
+
+    hj_i = hj_j = 0x9e3779b9u;
+
+    status = ucs_sockaddr_sizeof(sa, &length);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    hj_k = length;
+
+    while (hj_k >= 12U) {
+        hj_i  += (hj_key[0]                    +
+                  ((uint32_t)hj_key[1] << 8)   +
+                  ((uint32_t)hj_key[2] << 16)  +
+                  ((uint32_t)hj_key[3] << 24));
+        hj_j  += (hj_key[4]                    +
+                  ((uint32_t)hj_key[5] << 8)   +
+                  ((uint32_t)hj_key[6] << 16)  +
+                  ((uint32_t)hj_key[7] << 24));
+        hashv += (hj_key[8]                    +
+                  ((uint32_t)hj_key[9] << 8)   +
+                  ((uint32_t)hj_key[10] << 16) +
+                  ((uint32_t)hj_key[11] << 24));
+
+        ucs_sockaddr_khash_jenkin_mix(&hj_i, &hj_j, &hashv);
+
+        hj_key += 12;
+        hj_k   -= 12U;
+    }
+
+    hashv += (uint32_t)length;
+    switch (hj_k) {
+    case 11:
+        hashv += ((uint32_t)hj_key[10] << 24);
+        /* FALLTHROUGH */
+    case 10:
+        hashv += ((uint32_t)hj_key[9] << 16);
+        /* FALLTHROUGH */
+    case 9:
+        hashv += ((uint32_t)hj_key[8] << 8);
+        /* FALLTHROUGH */
+    case 8:
+        hj_j  += ((uint32_t)hj_key[7] << 24);
+        /* FALLTHROUGH */
+    case 7:
+        hj_j  += ((uint32_t)hj_key[6] << 16);
+        /* FALLTHROUGH */
+    case 6:
+        hj_j  += ((uint32_t)hj_key[5] << 8);
+        /* FALLTHROUGH */
+    case 5:
+        hj_j  += hj_key[4];
+        /* FALLTHROUGH */
+    case 4:
+        hj_i  += ((uint32_t)hj_key[3] << 24);
+        /* FALLTHROUGH */
+    case 3:
+        hj_i  += ((uint32_t)hj_key[2] << 16);
+        /* FALLTHROUGH */
+    case 2:
+        hj_i  += ((uint32_t)hj_key[1] << 8);
+        /* FALLTHROUGH */
+    case 1:
+        hj_i  += hj_key[0];
+    }
+
+    ucs_sockaddr_khash_jenkin_mix(&hj_i, &hj_j, &hashv);
+
+    return hashv;
+}
