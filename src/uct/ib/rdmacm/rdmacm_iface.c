@@ -464,6 +464,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_rdmacm_iface_config_t *config = ucs_derived_of(tl_config, uct_rdmacm_iface_config_t);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_rdmacm_md_t *rdmacm_md;
+    struct sockaddr *listen_addr;
     ucs_status_t status;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
@@ -520,26 +521,28 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_destroy_event_channel;
         }
 
-        if (rdma_bind_addr(self->cm_id, (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr)) {
-            status = (errno == EADDRINUSE) ? UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
+        listen_addr = (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr;
+        if (rdma_bind_addr(self->cm_id, listen_addr)) {
+            status = (errno == EADDRINUSE || errno == EADDRNOTAVAIL) ?
+                     UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
             ucs_error("rdma_bind_addr(addr=%s) failed: %m",
-                      ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
-                                       ip_port_str, UCS_SOCKADDR_STRING_LEN));
+                      ucs_sockaddr_str(listen_addr, ip_port_str,
+                                       UCS_SOCKADDR_STRING_LEN));
             goto err_destroy_id;
         }
 
         if (rdma_listen(self->cm_id, config->backlog)) {
             ucs_error("rdma_listen(cm_id:=%p event_channel=%p addr=%s) failed: %m",
                        self->cm_id, self->event_ch,
-                       ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
-                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
+                       ucs_sockaddr_str(listen_addr, ip_port_str,
+                                        UCS_SOCKADDR_STRING_LEN));
             status = UCS_ERR_IO_ERROR;
             goto err_destroy_id;
         }
 
         ucs_debug("rdma_cm id %p listening on %s:%d", self->cm_id,
-                  ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
-                                   ip_port_str, UCS_SOCKADDR_STRING_LEN),
+                  ucs_sockaddr_str(listen_addr, ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN),
                   ntohs(rdma_get_src_port(self->cm_id)));
 
         if (!(params->mode.sockaddr.cb_flags & UCT_CB_FLAG_ASYNC)) {
