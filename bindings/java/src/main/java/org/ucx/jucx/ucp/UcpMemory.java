@@ -22,6 +22,8 @@ public class UcpMemory extends UcxNativeStruct {
 
     private ByteBuffer data;
 
+    private long address;
+
     /**
      * To prevent construct outside of JNI.
      */
@@ -71,6 +73,13 @@ public class UcpMemory extends UcxNativeStruct {
 
     public ByteBuffer getData() {
         return data;
+    }
+
+    /**
+     * Address of registered memory.
+     */
+    public long getAddress() {
+        return address;
     }
 
     private static native void unmapMemoryNative(long contextId, long memoryId);

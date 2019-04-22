@@ -4,8 +4,6 @@
  */
 package org.ucx.jucx;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import org.ucx.jucx.ucp.UcpContext;
@@ -60,6 +58,7 @@ public class UcpMemoryTest {
         UcpMemory mem = context.registerMemory(buf);
         ByteBuffer rkeyBuffer = mem.getRemoteKeyBuffer();
         assertTrue(rkeyBuffer.capacity() > 0);
+        assertTrue(mem.getAddress() > 0);
         mem.deregister();
         context.close();
     }
