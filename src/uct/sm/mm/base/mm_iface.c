@@ -47,7 +47,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
 
     {"FIFO_ELEM_SIZE", "128",
-     "Size of the FIFO element size (dtat + header) in the MM UCTs.",
+     "Size of the FIFO element size (data + header) in the MM UCTs.",
      ucs_offsetof(uct_mm_iface_config_t, fifo_elem_size), UCS_CONFIG_TYPE_UINT},
 
     {NULL}

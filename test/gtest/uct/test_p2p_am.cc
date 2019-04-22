@@ -551,8 +551,7 @@ const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND) {
 
-    mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short,
-                                  10 * sizeof(uint64_t)), SEED1, sender());
+    mapped_buffer sendbuf(10 * sizeof(uint64_t), SEED1, sender());
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     ucs_status_t status;
 
