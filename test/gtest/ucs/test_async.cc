@@ -423,8 +423,8 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
 }
 
 UCS_TEST_P(test_async, many_timers) {
-
-    for (int count = 0; count < 4010; ++count) {
+    int max_iters = 4010 / ucs::test_time_multiplier();
+    for (int count = 0; count < max_iters; ++count) {
         std::vector<int> timers;
         ucs_status_t status;
         int timer_id;
