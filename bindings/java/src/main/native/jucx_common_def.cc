@@ -119,3 +119,9 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  sock
     JNU_ThrowException(env, "Unknown InetAddress family");
     return false;
 }
+
+void jucx_request_init(void *request)
+{
+     struct jucx_context *ctx = (struct jucx_context *)request;
+     ctx->callback = NULL;
+}
