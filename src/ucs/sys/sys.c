@@ -10,14 +10,15 @@
 #  include "config.h"
 #endif
 
-#include "sys.h"
-#include "checker.h"
-#include "string.h"
-#include "math.h"
 
+#include <ucs/algorithm/crc.h>
+#include <ucs/sys/checker.h>
+#include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucm/util/sys.h>
+
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -114,7 +115,7 @@ uint32_t ucs_file_checksum(const char *filename)
     do {
         nread = read(fd, buffer, sizeof(buffer));
         if (nread > 0) {
-            crc = ucs_calc_crc32(crc, buffer, nread);
+            crc = ucs_crc32(crc, buffer, nread);
         }
     } while (nread == sizeof(buffer));
     close(fd);

@@ -56,3 +56,10 @@ UCS_TEST_F(test_algorithm, crc16_string) {
     EXPECT_NE(ucs_crc16_string("123456789"),
               ucs_crc16_string("12345"));
 }
+
+UCS_TEST_F(test_algorithm, crc32_string) {
+    UCS_TEST_MESSAGE << "crc32 of '123456789' is 0x" << std::hex <<
+                    ucs_crc32_string("123456789") << std::dec;
+    EXPECT_NE(ucs_crc32_string("123456789"),
+              ucs_crc32_string("12345"));
+}
