@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-
+/* This is CRC-16-CCITT with reversed (0x8408) polynomial representation */
 uint16_t ucs_crc16(const void *buffer, size_t size)
 {
     const uint8_t *p;
@@ -26,7 +26,7 @@ uint16_t ucs_crc16(const void *buffer, size_t size)
         for (bit = 0; bit < 8; ++bit) {
             result >>= 1;
             if ((result ^ data) & 1) {
-                result = result ^ 0x8048;
+                result = result ^ 0x8408;
             }
             data >>= 1;
         }
