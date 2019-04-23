@@ -50,19 +50,77 @@ UCS_TEST_F(test_algorithm, qsort_r) {
     }
 }
 
-UCS_TEST_F(test_algorithm, crc16_string) {
-    UCS_TEST_MESSAGE << "crc16 of '123456789' is 0x" << std::hex <<
-        ucs_crc16_string("123456789") << std::dec;
-    EXPECT_NE(ucs_crc16_string("123456789"),
-              ucs_crc16_string("12345"));
+UCS_TEST_F(test_algorithm, crc16) {
+    std::string test_str;
+
+    test_str = "";
+    EXPECT_EQ(0u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "0";
+    EXPECT_EQ(0xc1fbu, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "01";
+    EXPECT_EQ(0x99efu, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "012";
+    EXPECT_EQ(0xfd89u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "0123";
+    EXPECT_EQ(0xea54u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "01234";
+    EXPECT_EQ(0x9394u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "012345";
+    EXPECT_EQ(0x4468u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "0123456";
+    EXPECT_EQ(0x4bc7u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "01234567";
+    EXPECT_EQ(0x07bcu, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "012345678";
+    EXPECT_EQ(0x3253u, ucs_crc16_string(test_str.c_str()));
+
+    test_str = "0123456789";
+    EXPECT_EQ(0x3c16u, ucs_crc16_string(test_str.c_str()));
 }
 
 UCS_TEST_F(test_algorithm, crc32) {
-    const char *long_val  = "123456789";
-    const char *short_val = "12345";
+    
+    std::string test_str;
 
-    UCS_TEST_MESSAGE << "crc32 of " << long_val << " is 0x" << std::hex <<
-        ucs_crc32(0, long_val, strlen(long_val)) << std::dec;
-    EXPECT_NE(ucs_crc32(0, long_val, strlen(long_val)),
-              ucs_crc32(0, short_val, strlen(short_val)));
+    test_str = "";
+    EXPECT_EQ(0u, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "0";
+    EXPECT_EQ(0xf4dbdf21ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "01";
+    EXPECT_EQ(0xcf412436ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "012";
+    EXPECT_EQ(0xd5a06ab0ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "0123";
+    EXPECT_EQ(0xa6669d7dul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "01234";
+    EXPECT_EQ(0xdda47024ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "012345";
+    EXPECT_EQ(0xb86f6b0ful, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "0123456";
+    EXPECT_EQ(0x8dbf08eeul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "01234567";
+    EXPECT_EQ(0x2d803af5ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "012345678";
+    EXPECT_EQ(0x37fad1baul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+
+    test_str = "0123456789";
+    EXPECT_EQ(0xa684c7c6ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
 }
