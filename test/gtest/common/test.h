@@ -175,7 +175,8 @@ public:
 /*
  * Helper macro
  */
-#define UCS_TEST_(test_case_name, test_name, parent_class, parent_id, num_threads, skip_cond, ...) \
+#define UCS_TEST_(test_case_name, test_name, parent_class, parent_id, \
+                  num_threads, skip_cond, skip_reason, ...) \
 class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class { \
  public: \
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() { \
@@ -185,7 +186,7 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class { 
  private: \
   virtual void check_skip_test() { \
      if (skip_cond) { \
-         UCS_TEST_SKIP_R(UCS_PP_MAKE_STRING(skip_cond)); \
+         UCS_TEST_SKIP_R(skip_reason); \
      } \
   } \
   virtual void test_body(); \
@@ -213,7 +214,8 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  */
 #define UCS_TEST_F(test_fixture, test_name, ...)\
   UCS_TEST_(test_fixture, test_name, test_fixture, \
-            ::testing::internal::GetTypeId<test_fixture>(), 1, 0, __VA_ARGS__)
+            ::testing::internal::GetTypeId<test_fixture>(), \
+            1, 0, "", __VA_ARGS__)
 
 
 /*
@@ -221,7 +223,8 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  */
 #define UCS_TEST_SKIP_COND_F(test_fixture, test_name, skip_cond, ...) \
   UCS_TEST_(test_fixture, test_name, test_fixture, \
-            ::testing::internal::GetTypeId<test_fixture>(), 1, skip_cond, __VA_ARGS__)
+            ::testing::internal::GetTypeId<test_fixture>(), \
+            1, skip_cond, #skip_cond, __VA_ARGS__)
 
 
 /*
@@ -235,7 +238,8 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 /*
  * Helper macro
  */
-#define UCS_TEST_P_(test_case_name, test_name, num_threads, skip_cond, ...) \
+#define UCS_TEST_P_(test_case_name, test_name, num_threads, \
+                    skip_cond, skip_reason, ...) \
   class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) \
       : public test_case_name { \
    public: \
@@ -247,7 +251,7 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
    private: \
     virtual void check_skip_test() { \
         if (skip_cond) { \
-            UCS_TEST_SKIP_R(UCS_PP_MAKE_STRING(skip_cond)); \
+            UCS_TEST_SKIP_R(skip_reason); \
         } \
     } \
     static int AddToRegistry() { \
@@ -274,14 +278,14 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  * Define parameterized test with modified configuration
  */
 #define UCS_TEST_P(test_case_name, test_name, ...) \
-    UCS_TEST_P_(test_case_name, test_name, 1, 0, __VA_ARGS__)
+    UCS_TEST_P_(test_case_name, test_name, 1, 0, "", __VA_ARGS__)
 
 
 /*
  * Define parameterized test with modified configuration and check skip condition
  */
 #define UCS_TEST_SKIP_COND_P(test_case_name, test_name, skip_cond, ...) \
-    UCS_TEST_P_(test_case_name, test_name, 1, skip_cond, __VA_ARGS__)
+    UCS_TEST_P_(test_case_name, test_name, 1, skip_cond, #skip_cond,  __VA_ARGS__)
 
 
 /*
