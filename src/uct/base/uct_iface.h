@@ -286,7 +286,6 @@ typedef struct uct_tl_component {
  * Specific transport extend this structure.
  */
 struct uct_iface_config {
-    size_t            max_short;
     size_t            max_bcopy;
 
     struct {

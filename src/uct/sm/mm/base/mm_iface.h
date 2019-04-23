@@ -34,8 +34,9 @@ typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
     unsigned                 fifo_size;            /* Size of the receive FIFO */
     double                   release_fifo_factor;
-    ucs_ternary_value_t      hugetlb_mode;         /* Enable using huge pages for */
-                                                   /* shared memory buffers */
+    ucs_ternary_value_t      hugetlb_mode;         /* Enable using huge pages for
+                                                    * shared memory buffers */
+    unsigned                 fifo_elem_size;       /* Size of the FIFO element size */
     uct_iface_mpool_config_t mp;
 } uct_mm_iface_config_t;
 

@@ -14,7 +14,7 @@
 #include <dirent.h>
 
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
-  {"", "MAX_SHORT=8k", NULL,
+  {"", "", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -97,8 +97,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                              UCT_IFACE_FLAG_EVENT_RECV;
 
-    attr->cap.am.max_bcopy = iface->config.buf_size - sizeof(uct_tcp_am_hdr_t);
-    attr->cap.am.max_short = iface->config.short_size - sizeof(uct_tcp_am_hdr_t);
+    attr->cap.am.max_short = attr->cap.am.max_bcopy =
+        iface->am_buf_size - sizeof(uct_tcp_am_hdr_t);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
                                 &attr->bandwidth);
@@ -398,10 +398,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
     self->outstanding           = 0;
-    self->config.buf_size       = config->super.max_bcopy +
-                                  sizeof(uct_tcp_am_hdr_t);
-    self->config.short_size     = config->super.max_short +
-                                  sizeof(uct_tcp_am_hdr_t);
     self->config.prefer_default = config->prefer_default;
     self->config.max_poll       = config->max_poll;
     self->sockopt.nodelay       = config->sockopt_nodelay;
@@ -409,7 +405,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
 
-    self->am_buf_size = ucs_max(self->config.buf_size, self->config.short_size);
+    self->am_buf_size = config->super.max_bcopy + sizeof(uct_tcp_am_hdr_t);
 
     status = ucs_mpool_init(&self->tx_mpool, 0, self->am_buf_size,
                             0, UCS_SYS_CACHE_LINE_SIZE,
