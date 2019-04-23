@@ -241,6 +241,8 @@ void test_base::TearDownProxy() {
                        m_state == ABORTED,
                        "state=%d", m_state);
 
+    watchdog_signal();
+
     if (m_initialized) {
         cleanup();
     }
@@ -319,11 +321,7 @@ void test_base::TestBodyProxy() {
             m_state = ABORTED;
             throw;
         }
-    } else if (m_state == SKIPPED) {
-    } else if (m_state == ABORTED) {
     }
-
-    watchdog_signal();
 }
 
 void test_base::skipped(const test_skip_exception& e) {
