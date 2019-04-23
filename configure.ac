@@ -79,7 +79,6 @@ LT_LIB_M
 AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
-m4_include([config/m4/pkg.m4])
 PKG_PROG_PKG_CONFIG
 
 
