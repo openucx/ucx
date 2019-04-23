@@ -19,13 +19,12 @@ BEGIN_C_DECLS
 /**
  * Calculate CRC16 of an arbitrary buffer.
  *
- * @param [in]  prev_crc   Intitial CRC value.
  * @param [in]  buffer     Buffer to compute crc for.
  * @param [in]  size       Buffer size.
  *
  * @return crc16() function of the buffer.
  */
-uint16_t ucs_crc16(uint16_t prev_crc, const void *buffer, size_t size);
+uint16_t ucs_crc16(const void *buffer, size_t size);
 
 
 /**
@@ -48,16 +47,6 @@ uint16_t ucs_crc16_string(const char *s);
  * @return crc32() function of the buffer.
  */
 uint32_t ucs_crc32(uint32_t prev_crc, const void *buffer, size_t size);
-
-
-/**
- * Calculate CRC32 of a NULL-terminated string.
- *
- * @param [in]  s          NULL-terminated string to compute crc for.
- *
- * @return crc32() function of the string.
- */
-uint32_t ucs_crc32_string(const char *s);
 
 END_C_DECLS
 
