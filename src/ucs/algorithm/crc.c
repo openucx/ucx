@@ -22,7 +22,7 @@
         uint8_t bit; \
         \
         if ((_size) != 0) { \
-            for (p = (buffer); p < end; ++p) { \
+            for (p = (_buffer); p < end; ++p) { \
                 (_crc) ^= *p; \
                 for (bit = 0; bit < 8; ++bit) { \
                     (_crc) = ((_crc) >> 1) ^ (-(int)((_crc) & 1) & \

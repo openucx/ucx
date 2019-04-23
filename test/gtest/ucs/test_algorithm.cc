@@ -31,7 +31,6 @@ protected:
 void *test_algorithm::MAGIC = (void*)0xdeadbeef1ee7a880ull;
 
 UCS_TEST_F(test_algorithm, qsort_r) {
-
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         unsigned nmemb = ucs::rand() % 100;
 
