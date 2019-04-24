@@ -146,12 +146,6 @@ static inline double ucs_log2(double x)
          (_index) = ucs_ffs64_safe((uint64_t)(_map) & (-2ull << (uint64_t)(_index))))
 
 
-/**
- * Calculate CRC32 of a buffer.
- */
-uint32_t ucs_calc_crc32(uint32_t crc, const void *buf, size_t size);
-
-
 /*
  * Generate a large prime number
  */
