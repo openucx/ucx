@@ -86,6 +86,9 @@ $ make docs
 ### OpenMPI and OpenSHMEM installation with UCX
 [Wiki page](http://github.com/openucx/ucx/wiki/OpenMPI-and-OpenSHMEM-installation-with-UCX)
 
+### MPICH installation with UCX
+[Wiki page](http://github.com/openucx/ucx/wiki/MPICH-installation-with-UCX)
+
 ### UCX Performance Test
 
 Start server:
