@@ -117,6 +117,16 @@ UCS_TEST_P(test_ucp_wakeup, tx_wait, "ZCOPY_THRESH=10000")
     std::string send_data(COUNT, '2'), recv_data(COUNT, '1');
     void *sreq, *rreq;
 
+    if (has_transport("tcp")) {
+        /* This test doesn't progress receiver's worker, while
+         * waiting for the events on a sender's worker fd. So,
+         * this causes the hang due to lack of the progress during
+         * TCP CM message exchange (TCP doesn't have an async progress
+         * for such events)
+         * TODO: add async progress for TCP connections */
+        UCS_TEST_SKIP_R("This test is disabled for TCP");
+    }
+
     sender().connect(&receiver(), get_ep_params());
 
     rreq = ucp_tag_recv_nb(receiver().worker(), &recv_data[0], COUNT, DATATYPE,

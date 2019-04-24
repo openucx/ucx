@@ -228,14 +228,18 @@ ucs_time_t get_deadline(double timeout_in_sec)
 
 int max_tcp_connections()
 {
-    int max_conn = 65535 - 1024; /* limit on number of ports */
+    static int max_conn = 0;
 
-    /* Limit numer of endpoints to number of open files, for TCP */
-    struct rlimit rlim;
-    int ret = getrlimit(RLIMIT_NOFILE, &rlim);
-    if (ret == 0) {
-        /* assume no more than 100 fd-s are already used */
-        max_conn = ucs_min((static_cast<int>(rlim.rlim_cur) - 100) / 2, max_conn);
+    if (!max_conn) {
+        max_conn = 65535 - 1024; /* limit on number of ports */
+
+        /* Limit numer of endpoints to number of open files, for TCP */
+        struct rlimit rlim;
+        int ret = getrlimit(RLIMIT_NOFILE, &rlim);
+        if (ret == 0) {
+            /* assume no more than 100 fd-s are already used */
+            max_conn = ucs_min((static_cast<int>(rlim.rlim_cur) - 100) / 2, max_conn);
+        }
     }
 
     return max_conn;

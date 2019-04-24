@@ -108,6 +108,18 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
  */
 ucs_status_t ucs_socket_connect_nb_get_status(int fd);
 
+
+/**
+ * Returns the maximum possible value for the number of sockets that
+ * are ready to be accepted. It maybe either value from the system path
+ * or SOMAXCONN value.
+ *
+ * @return The queue length for completely established sockets
+ * waiting to be accepted.
+ */
+int ucs_socket_max_conn();
+
+
 /**
  * Non-blocking send operation sends data on the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
@@ -195,7 +207,7 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p);
  *
  * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
  */
-ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p);
+ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, uint16_t *port_p);
 
 
 /**
@@ -206,7 +218,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
  *
  * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
  */
-ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port);
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port);
 
 
 /**

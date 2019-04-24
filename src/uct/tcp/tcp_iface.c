@@ -202,6 +202,17 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
+void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
+{
+    iface->outstanding++;
+}
+
+void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
+{
+    ucs_assert(iface->outstanding > 0);
+    iface->outstanding--;
+}
+
 static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 {
     if (iface->listen_fd != -1) {
@@ -232,14 +243,7 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
             return;
         }
 
-        /* This will be replaced by exact iface <address:port> information */
-        status = ucs_sockaddr_set_port((struct sockaddr*)&peer_addr, 0);
-        if (status != UCS_OK) {
-            close(fd);
-            return;
-        }
-
-        status = uct_tcp_cm_handle_incoming_conn(iface, (const struct sockaddr*)&peer_addr, fd);
+        status = uct_tcp_cm_handle_incoming_conn(iface, &peer_addr, fd);
         if (status != UCS_OK) {
             close(fd);
             return;
@@ -306,6 +310,7 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 {
     struct sockaddr_in bind_addr = iface->config.ifaddr;
     socklen_t addrlen            = sizeof(bind_addr);
+    int backlog                  = ucs_socket_max_conn();
     ucs_status_t status;
     int ret;
 
@@ -340,9 +345,10 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     iface->config.ifaddr.sin_port = bind_addr.sin_port;
 
     /* Listen for connections */
-    ret = listen(iface->listen_fd, SOMAXCONN);
+    ret = listen(iface->listen_fd, backlog);
     if (ret < 0) {
-        ucs_error("listen(fd=%d; backlog=%d)", iface->listen_fd, SOMAXCONN);
+        ucs_error("listen(fd=%d; backlog=%d)",
+                  iface->listen_fd, backlog);
         status = UCS_ERR_IO_ERROR;
         goto err_close_sock;
     }
