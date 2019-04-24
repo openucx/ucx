@@ -647,6 +647,7 @@ static void ucm_malloc_populate_glibc_cache()
 static void ucm_malloc_install_symbols(ucm_reloc_patch_t *patches)
 {
     ucm_reloc_patch_t *patch;
+
     for (patch = patches; patch->symbol != NULL; ++patch) {
         ucm_reloc_modify(patch);
     }
@@ -758,7 +759,7 @@ static void ucm_malloc_init_orig_funcs()
 {
     /* We cannot use global initializer for these variables; if we do it,
      * GCC makes them part of .got, and patching .got actually changes the
-     * values of these global variables. As a work around, we initialize
+     * values of these global variables. As a workaround, we initialize
      * them here.
      */
     if (ucm_malloc_hook_state.usable_size == NULL) {
