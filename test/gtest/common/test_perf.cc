@@ -305,3 +305,12 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
                       std::setprecision(3) << test.min << ".." << test.max;
 }
 
+void test_perf::adjust_test_iters(test_spec& test, size_t max_iter)
+{
+    if (ucs::test_time_multiplier() == 1) {
+        test.iters = ucs_min(test.iters, max_iter);
+    } else {
+        /* if running under analyzers, adjust to <= 100 iters */
+        test.iters = ucs_min(ucs_min(test.iters, max_iter), 100ul);
+    }
+}

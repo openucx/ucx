@@ -37,6 +37,8 @@ protected:
     void run_test(const test_spec& test, unsigned flags, bool check_perf,
                   const std::string &tl_name, const std::string &dev_name);
 
+    void adjust_test_iters(test_spec& test, size_t max_iters);
+
 private:
     class rte_comm {
     public:

@@ -187,7 +187,9 @@ UCS_TEST_P(test_ucp_perf, envelope) {
             test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
             test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
         }
-        test.iters = ucs_min(test.iters, max_iter);
+
+        adjust_test_iters(test, max_iter);
+
         run_test(test, 0, check_perf, "", "");
     }
 }
