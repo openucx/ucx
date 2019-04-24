@@ -214,8 +214,8 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
         return UCS_OK;
     }
 
-    entry       = (void *)(base + reloc->r_offset);
-    prev_value  = *entry;
+    entry      = (void *)(base + reloc->r_offset);
+    prev_value = *entry;
 
     if (prev_value == ctx->patch->value) {
         ucm_trace("%s entry '%s' in %s at [%p] up-to-date",
@@ -224,8 +224,8 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     }
 
     /* enable writing to the page */
-    page  = (void *)((intptr_t)entry & ~(page_size - 1));
-    ret = mprotect(page, page_size, PROT_READ|PROT_WRITE);
+    page = (void *)((intptr_t)entry & ~(page_size - 1));
+    ret  = mprotect(page, page_size, PROT_READ|PROT_WRITE);
     if (ret < 0) {
         ucm_error("failed to modify %s page %p to rw: %m", section_name, page);
         return UCS_ERR_UNSUPPORTED;
