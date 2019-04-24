@@ -401,8 +401,7 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
 {
     ucs_status_t status;
     ssize_t packed_len;
-    int N;
-    int i;
+    int N, max_listen_conn;
 
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
@@ -424,17 +423,21 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     N = ucs_min(N, max_connections());
 
     /* idx 0 is setup in initialize(). only need to alloc request */
-    for (i = 1; i < N; i++) {
-        m_e1->connect(i, *m_e2, i);
-    }
+    for (int j, i = 1; i < N; i += j) {
+        max_listen_conn = ucs_min(max_connect_batch(), N - i);
 
-    /* give a chance to finish connection for some transports (ib/ud, tcp) */
-    flush();
+        for (j = 0; j < max_listen_conn; j++) {
+            int idx = i + j;
+            m_e1->connect(idx, *m_e2, idx);
+        }
+        /* give a chance to finish connection for some transports (ib/ud, tcp) */
+        flush();
+    }
 
     n_pending = 0;
 
     /* try to exaust global resources and create a pending queue */
-    for (i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         packed_len = uct_ep_am_bcopy(m_e1->ep(i), 0, mapped_buffer::pack,
                                      &sbuf, 0);
 
@@ -470,7 +473,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
     if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-        N = 128;
+        N = ucs_min(128, max_connect_batch());
     }
     pending_send_request_t *reqs[N];
     install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, 0);

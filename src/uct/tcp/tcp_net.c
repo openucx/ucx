@@ -127,7 +127,7 @@ ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifadd
         }
     }
 
-    if ((ifra.ifr_addr.sa_family  != AF_INET) ) {
+    if ((ifra.ifr_addr.sa_family != AF_INET) ) {
         ucs_error("%s address is not INET", if_name);
         return UCS_ERR_INVALID_ADDR;
     }

@@ -9,10 +9,15 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <limits.h>
+
+
+#define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
 
 
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
@@ -152,6 +157,23 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
     return UCS_OK;
 }
 
+int ucs_socket_max_conn()
+{
+    static long somaxconn_val = 0;
+
+    if (somaxconn_val ||
+        (ucs_read_file_number(&somaxconn_val, 1,
+                              UCS_SOCKET_MAX_CONN_PATH) == UCS_OK)) {
+        ucs_assert(somaxconn_val <= INT_MAX);
+        return somaxconn_val;
+    } else {
+        ucs_warn("unable to read somaxconn value from %s file",
+                 UCS_SOCKET_MAX_CONN_PATH);
+        somaxconn_val = SOMAXCONN;
+        return somaxconn_val;
+    }
+}
+
 static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
                                                ucs_socket_io_func_t io_func, const char *name)
 {
@@ -236,7 +258,7 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
     }
 }
 
-ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p)
+ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, uint16_t *port_p)
 {
     switch (addr->sa_family) {
     case AF_INET:
@@ -251,7 +273,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
     }
 }
 
-ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port)
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port)
 {
     switch (addr->sa_family) {
     case AF_INET:
@@ -282,7 +304,7 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size)
 {
-    unsigned port;
+    uint16_t port;
     size_t str_len;
 
     if ((sock_addr->sa_family != AF_INET) && (sock_addr->sa_family != AF_INET6)) {

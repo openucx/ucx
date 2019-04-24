@@ -279,6 +279,7 @@ protected:
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
     int max_connections();
+    int max_connect_batch();
 
     ucs_status_t send_am_message(entity *e, int wnd, uint8_t am_id = 0, int ep_idx = 0);
 
