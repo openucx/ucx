@@ -21,7 +21,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
    return JNI_VERSION_1_1;
 }
 
-static inline void log_error(const char *error)
+inline void log_error(const char *error)
 {
     ucs_error("JUCX - %s: %s \n", __FILE__, error);
 }
