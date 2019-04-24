@@ -20,8 +20,8 @@ import static java.nio.file.StandardOpenOption.*;
 import static org.junit.Assert.*;
 
 public class UcpMemoryTest {
-    private static int MEM_SIZE = 4096;
-    private static String RANDOM_TEXT = UUID.randomUUID().toString();
+    public static int MEM_SIZE = 4096;
+    public static String RANDOM_TEXT = UUID.randomUUID().toString();
 
     @Test
     public void testMmapFile() throws IOException {

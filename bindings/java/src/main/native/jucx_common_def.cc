@@ -11,6 +11,7 @@ extern "C" {
 
 #include <string.h>    /* memset */
 #include <arpa/inet.h> /* inet_addr */
+#include <pthread.h>   /* pthread_yield */
 
 
 static JavaVM *jvm_global;
@@ -131,4 +132,40 @@ JNIEnv* get_jni_env()
     jint rs = jvm_global->AttachCurrentThread(&env, NULL);
     ucs_assert(rs == JNI_OK);
     return (JNIEnv*)env;
+}
+
+static inline void call_on_success(jobject callback)
+{
+    JNIEnv *env = get_jni_env();
+    jclass callback_cls = env->GetObjectClass(callback);
+    jmethodID on_success = env->GetMethodID(callback_cls, "onSuccess", "()V");
+    env->CallVoidMethod(callback, on_success);
+}
+
+static inline void call_on_error(jobject callback, ucs_status_t status)
+{
+    ucs_error("JUCX: send request error: %s", ucs_status_string(status));
+    JNIEnv *env = get_jni_env();
+    jclass callback_cls = env->GetObjectClass(callback);
+    jmethodID on_error = env->GetMethodID(callback_cls, "onError", "(ILjava/lang/String;)V");
+    jstring error_msg = env->NewStringUTF(ucs_status_string(status));
+    env->CallVoidMethod(callback, on_error, status, error_msg);
+}
+
+void send_callback(void *request, ucs_status_t status)
+{
+    struct jucx_context *ctx = (struct jucx_context *)request;
+    while(ctx->callback == NULL) {
+        pthread_yield();
+    }
+    if (status == UCS_OK) {
+        call_on_success(ctx->callback);
+    } else {
+        call_on_error(ctx->callback, status);
+    }
+
+    JNIEnv *env = get_jni_env();
+    env->DeleteGlobalRef(ctx->callback);
+    ctx->callback = NULL;
+    ucp_request_free(request);
 }

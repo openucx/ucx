@@ -46,4 +46,6 @@ void jucx_request_init(void *request);
  */
 JNIEnv* get_jni_env();
 
+void send_callback(void *request, ucs_status_t status);
+
 #endif

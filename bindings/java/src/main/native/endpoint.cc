@@ -105,3 +105,31 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
 
     return result;
 }
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
+                                                       jlong ep_ptr, jlong address,
+                                                       jlong rkey_ptr, jobject dst_buf,
+                                                       jobject callback)
+{
+    void *result_address = env->GetDirectBufferAddress(dst_buf);
+    size_t result_size = env->GetDirectBufferCapacity(dst_buf);
+
+    ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, result_address, result_size,
+                                          address, (ucp_rkey_h)rkey_ptr, send_callback);
+
+    // If request is a pointer set context callback and rkey.
+    if (UCS_PTR_IS_PTR(request)) {
+        ((struct jucx_context *)request)->callback = env->NewGlobalRef(callback);
+    } else {
+        // Just call a callback directly.
+        struct jucx_context ctx;
+        ctx.callback = env->NewGlobalRef(callback);
+        if (UCS_PTR_IS_ERR(request)) {
+            JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
+            send_callback(&ctx, UCS_PTR_STATUS(request));
+        } else if(UCS_PTR_STATUS(request) == UCS_OK) {
+            send_callback(&ctx, UCS_OK);
+        }
+    }
+}
