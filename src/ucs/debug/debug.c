@@ -1204,6 +1204,8 @@ void ucs_debug_init()
     }
     if (ucs_global_opts.debug_signo > 0) {
         struct sigaction sigact, old_action;
+        memset(&sigact, 0, sizeof(sigact));
+        memset(&old_action, 0, sizeof(old_action));
         sigact.sa_handler = ucs_debug_signal_handler;
         orig_sigaction(ucs_global_opts.debug_signo, &sigact, &old_action);
         ucs_debug_save_original_sighandler(ucs_global_opts.debug_signo, &old_action);

@@ -173,7 +173,7 @@ gtest_SOURCES += \
 endif
 if HAVE_MLX5_HW
 gtest_SOURCES += \
-    uct/ib/test_ib_md.cc
+	uct/ib/test_ib_md.cc
 endif
 if HAVE_TL_UD
 gtest_SOURCES += \
