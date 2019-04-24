@@ -299,6 +299,7 @@ void test_thread::test() {
     void *ptr = malloc(large_alloc_size);
     EXPECT_GE(m_map_size, large_alloc_size + small_map_size) << m_name;
     EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_map_ranges)) << m_name;
+    EXPECT_GE(malloc_usable_size(ptr), large_alloc_size);
 
     free(ptr);
     EXPECT_GE(m_unmap_size, large_alloc_size) << m_name;
@@ -322,6 +323,9 @@ void test_thread::test() {
 
     /* Test username */
     ucs_get_user_name();
+
+    /* Test usable size */
+    EXPECT_GE(malloc_usable_size(ptr_r), small_alloc_size);
 
     /* Test realloc */
     ptr_r = realloc(ptr_r, small_alloc_size / 2);
