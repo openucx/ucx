@@ -31,6 +31,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_iface_t, uct_iface_t);
 static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
+    uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
@@ -41,6 +43,10 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
     /* User's private data size is UCT_RDMACM_UDP_PRIV_DATA_LEN minus room for
      * the private_data header (to hold the length of the data) */
     iface_attr->max_conn_priv   = UCT_RDMACM_MAX_CONN_PRIV;
+
+    if (rdmacm_iface->is_server) {
+        iface_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_iface->cm_id));
+    }
 
     return UCS_OK;
 }
