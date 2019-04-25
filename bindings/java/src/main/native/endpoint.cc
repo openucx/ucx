@@ -9,6 +9,13 @@
 #include <string.h>    /* memset */
 
 
+static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
+{
+    JNIEnv* env = get_jni_env();
+    JNU_ThrowExceptionByStatus(env, status);
+    ucs_error("JUCX: endpoint error handler: %s", ucs_status_string(status));
+}
+
 JNIEXPORT jlong JNICALL
 Java_org_ucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
                                                        jobject ucp_ep_params,
@@ -60,6 +67,9 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
             ep_params.sockaddr.addrlen = addrlen;
         }
     }
+
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    ep_params.err_handler.cb = error_handler;
 
     ucs_status_t status = ucp_ep_create(ucp_worker, &ep_params, &endpoint);
     if (status != UCS_OK) {

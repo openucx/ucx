@@ -13,7 +13,6 @@
 
 typedef uintptr_t native_ptr;
 
-static void log_error(const char* error);
 
 JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *, const char *);
 
