@@ -116,7 +116,7 @@ ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
  */
 ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p);
+                                     uintptr_t *offset, void **handle_p);
 
 uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
                                       uint64_t md_flags,

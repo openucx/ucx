@@ -249,13 +249,14 @@ static void ucp_rndv_get_lanes_count(ucp_request_t *req)
     ucp_lane_map_t map = 0;
     uct_rkey_t uct_rkey;
     ucp_lane_index_t lane;
+    uintptr_t offset;
 
     if (ucs_likely(req->send.rndv_get.lane_count != 0)) {
         return; /* already resolved */
     }
 
     while ((lane = ucp_rkey_get_rma_bw_lane(req->send.rndv_get.rkey, ep, req->send.mem_type,
-                                            &uct_rkey, map)) != UCP_NULL_LANE) {
+                                            &uct_rkey, &offset, map)) != UCP_NULL_LANE) {
         req->send.rndv_get.lane_count++;
         map |= UCS_BIT(lane);
     }
@@ -264,7 +265,8 @@ static void ucp_rndv_get_lanes_count(ucp_request_t *req)
                                             ep->worker->context->config.ext.max_rndv_lanes);
 }
 
-static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey_t *uct_rkey)
+static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey_t *uct_rkey,
+                                               uintptr_t *offset)
 {
     /* get lane and mask it for next iteration.
      * next time this lane will not be selected & we continue
@@ -275,7 +277,7 @@ static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey
     ucp_lane_index_t lane;
 
     lane = ucp_rkey_get_rma_bw_lane(rndv_req->send.rndv_get.rkey, ep, rndv_req->send.mem_type,
-                                    uct_rkey, rndv_req->send.rndv_get.lanes_map);
+                                    uct_rkey, offset, rndv_req->send.rndv_get.lanes_map);
 
     if ((lane == UCP_NULL_LANE) && (rndv_req->send.rndv_get.lanes_map != 0)) {
         /* lanes_map != 0 - no more lanes (but BW lanes are exist because map
@@ -283,7 +285,7 @@ static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey
          * reset used lanes map to NULL and iterate it again */
         rndv_req->send.rndv_get.lanes_map = 0;
         lane = ucp_rkey_get_rma_bw_lane(rndv_req->send.rndv_get.rkey, ep, rndv_req->send.mem_type,
-                                        uct_rkey, rndv_req->send.rndv_get.lanes_map);
+                                        uct_rkey, offset, rndv_req->send.rndv_get.lanes_map);
     }
 
     if (ucs_unlikely(lane == UCP_NULL_LANE)) {
@@ -321,11 +323,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     size_t tail;
     int pending_add_res;
     ucp_lane_index_t lane;
+    uintptr_t remote_addr_offset;
 
     ucp_rndv_get_lanes_count(rndv_req);
 
     /* Figure out which lane to use for get operation */
-    rndv_req->send.lane = lane = ucp_rndv_get_next_lane(rndv_req, &uct_rkey);
+    rndv_req->send.lane = lane = ucp_rndv_get_next_lane(rndv_req, &uct_rkey,
+                                                        &remote_addr_offset);
 
     if (lane == UCP_NULL_LANE) {
         /* If can't perform get_zcopy - switch to active-message.
@@ -403,7 +407,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     for (;;) {
         status = uct_ep_get_zcopy(ep->uct_eps[lane],
                                   iov, iovcnt,
-                                  rndv_req->send.rndv_get.remote_address + offset,
+                                  rndv_req->send.rndv_get.remote_address + offset + remote_addr_offset,
                                   uct_rkey,
                                   &rndv_req->send.state.uct_comp);
         ucp_request_send_state_advance(rndv_req, &state,
@@ -718,7 +722,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
                         ucp_ep_md_index(ep, sreq->send.lane), sreq->send.mdesc);
     status = uct_ep_put_zcopy(ep->uct_eps[sreq->send.lane],
                               iov, iovcnt,
-                              sreq->send.rndv_put.remote_address + offset,
+                              sreq->send.rndv_put.remote_address + offset +
+                              sreq->send.rndv_put.offset,
                               sreq->send.rndv_put.uct_rkey,
                               &sreq->send.state.uct_comp);
     ucp_request_send_state_advance(sreq, &state,
@@ -908,6 +913,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_ep_h ep                      = sreq->send.ep;
     ucp_context_h context;
     ucs_status_t status;
+    uintptr_t offset;
 
     ucp_trace_req(sreq, "received rtr address 0x%lx remote rreq 0x%lx",
                   rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_ptr);
@@ -929,7 +935,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
 
         sreq->send.lane = ucp_rkey_get_rma_bw_lane(sreq->send.rndv_put.rkey, ep,
                                                    sreq->send.mem_type,
-                                                   &sreq->send.rndv_put.uct_rkey, 0);
+                                                   &sreq->send.rndv_put.uct_rkey,
+                                                   &offset, 0);
         if (sreq->send.lane != UCP_NULL_LANE) {
             /*
              * Try pipeline protocol for non-host memory, if PUT_ZCOPY protocol is
@@ -950,6 +957,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;
             sreq->send.rndv_put.remote_request = rndv_rtr_hdr->rreq_ptr;
             sreq->send.rndv_put.remote_address = rndv_rtr_hdr->address;
+            sreq->send.rndv_put.offset         = offset;
             sreq->send.mdesc                   = NULL;
             goto out_send;
         } else {

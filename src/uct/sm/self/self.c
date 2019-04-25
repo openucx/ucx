@@ -371,7 +371,7 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
 
 static ucs_status_t uct_self_md_rkey_unpack(uct_md_component_t *mdc,
                                             const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                            void **handle_p)
+                                            uintptr_t *offset, void **handle_p)
 {
     /**
      * Pseudo stub function for the key unpacking
@@ -379,6 +379,7 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_md_component_t *mdc,
      */
     *rkey_p   = 0;
     *handle_p = NULL;
+    *offset   = 0;
     return UCS_OK;
 }
 

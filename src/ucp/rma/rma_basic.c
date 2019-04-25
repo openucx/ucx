@@ -32,7 +32,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
                                   ep->uct_eps[lane],
                                   req->send.buffer,
                                   packed_len,
-                                  req->send.rma.remote_addr,
+                                  ucp_rkey_get_remote_addr(req->send.rma.remote_addr, rkey),
                                   rkey->cache.rma_rkey);
     } else if (ucs_likely(req->send.length < rma_config->put_zcopy_thresh)) {
         ucp_memcpy_pack_context_t pack_ctx;
@@ -42,7 +42,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
                                       ep->uct_eps[lane],
                                       ucp_memcpy_pack,
                                       &pack_ctx,
-                                      req->send.rma.remote_addr,
+                                      ucp_rkey_get_remote_addr(req->send.rma.remote_addr, rkey),
                                       rkey->cache.rma_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
     } else {
@@ -59,7 +59,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
                                   ep->uct_eps[lane],
                                   &iov, 1,
-                                  req->send.rma.remote_addr,
+                                  ucp_rkey_get_remote_addr(req->send.rma.remote_addr, rkey),
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
         ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
@@ -89,7 +89,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
                                   (uct_unpack_callback_t)memcpy,
                                   (void*)req->send.buffer,
                                   frag_length,
-                                  req->send.rma.remote_addr,
+                                  ucp_rkey_get_remote_addr(req->send.rma.remote_addr, rkey),
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
     } else {
@@ -103,7 +103,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
         status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
                                   ep->uct_eps[lane],
                                   &iov, 1,
-                                  req->send.rma.remote_addr,
+                                  ucp_rkey_get_remote_addr(req->send.rma.remote_addr, rkey),
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
     }

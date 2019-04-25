@@ -40,6 +40,7 @@ typedef struct ucp_rkey {
         uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
         ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
         ucp_rma_proto_t           *rma_proto;   /* Protocol for RMAs */
+        uintptr_t                 offset;       /* Offset of HW address from virtual remote addr */
     } cache;
     ucp_md_map_t                  md_map;  /* Which *remote* MDs have valid memory handles */
     uct_memory_type_t             mem_type;/* Memory type of remote key memory */
@@ -81,6 +82,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
                                           uct_memory_type_t mem_type,
                                           uct_rkey_t *uct_rkey_p,
+                                          uintptr_t *offset,
                                           ucp_lane_map_t ignore);
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
@@ -161,6 +163,11 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
     return ucp_memh_map2uct(memh->uct, memh->md_map, md_idx);
 }
 
+static UCS_F_ALWAYS_INLINE uintptr_t
+ucp_rkey_get_remote_addr(uintptr_t addr, ucp_rkey_h rkey)
+{
+    return addr + rkey->cache.offset;
+}
 
 #define UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type) \
     ({ \

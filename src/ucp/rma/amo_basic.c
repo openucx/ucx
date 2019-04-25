@@ -38,12 +38,14 @@ static ucs_status_t ucp_amo_basic_progress_post(uct_pending_req_t *self)
     if (req->send.length == sizeof(uint64_t)) {
         status = UCS_PROFILE_CALL(uct_ep_atomic64_post,
                                   ep->uct_eps[req->send.lane], op, value,
-                                  remote_addr, rkey->cache.amo_rkey);
+                                  ucp_rkey_get_remote_addr(remote_addr, rkey),
+                                  rkey->cache.amo_rkey);
     } else {
         ucs_assert(req->send.length == sizeof(uint32_t));
         status = UCS_PROFILE_CALL(uct_ep_atomic32_post,
                                   ep->uct_eps[req->send.lane], op, value,
-                                  remote_addr, rkey->cache.amo_rkey);
+                                  ucp_rkey_get_remote_addr(remote_addr, rkey),
+                                  rkey->cache.amo_rkey);
     }
 
     return ucp_amo_check_send_status(req, status);
@@ -65,13 +67,14 @@ static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
         if (op != UCT_ATOMIC_OP_CSWAP) {
             status = uct_ep_atomic64_fetch(ep->uct_eps[req->send.lane],
                                            op, value, result,
-                                           remote_addr,
+                                           ucp_rkey_get_remote_addr(remote_addr, rkey),
                                            rkey->cache.amo_rkey,
                                            &req->send.state.uct_comp);
         } else {
             status = uct_ep_atomic_cswap64(ep->uct_eps[req->send.lane],
                                            value, *result,
-                                           remote_addr, rkey->cache.amo_rkey, result,
+                                           ucp_rkey_get_remote_addr(remote_addr, rkey),
+                                           rkey->cache.amo_rkey, result,
                                            &req->send.state.uct_comp);
         }
     } else {
@@ -79,12 +82,13 @@ static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
         if (op != UCT_ATOMIC_OP_CSWAP) {
             status = uct_ep_atomic32_fetch(ep->uct_eps[req->send.lane],
                                            op, value, (uint32_t*)result,
-                                           remote_addr,
+                                           ucp_rkey_get_remote_addr(remote_addr, rkey),
                                            rkey->cache.amo_rkey,
                                            &req->send.state.uct_comp);
         } else {
             status = uct_ep_atomic_cswap32(ep->uct_eps[req->send.lane],
-                                           value, *result, remote_addr,
+                                           value, *result,
+                                           ucp_rkey_get_remote_addr(remote_addr, rkey),
                                            rkey->cache.amo_rkey, (uint32_t*)result,
                                            &req->send.state.uct_comp);
         }

@@ -1035,12 +1035,13 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 
 static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
                                        const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                       void **handle_p)
+                                       uintptr_t *offset, void **handle_p)
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
     *rkey_p   = packed_rkey;
     *handle_p = NULL;
+    *offset   = 0;
     ucs_trace("unpacked rkey 0x%llx: direct 0x%x indirect 0x%x",
               (unsigned long long)packed_rkey,
               uct_ib_md_direct_rkey(*rkey_p), uct_ib_md_indirect_rkey(*rkey_p));

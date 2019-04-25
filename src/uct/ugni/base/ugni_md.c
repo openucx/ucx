@@ -129,7 +129,7 @@ static ucs_status_t uct_ugni_rkey_release(uct_md_component_t *mdc, uct_rkey_t rk
 }
 
 static ucs_status_t uct_ugni_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
-                                         uct_rkey_t *rkey_p, void **handle_p)
+                                         uct_rkey_t *rkey_p, uintptr_t *offset, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;
     gni_mem_handle_t *mem_hndl = NULL;
@@ -151,8 +151,9 @@ static ucs_status_t uct_ugni_rkey_unpack(uct_md_component_t *mdc, const void *rk
 
     mem_hndl->qword1 = ptr[1];
     mem_hndl->qword2 = ptr[2];
-    *rkey_p = (uintptr_t)mem_hndl;
-    *handle_p = NULL;
+    *rkey_p          = (uintptr_t)mem_hndl;
+    *handle_p        = NULL;
+    *offset          = 0;
     return UCS_OK;
 }
 

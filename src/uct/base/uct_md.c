@@ -228,10 +228,11 @@ ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
 
 ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p)
+                                     uintptr_t *offset, void **handle_p)
 {
     *rkey_p   = 0xdeadbeef;
     *handle_p = NULL;
+    *offset   = 0;
     return UCS_OK;
 }
 
@@ -440,7 +441,8 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
     ucs_list_for_each(mdc, &uct_md_components_list, list) {
         if (!strncmp(rkey_buffer, mdc->name, UCT_MD_COMPONENT_NAME_MAX)) {
             status = mdc->rkey_unpack(mdc, rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
-                                      &rkey_ob->rkey, &rkey_ob->handle);
+                                      &rkey_ob->rkey, &rkey_ob->offset,
+                                      &rkey_ob->handle);
             if (status == UCS_OK) {
                 rkey_ob->type = mdc;
             }

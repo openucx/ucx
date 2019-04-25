@@ -159,6 +159,7 @@ struct ucp_request {
                     ucp_request_t    *sreq;          /* send request on the send side */
                     ucp_rkey_h       rkey;           /* key for remote receive buffer */
                     uct_rkey_t       uct_rkey;       /* UCT remote key */
+                    uintptr_t        offset;         /* HW offset from remote address */
                 } rndv_put;
 
                 struct {

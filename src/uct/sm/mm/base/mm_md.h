@@ -158,7 +158,7 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
 
 ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
-                                uct_rkey_t *rkey_p, void **handle_p);
+                                uct_rkey_t *rkey_p, uintptr_t *offset, void **handle_p);
 
 ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle);
 

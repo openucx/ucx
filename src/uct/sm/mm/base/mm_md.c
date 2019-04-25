@@ -156,7 +156,7 @@ ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 }
 
 ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
-                                uct_rkey_t *rkey_p, void **handle_p)
+                                uct_rkey_t *rkey_p, uintptr_t *offset, void **handle_p)
 {
     /* user is responsible to free rkey_buffer */
     const uct_mm_packed_rkey_t *rkey = rkey_buffer;
@@ -187,6 +187,7 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
      * the remote VA to local VA of the attached segment */
     *handle_p = mm_desc;
     *rkey_p   = (uintptr_t)mm_desc->address - rkey->owner_ptr;
+    *offset   = 0;
     return UCS_OK;
 }
 

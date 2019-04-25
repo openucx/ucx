@@ -199,7 +199,7 @@ static ucs_status_t uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
 
 static ucs_status_t uct_knem_rkey_unpack(uct_md_component_t *mdc,
                                          const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                         void **handle_p)
+                                         uintptr_t *offset, void **handle_p)
 {
     uct_knem_key_t *packed = (uct_knem_key_t *)rkey_buffer;
     uct_knem_key_t *key;
@@ -209,10 +209,11 @@ static ucs_status_t uct_knem_rkey_unpack(uct_md_component_t *mdc,
         ucs_error("Failed to allocate memory for uct_knem_key_t");
         return UCS_ERR_NO_MEMORY;
     }
-    key->cookie = packed->cookie;
+    key->cookie  = packed->cookie;
     key->address = packed->address;
-    *handle_p = NULL;
-    *rkey_p = (uintptr_t)key;
+    *handle_p    = NULL;
+    *rkey_p      = (uintptr_t)key;
+    *offset      = 0;
     ucs_trace("unpacked rkey: key %p cookie 0x%"PRIx64" address %"PRIxPTR,
               key, key->cookie, key->address);
     return UCS_OK;

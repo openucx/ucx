@@ -354,7 +354,8 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
                                                  const ucp_lane_index_t *lanes,
                                                  ucp_rkey_h rkey,
                                                  ucp_lane_map_t ignore,
-                                                 uct_rkey_t *uct_rkey_p)
+                                                 uct_rkey_t *uct_rkey_p,
+                                                 uint8_t *rkey_index_p)
 {
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
@@ -393,8 +394,9 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         dst_md_index = config->key.lanes[lane].dst_md_index;
         if (rkey->md_map & UCS_BIT(dst_md_index)) {
             /* Return first matching lane */
-            rkey_index  = ucs_bitmap2idx(rkey->md_map, dst_md_index);
-            *uct_rkey_p = rkey->uct[rkey_index].rkey;
+            rkey_index    = ucs_bitmap2idx(rkey->md_map, dst_md_index);
+            *uct_rkey_p   = rkey->uct[rkey_index].rkey;
+            *rkey_index_p = rkey_index;
             return lane;
         }
     }
@@ -406,6 +408,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 {
     ucp_context_h context   = ep->worker->context;
     ucp_ep_config_t *config = ucp_ep_config(ep);
+    uint8_t rkey_index      = 0;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
     int rma_sw, amo_sw;
@@ -413,23 +416,25 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
                                                     UCT_MD_MEM_TYPE_HOST,
                                                     config->key.rma_lanes, rkey,
-                                                    0, &uct_rkey);
+                                                    0, &uct_rkey, &rkey_index);
     rma_sw = (rkey->cache.rma_lane == UCP_NULL_LANE);
     if (rma_sw) {
         rkey->cache.rma_proto     = &ucp_rma_sw_proto;
         rkey->cache.rma_rkey      = UCT_INVALID_RKEY;
         rkey->cache.max_put_short = 0;
+        rkey->cache.offset        = 0;
     } else {
         rkey->cache.rma_proto     = &ucp_rma_basic_proto;
         rkey->cache.rma_rkey      = uct_rkey;
         rkey->cache.rma_proto     = &ucp_rma_basic_proto;
         rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
+        rkey->cache.offset        = rkey->uct[rkey_index].offset;
     }
 
     rkey->cache.amo_lane = ucp_config_find_rma_lane(context, config,
                                                     UCT_MD_MEM_TYPE_HOST,
                                                     config->key.amo_lanes, rkey,
-                                                    0, &uct_rkey);
+                                                    0, &uct_rkey, &rkey_index);
     amo_sw = (rkey->cache.amo_lane == UCP_NULL_LANE);
     if (amo_sw) {
         rkey->cache.amo_proto     = &ucp_amo_sw_proto;
@@ -472,10 +477,21 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
                                           uct_memory_type_t mem_type,
                                           uct_rkey_t *uct_rkey_p,
+                                          uintptr_t *offset,
                                           ucp_lane_map_t ignore)
 {
     ucp_ep_config_t *config = ucp_ep_config(ep);
-    return ucp_config_find_rma_lane(ep->worker->context, config, mem_type,
+    ucp_lane_index_t lane;
+    uint8_t rkey_index;
+
+    lane = ucp_config_find_rma_lane(ep->worker->context, config, mem_type,
                                     config->key.rma_bw_lanes, rkey,
-                                    ignore, uct_rkey_p);
+                                    ignore, uct_rkey_p, &rkey_index);
+    if ((lane != UCP_NULL_LANE) && (*uct_rkey_p != UCT_INVALID_RKEY)) {
+        *offset = rkey->uct[rkey_index].offset;
+    } else {
+        *offset = 0;
+    }
+
+    return lane;
 }

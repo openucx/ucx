@@ -25,7 +25,8 @@ struct uct_md_component {
                                       uct_md_h *md_p);
 
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
-                                          uct_rkey_t *rkey_p, void **handle_p);
+                                          uct_rkey_t *rkey_p, uintptr_t *offset,
+                                          void **handle_p);
 
     ucs_status_t           (*rkey_ptr)(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle,
                                        uint64_t raddr, void **laddr_p);
