@@ -21,18 +21,13 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
    return JNI_VERSION_1_1;
 }
 
-inline void log_error(const char *error)
-{
-    ucs_error("JUCX - %s: %s \n", __FILE__, error);
-}
-
 /**
  * Throw a Java exception by name. Similar to SignalError.
  */
 JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *env, const char *msg)
 {
     jclass cls = env->FindClass("org/ucx/jucx/UcxException");
-    log_error(msg);
+    ucs_error("JUCX: %s", msg);
     if (cls != 0) { /* Otherwise an exception has already been thrown */
         env->ThrowNew(cls, msg);
     }
