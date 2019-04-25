@@ -42,4 +42,9 @@ struct jucx_context {
 
 void jucx_request_init(void *request);
 
+/**
+ * @brief Get the jni env object. To be able to call java methods from ucx async callbacks.
+ */
+JNIEnv* get_jni_env();
+
 #endif
