@@ -146,8 +146,10 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     /* pack all addresses */
-    status = ucp_address_pack(ep->worker, ucp_wireup_is_ep_needed(ep) ? ep : NULL,
-                              tl_bitmap, order, &req->send.length, &address);
+    status = ucp_address_pack(ep->worker,
+                              ucp_wireup_is_ep_needed(ep) ? ep : NULL,
+                              tl_bitmap, -1, order, &req->send.length,
+                              &address);
     if (status != UCS_OK) {
         ucs_free(req);
         ucs_error("failed to pack address: %s", ucs_status_string(status));

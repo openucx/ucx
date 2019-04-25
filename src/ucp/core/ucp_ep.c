@@ -236,8 +236,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         md_index = context->mem_type_tl_mds[i];
         mem_type = context->tl_mds[md_index].attr.cap.mem_type;
 
-        status = ucp_address_pack(worker, NULL, context->mem_type_tls[mem_type], NULL,
-                                  &address_length, &address_buffer);
+        status = ucp_address_pack(worker, NULL, context->mem_type_tls[mem_type],
+                                  -1, NULL, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }

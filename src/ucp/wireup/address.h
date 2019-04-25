@@ -34,6 +34,15 @@ enum {
 };
 
 
+enum {
+    UCP_ADDRESS_PACK_FLAG_WORKER_GUID = UCS_BIT(0),
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME = UCS_BIT(1), /* valid only for debug build */
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2),
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3),
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4)
+};
+
+
 /**
  * Remote interface attributes.
  */
@@ -85,6 +94,7 @@ struct ucp_unpacked_address {
  *                            Can be set to NULL, to take addresses only from worker.
  * @param [in]  tl_bitmap   Specifies the resources whose transport address
  *                           (ep or iface) should be packed.
+ * @param [in]  flags       UCP_ADDRESS_FLAG_xx flags to specify address format.
  * @param [out] order       If != NULL, filled with the order of addresses as they
  *                           were packed. For example: first entry in the array is
  *                           the address index of the first transport specified
@@ -94,7 +104,8 @@ struct ucp_unpacked_address {
  * @param [out] buffer_p    Filled with pointer to packed buffer. It should be
  *                           released by ucs_free().
  */
-ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
+ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
+                              uint64_t tl_bitmap, uint64_t flags,
                               unsigned *order, size_t *size_p, void **buffer_p);
 
 
