@@ -74,7 +74,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         return 1;
     }
 
-    worker = listener->wiface.worker;
+    worker = listener->is_wcm ? listener->wcm.worker : listener->wiface.worker;
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
     status = ucp_ep_create_accept(worker, client_data, &ep);
@@ -269,12 +269,46 @@ out:
     return status;
 }
 
+static void ucp_listener_conn_request_cb(uct_listener_h listener, void *arg,
+                                         const char *dev_name,
+                                         uct_conn_request_h conn_request,
+                                         const void *conn_priv_data,
+                                         size_t length)
+{
+    ucp_listener_h ucp_listener = arg;
+    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
+    ucp_conn_request_h ucp_conn_request;
+
+    ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, client_data) +
+                                  length, "ucp_conn_request_h");
+    if (ucp_conn_request == NULL) {
+        ucs_error("failed to allocate connect request, rejecting connection request %p on TL listener %p, reason %s",
+                  conn_request, listener, ucs_status_string(UCS_ERR_NO_MEMORY));
+        /* TODO: CM reject */
+        ucs_assert_always(0);
+    }
+
+    ucp_conn_request->listener = ucp_listener;
+    ucp_conn_request->uct_req  = conn_request;
+    memcpy(&ucp_conn_request->client_data, conn_priv_data, length);
+
+    uct_worker_progress_register_safe(ucp_listener->wcm.worker->uct,
+                                      ucp_listener_conn_request_progress,
+                                      ucp_conn_request,
+                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+
+    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
+     * that he can wake-up on this event */
+    ucp_worker_signal_internal(ucp_listener->wcm.worker);
+
+}
+
 static ucs_status_t
 ucp_listener_create_on_cm(ucp_worker_h worker,
                           const ucp_listener_params_t *params,
                           ucp_listener_h *listener_p)
 {
-    ucp_listener_h listener = ucs_calloc(1, sizeof(listener), "ucp listener");
+    ucp_listener_h listener = ucs_calloc(1, sizeof(*listener), "ucp listener");
     uct_listener_params_t uct_params;
     ucs_status_t   status;
     ucp_md_index_t i;
@@ -283,19 +317,29 @@ ucp_listener_create_on_cm(ucp_worker_h worker,
         return UCS_ERR_NO_MEMORY;
     }
 
-    listener->is_wcm      = 1;
-    listener->wcm.worker  = worker;
+    listener->is_wcm     = 1;
+    listener->wcm.worker = worker;
+
+    if (params->field_mask & UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER) {
+        listener->accept_cb = params->accept_handler.cb;
+        listener->arg       = params->accept_handler.arg;
+    }
+
+    if (params->field_mask & UCP_LISTENER_PARAM_FIELD_CONN_HANDLER) {
+        listener->conn_cb = params->conn_handler.cb;
+        listener->arg     = params->conn_handler.arg;
+    }
+
     uct_params.field_mask = UCT_LISTENER_PARAM_FIELD_CM |
                             UCT_LISTENER_PARAM_FIELD_SOCKADDR |
                             UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
                             UCT_LISTENER_PARAM_FIELD_USER_DATA;
 
-    UCS_ASYNC_BLOCK(&worker->async);
     status = UCS_OK;
     for (i = 0; (i < worker->num_cms) && (status == UCS_OK); ++i) {
         uct_params.cm              = worker->cms[i];
         uct_params.sockaddr        = params->sockaddr;
-        uct_params.conn_request_cb = (void *)0xdeadbeaf;
+        uct_params.conn_request_cb = ucp_listener_conn_request_cb;
         uct_params.user_data       = listener;
         status = uct_listener_create(&uct_params, &listener->wcm.ucts[i]);
     }
@@ -308,7 +352,7 @@ ucp_listener_create_on_cm(ucp_worker_h worker,
     } else {
         *listener_p = listener;
     }
-    UCS_ASYNC_UNBLOCK(&worker->async);
+
     return status;
 }
 

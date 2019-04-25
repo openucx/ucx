@@ -56,6 +56,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->num_lanes        = 0;
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
+    key->connected_lane   = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
@@ -288,6 +289,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
     key.am_lane               = 0;
     key.wireup_lane           = 0;
+    key.connected_lane        = UCP_NULL_LANE;
     key.tag_lane              = 0;
     key.am_bw_lanes[0]        = 0;
     key.rma_lanes[0]          = 0;
@@ -382,9 +384,15 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_cleanup_lanes;
     }
 
-    status = ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
+    status = ucp_wireup_ep_connect_to_sockaddr_cm(ep->uct_eps[0], params);
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
+    } else {
+        /* Fallback to iface path */
+        status = ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
+        if (status != UCS_OK) {
+            goto err_cleanup_lanes;
+        }
     }
 
     *ep_p = ep;

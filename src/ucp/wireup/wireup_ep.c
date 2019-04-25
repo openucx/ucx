@@ -572,6 +572,117 @@ err:
     return status;
 }
 
+static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
+                                                       const char *dev_name,
+                                                       void *priv_data)
+{
+    const size_t dev_name_length = strlen(dev_name);
+    ucp_ep_h ep                  = arg;
+    ucp_wireup_ep_t *wireup_ep   = (ucp_wireup_ep_t *)ep->uct_eps[ucp_ep_config(ep)->key.wireup_lane];
+    ucs_status_t status          = UCS_ERR_NO_DEVICE;
+    size_t max_conn_priv         = 0;
+    uct_iface_h tl_iface         = NULL;
+    uct_ep_h tl_ep               = NULL;
+    uct_iface_attr_t *iface_attr;
+    uct_cm_attr_t cm_attr;
+    uct_ep_params_t tl_ep_params;
+    ucp_rsc_index_t tl_rsc_idx;
+    ucp_rsc_index_t num_tls;
+    ucp_rsc_index_t iface_idx;
+    ucp_rsc_index_t cm_idx;
+
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+
+    for (cm_idx = 0; cm_idx < ep->worker->num_cms; ++cm_idx) {
+        status = uct_cm_query(ep->worker->cms[cm_idx], &cm_attr);
+        ucs_assert(status == UCS_OK);
+        /* TODO: build map */
+        max_conn_priv = ucs_max(max_conn_priv, cm_attr.max_conn_priv);
+    }
+
+    if (max_conn_priv == 0) {
+        goto out;
+    }
+
+    num_tls = ep->worker->context->num_tls;
+    for (tl_rsc_idx = 0; tl_rsc_idx < num_tls; ++tl_rsc_idx) {
+        if (!strncmp(ep->worker->context->tl_rscs[tl_rsc_idx].tl_rsc.dev_name,
+                     dev_name, dev_name_length)) {
+            for (iface_idx = 0; iface_idx < ep->worker->num_ifaces; ++iface_idx) {
+                if (ep->worker->ifaces[iface_idx].rsc_index == tl_rsc_idx) {
+                    tl_iface = ep->worker->ifaces[iface_idx].iface;
+                    iface_attr = &ep->worker->ifaces[iface_idx].attr;
+                }
+            }
+
+            /* TODO: select the best one */
+            break;
+        }
+    }
+
+    if (tl_iface == NULL) {
+        goto out;
+    }
+
+    tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    tl_ep_params.iface      = tl_iface;
+    status = uct_ep_create(&tl_ep_params, &tl_ep);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, tl_ep);
+
+    ucs_assert((iface_attr->iface_addr_len + iface_attr->ep_addr_len) <=
+               max_conn_priv);
+    status = uct_iface_get_address(tl_iface, priv_data);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_ep_get_address(tl_ep,
+                                UCS_PTR_BYTE_OFFSET(priv_data,
+                                                    iface_attr->iface_addr_len));
+out:
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    return (status == UCS_OK) ?
+           (iface_attr->iface_addr_len + iface_attr->ep_addr_len) : status;
+}
+
+ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
+                                                  const ucp_ep_params_t *params)
+{
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker        = ucp_ep->worker;
+    uct_ep_params_t cm_lane_params;
+    ucs_status_t status;
+    ucp_md_index_t i;
+
+    cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
+                                UCT_EP_PARAM_FIELD_USER_DATA             |
+                                UCT_EP_PARAM_FIELD_SOCKADDR              |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB;
+
+    cm_lane_params.user_data                    = ucp_ep;
+    cm_lane_params.sockaddr                     = &params->sockaddr;
+    cm_lane_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
+    cm_lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_client_priv_pack_cb;
+    cm_lane_params.sockaddr_connected_cb.client = NULL;
+    cm_lane_params.disconnected_cb              = NULL;
+
+    ucs_assert(worker->num_cms == 1);
+    for (i = 0; i < worker->num_cms; ++i) {
+        cm_lane_params.cm = worker->cms[i];
+        status = uct_ep_create(&cm_lane_params, &wireup_ep->sockaddr_ep);
+    }
+
+    return status;
+}
+
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params)
 {
