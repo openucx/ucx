@@ -60,6 +60,18 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                                str_remote_addr, UCS_SOCKADDR_STRING_LEN));
 }
 
+static void uct_tcp_cm_io_err_handler_cb(void *arg, int errno)
+{
+    uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
+
+    /* check whether this is possible somaxconn exceeded reason or not */    
+    if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK)) &&
+        ((errno == ECONNRESET) || (errno == ECONNREFUSED))) {
+        ucs_error("try to increase \"net.core.somaxconn\" on the remote node");
+    }
+}
+
 static void uct_tcp_cm_trace_conn_pkt(const uct_tcp_ep_t *ep, const char *msg,
                                       const struct sockaddr_in *peer_addr)
 {
@@ -98,15 +110,20 @@ static void uct_tcp_cm_handle_maxconn_exceed(ucs_status_t status)
 
 static ucs_status_t uct_tcp_cm_send_conn_req(uct_tcp_ep_t *ep)
 {
-    uct_tcp_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
-                                                        uct_tcp_iface_t);
-    uct_tcp_cm_conn_req_pkt_t conn_pkt = {
-        .event                         = UCT_TCP_CM_CONN_REQ,
-        .iface_addr                    = iface->config.ifaddr
+    uct_tcp_iface_t *iface                  = ucs_derived_of(ep->super.super.iface,
+                                                             uct_tcp_iface_t);
+    uct_tcp_cm_conn_req_pkt_t conn_pkt      = {
+        .event                              = UCT_TCP_CM_CONN_REQ,
+        .iface_addr                         = iface->config.ifaddr
+    };
+    
+    ucs_socket_io_err_handler_t err_handler = {
+        .cb                                 = uct_tcp_cm_io_err_handler_cb,
+        .arg                                = ep
     };
     ucs_status_t status;
 
-    status = ucs_socket_send(ep->fd, &conn_pkt, sizeof(conn_pkt));
+    status = ucs_socket_send(ep->fd, &conn_pkt, sizeof(conn_pkt), &err_handler);
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to send connection request to",
                                   &ep->peer_addr);
@@ -125,7 +142,7 @@ static ucs_status_t uct_tcp_cm_recv_conn_req(uct_tcp_ep_t *ep,
     uct_tcp_cm_conn_req_pkt_t conn_pkt;
     ucs_status_t status;
 
-    status = ucs_socket_recv(ep->fd, &conn_pkt, sizeof(conn_pkt));
+    status = ucs_socket_recv(ep->fd, &conn_pkt, sizeof(conn_pkt), NULL);
     if (status != UCS_OK) {
         return status;
     }
@@ -148,7 +165,7 @@ static ucs_status_t uct_tcp_cm_send_conn_ack(uct_tcp_ep_t *ep)
     uct_tcp_cm_conn_event_t event = UCT_TCP_CM_CONN_ACK;
     ucs_status_t status;
 
-    status = ucs_socket_send(ep->fd, &event, sizeof(event));
+    status = ucs_socket_send(ep->fd, &event, sizeof(event), NULL);
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to send connection ack to",
                                   &ep->peer_addr);
@@ -162,10 +179,14 @@ static ucs_status_t uct_tcp_cm_send_conn_ack(uct_tcp_ep_t *ep)
 
 static ucs_status_t uct_tcp_cm_recv_conn_ack(uct_tcp_ep_t *ep)
 {
+    ucs_socket_io_err_handler_t err_handler = {
+        .cb                                 = uct_tcp_cm_io_err_handler_cb,
+        .arg                                = ep
+    };
     uct_tcp_cm_conn_event_t event;
-    ucs_status_t status;
+    ucs_status_t status; 
 
-    status = ucs_socket_recv(ep->fd, &event, sizeof(event));
+    status = ucs_socket_recv(ep->fd, &event, sizeof(event), &err_handler);
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to receive connection ack from",
                                   &ep->peer_addr);

@@ -20,6 +20,10 @@
 #define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
 
 
+typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
+                                        size_t size, int flags);
+
+
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
                              struct ifreq *if_req)
 {
@@ -174,8 +178,10 @@ int ucs_socket_max_conn()
     }
 }
 
-static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
-                                               ucs_socket_io_func_t io_func, const char *name)
+static inline ucs_status_t
+ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
+                    ucs_socket_io_func_t io_func, const char *name,
+                    ucs_socket_io_err_handler_t *io_err_handler)
 {
     ssize_t ret;
 
@@ -198,17 +204,25 @@ static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *lengt
 
     ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
               name, fd, data, *length_p);
+
+    if (io_err_handler != NULL) {
+        io_err_handler->cb(io_err_handler->arg, errno);
+    }
+
     return UCS_ERR_IO_ERROR;
 }
 
-static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
-                                              ucs_socket_io_func_t io_func, const char *name)
+static inline ucs_status_t
+ucs_socket_do_io_b(int fd, void *data, size_t length,
+                   ucs_socket_io_func_t io_func, const char *name,
+                   ucs_socket_io_err_handler_t *io_err_handler)
 {
     size_t done_cnt = 0, cur_cnt = length;
     ucs_status_t status;
 
     do {
-        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
+        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func,
+                                     name, io_err_handler);
         if (ucs_likely(status == UCS_OK)) {
             done_cnt += cur_cnt;
             ucs_assert(done_cnt <= length);
@@ -221,26 +235,34 @@ static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
     return UCS_OK;
 }
 
-ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
+ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
+                                ucs_socket_io_err_handler_t *io_err_handler)
 {
     return ucs_socket_do_io_nb(fd, (void*)data, length_p,
-                               (ucs_socket_io_func_t)send, "send");
+                               (ucs_socket_io_func_t)send,
+                               "send", io_err_handler);
 }
 
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
+                                ucs_socket_io_err_handler_t *io_err_handler)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, recv, "recv");
+    return ucs_socket_do_io_nb(fd, data, length_p, recv,
+                               "recv", io_err_handler);
 }
 
-ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
+ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
+                             ucs_socket_io_err_handler_t *io_err_handler)
 {
     return ucs_socket_do_io_b(fd, (void*)data, length,
-                              (ucs_socket_io_func_t)send, "send");
+                              (ucs_socket_io_func_t)send,
+                              "send", io_err_handler);
 }
 
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t length)
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
+                             ucs_socket_io_err_handler_t *io_err_handler)
 {
-    return ucs_socket_do_io_b(fd, data, length, recv, "recv");
+    return ucs_socket_do_io_b(fd, data, length, recv,
+                              "recv", io_err_handler);
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
