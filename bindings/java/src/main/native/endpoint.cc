@@ -13,7 +13,7 @@ static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
     JNIEnv* env = get_jni_env();
     JNU_ThrowExceptionByStatus(env, status);
-    log_error(ucs_status_string(status));
+    ucs_error("JUCX: endpoint error handler: %s", ucs_status_string(status));
 }
 
 JNIEXPORT jlong JNICALL
