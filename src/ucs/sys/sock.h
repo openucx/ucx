@@ -127,13 +127,13 @@ int ucs_socket_max_conn();
  * Non-blocking send operation sends data on the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
  *
- * @param [in]      fd          Socket fd.
- * @param [in]      data        A pointer to a buffer containing the data to
- *                              be transmitted.
- * @param [in/out]  length_p    The length, in bytes, of the data in buffer
- *                              pointed to by the `data` parameter. The amount of
- *                              data transmitted is written to this argument.
- * 
+ * @param [in]      fd              Socket fd.
+ * @param [in]      data            A pointer to a buffer containing the data to
+ *                                  be transmitted.
+ * @param [in/out]  length_p        The length, in bytes, of the data in buffer
+ *                                  pointed to by the `data` parameter. The amount of
+ *                                  data transmitted is written to this argument.
+ * @param [in]      io_err_handler  Error handler
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
@@ -146,12 +146,13 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
  * Non-blocking receive operation receives data from the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
  *
- * @param [in]      fd          Socket fd.
- * @param [in]      data        A pointer to a buffer to receive the incoming
- *                              data.
- * @param [in/out]  length_p    The length, in bytes, of the data in buffer
- *                              pointed to by the `data` parameter. The amount of
- *                              data received is written to this argument.
+ * @param [in]      fd              Socket fd.
+ * @param [in]      data            A pointer to a buffer to receive the incoming
+ *                                  data.
+ * @param [in/out]  length_p        The length, in bytes, of the data in buffer
+ *                                  pointed to by the `data` parameter. The amount of
+ *                                  data received is written to this argument.
+ * @param [in]      io_err_handler  Error handler
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
@@ -164,11 +165,12 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
  * Blocking send operation sends data on the connected (or bound connectionless)
  * socket referred to by the file descriptor `fd`.
  *
- * @param [in]      fd          Socket fd.
- * @param [in]      data        A pointer to a buffer containing the data to
- *                              be transmitted.
- * @param [in/out]  length      The length, in bytes, of the data in buffer
- *                              pointed to by the `data` parameter.
+ * @param [in]      fd              Socket fd.
+ * @param [in]      data            A pointer to a buffer containing the data to
+ *                                  be transmitted.
+ * @param [in/out]  length          The length, in bytes, of the data in buffer
+ *                                  pointed to by the `data` parameter.
+ * @param [in]      io_err_handler  Error handler
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
@@ -181,11 +183,12 @@ ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
  * Blocking receive operation receives data from the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
  *
- * @param [in]      fd          Socket fd.
- * @param [in]      data        A pointer to a buffer to receive the incoming
- *                              data.
- * @param [in/out]  length      The length, in bytes, of the data in buffer
- *                              pointed to by the `data` parameter.
+ * @param [in]      fd              Socket fd.
+ * @param [in]      data            A pointer to a buffer to receive the incoming
+ *                                  data.
+ * @param [in/out]  length          The length, in bytes, of the data in buffer
+ *                                  pointed to by the `data` parameter.
+ * @param [in]      io_err_handler  Error handler
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
