@@ -334,10 +334,16 @@ typedef struct {
 } ucp_ep_ext_proto_t;
 
 
+enum {
+    UCP_WIREUP_CD_FULL_ADDR = 0,
+    UCP_WIREUP_CD_PARTIAL_ADDR,
+    UCP_WIREUP_CD_LOCAL_ADDR
+};
+
 typedef struct ucp_wireup_client_data {
     uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
-    uint8_t                   is_full_addr;  /**< Whether the attached address is
+    uint8_t                   addr_mode;     /**< TODO: fixup, Whether the attached address is
                                                   full or partial */
     /* packed worker address follows */
 } UCS_S_PACKED ucp_wireup_client_data_t;

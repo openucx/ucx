@@ -420,12 +420,11 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    status = ucp_address_unpack(worker, client_data + 1, &remote_address);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    if (client_data->is_full_addr) {
+    if (client_data->addr_mode == UCP_WIREUP_CD_FULL_ADDR) {
+        status = ucp_address_unpack(worker, client_data + 1, &remote_address);
+        if (status != UCS_OK) {
+            goto out;
+        }
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
                                               UCP_EP_CREATE_AM_LANE, "listener",
@@ -435,7 +434,11 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         } else {
             goto out_free_address;
         }
-    } else {
+    } else if (client_data->addr_mode == UCP_WIREUP_CD_PARTIAL_ADDR) {
+        status = ucp_address_unpack(worker, client_data + 1, &remote_address);
+        if (status != UCS_OK) {
+            goto out;
+        }
         status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
                                             ep_p);
         if (status == UCS_OK) {
@@ -446,6 +449,14 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
                                            UCP_EP_FLAG_FLUSH_STATE_VALID)));
         } else {
             goto out_free_address;
+        }
+    } else {
+        ucs_assert(client_data->addr_mode == UCP_WIREUP_CD_LOCAL_ADDR);
+        assert(0);
+        /* TODO: flags to unpack */
+        status = ucp_address_unpack(worker, client_data + 1, &remote_address);
+        if (status != UCS_OK) {
+            goto out;
         }
     }
 
