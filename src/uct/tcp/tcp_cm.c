@@ -100,14 +100,6 @@ uct_tcp_cm_conn_pkt_check_event(const uct_tcp_ep_t *ep,
     return UCS_OK;
 }
 
-static void uct_tcp_cm_handle_maxconn_exceed(ucs_status_t status)
-{
-    /* check whether this is possible somaxconn exceeded reason or not */
-    if (status == UCS_ERR_IO_ERROR) {
-        ucs_error("try to increase \"net.core.somaxconn\" on the remote node");
-    }
-}
-
 static ucs_status_t uct_tcp_cm_send_conn_req(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface                  = ucs_derived_of(ep->super.super.iface,
@@ -127,7 +119,6 @@ static ucs_status_t uct_tcp_cm_send_conn_req(uct_tcp_ep_t *ep)
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to send connection request to",
                                   &ep->peer_addr);
-        uct_tcp_cm_handle_maxconn_exceed(status);
         return status;
     }
 
@@ -190,7 +181,6 @@ static ucs_status_t uct_tcp_cm_recv_conn_ack(uct_tcp_ep_t *ep)
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to receive connection ack from",
                                   &ep->peer_addr);
-        uct_tcp_cm_handle_maxconn_exceed(status);
         return status;
     }
 
