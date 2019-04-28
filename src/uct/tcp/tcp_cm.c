@@ -102,20 +102,16 @@ uct_tcp_cm_conn_pkt_check_event(const uct_tcp_ep_t *ep,
 
 static ucs_status_t uct_tcp_cm_send_conn_req(uct_tcp_ep_t *ep)
 {
-    uct_tcp_iface_t *iface                  = ucs_derived_of(ep->super.super.iface,
-                                                             uct_tcp_iface_t);
-    uct_tcp_cm_conn_req_pkt_t conn_pkt      = {
-        .event                              = UCT_TCP_CM_CONN_REQ,
-        .iface_addr                         = iface->config.ifaddr
-    };
-    
-    ucs_socket_io_err_handler_t err_handler = {
-        .cb                                 = uct_tcp_cm_io_err_handler_cb,
-        .arg                                = ep
+    uct_tcp_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
+                                                        uct_tcp_iface_t);
+    uct_tcp_cm_conn_req_pkt_t conn_pkt = {
+        .event                         = UCT_TCP_CM_CONN_REQ,
+        .iface_addr                    = iface->config.ifaddr
     };
     ucs_status_t status;
 
-    status = ucs_socket_send(ep->fd, &conn_pkt, sizeof(conn_pkt), &err_handler);
+    status = ucs_socket_send(ep->fd, &conn_pkt, sizeof(conn_pkt),
+                             uct_tcp_cm_io_err_handler_cb, ep);
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to send connection request to",
                                   &ep->peer_addr);
@@ -133,7 +129,7 @@ static ucs_status_t uct_tcp_cm_recv_conn_req(uct_tcp_ep_t *ep,
     uct_tcp_cm_conn_req_pkt_t conn_pkt;
     ucs_status_t status;
 
-    status = ucs_socket_recv(ep->fd, &conn_pkt, sizeof(conn_pkt), NULL);
+    status = ucs_socket_recv(ep->fd, &conn_pkt, sizeof(conn_pkt), NULL, NULL);
     if (status != UCS_OK) {
         return status;
     }
@@ -156,7 +152,7 @@ static ucs_status_t uct_tcp_cm_send_conn_ack(uct_tcp_ep_t *ep)
     uct_tcp_cm_conn_event_t event = UCT_TCP_CM_CONN_ACK;
     ucs_status_t status;
 
-    status = ucs_socket_send(ep->fd, &event, sizeof(event), NULL);
+    status = ucs_socket_send(ep->fd, &event, sizeof(event), NULL, NULL);
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to send connection ack to",
                                   &ep->peer_addr);
@@ -170,14 +166,11 @@ static ucs_status_t uct_tcp_cm_send_conn_ack(uct_tcp_ep_t *ep)
 
 static ucs_status_t uct_tcp_cm_recv_conn_ack(uct_tcp_ep_t *ep)
 {
-    ucs_socket_io_err_handler_t err_handler = {
-        .cb                                 = uct_tcp_cm_io_err_handler_cb,
-        .arg                                = ep
-    };
     uct_tcp_cm_conn_event_t event;
-    ucs_status_t status; 
+    ucs_status_t status;
 
-    status = ucs_socket_recv(ep->fd, &event, sizeof(event), &err_handler);
+    status = ucs_socket_recv(ep->fd, &event, sizeof(event),
+                             uct_tcp_cm_io_err_handler_cb, ep);
     if (status != UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, "unable to receive connection ack from",
                                   &ep->peer_addr);
