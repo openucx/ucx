@@ -28,10 +28,7 @@ BEGIN_C_DECLS
 #define UCS_SOCKET_INET6_PORT(_addr)     (((struct sockaddr_in6*)(_addr))->sin6_port)
 
 
-typedef struct ucs_socket_io_err_handler {
-    void (*cb)(void *arg, int errno);
-    void *arg;
-} ucs_socket_io_err_handler_t;
+typedef void (*ucs_socket_io_err_cb_t)(void *arg, int errno);
 
 
 /**
@@ -133,13 +130,15 @@ int ucs_socket_max_conn();
  * @param [in/out]  length_p        The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter. The amount of
  *                                  data transmitted is written to this argument.
- * @param [in]      io_err_handler  Error handler
+ * @param [in]      err_cb          Error callback.
+ * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
-                                ucs_socket_io_err_handler_t *io_err_handler);
+                                ucs_socket_io_err_cb_t err_cb,
+                                void *err_cb_arg);
 
 
 /**
@@ -152,13 +151,15 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
  * @param [in/out]  length_p        The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter. The amount of
  *                                  data received is written to this argument.
- * @param [in]      io_err_handler  Error handler
+ * @param [in]      err_cb          Error callback.
+ * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
-                                ucs_socket_io_err_handler_t *io_err_handler);
+                                ucs_socket_io_err_cb_t err_cb,
+                                void *err_cb_arg);
 
 
 /**
@@ -170,13 +171,15 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
  *                                  be transmitted.
  * @param [in/out]  length          The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter.
- * @param [in]      io_err_handler  Error handler
+ * @param [in]      err_cb          Error callback.
+ * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
-                             ucs_socket_io_err_handler_t *io_err_handler);
+                             ucs_socket_io_err_cb_t err_cb,
+                             void *err_cb_arg);
 
 
 /**
@@ -187,14 +190,16 @@ ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
  * @param [in]      data            A pointer to a buffer to receive the incoming
  *                                  data.
  * @param [in/out]  length          The length, in bytes, of the data in buffer
- *                                  pointed to by the `data` parameter.
- * @param [in]      io_err_handler  Error handler
+ *                                  pointed to by the `data` paramete.
+ * @param [in]      err_cb          Error callback.
+ * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
  *         UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
-                             ucs_socket_io_err_handler_t *io_err_handler);
+                             ucs_socket_io_err_cb_t err_cb,
+                             void *err_cb_arg);
 
 
 /**
