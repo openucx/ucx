@@ -838,10 +838,6 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
     if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
         memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
     }
-
-    if (uct_flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
-        memh->flags |= UCT_IB_MEM_FLAG_DM;
-    }
 }
 
 #if HAVE_IBV_EXP_DM
@@ -884,19 +880,19 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
 {
 #if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    int on_dm = !(*address_p) && (flags & UCT_MD_MEM_FLAG_FIXED);
     ucs_status_t status;
     uint64_t exp_access;
     uct_ib_mem_t *memh;
     size_t length;
 
 #if !HAVE_IBV_EXP_DM
-    if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+    if (on_dm) {
         return UCS_ERR_UNSUPPORTED;
     }
 #endif
 
-    if (!(flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
-        !md->config.enable_contig_pages) {
+    if (!on_dm && !md->config.enable_contig_pages) {
         /* in case if ON_DEVICE flag is not active - then memory
          * is allocated using contig_pages and contig pages
          * should be enabled */
@@ -911,11 +907,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
 
     length     = *length_p;
     exp_access = uct_ib_md_access_flags(md, flags, length) |
-                 !(flags & UCT_MD_MEM_FLAG_ON_DEVICE) ?
-                 IBV_EXP_ACCESS_ALLOCATE_MR : 0;
+                 (!on_dm ?  IBV_EXP_ACCESS_ALLOCATE_MR : 0);
 
 #if HAVE_IBV_EXP_DM
-    if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+    if (on_dm) {
         status = uct_ib_mem_alloc_dm(memh, md, length, exp_access);
         if (status != UCS_OK) {
             goto err_free_memh;
@@ -936,6 +931,11 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
               memh->mr->lkey, memh->mr->rkey);
 
     uct_ib_mem_init(memh, flags, exp_access);
+
+    if (on_dm) {
+        memh->flags |= UCT_IB_MEM_FLAG_DM;
+    }
+
     uct_ib_mem_set_numa_policy(md, memh);
 
     if (md->config.odp.prefetch) {

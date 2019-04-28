@@ -272,9 +272,9 @@ UCS_TEST_P(test_md, alloc) {
 }
 
 UCS_TEST_P(test_md, alloc_dm) {
+    void *address;
     size_t size, orig_size;
     ucs_status_t status;
-    void *address;
     uct_mem_h memh;
 
     check_caps(UCT_MD_FLAG_DEVICE_ALLOC, "DM allocation");
@@ -285,15 +285,17 @@ UCS_TEST_P(test_md, alloc_dm) {
             continue;
         }
 
-        status = uct_md_mem_alloc(md(), &size, &address,
-                                  UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_ON_DEVICE,
-                                  "test DM", &memh);
-        EXPECT_GT(size, 0ul);
+        address = NULL;
 
-        EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE));
+        status = uct_md_mem_alloc(md(), &size, &address,
+                                  UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_FIXED,
+                                  "test DM", &memh);
         if (status == UCS_ERR_NO_RESOURCE) {
             continue;
         }
+
+        ASSERT_UCS_OK(status);
+        EXPECT_GT(size, 0ul);
 
         EXPECT_GE(size, orig_size);
         EXPECT_TRUE(address != NULL);

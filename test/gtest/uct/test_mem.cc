@@ -240,7 +240,7 @@ UCS_TEST_P(test_mem, dm_alloc) {
             for (j = 1; j < 300; j++) {
                 length = j * 100;
                 status = uct_mem_alloc(NULL, length,
-                                       UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_ON_DEVICE,
+                                       UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_FIXED,
                                        methods, 3, &pd, 1, "test", &mem);
                 if (status == UCS_ERR_NO_RESOURCE) {
                     break;

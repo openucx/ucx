@@ -80,6 +80,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                            uct_md_h *mds, unsigned num_mds,
                            const char *alloc_name, uct_allocated_memory_t *mem)
 {
+    int on_dm = !addr && (flags & UCT_MD_MEM_FLAG_FIXED);
     uct_alloc_method_t *method;
     uct_md_attr_t md_attr;
     ucs_status_t status;
@@ -105,20 +106,14 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     }
 
     if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
-        (!addr || ((uintptr_t)addr % ucs_get_page_size()))) {
+        ((uintptr_t)addr % ucs_get_page_size())) {
         ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
-        (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
-        ucs_debug("UCT_MD_MEM_FLAG_FIXED can't be used with UCT_MD_MEM_FLAG_ON_DEVICE");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) &&
-        (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
-        ucs_debug("UCT_MD_MEM_FLAG_NONBLOCK can't be used with UCT_MD_MEM_FLAG_ON_DEVICE");
+    if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && on_dm) {
+        ucs_debug("UCT_MD_MEM_FLAG_NONBLOCK can't be used with "
+                  "UCT_MD_MEM_FLAG_FIXED and NULL address");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -127,7 +122,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
-            if ((flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
+            if (on_dm &&
                 ((uct_mem_dm_flag_count(mds, num_mds, UCT_MD_FLAG_DEVICE_ALLOC) != 1) ||
                  (uct_mem_dm_flag_count(mds, num_mds, UCT_MD_FLAG_REG) != 1))) {
                 /* DM allocation allowed on single device only, and no one else
@@ -144,19 +139,17 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                     return status;
                 }
 
-                if ((flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
-                    !(md_attr.cap.flags & UCT_MD_FLAG_DEVICE_ALLOC)) {
+                if (on_dm && !(md_attr.cap.flags & UCT_MD_FLAG_DEVICE_ALLOC)) {
                     /* DM requested, but not supported by MD */
                     continue;
                 }
 
-                if (!(flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
-                    !(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+                if (!on_dm && !(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
                     /* DM is not requested, then ALLOC caps is required to allocate */
                     continue;
                 }
 
-                if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
+                if (!on_dm && (flags & UCT_MD_MEM_FLAG_FIXED) &&
                     !(md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
                     /* FIXED requested, but not supported by MD */
                     continue;
@@ -197,7 +190,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 break;
             }
 
-            if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+            if (on_dm) {
                 break;
             }
 
@@ -239,7 +232,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 break;
             }
 
-            if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+            if (on_dm) {
                 break;
             }
 
@@ -254,7 +247,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
-            if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+            if (on_dm) {
                 break;
             }
 
@@ -274,7 +267,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_HUGE:
-            if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+            if (on_dm) {
                 break;
             }
 

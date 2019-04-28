@@ -176,7 +176,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
     }
 }
 
-UCS_TEST_P(test_ucp_mmap, dm_alloc, "SHM_DEVICES=\"\"") {
+UCS_TEST_P(test_ucp_mmap, dm_alloc) {
     int num_mds = 0;
     ucp_mem_attr_t attr;
     ucs_status_t status;

@@ -219,13 +219,7 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
         }
 
         if (params->flags & UCP_MEM_MAP_FIXED) {
-            if ((params->field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS) &&
-                (params->address == NULL)) {
-                /* special hint: allocate memory on device */
-                flags |= UCT_MD_MEM_FLAG_ON_DEVICE;
-            } else {
-                flags |= UCT_MD_MEM_FLAG_FIXED;
-            }
+            flags |= UCT_MD_MEM_FLAG_FIXED;
         }
     }
 

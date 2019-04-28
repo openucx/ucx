@@ -568,9 +568,6 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
     UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
 
-    /* device specific flags */
-    UCT_MD_MEM_FLAG_ON_DEVICE       = UCS_BIT(8), /**< allocate memory on device */
-
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
                               UCT_MD_MEM_ACCESS_REMOTE_GET|
