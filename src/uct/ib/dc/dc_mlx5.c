@@ -778,6 +778,12 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *ifa
 {
     int i;
 
+    if (iface->tx.fc_grants) {
+        /* If some ep is waiting for grant it may have some pending
+         * operations, while all QP resources are available. */
+        return UCS_INPROGRESS;
+    }
+
     for (i = 0; i < iface->tx.ndci; i++) {
         if (uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
             return UCS_INPROGRESS;
@@ -909,6 +915,8 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         ep = *((uct_dc_mlx5_ep_t**)(hdr + 1));
 
         if (!(ep->flags & UCT_DC_MLX5_EP_FLAG_VALID)) {
+            /* Just remove ep now, no need to clear waiting for grant state
+             * (it was done in destroy_ep func) */
             uct_dc_mlx5_ep_release(ep);
             return UCS_OK;
         }
@@ -919,7 +927,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
 
         /* Clear the flag for flush to complete  */
-        ep->fc.flags &= ~UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
+        uct_dc_mlx5_ep_clear_fc_grant_flag(ep);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
         UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
@@ -961,11 +969,19 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                    UCS_MASK(UCT_IB_QPN_ORDER);
     uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     uct_dc_mlx5_ep_t     *ep;
+    ucs_log_level_t      level;
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
-        (uct_dc_mlx5_ep_from_dci(iface, dci) == NULL)) {
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ep    = NULL;
+        level = UCS_LOG_LEVEL_FATAL; /* error handling is not supported with rand dci */
+    } else {
+        ep    = uct_dc_mlx5_ep_from_dci(iface, dci);
+        level = ib_iface->super.config.failure_level;
+    }
+
+    if (ep == NULL) {
         uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dci_wqs[dci],
-                                        ib_iface->super.config.failure_level);
+                                        level);
         return;
     }
 
@@ -1069,6 +1085,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     self->tx.ndci                          = config->ndci;
     self->tx.policy                        = config->tx_policy;
+    self->tx.fc_grants                     = 0;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);
 

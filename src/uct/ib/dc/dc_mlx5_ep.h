@@ -16,8 +16,9 @@
 enum {
     /* Indicates that FC grant has been requested, but is not received yet.
      * Flush will not complete until an outgoing grant request is acked.
-     * It is needed to avoid the case when grant arrives for the recently
-     * deleted ep. */
+     * It is needed to avoid the following cases:
+     * 1) Grant arrives for the recently deleted ep.
+     * 2) QP resources are available, but there are some pending requests. */
     UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT = UCS_BIT(0)
 };
 
@@ -230,6 +231,18 @@ uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci)
      * be used by many eps */
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
     return iface->tx.dcis[dci].ep;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_ep_clear_fc_grant_flag(uct_dc_mlx5_ep_t *ep)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+
+    ucs_assert((ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT) &&
+               iface->tx.fc_grants);
+    ep->fc.flags &= ~UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
+    --iface->tx.fc_grants;
 }
 
 enum uct_dc_mlx5_ep_flags {
