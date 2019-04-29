@@ -114,6 +114,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  *
  * @param [in]  worker           Worker object.
  * @param [in]  buffer           Buffer with data to unpack.
+ * @param [in]  flags            TODO: .
  * @param [out] unpacked_address Filled with remote address data.
  *
  * @note Entries in the address list could point into the data buffer, so it
@@ -123,6 +124,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  *       by ucs_free().
  */
 ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
+                                uint64_t flags,
                                 ucp_unpacked_address_t *unpacked_address);
 
 

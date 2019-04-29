@@ -242,7 +242,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer, &local_address);
+        status = ucp_address_unpack(worker, address_buffer, -1, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -416,15 +416,26 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     ucp_ep_params_t        params;
     ucp_unpacked_address_t remote_address;
     ucs_status_t           status;
+    uint64_t               addr_flags;
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
+    if (client_data->addr_mode == UCP_WIREUP_CD_LOCAL_ADDR) {
+        addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+    } else {
+        addr_flags = -1;
+    }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    status = ucp_address_unpack(worker, client_data + 1, addr_flags,
+                                &remote_address);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     if (client_data->addr_mode == UCP_WIREUP_CD_FULL_ADDR) {
-        status = ucp_address_unpack(worker, client_data + 1, &remote_address);
-        if (status != UCS_OK) {
-            goto out;
-        }
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
                                               UCP_EP_CREATE_AM_LANE, "listener",
@@ -435,10 +446,6 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
             goto out_free_address;
         }
     } else if (client_data->addr_mode == UCP_WIREUP_CD_PARTIAL_ADDR) {
-        status = ucp_address_unpack(worker, client_data + 1, &remote_address);
-        if (status != UCS_OK) {
-            goto out;
-        }
         status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
                                             ep_p);
         if (status == UCS_OK) {
@@ -453,11 +460,6 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     } else {
         ucs_assert(client_data->addr_mode == UCP_WIREUP_CD_LOCAL_ADDR);
         assert(0);
-        /* TODO: flags to unpack */
-        status = ucp_address_unpack(worker, client_data + 1, &remote_address);
-        if (status != UCS_OK) {
-            goto out;
-        }
     }
 
     ucp_ep_update_dest_ep_ptr(*ep_p, client_data->ep_ptr);
@@ -465,6 +467,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
 out_free_address:
     ucs_free(remote_address.address_list);
 out:
+    UCS_ASYNC_BLOCK(&worker->async);
     return status;
 }
 
@@ -534,7 +537,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(worker, params->address, &remote_address);
+    status = ucp_address_unpack(worker, params->address, -1, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }

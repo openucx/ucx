@@ -6,7 +6,6 @@
 
 #include "wireup_ep.h"
 #include "wireup.h"
-#include "address.h"
 
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_worker.h>
@@ -577,14 +576,14 @@ static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
                                                        const char *dev_name,
                                                        void *priv_data)
 {
-    const size_t dev_name_length = strlen(dev_name);
-    ucp_ep_h ep                  = arg;
-    ucp_wireup_ep_t *wireup_ep   = (ucp_wireup_ep_t *)ep->uct_eps[ucp_ep_config(ep)->key.wireup_lane];
-    ucs_status_t status          = UCS_ERR_NO_DEVICE;
-    size_t max_conn_priv         = 0;
-    uct_iface_h tl_iface         = NULL;
-    uct_ep_h tl_ep               = NULL;
-    uct_iface_attr_t *iface_attr;
+    ucp_wireup_client_data_t *client_data = priv_data;
+    const size_t dev_name_length          = strlen(dev_name);
+    ucp_ep_h ep                           = arg;
+    ucp_wireup_ep_t *wireup_ep            = (ucp_wireup_ep_t *)ep->uct_eps[ucp_ep_config(ep)->key.wireup_lane];
+    ucs_status_t status                   = UCS_ERR_NO_DEVICE;
+    size_t max_conn_priv                  = 0;
+    uct_iface_h tl_iface                  = NULL;
+    uct_ep_h tl_ep                        = NULL;
     uct_cm_attr_t cm_attr;
     uct_ep_params_t tl_ep_params;
     ucp_rsc_index_t tl_rsc_idx;
@@ -612,7 +611,6 @@ static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
             for (iface_idx = 0; iface_idx < ep->worker->num_ifaces; ++iface_idx) {
                 if (ep->worker->ifaces[iface_idx].rsc_index == tl_rsc_idx) {
                     tl_iface = ep->worker->ifaces[iface_idx].iface;
-                    iface_attr = &ep->worker->ifaces[iface_idx].attr;
                     /* TODO: select the best one */
                     break;
                 }
@@ -647,23 +645,25 @@ static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
 
     void* ucp_addr;
     size_t ucp_addr_size;
-    ucp_address_pack(ep->worker, ep, UCS_BIT(tl_rsc_idx),
-                     UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                     UCP_ADDRESS_PACK_FLAG_EP_ADDR, NULL, &ucp_addr_size,
-                     &ucp_addr);
-    ucs_assert(ucp_addr_size <= max_conn_priv);
-    status = uct_iface_get_address(tl_iface, priv_data);
+    status = ucp_address_pack(ep->worker, ep, UCS_BIT(tl_rsc_idx),
+                              UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                              UCP_ADDRESS_PACK_FLAG_EP_ADDR, NULL,
+                              &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;
     }
 
-    status = uct_ep_get_address(tl_ep,
-                                UCS_PTR_BYTE_OFFSET(priv_data,
-                                                    iface_attr->iface_addr_len));
+    ucs_assert((sizeof(client_data) + ucp_addr_size) <= max_conn_priv);
+    client_data->ep_ptr    = (uintptr_t)ep;
+    client_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
+    client_data->addr_mode = UCP_WIREUP_CD_LOCAL_ADDR;
+    memcpy(client_data + 1, ucp_addr, ucp_addr_size);
+    ucs_free(ucp_addr);
+
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return (status == UCS_OK) ?
-           (iface_attr->iface_addr_len + iface_attr->ep_addr_len) : status;
+           (sizeof(client_data) + ucp_addr_size) : status;
 }
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,

@@ -117,17 +117,22 @@ static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest,
 }
 
 /* Unpack a string and return pointer to next storage byte */
-static const void* ucp_address_unpack_worker_name(const void *src, char *s, size_t max)
+static const void* ucp_address_unpack_worker_name(const void *src, char *s,
+                                                  size_t max, uint64_t flags)
 {
 #if ENABLE_DEBUG_DATA
     size_t length, avail;
 
-    ucs_assert(max >= 1);
-    length   = *(const uint8_t*)src;
-    avail    = ucs_min(length, max - 1);
-    memcpy(s, src + 1, avail);
-    s[avail] = '\0';
-    return src + length + 1;
+    if (flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME) {
+        ucs_assert(max >= 1);
+        length   = *(const uint8_t*)src;
+        avail    = ucs_min(length, max - 1);
+        memcpy(s, src + 1, avail);
+        s[avail] = '\0';
+        return src + length + 1;
+    }
+    s[0] = '\0';
+    return src;
 #else
     s[0] = '\0';
     return src;
@@ -676,6 +681,7 @@ out:
 }
 
 ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
+                                uint64_t flags,
                                 ucp_unpacked_address_t *unpacked_address)
 {
     ucp_address_entry_t *address_list, *address;
@@ -696,11 +702,16 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     const void *flags_ptr;
 
     ptr = buffer;
-    unpacked_address->uuid = *(uint64_t*)ptr;
-    ptr += sizeof(uint64_t);
+    if (flags & UCP_ADDRESS_PACK_FLAG_WORKER_GUID) {
+        unpacked_address->uuid = *(uint64_t*)ptr;
+        ptr += sizeof(uint64_t);
+    } else {
+        unpacked_address->uuid = 0;
+    }
 
     aptr = ucp_address_unpack_worker_name(ptr, unpacked_address->name,
-                                          sizeof(unpacked_address->name));
+                                          sizeof(unpacked_address->name),
+                                          flags);
 
     address_count = 0;
 
