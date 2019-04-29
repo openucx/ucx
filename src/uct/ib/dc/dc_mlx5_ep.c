@@ -955,7 +955,7 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
         ucs_trace("not releasing dc_mlx5_ep %p - waiting for grant", ep);
         ep->flags &= ~UCT_DC_MLX5_EP_FLAG_VALID;
         /* No need to wait for grant on this ep anymore */
-        uct_dc_mlx5_ep_clear_fc_grant_flag(ep);
+        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
         ucs_list_add_tail(&iface->tx.gc_list, &ep->list);
     } else {
         ucs_free(ep);
@@ -1251,7 +1251,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
         /* No need to wait for grant on this ep anymore */
-        uct_dc_mlx5_ep_clear_fc_grant_flag(ep);
+        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
     }
 
     if (ep == iface->tx.fc_ep) {

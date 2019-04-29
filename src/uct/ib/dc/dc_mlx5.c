@@ -927,7 +927,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
 
         /* Clear the flag for flush to complete  */
-        uct_dc_mlx5_ep_clear_fc_grant_flag(ep);
+        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
         UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);

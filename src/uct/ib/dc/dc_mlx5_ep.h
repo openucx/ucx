@@ -234,11 +234,9 @@ uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_ep_clear_fc_grant_flag(uct_dc_mlx5_ep_t *ep)
+uct_dc_mlx5_ep_clear_fc_grant_flag(uct_dc_mlx5_iface_t *iface,
+                                   uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                                uct_dc_mlx5_iface_t);
-
     ucs_assert((ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT) &&
                iface->tx.fc_grants);
     ep->fc.flags &= ~UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
