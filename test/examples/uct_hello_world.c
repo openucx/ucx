@@ -603,10 +603,11 @@ int main(int argc, char **argv)
         ep_params.dev_addr    = peer_dev;
         ep_params.iface_addr  = peer_iface;
         status = uct_ep_create(&ep_params, &ep);
+        CHKERR_JUMP(UCS_OK != status, "create endpoint", out_free_ep_addrs);
     } else {
         status = UCS_ERR_UNSUPPORTED;
+        goto out_free_ep_addrs;
     }
-    CHKERR_JUMP(UCS_OK != status, "connect endpoint", out_free_ep);
 
     if (cmd_args.test_strlen > func_am_max_size(cmd_args.func_am_type, &if_info.attr)) {
         status = UCS_ERR_UNSUPPORTED;
