@@ -247,7 +247,7 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
                                 void *err_cb_arg)
 {
     return ucs_socket_do_io_nb(fd, data, length_p, recv,
-                               "recv", err_cb, err_cb);
+                               "recv", err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
@@ -256,7 +256,7 @@ ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
 {
     return ucs_socket_do_io_b(fd, (void*)data, length,
                               (ucs_socket_io_func_t)send,
-                              "send", err_cb, err_cb);
+                              "send", err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
@@ -264,7 +264,7 @@ ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
                              void *err_cb_arg)
 {
     return ucs_socket_do_io_b(fd, data, length, recv,
-                              "recv", err_cb, err_cb);
+                              "recv", err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
