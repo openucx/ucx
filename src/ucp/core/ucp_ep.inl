@@ -21,6 +21,11 @@ static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
     return &ep->worker->ep_config[ep->cfg_index];
 }
 
+static inline uint64_t ucp_ep_get_context_features(ucp_ep_h ep)
+{
+    return ep->worker->context->config.features;
+}
+
 static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
 {
     ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);

@@ -656,11 +656,6 @@ out:
     return select_best ? status : UCS_OK;
 }
 
-static uint64_t ucp_ep_get_context_features(ucp_ep_h ep)
-{
-    return ep->worker->context->config.features;
-}
-
 static double ucp_wireup_rma_score_func(ucp_context_h context,
                                         const uct_md_attr_t *md_attr,
                                         const uct_iface_attr_t *iface_attr,

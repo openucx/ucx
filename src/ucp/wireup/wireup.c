@@ -742,6 +742,107 @@ static void ucp_wireup_print_config(ucp_context_h context,
     }
 }
 
+static char* ucp_wireup_add_feature_rsc(ucp_context_h context,
+                                        const ucp_ep_config_key_t *key,
+                                        ucp_lane_map_t lanes_bitmap,
+                                        const char *feature_str,
+                                        char *buf, size_t max)
+{
+    char *p    = buf;
+    char *endp = buf + max;
+    int   sep  = 0;
+    ucp_rsc_index_t rsc_idx;
+    ucp_lane_index_t lane;
+
+    if (!lanes_bitmap) {
+        return p;
+    }
+
+    snprintf(p, endp - p, "%s(", feature_str);
+    p += strlen(p);
+
+    ucs_for_each_bit(lane, lanes_bitmap) {
+       ucs_for_each_bit(rsc_idx, context->tl_bitmap) {
+           if (key->lanes[lane].rsc_index == rsc_idx) {
+               snprintf(p, endp - p, "%*s"UCT_TL_RESOURCE_DESC_FMT, sep, "",
+                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_idx].tl_rsc));
+               p += strlen(p);
+               sep = 1; /* add space between tl names */
+           }
+       }
+    }
+
+    snprintf(p, endp - p, "); ");
+    p += strlen(p);
+
+    return p;
+}
+
+static void ucp_wireup_print_used_tls(ucp_ep_h ep)
+{
+    ucp_context_h context          = ep->worker->context;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    char info[256]                 = {0};
+    ucp_lane_map_t tag_lanes_map   = 0;
+    ucp_lane_map_t rma_lanes_map   = 0;
+    ucp_lane_map_t amo_lanes_map   = 0;
+    ucp_lane_index_t lane;
+    char *p, *endp;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_INFO)) {
+        return;
+    }
+
+    p    = info;
+    endp = p + sizeof(info);
+
+    snprintf(p, endp - p,  "ep %p tls: ", ep);
+    p += strlen(p);
+
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        if (((key->am_lane == lane) || (lane == key->tag_lane) ||
+            (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
+            (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) &&
+            (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
+            tag_lanes_map |= UCS_BIT(lane);
+        }
+
+        if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
+            rma_lanes_map |= UCS_BIT(lane);
+        }
+
+        if ((ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane) >= 0)) {
+            amo_lanes_map |= UCS_BIT(lane);
+        }
+    }
+
+    p = ucp_wireup_add_feature_rsc(context, key, tag_lanes_map, "tag",
+                                   p, endp - p);
+    p = ucp_wireup_add_feature_rsc(context, key, rma_lanes_map, "rma",
+                                   p, endp - p);
+    p = ucp_wireup_add_feature_rsc(context, key, amo_lanes_map, "amo",
+                                   p, endp - p);
+    ucs_info("%s", info);
+}
+
+static void ucp_wireup_print_lanes_config(ucp_ep_h ep, uint8_t *addr_indices)
+{
+    char str[32];
+
+    /* Print:
+     * - Detailed lanes config if log level is >= DEBUG
+     * - Less detailed info about lanes tls if log level is INFO
+     * - Nothing otherwise */
+
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        snprintf(str, sizeof(str), "ep %p", ep);
+        ucp_wireup_print_config(ep->worker->context, &ucp_ep_config(ep)->key,
+                                str, addr_indices, UCS_LOG_LEVEL_DEBUG);
+    } else if (ucs_log_is_enabled(UCS_LOG_LEVEL_INFO)) {
+        ucp_wireup_print_used_tls(ep);
+    }
+}
+
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                    unsigned ep_init_flags, unsigned address_count,
                                    const ucp_address_entry_t *address_list,
@@ -752,7 +853,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     uint16_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
-    char str[32];
 
     ucs_trace("ep %p: initialize lanes", ep);
 
@@ -791,9 +891,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     ep->cfg_index = new_cfg_index;
     ep->am_lane   = key.am_lane;
 
-    snprintf(str, sizeof(str), "ep %p", ep);
-    ucp_wireup_print_config(worker->context, &ucp_ep_config(ep)->key, str,
-                            addr_indices, UCS_LOG_LEVEL_DEBUG);
+    ucp_wireup_print_lanes_config(ep, addr_indices);
 
     /* establish connections on all underlying endpoints */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
