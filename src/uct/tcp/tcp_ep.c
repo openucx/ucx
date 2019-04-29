@@ -12,36 +12,66 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     [UCT_TCP_EP_CONN_STATE_CLOSED]      = {
         .name     = "CLOSED",
         .progress = {
-            [UCT_TCP_EP_CTX_TYPE_TX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
-            [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            [UCT_TCP_EP_CTX_TYPE_TX] = {
+                [0] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+                [1] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            },
+            [UCT_TCP_EP_CTX_TYPE_RX] = {
+                [0] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+                [1] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            }
         },
     },
     [UCT_TCP_EP_CONN_STATE_CONNECTING]  = {
         .name     = "CONNECTING",
         .progress = {
-            [UCT_TCP_EP_CTX_TYPE_TX] = uct_tcp_cm_conn_progress,
-            [UCT_TCP_EP_CTX_TYPE_RX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            [UCT_TCP_EP_CTX_TYPE_TX] = {
+                [0] = uct_tcp_cm_conn_progress,
+                [1] = uct_tcp_cm_conn_progress
+            },
+            [UCT_TCP_EP_CTX_TYPE_RX] = {
+                [0] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+                [1] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            }
         },
     },
     [UCT_TCP_EP_CONN_STATE_WAITING_ACK] = {
         .name     = "WAITING_ACK",
         .progress = {
-            [UCT_TCP_EP_CTX_TYPE_TX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
-            [UCT_TCP_EP_CTX_TYPE_RX] = uct_tcp_cm_conn_ack_rx_progress,
+            [UCT_TCP_EP_CTX_TYPE_TX] = {
+                [0] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+                [1] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            },
+            [UCT_TCP_EP_CTX_TYPE_RX] = {
+                [0] = uct_tcp_cm_conn_ack_rx_progress,
+                [1] = uct_tcp_cm_conn_ack_rx_progress
+            }
         },
     },
     [UCT_TCP_EP_CONN_STATE_ACCEPTING]   = {
         .name     = "ACCEPTING",
         .progress = {
-            [UCT_TCP_EP_CTX_TYPE_TX] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
-            [UCT_TCP_EP_CTX_TYPE_RX] = uct_tcp_cm_conn_req_rx_progress
+            [UCT_TCP_EP_CTX_TYPE_TX] = {
+                [0] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+                [1] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+            },
+            [UCT_TCP_EP_CTX_TYPE_RX] = {
+                [0] = uct_tcp_cm_conn_req_rx_progress,
+                [1] = uct_tcp_cm_conn_req_rx_progress
+            }
         },
     },
     [UCT_TCP_EP_CONN_STATE_CONNECTED]   = {
         .name     = "CONNECTED",
         .progress = {
-            [UCT_TCP_EP_CTX_TYPE_TX] = uct_tcp_ep_progress_tx,
-            [UCT_TCP_EP_CTX_TYPE_RX] = uct_tcp_ep_progress_rx
+            [UCT_TCP_EP_CTX_TYPE_TX] = {
+                [0] = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+                [1] = uct_tcp_ep_progress_tx
+            },
+            [UCT_TCP_EP_CTX_TYPE_RX] = {
+                [0] = uct_tcp_cm_conn_req_rx_progress,
+                [1] = uct_tcp_ep_progress_rx
+            }
         },
     }
 };
@@ -99,7 +129,7 @@ static inline void uct_tcp_ep_ctx_rewind(uct_tcp_ep_ctx_t *ctx)
     ctx->length = 0;
 }
 
-static void uct_tcp_ep_ctx_init(uct_tcp_ep_ctx_t *ctx)
+static inline void uct_tcp_ep_ctx_init(uct_tcp_ep_ctx_t *ctx)
 {
     ctx->buf = NULL;
     uct_tcp_ep_ctx_rewind(ctx);
@@ -108,8 +138,7 @@ static void uct_tcp_ep_ctx_init(uct_tcp_ep_ctx_t *ctx)
 static inline void uct_tcp_ep_ctx_reset(uct_tcp_ep_ctx_t *ctx)
 {
     ucs_mpool_put_inline(ctx->buf);
-    ctx->buf = NULL;
-    uct_tcp_ep_ctx_rewind(ctx);
+    uct_tcp_ep_ctx_init(ctx);
 }
 
 static void uct_tcp_ep_addr_cleanup(struct sockaddr_in *sock_addr)
@@ -136,28 +165,27 @@ static void uct_tcp_ep_close_fd(int *fd_p)
     }
 }
 
-/* Must be called with `iface::worker::async` blocked */
-static unsigned uct_tcp_ep_in_iface(uct_tcp_ep_t *ep)
+unsigned uct_tcp_ep_peer_addr_is_equal(const uct_tcp_ep_t *ep,
+                                       const struct sockaddr_in *peer_addr)
 {
-    return !ucs_list_is_empty(&ep->list);
+    ucs_status_t status;
+    unsigned ret;
+
+    ret = ucs_sockaddr_is_equal((const struct sockaddr*)&ep->peer_addr,
+                                (const struct sockaddr*)peer_addr, &status);
+    ucs_assert_always(status == UCS_OK);
+    return ret;
 }
 
-/* Must be called with `iface::worker::async` blocked */
-void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
+unsigned uct_tcp_ep_peer_addr_to_itself(const uct_tcp_ep_t *ep)
 {
-    if (uct_tcp_ep_in_iface(ep)) {
-        ucs_list_del(&ep->list);
-    }
-}
-
-/* Must be called with `iface::worker::async` blocked */
-void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
-{
-    ucs_list_add_tail(&iface->ep_list, &ep->list);
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    return uct_tcp_ep_peer_addr_is_equal(ep, &iface->config.ifaddr);
 }
 
 static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
-{ 
+{
     uct_tcp_ep_addr_cleanup(&ep->peer_addr);
 
     if (ep->tx.buf) {
@@ -166,6 +194,10 @@ static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
 
     if (ep->rx.buf) {
         uct_tcp_ep_ctx_reset(&ep->rx);
+    }
+
+    if (ep->events && (ep->fd != -1)) {
+        uct_tcp_ep_mod_events(ep, 0, ep->events);
     }
 
     uct_tcp_ep_close_fd(&ep->fd);
@@ -204,7 +236,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     }
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
-    uct_tcp_ep_add(iface, self);
+    ucs_list_add_tail(&iface->ep_list, &self->list);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
     ucs_debug("tcp_ep %p: created on iface %p, fd %d", self, iface, self->fd);
@@ -217,13 +249,147 @@ err_cleanup:
     return status;
 }
 
+const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer)
+{
+    ucs_snprintf_zero(str_buffer, UCT_TCP_EP_CTX_CAPS_STR_MAX, "[%s:%s]", 
+                      (ep_ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) ?
+                      "Tx" : "-",
+                      (ep_ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) ?
+                      "Rx" : "-");
+    return str_buffer;
+}
+
+static void uct_tcp_ep_trace_ctx_caps_change(uct_tcp_ep_t *ep,
+                                             uint8_t prev_caps)
+{
+    char str_prev_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
+    char str_cur_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
+
+    ucs_debug("tcp_ep %p: ctx caps changed %s -> %s", ep,
+              uct_tcp_ep_ctx_caps_str(prev_caps, str_prev_ctx_caps),
+              uct_tcp_ep_ctx_caps_str(ep->ctx_caps, str_cur_ctx_caps));
+    ucs_assertv(prev_caps != ep->ctx_caps, "ep=%p", ep);
+}
+
+ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
+                                    uct_tcp_ep_ctx_type_t cap)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    uint8_t prev_caps      = ep->ctx_caps;
+
+    ep->ctx_caps |= UCS_BIT(cap);
+    uct_tcp_ep_trace_ctx_caps_change(ep, prev_caps);
+
+    if (!uct_tcp_ep_peer_addr_to_itself(ep)) {
+        if (!prev_caps) {
+            return uct_tcp_cm_add_ep(iface, ep);
+        } else if (ep->ctx_caps == (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
+                                    UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX))) {
+            uct_tcp_cm_remove_ep(iface, ep);
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
+                                       uct_tcp_ep_ctx_type_t cap)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    uint8_t prev_caps      = ep->ctx_caps;
+
+    ep->ctx_caps &= ~UCS_BIT(cap);
+    uct_tcp_ep_trace_ctx_caps_change(ep, prev_caps);
+
+    if (!uct_tcp_ep_peer_addr_to_itself(ep)) {
+        if (prev_caps == (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
+                          UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX))) {
+            return uct_tcp_cm_add_ep(iface, ep);
+        } else if (!ep->ctx_caps) {
+            uct_tcp_cm_remove_ep(iface, ep);
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_tcp_ep_move_ctx_cap(uct_tcp_ep_t *from_ep, uct_tcp_ep_t *to_ep,
+                                     uct_tcp_ep_ctx_type_t ctx_cap)
+{
+    ucs_status_t status;
+
+    status = uct_tcp_ep_remove_ctx_cap(from_ep, ctx_cap);
+    if (status != UCS_OK) {
+        return status;
+    }
+    
+    return uct_tcp_ep_add_ctx_cap(to_ep, ctx_cap);
+}
+
+static void uct_tcp_ep_dup(uct_tcp_iface_t *iface, uct_tcp_ep_t *from_ep)
+{
+    uct_tcp_ep_t *ep;
+    ucs_status_t status;
+    uint32_t events;
+
+    /* Duplicate this EP and then close the current one */
+    status = uct_tcp_ep_init(iface, from_ep->fd, &from_ep->peer_addr, &ep);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_tcp_ep_move_ctx_cap(from_ep, ep,
+                                     UCT_TCP_EP_CTX_TYPE_RX);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    uct_tcp_cm_set_conn_state(ep, from_ep->conn_state);
+    /* we do it here to avoid calling `uct_tcp_cm_change_conn_state`
+     * in the cleanup procedure */
+    uct_tcp_cm_set_conn_state(from_ep, UCT_TCP_EP_CONN_STATE_CLOSED);
+
+    ep->rx              = from_ep->rx;
+    memset(&from_ep->rx, 0, sizeof(from_ep->rx));
+
+    events              = from_ep->events & EPOLLIN;
+    uct_tcp_ep_mod_events(from_ep, 0, from_ep->events);
+    from_ep->fd         = -1;
+    if (events) {
+        uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
+    }
+
+    ucs_debug("tcp_ep %p: created duplicate EP for %p RX events "
+              "on iface %p, fd %d", ep, from_ep, iface, ep->fd);
+    return;
+    
+err:
+    ucs_error("tcp_ep %p: unable to create copy for RX context", from_ep);
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_tcp_iface_t);
 
+    if ((self->ctx_caps == (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
+                            UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX))) &&
+        (self->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED)) {
+        uct_tcp_ep_dup(iface, self);
+    }
+
+    if (self->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) {
+        uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_TX);
+    }
+
+    if (self->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) {
+        uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_RX);
+    }
+
     UCS_ASYNC_BLOCK(iface->super.worker->async);
-    uct_tcp_ep_remove(iface, self);
+    ucs_list_del(&self->list);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
     if (self->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED) {
@@ -279,6 +445,11 @@ static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
         goto err_ep_destroy;
     }
 
+    status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_TX);
+    if (status != UCS_OK) {
+        goto err_ep_destroy;
+    }
+
     *new_ep = ep;
 
     return UCS_OK;
@@ -305,8 +476,31 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
     dest_addr.sin_port   = *(in_port_t*)params->iface_addr;
     dest_addr.sin_addr   = *(struct in_addr*)params->dev_addr;
 
-    /* TODO try to reuse existing connection */
-    status = uct_tcp_ep_create_connected(iface, &dest_addr, &ep);
+    do {
+        ep = uct_tcp_cm_search_ep(iface, &dest_addr,
+                                  UCT_TCP_EP_CTX_TYPE_TX);
+        if (ep) {
+            /* Found EP with RX ctx, try to send the connection request
+             * to the remote peer, if it successful - assign TX to this EP
+             * and return the EP to the user, otherwise - destroy this EP
+             * and try to search another EP w/o TX capability or create
+             * new EP */
+            status = uct_tcp_cm_send_conn_req(ep);
+            if (status != UCS_OK) {
+                uct_tcp_ep_destroy(&ep->super.super);
+                ep = NULL;
+            } else {
+                status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_TX);
+                if (status != UCS_OK) {
+                    return status;
+                }
+            }
+        } else {
+            status = uct_tcp_ep_create_connected(iface, &dest_addr, &ep);
+            break;
+        }
+    } while (ep == NULL);
+
     if (status == UCS_OK) {
         *ep_p = &ep->super.super;
     }
@@ -336,11 +530,19 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
 static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
                                            uct_tcp_ep_ctx_t *ctx)
 {
+    ucs_assert(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX));
     ucs_debug("tcp_ep %p: remote disconnected", ep);
 
     uct_tcp_ep_mod_events(ep, 0, EPOLLIN);
     uct_tcp_ep_ctx_reset(ctx);
-    uct_tcp_ep_destroy(&ep->super.super);
+
+    if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) {
+        uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_RX);
+        uct_tcp_ep_mod_events(ep, 0, EPOLLIN);
+    } else {
+        /* If the EP supports RX only, destroy it */
+        uct_tcp_ep_destroy(&ep->super.super);
+    }
 }
 
 static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
@@ -366,6 +568,30 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     return send_length > 0;
 }
 
+static void uct_tcp_ep_io_err_handler_cb(void *arg,
+                                         const ucs_socket_io_err_info_t *err_info)
+{
+    uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
+    char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
+
+    if ((err_info->err_no == ECONNRESET) &&
+        (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
+        (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */) {
+        ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
+                  "was dropped by the peer",
+                  ep, err_info->err_no, strerror(err_info->err_no),
+                  ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                   str_local_addr, UCS_SOCKADDR_STRING_LEN),
+                  ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
+                                   str_remote_addr, UCS_SOCKADDR_STRING_LEN));
+    } else {
+        err_info->print_err(err_info);
+    }
+}
+
 static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 {
     ucs_status_t status;
@@ -373,9 +599,11 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
     ucs_assertv(*recv_length, "ep=%p", ep);
 
     status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length,
-                                recv_length, NULL, NULL);
+                                recv_length, uct_tcp_ep_io_err_handler_cb, ep);
     if (status != UCS_OK) {
-        if (status == UCS_ERR_CANCELED) {
+        if (status == UCS_ERR_NO_PROGRESS) {
+            uct_tcp_ep_ctx_reset(&ep->rx);
+        } else {
             uct_tcp_ep_handle_disconnected(ep, &ep->rx);
         }
         *recv_length = 0;
@@ -420,7 +648,7 @@ uct_tcp_ep_comp_recv_am(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                         uct_tcp_am_hdr_t *hdr)
 {
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, hdr->am_id,
-                       hdr + 1, hdr->length, "RECV fd %d", ep->fd);
+                       hdr + 1, hdr->length, "RECV ep %p fd %d", ep, ep->fd);
     uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1, hdr->length, 0);
 }
 
@@ -532,7 +760,7 @@ static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                                       const uct_tcp_am_hdr_t *hdr)
 {
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
-                       hdr + 1, hdr->length, "SEND fd %d", ep->fd);
+                       hdr + 1, hdr->length, "SEND ep %p fd %d", ep, ep->fd);
 
     ep->tx.length       = sizeof(*hdr) + hdr->length;
     iface->outstanding += ep->tx.length;

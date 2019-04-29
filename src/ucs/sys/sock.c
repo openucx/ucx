@@ -145,7 +145,8 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
     ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,
                      &conn_status, &conn_status_sz);
     if (ret < 0) {
-        ucs_error("getsockopt(fd=%d) failed to get SOL_SOCKET(SO_ERROR): %m", fd);
+        ucs_error("getsockopt(fd=%d) failed to get SOL_SOCKET(SO_ERROR): %m",
+                  fd);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -154,7 +155,8 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
     }
 
     if (conn_status != 0) {
-        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s", fd, strerror(conn_status));
+        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s", fd,
+                  strerror(conn_status));
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -175,6 +177,43 @@ int ucs_socket_max_conn()
                  UCS_SOCKET_MAX_CONN_PATH);
         somaxconn_val = SOMAXCONN;
         return somaxconn_val;
+    }
+}
+
+static void ucs_socket_io_print_error(const ucs_socket_io_err_info_t *err_info)
+{
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr_in6 local_addr;
+    socklen_t sock_len;
+
+    sock_len = sizeof(local_addr);
+    (void)getsockname(err_info->fd, (struct sockaddr*)&local_addr, &sock_len);
+
+    ucs_error("%s(fd=%d data=%p length=%zu) for local addr: %s failed: %d (%s)",
+              err_info->name, err_info->fd, err_info->data, err_info->length,
+              ucs_sockaddr_str((const struct sockaddr*)&local_addr,
+                               str_local_addr, UCS_SOCKADDR_STRING_LEN),
+              err_info->err_no, strerror(err_info->err_no));
+}
+
+static void ucs_socket_io_error_handling(int fd, const char *name,
+                                         const void *data, size_t length,
+                                         ucs_socket_io_err_cb_t err_cb,
+                                         void *err_cb_arg, int err_no)
+{
+    ucs_socket_io_err_info_t err_info = {
+        .fd        = fd,
+        .name      = name,
+        .data      = data,
+        .length    = length,
+        .err_no    = err_no,
+        .print_err = ucs_socket_io_print_error
+    };
+
+    if (err_cb != NULL) {
+        err_cb(err_cb_arg, &err_info);
+    } else {
+        ucs_socket_io_print_error(&err_info);
     }
 }
 
@@ -202,11 +241,8 @@ ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
         return UCS_ERR_NO_PROGRESS;
     }
 
-    ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
-              name, fd, data, *length_p);
-    if (err_cb != NULL) {
-        err_cb(err_cb_arg, errno);
-    }
+    ucs_socket_io_error_handling(fd, name, data, *length_p,
+                                 err_cb, err_cb_arg, errno);
     return UCS_ERR_IO_ERROR;
 }
 
@@ -325,13 +361,19 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
     }
 }
 
+static unsigned ucs_sockaddr_is_known_af(const struct sockaddr *sa)
+{
+    return ((sa->sa_family == AF_INET) ||
+            (sa->sa_family == AF_INET6));
+}
+
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size)
 {
     uint16_t port;
     size_t str_len;
 
-    if ((sock_addr->sa_family != AF_INET) && (sock_addr->sa_family != AF_INET6)) {
+    if (!ucs_sockaddr_is_known_af(sock_addr)) {
         ucs_strncpy_zero(str, "<invalid address family>", max_size);
         return str;
     }
@@ -354,31 +396,52 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     return str;
 }
 
-int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
-                          const struct sockaddr *sa2,
-                          ucs_status_t *status_p)
+int ucs_sockaddr_cmp(const struct sockaddr *sa1,
+                     const struct sockaddr *sa2,
+                     ucs_status_t *status_p)
 {
+    int result          = 1;
     ucs_status_t status = UCS_OK;
-    int result          = 0;
+    uint16_t port1, port2;
 
-    if (sa1->sa_family != sa2->sa_family) {
+    if (!ucs_sockaddr_is_known_af(sa1) ||
+        !ucs_sockaddr_is_known_af(sa2)) {
+        ucs_error("unknown address family: %d",
+                  !ucs_sockaddr_is_known_af(sa1) ?
+                  sa1->sa_family : sa2->sa_family);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (sa1->sa_family < sa2->sa_family) {
+        result = (sa1->sa_family < sa2->sa_family) ? -1 : 1;
         goto out;
     }
 
     switch (sa1->sa_family) {
     case AF_INET:
-        result = ((UCS_SOCKET_INET_PORT(sa1) == UCS_SOCKET_INET_PORT(sa2)) &&
-                  (memcmp(&UCS_SOCKET_INET_ADDR(sa1), &UCS_SOCKET_INET_ADDR(sa2),
-                          sizeof(UCS_SOCKET_INET_ADDR(sa1))) == 0));
+        result = ucs_signum(memcmp(&UCS_SOCKET_INET_ADDR(sa1),
+                                   &UCS_SOCKET_INET_ADDR(sa2),
+                                   sizeof(UCS_SOCKET_INET_ADDR(sa1))));
+
+        port1 = ntohs(UCS_SOCKET_INET_PORT(sa1));
+        port2 = ntohs(UCS_SOCKET_INET_PORT(sa2));
+
+        if (!result && (port1 != port2)) {
+            result = (port1 < port2) ? -1 : 1;
+        }
         break;
     case AF_INET6:
-        result = ((UCS_SOCKET_INET6_PORT(sa1) == UCS_SOCKET_INET6_PORT(sa2)) &&
-                  (memcmp(&UCS_SOCKET_INET6_ADDR(sa1), &UCS_SOCKET_INET6_ADDR(sa2),
-                          sizeof(UCS_SOCKET_INET6_ADDR(sa1))) == 0));
-        break;
-    default:
-        ucs_error("unknown address family: %d", sa1->sa_family);
-        status = UCS_ERR_INVALID_PARAM;
+        result = ucs_signum(memcmp(&UCS_SOCKET_INET6_ADDR(sa1),
+                                   &UCS_SOCKET_INET6_ADDR(sa2),
+                                   sizeof(UCS_SOCKET_INET6_ADDR(sa1))));
+
+        port1 = ntohs(UCS_SOCKET_INET6_PORT(sa1));
+        port2 = ntohs(UCS_SOCKET_INET6_PORT(sa2));
+
+        if (!result && (port1 != port2)) {
+            result = (port1 < port2) ? -1 : 1;
+        }
         break;
     }
 
@@ -387,4 +450,11 @@ out:
         *status_p = status;
     }
     return result;
+}
+
+int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
+                          const struct sockaddr *sa2,
+                          ucs_status_t *status_p)
+{
+    return !ucs_sockaddr_cmp(sa1, sa2, status_p);
 }
