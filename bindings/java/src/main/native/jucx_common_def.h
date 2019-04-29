@@ -13,7 +13,6 @@
 
 typedef uintptr_t native_ptr;
 
-static void log_error(const char* error);
 
 JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *, const char *);
 
@@ -41,5 +40,10 @@ struct jucx_context {
 };
 
 void jucx_request_init(void *request);
+
+/**
+ * @brief Get the jni env object. To be able to call java methods from ucx async callbacks.
+ */
+JNIEnv* get_jni_env();
 
 #endif

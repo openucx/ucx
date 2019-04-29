@@ -5,6 +5,7 @@
 
 #include "jucx_common_def.h"
 extern "C" {
+  #include <ucs/debug/assert.h>
   #include <ucs/debug/debug.h>
 }
 
@@ -12,14 +13,12 @@ extern "C" {
 #include <arpa/inet.h> /* inet_addr */
 
 
+static JavaVM *jvm_global;
+
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
    ucs_debug_disable_signals();
+   jvm_global = jvm;
    return JNI_VERSION_1_1;
-}
-
-static inline void log_error(const char *error)
-{
-    ucs_error("JUCX - %s: %s \n", __FILE__, error);
 }
 
 /**
@@ -28,7 +27,7 @@ static inline void log_error(const char *error)
 JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *env, const char *msg)
 {
     jclass cls = env->FindClass("org/ucx/jucx/UcxException");
-    log_error(msg);
+    ucs_error("JUCX: %s", msg);
     if (cls != 0) { /* Otherwise an exception has already been thrown */
         env->ThrowNew(cls, msg);
     }
@@ -124,4 +123,12 @@ void jucx_request_init(void *request)
 {
      struct jucx_context *ctx = (struct jucx_context *)request;
      ctx->callback = NULL;
+}
+
+JNIEnv* get_jni_env()
+{
+    void *env;
+    jint rs = jvm_global->AttachCurrentThread(&env, NULL);
+    ucs_assert(rs == JNI_OK);
+    return (JNIEnv*)env;
 }
