@@ -260,4 +260,5 @@ void uct_rdmacm_ep_invoke_completions(uct_rdmacm_ep_t *ep, ucs_status_t status)
         ucs_free(op);
         pthread_mutex_lock(&ep->ops_mutex);
     }
+    /* coverity[missing_unlock] */
 }
