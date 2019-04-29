@@ -319,10 +319,7 @@ CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
 					#include <string>
 					int main() {
-						std::string my_str;
-						int a = 5;
-						my_str = std::to_string(a);
-						std::cout << "to_string: " << my_str << '\n';
+						std::to_string(1);
 						return 0;
 					} ]])],
                   [AC_MSG_RESULT([yes])
