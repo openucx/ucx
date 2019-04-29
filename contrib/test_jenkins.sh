@@ -431,8 +431,10 @@ build_clang() {
 #
 build_gcc_latest() {
 	echo 1..1 > build_gcc_latest.tap
-    #If the gcc version on the host is older than 4.8.5, don't run
-    if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
+	#If the glibc version on the host is older than 2.14, don't run
+	#check the glibc version with the ldd version since it comes with glibc
+	ldd_ver="$(ldd --version | awk '/ldd/{print $NF}')"
+	if (echo "2.14"; echo $ldd_ver) | sort -CV
 	then
 		if module_load dev/gcc-latest
 		then
@@ -450,8 +452,8 @@ build_gcc_latest() {
 		fi
 	else
 		echo "==== Not building with gcc compiler ===="
-		echo "GCC version is too old ($(gcc --version|head -1))"
-		echo "ok 1 - # SKIP because gcc version is older than 4.8.5" >> build_gcc_latest.tap
+		echo "Required glibc version is too old ($ldd_ver)"
+		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc_latest.tap
 	fi
 }
 
@@ -767,7 +769,7 @@ test_malloc_hooks_mpi() {
 #
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
-	if module_load hpcx-gcc && ucx_info -v
+	if module_load hpcx-gcc && mpirun --version
 	then
 		# Prevent our tests from using UCX libraries from hpcx module by prepending
 		# our local library path first
