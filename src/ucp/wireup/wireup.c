@@ -796,7 +796,7 @@ static void ucp_wireup_print_used_tls(ucp_ep_h ep)
     p    = info;
     endp = p + sizeof(info);
 
-    snprintf(p, endp - p,  "ep %p tls: ", ep);
+    snprintf(p, endp - p,  "ep_cfg[%d]: ", ep->cfg_index);
     p += strlen(p);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
@@ -830,16 +830,19 @@ static void ucp_wireup_print_lanes_config(ucp_ep_h ep, uint8_t *addr_indices)
     char str[32];
 
     /* Print:
-     * - Detailed lanes config if log level is >= DEBUG
-     * - Less detailed info about lanes tls if log level is INFO
-     * - Nothing otherwise */
+     * - Detailed lanes config if log level is >= DEBUG.
+     * - Less detailed info about lanes tls if log level is INFO.
+     *   Printed just once for every ep configuration.
+     * - Nothing otherwise. */
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
         snprintf(str, sizeof(str), "ep %p", ep);
         ucp_wireup_print_config(ep->worker->context, &ucp_ep_config(ep)->key,
                                 str, addr_indices, UCS_LOG_LEVEL_DEBUG);
-    } else if (ucs_log_is_enabled(UCS_LOG_LEVEL_INFO)) {
+    } else if (ucs_log_is_enabled(UCS_LOG_LEVEL_INFO) &&
+               (ep->cfg_index > ep->worker->ep_print_config_idx)) {
         ucp_wireup_print_used_tls(ep);
+        ep->worker->ep_print_config_idx = ep->cfg_index;
     }
 }
 

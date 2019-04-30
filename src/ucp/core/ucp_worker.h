@@ -235,6 +235,8 @@ typedef struct ucp_worker {
     ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
     unsigned                      ep_config_max;   /* Maximal number of configurations */
     unsigned                      ep_config_count; /* Current number of configurations */
+    unsigned                      ep_print_config_idx; /* Index of the last ep cfg, which
+                                                          has been printed (to info log level) */
     ucp_ep_config_t               ep_config[0];    /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
