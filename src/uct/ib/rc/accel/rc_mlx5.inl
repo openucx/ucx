@@ -895,6 +895,7 @@ uct_rc_mlx5_iface_tag_consumed(uct_rc_mlx5_iface_common_t *iface,
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
 
+    /* coverity[tainted_data] */
     tag = &iface->tm.list[ntohs(cqe->app_info)];
     ctx = tag->ctx;
     ctx->tag_consumed_cb(ctx);
@@ -917,6 +918,7 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
 
+    /* coverity[tainted_data] */
     tag_entry = &iface->tm.list[ntohs(cqe->app_info)];
     ctx       = tag_entry->ctx;
     priv      = uct_rc_mlx5_ctx_priv(tag_entry->ctx);
@@ -1122,6 +1124,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         break;
 
     case UCT_RC_MLX5_CQE_APP_OP_TM_EXPECTED:
+        /* coverity[tainted_data] */
         tag  = &iface->tm.list[ntohs(cqe->app_info)];
         ctx  = tag->ctx;
         priv = uct_rc_mlx5_ctx_priv(ctx);

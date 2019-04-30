@@ -152,6 +152,9 @@ struct uct_dc_mlx5_iface {
         /* List of destroyed endpoints waiting for credit grant */
         ucs_list_link_t           gc_list;
 
+        /* Number of expected FC grants */
+        unsigned                  fc_grants;
+
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
 

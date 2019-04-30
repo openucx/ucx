@@ -954,6 +954,8 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
     if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
         ucs_trace("not releasing dc_mlx5_ep %p - waiting for grant", ep);
         ep->flags &= ~UCT_DC_MLX5_EP_FLAG_VALID;
+        /* No need to wait for grant on this ep anymore */
+        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
         ucs_list_add_tail(&iface->tx.gc_list, &ep->list);
     } else {
         ucs_free(ep);
@@ -1203,7 +1205,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
     if (iface->super.super.config.fc_enabled) {
         UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
         if ((ep->fc.fc_wnd == iface->super.super.config.fc_hard_thresh) &&
-            !(ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT)) {
+            !uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
             status = uct_rc_fc_ctrl(&ep->super.super,
                                     UCT_RC_EP_FC_FLAG_HARD_REQ,
                                     NULL);
@@ -1211,6 +1213,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
                 return status;
             }
             ep->fc.flags |= UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
+            ++iface->tx.fc_grants;
         }
     } else {
         /* Set fc_wnd to max, to send as much as possible without checks */
@@ -1245,6 +1248,11 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_put(iface, dci);
     ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
+
+    if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
+        /* No need to wait for grant on this ep anymore */
+        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
+    }
 
     if (ep == iface->tx.fc_ep) {
         ucs_assert(status != UCS_ERR_CANCELED);
