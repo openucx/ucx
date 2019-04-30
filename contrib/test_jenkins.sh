@@ -433,6 +433,9 @@ build_gcc_latest() {
 	echo 1..1 > build_gcc_latest.tap
 	#If the glibc version on the host is older than 2.14, don't run
 	#check the glibc version with the ldd version since it comes with glibc
+	#see https://www.linuxquestions.org/questions/linux-software-2/how-to-check-glibc-version-263103/
+	#see https://benohead.com/linux-check-glibc-version/
+	#see https://stackoverflow.com/questions/9705660/check-glibc-version-for-a-particular-gcc-compiler
 	ldd_ver="$(ldd --version | awk '/ldd/{print $NF}')"
 	if (echo "2.14"; echo $ldd_ver) | sort -CV
 	then
@@ -882,7 +885,7 @@ test_env_var_aliases() {
 	echo "==== Running MLX5 env var aliases test ===="
 	if [[ `./src/tools/info/ucx_info -b | grep -P 'HW_TM *1$'` ]]
 	then
-		vars=( "TM_ENABLE" "TM_MAX_BCOPY" "TM_LIST_SIZE" "TX_MAX_BB" )
+		vars=( "TM_ENABLE" "TM_LIST_SIZE" "TX_MAX_BB" )
 		for var in "${vars[@]}"
 		do
 			for tl in "RC_MLX5" "DC_MLX5"
