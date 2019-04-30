@@ -73,11 +73,11 @@ UCS_TEST_F(test_socket, sockaddr_sizeof) {
 }
 
 UCS_TEST_F(test_socket, sockaddr_get_port) {
-    const unsigned sin_port    = 5555;
+    const uint16_t sin_port    = 5555;
     struct sockaddr_in sa_in;
     struct sockaddr_in6 sa_in6;
     struct sockaddr_un sa_un;
-    unsigned port = 0;
+    uint16_t port = 0;
 
     sa_in.sin_family   = AF_INET;
     sa_in.sin_port     = htons(sin_port);
@@ -152,7 +152,7 @@ UCS_TEST_F(test_socket, sockaddr_get_inet_addr) {
 }
 
 UCS_TEST_F(test_socket, sockaddr_str) {
-    const unsigned port        = 65534;
+    const uint16_t port        = 65534;
     const char *ipv4_addr      = "192.168.122.157";
     const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
     struct sockaddr_in sa_in;

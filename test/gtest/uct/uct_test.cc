@@ -469,6 +469,16 @@ int uct_test::max_connections()
     }
 }
 
+int uct_test::max_connect_batch()
+{
+    if (has_transport("tcp")) {
+        /* TCP connection listener is limited by Accept queue */
+        return ucs_socket_max_conn();
+    } else {
+        return std::numeric_limits<int>::max();
+    }
+}
+
 std::string uct_test::entity::client_priv_data = "";
 size_t uct_test::entity::client_cb_arg = 0;
 
