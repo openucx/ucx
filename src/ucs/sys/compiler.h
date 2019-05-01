@@ -66,7 +66,7 @@
     })
 
 /**
- * suppress unaligned pointer warning (actual on armclang5 platform)
+ * suppress unaligned pointer warning
  */
 #define ucs_unaligned_ptr(_ptr) ({void *_p = (void*)(_ptr); _p;})
 
