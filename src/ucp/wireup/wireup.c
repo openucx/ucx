@@ -763,6 +763,7 @@ static char* ucp_wireup_add_feature_rsc(ucp_context_h context,
 
     ucs_for_each_bit(lane, lanes_bitmap) {
        ucs_for_each_bit(rsc_idx, context->tl_bitmap) {
+           ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */
            if (key->lanes[lane].rsc_index == rsc_idx) {
                snprintf(p, endp - p, "%*s"UCT_TL_RESOURCE_DESC_FMT, sep, "",
                         UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_idx].tl_rsc));
