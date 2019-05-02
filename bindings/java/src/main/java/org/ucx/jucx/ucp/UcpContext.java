@@ -46,6 +46,13 @@ public class UcpContext extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Creates new UcpWorker on current context.
+     */
+    public UcpWorker newWorker(UcpWorkerParams params) {
+        return new UcpWorker(this, params);
+    }
+
+    /**
      * Associates memory allocated/mapped region with the network resources.
      * The network stack associated with an application context
      * can typically send and receive data from the mapped memory without

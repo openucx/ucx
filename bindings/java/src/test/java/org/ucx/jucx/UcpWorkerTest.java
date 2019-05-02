@@ -21,7 +21,7 @@ public class UcpWorkerTest {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
         assertEquals(2, UcsConstants.ThreadMode.UCS_THREAD_MODE_MULTI);
         assertNotEquals(context.getNativeId(), null);
-        UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
         assertNotNull(worker.getNativeId());
         assertEquals(worker.progress(), 0); // No communications was submitted.
         worker.close();
@@ -37,7 +37,7 @@ public class UcpWorkerTest {
         UcpWorkerParams workerParam = new UcpWorkerParams();
         for (int i = 0; i < numWorkers; i++) {
             workerParam.clear().setCpu(i).requestThreadSafety();
-            workers[i] = new UcpWorker(context, workerParam);
+            workers[i] = context.newWorker(workerParam);
             assertNotNull(workers[i].getNativeId());
         }
         for (int i = 0; i < numWorkers; i++) {
@@ -59,12 +59,12 @@ public class UcpWorkerTest {
             if (i % 2 == 0) {
                 userData.asCharBuffer().put("TCPWorker" + i);
                 workerParams.requestWakeupRX().setUserData(userData);
-                workers[i] = new UcpWorker(tcpContext, workerParams);
+                workers[i] = tcpContext.newWorker(workerParams);
             } else {
                 userData.asCharBuffer().put("RDMAWorker" + i);
                 workerParams.requestWakeupRMA().setCpu(i).setUserData(userData)
                     .requestThreadSafety();
-                workers[i] = new UcpWorker(rdmaContext, workerParams);
+                workers[i] = rdmaContext.newWorker(workerParams);
             }
         }
         for (int i = 0; i < numWorkers; i++) {
@@ -77,7 +77,7 @@ public class UcpWorkerTest {
     @Test
     public void testGetWorkerAddress() {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
-        UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
         ByteBuffer workerAddress = worker.getAddress();
         assertNotNull(workerAddress);
         assertTrue(workerAddress.capacity() > 0);
