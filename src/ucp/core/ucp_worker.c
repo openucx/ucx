@@ -501,7 +501,8 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
             rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
             tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
             ucs_error("error '%s' will not be handled for ep %p - "
-                      UCT_TL_RESOURCE_DESC_FMT, ucs_status_string(status), ucp_ep,
+                      UCT_TL_RESOURCE_DESC_FMT " since no error callback is installed",
+                      ucs_status_string(status), ucp_ep,
                       UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
         } else {
             ucs_assert(uct_ep == NULL);

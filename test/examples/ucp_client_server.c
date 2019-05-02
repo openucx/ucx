@@ -42,12 +42,12 @@ static uint16_t server_port = 13337;
 
 
 /**
- * Server context to be used in the user's accept callback.
- * It holds the server's endpoint which will be created upon accepting a
- * connection request from the client.
+ * Server's application context to be used in the user's connection request
+ * callback.
+ * It holds the server's ucp context which is created at the init stage.
  */
 typedef struct ucx_server_ctx {
-    ucp_ep_h     ep;
+    ucp_context_h ctx;
 } ucx_server_ctx_t;
 
 
@@ -89,15 +89,12 @@ static void stream_send_cb(void *request, ucs_status_t status)
 }
 
 /**
- * The callback on the server side which is invoked upon receiving a connection
- * request from the client.
+ * Error handling callback.
  */
-static void server_accept_cb(ucp_ep_h ep, void *arg)
+static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
-    ucx_server_ctx_t *context = arg;
-
-    /* Save the server's endpoint in the user's context, for future usage */
-    context->ep = ep;
+    printf("error handling callback was invoked with status %d (%s)\n",
+           status, ucs_status_string(status));
 }
 
 /**
@@ -121,35 +118,6 @@ void set_connect_addr(const char *address_str, struct sockaddr_in *connect_addr)
     connect_addr->sin_family      = AF_INET;
     connect_addr->sin_addr.s_addr = inet_addr(address_str);
     connect_addr->sin_port        = htons(server_port);
-}
-
-/**
- * Initialize the server side. The server starts listening on the set address
- * and waits for its connected endpoint to be created.
- */
-static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
-                        ucp_listener_h *listener)
-{
-    struct sockaddr_in listen_addr;
-    ucp_listener_params_t params;
-    ucs_status_t status;
-
-    set_listen_addr(&listen_addr);
-
-    params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
-                                UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
-    params.sockaddr.addr      = (const struct sockaddr*)&listen_addr;
-    params.sockaddr.addrlen   = sizeof(listen_addr);
-    params.accept_handler.cb  = server_accept_cb;
-    params.accept_handler.arg = context;
-
-    /* Create a listener on the server side to listen on the given address.*/
-    status = ucp_listener_create(ucp_worker, &params, listener);
-    if (status != UCS_OK) {
-        fprintf(stderr, "failed to listen (%s)\n", ucs_status_string(status));
-    }
-
-    return status;
 }
 
 /**
@@ -179,10 +147,13 @@ static int start_client(ucp_worker_h ucp_worker, const char *ip,
      *                                        removed, the error handling mode
      *                                        will be removed.
      */
-    ep_params.field_mask       = UCP_EP_PARAM_FIELD_FLAGS     |
-                                 UCP_EP_PARAM_FIELD_SOCK_ADDR |
+    ep_params.field_mask       = UCP_EP_PARAM_FIELD_FLAGS       |
+                                 UCP_EP_PARAM_FIELD_SOCK_ADDR   |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+    ep_params.err_handler.cb   = err_cb;
+    ep_params.err_handler.arg  = NULL;
     ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
     ep_params.sockaddr.addr    = (struct sockaddr*)&connect_addr;
     ep_params.sockaddr.addrlen = sizeof(connect_addr);
@@ -213,6 +184,9 @@ static void print_result(int is_server, char *recv_message)
     }
 }
 
+/**
+ * Progress the request until it completes.
+ */
 static void request_wait(ucp_worker_h ucp_worker, test_req_t *request)
 {
     while (request->complete == 0) {
@@ -352,18 +326,115 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr)
 }
 
 /**
+ * Create a ucp worker on the given ucp context.
+ */
+static int init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker)
+{
+    ucp_worker_params_t worker_params;
+    ucs_status_t status;
+    int ret = 0;
+
+    memset(&worker_params, 0, sizeof(worker_params));
+
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+
+    status = ucp_worker_create(ucp_context, &worker_params, ucp_worker);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to ucp_worker_create (%s)\n", ucs_status_string(status));
+        ret = -1;
+    }
+
+    return ret;
+}
+
+/**
+ * The callback on the server side which is invoked upon receiving a connection
+ * request from the client.
+ */
+static void server_conn_handle_cb(ucp_conn_request_h conn_request, void *arg)
+{
+    ucx_server_ctx_t *context = arg;
+    ucp_ep_h         ep;
+    ucp_ep_params_t  ep_params;
+    ucs_status_t     status;
+    ucp_worker_h     new_worker;
+    int ret;
+
+    /* Create a new worker */
+    ret = init_worker(context->ctx, &new_worker);
+    if (ret != 0) {
+        return;
+    }
+
+    /* Server creates an ep to the client on the new created worker.
+     * This is not the worker the listener was created on.
+     * The client side should initiate the connection, leading
+     * to this ep's creation */
+    ep_params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLER |
+                                UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    ep_params.conn_request    = conn_request;
+    ep_params.err_handler.cb  = err_cb;
+    ep_params.err_handler.arg = NULL;
+
+    status = ucp_ep_create(new_worker, &ep_params, &ep);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to create an endpoint on the server: (%s)\n",
+                ucs_status_string(status));
+        ucp_worker_destroy(new_worker);
+        return;
+    }
+
+    /* Client-Server communication via Stream API */
+    send_recv_stream(new_worker, ep, 1);
+
+    /* Close the endpoint to the client and destroy the new worker since the
+     * communication to the client ended */
+    ep_close(new_worker, ep);
+    ucp_worker_destroy(new_worker);
+
+    printf("Waiting for connection...\n");
+}
+
+/**
+ * Initialize the server side. The server starts listening on the set address.
+ */
+static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
+                        ucp_listener_h *listener)
+{
+    struct sockaddr_in listen_addr;
+    ucp_listener_params_t params;
+    ucs_status_t status;
+
+    set_listen_addr(&listen_addr);
+
+    params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                                UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+    params.sockaddr.addr      = (const struct sockaddr*)&listen_addr;
+    params.sockaddr.addrlen   = sizeof(listen_addr);
+    params.conn_handler.cb    = server_conn_handle_cb;
+    params.conn_handler.arg   = context;
+
+    /* Create a listener on the server side to listen on the given address.*/
+    status = ucp_listener_create(ucp_worker, &params, listener);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to listen (%s)\n", ucs_status_string(status));
+    }
+
+    return status;
+}
+
+/**
  * Initialize the UCP context and worker.
  */
 static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
 {
     /* UCP objects */
-    ucp_worker_params_t worker_params;
     ucp_params_t ucp_params;
     ucs_status_t status;
     int ret = 0;
 
     memset(&ucp_params, 0, sizeof(ucp_params));
-    memset(&worker_params, 0, sizeof(worker_params));
 
     /* UCP initialization */
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES     |
@@ -381,13 +452,8 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
         goto err;
     }
 
-    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-    worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
-
-    status = ucp_worker_create(*ucp_context, &worker_params, ucp_worker);
-    if (status != UCS_OK) {
-        fprintf(stderr, "failed to ucp_worker_create (%s)\n", ucs_status_string(status));
-        ret = -1;
+    ret = init_worker(*ucp_context, ucp_worker);
+    if (ret != 0) {
         goto err_cleanup;
     }
 
@@ -395,7 +461,6 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
 
 err_cleanup:
     ucp_cleanup(*ucp_context);
-
 err:
     return ret;
 }
@@ -404,8 +469,8 @@ err:
 int main(int argc, char **argv)
 {
     ucx_server_ctx_t context;
-    int is_server, ret;
     char *server_addr = NULL;
+    int ret;
 
     /* UCP objects */
     ucp_context_h ucp_context;
@@ -428,43 +493,25 @@ int main(int argc, char **argv)
     /* Client-Server initialization */
     if (server_addr == NULL) {
         /* Server side */
-        is_server = 1;
+        /* Save the server's context. */
+        context.ctx = ucp_context;
 
-        /* Initialize the server's endpoint to NULL. Once the server's endpoint
-         * is created, this field will have a valid value. */
-        context.ep = NULL;
-
+        /* Create a listener on the created worker.
+         * This listener will stay open for listening to incoming connection
+         * requests from the client */
         status = start_server(ucp_worker, &context, &listener);
         if (status != UCS_OK) {
             fprintf(stderr, "failed to start server\n");
             goto err_worker;
         }
 
-        /* Server is always up */
+        /* Server is always up listening */
         printf("Waiting for connection...\n");
         while (1) {
-            /* Wait for the server's callback to set the context->ep field, thus
-             * indicating that the server's endpoint was created and is ready to
-             * be used. The client side should initiate the connection, leading
-             * to this ep's creation */
-            if (context.ep == NULL) {
-                ucp_worker_progress(ucp_worker);
-            } else {
-                /* Client-Server communication via Stream API */
-                send_recv_stream(ucp_worker, context.ep, is_server);
-
-                /* Close the endpoint to the client */
-                ep_close(ucp_worker, context.ep);
-
-                /* Initialize server's endpoint for the next connection with a new
-                 * client */
-                context.ep = NULL;
-                printf("Waiting for connection...\n");
-            };
+            ucp_worker_progress(ucp_worker);
         }
     } else {
         /* Client side */
-        is_server = 0;
         status = start_client(ucp_worker, server_addr, &ep);
         if (status != UCS_OK) {
             fprintf(stderr, "failed to start client\n");
@@ -472,7 +519,7 @@ int main(int argc, char **argv)
         }
 
         /* Client-Server communication via Stream API */
-        ret = send_recv_stream(ucp_worker, ep, is_server);
+        ret = send_recv_stream(ucp_worker, ep, 0);
 
         /* Close the endpoint to the server */
         ep_close(ucp_worker, ep);
@@ -482,7 +529,6 @@ err_worker:
     ucp_worker_destroy(ucp_worker);
 
     ucp_cleanup(ucp_context);
-
 err:
     return ret;
 }
