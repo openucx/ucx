@@ -141,7 +141,8 @@ protected:
 
 void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 {
-    std::vector<char> sbuf(16 * 1024 * 1024, 's');
+    std::vector<char> sbuf(16 * 1024 * 1024 /
+                           ucs::test_time_multiplier(), 's');
     size_t            ssize = 0; /* total send size in bytes */
     std::vector<char> check_pattern;
     ucs_status_ptr_t  sstatus;
