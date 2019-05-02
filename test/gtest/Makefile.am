@@ -100,6 +100,7 @@ gtest_SOURCES = \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
 	uct/test_stats.cc \
+	ucs/test_event_set.cc \
 	ucs/test_stats_filter.cc \
 	uct/test_peer_failure.cc \
 	uct/test_tag.cc \

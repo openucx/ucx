@@ -36,6 +36,7 @@ nobase_dist_libucs_la_HEADERS = \
 	profile/profile_on.h \
 	stats/stats_fwd.h \
 	stats/libstats.h \
+	sys/event_set.h \
 	sys/compiler_def.h\
 	sys/math.h \
 	sys/preprocessor.h \
@@ -122,6 +123,7 @@ libucs_la_SOURCES = \
 	memory/memtype_cache.c \
 	profile/profile.c \
 	stats/stats.c \
+	sys/event_set.c \
 	sys/init.c \
 	sys/math.c \
 	sys/module.c \
