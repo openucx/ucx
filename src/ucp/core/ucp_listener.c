@@ -167,6 +167,15 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucp_worker_signal_internal(listener->wiface.worker);
 }
 
+ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *attr)
+{
+    if (attr->field_mask & UCP_LISTENER_ATTR_FIELD_PORT) {
+        attr->port = listener->wiface.attr.listen_port;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                  const ucp_listener_params_t *params,
                                  ucp_listener_h *listener_p)

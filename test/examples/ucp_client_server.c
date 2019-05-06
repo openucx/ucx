@@ -404,6 +404,7 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
 {
     struct sockaddr_in listen_addr;
     ucp_listener_params_t params;
+    ucp_listener_attr_t attr;
     ucs_status_t status;
 
     set_listen_addr(&listen_addr);
@@ -419,8 +420,20 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     status = ucp_listener_create(ucp_worker, &params, listener);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to listen (%s)\n", ucs_status_string(status));
+        goto out;
     }
 
+    /* Query the created listener to get the port it is listening on. */
+    attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
+    status = ucp_listener_query(*listener, &attr);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to query the listener (%s)\n",
+                ucs_status_string(status));
+        goto out;
+    }
+    fprintf(stderr,"server is listening on port %d\n", attr.port);
+
+out:
     return status;
 }
 

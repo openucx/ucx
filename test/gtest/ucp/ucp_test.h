@@ -89,6 +89,8 @@ public:
 
         ucp_context_h ucph() const;
 
+        ucp_listener_h listenerh() const;
+
         unsigned progress(int worker_index = 0);
 
         int get_num_workers() const;

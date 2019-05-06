@@ -31,6 +31,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_iface_t, uct_iface_t);
 static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
+    uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
@@ -42,15 +44,11 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
      * the private_data header (to hold the length of the data) */
     iface_attr->max_conn_priv   = UCT_RDMACM_MAX_CONN_PRIV;
 
-    return UCS_OK;
-}
+    if (rdmacm_iface->is_server) {
+        iface_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_iface->cm_id));
+    }
 
-static int uct_rdmacm_iface_is_reachable(const uct_iface_h tl_iface,
-                                         const uct_device_addr_t *dev_addr,
-                                         const uct_iface_addr_t *iface_addr)
-{
-    /* Reachability can be checked with the uct_md_is_sockaddr_accessible API call */
-    return 1;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
@@ -150,7 +148,7 @@ static uct_iface_ops_t uct_rdmacm_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_iface_t),
     .iface_query              = uct_rdmacm_iface_query,
-    .iface_is_reachable       = uct_rdmacm_iface_is_reachable,
+    .iface_is_reachable       = (void*)ucs_empty_function_return_zero,
     .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_get_address        = uct_rdmacm_iface_get_address
 };
