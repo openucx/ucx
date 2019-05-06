@@ -587,11 +587,15 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
                     unsigned length, unsigned flags)
 {
     ucs_status_t     status;
-    uct_am_handler_t *handler = &iface->am[id];
+    uct_am_handler_t *handler;
 
-    ucs_assert(id < UCT_AM_ID_MAX);
+    ucs_assertv(id < UCT_AM_ID_MAX, "invalid am id: %d (max: %lu)",
+                id, UCT_AM_ID_MAX - 1);
+
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
+
+    handler = &iface->am[id];
     status = handler->cb(handler->arg, data, length, flags);
     ucs_assert((status == UCS_OK) ||
                ((status == UCS_INPROGRESS) && (flags & UCT_CB_PARAM_FLAG_DESC)));

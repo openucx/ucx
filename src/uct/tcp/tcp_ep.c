@@ -419,12 +419,9 @@ static inline void
 uct_tcp_ep_comp_recv_am(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                         uct_tcp_am_hdr_t *hdr)
 {
-    ucs_assertv(hdr->am_id < UCT_AM_ID_MAX, "invalid am id: %d", hdr->am_id);
-
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, hdr->am_id,
                        hdr + 1, hdr->length, "RECV fd %d", ep->fd);
-    uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
-                        hdr->length, 0);
+    uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1, hdr->length, 0);
 }
 
 unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
