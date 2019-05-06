@@ -198,7 +198,7 @@ typedef struct ucp_mem_attr {
  * @brief UCP Memory handle attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_mem_attr_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_attr_field {
     UCP_MEM_ATTR_FIELD_ADDRESS = UCS_BIT(0), /**< Virtual address */

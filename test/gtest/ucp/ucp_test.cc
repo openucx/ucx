@@ -607,6 +607,10 @@ ucp_context_h ucp_test_base::entity::ucph() const {
     return m_ucph;
 }
 
+ucp_listener_h ucp_test_base::entity::listenerh() const {
+    return m_listener;
+}
+
 unsigned ucp_test_base::entity::progress(int worker_index)
 {
     ucp_worker_h ucp_worker = worker(worker_index);
