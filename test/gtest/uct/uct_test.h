@@ -80,6 +80,9 @@ protected:
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle, int mem_type) const;
 
+        void get_rkey(uct_mem_h memh, uct_rkey_bundle *rkey_bundle,
+                      int mem_type) const;
+
         void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey,
                       const uct_memory_type_t mem_type) const;
@@ -155,6 +158,9 @@ protected:
     class mapped_buffer {
     public:
         mapped_buffer(size_t size, uint64_t seed, const entity& entity, size_t offset = 0,
+                      uct_memory_type_t mem_type = UCT_MD_MEM_TYPE_HOST);
+        mapped_buffer(void *ptr, size_t size, uct_mem_h memh, uint64_t seed,
+                      const entity& entity,
                       uct_memory_type_t mem_type = UCT_MD_MEM_TYPE_HOST);
         virtual ~mapped_buffer();
 

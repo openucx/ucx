@@ -441,11 +441,34 @@ void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem
 #endif
 }
 
+void uct_test::entity::get_rkey(uct_mem_h memh, uct_rkey_bundle *rkey_bundle,
+                                int mem_type) const
+{
+    if ((md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+        (md_attr().cap.reg_mem_types & UCS_BIT(mem_type))) {
+        void *rkey_buffer = malloc(md_attr().rkey_packed_size);
+        if (rkey_buffer == NULL) {
+            UCS_TEST_ABORT("Failed to allocake rkey buffer");
+        }
+
+        ucs_status_t status = uct_md_mkey_pack(m_md, memh, rkey_buffer);
+        ASSERT_UCS_OK(status);
+
+        status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+        ASSERT_UCS_OK(status);
+
+        free(rkey_buffer);
+    } else {
+        rkey_bundle->handle = NULL;
+        rkey_bundle->rkey   = UCT_INVALID_RKEY;
+        rkey_bundle->type   = NULL;
+    }
+}
+
 void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                  uct_rkey_bundle *rkey_bundle, int mem_type) const {
     static const char *alloc_name = "uct_test";
     ucs_status_t status;
-    void *rkey_buffer;
 
     if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
         if (mem_type == UCT_MD_MEM_TYPE_HOST) {
@@ -458,25 +481,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
             UCS_TEST_ABORT("wrong memory type");
         }
 
-        if ((md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-            (md_attr().cap.reg_mem_types & UCS_BIT(mem_type))) {
-            rkey_buffer = malloc(md_attr().rkey_packed_size);
-            if (rkey_buffer == NULL) {
-                UCS_TEST_ABORT("Failed to allocake rkey buffer");
-            }
+        get_rkey(mem->memh, rkey_bundle, mem_type);
 
-            status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
-            ASSERT_UCS_OK(status);
-
-            status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
-            ASSERT_UCS_OK(status);
-
-            free(rkey_buffer);
-        } else {
-            rkey_bundle->handle = NULL;
-            rkey_bundle->rkey   = UCT_INVALID_RKEY;
-            rkey_bundle->type   = NULL;
-        }
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
         status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
@@ -846,6 +852,22 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
     m_iov.count  = 1;
     m_iov.stride = 0;
     m_iov.memh   = memh();
+}
+
+uct_test::mapped_buffer::mapped_buffer(void *ptr, size_t size, uct_mem_h memh,
+                                       uint64_t seed, const entity& entity,
+                                       uct_memory_type_t mem_type) :
+    m_entity(entity)
+{
+    m_mem.method   = UCT_ALLOC_METHOD_LAST;
+    m_mem.address  = NULL;
+    m_mem.md       = NULL;
+    m_mem.memh     = memh;
+    m_mem.mem_type = mem_type;
+    m_mem.length   = 0;
+    m_buf          = ptr;
+    m_end          = (char*)ptr + size;
+    m_entity.get_rkey(memh, &m_rkey, mem_type);
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {

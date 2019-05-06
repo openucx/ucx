@@ -187,6 +187,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CXX11], [false])
      AM_CONDITIONAL([HAVE_TCMALLOC], [false])
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
+     AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
     ],
     [
@@ -284,6 +285,16 @@ AS_IF([test "x$with_docs_only" = xyes],
 
 
      #
+     # Install development headers
+     #
+     AC_ARG_ENABLE([devel-headers],
+                   AS_HELP_STRING([--enable-devel-headers],
+                                  [Enable installing development headers, default: NO]))
+     AM_CONDITIONAL([INSTALL_DEVEL_HEADERS],
+                    [test "x$enable_devel_headers" = "xyes"])
+
+
+     #
      # Path for valgrind-enabled libraries
      #
      AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
@@ -364,6 +375,7 @@ AC_MSG_NOTICE([Building documents only])
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
+AC_MSG_NOTICE([     Devel headers:   ${enable_devel_headers}])
 AC_MSG_NOTICE([       UCT modules:   <$(echo $uct_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([      CUDA modules:   <$(echo $uct_cuda_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([      ROCM modules:   <$(echo $uct_rocm_modules|tr ':' ' ') >])

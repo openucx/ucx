@@ -14,6 +14,9 @@ libuct_ib_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                         $(top_builddir)/src/uct/libuct.la
 libuct_ib_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(NUMA_LIBS) -version-info $(SOVERSION)
 libmlx5_ver           = $(shell (rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | head -1)
+libuct_ib_ladir       = $(includedir)/uct/ib
+
+nobase_dist_libuct_ib_la_HEADERS =
 
 noinst_HEADERS = \
 	base/ib_device.h \
@@ -27,6 +30,15 @@ libuct_ib_la_SOURCES = \
 	base/ib_iface.c \
 	base/ib_log.c \
 	base/ib_md.c
+
+devel_headers = \
+	base/ib_alloc.h
+
+if INSTALL_DEVEL_HEADERS
+nobase_dist_libuct_ib_la_HEADERS += $(devel_headers)
+else
+noinst_HEADERS += $(devel_headers)
+endif
 
 # TODO separate module for mlx5
 if HAVE_MLX5_HW

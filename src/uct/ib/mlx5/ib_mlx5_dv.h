@@ -14,6 +14,8 @@
 #include <ucs/type/status.h>
 #include <infiniband/verbs.h>
 
+#include <uct/ib/base/ib_md.h>
+
 typedef struct {
     struct mlx5dv_obj  dv;
 } uct_ib_mlx5dv_t;
