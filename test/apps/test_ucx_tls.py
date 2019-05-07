@@ -9,6 +9,7 @@ import sys
 import subprocess
 import os
 import re
+import commands
 from distutils.version import LooseVersion
 
 
@@ -83,17 +84,19 @@ def find_am_transport(dev, neps, override = 0) :
     if (override):
         os.putenv("UCX_NUM_EPS", "2")
 
-    output = subprocess.check_output(ucx_info + " -n " + str(neps) + " | grep am", shell=True)
+    status, output = commands.getstatusoutput(ucx_info + " -n " + str(neps) + " | grep am")
     #print output
 
     match  = re.search(r'\d+:(\S+)/\S+', output)
-    am_tls = match.group(1)
+    if match:
+        am_tls = match.group(1)
+        #print am_tls
+        if (override):
+            os.unsetenv("UCX_NUM_EPS")
 
-    #print am_tls
-    if (override):
-        os.unsetenv("UCX_NUM_EPS")
-
-    return am_tls
+        return am_tls
+    else:
+        return "no am tls"
 
 
 if len(sys.argv) > 1:
@@ -101,15 +104,16 @@ if len(sys.argv) > 1:
 else:
     bin_prefix = "./src/tools/info"
 
-dev_list = subprocess.check_output("ibstat -l", shell=True).splitlines()
+status, output = commands.getstatusoutput("ibv_devinfo  -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1 ")
+dev_list = output.splitlines()
 port = "1"
 
 for dev in sorted(dev_list):
-    dev_attrs = subprocess.check_output("ibstat " + dev + " " + port, shell=True)
-    if dev_attrs.find("State: Active") == -1:
+    status, dev_attrs = commands.getstatusoutput("ibv_devinfo -d " + dev + " -i " + port)
+    if dev_attrs.find("PORT_ACTIVE") == -1:
         continue
     
-    if dev_attrs.find("Link layer: Ethernet") == -1:
+    if dev_attrs.find("Ethernet") == -1:
         dev_tl_map = am_tls[dev[0:dev.index('_')]]
         dev_tl_override_map = am_tls[dev[0:dev.index('_')] + "_override"]
         override = 1

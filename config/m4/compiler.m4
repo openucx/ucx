@@ -316,7 +316,12 @@ AC_LANG_PUSH([C++])
 SAVE_CXXFLAGS="$CXXFLAGS"
 CXX11FLAGS="-std=c++11"
 CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[int main() { return 0; } ]])],
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
+					#include <string>
+					int main() {
+						std::to_string(1);
+						return 0;
+					} ]])],
                   [AC_MSG_RESULT([yes])
                    AC_SUBST([CXX11FLAGS])
                    cxx11_happy=yes],
