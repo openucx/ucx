@@ -484,11 +484,11 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     return UCS_OK;
 }
 
+#if HAVE_EXP_UMR
 static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
                                              void *base_addr,
                                              struct ibv_mr **indirect_mr_p)
 {
-#if HAVE_EXP_UMR
     struct ibv_exp_mem_region *mem_reg = NULL;
     struct ibv_exp_send_wr wr, *bad_wr;
     struct ibv_exp_create_mr_in mrin;
@@ -544,7 +544,7 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     list_size                           = 1;
     mrin.attr.create_flags              = IBV_EXP_MR_INDIRECT_KLMS;
     wr.ext_op.umr.umr_type              = IBV_EXP_UMR_MR_LIST;
-#endif
+#endif /* HAVE_EXP_UMR_KSM */
 
     mrin.attr.exp_access_flags          = UCT_IB_MEM_ACCESS_FLAGS;
     mrin.attr.max_klm_list_size         = list_size;
@@ -647,10 +647,8 @@ err_free_umr:
 err:
     ucs_free(mem_reg);
     return status;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
+#endif /* HAVE_EXP_UMR */
 
 static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
@@ -1038,6 +1036,7 @@ uct_ib_verbs_reg_atomic_key(struct uct_ib_md *md, uct_ib_mem_t *memh,
     uct_ib_mem_t *ib_memh = memh;
     ucs_status_t status;
 
+#if HAVE_EXP_UMR
     status = uct_ib_verbs_md_post_umr(md, ib_memh->mr, memh->mr->addr + offset,
                                       &memh->atomic_mr);
     if (status != UCS_OK) {
@@ -1046,6 +1045,9 @@ uct_ib_verbs_reg_atomic_key(struct uct_ib_md *md, uct_ib_mem_t *memh,
 
     memh->atomic_rkey = memh->atomic_mr->rkey;
     return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
 }
 
 static ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
