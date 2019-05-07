@@ -182,6 +182,7 @@ protected:
         static void pattern_check_cuda(const void *buffer, size_t length, uint64_t seed);
     private:
         static uint64_t pat(uint64_t prev);
+        void set_iov();
 
         const uct_test::entity& m_entity;
 

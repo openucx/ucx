@@ -847,11 +847,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_rkey.handle = NULL;
         m_rkey.type   = NULL;
     }
-    m_iov.buffer = ptr();
-    m_iov.length = length();
-    m_iov.count  = 1;
-    m_iov.stride = 0;
-    m_iov.memh   = memh();
+    set_iov();
 }
 
 uct_test::mapped_buffer::mapped_buffer(void *ptr, size_t size, uct_mem_h memh,
@@ -868,6 +864,15 @@ uct_test::mapped_buffer::mapped_buffer(void *ptr, size_t size, uct_mem_h memh,
     m_buf          = ptr;
     m_end          = (char*)ptr + size;
     m_entity.get_rkey(memh, &m_rkey, mem_type);
+    set_iov();
+}
+
+void uct_test::mapped_buffer::set_iov() {
+    m_iov.buffer = ptr();
+    m_iov.length = length();
+    m_iov.count  = 1;
+    m_iov.stride = 0;
+    m_iov.memh   = memh();
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
