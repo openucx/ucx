@@ -151,16 +151,14 @@ UCS_TEST_P(test_ib_md, umr_noninline_klm, "MAX_INLINE_KLM_LIST=1") {
 
 UCS_TEST_P(test_ib_md, alloc_dm) {
     void *address;
-    size_t size, orig_size;
+    size_t size;
     ucs_status_t status;
     uct_ib_device_mem_h dev_mem;
     uct_mem_h dm_memh;
 
-    for (unsigned i = 0; i < 300; ++i) {
-        size = orig_size = i * 100;
-        if (size == 0) {
-            continue;
-        }
+    for (unsigned i = 1; i < 300; ++i) {
+        const size_t orig_size = i * 100;
+        size = orig_size;
 
         address = NULL;
 
