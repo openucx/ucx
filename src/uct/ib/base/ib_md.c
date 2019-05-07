@@ -1033,10 +1033,10 @@ static ucs_status_t
 uct_ib_verbs_reg_atomic_key(struct uct_ib_md *md, uct_ib_mem_t *memh,
                             off_t offset)
 {
+#if HAVE_EXP_UMR
     uct_ib_mem_t *ib_memh = memh;
     ucs_status_t status;
 
-#if HAVE_EXP_UMR
     status = uct_ib_verbs_md_post_umr(md, ib_memh->mr, memh->mr->addr + offset,
                                       &memh->atomic_mr);
     if (status != UCS_OK) {
