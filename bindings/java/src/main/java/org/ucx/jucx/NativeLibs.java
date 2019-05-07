@@ -6,10 +6,16 @@
 package org.ucx.jucx;
 
 import java.io.*;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.stream.Stream;
 
 public class NativeLibs {
     private static final String UCM  = "libucm.so";
@@ -69,27 +75,40 @@ public class NativeLibs {
      * Extracts shared UCT transport.
      */
     private static void extractUCTLibs() {
-        URL ucxResource = loader.getResource("ucx");
-        File ucxFolder = new File(ucxResource.getPath());
-        Path ucxTempFolder;
+        Path ucxTempFolder, ucxFolder;
+        Stream<Path> uctLibs;
+        FileSystem fileSystem = null;
         try {
             createTempDir();
             ucxTempFolder = Files.createDirectory(Paths.get(tempDir.getPath(), "ucx"));
             ucxTempFolder.toFile().deleteOnExit();
+            URI uri = NativeLibs.class.getClassLoader().getResource("ucx").toURI();
+            if ("jar".equals(uri.getScheme())) {
+                fileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap(), null);
+                ucxFolder = fileSystem.getPath("ucx");
+            } else {
+                ucxFolder = Paths.get(uri);
+            }
+            uctLibs = Files.walk(ucxFolder, 1);
         } catch (IOException ex) {
             errorMessage = "Failed to create temp directory";
             return;
+        } catch (URISyntaxException e) {
+            errorMessage = "Failed to find ucx resources";
+            return;
         }
-        for (File uctLib: ucxFolder.listFiles()) {
-            if (!uctLib.getName().startsWith("libuct_")) {
-                continue;
+
+        uctLibs.forEach(filePath -> {
+            if (!filePath.getFileName().toString().startsWith("libuct_")) {
+                return;
             }
             FileOutputStream os = null;
-            FileInputStream is = null;
-            File out = new File(ucxTempFolder.toAbsolutePath().toString(), uctLib.getName());
+            InputStream is = null;
+            File out = new File(ucxTempFolder.toAbsolutePath().toString(),
+                filePath.getFileName().toString());
             out.deleteOnExit();
             try {
-                is = new FileInputStream(uctLib);
+                is = NativeLibs.class.getResourceAsStream(filePath.toString());
                 os = new FileOutputStream(out);
                 copy(is, os);
             } catch (IOException ex) {
@@ -99,6 +118,10 @@ public class NativeLibs {
                 closeQuietly(os);
                 closeQuietly(is);
             }
+        });
+
+        if (fileSystem != null) {
+            closeQuietly(fileSystem);
         }
     }
 
