@@ -35,6 +35,15 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
      ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
 
+#define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_strm) \
+    if (_strm == 0) { \
+        ucs_status_t _status; \
+        _status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&(_strm), cudaStreamNonBlocking)); \
+        if (UCS_OK != _status) { \
+            return UCS_ERR_IO_ERROR; \
+        } \
+    }
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t length,
                                    int direction, cudaStream_t stream,
@@ -79,13 +88,7 @@ ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
 
-    if (iface->stream_d2h == 0) {
-        status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&iface->stream_d2h,
-                               cudaStreamNonBlocking));
-        if (UCS_OK != status) {
-            return UCS_ERR_IO_ERROR;
-        }
-    }
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_d2h);
 
     status = uct_cuda_copy_post_cuda_async_copy(tl_ep, iov[0].buffer, (void *)remote_addr,
                                                 iov[0].length, cudaMemcpyDeviceToHost,
@@ -107,13 +110,7 @@ ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
 
-    if (iface->stream_h2d == 0) {
-        status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&iface->stream_h2d,
-                               cudaStreamNonBlocking));
-        if (UCS_OK != status) {
-            return UCS_ERR_IO_ERROR;
-        }
-    }
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_h2d);
 
     status = uct_cuda_copy_post_cuda_async_copy(tl_ep, (void *)remote_addr,  iov[0].buffer,
                                                 iov[0].length, cudaMemcpyHostToDevice,
@@ -133,10 +130,14 @@ ucs_status_t uct_cuda_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
 
-    status = UCT_CUDA_FUNC(cudaMemcpy((void *)remote_addr, buffer,
-                                      length, cudaMemcpyHostToDevice));
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_h2d);
+
+    UCT_CUDA_FUNC(cudaMemcpyAsync((void *)remote_addr, buffer, length,
+                                  cudaMemcpyHostToDevice, iface->stream_h2d));
+    status = UCT_CUDA_FUNC(cudaStreamSynchronize(iface->stream_h2d));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
