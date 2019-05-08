@@ -12,10 +12,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.nio.ByteBuffer;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class UcpEndpointTest {
     @Test
@@ -69,5 +71,79 @@ public class UcpEndpointTest {
 
         worker.close();
         context.close();
+    }
+
+    @Test
+    public void testGetNB() {
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestRmaFeature();
+        UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+        UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
+        UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        // Create endpoint worker1 -> worker2
+        UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHadnlingMode()
+            .setUcpAddress(worker2.getAddress());
+        UcpEndpoint endpoint = worker1.newEndpoint(epParams);
+
+        // Allocate 2 source and 2 destination buffers, to perform 2 RDMA Read operations
+        ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer src2 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer dst1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer dst2 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        src1.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
+        src2.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT + UcpMemoryTest.RANDOM_TEXT);
+
+        // Register source buffers on context2
+        UcpMemory memory1 = context2.registerMemory(src1);
+        UcpMemory memory2 = context2.registerMemory(src2);
+
+        UcpRemoteKey rkey1 = endpoint.unpackRemoteKey(memory1.getRemoteKeyBuffer());
+        UcpRemoteKey rkey2 = endpoint.unpackRemoteKey(memory2.getRemoteKeyBuffer());
+
+        AtomicInteger numCompletedRequests = new AtomicInteger(0);
+        HashMap<UcxRequest, ByteBuffer> requestToData = new HashMap<>();
+        UcxCallback callback = new UcxCallback() {
+            @Override
+            public void onSuccess(UcxRequest request) {
+                // Here thread safety is guaranteed since worker progress is called after
+                // request added to map. In multithreaded environment could be an issue that
+                // callback is called, but request wasn't added yet to map.
+                if (requestToData.get(request) == dst1) {
+                    assertEquals(UcpMemoryTest.RANDOM_TEXT, dst1.asCharBuffer().toString().trim());
+                    memory1.deregister();
+                } else {
+                    assertEquals(UcpMemoryTest.RANDOM_TEXT + UcpMemoryTest.RANDOM_TEXT,
+                        dst2.asCharBuffer().toString().trim());
+                    memory2.deregister();
+                }
+                numCompletedRequests.incrementAndGet();
+            }
+        };
+
+        // Submit 2 get requests
+        UcxRequest request1 = endpoint.getNonBlocking(memory1.getAddress(), rkey1, dst1, callback);
+        UcxRequest request2 = endpoint.getNonBlocking(memory2.getAddress(), rkey2, dst2, callback);
+
+        // Map each request to corresponding data buffer.
+        requestToData.put(request1, dst1);
+        requestToData.put(request2, dst2);
+
+        // Wait for 2 get operations to complete
+        while (numCompletedRequests.get() != 2) {
+            worker1.progress();
+        }
+
+        assertTrue(request1.isCompleted() && request2.isCompleted());
+
+        rkey1.close();
+        rkey2.close();
+        endpoint.close();
+        worker1.close();
+        worker2.close();
+        context1.close();
+        context2.close();
     }
 }
