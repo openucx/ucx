@@ -4,6 +4,7 @@
  */
 #include "jucx_common_def.h"
 #include "org_ucx_jucx_ucp_UcpMemory.h"
+#include "org_ucx_jucx_ucp_UcpRemoteKey.h"
 
 
 JNIEXPORT void JNICALL
@@ -35,4 +36,10 @@ JNIEXPORT void JNICALL
 Java_org_ucx_jucx_ucp_UcpMemory_releaseRkeyBufferNative(JNIEnv *env, jclass cls, jobject rkey_buf)
 {
     ucp_rkey_buffer_release(env->GetDirectBufferAddress(rkey_buf));
+}
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_ucp_UcpRemoteKey_rkeyDestroy(JNIEnv *env, jclass cls, jlong rkey_ptr)
+{
+    ucp_rkey_destroy((ucp_rkey_h) rkey_ptr);
 }

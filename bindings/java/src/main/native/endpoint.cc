@@ -85,3 +85,23 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_destroyEndpointNative(JNIEnv *env, jclass cls,
 {
     ucp_ep_destroy((ucp_ep_h) ep_ptr);
 }
+
+JNIEXPORT jobject JNICALL
+Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
+                                                  jlong ep_ptr, jobject rkey_buf)
+{
+    ucp_rkey_h rkey;
+
+    ucs_status_t status = ucp_ep_rkey_unpack((ucp_ep_h) ep_ptr,
+                                             env->GetDirectBufferAddress(rkey_buf),
+                                             &rkey);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    jclass ucp_rkey_cls = env->FindClass("org/ucx/jucx/ucp/UcpRemoteKey");
+    jmethodID constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
+    jobject result = env->NewObject(ucp_rkey_cls, constructor, (native_ptr)rkey);
+
+    return result;
+}
