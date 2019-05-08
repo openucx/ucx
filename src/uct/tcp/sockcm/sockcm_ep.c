@@ -23,19 +23,19 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
 
     ep->sock_id_ctx = ucs_malloc(sizeof(*ep->sock_id_ctx), "client sock_id_ctx");
     if (ep->sock_id_ctx == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
+	status = UCS_ERR_NO_MEMORY;
+	goto out;
     }
 
     dest_addr = (struct sockaddr *) &(ep->remote_addr);
 
     status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
-                               &ep->sock_id_ctx->sock_id);
+			       &ep->sock_id_ctx->sock_id);
     if (status != UCS_OK) {
-        ucs_debug("unable to create client socket for sockcm");
-        goto out_free;
+	goto out_free;
     }
 
+    ep->sock_id_ctx->ep = ep;
     ucs_list_add_tail(&iface->used_sock_ids_list, &ep->sock_id_ctx->list);
     ucs_debug("ep %p, new sock_id %d", ep, ep->sock_id_ctx->sock_id);
     status = UCS_OK;
@@ -48,32 +48,45 @@ out:
     return status;
 }
 
-ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
+ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
 {
     uct_sockcm_conn_param_t conn_param;
     uct_sockcm_priv_data_hdr_t *hdr;
     ssize_t sent_len = 0;
+    ssize_t recv_len = 0;
+    ssize_t offset = 0;
+    int connect_confirm = -1;
 
     memset(&conn_param.private_data, 0, UCT_SOCKCM_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
 
     /* pack worker address into private data */
-    hdr->length = ep->pack_cb(ep->pack_cb_arg, "DEV_NAME_NULL",
+    hdr->length = ep->pack_cb(ep->pack_cb_arg, "eth0",
                               (void*)conn_param.private_data);
     if (hdr->length < 0) {
-        ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
+        ucs_error("sockcm client (iface=%p) failed to fill "
                   "private data. status: %s",
-                  iface, ep, ucs_status_string(hdr->length));
+                  iface, ucs_status_string(hdr->length));
         return UCS_ERR_IO_ERROR;
     }
-    ucs_assert(hdr->length + sizeof(int) <= UCT_SOCKCM_PRIV_DATA_LEN);
+    hdr->status = UCS_OK;
     conn_param.private_data_len = sizeof(uct_sockcm_conn_param_t);
 
-    sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param,
-                    conn_param.private_data_len, 0);
-    ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
-    /* TODO: handle when all data is not sent in one op */
-    ucs_assert(sent_len == conn_param.private_data_len);
+    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &connect_confirm,
+                    sizeof(int), 0);
+    ucs_debug("recv len = %d\n", (int) recv_len);
+    ucs_debug("connect confirm = %d\n", connect_confirm);
+
+    sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param + offset,
+                    (conn_param.private_data_len - offset), 0);
+    ucs_debug("send_len = %d bytes %m", (int) sent_len);
+
+    if (ep != NULL) {
+        pthread_mutex_lock(&ep->ops_mutex);
+        ep->status = UCS_OK;
+        uct_sockcm_ep_invoke_completions(ep, UCS_OK);
+        pthread_mutex_unlock(&ep->ops_mutex);
+    }
 
     return UCS_OK;
 }
@@ -84,32 +97,6 @@ static inline void uct_sockcm_ep_add_to_pending(uct_sockcm_iface_t *iface, uct_s
     ucs_list_add_tail(&iface->pending_eps_list, &ep->list_elem);
     ep->is_on_pending = 1;
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-}
-
-static void uct_sockcm_ep_event_handler(int fd, void *arg)
-{
-    uct_sockcm_iface_t *iface = NULL;
-    ssize_t recv_len          = 0;
-    uct_sockcm_ep_t *ep       = (uct_sockcm_ep_t *) arg;
-    char conn_status;
-    ucs_status_t status;
-
-    /* recv to see if listener accepted or not */
-    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &conn_status,
-                    sizeof(conn_status), 0);
-    ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
-
-    status = conn_status ? UCS_ERR_REJECTED : UCS_OK;
-
-    pthread_mutex_lock(&ep->ops_mutex);
-    if (status == UCS_OK) {
-        ep->status = status;
-    } else {
-        iface = ucs_derived_of(ep->super.super.iface, uct_sockcm_iface_t);
-        uct_sockcm_ep_set_failed(&iface->super.super, &ep->super.super, status);
-    }
-    uct_sockcm_ep_invoke_completions(ep, status);
-    pthread_mutex_unlock(&ep->ops_mutex);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
@@ -172,20 +159,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
-    status = uct_sockcm_ep_send_client_info(iface, self);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = ucs_sys_fcntl_modfl(self->sock_id_ctx->sock_id, O_NONBLOCK, 0); 
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = ucs_async_set_event_handler(iface->super.worker->async->mode,
-                                         self->sock_id_ctx->sock_id, POLLIN,
-                                         uct_sockcm_ep_event_handler,
-                                         self, iface->super.worker->async);
+    status = uct_sockcm_send_client_info(iface, self);
     if (status != UCS_OK) {
         goto err;
     }
@@ -196,7 +170,8 @@ add_to_pending:
     uct_sockcm_ep_add_to_pending(iface, self);
 out:
     ucs_debug("created an SOCKCM endpoint on iface %p, "
-              "remote addr: %s", iface,
+              "iface sock_id: %d remote addr: %s",
+               iface, iface->sock_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
     self->status = UCS_OK;
@@ -233,6 +208,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 
     if (self->sock_id_ctx != NULL) {
         sock_id_ctx     = self->sock_id_ctx;
+        sock_id_ctx->ep = NULL;
         ucs_debug("ep destroy: sock_id %d", sock_id_ctx->sock_id);
     }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);

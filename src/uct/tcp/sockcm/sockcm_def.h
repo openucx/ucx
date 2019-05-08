@@ -25,14 +25,14 @@ typedef struct uct_sockcm_iface   uct_sockcm_iface_t;
 typedef struct uct_sockcm_ep      uct_sockcm_ep_t;
 
 typedef struct uct_sockcm_priv_data_hdr {
-    ssize_t length;
+    unsigned int length;     /* length of the private data */
+    int8_t       status;
 } uct_sockcm_priv_data_hdr_t;
 
 typedef struct uct_sockcm_conn_param {
     uct_sockcm_priv_data_hdr_t hdr;
-    int                        fd;
-    char                       private_data[UCT_SOCKCM_PRIV_DATA_LEN];
-    unsigned int               private_data_len;
+    char                      private_data[UCT_SOCKCM_PRIV_DATA_LEN];
+    unsigned int              private_data_len;
 } uct_sockcm_conn_param_t;
 
 typedef struct uct_sockcm_ctx {

@@ -64,43 +64,13 @@ static ucs_status_t uct_sockcm_iface_get_address(uct_iface_h tl_iface, uct_iface
 static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-    ucs_status_t status   = UCS_OK;
-    int          *fd      = conn_request;
-    char         accept   = 0;
-    ssize_t      sent_len = -1;
-
-    /* Notify client of accept and close associated fd */
-    sent_len = send(*fd, (char *) &accept, sizeof(accept), 0);
-
-    if (sent_len < 0) {
-        ucs_debug("sockcm_listener: unable to send accept");
-        status = UCS_ERR_IO_ERROR;
-    } else {
-        ucs_debug("sockcm_listener: sent accept");
-    }
-
-    return status;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-    ucs_status_t status   = UCS_OK;
-    int          *fd      = conn_request;
-    char         reject = 1;
-    ssize_t      sent_len = -1;
-
-    /* Notify client of rejection and close associated fd */
-    sent_len = send(*fd, (char *) &reject, sizeof(reject), 0);
-
-    if (sent_len < 0) {
-        ucs_debug("sockcm_listener: unable to send reject");
-        status = UCS_ERR_IO_ERROR;
-    } else {
-        ucs_debug("sockcm_listener: sent reject");
-    }
-
-    return status;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_sockcm_ep_flush(uct_ep_h tl_ep, unsigned flags,
@@ -172,7 +142,7 @@ void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
 static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
                                              uct_sockcm_conn_param_t conn_param)
 {
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, &conn_param.fd,
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, NULL,
 			   conn_param.private_data, conn_param.private_data_len);
 }
 
@@ -180,15 +150,16 @@ static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
 {
     ssize_t recv_len          = 0;
+    ssize_t sent_len          = 0;
+    int     connect_confirm   = 42;
     uct_sockcm_iface_t *iface = arg;
     struct sockaddr peer_addr;
     socklen_t addrlen;
     int accept_fd;
     uct_sockcm_conn_param_t conn_param;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    uct_sockcm_ctx_t *sock_id_ctx;
 
-    /* accept initial client connection; iface accept/reject happens later */
+    // accept client connection
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
@@ -199,30 +170,24 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
         }
     }
 
-    ucs_debug("sockcm_iface %p: accepted connection from %s at fd %d %m", iface,
+    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d %m", iface,
               ucs_sockaddr_str(&peer_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN), accept_fd);
 
-    /* Unlike rdmacm, socket connect/accept does not permit exchange of
-     * connection parameters but we need to use send/recv on top of that
-     * We simulate that with an explicit receive */
-
-
-    sock_id_ctx = ucs_malloc(sizeof(uct_sockcm_ctx_t), "accepted sock_id_ctx");
-    if (sock_id_ctx == NULL) {
-        ucs_debug("sockcm_listener: unable to create mem for accepted fd");
-    }
-    sock_id_ctx->sock_id = accept_fd;
-    ucs_list_add_tail(&iface->accepted_sock_ids_list, &sock_id_ctx->list);
+    sent_len = send(accept_fd, (char *) &connect_confirm, sizeof(int), 0);
+    ucs_debug("send_len = %d bytes %m", (int) sent_len);
 
     recv_len = recv(accept_fd, (char *) &conn_param,
                     sizeof(uct_sockcm_conn_param_t), 0);
-    ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
+    ucs_debug("recv len = %d\n", (int) recv_len);
 
+    // schedule connection req callback
     if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
-        conn_param.fd = accept_fd;
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     }
+
+    return;
+
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -262,6 +227,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_warn("sockcm does not support SIGIO");
     }
 
+    self->sock_id = -1;
     self->listen_fd = -1;
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
@@ -315,6 +281,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
         self->is_server        = 1;
     } else {
+        self->sock_id          = -1;
         self->is_server        = 0;
     }
 
@@ -347,16 +314,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
     while (!ucs_list_is_empty(&self->used_sock_ids_list)) {
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_sockcm_ctx_t, list);
-        ucs_async_remove_handler(sock_id_ctx->sock_id, 1);
-        ucs_debug("cleaning client fd = %d", sock_id_ctx->sock_id);
-        close(sock_id_ctx->sock_id);
-        ucs_free(sock_id_ctx);
-    }
-
-    while (!ucs_list_is_empty(&self->accepted_sock_ids_list)) {
-        sock_id_ctx = ucs_list_extract_head(&self->accepted_sock_ids_list,
-                                            uct_sockcm_ctx_t, list);
-        ucs_debug("cleaning accepted fd = %d", sock_id_ctx->sock_id);
         close(sock_id_ctx->sock_id);
         ucs_free(sock_id_ctx);
     }
