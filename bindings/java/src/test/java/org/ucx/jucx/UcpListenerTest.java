@@ -18,16 +18,15 @@ public class UcpListenerTest {
     @Test
     public void testCreateUcpListener() {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
-        UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
         InetSocketAddress ipv4 = new InetSocketAddress("0.0.0.0", port);
-        UcpListener ipv4Listener = new UcpListener(worker,
-            new UcpListenerParams().setSockAddr(ipv4));
+        UcpListener ipv4Listener = worker.newListener(new UcpListenerParams().setSockAddr(ipv4));
 
         assertNotNull(ipv4Listener);
         ipv4Listener.close();
 
         InetSocketAddress ipv6 = new InetSocketAddress("::", port);
-        UcpListener ipv6Listener = new UcpListener(worker,
+        UcpListener ipv6Listener = worker.newListener(
             new UcpListenerParams().setSockAddr(ipv6));
 
         assertNotNull(ipv6Listener);
