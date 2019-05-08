@@ -99,9 +99,6 @@ public class NativeLibs {
         }
 
         uctLibs.forEach(filePath -> {
-            if (!filePath.getFileName().toString().startsWith("libuct_")) {
-                return;
-            }
             FileOutputStream os = null;
             InputStream is = null;
             File out = new File(ucxTempFolder.toAbsolutePath().toString(),
