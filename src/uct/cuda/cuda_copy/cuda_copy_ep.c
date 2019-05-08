@@ -36,10 +36,10 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
                     (_rkey))
 
 #define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_strm) \
-    if (_strm == 0) { \
-        ucs_status_t _status; \
-        _status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&(_strm), cudaStreamNonBlocking)); \
-        if (UCS_OK != _status) { \
+    if ((_strm) == 0) { \
+        ucs_status_t status; \
+        status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&(_strm), cudaStreamNonBlocking)); \
+        if (UCS_OK != status) { \
             return UCS_ERR_IO_ERROR; \
         } \
     }
