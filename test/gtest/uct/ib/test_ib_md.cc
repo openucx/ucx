@@ -8,7 +8,9 @@
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
+#if HAVE_MLX5_HW
 #include <uct/ib/mlx5/ib_mlx5.h>
+#endif
 
 #include <common/test.h>
 #include <uct/test_md.h>
