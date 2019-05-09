@@ -7,6 +7,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
+#include <uct/ib/base/ib_alloc.h>
 #include <uct/ib/base/ib_md.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 
@@ -147,5 +148,44 @@ UCS_TEST_P(test_ib_md, umr_noninline_klm, "MAX_INLINE_KLM_LIST=1") {
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
 #endif
+
+UCS_TEST_P(test_ib_md, alloc_dm) {
+    void *address;
+    size_t size;
+    ucs_status_t status;
+    uct_ib_device_mem_h dev_mem;
+    uct_mem_h dm_memh;
+
+    for (unsigned i = 1; i < 300; ++i) {
+        const size_t orig_size = i * 100;
+        size = orig_size;
+
+        address = NULL;
+
+        status = uct_ib_md_alloc_device_mem(md(), &size, &address, UCT_MD_MEM_ACCESS_ALL,
+                                    "test DM", &dev_mem);
+        if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_ERR_UNSUPPORTED)) {
+            continue;
+        }
+
+        ASSERT_UCS_OK(status);
+        EXPECT_GT(size, 0ul);
+
+        EXPECT_GE(size, orig_size);
+        EXPECT_TRUE(address != NULL);
+        EXPECT_TRUE(dev_mem != NULL);
+
+        memset(address, 0xBB, size);
+
+        status = uct_md_mem_reg(md(), address, size, UCT_MD_MEM_ACCESS_ALL,
+                                &dm_memh);
+        ASSERT_UCS_OK(status);
+
+        status = uct_md_mem_dereg(md(), dm_memh);
+        ASSERT_UCS_OK(status);
+
+        uct_ib_md_release_device_mem(dev_mem);
+    }
+}
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)

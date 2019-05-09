@@ -51,6 +51,15 @@ noinst_HEADERS = \
 	wireup/wireup.h \
 	stream/stream.h
 
+devel_headers = \
+	core/ucp_resource.h
+
+if INSTALL_DEVEL_HEADERS
+nobase_dist_libucp_la_HEADERS += $(devel_headers)
+else
+noinst_HEADERS += $(devel_headers)
+endif
+
 if ENABLE_EXPERIMENTAL_API
 nobase_dist_libucp_la_HEADERS += api/ucpx.h
 else

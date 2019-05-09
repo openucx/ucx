@@ -7,6 +7,7 @@
  */
 
 #include "ib_md.h"
+#include "ib_alloc.h"
 #include "ib_device.h"
 
 #include <ucs/arch/atomic.h>
@@ -417,10 +418,14 @@ uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 
 static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
                                             size_t length, uint64_t exp_access,
-                                            const char *exp_prefix)
+                                            const char *exp_prefix, int line)
 {
     char msg[200] = {0};
     struct rlimit limit_info;
+
+    if (!ucs_log_is_enabled(level)) {
+        return;
+    }
 
     ucs_snprintf_zero(msg, sizeof(msg),
                       "ibv_%sreg_mr(address=%p, length=%zu, %saccess=0x%lx) failed: %m",
@@ -435,7 +440,7 @@ static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address
                           "(current: %llu kbytes)", limit_info.rlim_cur / UCS_KBYTE);
     }
 
-    ucs_log(level, "%s", msg);
+    ucs_log_dispatch(__FILE__, line, "??", level, "%s", msg);
 }
 
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
@@ -458,7 +463,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
             uct_ib_md_print_mem_reg_err_msg(level, in.addr, in.length,
-                                            in.exp_access, "exp_");
+                                            in.exp_access, "exp_", __LINE__);
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -469,7 +474,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
             uct_ib_md_print_mem_reg_err_msg(level, address, length,
-                                            UCT_IB_MEM_ACCESS_FLAGS, "");
+                                            UCT_IB_MEM_ACCESS_FLAGS, "",
+                                            __LINE__);
             return UCS_ERR_IO_ERROR;
         }
     }
@@ -478,13 +484,12 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
-                                             uct_ib_mem_t *memh,
-                                             off_t offset)
-{
 #if HAVE_EXP_UMR
+static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
+                                             void *base_addr,
+                                             struct ibv_mr **indirect_mr_p)
+{
     struct ibv_exp_mem_region *mem_reg = NULL;
-    struct ibv_mr *mr = memh->mr;
     struct ibv_exp_send_wr wr, *bad_wr;
     struct ibv_exp_create_mr_in mrin;
     ucs_status_t status;
@@ -539,7 +544,7 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
     list_size                           = 1;
     mrin.attr.create_flags              = IBV_EXP_MR_INDIRECT_KLMS;
     wr.ext_op.umr.umr_type              = IBV_EXP_UMR_MR_LIST;
-#endif
+#endif /* HAVE_EXP_UMR_KSM */
 
     mrin.attr.exp_access_flags          = UCT_IB_MEM_ACCESS_FLAGS;
     mrin.attr.max_klm_list_size         = list_size;
@@ -557,7 +562,7 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
     }
 
     for (i = 0; i < list_size; i++) {
-        mem_reg[i].base_addr            = (uintptr_t) mr->addr + i * reg_length;
+        mem_reg[i].base_addr            = (uintptr_t)mr->addr + i * reg_length;
         mem_reg[i].length               = reg_length;
         mem_reg[i].mr                   = mr;
     }
@@ -565,7 +570,7 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
     ucs_assert(list_size >= 1);
     mem_reg[list_size - 1].length       = mr->length % reg_length;
     wr.ext_op.umr.mem_list.mem_reg_list = mem_reg;
-    wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) mr->addr + offset;
+    wr.ext_op.umr.base_addr             = (uintptr_t)base_addr;
     wr.ext_op.umr.num_mrs               = list_size;
     wr.ext_op.umr.modified_mr           = umr;
 
@@ -625,11 +630,10 @@ static ucs_status_t uct_ib_verbs_md_post_umr(uct_ib_md_t *md,
         ibv_exp_dealloc_mkey_list_memory(wr.ext_op.umr.memory_objects);
     }
 
-    ucs_debug("UMR registered memory %p..%p offset 0x%lx on %s lkey 0x%x rkey 0x%x",
-              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
-              umr->lkey, umr->rkey);
-    memh->atomic_mr   = umr;
-    memh->atomic_rkey = umr->rkey;
+    ucs_debug("UMR registered memory 0x%lx..0x%lx/%p on %s lkey 0x%x rkey 0x%x",
+              (uintptr_t)mr->addr, (uintptr_t)mr->addr + mr->length, base_addr,
+              uct_ib_device_name(&md->dev), umr->lkey, umr->rkey);
+    *indirect_mr_p = umr;
 
     ucs_free(mem_reg);
     return UCS_OK;
@@ -643,10 +647,8 @@ err_free_umr:
 err:
     ucs_free(mem_reg);
     return status;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
+#endif /* HAVE_EXP_UMR */
 
 static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
@@ -835,6 +837,141 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
     }
 }
 
+ucs_status_t uct_ib_md_alloc_device_mem(uct_md_h uct_md, size_t *length_p,
+                                        void **address_p, unsigned flags,
+                                        const char *alloc_name,
+                                        uct_ib_device_mem_h *dev_mem_p)
+{
+#if HAVE_IBV_EXP_DM
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    struct ibv_exp_alloc_dm_attr dm_attr;
+    struct ibv_exp_reg_mr_in mr_in;
+    uct_ib_device_mem_t *dev_mem;
+    ucs_status_t status;
+
+    dev_mem = ucs_malloc(sizeof(*dev_mem), "ib_device_mem");
+    if (dev_mem == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* Align the allocation to a potential use of registration cache */
+    *length_p = ucs_align_up_pow2(*length_p, md->alloc_align);
+
+    /* Allocate device memory */
+    dm_attr.length    = *length_p;
+    dm_attr.comp_mask = 0;
+    dev_mem->dm = UCS_PROFILE_CALL(ibv_exp_alloc_dm, md->dev.ibv_context,
+                                   &dm_attr);
+    if (dev_mem->dm == NULL) {
+        ucs_debug("ibv_exp_alloc_dm(dev=%s, length=%zu) failed: %m",
+                  uct_ib_device_name(&md->dev), dm_attr.length);
+        status = UCS_ERR_NO_RESOURCE;
+        goto err_free_struct;
+    }
+
+    /* Register device memory (the resulting key will have address==0) */
+    mr_in.addr       = 0;
+    mr_in.pd         = md->pd;
+    mr_in.length     = *length_p;
+    mr_in.exp_access = UCT_IB_MEM_ACCESS_FLAGS;
+    mr_in.comp_mask  = IBV_EXP_REG_MR_DM;
+    mr_in.dm         =  dev_mem->dm;
+    dev_mem->mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &mr_in);
+    if (dev_mem->mr == NULL) {
+        uct_ib_md_print_mem_reg_err_msg(UCS_LOG_LEVEL_ERROR, mr_in.addr,
+                                        mr_in.length, mr_in.exp_access, "exp_",
+                                        __LINE__);
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_dm;
+    }
+
+    dev_mem->address = ((uct_mlx5_dm_va_t*)dev_mem->dm)->start_va;
+    *address_p       = dev_mem->address;
+    *dev_mem_p       = dev_mem;
+    ucs_list_add_tail(&md->dm_list, &dev_mem->list);
+
+    ucs_debug("allocated device memory %p..%p on %s lkey 0x%x rkey 0x%x",
+              dev_mem->address, dev_mem->address + dev_mem->mr->length,
+              uct_ib_device_name(&md->dev), dev_mem->mr->lkey, dev_mem->mr->rkey);
+    return UCS_OK;
+
+err_free_dm:
+    UCS_PROFILE_CALL(ibv_exp_free_dm, dev_mem->dm);
+err_free_struct:
+    ucs_free(dev_mem);
+err:
+    return status;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+void uct_ib_md_release_device_mem(uct_ib_device_mem_h dev_mem)
+{
+#if HAVE_IBV_EXP_DM
+    int ret;
+
+    ucs_list_del(&dev_mem->list);
+    (void)uct_ib_dereg_mr(dev_mem->mr);
+
+    ret = UCS_PROFILE_CALL(ibv_exp_free_dm, dev_mem->dm);
+    if (ret) {
+       ucs_warn("ibv_exp_free_dm() failed: %m");
+    }
+
+    ucs_free(dev_mem);
+#endif
+}
+
+static ucs_status_t
+uct_ib_md_reg_check_device_mem(uct_ib_md_t *md, void *address, size_t length,
+                               unsigned flags, uct_ib_mem_t *memh)
+{
+    ucs_status_t status = UCS_ERR_NO_ELEM;
+#if HAVE_IBV_EXP_DM
+    uct_ib_device_mem_t *dev_mem;
+    off_t offset;
+
+    /* try to find a device memory object which covers the requested address range */
+    ucs_list_for_each(dev_mem, &md->dm_list, list) {
+        if ((address >= dev_mem->address) &&
+            (address + length <= dev_mem->address + dev_mem->mr->length)) {
+            status = UCS_OK;
+            break;
+        }
+    }
+    if (status != UCS_OK) {
+        goto err; /* device memory object not found */
+    }
+
+    /* create access key as indirect key over DM key */
+    status = uct_ib_verbs_md_post_umr(md, dev_mem->mr, address, &memh->mr);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    uct_ib_mem_init(memh, flags, 0);
+
+    /* create atomic key as indirect key over DM key with atomic offset */
+    offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
+    status = uct_ib_verbs_md_post_umr(md, dev_mem->mr, address + offset,
+                                      &memh->atomic_mr);
+    if (status != UCS_OK) {
+        goto err_dereg_mr;
+    }
+
+    memh->flags       |= UCT_IB_MEM_FLAG_ATOMIC_MR;
+    memh->atomic_rkey  = memh->atomic_mr->rkey;
+    return UCS_OK;
+
+err_dereg_mr:
+    (void)uct_ib_dereg_mr(memh->mr);
+err:
+#endif
+    return status;
+}
+
 static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                      void **address_p, unsigned flags,
                                      const char *alloc_name, uct_mem_h *memh_p)
@@ -892,6 +1029,27 @@ err:
 #endif
 }
 
+static ucs_status_t
+uct_ib_verbs_reg_atomic_key(struct uct_ib_md *md, uct_ib_mem_t *memh,
+                            off_t offset)
+{
+#if HAVE_EXP_UMR
+    uct_ib_mem_t *ib_memh = memh;
+    ucs_status_t status;
+
+    status = uct_ib_verbs_md_post_umr(md, ib_memh->mr, memh->mr->addr + offset,
+                                      &memh->atomic_mr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    memh->atomic_rkey = memh->atomic_mr->rkey;
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
 static ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
                                                   uct_ib_mem_t *memh)
 {
@@ -926,6 +1084,11 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_status_t status;
     uint64_t exp_access;
+
+    status = uct_ib_md_reg_check_device_mem(md, address, length, flags, memh);
+    if (status != UCS_ERR_NO_ELEM) {
+        return status;
+    }
 
     exp_access = uct_ib_md_access_flags(md, flags, length);
     status = uct_ib_md_reg_mr(md, address, length, exp_access, silent, &memh->mr);
@@ -1061,7 +1224,7 @@ static uct_md_ops_t uct_ib_md_ops = {
 
 uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .memh_struct_size  = sizeof(uct_ib_mem_t),
-    .reg_atomic_key    = uct_ib_verbs_md_post_umr,
+    .reg_atomic_key    = uct_ib_verbs_reg_atomic_key,
     .dereg_atomic_key  = uct_ib_verbs_dereg_atomic_key,
 };
 
@@ -1332,6 +1495,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             }
 
             md->super.ops         = &uct_ib_md_rcache_ops;
+            md->alloc_align       = md_config->rcache.alignment;
             md->reg_cost.overhead = md_config->rcache.overhead;
             md->reg_cost.growth   = 0; /* It's close enough to 0 */
             ucs_debug("%s: using registration cache",
@@ -1360,6 +1524,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             md->global_odp.lkey      = md->global_odp.mr->lkey;
             md->global_odp.flags     = UCT_IB_MEM_FLAG_ODP;
             md->super.ops            = &uct_ib_md_global_odp_ops;
+            md->alloc_align          = 1;
             md->reg_cost.overhead    = 10e-9;
             md->reg_cost.growth      = 0;
             uct_ib_mem_init(&md->global_odp, 0, in.exp_access);
@@ -1367,8 +1532,9 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             return UCS_OK;
 #endif
         } else if (!strcmp(md_config->reg_methods.rmtd[i], "direct")) {
-            md->super.ops = &uct_ib_md_ops;
-            md->reg_cost  = md_config->uc_reg_cost;
+            md->super.ops   = &uct_ib_md_ops;
+            md->alloc_align = 1;
+            md->reg_cost    = md_config->uc_reg_cost;
             ucs_debug("%s: using direct registration",
                       uct_ib_device_name(&md->dev));
             return UCS_OK;
@@ -1610,6 +1776,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     md->super.ops             = &uct_ib_md_ops;
     md->super.component       = &uct_ib_mdc;
     md->config                = md_config->ext;
+    ucs_list_head_init(&md->dm_list);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1726,6 +1893,11 @@ err_free_md:
 void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+
+    if (!ucs_list_is_empty(&md->dm_list)) {
+        ucs_warn("device memory list is not empty during md %s close",
+                 uct_ib_device_name(&md->dev));
+    }
 
     uct_ib_md_release_device_config(md);
     uct_ib_md_release_reg_method(md);

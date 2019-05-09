@@ -36,7 +36,7 @@ enum {
                                                        demand paging enabled */
     UCT_IB_MEM_FLAG_ATOMIC_MR       = UCS_BIT(1), /**< The memory region has UMR
                                                        for the atomic access */
-    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2)  /**< An atomic access was 
+    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2)  /**< An atomic access was
                                                        requested for the memory
                                                        region */
 };
@@ -63,6 +63,27 @@ typedef struct uct_ib_md_ext_config {
 
     size_t                   gid_index;    /**< IB GID index to use  */
 } uct_ib_md_ext_config_t;
+
+
+#if HAVE_IBV_EXP_DM
+
+/* uct_mlx5_dm_va is used to get pointer to DM mapped into process address space */
+typedef struct uct_mlx5_dm_va {
+    struct ibv_exp_dm  ibv_dm;
+    size_t             length;
+    uint64_t           *start_va;
+} uct_mlx5_dm_va_t;
+
+
+/* Device memory region */
+typedef struct uct_ib_device_mem {
+    struct ibv_exp_dm       *dm;      /* Device memory object */
+    struct ibv_mr           *mr;      /* Direct map memory region */
+    void                    *address; /* Virtual memory address */
+    ucs_list_link_t         list;     /* Entry in DM list in memory domain */
+} uct_ib_device_mem_t;
+
+#endif /* HAVE_IBV_EXP_DM */
 
 
 typedef struct uct_ib_mem {
@@ -109,7 +130,9 @@ typedef struct uct_ib_md {
     } custom_devices;
     int                      check_subnet_filter;
     uint64_t                 subnet_filter;
+    size_t                   alloc_align;
     double                   pci_bw;
+    ucs_list_link_t          dm_list;
 } uct_ib_md_t;
 
 

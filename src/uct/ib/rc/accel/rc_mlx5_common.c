@@ -11,16 +11,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 
 
-#if HAVE_IBV_EXP_DM
-/* uct_mlx5_dm_va is used to get pointer to DM mapped into process address space */
-typedef struct uct_mlx5_dm_va {
-    struct ibv_exp_dm  ibv_dm;
-    size_t             length;
-    uint64_t           *start_va;
-} uct_mlx5_dm_va_t;
-#endif
-
-
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),

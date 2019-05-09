@@ -21,5 +21,6 @@ $basedir/../configure \
 	--enable-memtrack \
 	--enable-fault-injection \
 	--enable-debug-data \
+	--enable-devel-headers \
 	--enable-mt \
 	"$@"
