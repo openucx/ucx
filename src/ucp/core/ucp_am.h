@@ -9,17 +9,22 @@
 #define UCP_AM_CB_BLOCK_SIZE 16
 
 
-typedef struct {
-    uint32_t     length;     /* length of an AM. Ideally it would be size_t
-                              * but we want to keep this struct at 64 bits
-                              * to fit in uct_ep_am_short header. MAX_SHORT
-                              * or b/zcopy MTU
-                              * should be much smaller than this anyway */
-    uint16_t     am_id;      /* Index into callback array */
-    uint16_t     flags;      /* currently unused in this header 
-                                because replies require long header
-                                defined by @ref ucp_am_send_flags */
-} UCS_S_PACKED ucp_am_hdr_t;
+typedef union {
+    struct {
+        uint32_t     length;      /* length of an AM. Ideally it would be size_t
+                                   * but we want to keep this struct at 64 bits
+                                   * to fit in uct_ep_am_short header. MAX_SHORT
+                                   * or b/zcopy MTU
+                                   * should be much smaller than this anyway */
+        uint16_t     am_id;       /* Index into callback array */
+        uint16_t     flags;       /* currently unused in this header 
+                                     because replies require long header
+                                     defined by @ref ucp_am_send_flags */
+    } am_hdr;
+
+    uint64_t u64;                 /* This is used to ensure the size of
+                                     the header is 64 bytes and aligned */
+} ucp_am_hdr_t;
 
 typedef struct {
     ucp_am_hdr_t super;
