@@ -252,17 +252,17 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size,
     int phsize;
     int i;
 
-    /* check if need to update only the one module which is being loaded */
+    /* check if need to update only the one shared object which is being loaded */
     if (ctx->dlopened_base_addr && (ctx->dlopened_base_addr != info->dlpi_addr)) {
         ucm_trace("not updating symbols in '%s'", info->dlpi_name);
         return 0;
     }
 
-    /* check if module is black-listed for this patch */
+    /* check if shared object is black-listed for this patch */
     if (ctx->patch->blacklist) {
         for (i = 0; ctx->patch->blacklist[i]; i++) {
             if (strstr(info->dlpi_name, ctx->patch->blacklist[i])) {
-                /* module is black-listed */
+                /* shared object is black-listed */
                 return 0;
             }
         }
@@ -278,11 +278,13 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size,
     ctx->status = ucm_reloc_modify_got(info->dlpi_addr, info->dlpi_phdr,
                                        info->dlpi_name, info->dlpi_phnum,
                                        phsize, ctx);
-    if (ctx->status == UCS_OK) {
-        return 0; /* continue iteration and patch all objects */
-    } else {
+    if (ctx->status != UCS_OK) {
         return -1; /* stop iteration if got a real error */
     }
+
+    /* If we patch only one shared object, stop iteration.
+     * Otherwise, continue iteration and patch all remaining objects. */
+    return ctx->dlopened_base_addr ? -1 : 0;
 }
 
 /* called with lock held */
@@ -323,9 +325,9 @@ static void *ucm_dlopen(const char *filename, int flag)
     }
 
     /*
-     * Every time a new object is loaded, we must update its relocations with
-     * our list of patches (including dlopen itself). We obtain the module base
-     * address to avoid updating any other modules except this one.
+     * Every time a new shared object is loaded, we must update its relocations
+     * with our list of patches (including dlopen itself). We obtain the object
+     * base address to avoid updating any other shared objects except this one.
      */
 
     ret = dlinfo(handle, RTLD_DI_LINKMAP, &lm_entry);
