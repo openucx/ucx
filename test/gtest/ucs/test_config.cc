@@ -22,17 +22,32 @@ typedef enum {
     COLOR_LAST
 } color_t;
 
+typedef enum {
+    MATERIAL_LEATHER,
+    MATERIAL_ALCANTARA,
+    MATERIAL_TEXTILE,
+    MATERIAL_LAST
+} material_t;
+
 const char *color_names[] = {
-    /*[COLOR_RED]   =*/ "red",
-    /*[COLOR_BLUE]  =*/ "blue",
-    /*[COLOR_BLACK] =*/ "black",
-    /*[COLOR_YELLOW] =*/ "yellow",
-    /*[COLOR_WHITE] =*/ "white",
-    /*[COLOR_LAST]  =*/ NULL
+    /* [COLOR_RED]    = */ "red",
+    /* [COLOR_BLUE]   = */ "blue",
+    /* [COLOR_BLACK]  = */ "black",
+    /* [COLOR_YELLOW] = */ "yellow",
+    /* [COLOR_WHITE]  = */ "white",
+    /* [COLOR_LAST]   = */ NULL
+};
+
+const char *material_names[] = {
+    /* [MATERIAL_LEATHER]   = */ "leather",
+    /* [MATERIAL_ALCANTARA] = */ "alcantara",
+    /* [MATERIAL_TEXTILE]   = */ "textile",
+    /* [MATERIAL_LAST]      = */ NULL
 };
 
 typedef struct {
-    unsigned        color;
+    color_t         color;
+    material_t      material;
 } seat_opts_t;
 
 typedef struct {
@@ -52,7 +67,7 @@ typedef struct {
     unsigned        price;
     const char      *brand;
     const char      *model;
-    unsigned        color;
+    color_t         color;
     unsigned long   vin;
 
     double          bw_bytes;
@@ -73,6 +88,12 @@ typedef struct {
 ucs_config_field_t seat_opts_table[] = {
   {"COLOR", "black", "Seat color",
    ucs_offsetof(seat_opts_t, color), UCS_CONFIG_TYPE_ENUM(color_names)},
+
+  {"COLOR_ALIAS", NULL, "Seat color",
+   ucs_offsetof(seat_opts_t, color), UCS_CONFIG_TYPE_ENUM(color_names)},
+
+  {"MATERIAL", "textile", "Cover seat material",
+   ucs_offsetof(seat_opts_t, material), UCS_CONFIG_TYPE_ENUM(material_names)},
 
   {NULL}
 };
@@ -97,6 +118,9 @@ ucs_config_field_t engine_opts_table[] = {
   {"POWER", "200", "Engine power",
    ucs_offsetof(engine_opts_t, power), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"POWER_ALIAS", NULL, "Engine power",
+   ucs_offsetof(engine_opts_t, power), UCS_CONFIG_TYPE_ULUNITS},
+
   {NULL}
 };
 
@@ -108,6 +132,9 @@ ucs_config_field_t car_opts_table[] = {
    ucs_offsetof(car_opts_t, coach), UCS_CONFIG_TYPE_TABLE(coach_opts_table)},
 
   {"PRICE", "999", "Price",
+   ucs_offsetof(car_opts_t, price), UCS_CONFIG_TYPE_UINT},
+
+  {"PRICE_ALIAS", NULL, "Price",
    ucs_offsetof(car_opts_t, price), UCS_CONFIG_TYPE_UINT},
 
   {"BRAND", "Chevy", "Car brand",
@@ -227,19 +254,82 @@ protected:
         const size_t m_max;
         char         *m_value;
     };
+
+    static void test_config_print_opts(unsigned flags,
+                                       unsigned exp_num_lines,
+                                       const char *prefix = NULL)
+    {
+        char *dump_data;
+        size_t dump_size;
+        char line_buf[1024];
+        char alias[128];
+        car_opts opts(NULL, NULL);
+
+        memset(alias, 0, sizeof(alias));
+
+        /* Dump configuration to a memory buffer */
+        dump_data = NULL;
+        FILE *file = open_memstream(&dump_data, &dump_size);
+        ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
+                                     prefix,
+                                     (ucs_config_print_flags_t)flags);
+
+        /* Sanity check - all lines begin with UCS_ */
+        unsigned num_lines = 0;
+        fseek(file, 0, SEEK_SET);
+        while (fgets(line_buf, sizeof(line_buf), file)) {
+            if (line_buf[0] == '\n') {
+                continue;
+            }
+
+            if (line_buf[0] != '#') {
+                /* found the name of attribute */
+
+                if (alias[0] != '\0') {
+                    /* the code below relies on the fact that all
+                     * aliases has the name: "<real_name>_ALIAS" */
+                    EXPECT_EQ(0, strncmp(alias, line_buf,
+                                         strlen(alias) - strlen("_ALIAS")));
+                    memset(alias, 0, sizeof(alias));
+                }
+
+                std::string exp_str = "UCX_";
+                if (prefix) {
+                    exp_str += prefix;
+                }
+                line_buf[exp_str.size()] = '\0';
+                EXPECT_STREQ(exp_str.c_str(), line_buf);
+                ++num_lines;
+            } else if (strncmp(&line_buf[2], "alias of:",
+                               strlen("alias of:")) == 0) {
+                /* found the alias name of attribute */
+
+                size_t cnt = 0;
+                for (size_t i = 2 + strlen("alias of: ") + 1;
+                     line_buf[i] != '\n'; i++) {
+                    alias[cnt++] = line_buf[i];
+                }
+            }
+        }
+
+        EXPECT_EQ(exp_num_lines, num_lines);
+
+        fclose(file);
+        free(dump_data);
+    }
 };
 
 UCS_TEST_F(test_config, parse_default) {
     car_opts opts(NULL, "TEST");
 
-    EXPECT_EQ((unsigned)999, opts->price);
+    EXPECT_EQ(999U, opts->price);
     EXPECT_EQ(std::string("Chevy"), opts->brand);
     EXPECT_EQ(std::string("Corvette"), opts->model);
-    EXPECT_EQ((unsigned)COLOR_RED, opts->color);
-    EXPECT_EQ((unsigned)6000, opts->engine.volume);
-    EXPECT_EQ((unsigned)COLOR_RED, opts->coach.driver_seat.color);
-    EXPECT_EQ((unsigned)COLOR_BLUE, opts->coach.passenger_seat.color);
-    EXPECT_EQ((unsigned)COLOR_BLACK, opts->coach.rear_seat.color);
+    EXPECT_EQ(COLOR_RED, opts->color);
+    EXPECT_EQ(6000U, opts->engine.volume);
+    EXPECT_EQ(COLOR_RED, opts->coach.driver_seat.color);
+    EXPECT_EQ(COLOR_BLUE, opts->coach.passenger_seat.color);
+    EXPECT_EQ(COLOR_BLACK, opts->coach.rear_seat.color);
     EXPECT_EQ(UCS_CONFIG_ULUNITS_AUTO, opts->vin);
     EXPECT_EQ(200UL, opts->engine.power);
 
@@ -266,28 +356,37 @@ UCS_TEST_F(test_config, clone) {
     {
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env1("UCX_COLOR", "white");
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env2("UCX_PRICE_ALIAS", "0");
+        
         car_opts opts(NULL, NULL);
-        EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+        EXPECT_EQ(COLOR_WHITE, opts->color);
+        EXPECT_EQ(0U, opts->price);
 
         /* coverity[tainted_string_argument] */
-        ucs::scoped_setenv env2("UCX_COLOR", "black");
+        ucs::scoped_setenv env3("UCX_COLOR", "black");
         opts_clone_ptr = new car_opts(opts);
     }
 
-    EXPECT_EQ((unsigned)COLOR_WHITE, (*opts_clone_ptr)->color);
+    EXPECT_EQ(COLOR_WHITE, (*opts_clone_ptr)->color);
     delete opts_clone_ptr;
 }
 
 UCS_TEST_F(test_config, set_get) {
     car_opts opts(NULL, NULL);
-    EXPECT_EQ((unsigned)COLOR_RED, opts->color);
+    EXPECT_EQ(COLOR_RED, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_RED]),
               std::string(opts.get("COLOR")));
 
     opts.set("COLOR", "white");
-    EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+    EXPECT_EQ(COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
+
+    opts.set("DRIVER_COLOR_ALIAS", "black");
+    EXPECT_EQ(COLOR_BLACK, opts->coach.driver_seat.color);
+    EXPECT_EQ(std::string(color_names[COLOR_BLACK]),
+              std::string(opts.get("COACH_DRIVER_COLOR_ALIAS")));
 
     opts.set("VIN", "123456");
     EXPECT_EQ(123456UL, opts->vin);
@@ -300,7 +399,7 @@ UCS_TEST_F(test_config, set_get_with_table_prefix) {
     ucs::scoped_setenv env2("UCX_CARS_COLOR", "white");
 
     car_opts opts(NULL, "CARS_");
-    EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+    EXPECT_EQ(COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
 }
@@ -312,7 +411,7 @@ UCS_TEST_F(test_config, set_get_with_env_prefix) {
     ucs::scoped_setenv env2("UCX_TEST_COLOR", "white");
 
     car_opts opts("TEST", NULL);
-    EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+    EXPECT_EQ(COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
 }
@@ -334,28 +433,26 @@ UCS_TEST_F(test_config, performance) {
 }
 
 UCS_TEST_F(test_config, dump) {
-    char *dump_data;
-    size_t dump_size;
-    char line_buf[1024];
+    /* aliases must not be counted here */
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 24u);
+}
 
-    car_opts opts(NULL, NULL);
+UCS_TEST_F(test_config, dump_hidden) {
+    /* aliases must be counted here */
+    test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
+                            UCS_CONFIG_PRINT_HIDDEN),
+                           29u);
+}
 
-    /* Dump configuration to a memory buffer */
-    dump_data = NULL;
-    FILE *file = open_memstream(&dump_data, &dump_size);
-    ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
-                                 NULL, UCS_CONFIG_PRINT_CONFIG);
+UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
+    /* aliases must be counted here */
+    test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
+                            UCS_CONFIG_PRINT_HIDDEN |
+                            UCS_CONFIG_PRINT_DOC),
+                           29u);
 
-    /* Sanity check - all lines begin with UCS_ */
-    unsigned num_lines = 0;
-    fseek(file, 0, SEEK_SET);
-    while (fgets(line_buf, sizeof(line_buf), file)) {
-        line_buf[4] = '\0';
-        EXPECT_STREQ("UCX_", line_buf);
-        ++num_lines;
-    }
-    EXPECT_EQ(21u, num_lines);
-
-    fclose(file);
-    free(dump_data);
+    test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
+                            UCS_CONFIG_PRINT_HIDDEN |
+                            UCS_CONFIG_PRINT_DOC),
+                           29u, "TEST_");
 }
