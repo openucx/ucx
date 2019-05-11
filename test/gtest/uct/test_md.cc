@@ -94,12 +94,11 @@ void test_md::cleanup()
     ucs::test_base::cleanup();
 }
 
-void test_md::modify_config(const std::string& name, const std::string& value,
-                            bool optional)
+void test_md::modify_config(const std::string& name, const std::string& value)
 {
     ucs_status_t status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
-        return ucs::test_base::modify_config(name, value, optional);
+        return ucs::test_base::modify_config(name, value);
     } else {
         ASSERT_UCS_OK(status);
     }

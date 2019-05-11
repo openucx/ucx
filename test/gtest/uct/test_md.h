@@ -25,8 +25,7 @@ public:
 protected:
     virtual void init();
     virtual void cleanup();
-    virtual void modify_config(const std::string& name, const std::string& value,
-                               bool optional);
+    virtual void modify_config(const std::string& name, const std::string& value);
     void check_caps(uint64_t flags, const std::string& name);
     void alloc_memory(void **address, size_t size, char *fill, int mem_type);
     void check_memory(void *address, void *expect, size_t size, int mem_type);
