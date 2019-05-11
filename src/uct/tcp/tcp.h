@@ -131,8 +131,8 @@ typedef struct uct_tcp_iface {
 
     struct {
         int                       nodelay;           /* TCP_NODELAY */
-        int                       sndbuf;            /* SO_SNDBUF */
-        int                       rcvbuf;            /* SO_RCVBUF */
+        size_t                    sndbuf;            /* SO_SNDBUF */
+        size_t                    rcvbuf;            /* SO_RCVBUF */
     } sockopt;
 } uct_tcp_iface_t;
 
