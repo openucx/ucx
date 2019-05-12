@@ -31,7 +31,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "option usually provides better performance",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
 
-  {"SNDBUF", "64k",
+  {"SNDBUF", "auto",
    "Socket send buffer size",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
 

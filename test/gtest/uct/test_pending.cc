@@ -14,6 +14,18 @@ extern "C" {
 
 class test_uct_pending : public uct_test {
 public:
+    test_uct_pending() : uct_test() {
+        m_e1 = NULL;
+        m_e2 = NULL;
+
+        if (has_transport("tcp")) {
+            /* Set `SO_SNDBUF` and `SO_RCVBUF` socket options to minimum
+             * values to reduce the testing time for `pending_fairness` test */
+            modify_config("SNDBUF", "1024");
+            modify_config("RCVBUF", "128");
+        }
+    }
+
     virtual void init() {
         uct_test::init();
 
@@ -211,7 +223,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
-    iters = 1000000/ucs::test_time_multiplier();
+    iters = 1000000 / ucs::test_time_multiplier();
 
     /* set a callback for the uct to invoke for receiving the data */
     install_handler_sync_or_async(m_e2->iface(), 0, am_handler, &counter);
@@ -465,11 +477,6 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
     int i, iters;
     ucs_status_t status;
 
-    /* TODO: need to investigate the slowness of the test with TCP */
-    if (has_transport("tcp")) {
-        ucs::watchdog_set(ucs::watchdog_timeout_default * 2.0);
-    }
-
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
     if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
@@ -536,14 +543,13 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
     for (i = 0; i < N; i++) {
         min_sends = ucs_min(min_sends, reqs[i]->countdown);
         max_sends = ucs_max(max_sends, reqs[i]->countdown);
-        //printf("%d: send %d\n", i, reqs[i]->countdown);
     }
     UCS_TEST_MESSAGE << " min_sends: " << min_sends 
                      << " max_sends: " << max_sends 
                      << " still pending: " << n_pending;
 
     while(n_pending > 0) {
-       progress();
+        progress();
     }
 
     flush();
