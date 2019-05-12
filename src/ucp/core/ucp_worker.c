@@ -506,7 +506,8 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                       UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
         } else {
             ucs_assert(uct_ep == NULL);
-            ucs_error("error '%s' occurred on wireup will not be handled for ep %p",
+            ucs_error("error '%s' occurred on wireup will not be handled for ep %p "
+                      "since no error callback is installed",
                       ucs_status_string(status), ucp_ep);
         }
         ret_status = status;
