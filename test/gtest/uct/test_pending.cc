@@ -15,6 +15,9 @@ extern "C" {
 class test_uct_pending : public uct_test {
 public:
     test_uct_pending() : uct_test() {
+        m_e1 = NULL;
+        n_e2 = NULL;
+
         if (has_transport("tcp")) {
             /* Set `SO_SNDBUF` and `SO_RCVBUF` socket options to minimum
              * values to reduce the testing time for `pending_fairness` test */
