@@ -30,6 +30,15 @@ static uct_iface_ops_t uct_self_iface_ops;
 static uct_md_component_t uct_self_md;
 
 
+static ucs_config_field_t uct_self_iface_config_table[] = {
+    {"", "", NULL,
+     ucs_offsetof(uct_self_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {NULL}
+};
+
+
 static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
@@ -146,6 +155,8 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_self_iface_config_t *config = ucs_derived_of(tl_config,
+                                                     uct_self_iface_config_t);
     ucs_status_t status;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
@@ -173,7 +184,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                               UCS_STATS_ARG(UCT_SELF_NAME));
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
-    self->send_size   = tl_config->max_bcopy;
+    self->send_size   = config->super.max_bcopy;
 
     status = ucs_mpool_init(&self->msg_mp, 0, self->send_size, 0,
                             UCS_SYS_CACHE_LINE_SIZE,
@@ -316,7 +327,8 @@ static uct_iface_ops_t uct_self_iface_ops = {
 };
 
 UCT_TL_COMPONENT_DEFINE(uct_self_tl, uct_self_query_tl_resources, uct_self_iface_t,
-                        UCT_SELF_NAME, "SELF_", uct_iface_config_table, uct_iface_config_t);
+                        UCT_SELF_NAME, "SELF_", uct_self_iface_config_table,
+                        uct_self_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_self_md, &uct_self_tl);
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
@@ -386,4 +398,4 @@ static UCT_MD_COMPONENT_DEFINE(uct_self_md, UCT_SELF_NAME,
                                uct_self_query_md_resources, uct_self_md_open, NULL,
                                uct_self_md_rkey_unpack,
                                ucs_empty_function_return_success, "SELF_",
-                               uct_md_config_table, uct_md_config_t);
+                               uct_self_iface_config_table, uct_self_iface_config_t);

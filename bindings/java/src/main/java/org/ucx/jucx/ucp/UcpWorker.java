@@ -35,6 +35,20 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         setNativeId(createWorkerNative(params, context.getNativeId()));
     }
 
+    /**
+     * Creates new UcpEndpoint on current worker.
+     */
+    public UcpEndpoint newEndpoint(UcpEndpointParams params) {
+        return new UcpEndpoint(this, params);
+    }
+
+    /**
+     * Creates new UcpListener on current worker.
+     */
+    public UcpListener newListener(UcpListenerParams params) {
+        return new UcpListener(this, params);
+    }
+
     @Override
     public void close() {
         releaseWorkerNative(getNativeId());

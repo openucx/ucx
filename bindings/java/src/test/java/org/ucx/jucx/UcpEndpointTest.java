@@ -21,10 +21,10 @@ public class UcpEndpointTest {
     @Test
     public void testConnectToListenerByWorkerAddr() {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
-        UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
             .setPeerErrorHadnlingMode().setNoLoopbackMode();
-        UcpEndpoint endpoint = new UcpEndpoint(worker, epParams);
+        UcpEndpoint endpoint = worker.newEndpoint(epParams);
         assertNotNull(endpoint.getNativeId());
 
         endpoint.close();
@@ -35,7 +35,7 @@ public class UcpEndpointTest {
     @Test
     public void testConnectToListenerBySocketAddr() throws SocketException {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
-        UcpWorker worker = new UcpWorker(context, new UcpWorkerParams());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
         // Iterate over each network interface - got it's sockaddr - try to instantiate listener
         // And pass this sockaddr to endpoint.
         Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
@@ -49,11 +49,11 @@ public class UcpEndpointTest {
                     try {
                         InetSocketAddress addr = new InetSocketAddress(inetAddress,
                             UcpListenerTest.port);
-                        UcpListener ucpListener = new UcpListener(worker,
+                        UcpListener ucpListener = worker.newListener(
                             new UcpListenerParams().setSockAddr(addr));
                         UcpEndpointParams epParams =
                             new UcpEndpointParams().setSocketAddress(addr);
-                        UcpEndpoint endpoint = new UcpEndpoint(worker, epParams);
+                        UcpEndpoint endpoint = worker.newEndpoint(epParams);
                         assertNotNull(endpoint.getNativeId());
                         success = true;
                         endpoint.close();

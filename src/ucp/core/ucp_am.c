@@ -95,9 +95,9 @@ ucp_am_bcopy_pack_args_single(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt.offset == 0);
     
-    hdr->am_id  = req->send.am.am_id;
-    hdr->length = req->send.length;
-    hdr->flags  = req->send.am.flags;
+    hdr->am_hdr.am_id  = req->send.am.am_id;
+    hdr->am_hdr.length = req->send.length;
+    hdr->am_hdr.flags  = req->send.am.flags;
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                          UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
@@ -117,10 +117,10 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt.offset == 0);
     
-    reply_hdr->super.am_id  = req->send.am.am_id;
-    reply_hdr->super.length = req->send.length;
-    reply_hdr->super.flags  = req->send.am.flags;
-    reply_hdr->ep_ptr       = ucp_request_get_dest_ep_ptr(req);
+    reply_hdr->super.am_hdr.am_id  = req->send.am.am_id;
+    reply_hdr->super.am_hdr.length = req->send.length;
+    reply_hdr->super.am_hdr.flags  = req->send.am.flags;
+    reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                          UCT_MD_MEM_TYPE_HOST, reply_hdr + 1, 
@@ -187,15 +187,13 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
 {
     uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
     ucp_am_hdr_t hdr;
-    uint64_t *hdr_ptr;
 
-    hdr.am_id  = id;
-    hdr.length = length;
-    hdr.flags  = 0;
+    hdr.am_hdr.am_id  = id;
+    hdr.am_hdr.length = length;
+    hdr.am_hdr.flags  = 0;
     ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
-    hdr_ptr = (uint64_t *) &hdr;
     
-    return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE, *hdr_ptr, 
+    return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE, hdr.u64, 
                            (void *)payload, length);
 }
 
@@ -288,9 +286,9 @@ static ucs_status_t ucp_am_zcopy_single(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_am_hdr_t hdr;
     
-    hdr.am_id  = req->send.am.am_id;
-    hdr.length = req->send.length;
-    hdr.flags  = req->send.am.flags;
+    hdr.am_hdr.am_id  = req->send.am.am_id;
+    hdr.am_hdr.length = req->send.length;
+    hdr.am_hdr.flags  = req->send.am.flags;
     
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE, &hdr,
                                   sizeof(hdr), ucp_proto_am_zcopy_req_complete);
@@ -301,10 +299,10 @@ static ucs_status_t ucp_am_zcopy_single_reply(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_am_reply_hdr_t reply_hdr;
 
-    reply_hdr.super.am_id  = req->send.am.am_id;
-    reply_hdr.super.length = req->send.length;
-    reply_hdr.super.flags  = req->send.am.flags;
-    reply_hdr.ep_ptr       = ucp_request_get_dest_ep_ptr(req);
+    reply_hdr.super.am_hdr.am_id  = req->send.am.am_id;
+    reply_hdr.super.am_hdr.length = req->send.length;
+    reply_hdr.super.am_hdr.flags  = req->send.am.flags;
+    reply_hdr.ep_ptr              = ucp_request_get_dest_ep_ptr(req);
     
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE_REPLY, 
                                   &reply_hdr, sizeof(reply_hdr), 
@@ -519,7 +517,7 @@ ucp_am_handler_reply(void *am_arg, void *am_data, size_t am_length,
 {
     ucp_am_reply_hdr_t *hdr = (ucp_am_reply_hdr_t *)am_data;
     ucp_worker_h worker     = (ucp_worker_h)am_arg;
-    uint16_t am_id          = hdr->super.am_id;
+    uint16_t am_id          = hdr->super.am_hdr.am_id;
     ucp_ep_h reply_ep;
 
     reply_ep = ucp_worker_get_ep_by_ptr(worker, hdr->ep_ptr);
@@ -536,7 +534,7 @@ ucp_am_handler(void *am_arg, void *am_data, size_t am_length,
 {
     ucp_worker_h worker   = (ucp_worker_h)am_arg;
     ucp_am_hdr_t *hdr     = (ucp_am_hdr_t *)am_data;
-    uint16_t am_id        = hdr->am_id;
+    uint16_t am_id        = hdr->am_hdr.am_id;
 
     return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr),
                                  am_length - sizeof(*hdr), NULL,
