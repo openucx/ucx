@@ -38,7 +38,7 @@ struct uct_md_component {
     const char             *cfg_prefix;        /**< Prefix for configuration environment vars */
     ucs_config_field_t     *md_config_table;   /**< Defines MD configuration options */
     size_t                 md_config_size;     /**< MD configuration structure size */
-    ucs_list_link_t        tl_list;            /* List of uct_md_registered_tl_t */
+    ucs_list_link_t        tl_list;            /**< List of uct_md_registered_tl_t */
     ucs_list_link_t        list;
 };
 
