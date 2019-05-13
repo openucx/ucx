@@ -21,8 +21,12 @@ public:
 protected:
     static void* event_set_read_func(void *arg) {
         int *fd = (int *)arg;
+        int n;
         usleep(10000);
-        write(fd[1], evfd_data, strlen(test_event_set::evfd_data));
+        n = write(fd[1], evfd_data, strlen(test_event_set::evfd_data));
+        if (n == -1) {
+            ADD_FAILURE();
+        }
         return 0;
     }
 
