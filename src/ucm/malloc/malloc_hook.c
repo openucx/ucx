@@ -661,9 +661,16 @@ static void* ucm_malloc_patchlist_prev_value(const ucm_reloc_patch_t *patches,
         if (!strcmp(patch->symbol, symbol)) {
             ucm_debug("previous function pointer for '%s' is %p", symbol,
                       patch->prev_value);
+            if (patch->prev_value == NULL) {
+                goto not_found;
+            }
+
             return patch->prev_value;
         }
     }
+
+not_found:
+    ucm_fatal("could not find the previous value of '%s'", symbol);
     return NULL;
 }
 
@@ -761,6 +768,8 @@ static void ucm_malloc_init_orig_funcs()
      * GCC makes them part of .got, and patching .got actually changes the
      * values of these global variables. As a workaround, we initialize
      * them here.
+     * NOTE This also makes sure that libucm.so has a reference to these symbols,
+     * so patching the relocation tables would find their previous value by libucm
      */
     if (ucm_malloc_hook_state.usable_size == NULL) {
         ucm_malloc_hook_state.usable_size = malloc_usable_size;

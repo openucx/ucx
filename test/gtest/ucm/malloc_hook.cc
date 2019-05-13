@@ -996,23 +996,35 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     ASSERT_UCS_OK(status);
 }
 
-/* test for mmap events are fired from non-direct load modules
- * we are trying to load lib1, from lib1 load lib2, and
- * fire mmap event from lib2 */
-UCS_TEST_F(malloc_hook, dlopen) {
+class malloc_hook_dlopen : public malloc_hook {
+public:
+    static std::string get_lib_dir() {
 #ifndef GTEST_UCM_HOOK_LIB_DIR
 #  error "Missing build configuration"
 #else
+        return GTEST_UCM_HOOK_LIB_DIR;
+#endif
+    }
+
+    static std::string get_lib_path_do_load() {
+        return get_lib_dir() + "/libdlopen_test_do_load.so";
+    }
+
+    static std::string get_lib_path_do_mmap() {
+        return get_lib_dir() + "/libdlopen_test_do_mmap.so";
+    }
+};
+
+/* test for mmap events are fired from non-direct load modules
+ * we are trying to load lib1, from lib1 load lib2, and
+ * fire mmap event from lib2 */
+UCS_TEST_F(malloc_hook_dlopen, indirect_dlopen) {
     typedef void (fire_mmap_f)(void);
     typedef void* (load_lib_f)(const char *path);
 
-    const char *libdlopen_load = "/libdlopen_test_do_load.so";
-    const char *libdlopen_mmap = "/libdlopen_test_do_mmap.so";
     const char *load_lib       = "load_lib";
     const char *fire_mmap      = "fire_mmap";
 
-    std::string lib_load;
-    std::string lib_mmap;
     void *lib;
     void *lib2;
     load_lib_f *load;
@@ -1023,13 +1035,7 @@ UCS_TEST_F(malloc_hook, dlopen) {
     status = event.set(UCM_EVENT_VM_MAPPED);
     ASSERT_UCS_OK(status);
 
-    lib_load = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_load;
-    lib_mmap = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_mmap;
-
-    UCS_TEST_MESSAGE << "Loading " << lib_load;
-    UCS_TEST_MESSAGE << "Loading " << lib_mmap;
-
-    lib = dlopen(lib_load.c_str(), RTLD_NOW);
+    lib = dlopen(get_lib_path_do_load().c_str(), RTLD_NOW);
     EXPECT_NE((uintptr_t)lib, (uintptr_t)NULL);
     if (!lib) {
         goto no_lib;
@@ -1041,7 +1047,7 @@ UCS_TEST_F(malloc_hook, dlopen) {
         goto no_load;
     }
 
-    lib2 = load(lib_mmap.c_str());
+    lib2 = load(get_lib_path_do_mmap().c_str());
     EXPECT_NE((uintptr_t)lib2, (uintptr_t)NULL);
     if (!lib2) {
         goto no_load;
@@ -1063,5 +1069,39 @@ no_load:
     dlclose(lib);
 no_lib:
     event.unset();
-#endif /* GTEST_UCM_HOOK_LIB_DIR */
+}
+
+UCS_MT_TEST_F(malloc_hook_dlopen, dlopen_mt_with_memtype, 2) {
+#ifndef GTEST_UCM_HOOK_LIB_DIR
+#  error "Missing build configuration"
+#endif
+    mmap_event<malloc_hook> event(this);
+
+    ucs_status_t status = event.set(UCM_EVENT_VM_MAPPED |
+                                    UCM_EVENT_MEM_TYPE_ALLOC |
+                                    UCM_EVENT_MEM_TYPE_FREE);
+    ASSERT_UCS_OK(status);
+
+    const std::string path = get_lib_path_do_mmap();
+    static uint32_t count = 0;
+
+    for (int i = 0; i < 100 / ucs::test_time_multiplier(); ++i) {
+        /* Tests that calling dlopen() from 2 threads does not deadlock, if for
+         * example we install memtype relocation patches and call dladdr() while
+         * iterating over loaded libraries.
+         */
+        if (ucs_atomic_fadd32(&count, 1) % 2) {
+            void *lib1 = dlopen(get_lib_path_do_mmap().c_str(), RTLD_LAZY);
+            ASSERT_TRUE(lib1 != NULL);
+            dlclose(lib1);
+        } else {
+            void *lib2 = dlopen(get_lib_path_do_load().c_str(), RTLD_LAZY);
+            ASSERT_TRUE(lib2 != NULL);
+            dlclose(lib2);
+        }
+
+        barrier();
+    }
+
+    event.unset();
 }
