@@ -932,10 +932,8 @@ test_jucx() {
 	if module_load dev/jdk && module_load dev/mvn
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
-		export JUCX_TEST_PORT=jucx_port
-		export UCX_ERROR_SIGNALS=""
+		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
-		unset UCX_ERROR_SIGNALS
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
