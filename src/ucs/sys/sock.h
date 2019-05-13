@@ -264,10 +264,33 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
 /**
  * Return a value indicating the relationships between passed sockaddr structures.
+ *
+ * @param [in]     sa1        Pointer to sockaddr structure #1.
+ * @param [in]     sa2        Pointer to sockaddr structure #2.
+ * @param [in/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
+ *                            or UCS_ERR_INVALID_PARAM on failure.
+ *
+ * @return Returns an integral value indicating the relationship between the
+ *         socket addresses:
+ *         > 0 - the first socket address is greater than the second
+ *               socket address;
+ *         < 0 - the first socket address is greater than the second
+ *               socket address;
+ *         = 0 - the socket addresses are equal.
+ *         Note: it returns a postive integer value in case of error occured
+ *               during comparison.
+ */
+int ucs_sockaddr_cmp(const struct sockaddr *sa1,
+                     const struct sockaddr *sa2,
+                     ucs_status_t *status_p);
+
+
+/**
+ * Return a value indicating the relationships between passed sockaddr structures.
  * 
  * @param [in]     sa1        Pointer to sockaddr structure #1.
  * @param [in]     sa2        Pointer to sockaddr structure #2.
- * @param [un/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
+ * @param [in/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
  *                            or UCS_ERR_INVALID_PARAM on failure.
  *
  * @return 0 - not equal, != 0 - equal
