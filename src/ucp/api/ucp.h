@@ -1568,7 +1568,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker);
  * waiting on a file descriptor from @ref ucp_worker_get_efd to return, even
  * if no event from the underlying interfaces has taken place.
  *
- * @note It’s safe to use this routine from any thread, even if UCX is compiled
+ * @note It's safe to use this routine from any thread, even if UCX is compiled
  *       without multi-threading support and/or initialized with any value of
  *       @ref ucp_params_t::mt_workers_shared and
  *       @ref ucp_worker_params_t::thread_mode parameters
