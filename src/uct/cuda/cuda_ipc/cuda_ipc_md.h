@@ -43,6 +43,7 @@ typedef struct uct_cuda_ipc_key {
     CUdeviceptr    d_bptr;       /* Allocation base address */
     size_t         b_len;        /* Allocation size */
     int            dev_num;      /* GPU Device number */
+    CUuuid         uuid;         /* GPU Device UUID */
 } uct_cuda_ipc_key_t;
 
 

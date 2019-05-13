@@ -57,12 +57,40 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
     uct_cuda_ipc_key_t *key;
     ucs_status_t status;
     CUdevice cu_device;
+    CUdevice own_cu_device;
+    CUdevice peer_cu_device;
+    CUuuid own_uuid;
     int peer_accessble;
+    int device_count;
+    int i;
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&device_count));
+    if (status != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    peer_cu_device = -1;
+    for (i = 0; i < device_count; i++) {
+
+        status = UCT_CUDADRV_FUNC(cuDeviceGet(&own_cu_device, i));
+        if (status != UCS_OK) {
+            return UCS_ERR_IO_ERROR;
+        }
+        
+        status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&own_uuid, own_cu_device));
+        if (status != UCS_OK) {
+            return UCS_ERR_IO_ERROR;
+        }
+        
+        if (!memcmp((void *) &own_uuid, (void *) &packed->uuid, sizeof(packed->uuid))) {
+            peer_cu_device = i;
+        }
+    }
+    
     status = UCT_CUDADRV_FUNC(cuDeviceCanAccessPeer(&peer_accessble,
-                                                    cu_device, packed->dev_num));
+                                                    cu_device, peer_cu_device));
     if ((status != UCS_OK) || (peer_accessble == 0)) {
         return UCS_ERR_UNREACHABLE;
     }
@@ -110,6 +138,12 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
                                           &(key->b_len),
                                           (CUdeviceptr) addr));
     key->dev_num  = (int) cu_device;
+
+    status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&(key->uuid), key->dev_num));
+    if (UCS_OK != status) {
+        return status;
+    }
+    
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
               addr, addr + length, length, (int) cu_device);
     return UCS_OK;
