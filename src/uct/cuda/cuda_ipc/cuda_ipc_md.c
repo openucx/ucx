@@ -54,6 +54,7 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
                                              void **handle_p)
 {
     uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
+    uct_cuda_ipc_md_t *md = mdc->priv;
     uct_cuda_ipc_key_t *key;
     ucs_status_t status;
     CUdevice cu_device;
@@ -66,25 +67,41 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
     
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&device_count));
-    if (status != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
+    if (NULL == md->uuid_map) {
+        
+        status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&device_count));
+        if (status != UCS_OK) {
+            return UCS_ERR_IO_ERROR;
+        }
+        
+        md->uuid_map = ucs_malloc(sizeof(CUuuid) * device_count, "uct_cuda_ipc_uuid_map");
+        if (NULL == md->uuid_map) {
+            ucs_error("failed to allocate memory for uct_cuda_ipc_uuid_map");
+            return UCS_ERR_NO_MEMORY;
+        }
+        
+        for (i = 0; i < device_count; i++) {
+
+            status = UCT_CUDADRV_FUNC(cuDeviceGet(&own_cu_device, i));
+            if (status != UCS_OK) {
+                return UCS_ERR_IO_ERROR;
+            }
+        
+            status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&own_uuid, own_cu_device));
+            if (status != UCS_OK) {
+                return UCS_ERR_IO_ERROR;
+            }
+            
+            md->uuid_map[i] = own_uuid;
+        }
+        
+        md->uuid_map_len = device_count;
     }
 
     peer_cu_device = -1;
-    for (i = 0; i < device_count; i++) {
-
-        status = UCT_CUDADRV_FUNC(cuDeviceGet(&own_cu_device, i));
-        if (status != UCS_OK) {
-            return UCS_ERR_IO_ERROR;
-        }
+    for (i = 0; i < md->uuid_map_len; i++) {
         
-        status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&own_uuid, own_cu_device));
-        if (status != UCS_OK) {
-            return UCS_ERR_IO_ERROR;
-        }
-        
-        if (!memcmp((void *) &own_uuid, (void *) &packed->uuid, sizeof(packed->uuid))) {
+        if (!memcmp((void *) &(md->uuid_map[i]), (void *) &packed->uuid, sizeof(packed->uuid))) {
             peer_cu_device = i;
         }
     }
@@ -228,6 +245,7 @@ static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_confi
 
     cuda_ipc_md->super.ops = &md_ops;
     cuda_ipc_md->super.component = &uct_cuda_ipc_md_component;
+    cuda_ipc_md->super.component->priv = (void *) cuda_ipc_md;
 
     *md_p = &cuda_ipc_md->super;
     return UCS_OK;
