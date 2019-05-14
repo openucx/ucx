@@ -378,36 +378,30 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
         goto out;
     }
 
-    if (sa1->sa_family < sa2->sa_family) {
+    if (sa1->sa_family != sa2->sa_family) {
         result = (sa1->sa_family < sa2->sa_family) ? -1 : 1;
         goto out;
     }
 
     switch (sa1->sa_family) {
     case AF_INET:
-        result = ucs_signum(memcmp(&UCS_SOCKET_INET_ADDR(sa1),
-                                   &UCS_SOCKET_INET_ADDR(sa2),
-                                   sizeof(UCS_SOCKET_INET_ADDR(sa1))));
-
+        result = memcmp(&UCS_SOCKET_INET_ADDR(sa1),
+                        &UCS_SOCKET_INET_ADDR(sa2),
+                        sizeof(UCS_SOCKET_INET_ADDR(sa1)));
         port1 = ntohs(UCS_SOCKET_INET_PORT(sa1));
         port2 = ntohs(UCS_SOCKET_INET_PORT(sa2));
-
-        if (!result && (port1 != port2)) {
-            result = (port1 < port2) ? -1 : 1;
-        }
         break;
     case AF_INET6:
-        result = ucs_signum(memcmp(&UCS_SOCKET_INET6_ADDR(sa1),
-                                   &UCS_SOCKET_INET6_ADDR(sa2),
-                                   sizeof(UCS_SOCKET_INET6_ADDR(sa1))));
-
+        result = memcmp(&UCS_SOCKET_INET6_ADDR(sa1),
+                        &UCS_SOCKET_INET6_ADDR(sa2),
+                        sizeof(UCS_SOCKET_INET6_ADDR(sa1)));
         port1 = ntohs(UCS_SOCKET_INET6_PORT(sa1));
         port2 = ntohs(UCS_SOCKET_INET6_PORT(sa2));
-
-        if (!result && (port1 != port2)) {
-            result = (port1 < port2) ? -1 : 1;
-        }
         break;
+    }
+
+    if (!result && (port1 != port2)) {
+        result = (port1 < port2) ? -1 : 1;
     }
 
 out:

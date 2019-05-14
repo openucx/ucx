@@ -274,10 +274,10 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
  *         socket addresses:
  *         > 0 - the first socket address is greater than the second
  *               socket address;
- *         < 0 - the first socket address is greater than the second
+ *         < 0 - the first socket address is lower than the second
  *               socket address;
  *         = 0 - the socket addresses are equal.
- *         Note: it returns a postive integer value in case of error occured
+ *         Note: it returns a positive integer value in case of error occured
  *               during comparison.
  */
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,

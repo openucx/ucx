@@ -85,9 +85,6 @@ BEGIN_C_DECLS
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
 
-#define ucs_signum(_n) \
-    (((typeof(_n))0 < (_n)) - ((_n) < (typeof(_n))0))
-
 static inline double ucs_log2(double x)
 {
     return log(x) / log(2.0);
