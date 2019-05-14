@@ -24,6 +24,8 @@ extern uct_md_component_t uct_cuda_ipc_md_component;
  */
 typedef struct uct_cuda_ipc_md {
     struct uct_md super;   /**< Domain info */
+    CUuuid *uuid_map;     /* List of UUIDs for cuda devices */
+    int    uuid_map_len;
 } uct_cuda_ipc_md_t;
 
 

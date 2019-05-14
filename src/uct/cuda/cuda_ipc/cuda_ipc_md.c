@@ -65,7 +65,7 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
     int i;
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
-
+    
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&device_count));
     if (status != UCS_OK) {
         return UCS_ERR_IO_ERROR;
@@ -192,24 +192,48 @@ static ucs_status_t uct_cuda_ipc_query_md_resources(uct_md_resource_desc_t **res
     return uct_single_md_resource(&uct_cuda_ipc_md_component, resources_p, num_resources_p);
 }
 
+static void uct_cuda_ipc_md_close(uct_md_h uct_md)
+{
+    uct_cuda_ipc_md_t *md = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
+    if (NULL != md->uuid_map) {
+        ucs_free(md->uuid_map);
+    }
+    ucs_free(md);
+}
+
 static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_config_t *md_config,
                                          uct_md_h *md_p)
 {
+    uct_cuda_ipc_md_t *cuda_ipc_md;
+    ucs_status_t status;
+
+    cuda_ipc_md = ucs_malloc(sizeof(*cuda_ipc_md), "uct_cuda_ipc_md_t");
+    if (cuda_ipc_md == NULL) {
+        ucs_error("Failed to allocate memory for uct_cuda_ipc_md_t");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+    
+    cuda_ipc_md->uuid_map = NULL;
+    cuda_ipc_md->uuid_map_len = -1;
+    
     static uct_md_ops_t md_ops = {
-        .close        = (void*)ucs_empty_function,
+        .close        = uct_cuda_ipc_md_close,
         .query        = uct_cuda_ipc_md_query,
         .mkey_pack    = uct_cuda_ipc_mkey_pack,
         .mem_reg      = uct_cuda_ipc_mem_reg,
         .mem_dereg    = uct_cuda_ipc_mem_dereg,
         .is_mem_type_owned = uct_cuda_is_mem_type_owned,
     };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_cuda_ipc_md_component
-    };
 
-    *md_p = &md;
+    cuda_ipc_md->super.ops = &md_ops;
+    cuda_ipc_md->super.component = &uct_cuda_ipc_md_component;
+
+    *md_p = &cuda_ipc_md->super;
     return UCS_OK;
+    
+err:
+    return status;
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_cuda_ipc_md_component, UCT_CUDA_IPC_MD_NAME,
