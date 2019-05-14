@@ -30,7 +30,7 @@ BEGIN_C_DECLS
 
 /* Returns `UCS_ERR_NO_PROGRESS` if the default error
  * handling should be done, otherwise `UCS_OK` */
-typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int err_no);
+typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int errno);
 
 
 /**
