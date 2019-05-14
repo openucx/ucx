@@ -54,49 +54,15 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
                                              void **handle_p)
 {
     uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
-    uct_cuda_ipc_md_t *md = mdc->priv;
+    uct_cuda_ipc_md_t *md = mdc->priv; /* cuda_ipc_mdc->priv points to uct_md */
     uct_cuda_ipc_key_t *key;
     ucs_status_t status;
     CUdevice cu_device;
-    CUdevice own_cu_device;
     CUdevice peer_cu_device;
-    CUuuid own_uuid;
     int peer_accessble;
-    int device_count;
     int i;
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
-    
-    if (NULL == md->uuid_map) {
-        
-        status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&device_count));
-        if (status != UCS_OK) {
-            return UCS_ERR_IO_ERROR;
-        }
-        
-        md->uuid_map = ucs_malloc(sizeof(CUuuid) * device_count, "uct_cuda_ipc_uuid_map");
-        if (NULL == md->uuid_map) {
-            ucs_error("failed to allocate memory for uct_cuda_ipc_uuid_map");
-            return UCS_ERR_NO_MEMORY;
-        }
-        
-        for (i = 0; i < device_count; i++) {
-
-            status = UCT_CUDADRV_FUNC(cuDeviceGet(&own_cu_device, i));
-            if (status != UCS_OK) {
-                return UCS_ERR_IO_ERROR;
-            }
-        
-            status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&own_uuid, own_cu_device));
-            if (status != UCS_OK) {
-                return UCS_ERR_IO_ERROR;
-            }
-            
-            md->uuid_map[i] = own_uuid;
-        }
-        
-        md->uuid_map_len = device_count;
-    }
 
     peer_cu_device = -1;
     for (i = 0; i < md->uuid_map_len; i++) {
@@ -223,6 +189,10 @@ static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_confi
 {
     uct_cuda_ipc_md_t *cuda_ipc_md;
     ucs_status_t status;
+    int device_count;
+    int i;
+    CUuuid own_uuid;
+    CUdevice own_cu_device;
 
     cuda_ipc_md = ucs_malloc(sizeof(*cuda_ipc_md), "uct_cuda_ipc_md_t");
     if (cuda_ipc_md == NULL) {
@@ -233,6 +203,34 @@ static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_confi
     
     cuda_ipc_md->uuid_map = NULL;
     cuda_ipc_md->uuid_map_len = -1;
+        
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&device_count));
+    if (status != UCS_OK) {
+	return UCS_ERR_IO_ERROR;
+    }
+        
+    cuda_ipc_md->uuid_map = ucs_malloc(sizeof(CUuuid) * device_count, "uct_cuda_ipc_uuid_map");
+    if (NULL == cuda_ipc_md->uuid_map) {
+	ucs_error("failed to allocate memory for uct_cuda_ipc_uuid_map");
+	return UCS_ERR_NO_MEMORY;
+    }
+        
+    for (i = 0; i < device_count; i++) {
+
+	status = UCT_CUDADRV_FUNC(cuDeviceGet(&own_cu_device, i));
+	if (status != UCS_OK) {
+	    return UCS_ERR_IO_ERROR;
+	}
+        
+	status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&own_uuid, own_cu_device));
+	if (status != UCS_OK) {
+	    return UCS_ERR_IO_ERROR;
+	}
+            
+	cuda_ipc_md->uuid_map[i] = own_uuid;
+    }
+        
+    cuda_ipc_md->uuid_map_len = device_count;
     
     static uct_md_ops_t md_ops = {
         .close        = uct_cuda_ipc_md_close,
