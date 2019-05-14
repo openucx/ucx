@@ -22,7 +22,8 @@ protected:
     static void* event_set_read_func(void *arg) {
         int *fd = (int *)arg;
         usleep(10000);
-        write(fd[1], evfd_data, strlen(test_event_set::evfd_data));
+        const ssize_t nbytes UCS_V_UNUSED =
+            write(fd[1], evfd_data, strlen(test_event_set::evfd_data));
         return 0;
     }
 
