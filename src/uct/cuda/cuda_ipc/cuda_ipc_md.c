@@ -54,7 +54,7 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
                                              void **handle_p)
 {
     uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
-    uct_cuda_ipc_md_t *md = mdc->priv; /* cuda_ipc_mdc->priv points to uct_md */
+    uct_cuda_ipc_md_t *md = mdc->priv;
     uct_cuda_ipc_key_t *key;
     ucs_status_t status;
     CUdevice cu_device;
@@ -66,7 +66,6 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
 
     peer_cu_device = -1;
     for (i = 0; i < md->uuid_map_len; i++) {
-        
         if (!memcmp((void *) &(md->uuid_map[i]), (void *) &packed->uuid, sizeof(packed->uuid))) {
             peer_cu_device = i;
         }
