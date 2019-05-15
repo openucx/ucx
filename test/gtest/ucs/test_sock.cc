@@ -286,9 +286,19 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
     status = ucs_sockaddr_set_port(sa2, port2);
     ASSERT_UCS_OK(status);
 
+    const void *addr1 = ucs_sockaddr_get_inet_addr(sa1);
+    const void *addr2 = ucs_sockaddr_get_inet_addr(sa2);
+
+    ASSERT_TRUE(addr1 != NULL);
+    ASSERT_TRUE(addr2 != NULL);
+
+    size_t addr_size = ((sa_family == AF_INET) ?
+                        sizeof(UCS_SOCKET_INET_ADDR(sa1)) :
+                        sizeof(UCS_SOCKET_INET6_ADDR(sa1)));
+
     // `sa1` vs `sa2`
     {
-        int addr_cmp_res = strcmp(ip_addr1, ip_addr2);
+        int addr_cmp_res = memcmp(addr1, addr2, addr_size);
         int port_cmp_res =
             (port1 == port2) ? 0 : ((port1 < port2) ? -1 : 1);
         int expected_cmp_res =
@@ -312,7 +322,7 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
 
     // `sa2` vs `sa1`
     {
-        int addr_cmp_res = strcmp(ip_addr2, ip_addr1);
+        int addr_cmp_res = memcmp(addr2, addr1, addr_size);
         int port_cmp_res =
             (port2 == port1) ? 0 : ((port2 < port1) ? -1 : 1);
         int expected_cmp_res =
