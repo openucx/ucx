@@ -11,8 +11,6 @@ extern "C" {
 
 #include <sys/un.h>
 
-#define signum(_n) \
-    (((typeof(_n))0 < (_n)) - ((_n) < (typeof(_n))0))
 
 static std::string socket_err_exp_str;
 
@@ -302,19 +300,19 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
         int port_cmp_res =
             (port1 == port2) ? 0 : ((port1 < port2) ? -1 : 1);
         int expected_cmp_res =
-            signum((addr_cmp_res) ? addr_cmp_res : port_cmp_res);
+            addr_cmp_res ? addr_cmp_res : port_cmp_res;
 
         is_equal_res1 = ucs_sockaddr_is_equal(sa1, sa2, &status);
         EXPECT_UCS_OK(status);
         EXPECT_EQ(expected_cmp_res == 0, is_equal_res1);
 
-        cmp_res1 = signum(ucs_sockaddr_cmp(sa1, sa2, &status));
+        cmp_res1 = ucs_sockaddr_cmp(sa1, sa2, &status);
         EXPECT_UCS_OK(status);
         EXPECT_EQ(expected_cmp_res, cmp_res1);
 
         // Call w/o `status` provided
         is_equal_res2 = ucs_sockaddr_is_equal(sa1, sa2, NULL);
-        cmp_res2 = signum(ucs_sockaddr_cmp(sa1, sa2, &status));
+        cmp_res2 = ucs_sockaddr_cmp(sa1, sa2, &status);
 
         EXPECT_EQ(is_equal_res1, is_equal_res2);
         EXPECT_EQ(cmp_res1, cmp_res2);
@@ -326,19 +324,19 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
         int port_cmp_res =
             (port2 == port1) ? 0 : ((port2 < port1) ? -1 : 1);
         int expected_cmp_res =
-            signum((addr_cmp_res) ? addr_cmp_res : port_cmp_res);
+            addr_cmp_res ? addr_cmp_res : port_cmp_res;
 
         is_equal_res1 = ucs_sockaddr_is_equal(sa2, sa1, &status);
         EXPECT_UCS_OK(status);
         EXPECT_EQ(expected_cmp_res == 0, is_equal_res1);
 
-        cmp_res1 = signum(ucs_sockaddr_cmp(sa2, sa1, &status));
+        cmp_res1 = ucs_sockaddr_cmp(sa2, sa1, &status);
         EXPECT_UCS_OK(status);
         EXPECT_EQ(expected_cmp_res, cmp_res1);
 
         // Call w/o `status` provided
         is_equal_res2 = ucs_sockaddr_is_equal(sa2, sa1, NULL);
-        cmp_res2 = signum(ucs_sockaddr_cmp(sa2, sa1, &status));
+        cmp_res2 = ucs_sockaddr_cmp(sa2, sa1, &status);
 
         EXPECT_EQ(is_equal_res1, is_equal_res2);
         EXPECT_EQ(cmp_res1, cmp_res2);
