@@ -100,7 +100,7 @@ public class NativeLibs {
         }
 
         uctLibs.forEach(filePath -> {
-            if (!filePath.getFileName().toString().endsWith(".so")) {
+            if (!filePath.getFileName().toString().contains(".so")) {
                 return;
             }
             FileOutputStream os = null;

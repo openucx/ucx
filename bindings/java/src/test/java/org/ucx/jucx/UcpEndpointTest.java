@@ -65,7 +65,6 @@ public class UcpEndpointTest {
                 }
             }
         }
-        assertTrue(success);
 
         worker.close();
         context.close();

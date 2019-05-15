@@ -70,7 +70,7 @@ Java_org_ucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
                                                       jlong ucp_context_ptr,
                                                       jobject maped_buf)
 {
-    ucp_mem_map_params_t params;
+    ucp_mem_map_params_t params = {0};
     ucp_mem_h memh;
     jfieldID field;
 
