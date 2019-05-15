@@ -9,7 +9,6 @@
 #include "cma_ep.h"
 
 #include <uct/base/uct_md.h>
-#include <uct/sm/base/sm_iface.h>
 #include <ucs/sys/string.h>
 
 
@@ -19,6 +18,11 @@ static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap", NULL,
     ucs_offsetof(uct_cma_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"", "BW=11145MBs", NULL,
+     ucs_offsetof(uct_cma_iface_config_t, common),
+     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_common_config_table)},
+
     {NULL}
 };
 
@@ -32,6 +36,7 @@ static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
 static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
                                        uct_iface_attr_t *iface_attr)
 {
+    uct_cma_iface_t *iface = ucs_derived_of(tl_iface, uct_cma_iface_t);
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
@@ -61,7 +66,7 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 11145 * 1024.0 * 1024.0;
+    iface_attr->bandwidth               = iface->config.bw;
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
     return UCS_OK;
 }
@@ -93,6 +98,9 @@ static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_cma_iface_config_t *config = ucs_derived_of(tl_config,
+                                                   uct_cma_iface_config_t);
+
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
@@ -102,11 +110,12 @@ static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cma_iface_ops, md, worker,
                               params, tl_config
-                              UCS_STATS_ARG((params->field_mask & 
+                              UCS_STATS_ARG((params->field_mask &
                                              UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
                                             params->stats_root : NULL)
                               UCS_STATS_ARG(UCT_CMA_TL_NAME));
     uct_sm_get_max_iov(); /* to initialize ucs_get_max_iov static variable */
+    self->config.bw = config->common.bw;
 
     return UCS_OK;
 }
@@ -149,6 +158,6 @@ UCT_TL_COMPONENT_DEFINE(uct_cma_tl,
                         uct_cma_query_tl_resources,
                         uct_cma_iface_t,
                         UCT_CMA_TL_NAME,
-                        "",
+                        "CMA_",
                         uct_cma_iface_config_table,
                         uct_cma_iface_config_t);

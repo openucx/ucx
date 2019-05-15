@@ -8,11 +8,18 @@
 #define SM_IFACE_H_
 
 #include <uct/api/uct.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 
 #define UCT_SM_IFACE_DEVICE_ADDR_LEN    sizeof(uint64_t)
 #define UCT_SM_MAX_IOV                  16
+
+extern ucs_config_field_t uct_sm_iface_common_config_table[];
+
+typedef struct uct_sm_iface_common_config {
+    double          bw; /* Memory bandwidth in bytes per second */
+} uct_sm_iface_common_config_t;
 
 ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr);

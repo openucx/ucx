@@ -9,7 +9,6 @@
 
 #include <uct/base/uct_worker.h>
 #include <uct/sm/base/sm_ep.h>
-#include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
@@ -25,6 +24,10 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=md", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"", "", NULL,
+     ucs_offsetof(uct_mm_iface_config_t, common),
+     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_common_config_table)},
 
     {"FIFO_SIZE", "64",
      "Size of the receive FIFO in the memory-map UCTs.",
@@ -146,7 +149,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 12179 * 1024.0 * 1024.0;
+    iface_attr->bandwidth               = iface->config.bw;
     iface_attr->overhead                = 10e-9; /* 10 ns */
     iface_attr->priority                = uct_mm_md_mapper_ops(iface->super.md)->get_priority();
     return UCS_OK;
@@ -509,6 +512,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.fifo_size         = mm_config->fifo_size;
     self->config.fifo_elem_size    = mm_config->fifo_elem_size;
     self->config.seg_size          = mm_config->super.max_bcopy;
+    self->config.bw                = mm_config->common.bw;
     self->fifo_release_factor_mask = UCS_MASK(ucs_ilog2(ucs_max((int)
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
                                      1)));

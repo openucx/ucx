@@ -12,6 +12,7 @@
 #include "mm_md.h"
 
 #include <uct/base/uct_iface.h>
+#include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/arbiter.h>
@@ -31,13 +32,14 @@
 
 
 typedef struct uct_mm_iface_config {
-    uct_iface_config_t       super;
-    unsigned                 fifo_size;            /* Size of the receive FIFO */
-    double                   release_fifo_factor;
-    ucs_ternary_value_t      hugetlb_mode;         /* Enable using huge pages for
-                                                    * shared memory buffers */
-    unsigned                 fifo_elem_size;       /* Size of the FIFO element size */
-    uct_iface_mpool_config_t mp;
+    uct_iface_config_t           super;
+    uct_sm_iface_common_config_t common;
+    unsigned                     fifo_size;      /* Size of the receive FIFO */
+    double                       release_fifo_factor;
+    ucs_ternary_value_t          hugetlb_mode;   /* Enable using huge pages for
+                                                  * shared memory buffers */
+    unsigned                     fifo_elem_size; /* Size of the FIFO element size */
+    uct_iface_mpool_config_t     mp;
 } uct_mm_iface_config_t;
 
 
@@ -89,6 +91,7 @@ struct uct_mm_iface {
         unsigned fifo_size;
         unsigned fifo_elem_size;
         unsigned seg_size;                    /* size of the receive descriptor (for payload)*/
+        double   bw;
     } config;
 };
 

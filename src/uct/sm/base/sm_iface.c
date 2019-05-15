@@ -7,12 +7,18 @@
 
 #include "sm_iface.h"
 
-#include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/arch/cpu.h>
 
+ucs_config_field_t uct_sm_iface_common_config_table[] = {
+    {"BW", "12179MBs",
+     "Effective memory bandwidth",
+     ucs_offsetof(uct_sm_iface_common_config_t, bw), UCS_CONFIG_TYPE_BW},
+
+    {NULL}
+};
 
 static uint64_t uct_sm_iface_node_guid(uct_base_iface_t *iface)
 {
