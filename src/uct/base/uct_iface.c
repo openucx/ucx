@@ -540,18 +540,23 @@ UCS_CONFIG_DEFINE_ARRAY(alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
 
 ucs_config_field_t uct_iface_config_table[] = {
-  {"MAX_BCOPY", "8192",
-   "Maximal size of copy-out sends. The transport is allowed to support any size\n"
-   "up to this limit, the actual size can be lower due to transport constraints.",
-   ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+    {"MAX_SHORT", "",
+     "The configuration parameter replaced by: "
+     "UCX_<IB transport>_TX_MIN_INLINE for IB, UCX_MM_FIFO_SIZE for MM",
+     0, UCS_CONFIG_TYPE_DEPRECATED},
 
-  {"ALLOC", "huge,thp,md,mmap,heap",
-   "Priority of methods to allocate intermediate buffers for communication",
-   ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
+    {"MAX_BCOPY", "8k",
+     "Maximal size of copy-out sends. The transport is allowed to support any size\n"
+     "up to this limit, the actual size can be lower due to transport constraints.",
+     ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"FAILURE", "error",
-   "Level of network failure reporting",
-   ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+    {"ALLOC", "huge,thp,md,mmap,heap",
+     "Priority of methods to allocate intermediate buffers for communication",
+     ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
 
-  {NULL}
+    {"FAILURE", "error",
+     "Level of network failure reporting",
+     ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+    {NULL}
 };

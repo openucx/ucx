@@ -31,7 +31,7 @@ BEGIN_C_DECLS
  * - field_name:     field_name as defined in the table. e.g ZCOPY_THRESH
  *
  * Examples of full variable names:
- *   - UCS_CIB_RNDV_THRESH
+ *   - UCS_IB_RNDV_THRESH
  *   - UCS_IB_TX_MODERATION
  */
 
@@ -262,6 +262,9 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \
                                     ucs_config_help_generic,     \
                                     "memory units: <number>[b|kb|mb|gb], \"inf\", or \"auto\""}
+
+/* `ucs_config_parser_t::arg` must be `NULL` only for deprecated values */
+#define UCS_CONFIG_TYPE_DEPRECATED { 0 }
 
 #define UCS_CONFIG_TYPE_ARRAY(a)   {ucs_config_sscanf_array,     ucs_config_sprintf_array, \
                                     ucs_config_clone_array,      ucs_config_release_array, \

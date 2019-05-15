@@ -35,9 +35,17 @@ typedef struct ucs_config_parser_prefix_list {
 } ucs_config_parser_prefix_t;
 
 
+typedef struct ucs_config_deprecated_var {
+    const char                  *name;
+    const char                  *doc;
+    ucs_list_link_t             list;
+} ucs_config_deprecated_var_t;
+
+
 typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
-KHASH_SET_INIT_STR(ucs_config_env_vars)
+
+KHASH_MAP_INIT_STR(ucs_config_env_vars, const char *)
 
 
 /* Process environment variables */
@@ -45,8 +53,9 @@ extern char **environ;
 
 
 UCS_LIST_HEAD(ucs_config_global_list);
-static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
-static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
+static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars                       = {0};
+static khash_t(ucs_config_env_vars) ucs_config_parser_deprecated_env_vars = {0};
+static pthread_mutex_t ucs_config_parser_env_vars_hash_lock                          = PTHREAD_MUTEX_INITIALIZER;
 
 
 const char *ucs_async_mode_names[] = {
@@ -805,6 +814,11 @@ static inline int ucs_config_is_table_field(const ucs_config_field_t *field)
     return (field->parser.read == ucs_config_sscanf_table);
 }
 
+static inline int ucs_config_is_deprecated_field(const ucs_config_field_t *field)
+{
+    return (field->parser.arg == NULL);
+}
+
 static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
                                               void (*cb)(int num, const char *line, void *arg),
                                               void *arg)
@@ -861,7 +875,8 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     void *var;
 
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -976,6 +991,43 @@ out:
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
 }
 
+static void
+ucs_config_parser_mark_env_var_deprecated(const char *name,
+                                          const ucs_config_field_t *field)
+{
+    khiter_t iter;
+    char *key;
+    int ret;
+
+    if (!ucs_global_opts.warn_unused_env_vars) {
+        return;
+    }
+
+    pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
+
+    iter = kh_get(ucs_config_env_vars,
+                  &ucs_config_parser_deprecated_env_vars, name);
+    if (iter != kh_end(&ucs_config_parser_deprecated_env_vars)) {
+        goto out; /* already exists */
+    }
+
+    key = ucs_strdup(name, "config_parser_deprecated_env_var");
+    if (key == NULL) {
+        ucs_error("strdup(%s) for name failed", name);
+        goto out;
+    }
+
+    iter = kh_put(ucs_config_env_vars,
+                  &ucs_config_parser_deprecated_env_vars, key, &ret);
+    kh_val(&ucs_config_parser_deprecated_env_vars, iter) =
+        (void *)ucs_strdup(field->doc, "config_parser_deprecated_env_var_doc");
+    if (kh_val(&ucs_config_parser_deprecated_env_vars, iter) == NULL) {
+        ucs_error("strdup(%s) for documentation failed", name);
+    }
+out:
+    pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
+}
+
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
                                              const char *prefix, const char *table_prefix,
                                              int recurse, int ignore_errors)
@@ -1021,6 +1073,10 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             strncpy(buf + prefix_len, field->name, sizeof(buf) - prefix_len - 1);
             env_value = getenv(buf);
             if (env_value != NULL) {
+                if (ucs_config_is_deprecated_field(field)) {
+                    ucs_config_parser_mark_env_var_deprecated(buf, field);
+                    continue;
+                }
                 ucs_config_parser_release_field(field, var);
                 ucs_config_parser_mark_env_var_used(buf);
                 status = ucs_config_parser_parse_field(field, env_value, var);
@@ -1138,7 +1194,8 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
 
     ucs_config_field_t *field;
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -1160,7 +1217,8 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields)
     ucs_config_field_t *field;
 
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -1304,6 +1362,8 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                               "alias of:", env_prefix,
                                               aliased_field->name);
             }
+        } else if (ucs_config_is_deprecated_field(field)) {
+            continue;
         } else {
             ucs_config_parser_print_field(stream, opts, env_prefix, prefix_list,
                                           field->name, field, flags, NULL);
@@ -1372,16 +1432,18 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
 void ucs_config_parser_warn_unused_env_vars()
 {
     static uint32_t warn_once = 1;
-    char unused_env_vars_names[40];
-    int num_unused_vars;
+    ucs_config_deprecated_var_t *d_var;
+    char u_env_vars_names[40];
+    char *u_p, *u_endp;
+    int num_u_vars, num_d_vars;
+    int u_truncated;
     char **envp, *envstr;
     size_t prefix_len;
     char *var_name;
-    char *p, *endp;
     khiter_t iter;
     char *saveptr;
-    int truncated;
     int ret;
+    UCS_LIST_HEAD(d_env_vars_list);
 
     if (!ucs_global_opts.warn_unused_env_vars) {
         return;
@@ -1393,14 +1455,15 @@ void ucs_config_parser_warn_unused_env_vars()
 
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
-    prefix_len      = strlen(UCS_CONFIG_PREFIX);
-    p               = unused_env_vars_names;
-    endp            = p + sizeof(unused_env_vars_names) - 1;
-    *endp           = '\0';
-    truncated       = 0;
-    num_unused_vars = 0;
+    prefix_len  = strlen(UCS_CONFIG_PREFIX);
+    u_p         = u_env_vars_names;
+    u_endp      = u_p + sizeof(u_env_vars_names) - 1;
+    *u_endp     = '\0';
+    u_truncated = 0;
+    num_u_vars  = 0;
+    num_d_vars  = 0;
 
-    for (envp = environ; !truncated && (*envp != NULL); ++envp) {
+    for (envp = environ; *envp != NULL; ++envp) {
         envstr = ucs_strdup(*envp, "env_str");
         if (envstr == NULL) {
             continue;
@@ -1412,29 +1475,60 @@ void ucs_config_parser_warn_unused_env_vars()
             continue; /* Not UCX */
         }
 
-        iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, var_name);
-        if (iter == kh_end(&ucs_config_parser_env_vars)) {
-            ret = snprintf(p, endp - p, " %s,", var_name);
-            if (ret > endp - p) {
-                truncated = 1;
-                *p = '\0';
-            } else {
-                p += strlen(p);
-                ++num_unused_vars;
+        iter = kh_get(ucs_config_env_vars,
+                      &ucs_config_parser_deprecated_env_vars, var_name);
+        if (iter != kh_end(&ucs_config_parser_deprecated_env_vars)) {
+            d_var = ucs_calloc(1, sizeof(*d_var), "deprecated var");
+            if (d_var == NULL) {
+                continue;
+            }
+            d_var->name = kh_key(&ucs_config_parser_deprecated_env_vars, iter);
+            d_var->doc  = kh_val(&ucs_config_parser_deprecated_env_vars, iter);
+            ucs_list_add_tail(&d_env_vars_list, &d_var->list);
+            ++num_d_vars;
+        } else {
+            iter = kh_get(ucs_config_env_vars,
+                          &ucs_config_parser_env_vars, var_name);
+            if (iter == kh_end(&ucs_config_parser_env_vars)) {   
+                if (u_truncated) {
+                    ++num_u_vars;
+                    continue;
+                }
+                ret = snprintf(u_p, u_endp - u_p, " %s,", var_name);
+                if (ret > (u_endp - u_p)) {
+                    u_truncated = 1;
+                    *u_p = '\0';
+                } else {
+                    u_p += strlen(u_p);
+                    ++num_u_vars;
+                }
             }
         }
 
         ucs_free(envstr);
     }
 
-    if (num_unused_vars > 0) {
-        if (!truncated) {
-            p[-1] = '\0'; /* remove trailing comma */
+    if (num_u_vars > 0) {
+        if (!u_truncated) {
+            u_p[-1] = '\0'; /* remove trailing comma */
         }
         ucs_warn("unused env variable%s:%s%s (set %s%s=n to suppress this warning)",
-                 num_unused_vars > 1 ? "s" : "", unused_env_vars_names,
-                 truncated ? "..." : "", UCS_CONFIG_PREFIX,
+                 (num_u_vars > 1) ? "s" : "", u_env_vars_names,
+                 (u_truncated && (num_u_vars > 1)) ? "..." : "", UCS_CONFIG_PREFIX,
                  UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
+    }
+
+    if (num_d_vars > 0) {
+        ucs_warn("deprecated env variable%s: (set %s%s=n to suppress this warning)",
+                 (num_d_vars > 1) ? "s" : "",
+                 UCS_CONFIG_PREFIX, UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
+        while (!ucs_list_is_empty(&d_env_vars_list)) {
+            d_var = ucs_list_extract_head(&d_env_vars_list,
+                                          ucs_config_deprecated_var_t,
+                                          list);
+            ucs_warn("- %s: %s", d_var->name, d_var->doc);
+            ucs_free(d_var);
+        }
     }
 
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
@@ -1466,9 +1560,19 @@ int ucs_config_names_search(ucs_config_names_array_t config_names,
 
 UCS_STATIC_CLEANUP {
     const char *key;
+    const char *val;
 
     kh_foreach_key(&ucs_config_parser_env_vars, key, {
         ucs_free((void*)key);
     })
-    kh_destroy_inplace(ucs_config_env_vars, &ucs_config_parser_env_vars);
+    kh_destroy_inplace(ucs_config_env_vars,
+                       &ucs_config_parser_env_vars);
+
+    kh_foreach(&ucs_config_parser_deprecated_env_vars, key, val, {
+            (void)key;
+         ucs_free((void*)key);
+         ucs_free((void*)val);
+    })
+    kh_destroy_inplace(ucs_config_env_vars,
+                       &ucs_config_parser_deprecated_env_vars);
 }
