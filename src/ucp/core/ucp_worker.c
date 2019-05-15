@@ -424,7 +424,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     key.num_lanes          = 1;
     key.status             = status;
 
-    ucp_ep->cfg_index = ucp_worker_get_ep_config(worker, &key);
+    ucp_ep->cfg_index = ucp_worker_get_ep_config(worker, &key, 0);
     ucp_ep->am_lane   = 0;
 
     if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
@@ -1281,6 +1281,94 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
     }
 }
 
+static char* ucp_worker_add_feature_rsc(ucp_context_h context,
+                                        const ucp_ep_config_key_t *key,
+                                        ucp_lane_map_t lanes_bitmap,
+                                        const char *feature_str,
+                                        char *buf, size_t max)
+{
+    char *p    = buf;
+    char *endp = buf + max;
+    int   sep  = 0;
+    ucp_rsc_index_t rsc_idx;
+    ucp_lane_index_t lane;
+
+    if (!lanes_bitmap) {
+        return p;
+    }
+
+    snprintf(p, endp - p, "%s(", feature_str);
+    p += strlen(p);
+
+    ucs_for_each_bit(lane, lanes_bitmap) {
+        ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */
+        rsc_idx = key->lanes[lane].rsc_index;
+        snprintf(p, endp - p, "%*s"UCT_TL_RESOURCE_DESC_FMT, sep, "",
+                 UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_idx].tl_rsc));
+        p  += strlen(p);
+        sep = 1; /* add space between tl names */
+    }
+
+    snprintf(p, endp - p, "); ");
+    p += strlen(p);
+
+    return p;
+}
+
+static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
+                                      ucp_context_h context, unsigned config_idx)
+{
+    char info[256]                  = {0};
+    ucp_lane_map_t tag_lanes_map    = 0;
+    ucp_lane_map_t rma_lanes_map    = 0;
+    ucp_lane_map_t amo_lanes_map    = 0;
+    ucp_lane_map_t stream_lanes_map = 0;
+    ucp_lane_index_t lane;
+    char *p, *endp;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_INFO)) {
+        return;
+    }
+
+    p    = info;
+    endp = p + sizeof(info);
+
+    snprintf(p, endp - p,  "ep_cfg[%d]: ", config_idx);
+    p += strlen(p);
+
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        if (((key->am_lane == lane) || (lane == key->tag_lane) ||
+            (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
+            (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) &&
+            (context->config.features & UCP_FEATURE_TAG)) {
+            tag_lanes_map |= UCS_BIT(lane);
+        }
+
+        if ((key->am_lane == lane) &&
+            (context->config.features & UCP_FEATURE_STREAM)) {
+            stream_lanes_map |= UCS_BIT(lane);
+        }
+
+        if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
+            rma_lanes_map |= UCS_BIT(lane);
+        }
+
+        if ((ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane) >= 0)) {
+            amo_lanes_map |= UCS_BIT(lane);
+        }
+    }
+
+    p = ucp_worker_add_feature_rsc(context, key, tag_lanes_map, "tag",
+                                   p, endp - p);
+    p = ucp_worker_add_feature_rsc(context, key, rma_lanes_map, "rma",
+                                   p, endp - p);
+    p = ucp_worker_add_feature_rsc(context, key, amo_lanes_map, "amo",
+                                   p, endp - p);
+    p = ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
+                                   p, endp - p);
+    ucs_info("%s", info);
+}
+
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 {
     size_t           max_mp_entry_size = 0;
@@ -1340,7 +1428,8 @@ out:
  * additional configuration parameters and thresholds.
  */
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
-                                  const ucp_ep_config_key_t *key)
+                                  const ucp_ep_config_key_t *key,
+                                  int print_cfg)
 {
     ucp_ep_config_t *config;
     unsigned config_idx;
@@ -1364,6 +1453,10 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
     memset(config, 0, sizeof(*config));
     config->key = *key;
     ucp_ep_config_init(worker, config);
+
+    if (print_cfg) {
+        ucp_worker_print_used_tls(key, worker->context, config_idx);
+    }
 
 out:
     return config_idx;

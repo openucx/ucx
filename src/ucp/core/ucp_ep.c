@@ -84,7 +84,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
 
     ucp_ep_config_key_reset(&key);
     ep->worker                      = worker;
-    ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
+    ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key, 0);
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
     ep->conn_sn                     = -1;
@@ -294,7 +294,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     key.rma_bw_lanes[0]       = 0;
     key.amo_lanes[0]          = 0;
 
-    ep->cfg_index             = ucp_worker_get_ep_config(ep->worker, &key);
+    ep->cfg_index             = ucp_worker_get_ep_config(ep->worker, &key, 0);
     ep->am_lane               = 0;
     ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
