@@ -35,7 +35,7 @@ const char *ucs_log_level_names[] = {
 static unsigned ucs_log_handlers_count = 0;
 static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static int ucs_log_initialized         = 0;
-static char ucs_log_hostname[256]      = {0};
+static char ucs_log_hostname[HOST_NAME_MAX] = {0};
 static int  ucs_log_pid                = 0;
 static FILE *ucs_log_file              = NULL;
 static int ucs_log_file_close          = 0;
