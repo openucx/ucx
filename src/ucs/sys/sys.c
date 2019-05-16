@@ -51,7 +51,7 @@ const char *ucs_get_tmpdir()
 
 const char *ucs_get_host_name()
 {
-    static char hostname[256] = {0};
+    static char hostname[HOST_NAME_MAX] = {0};
 
     if (*hostname == 0) {
         gethostname(hostname, sizeof(hostname));
