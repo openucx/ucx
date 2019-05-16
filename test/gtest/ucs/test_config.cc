@@ -248,7 +248,7 @@ protected:
                                                               0);
             ASSERT_UCS_OK(status);
             return tmp;
-        }        
+        }
 
         car_opts_t   m_opts;
         const size_t m_max;
@@ -427,7 +427,7 @@ UCS_TEST_F(test_config, performance) {
     }
 
     /* Now test the time */
-    UCS_TEST_TIME_LIMIT(0.05){
+    UCS_TEST_TIME_LIMIT(0.05) {
         car_opts opts(NULL, NULL);
     }
 }
