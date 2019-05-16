@@ -99,7 +99,7 @@ static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_config_t *tl_config)
 {
     uct_cma_iface_config_t *config = ucs_derived_of(tl_config,
-                                                   uct_cma_iface_config_t);
+                                                    uct_cma_iface_config_t);
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
