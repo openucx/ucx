@@ -398,4 +398,4 @@ static UCT_MD_COMPONENT_DEFINE(uct_self_md, UCT_SELF_NAME,
                                uct_self_query_md_resources, uct_self_md_open, NULL,
                                uct_self_md_rkey_unpack,
                                ucs_empty_function_return_success, "SELF_",
-                               uct_md_config_table, uct_self_iface_config_t);
+                               uct_md_config_table, uct_md_config_t);
