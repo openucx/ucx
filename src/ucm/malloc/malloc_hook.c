@@ -633,7 +633,7 @@ static void ucm_malloc_test(int events)
 
 static void ucm_malloc_populate_glibc_cache()
 {
-    char hostname[NAME_MAX];
+    char hostname[HOST_NAME_MAX];
 
     /* Trigger NSS initialization before we install malloc hooks.
      * This is needed because NSS could allocate strings with our malloc(), but

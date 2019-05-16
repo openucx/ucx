@@ -17,12 +17,12 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
-
+#include <limits.h>
 
 #define UCM_LOG_BUG_SIZE   256
 
-static int  ucm_log_fileno = 1; /* stdout */
-static char ucm_log_hostname[40] = {0};
+static int  ucm_log_fileno                  = 1; /* stdout */
+static char ucm_log_hostname[HOST_NAME_MAX] = {0};
 
 const char *ucm_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL] = "FATAL",

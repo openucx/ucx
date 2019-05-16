@@ -10,7 +10,7 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/time/time_def.h>
-
+#include <limits.h>
 
 BEGIN_C_DECLS
 
@@ -47,13 +47,13 @@ typedef enum {
  * Profile output file header
  */
 typedef struct ucs_profile_header {
-    char                     cmdline[1024]; /**< Command line */
-    char                     hostname[40];  /**< Host name */
-    uint32_t                 pid;           /**< Process ID */
-    uint32_t                 mode;          /**< Profiling mode */
-    uint32_t                 num_locations; /**< Number of locations in the file */
-    uint64_t                 num_records;   /**< Number of records in the file */
-    uint64_t                 one_second;    /**< How much time is one second on the sampled machine */
+    char                     cmdline[1024];            /**< Command line */
+    char                     hostname[HOST_NAME_MAX];  /**< Host name */
+    uint32_t                 pid;                      /**< Process ID */
+    uint32_t                 mode;                     /**< Profiling mode */
+    uint32_t                 num_locations;            /**< Number of locations in the file */
+    uint64_t                 num_records;              /**< Number of records in the file */
+    uint64_t                 one_second;               /**< How much time is one second on the sampled machine */
 } UCS_S_PACKED ucs_profile_header_t;
 
 
