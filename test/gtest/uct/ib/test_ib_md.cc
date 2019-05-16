@@ -61,18 +61,22 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
     uct_ib_mem_t *ib_memh = (uct_ib_mem_t *)memh;
-    uct_ib_md_t  *ib_md = (uct_ib_md_t *)md();
 
     if (amo_access) {
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
-        EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
     } else {
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
-        EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
     }
+
+#if HAVE_MLX5_HW
+    EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
+#endif
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
+
+#if HAVE_MLX5_HW
+    uct_ib_md_t *ib_md = (uct_ib_md_t *)md();
 
     if (amo_access) {
         if (check_umr(ib_md)) {
@@ -86,6 +90,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
         EXPECT_TRUE(ib_memh->atomic_rkey == 0);
     }
+#endif
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
@@ -108,8 +113,11 @@ bool test_ib_md::has_ksm() const {
 bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
 #if HAVE_DEVX
     return has_ksm();
+#elif HAVE_MLX5_HW
+    uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+    return mlx5_md->umr_qp != NULL;
 #else
-    return ib_md->umr_qp != NULL;
+    return false;
 #endif
 }
 

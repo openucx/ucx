@@ -21,10 +21,6 @@
 
 
 #define UCT_IB_MD_PREFIX         "ib"
-#define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
-                                  IBV_ACCESS_REMOTE_WRITE | \
-                                  IBV_ACCESS_REMOTE_READ | \
-                                  IBV_ACCESS_REMOTE_ATOMIC)
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 /* define string to use it in debug messages */
@@ -247,163 +243,6 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
-{
-#if HAVE_EXP_UMR
-    struct ibv_exp_qp_init_attr qp_init_attr;
-    struct ibv_qp_attr qp_attr;
-    uint8_t port_num;
-    int ret;
-    uct_ib_device_t *ibdev;
-    struct ibv_exp_port_attr *port_attr;
-    int is_roce_v2;
-
-    ibdev = &md->dev;
-
-    if (!(ibdev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_UMR) ||
-        !md->config.enable_indirect_atomic) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    /* TODO: fix port selection. It looks like active port should be used */
-    port_num = ibdev->first_port;
-    port_attr = uct_ib_device_port_attr(ibdev, port_num);
-
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-
-    md->umr_cq = ibv_create_cq(ibdev->ibv_context, 1, NULL, NULL, 0);
-    if (md->umr_cq == NULL) {
-        ucs_error("failed to create UMR CQ: %m");
-        goto err;
-    }
-
-    md->config.max_inline_klm_list = ucs_min(md->config.max_inline_klm_list,
-                                             ibdev->dev_attr.umr_caps.max_send_wqe_inline_klms);
-
-    qp_init_attr.qp_type             = IBV_QPT_RC;
-    qp_init_attr.send_cq             = md->umr_cq;
-    qp_init_attr.recv_cq             = md->umr_cq;
-    qp_init_attr.cap.max_inline_data = 0;
-    qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_send_sge    = 1;
-    qp_init_attr.srq                 = NULL;
-    qp_init_attr.cap.max_recv_wr     = 16;
-    qp_init_attr.cap.max_send_wr     = 16;
-    qp_init_attr.pd                  = md->pd;
-    qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_MAX_INL_KLMS;
-    qp_init_attr.max_inl_recv        = 0;
-    qp_init_attr.max_inl_send_klms   = md->config.max_inline_klm_list;
-
-#if HAVE_IBV_EXP_QP_CREATE_UMR
-    qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
-    qp_init_attr.exp_create_flags    = IBV_EXP_QP_CREATE_UMR;
-#endif
-
-    md->umr_qp = ibv_exp_create_qp(ibdev->ibv_context, &qp_init_attr);
-    if (md->umr_qp == NULL) {
-        ucs_error("failed to create UMR QP: %m");
-        goto err_destroy_cq;
-    }
-
-    memset(&qp_attr, 0, sizeof(qp_attr));
-
-    /* Modify QP to INIT state */
-    qp_attr.qp_state                 = IBV_QPS_INIT;
-    qp_attr.pkey_index               = 0;
-    qp_attr.port_num                 = port_num;
-    qp_attr.qp_access_flags          = UCT_IB_MEM_ACCESS_FLAGS;
-    ret = ibv_modify_qp(md->umr_qp, &qp_attr,
-                        IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
-    if (ret) {
-        ucs_error("Failed to modify UMR QP to INIT: %m");
-        goto err_destroy_qp;
-    }
-
-    /* Modify to RTR */
-    qp_attr.qp_state                 = IBV_QPS_RTR;
-    qp_attr.dest_qp_num              = md->umr_qp->qp_num;
-
-    memset(&qp_attr.ah_attr, 0, sizeof(qp_attr.ah_attr));
-    qp_attr.ah_attr.port_num         = port_num;
-    qp_attr.ah_attr.dlid             = port_attr->lid;
-    qp_attr.ah_attr.is_global        = 1;
-    if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
-                                &qp_attr.ah_attr.grh.dgid, &is_roce_v2) != UCS_OK) {
-        goto err_destroy_qp;
-    }
-    qp_attr.rq_psn                   = 0;
-    qp_attr.path_mtu                 = IBV_MTU_512;
-    qp_attr.min_rnr_timer            = 7;
-    qp_attr.max_dest_rd_atomic       = 1;
-    ret = ibv_modify_qp(md->umr_qp, &qp_attr,
-                        IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
-                        IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);
-    if (ret) {
-        ucs_error("Failed to modify UMR QP to RTR: %m");
-        goto err_destroy_qp;
-    }
-
-    /* Modify to RTS */
-    qp_attr.qp_state                 = IBV_QPS_RTS;
-    qp_attr.sq_psn                   = 0;
-    qp_attr.timeout                  = 7;
-    qp_attr.rnr_retry                = 7;
-    qp_attr.retry_cnt                = 7;
-    qp_attr.max_rd_atomic            = 1;
-    ret = ibv_modify_qp(md->umr_qp, &qp_attr,
-                        IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT |
-                        IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN |
-                        IBV_QP_MAX_QP_RD_ATOMIC);
-    if (ret) {
-        ucs_error("Failed to modify UMR QP to RTS: %m");
-        goto err_destroy_qp;
-    }
-
-    ucs_debug("initialized UMR QP 0x%x, max_inline_klm_list %u",
-              md->umr_qp->qp_num, md->config.max_inline_klm_list);
-    return UCS_OK;
-
-err_destroy_qp:
-    ibv_destroy_qp(md->umr_qp);
-err_destroy_cq:
-    ibv_destroy_cq(md->umr_cq);
-err:
-    return UCS_ERR_IO_ERROR;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
-static void uct_ib_md_umr_qp_destroy(uct_ib_md_t *md)
-{
-#if HAVE_EXP_UMR
-    if (md->umr_qp != NULL) {
-        ibv_destroy_qp(md->umr_qp);
-    }
-    if (md->umr_cq != NULL) {
-        ibv_destroy_cq(md->umr_cq);
-    }
-#endif
-}
-
-uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
-{
-#if HAVE_EXP_UMR
-    if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
-        return 0;
-    }
-    /* Generate atomic UMR id. We want umrs for same virtual addresses to have
-     * different ids across processes.
-     *
-     * Usually parallel processes running on the same node as part of a single
-     * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
-     */
-    return getpid() % 256;
-#else
-    return 0;
-#endif
-}
-
 static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
                                             size_t length, uint64_t exp_access,
                                             const char *exp_prefix)
@@ -465,176 +304,6 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
     *mr_p = mr;
     return UCS_OK;
-}
-
-ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
-                                         uct_ib_mem_t *memh,
-                                         off_t offset)
-{
-#if HAVE_EXP_UMR
-    struct ibv_exp_mem_region *mem_reg = NULL;
-    struct ibv_mr *mr = memh->mr;
-    struct ibv_exp_send_wr wr, *bad_wr;
-    struct ibv_exp_create_mr_in mrin;
-    ucs_status_t status;
-    struct ibv_mr *umr;
-    struct ibv_wc wc;
-    int i, list_size;
-    size_t reg_length;
-    int ret;
-
-    if (md->umr_qp == NULL) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err;
-    }
-
-    /* Create and fill memory key */
-    memset(&mrin, 0, sizeof(mrin));
-    memset(&wr, 0, sizeof(wr));
-
-    mrin.pd                             = md->pd;
-    wr.exp_opcode                       = IBV_EXP_WR_UMR_FILL;
-    wr.exp_send_flags                   = IBV_EXP_SEND_SIGNALED;
-    wr.ext_op.umr.exp_access            = UCT_IB_MEM_ACCESS_FLAGS;
-
-    reg_length = UCT_IB_MD_MAX_MR_SIZE;
-#ifdef HAVE_EXP_UMR_KSM
-    if ((md->dev.dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_COMP_MASK_2) &&
-        (md->dev.dev_attr.comp_mask_2 & IBV_EXP_DEVICE_ATTR_UMR_FIXED_SIZE_CAPS) &&
-        (md->dev.dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_UMR_FIXED_SIZE))
-    {
-        reg_length                      = md->dev.dev_attr.umr_fixed_size_caps.max_entity_size;
-        list_size                       = ucs_div_round_up(mr->length, reg_length);
-    } else if (mr->length < reg_length) {
-        list_size                       = 1;
-    } else {
-        status                          = UCS_ERR_UNSUPPORTED;
-        goto err;
-    }
-
-    if (list_size > 1) {
-        mrin.attr.create_flags          = IBV_EXP_MR_FIXED_BUFFER_SIZE;
-        wr.ext_op.umr.umr_type          = IBV_EXP_UMR_MR_LIST_FIXED_SIZE;
-    } else {
-        mrin.attr.create_flags          = IBV_EXP_MR_INDIRECT_KLMS;
-        wr.ext_op.umr.umr_type          = IBV_EXP_UMR_MR_LIST;
-    }
-#else
-    if (mr->length >= reg_length) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err;
-    }
-
-    list_size                           = 1;
-    mrin.attr.create_flags              = IBV_EXP_MR_INDIRECT_KLMS;
-    wr.ext_op.umr.umr_type              = IBV_EXP_UMR_MR_LIST;
-#endif
-
-    mrin.attr.exp_access_flags          = UCT_IB_MEM_ACCESS_FLAGS;
-    mrin.attr.max_klm_list_size         = list_size;
-    mem_reg                             = ucs_calloc(list_size, sizeof(mem_reg[0]), "mem_reg");
-    if (!mem_reg) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    umr = ibv_exp_create_mr(&mrin);
-    if (!umr) {
-        ucs_error("Failed to create modified_mr: %m");
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    for (i = 0; i < list_size; i++) {
-        mem_reg[i].base_addr            = (uintptr_t) mr->addr + i * reg_length;
-        mem_reg[i].length               = reg_length;
-        mem_reg[i].mr                   = mr;
-    }
-
-    ucs_assert(list_size >= 1);
-    mem_reg[list_size - 1].length       = mr->length % reg_length;
-    wr.ext_op.umr.mem_list.mem_reg_list = mem_reg;
-    wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) mr->addr + offset;
-    wr.ext_op.umr.num_mrs               = list_size;
-    wr.ext_op.umr.modified_mr           = umr;
-
-    /* If the list exceeds max inline size, allocate a container object */
-    if (list_size > md->config.max_inline_klm_list) {
-        struct ibv_exp_mkey_list_container_attr in = {
-            .pd                = md->pd,
-            .mkey_list_type    = IBV_EXP_MKEY_LIST_TYPE_INDIRECT_MR,
-            .max_klm_list_size = list_size
-        };
-
-        wr.ext_op.umr.memory_objects = ibv_exp_alloc_mkey_list_memory(&in);
-        if (wr.ext_op.umr.memory_objects == NULL) {
-            ucs_error("ibv_exp_alloc_mkey_list_memory(list_size=%d) failed: %m",
-                      list_size);
-            status = UCS_ERR_IO_ERROR;
-            goto err_free_umr;
-        }
-    } else {
-        wr.ext_op.umr.memory_objects = NULL;
-        wr.exp_send_flags           |= IBV_EXP_SEND_INLINE;
-    }
-
-    ucs_trace_data("UMR_FILL qp 0x%x lkey 0x%x base 0x%lx [addr %lx len %zu lkey 0x%x] list_size %d",
-                   md->umr_qp->qp_num, wr.ext_op.umr.modified_mr->lkey,
-                   wr.ext_op.umr.base_addr, mem_reg[0].base_addr,
-                   mem_reg[0].length, mem_reg[0].mr->lkey, list_size);
-
-    /* Post UMR */
-    ret = ibv_exp_post_send(md->umr_qp, &wr, &bad_wr);
-    if (ret) {
-        ucs_error("ibv_exp_post_send(UMR_FILL) failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_free_klm_container;
-    }
-
-    /* Wait for send UMR completion */
-    for (;;) {
-        ret = ibv_poll_cq(md->umr_cq, 1, &wc);
-        if (ret < 0) {
-            ucs_error("ibv_exp_poll_cq(umr_cq) failed: %m");
-            status = UCS_ERR_IO_ERROR;
-            goto err_free_klm_container;
-        }
-        if (ret == 1) {
-            if (wc.status != IBV_WC_SUCCESS) {
-                ucs_error("UMR_FILL completed with error: %s vendor_err %d",
-                          ibv_wc_status_str(wc.status), wc.vendor_err);
-                status = UCS_ERR_IO_ERROR;
-                goto err_free_klm_container;
-            }
-            break;
-        }
-    }
-
-    if (wr.ext_op.umr.memory_objects != NULL) {
-        ibv_exp_dealloc_mkey_list_memory(wr.ext_op.umr.memory_objects);
-    }
-
-    ucs_debug("UMR registered memory %p..%p offset 0x%lx on %s lkey 0x%x rkey 0x%x",
-              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
-              umr->lkey, umr->rkey);
-    memh->atomic_mr   = umr;
-    memh->atomic_rkey = umr->rkey;
-
-    ucs_free(mem_reg);
-    return UCS_OK;
-
-err_free_klm_container:
-    if (wr.ext_op.umr.memory_objects != NULL) {
-        ibv_exp_dealloc_mkey_list_memory(wr.ext_op.umr.memory_objects);
-    }
-err_free_umr:
-    UCS_PROFILE_CALL(ibv_dereg_mr, umr);
-err:
-    ucs_free(mem_reg);
-    return status;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
 
 static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
@@ -824,16 +493,6 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
     }
 }
 
-ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
-                                           uct_ib_mem_t *memh)
-{
-#if HAVE_EXP_UMR
-    return uct_ib_dereg_mr(memh->atomic_mr);
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
 static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
                                             size_t length, unsigned flags,
                                             int silent, uct_ib_mem_t *memh)
@@ -915,7 +574,6 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     uct_ib_md_t *md         = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_mem_t *memh      = uct_memh;
     uint32_t atomic_rkey;
-    uint16_t umr_offset;
     ucs_status_t status;
 
     /* create umr only if a user requested atomic access to the
@@ -926,9 +584,8 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         (memh != &md->global_odp))
     {
         /* create UMR on-demand */
-        umr_offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
         UCS_PROFILE_CODE("reg atomic key") {
-            status = md->ops->reg_atomic_key(md, memh, umr_offset);
+            status = md->ops->reg_atomic_key(md, memh);
         }
         if (status == UCS_OK) {
             memh->flags |= UCT_IB_MEM_FLAG_ATOMIC_MR;
@@ -1466,8 +1123,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     struct ibv_device **ib_device_list, *ib_device;
     uct_ib_md_ops_entry_t *md_ops_entry;
     char tmp_md_name[UCT_MD_NAME_MAX];
-    int i, num_devices, ret;
-    uct_md_attr_t md_attr;
+    int i, num_devices;
 
     ucs_trace("opening IB device %s", md_name);
 
@@ -1495,7 +1151,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
-        status = md_ops_entry->ops->open(ib_device, &md);
+        status = md_ops_entry->ops->open(ib_device, md_config, &md);
         if (status == UCS_OK) {
             md->ops = md_ops_entry->ops;
             break;
@@ -1510,17 +1166,33 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
-    ucs_assert(md != NULL);
-    md->super.ops             = &uct_ib_md_ops;
-    md->super.component       = &uct_ib_mdc;
-    md->config                = md_config->ext;
+    *md_p = &md->super;
+    status = UCS_OK;
+
+out_free_dev_list:
+    ibv_free_device_list(ib_device_list);
+out:
+    return status;
+}
+
+ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
+                                   struct ibv_device *ib_device,
+                                   const uct_ib_md_config_t *md_config)
+{
+    uct_md_attr_t md_attr;
+    ucs_status_t status;
+    int ret;
+
+    md->super.ops                      = &uct_ib_md_ops;
+    md->super.component                = &uct_ib_mdc;
+    md->config                         = md_config->ext;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
                                   ucs_stats_get_root(),
                                   "%s-%p", ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
-        goto err_free_md;
+        return status;
     }
 
     if (md_config->fork_init != UCS_NO) {
@@ -1571,27 +1243,14 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_cleanup_device;
     }
 
-    status = uct_ib_md_umr_qp_create(md);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        md->umr_qp = NULL;
-        md->umr_cq = NULL;
-    } else if (status != UCS_OK) {
-        goto err_dealloc_pd;
-    }
-
     status = uct_md_query(&md->super, &md_attr);
     if (status != UCS_OK) {
-        goto err_destroy_umr_qp;
+        goto err_dealloc_pd;
     }
 
     status = uct_ib_md_parse_reg_methods(md, &md_attr, md_config);
     if (status != UCS_OK) {
-        goto err_destroy_umr_qp;
-    }
-
-    status = uct_ib_md_parse_device_config(md, md_config);
-    if (status != UCS_OK) {
-        goto err_release_reg_method;
+        goto err_dealloc_pd;
     }
 
     md->dev.max_zcopy_log_sge = INT_MAX;
@@ -1600,28 +1259,15 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     md->pci_bw = uct_ib_md_pci_bw(md_config, ib_device);
+    return UCS_OK;
 
-    *md_p = &md->super;
-    status = UCS_OK;
-
-out_free_dev_list:
-    ibv_free_device_list(ib_device_list);
-out:
-    return status;
-
-err_release_reg_method:
-    uct_ib_md_release_reg_method(md);
-err_destroy_umr_qp:
-    uct_ib_md_umr_qp_destroy(md);
 err_dealloc_pd:
     ibv_dealloc_pd(md->pd);
 err_cleanup_device:
     uct_ib_device_cleanup(&md->dev);
 err_release_stats:
     UCS_STATS_NODE_FREE(md->stats);
-err_free_md:
-    ucs_free(md);
-    goto out_free_dev_list;
+    return status;
 }
 
 void uct_ib_md_close(uct_md_h uct_md)
@@ -1631,7 +1277,6 @@ void uct_ib_md_close(uct_md_h uct_md)
     md->ops->cleanup(md);
     uct_ib_md_release_device_config(md);
     uct_ib_md_release_reg_method(md);
-    uct_ib_md_umr_qp_destroy(md);
     uct_ib_device_cleanup_ah_cached(&md->dev);
     ibv_dealloc_pd(md->pd);
     uct_ib_device_cleanup(&md->dev);
@@ -1639,7 +1284,10 @@ void uct_ib_md_close(uct_md_h uct_md)
     ucs_free(md);
 }
 
+static uct_ib_md_ops_t uct_ib_verbs_md_ops;
+
 static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
+                                         const uct_ib_md_config_t *md_config,
                                          uct_ib_md_t **p_md)
 {
     uct_ib_device_t *dev;
@@ -1680,9 +1328,23 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         dev->atomic_arg_sizes = sizeof(uint64_t);
     }
 
+    md->ops = &uct_ib_verbs_md_ops;
+    status = uct_ib_md_parse_device_config(md, md_config);
+    if (status != UCS_OK) {
+        goto err_free_context;
+    }
+
+    status = uct_ib_md_open_common(md, ibv_device, md_config);
+    if (status != UCS_OK) {
+        goto err_dev_cfg;
+    }
+
+    md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
     *p_md = md;
     return UCS_OK;
 
+err_dev_cfg:
+    uct_ib_md_release_device_config(md);
 err_free_context:
     ibv_close_device(dev->ibv_context);
 err:
@@ -1694,8 +1356,8 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .open              = uct_ib_verbs_md_open,
     .cleanup           = (void*)ucs_empty_function,
     .memh_struct_size  = sizeof(uct_ib_mem_t),
-    .reg_atomic_key    = uct_ib_verbs_reg_atomic_key,
-    .dereg_atomic_key  = uct_ib_verbs_dereg_atomic_key,
+    .reg_atomic_key    = (void*)ucs_empty_function_return_unsupported,
+    .dereg_atomic_key  = (void*)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);

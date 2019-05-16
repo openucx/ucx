@@ -193,7 +193,6 @@ typedef struct uct_rc_fc {
 struct uct_rc_ep {
     uct_base_ep_t       super;
     uct_rc_txqp_t       txqp;
-    uint16_t            atomic_mr_offset;
     uint8_t             sl;
     uint8_t             path_bits;
     ucs_list_link_t     list;
@@ -206,7 +205,6 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 typedef struct uct_rc_ep_address {
     uct_ib_uint24_t  qp_num;
-    uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_ep_address_t;
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);

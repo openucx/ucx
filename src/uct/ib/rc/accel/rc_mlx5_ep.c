@@ -355,7 +355,7 @@ uct_rc_mlx5_ep_atomic_post(uct_ep_h tl_ep, unsigned opcode,
                            uint64_t swap_mask, uint64_t swap_add)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    uint32_t ib_rkey = uct_ib_resolve_atomic_rkey(rkey, ep->super.atomic_mr_offset,
+    uint32_t ib_rkey = uct_ib_resolve_atomic_rkey(rkey, ep->atomic_mr_offset,
                                                   &remote_addr);
 
     desc->super.sn = ep->tx.wq.sw_pi;
@@ -650,7 +650,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         return status;
     }
 
-    ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+    ep->atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
 
     return UCS_OK;
 }
