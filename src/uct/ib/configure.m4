@@ -318,6 +318,33 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [], [],
                       [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_DECLS(IBV_EXP_ACCESS_ON_DEMAND, [with_odp=yes], [],
+                      [[#include <infiniband/verbs_exp.h>]])
+
+       AC_CHECK_DECLS(IBV_ACCESS_ON_DEMAND, [with_odp=yes], [],
+                      [[#include <infiniband/verbs.h>]])
+
+       AS_IF([test "x$with_odp" = "xyes" ], [
+           AC_DEFINE([HAVE_ODP], 1, [ODP support])
+
+           AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
+                          [[#include <infiniband/verbs_exp.h>]])
+
+           AC_CHECK_DECLS(IBV_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
+                          [[#include <infiniband/verbs.h>]])
+
+           AS_IF([test "x$with_odp_i" = "xyes" ], [
+               AC_DEFINE([HAVE_ODP_IMPLICIT], 1, [Implicit ODP support])])])
+
+       AC_CHECK_DECLS(ibv_exp_prefetch_mr, [with_prefetch=yes], [],
+                      [[#include <infiniband/verbs_exp.h>]])
+
+       AC_CHECK_DECLS(ibv_advise_mr, [with_prefetch=yes], [],
+                      [[#include <infiniband/verbs.h>]])
+
+       AS_IF([test "x$with_prefetch" = "xyes" ], [
+           AC_DEFINE([HAVE_PREFETCH], 1, [Prefetch support])])
+
        AC_CHECK_MEMBERS([struct mlx5_wqe_av.base,
                          struct mlx5_grh_av.rmac],
                         [], [], [[#include <infiniband/$mlx5_include>]])
