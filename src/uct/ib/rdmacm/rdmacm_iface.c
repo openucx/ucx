@@ -379,11 +379,11 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
 
     /* client error events */
     case RDMA_CM_EVENT_UNREACHABLE:
-        hdr = *(uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
-        if ((event->param.conn.private_data_len > 0) &&
+        hdr = *(uct_rdmacm_priv_data_hdr_t *)event->param.ud.private_data;
+        if ((event->param.ud.private_data_len > 0) &&
             (hdr.status == UCS_ERR_REJECTED)) {
             ucs_assert(hdr.length == 0);
-            ucs_assert(event->param.conn.private_data_len >= sizeof(hdr));
+            ucs_assert(event->param.ud.private_data_len >= sizeof(hdr));
             ucs_assert(!iface->is_server);
             status = UCS_ERR_REJECTED;
         }
