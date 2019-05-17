@@ -141,13 +141,14 @@ protected:
 
 void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 {
-    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
     size_t            ssize = 0; /* total send size in bytes */
+    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
     std::vector<char> check_pattern;
     ucs_status_ptr_t  sstatus;
 
     /* send all msg sizes*/
-    for (size_t i = 3; i < sbuf.size(); i *= 2) {
+    for (size_t i = 3; i < sbuf.size();
+         i *= (2 * ucs::test_time_multiplier())) {
         if (UCP_DT_IS_GENERIC(datatype)) {
             for (size_t j = 0; j < i; ++j) {
                 check_pattern.push_back(char(j));
