@@ -495,8 +495,8 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
 void test_ucp_tag_xfer::test_xfer_len_offset()
 {
     const size_t max_offset  = 128;
-    const size_t max_length  = 64 * 1024;
-    const size_t min_length  = 1024;
+    const size_t max_length  = 64 * UCS_KBYTE;
+    const size_t min_length  = UCS_KBYTE;
     const size_t offset_step = 16;
     const size_t length_step = 16;
     const size_t buf_size    = max_length + max_offset + 2;
@@ -957,7 +957,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_tag_xfer, test_xfer_len_offset,
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_with_empty_buffers, "ZCOPY_THRESH=512") {
     const size_t iovcnt    = ucp::data_type_desc_t::MAX_IOV;
-    const size_t size      = 1024;
+    const size_t size      = UCS_KBYTE;
     const int    expected  = 1;
     const int    sync      = 0;
     const int    truncated = 0;

@@ -141,8 +141,7 @@ protected:
 
 void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 {
-    std::vector<char> sbuf(16 * 1024 * 1024 /
-                           ucs::test_time_multiplier(), 's');
+    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
     size_t            ssize = 0; /* total send size in bytes */
     std::vector<char> check_pattern;
     ucs_status_ptr_t  sstatus;
@@ -190,8 +189,8 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 {
     const size_t      dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
                                      ucp_contig_dt_elem_size(datatype) : 1;
-    std::vector<char> sbuf(16 * 1024 * 1024, 's');
-    size_t            ssize = 0; /* total send size */
+    size_t            ssize        = 0; /* total send size */
+    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
 
@@ -269,7 +268,7 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
 {
     const size_t dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
                                 ucp_contig_dt_elem_size(datatype) : 1;
-    const size_t msg_size = dt_elem_size * 1024 * 1024;
+    const size_t msg_size = dt_elem_size * UCS_MBYTE;
     const size_t n_msgs   = 10;
 
     std::vector<std::vector<T> > rbufs(n_msgs,
@@ -349,17 +348,17 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
 {
     const size_t dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
                                 ucp_contig_dt_elem_size(datatype) : 1;
-    std::vector<char> sbuf(16 * 1024 * 1024, 's');
-    size_t            ssize = 0; /* total send size */
+    size_t            ssize   = 0; /* total send size */
+    size_t            roffset = 0;
+    size_t            send_i  = dt_elem_size;
+    size_t            recv_i  = 0;
+    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
     std::vector<char> rbuf;
-    size_t            roffset = 0;
     ucs_status_ptr_t  rdata;
     size_t            length;
 
-    size_t            send_i = dt_elem_size;
-    size_t            recv_i = 0;
     do {
         if (send_i < sbuf.size()) {
             rbuf.resize(rbuf.size() + send_i, 'r');
@@ -517,7 +516,7 @@ UCS_TEST_P(test_ucp_stream, send_recv_data_recv_iov) {
 }
 
 UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
-    const size_t min_size         = 1024;
+    const size_t min_size         = UCS_KBYTE;
     const size_t max_size         = min_size * 64;
     const size_t iov_num          = 8; /* must be divisible by 4 without a
                                         * remainder, caught on mlx5 based TLs
