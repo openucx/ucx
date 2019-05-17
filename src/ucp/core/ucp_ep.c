@@ -288,7 +288,8 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
     key.am_lane               = 0;
     key.wireup_lane           = 0;
-    key.tag_lane              = 0;
+    key.tag_lane              = UCP_NULL_LANE; /* should be initialized only if
+                                                  HW TM is supported */
     key.am_bw_lanes[0]        = 0;
     key.rma_lanes[0]          = 0;
     key.rma_bw_lanes[0]       = 0;
