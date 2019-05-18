@@ -314,8 +314,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 
     iface->tx.resend_skbs_quota = iface->tx.available;
 
-    /* TODO: make tick configurable */
-    iface->async.slow_tick = ucs_time_from_msec(100);
+    iface->async.slow_tick = iface->config.slow_timer_tick;
     status = ucs_twheel_init(&iface->async.slow_timer,
                              iface->async.slow_tick / 4,
                              uct_ud_iface_get_async_time(iface));
@@ -437,6 +436,14 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.check_grh_dgid  = config->dgid_check &&
                                    uct_ib_iface_is_roce(&self->super);
 
+    if (config->slow_timer_tick <= 0.) {
+        ucs_error("The slow timer tick should be > 0 (%lf)",
+                  config->slow_timer_tick);
+        return UCS_ERR_INVALID_PARAM;
+    } else {
+        self->config.slow_timer_tick = config->slow_timer_tick;
+    }
+
     if (config->slow_timer_backoff <= 0.) {
         ucs_error("The slow timer back off should be > 0 (%lf)",
                   config->slow_timer_backoff);
@@ -553,6 +560,8 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
     {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
+    {"SLOW_TIMER_TICK", "100ms", "Initial time granularity for resending trigger",
+     ucs_offsetof(uct_ud_iface_config_t, slow_timer_tick), UCS_CONFIG_TYPE_DOUBLE},
     {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
                   UCS_CONFIG_TYPE_DOUBLE},
