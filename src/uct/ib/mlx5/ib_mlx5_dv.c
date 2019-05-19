@@ -45,7 +45,7 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
-uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
+uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
 {
 #if HAVE_EXP_UMR
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
@@ -72,7 +72,7 @@ static ucs_status_t uct_ib_mlx5dv_memh_reg(uct_ib_md_t *ibmd,
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
-    off_t offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
+    off_t offset = uct_ib_md_atomic_offset(uct_ib_mlx5_md_get_atomic_mr_id(md));
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {};
     struct ibv_mr *mr = memh->super.mr;
     ucs_status_t status = UCS_OK;
@@ -467,7 +467,7 @@ err_cq:
     return status;
 }
 
-static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_mlx5_md_t *md)
+static ucs_status_t uct_ib_mlx5_md_umr_qp_create(uct_ib_mlx5_md_t *md)
 {
 #if HAVE_EXP_UMR
     struct ibv_exp_qp_init_attr qp_init_attr;
@@ -601,7 +601,7 @@ static ucs_status_t uct_ib_mlx5dv_memh_reg(uct_ib_md_t *ibmd,
 #if HAVE_EXP_UMR
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
-    off_t offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
+    off_t offset = uct_ib_md_atomic_offset(uct_ib_mlx5_md_get_atomic_mr_id(md));
     struct ibv_exp_mem_region *mem_reg = NULL;
     struct ibv_mr *mr = memh->super.mr;
     struct ibv_exp_send_wr wr, *bad_wr;
@@ -822,6 +822,11 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    if (!(uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free;
+    }
+
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr))
@@ -862,14 +867,14 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    status = uct_ib_md_umr_qp_create(md);
+    status = uct_ib_mlx5_md_umr_qp_create(md);
     if (status != UCS_OK && status != UCS_ERR_UNSUPPORTED) {
         goto err_free;
     }
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     *p_md = &md->super;
-    return status;
+    return UCS_OK;
 
 err_free:
     ucs_free(md);

@@ -565,7 +565,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     ucs_assert(ep->qp_num == ep->super.txqp.qp->qp_num);
     uct_ib_pack_uint24(rc_addr->qp_num, ep->qp_num);
-    rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super.super);
+    rc_addr->atomic_mr_id = uct_ib_mlx5_iface_get_atomic_mr_id(&iface->super.super);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp->qp_num);
