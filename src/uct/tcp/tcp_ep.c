@@ -366,14 +366,39 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     return send_length > 0;
 }
 
+static ucs_status_t
+uct_tcp_ep_io_err_handler_cb(void *arg, int errno)
+{
+    uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
+    char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
+
+    if ((errno == ECONNRESET) &&
+        (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
+        (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */) {
+        ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
+                  "was dropped by the peer",
+                  ep, errno, strerror(errno),
+                  ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                   str_local_addr, UCS_SOCKADDR_STRING_LEN),
+                  ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
+                                   str_remote_addr, UCS_SOCKADDR_STRING_LEN));
+        return UCS_OK;
+    }
+
+    return UCS_ERR_NO_PROGRESS;
+}
+
 static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
 {
     ucs_status_t status;
 
     ucs_assertv(*recv_length, "ep=%p", ep);
 
-    status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length,
-                                recv_length, NULL, NULL);
+    status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length, recv_length,
+                                uct_tcp_ep_io_err_handler_cb, ep);
     if (status != UCS_OK) {
         if (status == UCS_ERR_CANCELED) {
             uct_tcp_ep_handle_disconnected(ep, &ep->rx);

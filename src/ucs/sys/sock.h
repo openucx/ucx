@@ -19,16 +19,18 @@ BEGIN_C_DECLS
 
 
 /* A string to hold the IP address and port from a sockaddr */
-#define UCS_SOCKADDR_STRING_LEN          60
+#define UCS_SOCKADDR_STRING_LEN      60
 
-#define UCS_SOCKET_INET_ADDR(_addr)      (((struct sockaddr_in*)(_addr))->sin_addr)
-#define UCS_SOCKET_INET_PORT(_addr)      (((struct sockaddr_in*)(_addr))->sin_port)
+#define UCS_SOCKET_INET_ADDR(_addr)  (((struct sockaddr_in*)(_addr))->sin_addr)
+#define UCS_SOCKET_INET_PORT(_addr)  (((struct sockaddr_in*)(_addr))->sin_port)
 
-#define UCS_SOCKET_INET6_ADDR(_addr)     (((struct sockaddr_in6*)(_addr))->sin6_addr)
-#define UCS_SOCKET_INET6_PORT(_addr)     (((struct sockaddr_in6*)(_addr))->sin6_port)
+#define UCS_SOCKET_INET6_ADDR(_addr) (((struct sockaddr_in6*)(_addr))->sin6_addr)
+#define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
 
 
-typedef void (*ucs_socket_io_err_cb_t)(void *arg, int errno);
+/* Returns `UCS_ERR_NO_PROGRESS` if the default error
+ * handling should be done, otherwise `UCS_OK` */
+typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int errno);
 
 
 /**

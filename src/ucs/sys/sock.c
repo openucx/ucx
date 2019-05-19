@@ -202,10 +202,9 @@ ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
         return UCS_ERR_NO_PROGRESS;
     }
 
-    ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
-              name, fd, data, *length_p);
-    if (err_cb != NULL) {
-        err_cb(err_cb_arg, errno);
+    if ((err_cb != NULL) && (err_cb(err_cb_arg, errno) != UCS_OK)) {
+        ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
+                  name, fd, data, *length_p);
     }
     return UCS_ERR_IO_ERROR;
 }
