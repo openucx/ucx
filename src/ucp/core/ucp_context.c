@@ -984,6 +984,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (num_uct_components > UCP_MAX_RESOURCES) {
         ucs_error("too many components: %u, max: %u", num_uct_components,
                   UCP_MAX_RESOURCES);
+        status = UCS_ERR_EXCEEDS_LIMIT;
         goto err_release_components;
     }
 
@@ -1004,7 +1005,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         status = uct_component_query(context->tl_cmpts[i].cmpt,
                                      &context->tl_cmpts[i].attr);
         if (status != UCS_OK) {
-            goto err_release_components;
+            goto err_free_resources;
         }
 
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
@@ -1015,7 +1016,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                  "ucp_tl_mds");
     if (context->tl_mds == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_release_components;
+        goto err_free_resources;
     }
 
     /* Collect resources of each component */

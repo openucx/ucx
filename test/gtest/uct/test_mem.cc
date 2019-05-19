@@ -32,7 +32,7 @@ protected:
 };
 
 
-UCS_TEST_P(test_mem, nopd_alloc) {
+UCS_TEST_P(test_mem, nomd_alloc) {
     uct_alloc_method_t methods[2];
     uct_allocated_memory mem;
     ucs_status_t status;
@@ -49,13 +49,13 @@ UCS_TEST_P(test_mem, nopd_alloc) {
     uct_mem_free(&mem);
 }
 
-UCS_TEST_P(test_mem, pd_alloc) {
+UCS_TEST_P(test_mem, md_alloc) {
     uct_alloc_method_t methods[3];
     uct_allocated_memory mem;
     std::vector<md_resource> md_resources;
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    uct_md_h pd;
+    uct_md_h md;
     uct_md_config_t *md_config;
     int nonblock;
 
@@ -70,17 +70,17 @@ UCS_TEST_P(test_mem, pd_alloc) {
         status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_open(iter->rsc_desc.md_name, md_config, &pd);
+        status = uct_md_open(iter->rsc_desc.md_name, md_config, &md);
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_query(pd, &md_attr);
+        status = uct_md_query(md, &md_attr);
         ASSERT_UCS_OK(status);
 
         for (nonblock = 0; nonblock <= 1; ++nonblock) {
             int flags = nonblock ? UCT_MD_MEM_FLAG_NONBLOCK : 0;
             flags |= UCT_MD_MEM_ACCESS_ALL;
-            status = uct_mem_alloc(NULL, min_length, flags, methods, 3, &pd, 1,
+            status = uct_mem_alloc(NULL, min_length, flags, methods, 3, &md, 1,
                                    "test", &mem);
             ASSERT_UCS_OK(status);
 
@@ -95,7 +95,7 @@ UCS_TEST_P(test_mem, pd_alloc) {
             uct_mem_free(&mem);
         }
 
-        uct_md_close(pd);
+        uct_md_close(md);
     }
 }
 
@@ -103,7 +103,7 @@ UCS_TEST_P(test_mem, md_fixed) {
     std::vector<md_resource> md_resources;
     uct_md_attr_t           md_attr;
     uct_md_config_t         *md_config;
-    uct_md_h                pd;
+    uct_md_h                md;
     unsigned                j;
 
     const size_t            page_size   = ucs_get_page_size();
@@ -122,11 +122,11 @@ UCS_TEST_P(test_mem, md_fixed) {
         status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_open(iter->rsc_desc.md_name, md_config, &pd);
+        status = uct_md_open(iter->rsc_desc.md_name, md_config, &md);
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_query(pd, &md_attr);
+        status = uct_md_query(md, &md_attr);
         ASSERT_UCS_OK(status);
 
         if ((md_attr.cap.flags & UCT_MD_FLAG_ALLOC) &&
@@ -139,7 +139,7 @@ UCS_TEST_P(test_mem, md_fixed) {
                 status = uct_mem_alloc(p_addr, 1,
                                        UCT_MD_MEM_FLAG_FIXED|
                                        UCT_MD_MEM_ACCESS_ALL,
-                                       &meth, 1, &pd, 1, "test", &uct_mem);
+                                       &meth, 1, &md, 1, "test", &uct_mem);
                 if (status == UCS_OK) {
                     ++n_success;
                     EXPECT_EQ(meth, uct_mem.method);
@@ -159,7 +159,7 @@ UCS_TEST_P(test_mem, md_fixed) {
             EXPECT_GT(n_success, (size_t)0);
         }
 
-        uct_md_close(pd);
+        uct_md_close(md);
     }
 }
 

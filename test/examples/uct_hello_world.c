@@ -348,7 +348,6 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
                         fprintf(stdout, "Using %s with %s.\n",
                                 tl_resources[tl_index].dev_name,
                                 tl_resources[tl_index].tl_name);
-                        fflush(stdout);
                         uct_release_tl_resource_list(tl_resources);
                         goto release_component_list;
                     }

@@ -103,7 +103,7 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
                                                 uct_release_component_list);
 
         for (unsigned cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
-            uct_component_attr_t component_attr = {};
+            uct_component_attr_t component_attr = {0};
 
             component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
                                         UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
@@ -117,14 +117,16 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
             md_rsc.cmpt_attr = component_attr;
 
             std::vector<uct_md_resource_desc_t> md_resources;
-            md_resources.resize(component_attr.md_resource_count);
-            component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
-            component_attr.md_resources = &md_resources[0];
-            status = uct_component_query(uct_components[cmpt_index], &component_attr);
+            uct_component_attr_t component_attr_resouces = {0};
+            md_resources.resize(md_rsc.cmpt_attr.md_resource_count);
+            component_attr_resouces.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+            component_attr_resouces.md_resources = &md_resources[0];
+            status = uct_component_query(uct_components[cmpt_index],
+                                         &component_attr_resouces);
             ASSERT_UCS_OK(status);
 
-            for (unsigned md_index = 0; md_index < component_attr.md_resource_count;
-                 ++md_index) {
+            for (unsigned md_index = 0;
+                 md_index < md_rsc.cmpt_attr.md_resource_count; ++md_index) {
                 md_rsc.rsc_desc = md_resources[md_index];
                 all_md_resources.push_back(md_rsc);
             }
