@@ -285,21 +285,6 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      ucs_status_t *status_p);
 
 
-/**
- * Return a value indicating the relationships between passed sockaddr structures.
- * 
- * @param [in]     sa1        Pointer to sockaddr structure #1.
- * @param [in]     sa2        Pointer to sockaddr structure #2.
- * @param [in/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
- *                            or UCS_ERR_INVALID_PARAM on failure.
- *
- * @return 0 - not equal, != 0 - equal
- */
-int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
-                          const struct sockaddr *sa2,
-                          ucs_status_t *status_p);
-
-
 END_C_DECLS
 
 #endif

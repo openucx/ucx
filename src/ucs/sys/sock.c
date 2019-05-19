@@ -379,7 +379,7 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
     }
 
     if (sa1->sa_family != sa2->sa_family) {
-        result = (sa1->sa_family < sa2->sa_family) ? -1 : 1;
+        result = (int)sa1->sa_family - (int)sa2->sa_family;
         goto out;
     }
 
@@ -401,7 +401,7 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
     }
 
     if (!result && (port1 != port2)) {
-        result = (port1 < port2) ? -1 : 1;
+        result = (int)port1 - (int)port2;
     }
 
 out:
@@ -409,11 +409,4 @@ out:
         *status_p = status;
     }
     return result;
-}
-
-int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
-                          const struct sockaddr *sa2,
-                          ucs_status_t *status_p)
-{
-    return !ucs_sockaddr_cmp(sa1, sa2, status_p);
 }

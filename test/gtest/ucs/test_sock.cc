@@ -267,7 +267,6 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
                               unsigned port2, struct sockaddr *sa1,
                               struct sockaddr *sa2)
 {
-    int is_equal_res1, is_equal_res2;
     int cmp_res1, cmp_res2;
     ucs_status_t status;
 
@@ -302,19 +301,12 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
         int expected_cmp_res =
             addr_cmp_res ? addr_cmp_res : port_cmp_res;
 
-        is_equal_res1 = ucs_sockaddr_is_equal(sa1, sa2, &status);
-        EXPECT_UCS_OK(status);
-        EXPECT_EQ(expected_cmp_res == 0, is_equal_res1);
-
         cmp_res1 = ucs_sockaddr_cmp(sa1, sa2, &status);
         EXPECT_UCS_OK(status);
         EXPECT_EQ(expected_cmp_res, cmp_res1);
 
         // Call w/o `status` provided
-        is_equal_res2 = ucs_sockaddr_is_equal(sa1, sa2, NULL);
         cmp_res2 = ucs_sockaddr_cmp(sa1, sa2, &status);
-
-        EXPECT_EQ(is_equal_res1, is_equal_res2);
         EXPECT_EQ(cmp_res1, cmp_res2);
     }
 
@@ -326,19 +318,12 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
         int expected_cmp_res =
             addr_cmp_res ? addr_cmp_res : port_cmp_res;
 
-        is_equal_res1 = ucs_sockaddr_is_equal(sa2, sa1, &status);
-        EXPECT_UCS_OK(status);
-        EXPECT_EQ(expected_cmp_res == 0, is_equal_res1);
-
         cmp_res1 = ucs_sockaddr_cmp(sa2, sa1, &status);
         EXPECT_UCS_OK(status);
         EXPECT_EQ(expected_cmp_res, cmp_res1);
 
         // Call w/o `status` provided
-        is_equal_res2 = ucs_sockaddr_is_equal(sa2, sa1, NULL);
         cmp_res2 = ucs_sockaddr_cmp(sa2, sa1, &status);
-
-        EXPECT_EQ(is_equal_res1, is_equal_res2);
         EXPECT_EQ(cmp_res1, cmp_res2);
     }
 }
@@ -402,35 +387,17 @@ static void sockaddr_cmp_err_test(const struct sockaddr *sa1,
     ucs_status_t status;
     int result;
 
-    // is equal
-    {
-        result = ucs_sockaddr_is_equal((const struct sockaddr*)sa1,
-                                       (const struct sockaddr*)sa2,
-                                       &status);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-        EXPECT_EQ(0, result);
+    result = ucs_sockaddr_cmp((const struct sockaddr*)sa1,
+                              (const struct sockaddr*)sa2,
+                              &status);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    EXPECT_TRUE(result > 0);
 
-        // Call w/o `status` provided
-        result = ucs_sockaddr_is_equal((const struct sockaddr*)sa1,
-                                       (const struct sockaddr*)sa2,
-                                       NULL);
-        EXPECT_EQ(0, result);
-    }
-
-    // cmp
-    {
-        result = ucs_sockaddr_cmp((const struct sockaddr*)sa1,
-                                  (const struct sockaddr*)sa2,
-                                  &status);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-        EXPECT_TRUE(result > 0);
-
-        // Call w/o `status` provided
-        result = ucs_sockaddr_cmp((const struct sockaddr*)sa1,
-                                  (const struct sockaddr*)sa2,
-                                  NULL);
-        EXPECT_TRUE(result > 0);
-    }
+    // Call w/o `status` provided
+    result = ucs_sockaddr_cmp((const struct sockaddr*)sa1,
+                              (const struct sockaddr*)sa2,
+                              NULL);
+    EXPECT_TRUE(result > 0);
 }
 
 UCS_TEST_F(test_socket, sockaddr_cmp_err) {
