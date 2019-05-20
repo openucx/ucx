@@ -39,9 +39,11 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {
     int mm_flags = 0;
 
+#ifdef MAP_NONBLOCK
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
         mm_flags |= MAP_NONBLOCK;
     }
+#endif
 
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
         mm_flags |= MAP_FIXED;
