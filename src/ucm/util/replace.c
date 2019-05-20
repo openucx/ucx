@@ -10,6 +10,7 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 
 #include <ucm/event/event.h>
@@ -20,8 +21,9 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 
-
+#ifndef MAP_FAILED
 #define MAP_FAILED ((void*)-1)
+#endif
 
 pthread_mutex_t ucm_reloc_get_orig_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 pthread_t volatile ucm_reloc_get_orig_thread = -1;
