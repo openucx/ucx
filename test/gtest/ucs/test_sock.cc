@@ -11,6 +11,7 @@ extern "C" {
 
 #include <sys/un.h>
 
+
 static std::string socket_err_exp_str;
 
 class test_socket : public ucs::test {
@@ -261,12 +262,12 @@ UCS_TEST_F(test_socket, socket_setopt) {
     close(fd);
 }
 
-static bool sockaddr_is_equal(int sa_family, const char *ip_addr1,
+static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
                               const char *ip_addr2, unsigned port1,
                               unsigned port2, struct sockaddr *sa1,
                               struct sockaddr *sa2)
 {
-    bool result1, result2;
+    int cmp_res1, cmp_res2;
     ucs_status_t status;
 
     sa1->sa_family = sa_family;
@@ -278,21 +279,56 @@ static bool sockaddr_is_equal(int sa_family, const char *ip_addr1,
               const_cast<void*>(ucs_sockaddr_get_inet_addr(sa2)));
 
     status = ucs_sockaddr_set_port(sa1, port1);
-    EXPECT_UCS_OK(status);
+    ASSERT_UCS_OK(status);
     status = ucs_sockaddr_set_port(sa2, port2);
-    EXPECT_UCS_OK(status);
+    ASSERT_UCS_OK(status);
 
-    result1 = ucs_sockaddr_is_equal(sa1, sa2, &status);
-    EXPECT_UCS_OK(status);
+    const void *addr1 = ucs_sockaddr_get_inet_addr(sa1);
+    const void *addr2 = ucs_sockaddr_get_inet_addr(sa2);
 
-    // Call w/o `status` provided
-    result2 = ucs_sockaddr_is_equal(sa1, sa2, NULL);
-    EXPECT_EQ(result1, result2);
+    ASSERT_TRUE(addr1 != NULL);
+    ASSERT_TRUE(addr2 != NULL);
 
-    return result1;
+    size_t addr_size = ((sa_family == AF_INET) ?
+                        sizeof(UCS_SOCKET_INET_ADDR(sa1)) :
+                        sizeof(UCS_SOCKET_INET6_ADDR(sa1)));
+
+    // `sa1` vs `sa2`
+    {
+        int addr_cmp_res = memcmp(addr1, addr2, addr_size);
+        int port_cmp_res =
+            (port1 == port2) ? 0 : ((port1 < port2) ? -1 : 1);
+        int expected_cmp_res =
+            addr_cmp_res ? addr_cmp_res : port_cmp_res;
+
+        cmp_res1 = ucs_sockaddr_cmp(sa1, sa2, &status);
+        EXPECT_UCS_OK(status);
+        EXPECT_EQ(expected_cmp_res, cmp_res1);
+
+        // Call w/o `status` provided
+        cmp_res2 = ucs_sockaddr_cmp(sa1, sa2, &status);
+        EXPECT_EQ(cmp_res1, cmp_res2);
+    }
+
+    // `sa2` vs `sa1`
+    {
+        int addr_cmp_res = memcmp(addr2, addr1, addr_size);
+        int port_cmp_res =
+            (port2 == port1) ? 0 : ((port2 < port1) ? -1 : 1);
+        int expected_cmp_res =
+            addr_cmp_res ? addr_cmp_res : port_cmp_res;
+
+        cmp_res1 = ucs_sockaddr_cmp(sa2, sa1, &status);
+        EXPECT_UCS_OK(status);
+        EXPECT_EQ(expected_cmp_res, cmp_res1);
+
+        // Call w/o `status` provided
+        cmp_res2 = ucs_sockaddr_cmp(sa2, sa1, &status);
+        EXPECT_EQ(cmp_res1, cmp_res2);
+    }
 }
 
-UCS_TEST_F(test_socket, sockaddr_is_equal) {
+UCS_TEST_F(test_socket, sockaddr_cmp) {
     const unsigned port1         = 65534;
     const unsigned port2         = 65533;
     const char *ipv4_addr1       = "192.168.122.157";
@@ -305,87 +341,82 @@ UCS_TEST_F(test_socket, sockaddr_is_equal) {
     struct sockaddr_in6 sa_in6_2 = { 0 };
 
     // Same addresses; same ports
-    EXPECT_TRUE(sockaddr_is_equal(AF_INET, ipv4_addr1, ipv4_addr1,
-                                  port1, port1,
-                                  (struct sockaddr*)&sa_in_1,
-                                  (struct sockaddr*)&sa_in_2));
-    EXPECT_TRUE(sockaddr_is_equal(AF_INET6, ipv6_addr1, ipv6_addr1,
-                                  port1, port1,
-                                  (struct sockaddr*)&sa_in6_1,
-                                  (struct sockaddr*)&sa_in6_2));
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr1,
+                      port1, port1,
+                      (struct sockaddr*)&sa_in_1,
+                      (struct sockaddr*)&sa_in_2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr1,
+                      port1, port1,
+                      (struct sockaddr*)&sa_in6_1,
+                      (struct sockaddr*)&sa_in6_2);
 
     // Same addresses; different ports
-    EXPECT_FALSE(sockaddr_is_equal(AF_INET, ipv4_addr1, ipv4_addr1,
-                                   port1, port2,
-                                   (struct sockaddr*)&sa_in_1,
-                                   (struct sockaddr*)&sa_in_2));
-    EXPECT_FALSE(sockaddr_is_equal(AF_INET6, ipv6_addr1, ipv6_addr1,
-                                   port1, port2,
-                                   (struct sockaddr*)&sa_in6_1,
-                                   (struct sockaddr*)&sa_in6_2));
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr1,
+                      port1, port2,
+                      (struct sockaddr*)&sa_in_1,
+                      (struct sockaddr*)&sa_in_2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr1,
+                      port1, port2,
+                      (struct sockaddr*)&sa_in6_1,
+                      (struct sockaddr*)&sa_in6_2);
 
     // Different addresses; same ports
-    EXPECT_FALSE(sockaddr_is_equal(AF_INET, ipv4_addr1, ipv4_addr2,
-                                   port1, port1,
-                                   (struct sockaddr*)&sa_in_1,
-                                   (struct sockaddr*)&sa_in_2));
-    EXPECT_FALSE(sockaddr_is_equal(AF_INET6, ipv6_addr1, ipv6_addr2,
-                                   port1, port1,
-                                   (struct sockaddr*)&sa_in6_1,
-                                   (struct sockaddr*)&sa_in6_2));
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr2,
+                      port1, port1,
+                      (struct sockaddr*)&sa_in_1,
+                      (struct sockaddr*)&sa_in_2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr2,
+                      port1, port1,
+                      (struct sockaddr*)&sa_in6_1,
+                      (struct sockaddr*)&sa_in6_2);
 
     // Different addresses; different ports
-    EXPECT_FALSE(sockaddr_is_equal(AF_INET, ipv4_addr1, ipv4_addr2,
-                                   port1, port2,
-                                   (struct sockaddr*)&sa_in_1,
-                                   (struct sockaddr*)&sa_in_2));
-    EXPECT_FALSE(sockaddr_is_equal(AF_INET6, ipv6_addr1, ipv6_addr2,
-                                   port1, port2,
-                                   (struct sockaddr*)&sa_in6_1,
-                                   (struct sockaddr*)&sa_in6_2));
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr2,
+                      port1, port2,
+                      (struct sockaddr*)&sa_in_1,
+                      (struct sockaddr*)&sa_in_2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr2,
+                      port1, port2,
+                      (struct sockaddr*)&sa_in6_1,
+                      (struct sockaddr*)&sa_in6_2);
 }
 
-UCS_TEST_F(test_socket, sockaddr_is_equal_err) {
+static void sockaddr_cmp_err_test(const struct sockaddr *sa1,
+                                  const struct sockaddr *sa2)
+{
+    ucs_status_t status;
+    int result;
+
+    result = ucs_sockaddr_cmp((const struct sockaddr*)sa1,
+                              (const struct sockaddr*)sa2,
+                              &status);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    EXPECT_TRUE(result > 0);
+
+    // Call w/o `status` provided
+    result = ucs_sockaddr_cmp((const struct sockaddr*)sa1,
+                              (const struct sockaddr*)sa2,
+                              NULL);
+    EXPECT_TRUE(result > 0);
+}
+
+UCS_TEST_F(test_socket, sockaddr_cmp_err) {
     // Check with wrong sa_family
     struct sockaddr_un sa_un;
     struct sockaddr_in sa_in;
-    ucs_status_t status;
-    int result;
 
     sa_un.sun_family = AF_UNIX;
     sa_in.sin_family = AF_INET;
 
-    {
-        socket_err_exp_str = "unknown address family: ";
-        scoped_log_handler log_handler(socket_error_handler);
+    socket_err_exp_str = "unknown address family: ";
+    scoped_log_handler log_handler(socket_error_handler);
 
-        result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
-                                       (const struct sockaddr*)&sa_un,
-                                       &status);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-        EXPECT_EQ(0, result);
-    }
+    sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
+                          (const struct sockaddr*)&sa_un);
 
-    result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
-                                   (const struct sockaddr*)&sa_in,
-                                   &status);
-    EXPECT_EQ(UCS_OK, status);
-    EXPECT_EQ(0, result);
+    sockaddr_cmp_err_test((const struct sockaddr*)&sa_in,
+                          (const struct sockaddr*)&sa_un);
 
-    result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_in,
-                                   (const struct sockaddr*)&sa_un,
-                                   &status);
-    EXPECT_EQ(UCS_OK, status);
-    EXPECT_EQ(0, result);
-
-    // Call w/o `status` provided
-    {
-        socket_err_exp_str = "unknown address family: ";
-        scoped_log_handler log_handler(socket_error_handler);
-
-        result = ucs_sockaddr_is_equal((const struct sockaddr*)&sa_un,
-                                       (const struct sockaddr*)&sa_un,
-                                       NULL);
-        EXPECT_EQ(0, result);
-    }
+    sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
+                          (const struct sockaddr*)&sa_in);
 }
