@@ -77,7 +77,7 @@ public class NativeLibs {
     private static void extractUCTLibs() {
         Path ucxTempFolder, ucxFolder;
         Stream<Path> uctLibs;
-        FileSystem fileSystem = null;
+        final FileSystem fileSystem;
         try {
             createTempDir();
             ucxTempFolder = Files.createDirectory(Paths.get(tempDir.getPath(), "ucx"));
@@ -88,6 +88,7 @@ public class NativeLibs {
                 ucxFolder = fileSystem.getPath("ucx");
             } else {
                 ucxFolder = Paths.get(uri);
+                fileSystem = null;
             }
             uctLibs = Files.walk(ucxFolder, 1);
         } catch (IOException ex) {
@@ -99,13 +100,20 @@ public class NativeLibs {
         }
 
         uctLibs.forEach(filePath -> {
+            if (!filePath.getFileName().toString().contains(".so")) {
+                return;
+            }
             FileOutputStream os = null;
             InputStream is = null;
             File out = new File(ucxTempFolder.toAbsolutePath().toString(),
                 filePath.getFileName().toString());
             out.deleteOnExit();
             try {
-                is = NativeLibs.class.getResourceAsStream(filePath.toString());
+                if (fileSystem != null) {
+                    is = NativeLibs.class.getResourceAsStream(filePath.toString());
+                } else {
+                    is = new FileInputStream(filePath.toFile());
+                }
                 os = new FileOutputStream(out);
                 copy(is, os);
             } catch (IOException ex) {

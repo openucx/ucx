@@ -929,13 +929,16 @@ test_malloc_hook() {
 test_jucx() {
 	echo "==== Running jucx test ===="
 	echo "1..2" > jucx_tests.tap
-	if module_load dev/jdk && module_load dev/mvn
+	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+	if [ -z "$iface" ]
+        then
+		echo "Failed to find active ib devices." >> jucx_tests.tap
+		return
+	elif module_load dev/jdk && module_load dev/mvn
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
-		export JUCX_TEST_PORT=jucx_port
-		export UCX_ERROR_SIGNALS=""
+		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
-		unset UCX_ERROR_SIGNALS
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
