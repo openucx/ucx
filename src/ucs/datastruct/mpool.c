@@ -286,11 +286,14 @@ typedef struct ucs_hugetlb_mpool_chunk_hdr {
 ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
     ucs_hugetlb_mpool_chunk_hdr_t *chunk;
+    size_t real_size;
+#ifdef SHM_HUGETLB
     void *ptr;
     ucs_status_t status;
-    size_t real_size;
     int shmid;
+#endif
 
+#ifdef SHM_HUGETLB
     ptr = NULL;
 
     /* First, try hugetlb */
@@ -302,6 +305,7 @@ ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **ch
         chunk->hugetlb = 1;
         goto out_ok;
     }
+#endif
 
     /* Fallback to glibc */
     real_size = *size_p;

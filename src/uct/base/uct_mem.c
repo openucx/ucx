@@ -63,7 +63,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     uct_mem_h memh;
     uct_md_h md;
     void *address;
+#ifdef SHM_HUGETLB
     int shmid;
+#endif
 #ifdef MADV_HUGEPAGE
     ssize_t huge_page_size;
     int ret;
@@ -208,6 +210,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_HUGE:
+#ifdef SHM_HUGETLB
             /* Allocate huge pages */
             alloc_length = min_length;
             address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
@@ -216,6 +219,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }
+#else
+            status = UCS_ERR_NO_MEMORY;
+#endif
 
             ucs_trace("failed to allocate %zu bytes from hugetlb: %s",
                       min_length, ucs_status_string(status));
