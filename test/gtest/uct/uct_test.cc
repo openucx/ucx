@@ -86,6 +86,56 @@ resource_speed::resource_speed(const uct_worker_h& worker,
 
 const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
 
+std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
+
+    static std::vector<uct_test::md_resource> all_md_resources;
+
+    if (all_md_resources.empty()) {
+        uct_component_h *uct_components;
+        unsigned num_components;
+        ucs_status_t status;
+
+        status = uct_query_components(&uct_components, &num_components);
+        ASSERT_UCS_OK(status);
+
+        /* for RAII */
+        ucs::handle<uct_component_h*> cmpt_list(uct_components,
+                                                uct_release_component_list);
+
+        for (unsigned cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
+            uct_component_attr_t component_attr = {0};
+
+            component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+            /* coverity[var_deref_model] */
+            status = uct_component_query(uct_components[cmpt_index], &component_attr);
+            ASSERT_UCS_OK(status);
+
+            /* Save attributes before asking for MD resource list */
+            md_resource md_rsc;
+            md_rsc.cmpt      = uct_components[cmpt_index];
+            md_rsc.cmpt_attr = component_attr;
+
+            std::vector<uct_md_resource_desc_t> md_resources;
+            uct_component_attr_t component_attr_resouces = {0};
+            md_resources.resize(md_rsc.cmpt_attr.md_resource_count);
+            component_attr_resouces.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+            component_attr_resouces.md_resources = &md_resources[0];
+            status = uct_component_query(uct_components[cmpt_index],
+                                         &component_attr_resouces);
+            ASSERT_UCS_OK(status);
+
+            for (unsigned md_index = 0;
+                 md_index < md_rsc.cmpt_attr.md_resource_count; ++md_index) {
+                md_rsc.rsc_desc = md_resources[md_index];
+                all_md_resources.push_back(md_rsc);
+            }
+        }
+    }
+
+    return all_md_resources;
+}
+
 uct_test::uct_test() {
     ucs_status_t status;
     uct_md_attr_t pd_attr;
@@ -207,10 +257,6 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
     if (all_resources.empty()) {
         ucs_async_context_t *async;
         uct_worker_h worker;
-        uct_md_resource_desc_t *md_resources;
-        unsigned num_md_resources;
-        uct_tl_resource_desc_t *tl_resources;
-        unsigned num_tl_resources;
         ucs_status_t status;
 
         status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
@@ -219,19 +265,19 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
         status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
         ASSERT_UCS_OK(status);
 
-        status = uct_query_md_resources(&md_resources, &num_md_resources);
-        ASSERT_UCS_OK(status);
+        std::vector<md_resource> md_resources = enum_md_resources();
 
-        for (unsigned i = 0; i < num_md_resources; ++i) {
+        for (std::vector<md_resource>::iterator iter = md_resources.begin();
+             iter != md_resources.end(); ++iter) {
             uct_md_h md;
             uct_md_config_t *md_config;
-            status = uct_md_config_read(md_resources[i].md_name, NULL, NULL,
+            status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL,
                                         &md_config);
             ASSERT_UCS_OK(status);
 
             {
                 scoped_log_handler slh(hide_errors_logger);
-                status = uct_md_open(md_resources[i].md_name, md_config, &md);
+                status = uct_md_open(iter->rsc_desc.md_name, md_config, &md);
             }
             uct_config_release(md_config);
             if (status != UCS_OK) {
@@ -242,6 +288,8 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             status = uct_md_query(md, &md_attr);
             ASSERT_UCS_OK(status);
 
+            uct_tl_resource_desc_t *tl_resources;
+            unsigned num_tl_resources;
             status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
             ASSERT_UCS_OK(status);
 
@@ -249,13 +297,13 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
                 if (tcp_fastest_dev && (std::string("tcp") == tl_resources[j].tl_name)) {
-                    resource_speed rsc(worker, md, md_attr,
-                                       md_resources[i], tl_resources[j]);
+                    resource_speed rsc(worker, md, md_attr, iter->rsc_desc,
+                                       tl_resources[j]);
                     if (!tcp_fastest_rsc.bw || (rsc.bw > tcp_fastest_rsc.bw)) {
                         tcp_fastest_rsc = rsc;
                     }
                 } else {
-                    resource rsc(md_attr, md_resources[i], tl_resources[j]);
+                    resource rsc(md_attr, iter->rsc_desc, tl_resources[j]);
                     all_resources.push_back(rsc);
                 }
             }
@@ -265,7 +313,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             }
 
             if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                uct_test::set_sockaddr_resources(md, md_resources[i].md_name,
+                uct_test::set_sockaddr_resources(md, iter->rsc_desc.md_name,
                                                  md_attr.local_cpus, all_resources);
             }
 
@@ -273,7 +321,6 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             uct_md_close(md);
         }
 
-        uct_release_md_resource_list(md_resources);
         uct_worker_destroy(worker);
         ucs_async_context_destroy(async);
     }

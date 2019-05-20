@@ -516,13 +516,14 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
     }
 }
 
-static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
+static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
                                          ucp_rsc_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
                                          uint64_t dev_cfg_masks[],
                                          uint64_t *tl_cfg_mask)
 {
+    ucp_tl_md_t *md = &context->tl_mds[md_index];
     uct_tl_resource_desc_t *tl_resources;
     uct_tl_resource_desc_t sa_rsc;
     ucp_tl_resource_desc_t *tmp;
@@ -710,6 +711,7 @@ static void ucp_free_resources(ucp_context_t *context)
         uct_md_close(context->tl_mds[i].md);
     }
     ucs_free(context->tl_mds);
+    ucs_free(context->tl_cmpts);
 }
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
@@ -883,69 +885,48 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     return ucp_check_tl_names(context);
 }
 
-static ucs_status_t ucp_fill_resources(ucp_context_h context,
-                                       const ucp_config_t *config)
+static ucs_status_t ucp_add_component_resources(ucp_context_h context,
+                                                ucp_rsc_index_t cmpt_index,
+                                                uint64_t *dev_cfg_masks,
+                                                uint64_t *tl_cfg_mask,
+                                                const ucp_config_t *config)
 {
-    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {0};
-    uint64_t tl_cfg_mask = 0;
+    const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
+    uct_component_attr_t uct_component_attr;
+    uct_memory_type_t mem_type;
     unsigned num_tl_resources;
-    unsigned num_md_resources;
-    uct_md_resource_desc_t *md_rscs;
+    uint64_t mem_type_mask;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
-    uint64_t mem_type_mask;
-    uct_memory_type_t mem_type;
-
-    context->tl_mds      = NULL;
-    context->num_mds     = 0;
-    context->tl_rscs     = NULL;
-    context->num_tls     = 0;
-    context->num_mem_type_mds = 0;
-    context->memtype_cache = NULL;
-
-    status = ucp_check_resource_config(config);
-    if (status != UCS_OK) {
-        goto err;
-    }
 
     /* List memory domain resources */
-    status = uct_query_md_resources(&md_rscs, &num_md_resources);
+    uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    uct_component_attr.md_resources =
+                    ucs_alloca(tl_cmpt->attr.md_resource_count *
+                               sizeof(*uct_component_attr.md_resources));
+    status = uct_component_query(tl_cmpt->cmpt, &uct_component_attr);
     if (status != UCS_OK) {
-        goto err;
-    }
-
-    /* Error check: Make sure there is at least one MD */
-    if (num_md_resources == 0) {
-        ucs_error("No memory domain resources found");
-        status = UCS_ERR_NO_DEVICE;
-        goto err_release_md_resources;
-    }
-
-    /* Allocate actual array of MDs */
-    context->tl_mds = ucs_malloc(num_md_resources * sizeof(*context->tl_mds),
-                                 "ucp_tl_mds");
-    if (context->tl_mds == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_release_md_resources;
+        goto out;
     }
 
     /* Open all memory domains */
-    md_index = 0;
     mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    for (i = 0; i < num_md_resources; ++i) {
-        status = ucp_fill_tl_md(&md_rscs[i], &context->tl_mds[md_index]);
+    for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
+        md_index = context->num_mds;
+        status = ucp_fill_tl_md(&uct_component_attr.md_resources[i],
+                                &context->tl_mds[md_index]);
         if (status != UCS_OK) {
             continue;
         }
 
         /* Add communication resources of each MD */
-        status = ucp_add_tl_resources(context, &context->tl_mds[md_index],
-                                      md_index, config, &num_tl_resources,
-                                      dev_cfg_masks, &tl_cfg_mask);
+        status = ucp_add_tl_resources(context, md_index, config,
+                                      &num_tl_resources, dev_cfg_masks,
+                                      tl_cfg_mask);
         if (status != UCS_OK) {
             uct_md_close(context->tl_mds[md_index].md);
-            goto err_free_context_resources;
+            goto out;
         }
 
         /* If the MD does not have transport resources (device or sockaddr),
@@ -958,20 +939,103 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
                 ++context->num_mem_type_mds;
                 mem_type_mask |= UCS_BIT(mem_type);
             }
-            ++md_index;
             ++context->num_mds;
         } else {
             ucs_debug("closing md %s because it has no selected transport resources",
-                      md_rscs[i].md_name);
+                      context->tl_mds[md_index].rsc.md_name);
             uct_md_close(context->tl_mds[md_index].md);
         }
     }
 
+    status = UCS_OK;
+out:
+    return status;
+}
+
+static ucs_status_t ucp_fill_resources(ucp_context_h context,
+                                       const ucp_config_t *config)
+{
+    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
+    uint64_t tl_cfg_mask                         = 0;
+    uct_component_h *uct_components;
+    unsigned i, num_uct_components;
+    ucs_status_t status;
+    unsigned max_mds;
+
+    context->tl_cmpts         = NULL;
+    context->num_cmpts        = 0;
+    context->tl_mds           = NULL;
+    context->num_mds          = 0;
+    context->tl_rscs          = NULL;
+    context->num_tls          = 0;
+    context->num_mem_type_mds = 0;
+    context->memtype_cache    = NULL;
+
+    status = ucp_check_resource_config(config);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_query_components(&uct_components, &num_uct_components);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    if (num_uct_components > UCP_MAX_RESOURCES) {
+        ucs_error("too many components: %u, max: %u", num_uct_components,
+                  UCP_MAX_RESOURCES);
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err_release_components;
+    }
+
+    context->tl_cmpts = ucs_calloc(num_uct_components,
+                                   sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
+    if (context->tl_cmpts == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_release_components;
+    }
+
+    max_mds = 0;
+    for (i = 0; i < num_uct_components; ++i) {
+        memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
+        context->tl_cmpts[i].cmpt = uct_components[i];
+        context->tl_cmpts[i].attr.field_mask =
+                        UCT_COMPONENT_ATTR_FIELD_NAME |
+                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+        status = uct_component_query(context->tl_cmpts[i].cmpt,
+                                     &context->tl_cmpts[i].attr);
+        if (status != UCS_OK) {
+            goto err_free_resources;
+        }
+
+        max_mds += context->tl_cmpts[i].attr.md_resource_count;
+    }
+
+    /* Allocate actual array of MDs */
+    context->tl_mds = ucs_malloc(max_mds * sizeof(*context->tl_mds),
+                                 "ucp_tl_mds");
+    if (context->tl_mds == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_resources;
+    }
+
+    /* Collect resources of each component */
+    for (i = 0; i < num_uct_components; ++i) {
+        status = ucp_add_component_resources(context, i, dev_cfg_masks,
+                                             &tl_cfg_mask, config);
+        if (status != UCS_OK) {
+            goto err_free_resources;
+        }
+    }
+
+    /* Create memtype cache if we have memory type MDs, and it's enabled by
+     * configuration
+     */
     if (context->num_mem_type_mds && context->config.ext.enable_memtype_cache) {
         status = ucs_memtype_cache_create(&context->memtype_cache);
         if (status != UCS_OK) {
             ucs_debug("could not create memtype cache for mem_type allocations");
-            goto err_free_context_resources;
+            goto err_free_resources;
         }
     }
 
@@ -984,15 +1048,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     /* Validate context resources */
     status = ucp_check_resources(context, config);
     if (status != UCS_OK) {
-        goto err_free_context_resources;
+        goto err_free_resources;
     }
 
-    uct_release_md_resource_list(md_rscs);
-
+    /* Warn about devices and transports which were specified explicitly in the
+     * configuration, but are not available
+     */
     if (config->warn_invalid_config) {
-        /* Notify the user if there are devices or transports from the command line
-         * that are not available
-         */
         for (i = 0; i < UCT_DEVICE_TYPE_LAST; ++i) {
             ucp_report_unavailable(&config->devices[i], dev_cfg_masks[i], "device");
         }
@@ -1001,12 +1063,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     ucp_fill_sockaddr_aux_tls_config(context, config);
 
+    uct_release_component_list(uct_components);
     return UCS_OK;
 
-err_free_context_resources:
+err_free_resources:
     ucp_free_resources(context);
-err_release_md_resources:
-    uct_release_md_resource_list(md_rscs);
+err_release_components:
+    uct_release_component_list(uct_components);
 err:
     return status;
 }

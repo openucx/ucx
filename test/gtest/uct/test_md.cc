@@ -42,31 +42,17 @@ void* test_md::alloc_thread(void *arg)
 }
 
 std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
-    static std::vector<std::string> all_pds;
+
+    std::vector<md_resource> md_resources = enum_md_resources();
+
     std::vector<std::string> result;
-
-    if (all_pds.empty()) {
-        uct_md_resource_desc_t *md_resources;
-        unsigned num_md_resources;
-        ucs_status_t status;
-
-        status = uct_query_md_resources(&md_resources, &num_md_resources);
-        ASSERT_UCS_OK(status);
-
-        for (unsigned i = 0; i < num_md_resources; ++i) {
-            all_pds.push_back(md_resources[i].md_name);
-        }
-
-        uct_release_md_resource_list(md_resources);
-    }
-
-    for (std::vector<std::string>::iterator iter = all_pds.begin();
-                    iter != all_pds.end(); ++iter)
-    {
-        if (iter->substr(0, mdc_name.length()) == mdc_name) {
-            result.push_back(*iter);
+    for (std::vector<md_resource>::iterator iter = md_resources.begin();
+         iter != md_resources.end(); ++iter) {
+        if (iter->cmpt_attr.name == mdc_name) {
+            result.push_back(iter->rsc_desc.md_name);
         }
     }
+
     return result;
 }
 

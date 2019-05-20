@@ -290,64 +290,86 @@ error_ret:
 static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
                                   iface_info_t *iface_p)
 {
-    uct_md_resource_desc_t  *md_resources; /* Memory domain resource descriptor */
+    uct_component_h         *components;
+    unsigned                num_components;
+    unsigned                cmpt_index;
+    uct_component_attr_t    component_attr;
+    unsigned                md_index;
     uct_tl_resource_desc_t  *tl_resources; /* Communication resource descriptor */
-    unsigned                num_md_resources; /* Number of memory domains */
     unsigned                num_tl_resources; /* Number of transport resources resource objects created */
+    unsigned                tl_index;
     uct_md_config_t         *md_config;
     ucs_status_t            status;
-    int                     i;
-    int                     j;
 
-    status = uct_query_md_resources(&md_resources, &num_md_resources);
-    CHKERR_JUMP(UCS_OK != status, "query for memory domain resources", error_ret);
+    status = uct_query_components(&components, &num_components);
+    CHKERR_JUMP(UCS_OK != status, "query for components", error_ret);
 
-    iface_p->iface = NULL;
+    for (cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
 
-    /* Iterate through memory domain resources */
-    for (i = 0; i < num_md_resources; ++i) {
-        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
-        CHKERR_JUMP(UCS_OK != status, "read PD config", release_md);
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+        status = uct_component_query(components[cmpt_index], &component_attr);
+        CHKERR_JUMP(UCS_OK != status, "query component attributes",
+                    release_component_list);
 
-        status = uct_md_open(md_resources[i].md_name, md_config, &iface_p->md);
-        uct_config_release(md_config);
-        CHKERR_JUMP(UCS_OK != status, "open memory domains", release_md);
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+        component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
+                                             component_attr.md_resource_count);
+        status = uct_component_query(components[cmpt_index], &component_attr);
+        CHKERR_JUMP(UCS_OK != status, "query for memory domain resources",
+                    release_component_list);
 
-        status = uct_md_query_tl_resources(iface_p->md, &tl_resources, &num_tl_resources);
-        CHKERR_JUMP(UCS_OK != status, "query transport resources", close_md);
+        iface_p->iface = NULL;
 
-        /* Go through each available transport and find the proper name */
-        for (j = 0; j < num_tl_resources; ++j) {
-            if (!strcmp(cmd_args->dev_name, tl_resources[j].dev_name) &&
-                !strcmp(cmd_args->tl_name, tl_resources[j].tl_name)) {
-                status = init_iface(tl_resources[j].dev_name,
-                                    tl_resources[j].tl_name,
-                                    cmd_args->func_am_type, iface_p);
-                if (UCS_OK == status) {
-                    fprintf(stdout, "Using %s with %s.\n",
-                            tl_resources[j].dev_name,
-                            tl_resources[j].tl_name);
-                    fflush(stdout);
-                    uct_release_tl_resource_list(tl_resources);
-                    goto release_md;
+        /* Iterate through memory domain resources */
+        for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
+            status = uct_md_config_read(component_attr.md_resources[md_index].md_name,
+                                        NULL, NULL, &md_config);
+            CHKERR_JUMP(UCS_OK != status, "read PD config",
+                        release_component_list);
+
+            status = uct_md_open(component_attr.md_resources[md_index].md_name,
+                                 md_config, &iface_p->md);
+            uct_config_release(md_config);
+            CHKERR_JUMP(UCS_OK != status, "open memory domains",
+                        release_component_list);
+
+            status = uct_md_query_tl_resources(iface_p->md, &tl_resources,
+                                               &num_tl_resources);
+            CHKERR_JUMP(UCS_OK != status, "query transport resources", close_md);
+
+            /* Go through each available transport and find the proper name */
+            for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
+                if (!strcmp(cmd_args->dev_name, tl_resources[tl_index].dev_name) &&
+                    !strcmp(cmd_args->tl_name, tl_resources[tl_index].tl_name)) {
+                    status = init_iface(tl_resources[tl_index].dev_name,
+                                        tl_resources[tl_index].tl_name,
+                                        cmd_args->func_am_type, iface_p);
+                    if (UCS_OK == status) {
+                        fprintf(stdout, "Using %s with %s.\n",
+                                tl_resources[tl_index].dev_name,
+                                tl_resources[tl_index].tl_name);
+                        uct_release_tl_resource_list(tl_resources);
+                        goto release_component_list;
+                    }
                 }
             }
+
+            uct_release_tl_resource_list(tl_resources);
+            uct_md_close(iface_p->md);
         }
-        uct_release_tl_resource_list(tl_resources);
-        uct_md_close(iface_p->md);
     }
 
     fprintf(stderr, "No supported (dev/tl) found (%s/%s)\n",
             cmd_args->dev_name, cmd_args->tl_name);
     status = UCS_ERR_UNSUPPORTED;
 
-release_md:
-    uct_release_md_resource_list(md_resources);
+release_component_list:
+    uct_release_component_list(components);
 error_ret:
     return status;
 close_md:
     uct_md_close(iface_p->md);
-    goto release_md;
+    goto release_component_list;
 }
 
 int print_err_usage()

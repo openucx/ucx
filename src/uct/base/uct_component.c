@@ -8,6 +8,7 @@
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <limits.h>
 #include <string.h>
@@ -16,10 +17,12 @@
 ucs_status_t uct_query_components(uct_component_h **components_p,
                                   unsigned *num_components_p)
 {
+    UCS_MODULE_FRAMEWORK_DECLARE(uct);
     uct_component_h *components;
     uct_md_component_t *mdc;
     size_t num_components;
 
+    UCS_MODULE_FRAMEWORK_LOAD(uct, 0);
     num_components = ucs_list_length(&uct_md_components_list);
     components = ucs_malloc(num_components * sizeof(*components),
                             "uct_components");
@@ -59,7 +62,8 @@ ucs_status_t uct_component_query(uct_component_h component,
             return status;
         }
 
-        ucs_assert(resources != NULL);
+        ucs_assertv((num_resources == 0) || (resources != NULL),
+                    "component=%s", mdc->name);
     }
 
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_NAME) {
