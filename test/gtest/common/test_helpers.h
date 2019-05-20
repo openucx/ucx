@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
+
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -170,7 +171,7 @@
 
 
 namespace ucs {
-
+    
 extern const double test_timeout_in_sec;
 extern const double watchdog_timeout_default;
 
@@ -193,6 +194,8 @@ typedef struct {
     int                   kill_signal;
 } test_watchdog_t;
 
+typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
+
 void *watchdog_func(void *arg);
 void watchdog_signal(bool barrier = 1);
 void watchdog_set(test_watchdog_state_t new_state, double new_timeout);
@@ -203,6 +206,8 @@ double watchdog_get_timeout();
 int watchdog_get_kill_signal();
 int watchdog_start();
 void watchdog_stop();
+
+void analyze_test_results();
 
 class test_abort_exception : public std::exception {
 };
