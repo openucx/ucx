@@ -64,6 +64,19 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * This routine waits (blocking) until an event has happened, as part of the
+     * wake-up mechanism.
+     *
+     * This function is guaranteed to return only if new communication events occur
+     * on the worker. Therefore one must drain all existing events before waiting
+     * on the file descriptor. This can be achieved by calling
+     * {@link UcpWorker#progress()} repeatedly until it returns 0.
+     */
+    public void waitForEvents() {
+        waitWorkerNative(getNativeId());
+    }
+
+    /**
      * This routine returns the address of the worker object. This address can be
      * passed to remote instances of the UCP library in order to connect to this
      * worker. Ucp worker address - is an opaque object that is used as an
@@ -90,4 +103,6 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
 
     private static native int progressWorkerNative(long workerId);
+
+    private static native void waitWorkerNative(long workerId);
 }

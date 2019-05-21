@@ -108,3 +108,13 @@ Java_org_ucx_jucx_ucp_UcpWorker_progressWorkerNative(JNIEnv *env, jclass cls, jl
 {
     return ucp_worker_progress((ucp_worker_h)ucp_worker_ptr);
 }
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_waitWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+{
+    ucs_status_t status = ucp_worker_wait((ucp_worker_h)ucp_worker_ptr);
+
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+}
