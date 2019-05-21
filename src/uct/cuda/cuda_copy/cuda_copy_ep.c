@@ -149,10 +149,14 @@ ucs_status_t uct_cuda_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
 
-    status = UCT_CUDA_FUNC(cudaMemcpy(buffer, (void *)remote_addr,
-                                      length, cudaMemcpyDeviceToHost));
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_d2h);
+
+    UCT_CUDA_FUNC(cudaMemcpyAsync(buffer, (void *)remote_addr, length,
+                                  cudaMemcpyDeviceToHost, iface->stream_d2h));
+    status = UCT_CUDA_FUNC(cudaStreamSynchronize(iface->stream_d2h));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",
