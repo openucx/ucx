@@ -1462,6 +1462,17 @@ out:
     return config_idx;
 }
 
+static void ucp_worker_warn_config_unused_env_vars()
+{
+    static uint32_t warn_once = 1;
+
+    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
+        return;
+    }
+
+    ucs_config_parser_warn_unused_env_vars();
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -1624,7 +1635,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* At this point all UCT memory domains and interfaces are already created
      * so warn about unused environment variables.
      */
-    ucs_config_parser_warn_unused_env_vars();
+    ucp_worker_warn_config_unused_env_vars();
 
     *worker_p = worker;
     return UCS_OK;

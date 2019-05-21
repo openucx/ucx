@@ -185,8 +185,26 @@ ucs_config_field_t car_opts_table[] = {
   {NULL}
 };
 
+static std::string config_err_exp_str;
+
 class test_config : public ucs::test {
 protected:
+    static ucs_log_func_rc_t
+    config_error_handler(const char *file, unsigned line, const char *function,
+                         ucs_log_level_t level, const char *message, va_list ap)
+    {
+        // Ignore errors that invalid input parameters as it is expected
+        if (level == UCS_LOG_LEVEL_WARN) {
+            std::string err_str = format_message(message, ap);
+
+            if (err_str.find(config_err_exp_str) != std::string::npos) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
 
     /*
      * Wrapper class for car options parser.
@@ -430,6 +448,41 @@ UCS_TEST_F(test_config, performance) {
     UCS_TEST_TIME_LIMIT(0.05) {
         car_opts opts(NULL, NULL);
     }
+}
+
+UCS_TEST_F(test_config, unused) {
+    ucs::ucx_env_cleanup env_cleanup;
+
+    /* set to warn about unused env vars */
+    ucs_global_opts.warn_unused_env_vars = 1;
+
+    const std::string warn_str    = "unused env variable";
+    const std::string unused_var1 = "UCX_UNUSED_VAR1";
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv env1(unused_var1.c_str(), "unused");
+
+    {
+        config_err_exp_str = warn_str + ": " + unused_var1;
+        scoped_log_handler log_handler(config_error_handler);
+        car_opts opts(NULL, NULL);
+
+        ucs_config_parser_warn_unused_env_vars();
+    }
+
+    {
+        const std::string unused_var2 = "UCX_UNUSED_VAR2";
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env2(unused_var2.c_str(), "unused");
+
+        config_err_exp_str = warn_str + "s: " + unused_var1 + ", " + unused_var2;
+        scoped_log_handler log_handler(config_error_handler);
+        car_opts opts(NULL, NULL);
+
+        ucs_config_parser_warn_unused_env_vars();
+    }
+
+    /* reset to not warn about unused env vars */
+    ucs_global_opts.warn_unused_env_vars = 0;
 }
 
 UCS_TEST_F(test_config, dump) {

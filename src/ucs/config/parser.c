@@ -1376,7 +1376,6 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
 
 void ucs_config_parser_warn_unused_env_vars()
 {
-    static uint32_t warn_once = 1;
     char unused_env_vars_names[40];
     int num_unused_vars;
     char **envp, *envstr;
@@ -1389,10 +1388,6 @@ void ucs_config_parser_warn_unused_env_vars()
     int ret;
 
     if (!ucs_global_opts.warn_unused_env_vars) {
-        return;
-    }
-
-    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
         return;
     }
 
@@ -1437,7 +1432,7 @@ void ucs_config_parser_warn_unused_env_vars()
             p[-1] = '\0'; /* remove trailing comma */
         }
         ucs_warn("unused env variable%s:%s%s (set %s%s=n to suppress this warning)",
-                 num_unused_vars > 1 ? "s" : "", unused_env_vars_names,
+                 (num_unused_vars > 1) ? "s" : "", unused_env_vars_names,
                  truncated ? "..." : "", UCS_CONFIG_PREFIX,
                  UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
     }
