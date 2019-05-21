@@ -272,8 +272,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     struct ibv_mr *mr;
 
-    mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
-                          UCT_IB_MEM_ACCESS_FLAGS);
+    mr = UCS_PROFILE_NAMED_CALL(ibv_reg_mr_func_name, ibv_reg_mr, md->pd,
+                                address, length, UCT_IB_MEM_ACCESS_FLAGS);
     if (mr == NULL) {
         uct_ib_md_print_mem_reg_err_msg(level, address, length,
                                         UCT_IB_MEM_ACCESS_FLAGS | access);

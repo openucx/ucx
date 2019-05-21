@@ -106,30 +106,31 @@
 
 #if HAVE_ODP
 #  if HAVE_VERBS_EXP_H
-#    define IBV_ODP_SUPPORT_IMPLICT IBV_EXP_ODP_SUPPORT_IMPLICIT
+#    define IBV_ODP_SUPPORT_IMPLICT     IBV_EXP_ODP_SUPPORT_IMPLICIT
 static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
                                             size_t length, long access)
 {
     struct ibv_exp_reg_mr_in in = {};
 
-    in.pd = pd;
-    in.addr = addr;
-    in.length = length;
+    in.pd         = pd;
+    in.addr       = addr;
+    in.length     = length;
     in.exp_access = access;
     return ibv_exp_reg_mr(&in);
 }
-#    define ibv_reg_mr uct_ib_reg_mr
-#    define IBV_ACCESS_ON_DEMAND IBV_EXP_ACCESS_ON_DEMAND
-#    define ibv_reg_mr_func_name "ibv_exp_reg_mr"
+#    define ibv_reg_mr                  uct_ib_reg_mr
+#    define IBV_ACCESS_ON_DEMAND        IBV_EXP_ACCESS_ON_DEMAND
+#    define ibv_reg_mr_func_name        "ibv_exp_reg_mr"
 #  else
-#    define ibv_reg_mr_func_name "ibv_reg_mr"
+#    define ibv_reg_mr_func_name        "ibv_reg_mr"
 #  endif
 #else
-#  define IBV_ACCESS_ON_DEMAND 0
+#  define IBV_ACCESS_ON_DEMAND          0
+#  define ibv_reg_mr_func_name          "ibv_reg_mr"
 #endif
 
 #if !HAVE_DECL_IBV_EXP_PREFETCH_WRITE_ACCESS
-#  define IBV_EXP_PREFETCH_WRITE_ACCESS             IBV_EXP_ACCESS_LOCAL_WRITE
+#  define IBV_EXP_PREFETCH_WRITE_ACCESS IBV_EXP_ACCESS_LOCAL_WRITE
 #endif
 
 static inline ucs_status_t uct_ib_prefetch_mr(struct ibv_mr *mr,
@@ -145,6 +146,7 @@ static inline ucs_status_t uct_ib_prefetch_mr(struct ibv_mr *mr,
 
     ret = ibv_advise_mr(mr->pd, IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
                         IB_UVERBS_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+#  define ibv_prefetch_func_name "ibv_advise_mr"
 #elif HAVE_DECL_IBV_EXP_PREFETCH_MR
     struct ibv_exp_prefetch_attr attr = {};
 
@@ -153,10 +155,13 @@ static inline ucs_status_t uct_ib_prefetch_mr(struct ibv_mr *mr,
     attr.length    = length;
 
     ret = ibv_exp_prefetch_mr(mr, &attr);
+#  define ibv_prefetch_func_name "ibv_exp_prefetch_mr"
+#else
+#  define ibv_prefetch_func_name "UNDEFINED"
 #endif
     if (ret) {
-        ucs_error("prefetch addr=%p length=%zu returned %d: %m",
-                  addr, length, ret);
+        ucs_error("%s addr=%p length=%zu returned %d: %m",
+                  ibv_prefetch_func_name, addr, length, ret);
         return UCS_ERR_IO_ERROR;
     }
 
