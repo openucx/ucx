@@ -44,7 +44,8 @@ libuct_ib_la_SOURCES += \
 	mlx5/ib_mlx5_log.c \
 	mlx5/ib_mlx5.c \
 	mlx5/ib_mlx5_dv.c \
-	mlx5/ib_mlx5_hw.c
+	mlx5/ib_mlx5_hw.c \
+	mlx5/ib_mlx5_md.c
 
 if HAVE_MLX5_DV
 libuct_ib_la_LDFLAGS +=  $(LIB_MLX5)
