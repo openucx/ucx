@@ -280,38 +280,32 @@ scoped_setenv::~scoped_setenv() {
 
 ucx_env_cleanup::ucx_env_cleanup() {
     const size_t prefix_len = strlen(UCS_CONFIG_PREFIX);
-    const char *var_name, *var_value;
-    char **envp, *saveptr, *envstr;
+    char **envp;
 
     for (envp = environ; *envp != NULL; ++envp) {
-        envstr = ucs_strdup(*envp, "env_str");;
+        std::string env_var = *envp;
 
-        var_name = strtok_r(envstr, "=", &saveptr);
-        if (!var_name || strncmp(var_name, UCS_CONFIG_PREFIX, prefix_len)) {
-            ucs_free(envstr);
-            continue; /* Not UCX */
+        if (env_var.size() &&
+            !strncmp(env_var.c_str(), UCS_CONFIG_PREFIX, prefix_len)) {
+            ucx_env_storage.push_back(ucs_strdup(env_var.c_str(), "env var"));
         }
-
-        var_value = strtok_r(NULL, "=", &saveptr);
-        if (!var_value) {
-            var_value = "";
-        }
-
-        ucx_env_storage.push_back(std::make_pair(var_name, var_value));
-
-        ucs_free(envstr);
     }
 
     for (size_t i = 0; i < ucx_env_storage.size(); i++) {
-        unsetenv(ucx_env_storage[i].first.c_str());
+        std::string env_var  = ucx_env_storage[i];
+        std::string var_name = env_var.substr(0, env_var.find("="));
+
+        unsetenv(var_name.c_str());
     }
 }
 
 ucx_env_cleanup::~ucx_env_cleanup() {
     while (!ucx_env_storage.empty()) {
-        setenv(ucx_env_storage.back().first.c_str(),
-               ucx_env_storage.back().second.c_str(), 1);
+        char *env_var = ucx_env_storage.back();
+
+        putenv(ucx_env_storage.back());
         ucx_env_storage.pop_back();
+        ucs_free(env_var);
     }
 }
 
