@@ -171,7 +171,7 @@
 
 
 namespace ucs {
-    
+
 extern const double test_timeout_in_sec;
 extern const double watchdog_timeout_default;
 
