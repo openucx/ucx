@@ -1374,6 +1374,17 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
     }
 }
 
+void ucs_config_parser_warn_unused_env_vars_once()
+{
+    static uint32_t warn_once = 1;
+
+    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
+        return;
+    }
+
+    ucs_config_parser_warn_unused_env_vars();
+}
+
 void ucs_config_parser_warn_unused_env_vars()
 {
     char unused_env_vars_names[40];

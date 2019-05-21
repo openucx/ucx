@@ -281,13 +281,14 @@ scoped_setenv::~scoped_setenv() {
 ucx_env_cleanup::ucx_env_cleanup() {
     const size_t prefix_len = strlen(UCS_CONFIG_PREFIX);
     const char *var_name, *var_value;
-    char **envp, *saveptr;
+    char **envp, *saveptr, *envstr;
 
     for (envp = environ; *envp != NULL; ++envp) {
-        std::string env_var = *envp;
+        envstr = ucs_strdup(*envp, "env_str");;
 
-        var_name = strtok_r(const_cast<char*>(env_var.c_str()), "=", &saveptr);
+        var_name = strtok_r(envstr, "=", &saveptr);
         if (!var_name || strncmp(var_name, UCS_CONFIG_PREFIX, prefix_len)) {
+            ucs_free(envstr);
             continue; /* Not UCX */
         }
 
@@ -297,6 +298,8 @@ ucx_env_cleanup::ucx_env_cleanup() {
         }
 
         ucx_env_storage.push_back(std::make_pair(var_name, var_value));
+
+        ucs_free(envstr);
     }
 
     for (size_t i = 0; i < ucx_env_storage.size(); i++) {

@@ -377,6 +377,11 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
  */
 void ucs_config_parser_warn_unused_env_vars();
 
+/**
+ * Wrapper for `ucs_config_parser_warn_unused_env_vars`
+ * that ensures that this is called once
+ */
+void ucs_config_parser_warn_unused_env_vars_once();
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.
