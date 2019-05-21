@@ -222,9 +222,15 @@ void analyze_test_results()
         return;
     }
 
-    int max_name_size = 0, top_n = atoi(env_p);
-    if (!top_n) {
-        return;
+    int max_name_size = 0, top_n;
+
+    if (!strcmp(env_p, "*")) {
+        top_n = std::numeric_limits<int>::max();
+    } else {
+        top_n = atoi(env_p);
+        if (!top_n) {
+            return;
+        }
     }
 
     ::testing::UnitTest *unit_test = ::testing::UnitTest::GetInstance();
