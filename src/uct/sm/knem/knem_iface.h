@@ -17,17 +17,13 @@
 
 
 typedef struct uct_knem_iface_config {
-    uct_iface_config_t           super;
-    uct_sm_iface_common_config_t common;
+    uct_sm_iface_config_t         super;
 } uct_knem_iface_config_t;
 
 
 typedef struct uct_knem_iface {
-    uct_base_iface_t             super;
-    uct_knem_md_t                *knem_md;
-    struct {
-        double                   bw;
-    } config;
+    uct_sm_iface_t                super;
+    uct_knem_md_t                 *knem_md;
 } uct_knem_iface_t;
 
 

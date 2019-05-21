@@ -23,11 +23,7 @@
 static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=md", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
-     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-
-    {"", "", NULL,
-     ucs_offsetof(uct_mm_iface_config_t, common),
-     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_common_config_table)},
+     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
 
     {"FIFO_SIZE", "64",
      "Size of the receive FIFO in the memory-map UCTs.",
@@ -91,6 +87,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                        uct_iface_attr_t *iface_attr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    uct_md_t *md          = iface->super.super.md;
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
@@ -151,7 +148,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->latency.growth          = 0;
     iface_attr->bandwidth               = iface->config.bw;
     iface_attr->overhead                = 10e-9; /* 10 ns */
-    iface_attr->priority                = uct_mm_md_mapper_ops(iface->super.md)->get_priority();
+    iface_attr->priority                = uct_mm_md_mapper_ops(md)->get_priority();
     return UCS_OK;
 }
 
@@ -174,7 +171,7 @@ ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
     if (!need_new_desc) {
         desc = iface->last_recv_desc;
     } else {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp, desc,
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super, &iface->recv_desc_mp, desc,
                                  return UCS_ERR_NO_RESOURCE);
     }
 
@@ -195,8 +192,8 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
 
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
         /* read short (inline) messages from the FIFO elements */
-        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
-                           elem + 1, elem->length, "RX: AM_SHORT");
+        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
+                           elem->am_id, elem + 1, elem->length, "RX: AM_SHORT");
         status = uct_mm_iface_invoke_am(iface, elem->am_id, elem + 1,
                                         elem->length, 0);
     } else {
@@ -206,8 +203,8 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
 
         data = elem->desc_chunk_base_addr + elem->desc_offset;
 
-        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
-                           data, elem->length, "RX: AM_BCOPY");
+        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
+                           elem->am_id, data, elem->length, "RX: AM_BCOPY");
 
         status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
                                         UCT_CB_PARAM_FLAG_DESC);
@@ -227,7 +224,7 @@ static inline unsigned uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 
     /* check the memory pool to make sure that there is a new descriptor available */
     if (ucs_unlikely(iface->last_recv_desc == NULL)) {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp,
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super, &iface->recv_desc_mp,
                                  iface->last_recv_desc, return 0);
     }
 
@@ -246,7 +243,7 @@ static inline unsigned uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
         status = uct_mm_iface_process_recv(iface, read_index_elem);
         if (status != UCS_OK) {
             /* the last_recv_desc is in use. get a new descriptor for it */
-            UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp,
+            UCT_TL_IFACE_GET_RX_DESC(&iface->super.super, &iface->recv_desc_mp,
                                      iface->last_recv_desc, ucs_debug("recv mpool is empty"));
         }
 
@@ -465,19 +462,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_status_t status;
     unsigned i;
 
-    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
-                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
-    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
-        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_mm_iface_ops, md, worker,
-                              params, tl_config
-                              UCS_STATS_ARG((params->field_mask & 
-                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
-                                            params->stats_root : NULL)
-                              UCS_STATS_ARG(UCT_MM_TL_NAME));
+    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops, md,
+                              worker, params, tl_config);
 
     ucs_trace_func("Creating an MM iface=%p worker=%p", self, worker);
 
@@ -511,8 +497,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->config.fifo_size         = mm_config->fifo_size;
     self->config.fifo_elem_size    = mm_config->fifo_elem_size;
-    self->config.seg_size          = mm_config->super.max_bcopy;
-    self->config.bw                = mm_config->common.bw;
+    self->config.seg_size          = mm_config->super.super.max_bcopy;
     self->fifo_release_factor_mask = UCS_MASK(ucs_ilog2(ucs_max((int)
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
                                      1)));
@@ -541,7 +526,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     /* create a memory pool for receive descriptors */
-    status = uct_iface_mpool_init(&self->super,
+    status = uct_iface_mpool_init(&self->super.super,
                                   &self->recv_desc_mp,
                                   sizeof(uct_mm_recv_desc_t) + self->rx_headroom +
                                   self->config.seg_size,
@@ -604,8 +589,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
     size_t size_to_free;
 
-    uct_base_iface_progress_disable(&self->super.super,
-                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_base_iface_progress_disable(&self->super.super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     /* return all the descriptors that are now 'assigned' to the FIFO,
      * to their mpool */
@@ -618,9 +603,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     size_to_free = UCT_MM_GET_FIFO_SIZE(self);
 
     /* release the memory allocated for the FIFO */
-    status = uct_mm_md_mapper_ops(self->super.md)->free(self->shared_mem,
-                                                        self->fifo_mm_id,
-                                                        size_to_free, self->path);
+    status = uct_mm_md_mapper_ops(self->super.super.md)->free(self->shared_mem,
+                                                              self->fifo_mm_id,
+                                                              size_to_free,
+                                                              self->path);
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }

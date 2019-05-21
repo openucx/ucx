@@ -15,13 +15,9 @@
 UCT_MD_REGISTER_TL(&uct_cma_md_component, &uct_cma_tl);
 
 static ucs_config_field_t uct_cma_iface_config_table[] = {
-    {"", "ALLOC=huge,thp,mmap,heap", NULL,
+    {"", "ALLOC=huge,thp,mmap,heap;BW=11145MBs", NULL,
     ucs_offsetof(uct_cma_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-
-    {"", "BW=11145MBs", NULL,
-     ucs_offsetof(uct_cma_iface_config_t, common),
-     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_common_config_table)},
+    UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
 
     {NULL}
 };
@@ -66,7 +62,7 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = iface->config.bw;
+    iface_attr->bandwidth               = iface->super.config.bandwidth;
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
     return UCS_OK;
 }
@@ -98,24 +94,9 @@ static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_cma_iface_config_t *config = ucs_derived_of(tl_config,
-                                                    uct_cma_iface_config_t);
-
-    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
-                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
-    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
-        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cma_iface_ops, md, worker,
-                              params, tl_config
-                              UCS_STATS_ARG((params->field_mask &
-                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
-                                            params->stats_root : NULL)
-                              UCS_STATS_ARG(UCT_CMA_TL_NAME));
+    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_cma_iface_ops, md,
+                              worker, params, tl_config);
     uct_sm_get_max_iov(); /* to initialize ucs_get_max_iov static variable */
-    self->config.bw = config->common.bw;
 
     return UCS_OK;
 }
