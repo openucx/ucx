@@ -194,8 +194,6 @@ typedef struct {
     int                   kill_signal;
 } test_watchdog_t;
 
-typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
-
 void *watchdog_func(void *arg);
 void watchdog_signal(bool barrier = 1);
 void watchdog_set(test_watchdog_state_t new_state, double new_timeout);

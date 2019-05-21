@@ -1050,7 +1050,7 @@ run_gtest() {
 	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	# Report TOP-20 longest test at the end of testing
-	export GTEST_ANALYZE_RESULTS=20
+	export GTEST_REPORT_LONGEST_TESTS=20
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))

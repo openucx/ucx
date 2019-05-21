@@ -13,6 +13,8 @@
 
 namespace ucs {
 
+typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
+
 const double test_timeout_in_sec = 60.;
 
 const double watchdog_timeout_default = 900.; // 15 minutes
@@ -215,14 +217,15 @@ static bool test_results_cmp(const test_result_t &a, const test_result_t &b)
 
 void analyze_test_results()
 {
-    // GTEST_ANALYZE_RESULTS=100 will report TOP-100 longest tests
+    // GTEST_REPORT_LONGEST_TESTS=100 will report TOP-100 longest tests
     /* coverity[tainted_data_return] */
-    char *env_p = getenv("GTEST_ANALYZE_RESULTS");
+    char *env_p = getenv("GTEST_REPORT_LONGEST_TESTS");
     if (env_p == NULL) {
         return;
     }
 
-    int max_name_size = 0, top_n;
+    size_t max_name_size = 0;
+    int top_n;
 
     if (!strcmp(env_p, "*")) {
         top_n = std::numeric_limits<int>::max();
@@ -267,7 +270,7 @@ void analyze_test_results()
                 test_results.push_back(std::make_pair(test_name,
                                                       result->elapsed_time()));
 
-                max_name_size = std::max((int)test_name.size(), max_name_size);
+                max_name_size = std::max(test_name.size(), max_name_size);
             }
         }
     }
