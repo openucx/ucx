@@ -90,7 +90,6 @@ struct uct_mm_iface {
         unsigned fifo_size;
         unsigned fifo_elem_size;
         unsigned seg_size;                    /* size of the receive descriptor (for payload)*/
-        double   bw;
     } config;
 };
 
