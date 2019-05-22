@@ -386,6 +386,24 @@ void ucs_sys_free(void *ptr, size_t length);
  */
 char *ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len);
 
+/**
+ * Sets affinity for the current process.
+ *
+ * @param [in] cpuset      Pointer to the cpuset to assign
+ *
+ * @return -1 on error with errno set, 0 on success
+ */
+int ucs_sys_setaffinity(ucs_sys_cpuset_t *cpuset);
+
+/**
+ * Queries affinity for the current process.
+ *
+ * @param [out] cpuset      Pointer to the cpuset to return result
+ *
+ * @return -1 on error with errno set, 0 on success
+ */
+int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset);
+
 END_C_DECLS
 
 #endif

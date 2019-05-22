@@ -981,7 +981,7 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
         return UCS_OK;
     }
 
-    ret = sched_getaffinity(0, sizeof(process_affinity), &process_affinity);
+    ret = ucs_sys_getaffinity(&process_affinity);
     if (ret) {
         ucs_error("sched_getaffinity() failed: %m");
         return UCS_ERR_INVALID_PARAM;

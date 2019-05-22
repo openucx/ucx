@@ -1357,13 +1357,13 @@ static ucs_status_t check_system(struct perftest_context *ctx)
         }
         CPU_SET(ctx->cpu, &cpuset);
 
-        ret = sched_setaffinity(0, sizeof(cpuset), &cpuset);
+        ret = ucs_sys_setaffinity(&cpuset);
         if (ret) {
             ucs_warn("sched_setaffinity() failed: %m");
             return UCS_ERR_INVALID_PARAM;
         }
     } else {
-        ret = sched_getaffinity(0, sizeof(cpuset), &cpuset);
+        ret = ucs_sys_getaffinity(&cpuset);
         if (ret) {
             ucs_warn("sched_getaffinity() failed: %m");
             return UCS_ERR_INVALID_PARAM;
