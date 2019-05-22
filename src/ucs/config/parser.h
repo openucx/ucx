@@ -11,7 +11,7 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/stubs.h>
 
 #include <stdio.h>
 

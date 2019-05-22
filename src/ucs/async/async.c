@@ -9,7 +9,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/debug/debug.h>
 #include <ucs/datastruct/khash.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/stubs.h>
 
 
 #define UCS_ASYNC_TIMER_ID_MIN      1000000u

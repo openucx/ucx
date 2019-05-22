@@ -343,23 +343,6 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length);
  */
 void ucs_sys_free(void *ptr, size_t length);
 
-
-/**
- * Empty function which can be casted to a no-operation callback in various situations.
- */
-void ucs_empty_function();
-unsigned ucs_empty_function_return_zero();
-int64_t ucs_empty_function_return_zero_int64();
-ucs_status_t ucs_empty_function_return_success();
-ucs_status_t ucs_empty_function_return_unsupported();
-ucs_status_t ucs_empty_function_return_inprogress();
-ucs_status_t ucs_empty_function_return_no_resource();
-ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource();
-ucs_status_t ucs_empty_function_return_ep_timeout();
-ssize_t ucs_empty_function_return_bc_ep_timeout();
-ucs_status_t ucs_empty_function_return_busy();
-int ucs_empty_function_do_assert();
-
 END_C_DECLS
 
 #endif
