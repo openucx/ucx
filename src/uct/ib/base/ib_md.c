@@ -1178,8 +1178,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         goto err_release_stats;
     }
 
+#if HAVE_DECL_IBV_EXP_SETENV
     ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
     ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
+#endif
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         /* Must be done after we open and query the device */
