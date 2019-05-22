@@ -243,7 +243,9 @@ static ucs_status_t ucs_async_signal_install_handler()
         new_action.sa_sigaction = ucs_async_signal_handler;
         sigemptyset(&new_action.sa_mask);
         new_action.sa_flags    = SA_RESTART|SA_SIGINFO;
+#if HAVE_SIGACTION_SA_RESTORER
         new_action.sa_restorer = NULL;
+#endif
         ret = sigaction(ucs_global_opts.async_signo, &new_action,
                         &ucs_async_signal_global_context.prev_sighandler);
         if (ret < 0) {

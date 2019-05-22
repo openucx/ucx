@@ -110,7 +110,9 @@ const char *ucs_signal_names[] = {
     [SIGSYS + 1] = NULL
 };
 
+#if HAVE_SIGACTION_SA_RESTORER
 static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+#endif
 static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
 static khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
@@ -1142,14 +1144,20 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
             ucs_warn("failed to set signal handler for sig %d : %m",
                      ucs_global_opts.error_signals.signals[i]);
         }
+#if HAVE_SIGACTION_SA_RESTORER
         ucs_debug_signal_restorer = old_action.sa_restorer;
+#endif
         ucs_debug_save_original_sighandler(ucs_global_opts.error_signals.signals[i], &old_action);
     }
 }
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
 {
-    return !strcmp(symbol, "ucs_handle_error") ||
+    return
+#if HAVE_SIGACTION_SA_RESTORER
+           address == ucs_debug_signal_restorer ||
+#endif
+           !strcmp(symbol, "ucs_handle_error") ||
            !strcmp(symbol, "ucs_fatal_error") ||
            !strcmp(symbol, "ucs_error_freeze") ||
            !strcmp(symbol, "ucs_error_signal_handler") ||
@@ -1161,8 +1169,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "ucs_log_dispatch") ||
            !strcmp(symbol, "__ucs_log") ||
            !strcmp(symbol, "ucs_debug_send_mail") ||
-           (strstr(symbol, "_L_unlock_") == symbol) ||
-           (address == ucs_debug_signal_restorer);
+           (strstr(symbol, "_L_unlock_") == symbol);
 }
 
 static ucs_status_t ucs_debug_get_lib_info(Dl_info *dlinfo)
