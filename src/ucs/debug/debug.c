@@ -841,8 +841,12 @@ static const char *ucs_signal_cause_common(int si_code)
     case SI_TIMER     : return "POSIX timer expired";
     case SI_MESGQ     : return "POSIX message queue state changed";
     case SI_ASYNCIO   : return "AIO completed";
+#ifdef SI_SIGIO
     case SI_SIGIO     : return "queued SIGIO";
+#endif
+#ifdef SI_TKILL
     case SI_TKILL     : return "tkill(2) or tgkill(2)";
+#endif
     default           : return "<unknown si_code>";
     }
 }
