@@ -11,6 +11,8 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/sys.h>
+
 #include <stdio.h>
 
 
@@ -182,6 +184,7 @@ void ucs_config_help_table(char *buf, size_t max, const void *arg);
 void ucs_config_release_nop(void *ptr, const void *arg);
 void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
+#define UCS_CONFIG_DEPRECATED_FIELD SIZE_MAX
 
 /* Forward declaration of array. Should be in header file. */
 #define UCS_CONFIG_DECLARE_ARRAY(_name) \
@@ -274,6 +277,13 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_RANGE_SPEC {ucs_config_sscanf_range_spec,ucs_config_sprintf_range_spec, \
                                     ucs_config_clone_range_spec, ucs_config_release_nop, \
                                     ucs_config_help_generic,     "numbers range: <number>-<number>"}
+
+#define UCS_CONFIG_TYPE_DEPRECATED {(ucs_field_type(ucs_config_parser_t, read))   ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, write))  ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, clone))  ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, release))ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, help))   ucs_empty_function_do_assert, \
+                                    ""}
 
 /*
  * Helpers for using an array of strings.

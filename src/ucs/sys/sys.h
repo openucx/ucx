@@ -358,6 +358,7 @@ ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource();
 ucs_status_t ucs_empty_function_return_ep_timeout();
 ssize_t ucs_empty_function_return_bc_ep_timeout();
 ucs_status_t ucs_empty_function_return_busy();
+int ucs_empty_function_do_assert();
 
 END_C_DECLS
 

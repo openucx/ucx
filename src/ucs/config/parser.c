@@ -795,6 +795,11 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg)
     strncpy(buf, (char*)arg, max);
 }
 
+static inline int ucs_config_is_deprecated_field(const ucs_config_field_t *field)
+{
+    return (field->offset == UCS_CONFIG_DEPRECATED_FIELD);
+}
+
 static inline int ucs_config_is_alias_field(const ucs_config_field_t *field)
 {
     return (field->dfl_value == NULL);
@@ -861,7 +866,8 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     void *var;
 
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -936,6 +942,10 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
         } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
                    !strcmp(name + prefix_len, field->name))
         {
+            if (ucs_config_is_deprecated_field(field)) {
+                return UCS_ERR_NO_ELEM;
+            }
+
             ucs_config_parser_release_field(field, var);
             status = ucs_config_parser_parse_field(field, value, var);
             if (status != UCS_OK) {
@@ -948,32 +958,36 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
     return (count == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
 }
 
-static void ucs_config_parser_mark_env_var_used(const char *name)
+static ucs_status_t ucs_config_parser_mark_env_var_used(const char *name)
 {
+    ucs_status_t status = UCS_OK;
     khiter_t iter;
     char *key;
     int ret;
 
     if (!ucs_global_opts.warn_unused_env_vars) {
-        return;
+        return UCS_OK;
     }
 
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
     iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, name);
     if (iter != kh_end(&ucs_config_parser_env_vars)) {
+        status = UCS_ERR_ALREADY_EXISTS;
         goto out; /* already exists */
     }
 
     key = ucs_strdup(name, "config_parser_env_var");
     if (key == NULL) {
         ucs_error("strdup(%s) failed", name);
+        status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
     kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
 out:
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
+    return status;
 }
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
@@ -1021,20 +1035,36 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             strncpy(buf + prefix_len, field->name, sizeof(buf) - prefix_len - 1);
             env_value = getenv(buf);
             if (env_value != NULL) {
-                ucs_config_parser_release_field(field, var);
-                ucs_config_parser_mark_env_var_used(buf);
-                status = ucs_config_parser_parse_field(field, env_value, var);
-                if (status != UCS_OK) {
-                    /* If set to ignore errors, restore the default value */
-                    ucs_status_t tmp_status =
-                        ucs_config_parser_parse_field(field, field->dfl_value,
-                                                      var);
-                    if (ignore_errors) {
-                        status = tmp_status;
+                status = ucs_config_parser_mark_env_var_used(buf);
+
+                if (ucs_config_is_deprecated_field(field)) {
+                    if ((status == UCS_OK) &&
+                        ucs_global_opts.warn_unused_env_vars) {
+                        ucs_warn("deprecated env variable %s used "
+                                 "(set %s%s=n to suppress this warning)",
+                                 buf, UCS_CONFIG_PREFIX,
+                                 UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
                     }
-                }
-                if (status != UCS_OK) {
-                    return status;
+                } else {
+                    if ((status != UCS_OK) &&
+                        (status != UCS_ERR_ALREADY_EXISTS)) {
+                        continue;
+                    }
+
+                    ucs_config_parser_release_field(field, var);
+                    status = ucs_config_parser_parse_field(field, env_value, var);
+                    if (status != UCS_OK) {
+                        /* If set to ignore errors, restore the default value */
+                        ucs_status_t tmp_status =
+                            ucs_config_parser_parse_field(field, field->dfl_value,
+                                                          var);
+                        if (ignore_errors) {
+                            status = tmp_status;
+                        }
+                    }
+                    if (status != UCS_OK) {
+                        return status;
+                    }
                 }
             }
         }
@@ -1139,7 +1169,8 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
 
     ucs_config_field_t *field;
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -1161,7 +1192,8 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields)
     ucs_config_field_t *field;
 
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -1222,9 +1254,16 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
     ucs_assert(!ucs_list_is_empty(prefix_list));
     head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
 
-    field->parser.write(value_buf, sizeof(value_buf) - 1, (char*)opts + field->offset,
-                        field->parser.arg);
-    field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
+    if (ucs_config_is_deprecated_field(field)) {
+        sprintf(value_buf, " (deprecated)");
+        sprintf(syntax_buf, "N/A");
+    } else {
+        sprintf(value_buf, "=");
+        field->parser.write(value_buf + 1, sizeof(value_buf) - 2,
+                            (char*)opts + field->offset,
+                            field->parser.arg);
+        field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
+    }
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "#\n");
@@ -1261,7 +1300,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         fprintf(stream, "#\n");
     }
 
-    fprintf(stream, "%s%s%s=%s\n", env_prefix, head->prefix, name, value_buf);
+    fprintf(stream, "%s%s%s%s\n", env_prefix, head->prefix, name, value_buf);
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "\n");
@@ -1311,6 +1350,10 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                               aliased_field->name);
             }
         } else {
+            if (ucs_config_is_deprecated_field(field) &&
+                !(flags & UCS_CONFIG_PRINT_HIDDEN)) {
+                continue;
+            }
             ucs_config_parser_print_field(stream, opts, env_prefix, prefix_list,
                                           field->name, field, flags, NULL);
         }
