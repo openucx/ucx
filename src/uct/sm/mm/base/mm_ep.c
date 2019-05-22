@@ -52,20 +52,20 @@ static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
 
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
 {
-    uct_mm_iface_t *iface = ucs_derived_of(params->iface, uct_mm_iface_t);
+    uct_mm_iface_t *iface           = ucs_derived_of(params->iface, uct_mm_iface_t);
     const uct_mm_iface_addr_t *addr = (const void *)params->iface_addr;
+    uct_md_t *md                    = iface->super.super.md;
 
     ucs_status_t status;
     size_t size_to_attach;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     /* Connect to the remote address (remote FIFO) */
     /* Attach the address's memory */
     size_to_attach = UCT_MM_GET_FIFO_SIZE(iface);
-    status =
-        uct_mm_md_mapper_ops(iface->super.md)->attach(addr->id,
+    status         = uct_mm_md_mapper_ops(md)->attach(addr->id,
                                                       size_to_attach,
                                                       (void *)addr->vaddr,
                                                       &self->mapped_desc.address,
@@ -116,7 +116,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
          remote_seg != NULL; remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_next(&iter)) {
             sglib_hashed_uct_mm_remote_seg_t_delete(self->remote_segments_hash, remote_seg);
             /* detach the remote proceess's descriptors segment */
-            status = uct_mm_md_mapper_ops(iface->super.md)->detach(remote_seg);
+            status = uct_mm_md_mapper_ops(iface->super.super.md)->detach(remote_seg);
             if (status != UCS_OK) {
                 ucs_warn("Unable to detach shared memory segment of descriptors: %s",
                          ucs_status_string(status));
@@ -125,7 +125,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     }
 
     /* detach the remote proceess's shared memory segment (remote recv FIFO) */
-    status = uct_mm_md_mapper_ops(iface->super.md)->detach(&self->mapped_desc);
+    status = uct_mm_md_mapper_ops(iface->super.super.md)->detach(&self->mapped_desc);
     if (status != UCS_OK) {
         ucs_error("error detaching from remote FIFO");
     }
@@ -139,6 +139,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm_fifo_element_t *elem)
 {
+    uct_md_t *md = iface->super.super.md;
     uct_mm_remote_seg_t *remote_seg, search;
     ucs_status_t status;
 
@@ -156,12 +157,12 @@ void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm
             ucs_fatal("Failed to allocated memory for a remote segment identifier. %m");
         }
 
-        status = uct_mm_md_mapper_ops(iface->super.md)->attach(elem->desc_mmid,
-                                                               elem->desc_mpool_size,
-                                                               elem->desc_chunk_base_addr,
-                                                               &remote_seg->address,
-                                                               &remote_seg->cookie,
-                                                               iface->path);
+        status = uct_mm_md_mapper_ops(md)->attach(elem->desc_mmid,
+                                                  elem->desc_mpool_size,
+                                                  elem->desc_chunk_base_addr,
+                                                  &remote_seg->address,
+                                                  &remote_seg->cookie,
+                                                  iface->path);
         if (status != UCS_OK) {
             ucs_fatal("Failed to attach to remote mmid:%zu. %s ",
                       elem->desc_mmid, ucs_status_string(status));
@@ -257,7 +258,7 @@ retry:
         elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
 
-        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
+        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
                            elem + 1, length + sizeof(header), "TX: AM_SHORT");
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(header) + length);
     } else {
@@ -270,7 +271,7 @@ retry:
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length;
 
-        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
+        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
                            base_address + elem->desc_offset, length, "TX: AM_BCOPY");
 
         UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);

@@ -247,12 +247,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     \
-                                    "bandwidth value: <number>[T|G|K]B|b[[p|/]s]"}
+                                    "bandwidth value: <number>[T|G|M|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_BW_SPEC    {ucs_config_sscanf_bw_spec,   ucs_config_sprintf_bw_spec, \
                                     ucs_config_clone_bw_spec,    ucs_config_release_bw_spec, \
                                     ucs_config_help_generic,     \
-                                    "device_name:<number>[T|G|K]B|b[[p|/]s]"}
+                                    "device_name:<number>[T|G|M|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
