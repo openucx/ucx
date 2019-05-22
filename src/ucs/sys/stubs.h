@@ -7,10 +7,6 @@
 #ifndef UCS_STUBS_H
 #define UCS_STUBS_H
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
 #include <ucs/type/status.h>
 
 #include <stdlib.h>
