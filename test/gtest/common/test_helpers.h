@@ -419,7 +419,7 @@ public:
     ucx_env_cleanup();
     ~ucx_env_cleanup();
 private:
-    std::vector<char*> ucx_env_storage;
+    std::vector<std::string> ucx_env_storage;
 };
 
 template <typename T>
