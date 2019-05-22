@@ -1019,6 +1019,13 @@ static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
     return func_ptr;
 }
 
+#if !HAVE_SIGHANDLER_T
+#if HAVE___SIGHANDLER_T
+typedef __sighandler_t *sighandler_t;
+#else
+#error "Port me"
+#endif
+#endif
 sighandler_t signal(int signum, sighandler_t handler)
 {
     static sighandler_t (*orig)(int, sighandler_t) = NULL;
