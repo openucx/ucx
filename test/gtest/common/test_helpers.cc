@@ -285,8 +285,8 @@ ucx_env_cleanup::ucx_env_cleanup() {
     for (envp = environ; *envp != NULL; ++envp) {
         std::string env_var = *envp;
 
-        if (env_var.size() &&
-            !strncmp(env_var.c_str(), UCS_CONFIG_PREFIX, prefix_len)) {
+        if ((env_var.find("=") != std::string::npos) &&
+            (env_var.find(UCS_CONFIG_PREFIX, 0, prefix_len) != std::string::npos)) {
             ucx_env_storage.push_back(env_var);
         }
     }
