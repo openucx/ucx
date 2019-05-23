@@ -83,6 +83,9 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
+    /** Transport to use for sending a connection request from
+     *  the client to the server in client/server mode */
+    char                                   *cm_tl;
 } ucp_context_config_t;
 
 

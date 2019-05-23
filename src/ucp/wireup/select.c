@@ -1481,17 +1481,20 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
         ucs_assert(context->tl_mds[md_index].attr.cap.flags &
                    UCT_MD_FLAG_SOCKADDR);
 
+        /* The client selects the transport for sockaddr according to the
+         * configuration. We rely on the server having this transport available
+         * as well */
         if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
-                                          UCT_SOCKADDR_ACC_REMOTE)) {
-            /* TODO use score to prefer best tl rather than using first one */
+                                          UCT_SOCKADDR_ACC_REMOTE) &&
+            (!strcmp(context->config.ext.cm_tl, resource->tl_rsc.tl_name))) {
             *rsc_index_p = tl_id;
             return UCS_OK;
         }
 
-        ucs_debug("md %s cannot reach %s",
+        ucs_debug("md %s cannot reach %s or doesn't match the configured transport: %s ",
                   context->tl_mds[md_index].rsc.md_name,
                   ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
-                                   sizeof(saddr_str)));
+                                   sizeof(saddr_str)), context->config.ext.cm_tl);
     }
 
     return UCS_ERR_UNREACHABLE;

@@ -424,7 +424,7 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
         ucp_listener_destroy(*listener_p);
         goto out;
     }
-    fprintf(stderr,"server is listening on port %d\n", attr.port);
+    fprintf(stderr,"server is listening on port %d\n", attr.ports[0]);
 
 out:
     return status;

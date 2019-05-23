@@ -444,8 +444,10 @@ UCS_TEST_P(test_ucp_sockaddr, reject) {
 
 UCS_TEST_P(test_ucp_sockaddr, query_listener) {
     ucp_listener_attr_t listener_attr;
+    int i;
 
-    listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
+    listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT |
+                               UCP_LISTENER_ATTR_FIELD_NUM_TRANSPORTS;
 
     UCS_TEST_MESSAGE << "Testing "
                      << ucs::sockaddr_to_str(
@@ -453,7 +455,10 @@ UCS_TEST_P(test_ucp_sockaddr, query_listener) {
 
     start_listener(cb_type(), (const struct sockaddr*)&test_addr);
     ucp_listener_query(receiver().listenerh(), &listener_attr);
-    EXPECT_EQ(test_addr.sin_port, htons(listener_attr.port));
+
+    for (i = 0; i < listener_attr.num_listening_transports; i++) {
+        EXPECT_EQ(test_addr.sin_port, htons(listener_attr.ports[i]));
+    }
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {

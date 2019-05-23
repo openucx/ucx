@@ -487,10 +487,10 @@ out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
     if (status == UCS_OK) {
-        status = uct_iface_accept(conn_request->listener->wiface.iface,
+        status = uct_iface_accept(conn_request->listener->wifaces[conn_request->wiface_idx].iface,
                                   conn_request->uct_req);
     } else {
-        uct_iface_reject(conn_request->listener->wiface.iface,
+        uct_iface_reject(conn_request->listener->wifaces[conn_request->wiface_idx].iface,
                          conn_request->uct_req);
     }
     ucs_free(params->conn_request);

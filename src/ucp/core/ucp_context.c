@@ -107,6 +107,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
 
+  {"CM_TRANSPORT", "rdmacm",
+   "Transport to use for initiating a connection from the client side while\n"
+   "establishing client/server connection",
+   ucs_offsetof(ucp_config_t, ctx.cm_tl), UCS_CONFIG_TYPE_STRING},
+
   {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
@@ -1124,6 +1129,32 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     }
 }
 
+static void ucp_context_set_config_ext(ucp_context_h context,
+                                       const ucp_config_t *config)
+{
+    context->config.ext = config->ctx;
+    context->config.ext.cm_tl = strdup(config->ctx.cm_tl);
+
+    /* Need to check MAX_BCOPY value if it is enabled only */
+    if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
+        if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
+            /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
+             * scattered to UCP user buffer. Make sure that bounce buffer is used for
+             * messages which can not fit SW RNDV hdr. */
+            context->config.ext.tm_max_bb_size = sizeof(ucp_request_hdr_t);
+            ucs_info("UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bb_size, sizeof(ucp_request_hdr_t));
+        }
+
+        if (context->config.ext.tm_max_bb_size > context->config.ext.seg_size) {
+            context->config.ext.tm_max_bb_size = context->config.ext.seg_size;
+            ucs_info("Wrong UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bb_size,
+                     context->config.ext.seg_size);
+        }
+    }
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -1135,7 +1166,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucp_apply_params(context, params,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
-    context->config.ext = config->ctx;
+
+    ucp_context_set_config_ext(context, config);
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
         /* num_eps were set via the env variable. Override current value */
@@ -1202,25 +1234,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    /* Need to check MAX_BCOPY value if it is enabled only */
-    if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
-        if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
-            /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
-             * scattered to UCP user buffer. Make sure that bounce buffer is used for
-             * messages which can not fit SW RNDV hdr. */
-            context->config.ext.tm_max_bb_size = sizeof(ucp_request_hdr_t);
-            ucs_info("UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
-                     context->config.ext.tm_max_bb_size, sizeof(ucp_request_hdr_t));
-        }
-
-        if (context->config.ext.tm_max_bb_size > context->config.ext.seg_size) {
-            context->config.ext.tm_max_bb_size = context->config.ext.seg_size;
-            ucs_info("Wrong UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
-                     context->config.ext.tm_max_bb_size,
-                     context->config.ext.seg_size);
-        }
-    }
-
     return UCS_OK;
 
 err_free:
@@ -1233,6 +1246,7 @@ err:
 static void ucp_free_config(ucp_context_h context)
 {
     ucs_free(context->config.alloc_methods);
+    ucs_free(context->config.ext.cm_tl);
 }
 
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
