@@ -15,7 +15,6 @@ BEGIN_C_DECLS
 
 /** @file libperf.h */
 
-
 #include <sys/uio.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
