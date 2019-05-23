@@ -23,7 +23,7 @@
 
 
 /* width of titles in docstring */
-#define UCP_CONFIG_PARSER_DOCSTR_WIDTH         10
+#define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
 
 /* list of prefixes for a configuration variable, used to dump all possible
@@ -1230,7 +1230,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         fprintf(stream, "#\n");
         ucs_config_print_doc_line_by_line(field, __print_stream_cb, stream);
         fprintf(stream, "#\n");
-        fprintf(stream, "# %-*s %s\n", UCP_CONFIG_PARSER_DOCSTR_WIDTH, "syntax:",
+        fprintf(stream, "# %-*s %s\n", UCS_CONFIG_PARSER_DOCSTR_WIDTH, "syntax:",
                 syntax_buf);
 
         /* Extra docstring */
@@ -1244,7 +1244,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
 
         /* Parents in configuration hierarchy */
         if (prefix_list->next != prefix_list->prev) {
-            fprintf(stream, "# %-*s", UCP_CONFIG_PARSER_DOCSTR_WIDTH, "inherits:");
+            fprintf(stream, "# %-*s", UCS_CONFIG_PARSER_DOCSTR_WIDTH, "inherits:");
             ucs_list_for_each(prefix, prefix_list, list) {
                 if (prefix == head) {
                     continue;
@@ -1305,7 +1305,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                               env_prefix, prefix_list,
                                               field->name, aliased_field,
                                               flags, "%-*s %s%s%s",
-                                              UCP_CONFIG_PARSER_DOCSTR_WIDTH,
+                                              UCS_CONFIG_PARSER_DOCSTR_WIDTH,
                                               "alias of:", env_prefix,
                                               head->prefix,
                                               aliased_field->name);
