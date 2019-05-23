@@ -366,8 +366,7 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     return send_length > 0;
 }
 
-static ucs_status_t
-uct_tcp_ep_io_err_handler_cb(void *arg, int errno)
+static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
 {
     uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -375,12 +374,12 @@ uct_tcp_ep_io_err_handler_cb(void *arg, int errno)
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
 
-    if ((errno == ECONNRESET) &&
+    if ((io_errno == ECONNRESET) &&
         (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
         (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */) {
         ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
                   "was dropped by the peer",
-                  ep, errno, strerror(errno),
+                  ep, io_errno, strerror(io_errno),
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
                                    str_local_addr, UCS_SOCKADDR_STRING_LEN),
                   ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
