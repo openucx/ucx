@@ -77,6 +77,20 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * This routine signals that the event has happened, as part of the wake-up
+     * mechanism. This function causes a blocking call to {@link UcpWorker#waitForEvents()}
+     * to return, even if no event from the underlying interfaces has taken place.
+     *
+     * It’s safe to use this routine from any thread, even if UCX is compiled
+     * without multi-threading support and/or initialized without
+     * {@link UcpWorkerParams#requestThreadSafety()}. However {@link UcpContext} has to be
+     * created with {@link UcpParams#requestWakeupFeature()}.
+     */
+    public void signal() {
+        signalWorkerNative(getNativeId());
+    }
+
+    /**
      * This routine returns the address of the worker object. This address can be
      * passed to remote instances of the UCP library in order to connect to this
      * worker. Ucp worker address - is an opaque object that is used as an
@@ -105,4 +119,6 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native int progressWorkerNative(long workerId);
 
     private static native void waitWorkerNative(long workerId);
+
+    private static native void signalWorkerNative(long workerId);
 }
