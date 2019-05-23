@@ -9,6 +9,8 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/config/parser.h>
+
 #include <sys/resource.h>
 
 namespace ucs {
@@ -358,6 +360,39 @@ scoped_setenv::~scoped_setenv() {
         setenv(m_name.c_str(), m_old_value.c_str(), 1);
     } else {
         unsetenv(m_name.c_str());
+    }
+}
+
+ucx_env_cleanup::ucx_env_cleanup() {
+    const size_t prefix_len = strlen(UCS_CONFIG_PREFIX);
+    char **envp;
+
+    for (envp = environ; *envp != NULL; ++envp) {
+        std::string env_var = *envp;
+
+        if ((env_var.find("=") != std::string::npos) &&
+            (env_var.find(UCS_CONFIG_PREFIX, 0, prefix_len) != std::string::npos)) {
+            ucx_env_storage.push_back(env_var);
+        }
+    }
+
+    for (size_t i = 0; i < ucx_env_storage.size(); i++) {
+        std::string var_name =
+            ucx_env_storage[i].substr(0, ucx_env_storage[i].find("="));
+
+        unsetenv(var_name.c_str());
+    }
+}
+
+ucx_env_cleanup::~ucx_env_cleanup() {
+    while (!ucx_env_storage.empty()) {
+        std::string var_name =
+            ucx_env_storage.back().substr(0, ucx_env_storage.back().find("="));
+        std::string var_value =
+            ucx_env_storage.back().substr(ucx_env_storage.back().find("=") + 1);
+
+        setenv(var_name.c_str(), var_value.c_str(), 1);
+        ucx_env_storage.pop_back();
     }
 }
 
