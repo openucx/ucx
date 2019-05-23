@@ -13,6 +13,8 @@
 
 namespace ucs {
 
+typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
+
 const double test_timeout_in_sec = 60.;
 
 const double watchdog_timeout_default = 900.; // 15 minutes
@@ -206,6 +208,89 @@ void watchdog_stop()
     pthread_barrier_destroy(&watchdog.barrier);
     pthread_cond_destroy(&watchdog.cv);
     pthread_mutex_destroy(&watchdog.mutex);
+}
+
+static bool test_results_cmp(const test_result_t &a, const test_result_t &b)
+{
+    return a.second > b.second;
+}
+
+void analyze_test_results()
+{
+    // GTEST_REPORT_LONGEST_TESTS=100 will report TOP-100 longest tests
+    /* coverity[tainted_data_return] */
+    char *env_p = getenv("GTEST_REPORT_LONGEST_TESTS");
+    if (env_p == NULL) {
+        return;
+    }
+
+    size_t max_name_size = 0;
+    int top_n;
+
+    if (!strcmp(env_p, "*")) {
+        top_n = std::numeric_limits<int>::max();
+    } else {
+        top_n = atoi(env_p);
+        if (!top_n) {
+            return;
+        }
+    }
+
+    ::testing::UnitTest *unit_test = ::testing::UnitTest::GetInstance();
+    std::vector<test_result_t> test_results;
+
+    if (unit_test == NULL) {
+        ADD_FAILURE() << "Unable to get the Unit Test instance";
+        return;
+    }
+
+    for (int i = 0; i < unit_test->total_test_case_count(); i++) {
+        const ::testing::TestCase *test_case = unit_test->GetTestCase(i);
+        if (test_case == NULL) {
+            ADD_FAILURE() << "Unable to get the Test Case instance with index "
+                          << i;
+            return;
+        }
+
+        for (int i = 0; i < test_case->total_test_count(); i++) {
+            const ::testing::TestInfo *test = test_case->GetTestInfo(i);
+            if (test == NULL) {
+                ADD_FAILURE() << "Unable to get the Test Info instance with index "
+                              << i;
+                return;
+            }
+
+            if (test->should_run()) {
+                const ::testing::TestResult *result = test->result();
+                std::string test_name               = test->test_case_name();
+
+                test_name += ".";
+                test_name += test->name();
+
+                test_results.push_back(std::make_pair(test_name,
+                                                      result->elapsed_time()));
+
+                max_name_size = std::max(test_name.size(), max_name_size);
+            }
+        }
+    }
+
+    std::sort(test_results.begin(), test_results.end(), test_results_cmp);
+
+    top_n = std::min((int)test_results.size(), top_n);
+    if (!top_n) {
+        return;
+    }
+
+    int max_index_size = ucs::to_string(top_n).size();
+    std::cout << std::endl << "TOP-" << top_n << " longest tests:" << std::endl;
+
+    for (int i = 0; i < top_n; i++) {
+        std::cout << std::setw(max_index_size - ucs::to_string(i + 1).size() + 1)
+                  << (i + 1) << ". " << test_results[i].first
+                  << std::setw(max_name_size - test_results[i].first.size() + 3)
+                  << " - " << test_results[i].second << " ms" << std::endl;
+    }
 }
 
 int test_time_multiplier()

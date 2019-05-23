@@ -40,7 +40,7 @@ public:
 
 protected:
     class scoped_log_handler {
-    public:
+public:
         scoped_log_handler(ucs_log_func_t handler) {
             ucs_log_push_handler(handler);
         }
