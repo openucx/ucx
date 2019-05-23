@@ -5,12 +5,14 @@
 
 #include "jucx_common_def.h"
 extern "C" {
+  #include <ucs/arch/cpu.h>
   #include <ucs/debug/assert.h>
   #include <ucs/debug/debug.h>
 }
 
 #include <string.h>    /* memset */
 #include <arpa/inet.h> /* inet_addr */
+#include <pthread.h>   /* pthread_yield */
 
 
 static JavaVM *jvm_global;
@@ -123,6 +125,7 @@ void jucx_request_init(void *request)
 {
      struct jucx_context *ctx = (struct jucx_context *)request;
      ctx->callback = NULL;
+     ctx->jucx_request = NULL;
 }
 
 JNIEnv* get_jni_env()
@@ -131,4 +134,76 @@ JNIEnv* get_jni_env()
     jint rs = jvm_global->AttachCurrentThread(&env, NULL);
     ucs_assert(rs == JNI_OK);
     return (JNIEnv*)env;
+}
+
+static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request)
+{
+    jclass jucx_request_cls = env->GetObjectClass(jucx_request);
+    jfieldID field = env->GetFieldID(jucx_request_cls, "completed", "Z");
+    env->SetBooleanField(jucx_request, field, true);
+}
+
+static inline void call_on_success(jobject callback, jobject request)
+{
+    JNIEnv *env = get_jni_env();
+    jclass callback_cls = env->GetObjectClass(callback);
+    jmethodID on_success = env->GetMethodID(callback_cls, "onSuccess",
+                                            "(Lorg/ucx/jucx/UcxRequest;)V");
+    env->CallVoidMethod(callback, on_success, request);
+}
+
+static inline void call_on_error(jobject callback, ucs_status_t status)
+{
+    ucs_error("JUCX: send request error: %s", ucs_status_string(status));
+    JNIEnv *env = get_jni_env();
+    jclass callback_cls = env->GetObjectClass(callback);
+    jmethodID on_error = env->GetMethodID(callback_cls, "onError", "(ILjava/lang/String;)V");
+    jstring error_msg = env->NewStringUTF(ucs_status_string(status));
+    env->CallVoidMethod(callback, on_error, status, error_msg);
+}
+
+void send_callback(void *request, ucs_status_t status)
+{
+    struct jucx_context *ctx = (struct jucx_context *)request;
+    while (ctx->jucx_request == NULL) {
+        pthread_yield();
+    }
+    ucs_memory_cpu_load_fence();
+    if (status == UCS_OK) {
+        call_on_success(ctx->callback, ctx->jucx_request);
+    } else {
+        call_on_error(ctx->callback, status);
+    }
+
+    JNIEnv *env = get_jni_env();
+    set_jucx_request_completed(env, ctx->jucx_request);
+    env->DeleteGlobalRef(ctx->callback);
+    env->DeleteGlobalRef(ctx->jucx_request);
+    ctx->callback = NULL;
+    ctx->jucx_request = NULL;
+    ucp_request_free(request);
+}
+
+jobject process_request(void *request, jobject callback)
+{
+    JNIEnv *env = get_jni_env();
+    jclass jucx_request_cls = env->FindClass("org/ucx/jucx/UcxRequest");
+    jmethodID constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
+    jobject jucx_request = env->NewObject(jucx_request_cls, constructor);
+
+    // If request is a pointer set context callback and rkey.
+    if (UCS_PTR_IS_PTR(request)) {
+        ((struct jucx_context *)request)->callback = env->NewGlobalRef(callback);
+        ucs_memory_cpu_store_fence();
+        ((struct jucx_context *)request)->jucx_request = env->NewGlobalRef(jucx_request);
+    } else {
+        if (UCS_PTR_IS_ERR(request)) {
+            JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
+            call_on_error(callback, UCS_PTR_STATUS(request));
+        } else if (UCS_PTR_STATUS(request) == UCS_OK) {
+            call_on_success(callback, jucx_request);
+        }
+        set_jucx_request_completed(env, jucx_request);
+    }
+    return jucx_request;
 }

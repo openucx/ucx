@@ -122,7 +122,7 @@ ucs_config_field_t engine_opts_table[] = {
    ucs_offsetof(engine_opts_t, power), UCS_CONFIG_TYPE_ULUNITS},
 
   {"FUEL_LEVEL", "", "This is electric car",
-   UCS_CONFIG_DEPRECATED_FIELD, UCS_CONFIG_TYPE_DEPRECATED},
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {NULL}
 };
@@ -141,7 +141,7 @@ ucs_config_field_t car_opts_table[] = {
    ucs_offsetof(car_opts_t, price), UCS_CONFIG_TYPE_UINT},
 
   {"DRIVER", "", "AI drives a car",
-   UCS_CONFIG_DEPRECATED_FIELD, UCS_CONFIG_TYPE_DEPRECATED},
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"BRAND", "Chevy", "Car brand",
    ucs_offsetof(car_opts_t, brand), UCS_CONFIG_TYPE_STRING},
@@ -458,6 +458,46 @@ UCS_TEST_F(test_config, performance) {
     }
 }
 
+UCS_TEST_F(test_config, unused) {
+    ucs::ucx_env_cleanup env_cleanup;
+
+    /* set to warn about unused env vars */
+    ucs_global_opts.warn_unused_env_vars = 1;
+
+    const std::string warn_str    = "unused env variable";
+    const std::string unused_var1 = "UCX_UNUSED_VAR1";
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv env1(unused_var1.c_str(), "unused");
+
+    {
+        config_err_exp_str.push_back(warn_str + ": " + unused_var1);
+        scoped_log_handler log_handler(config_error_handler);
+        car_opts opts(NULL, NULL);
+
+        ucs_config_parser_warn_unused_env_vars();
+
+        config_err_exp_str.pop_back();
+    }
+
+    {
+        const std::string unused_var2 = "UCX_UNUSED_VAR2";
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env2(unused_var2.c_str(), "unused");
+
+        config_err_exp_str.push_back(warn_str + "s: " +
+                                     unused_var1 + ", " + unused_var2);
+        scoped_log_handler log_handler(config_error_handler);
+        car_opts opts(NULL, NULL);
+
+        ucs_config_parser_warn_unused_env_vars();
+
+        config_err_exp_str.pop_back();
+    }
+
+    /* reset to not warn about unused env vars */
+    ucs_global_opts.warn_unused_env_vars = 0;
+}
+
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 24u);
@@ -487,11 +527,11 @@ UCS_TEST_F(test_config, deprecated) {
     /* set to warn about unused env vars */
     ucs_global_opts.warn_unused_env_vars = 1;
 
-    const std::string warn_str        = "deprecated env variable ";
+    const std::string warn_str        = " is deprecated";
     const std::string deprecated_var1 = "UCX_DRIVER";
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1(deprecated_var1.c_str(), "Taxi driver");
-    config_err_exp_str.push_back(warn_str + deprecated_var1);
+    config_err_exp_str.push_back(deprecated_var1 + warn_str);
 
     {
         scoped_log_handler log_handler(config_error_handler);
@@ -502,7 +542,7 @@ UCS_TEST_F(test_config, deprecated) {
         const std::string deprecated_var2 = "UCX_ENGINE_FUEL_LEVEL";
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env2(deprecated_var2.c_str(), "58");
-        config_err_exp_str.push_back(warn_str + deprecated_var2);
+        config_err_exp_str.push_back(deprecated_var2 + warn_str);
 
         scoped_log_handler log_handler_vars(config_error_handler);
         car_opts opts(NULL, NULL);

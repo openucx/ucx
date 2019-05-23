@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
+
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -203,6 +204,8 @@ double watchdog_get_timeout();
 int watchdog_get_kill_signal();
 int watchdog_start();
 void watchdog_stop();
+
+void analyze_test_results();
 
 class test_abort_exception : public std::exception {
 };
@@ -412,6 +415,14 @@ private:
     scoped_setenv(const scoped_setenv&);
     const std::string m_name;
     std::string       m_old_value;
+};
+
+class ucx_env_cleanup {
+public:
+    ucx_env_cleanup();
+    ~ucx_env_cleanup();
+private:
+    std::vector<std::string> ucx_env_storage;
 };
 
 template <typename T>

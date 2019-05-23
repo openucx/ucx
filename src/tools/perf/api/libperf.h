@@ -15,13 +15,14 @@ BEGIN_C_DECLS
 
 /** @file libperf.h */
 
+
+#include <sys/uio.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/stubs.h>
 #include <ucs/type/status.h>
 
-#include <sys/uio.h>
 
 typedef enum {
     UCX_PERF_API_UCT,

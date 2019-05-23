@@ -23,7 +23,7 @@
 
 
 /* width of titles in docstring */
-#define UCP_CONFIG_PARSER_DOCSTR_WIDTH         10
+#define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
 
 /* list of prefixes for a configuration variable, used to dump all possible
@@ -797,7 +797,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg)
 
 static inline int ucs_config_is_deprecated_field(const ucs_config_field_t *field)
 {
-    return (field->offset == UCS_CONFIG_DEPRECATED_FIELD);
+    return (field->offset == UCS_CONFIG_DEPRECATED_FIELD_OFFSET);
 }
 
 static inline int ucs_config_is_alias_field(const ucs_config_field_t *field)
@@ -958,36 +958,36 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
     return (count == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
 }
 
-static ucs_status_t ucs_config_parser_mark_env_var_used(const char *name)
+static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 {
-    ucs_status_t status = UCS_OK;
     khiter_t iter;
     char *key;
     int ret;
 
+    *added = 0;
+
     if (!ucs_global_opts.warn_unused_env_vars) {
-        return UCS_OK;
+        return;
     }
 
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
     iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, name);
     if (iter != kh_end(&ucs_config_parser_env_vars)) {
-        status = UCS_ERR_ALREADY_EXISTS;
         goto out; /* already exists */
     }
 
     key = ucs_strdup(name, "config_parser_env_var");
     if (key == NULL) {
         ucs_error("strdup(%s) failed", name);
-        status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
     kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
+    *added = 1;
 out:
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
-    return status;
+    return ;
 }
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
@@ -1000,6 +1000,7 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
     const char *env_value;
     void *var;
     char buf[256];
+    int added;
 
     /* Put prefix in the buffer. Later we replace only the variable name part */
     snprintf(buf, sizeof(buf) - 1, "%s%s", prefix, table_prefix ? table_prefix : "");
@@ -1034,37 +1035,32 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             /* Read and parse environment variable */
             strncpy(buf + prefix_len, field->name, sizeof(buf) - prefix_len - 1);
             env_value = getenv(buf);
-            if (env_value != NULL) {
-                status = ucs_config_parser_mark_env_var_used(buf);
+            if (env_value == NULL) {
+                continue;
+            }
 
-                if (ucs_config_is_deprecated_field(field)) {
-                    if ((status == UCS_OK) &&
-                        ucs_global_opts.warn_unused_env_vars) {
-                        ucs_warn("deprecated env variable %s used "
-                                 "(set %s%s=n to suppress this warning)",
-                                 buf, UCS_CONFIG_PREFIX,
-                                 UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
-                    }
-                } else {
-                    if ((status != UCS_OK) &&
-                        (status != UCS_ERR_ALREADY_EXISTS)) {
-                        continue;
-                    }
+            ucs_config_parser_mark_env_var_used(buf, &added);
 
-                    ucs_config_parser_release_field(field, var);
-                    status = ucs_config_parser_parse_field(field, env_value, var);
-                    if (status != UCS_OK) {
-                        /* If set to ignore errors, restore the default value */
-                        ucs_status_t tmp_status =
-                            ucs_config_parser_parse_field(field, field->dfl_value,
-                                                          var);
-                        if (ignore_errors) {
-                            status = tmp_status;
-                        }
+            if (ucs_config_is_deprecated_field(field)) {
+                if (added && !ignore_errors) {
+                    ucs_warn("%s is deprecated (set %s%s=n to suppress this warning)",
+                             buf, UCS_CONFIG_PREFIX,
+                             UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
+                }
+            } else {
+                ucs_config_parser_release_field(field, var);
+                status = ucs_config_parser_parse_field(field, env_value, var);
+                if (status != UCS_OK) {
+                    /* If set to ignore errors, restore the default value */
+                    ucs_status_t tmp_status =
+                        ucs_config_parser_parse_field(field, field->dfl_value,
+                                                      var);
+                    if (ignore_errors) {
+                        status = tmp_status;
                     }
-                    if (status != UCS_OK) {
-                        return status;
-                    }
+                }
+                if (status != UCS_OK) {
+                    return status;
                 }
             }
         }
@@ -1255,10 +1251,10 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
     head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
 
     if (ucs_config_is_deprecated_field(field)) {
-        sprintf(value_buf, " (deprecated)");
-        sprintf(syntax_buf, "N/A");
+        snprintf(value_buf, sizeof(value_buf), " (deprecated)");
+        snprintf(syntax_buf, sizeof(syntax_buf), "N/A");
     } else {
-        sprintf(value_buf, "=");
+        snprintf(value_buf, sizeof(value_buf), "=");
         field->parser.write(value_buf + 1, sizeof(value_buf) - 2,
                             (char*)opts + field->offset,
                             field->parser.arg);
@@ -1269,7 +1265,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         fprintf(stream, "#\n");
         ucs_config_print_doc_line_by_line(field, __print_stream_cb, stream);
         fprintf(stream, "#\n");
-        fprintf(stream, "# %-*s %s\n", UCP_CONFIG_PARSER_DOCSTR_WIDTH, "syntax:",
+        fprintf(stream, "# %-*s %s\n", UCS_CONFIG_PARSER_DOCSTR_WIDTH, "syntax:",
                 syntax_buf);
 
         /* Extra docstring */
@@ -1283,7 +1279,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
 
         /* Parents in configuration hierarchy */
         if (prefix_list->next != prefix_list->prev) {
-            fprintf(stream, "# %-*s", UCP_CONFIG_PARSER_DOCSTR_WIDTH, "inherits:");
+            fprintf(stream, "# %-*s", UCS_CONFIG_PARSER_DOCSTR_WIDTH, "inherits:");
             ucs_list_for_each(prefix, prefix_list, list) {
                 if (prefix == head) {
                     continue;
@@ -1344,7 +1340,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                               env_prefix, prefix_list,
                                               field->name, aliased_field,
                                               flags, "%-*s %s%s%s",
-                                              UCP_CONFIG_PARSER_DOCSTR_WIDTH,
+                                              UCS_CONFIG_PARSER_DOCSTR_WIDTH,
                                               "alias of:", env_prefix,
                                               head->prefix,
                                               aliased_field->name);
@@ -1417,9 +1413,19 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
     }
 }
 
-void ucs_config_parser_warn_unused_env_vars()
+void ucs_config_parser_warn_unused_env_vars_once()
 {
     static uint32_t warn_once = 1;
+
+    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
+        return;
+    }
+
+    ucs_config_parser_warn_unused_env_vars();
+}
+
+void ucs_config_parser_warn_unused_env_vars()
+{
     char unused_env_vars_names[40];
     int num_unused_vars;
     char **envp, *envstr;
@@ -1432,10 +1438,6 @@ void ucs_config_parser_warn_unused_env_vars()
     int ret;
 
     if (!ucs_global_opts.warn_unused_env_vars) {
-        return;
-    }
-
-    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
         return;
     }
 
@@ -1480,7 +1482,7 @@ void ucs_config_parser_warn_unused_env_vars()
             p[-1] = '\0'; /* remove trailing comma */
         }
         ucs_warn("unused env variable%s:%s%s (set %s%s=n to suppress this warning)",
-                 num_unused_vars > 1 ? "s" : "", unused_env_vars_names,
+                 (num_unused_vars > 1) ? "s" : "", unused_env_vars_names,
                  truncated ? "..." : "", UCS_CONFIG_PREFIX,
                  UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
     }

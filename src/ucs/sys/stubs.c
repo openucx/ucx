@@ -7,6 +7,7 @@
 #include <ucs/sys/stubs.h>
 #include <ucs/debug/assert.h>
 
+
 void ucs_empty_function()
 {
 }

@@ -14,9 +14,11 @@
 #include "test_helpers.h"
 #include "tap.h"
 
+
 static int ucs_gtest_random_seed = -1;
 int ucs::perf_retry_count        = 0; /* 0 - don't check performance */
 double ucs::perf_retry_interval  = 1.0;
+
 
 void parse_test_opts(int argc, char **argv) {
     int c;
@@ -51,8 +53,8 @@ static void modify_config_for_valgrind(const char *name, const char *value)
 }
 
 int main(int argc, char **argv) {
-	// coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
-	::testing::InitGoogleTest(&argc, argv);
+    // coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
+    ::testing::InitGoogleTest(&argc, argv);
 
     char *str = getenv("GTEST_TAP");
     int ret;
@@ -99,6 +101,8 @@ int main(int argc, char **argv) {
     ret = RUN_ALL_TESTS();
 
     ucs::watchdog_stop();
+
+    ucs::analyze_test_results();
 
     return ret;
 }

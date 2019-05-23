@@ -543,7 +543,7 @@ ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_SHORT", "",
    "The configuration parameter replaced by: "
    "UCX_<IB transport>_TX_MIN_INLINE for IB, UCX_MM_FIFO_SIZE for MM",
-   UCS_CONFIG_DEPRECATED_FIELD, UCS_CONFIG_TYPE_DEPRECATED},
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"MAX_BCOPY", "8192",
    "Maximal size of copy-out sends. The transport is allowed to support any size\n"

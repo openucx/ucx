@@ -8,6 +8,8 @@
 
 #include <string.h>    /* memset */
 
+#include <ucp/core/ucp_ep.inl> /* ucp_ep_peer_name */
+
 
 static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
@@ -104,4 +106,21 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
     jobject result = env->NewObject(ucp_rkey_cls, constructor, (native_ptr)rkey);
 
     return result;
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_ucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
+                                                       jlong ep_ptr, jlong address,
+                                                       jlong rkey_ptr, jobject dst_buf,
+                                                       jobject callback)
+{
+    void *result_address = env->GetDirectBufferAddress(dst_buf);
+    size_t result_size = env->GetDirectBufferCapacity(dst_buf);
+
+    ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, result_address, result_size,
+                                          address, (ucp_rkey_h)rkey_ptr, send_callback);
+
+    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %p",
+                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), address, result_size, result_address);
+    return process_request(request, callback);
 }

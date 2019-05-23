@@ -184,7 +184,7 @@ void ucs_config_help_table(char *buf, size_t max, const void *arg);
 void ucs_config_release_nop(void *ptr, const void *arg);
 void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
-#define UCS_CONFIG_DEPRECATED_FIELD SIZE_MAX
+#define UCS_CONFIG_DEPRECATED_FIELD_OFFSET SIZE_MAX
 
 /* Forward declaration of array. Should be in header file. */
 #define UCS_CONFIG_DECLARE_ARRAY(_name) \
@@ -250,12 +250,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     \
-                                    "bandwidth value: <number>[T|G|K]B|b[[p|/]s]"}
+                                    "bandwidth value: <number>[T|G|M|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_BW_SPEC    {ucs_config_sscanf_bw_spec,   ucs_config_sprintf_bw_spec, \
                                     ucs_config_clone_bw_spec,    ucs_config_release_bw_spec, \
                                     ucs_config_help_generic,     \
-                                    "device_name:<number>[T|G|K]B|b[[p|/]s]"}
+                                    "device_name:<number>[T|G|M|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
@@ -387,6 +387,11 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
  */
 void ucs_config_parser_warn_unused_env_vars();
 
+/**
+ * Wrapper for `ucs_config_parser_warn_unused_env_vars`
+ * that ensures that this is called once
+ */
+void ucs_config_parser_warn_unused_env_vars_once();
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.

@@ -132,10 +132,7 @@
     })
 
 /**
- * @param _type   Structure type.
- * @param _field  Field of structure.
- * 
- * @return Size of _field in _type.
+ * @return Size of _member in _type. _type is a structure type.
  */
 #define ucs_field_sizeof(_type, _field) \
     sizeof(((_type*)0)->_field)
