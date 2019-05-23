@@ -60,15 +60,14 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                                str_remote_addr, UCS_SOCKADDR_STRING_LEN));
 }
 
-static ucs_status_t
-uct_tcp_cm_io_err_handler_cb(void *arg, int errno)
+static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg, int io_errno)
 {
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
     /* check whether this is possible somaxconn exceeded reason or not */
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK)) &&
-        ((errno == ECONNRESET) || (errno == ECONNREFUSED))) {
+        ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED))) {
         ucs_error("try to increase \"net.core.somaxconn\" on the remote node");
     }
 
