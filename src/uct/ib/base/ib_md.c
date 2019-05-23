@@ -1259,9 +1259,7 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
     status = UCS_OK;
 
 out_free_device_list:
-    if (device_list != NULL) {
-        ibv_free_device_list(device_list);
-    }
+    ibv_free_device_list(device_list);
     return status;
 }
 
