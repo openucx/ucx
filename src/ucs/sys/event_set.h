@@ -15,12 +15,18 @@
  */
 typedef struct ucs_sys_event_set ucs_sys_event_set_t;
 
+/**
+ * ucs_event_set_extra_arg used in ucs_event_set_wait callback function.
+ *
+ */
+typedef void* ucs_event_set_extra_arg;
 
 /**
  * ucs_event_set_handler call this handler for notifying event
  *
  */
-typedef void (*event_set_handler_t)(int fd, int event);
+typedef void (*ucs_event_set_handler_t)(int fd, int event,
+                                        ucs_event_set_extra_arg *args);
 
 /**
  * ucs_event_set_type_t member is a bit set composed using the following
@@ -85,7 +91,8 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd);
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
-                                event_set_handler_t event_set_handler);
+                                ucs_event_set_handler_t event_set_handler,
+                                ucs_event_set_extra_arg *args);
 
 /**
  * Cleanup event set
