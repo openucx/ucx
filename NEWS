@@ -14,7 +14,7 @@ Features:
 ## 1.6.0-rc1 (May 24, 2019)
 Features:
 - Modular architecture for UCT transports
-- ROCM transport re-design: support for managed memory, direct copy, ROCM GDR
+- ROCm transport re-design: support for managed memory, direct copy, ROCm GDR
 - Random scheduling policy for DC transport
 - Optimized out-of-box settings for multi-rail
 - Added support for OmniPath (using Verbs)
@@ -22,7 +22,7 @@ Features:
 - Reduced UCP address size for homogeneous environments
 
 Bugfixes:
-- Multiple stability and performance improvements in  TCP transport
+- Multiple stability and performance improvements in TCP transport
 - Multiple stability fixed in Verbs and MLX5 transports
 - Multiple stability fixes in UCM memory hooks
 - Multiple stability fixes in UGNI transport
@@ -31,7 +31,7 @@ Bugfixes:
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
-- CUDA: gdrcopy 1.3.2, cuda 9.2, ROCM 2.1
+- CUDA: gdrcopy 1.3.2, cuda 9.2, ROCM 2.2
 - XPMEM: 2.6.2
 - KNEM: 1.1.3
 
@@ -125,7 +125,7 @@ Tested configurations:
 
 Features:
 - Added stream-based communication API to UCP
-- Added support for GPU platforms: Nvidia CUDA and AMD ROCM software stacks
+- Added support for GPU platforms: Nvidia CUDA and AMD ROCm software stacks
 - Added API for client/server based connection establishment
 - Added support for TCP transport
 - Support for InfiniBand tag-matching offload for DC and accelerated transports
