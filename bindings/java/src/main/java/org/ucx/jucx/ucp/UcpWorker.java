@@ -8,7 +8,10 @@ package org.ucx.jucx.ucp;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 
+import org.ucx.jucx.UcxCallback;
+import org.ucx.jucx.UcxException;
 import org.ucx.jucx.UcxNativeStruct;
+import org.ucx.jucx.UcxRequest;
 
 /**
  * UCP worker is an opaque object representing the communication context.  The
@@ -91,6 +94,36 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Non-blocking tagged-receive operation.
+     * This routine receives a messages that is described by the local {@code recvBuffer}
+     * buffer on the current worker. The tag value of the receive message has to match
+     * the {@code tag} of sent message. The routine is a non-blocking and therefore returns
+     * immediately. The receive operation is considered completed when the message is delivered
+     * to the {@code recvBuffer}. In order to notify the application about completion of the receive
+     * operation the UCP library will invoke the call-back {@code callback} when the received
+     * message is in the receive buffer and ready for application access.
+     */
+    public UcxRequest recvNonBlocking(ByteBuffer recvBuffer, long tag,
+                                      UcxCallback callback) {
+        if (!recvBuffer.isDirect()) {
+            throw new UcxException("Recv buffer must be direct.");
+        }
+        if (callback == null) {
+            callback = new UcxCallback();
+        }
+        return recvNonBlockingNative(getNativeId(), recvBuffer, tag, callback);
+    }
+
+    /**
+     * Non-blocking receive operation. Invokes
+     * {@link UcpWorker#recvNonBlocking(ByteBuffer, long, UcxCallback)} with default 0 tag.
+     */
+    public UcxRequest recvNonBlocking(ByteBuffer recvBuffer, UcxCallback callback) {
+        return recvNonBlocking(recvBuffer, 0, callback);
+    }
+
+
+    /**
      * This routine returns the address of the worker object. This address can be
      * passed to remote instances of the UCP library in order to connect to this
      * worker. Ucp worker address - is an opaque object that is used as an
@@ -121,4 +154,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void waitWorkerNative(long workerId);
 
     private static native void signalWorkerNative(long workerId);
+
+    private static native UcxRequest recvNonBlockingNative(long workerId, ByteBuffer recvBuffer,
+                                                           long tag, UcxCallback callback);
 }

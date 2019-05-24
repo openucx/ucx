@@ -128,3 +128,21 @@ Java_org_ucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, jlon
         JNU_ThrowExceptionByStatus(env, status);
     }
 }
+
+JNIEXPORT jobject JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_recvNonBlockingNative(JNIEnv *env, jclass cls,
+                                                      jlong ucp_worker_ptr, jobject recv_buf,
+                                                      jlong tag, jobject callback)
+{
+    size_t recv_msg_size = env->GetDirectBufferCapacity(recv_buf);
+    ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
+                                                env->GetDirectBufferAddress(recv_buf),
+                                                recv_msg_size,
+                                                ucp_dt_make_contig(1), tag, 0,
+                                                recv_callback);
+
+    ucs_trace_req("JUCX: recv_nb request %p, msg size: %zu, tag: %ld",
+                  request, recv_msg_size, tag);
+
+    return process_request(request, callback);
+}

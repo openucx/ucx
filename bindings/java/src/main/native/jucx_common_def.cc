@@ -184,6 +184,11 @@ void send_callback(void *request, ucs_status_t status)
     ucp_request_free(request);
 }
 
+void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info)
+{
+    send_callback(request, status);
+}
+
 jobject process_request(void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
