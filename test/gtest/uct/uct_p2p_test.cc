@@ -172,8 +172,8 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
 
     ms << "memory_type:" << uct_test::uct_mem_type_names[mem_type] << " " << std::flush;
 
-    /* Trim at 4GB */
-    max_length = ucs_min(max_length, 4ull * UCS_GBYTE);
+    /* Trim at 4.1 GB */
+    max_length = ucs_min(max_length, (size_t)(4.1 * (double)UCS_GBYTE));
 
     /* Trim at max. phys memory */
     max_length = ucs_min(max_length, ucs_get_phys_mem_size() / 8);
