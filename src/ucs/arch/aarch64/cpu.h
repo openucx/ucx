@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -28,14 +28,35 @@ BEGIN_C_DECLS
 /**
  * Assume the worst - weak memory ordering.
  */
-#define ucs_memory_bus_fence()        asm volatile ("dsb sy" ::: "memory");
-#define ucs_memory_bus_store_fence()  asm volatile ("dsb st" ::: "memory");
-#define ucs_memory_bus_load_fence()   asm volatile ("dsb ld" ::: "memory");
-#define ucs_memory_bus_wc_flush()
-#define ucs_memory_cpu_fence()        asm volatile ("dmb ish" ::: "memory");
-#define ucs_memory_cpu_store_fence()  asm volatile ("dmb ishst" ::: "memory");
-#define ucs_memory_cpu_load_fence()   asm volatile ("dmb ishld" ::: "memory");
-#define ucs_memory_cpu_wc_fence()     asm volatile ("dmb st" ::: "memory");
+
+#define dmb(op)                       asm volatile ("dmb " #op ::: "memory")
+#define dsb(op)                       asm volatile ("dsb " #op ::: "memory")
+
+/* The macro is used to serialize stores to Normal NC or Device memory
+ * (see Arm Spec, B2.7.2)
+ */
+#define ucs_memory_bus_fence()        dsb(oshsy)
+#define ucs_memory_bus_store_fence()  dsb(oshst)
+#define ucs_memory_bus_load_fence()   dsb(oshld)
+
+/* The macro is used to flush all pending stores from write combining buffer.
+ * Some uarch "auto" flush the stores once cache line is full (no need for additional barrier).
+ */
+#if defined(HAVE_AARCH64_THUNDERX2)
+#define ucs_memory_bus_cacheline_wc_flush()
+#else
+/* The macro is used to flush stores to Normal NC or Device memory */
+#define ucs_memory_bus_cacheline_wc_flush()     dmb(oshst)
+#endif
+
+#define ucs_memory_cpu_fence()        dmb(ish)
+#define ucs_memory_cpu_store_fence()  dmb(ishst)
+#define ucs_memory_cpu_load_fence()   dmb(ishld)
+
+/* The macro is used to serialize stores to Normal NC or Device memory
+ * (see Arm Spec, B2.7.2)
+ */
+#define ucs_memory_cpu_wc_fence()     dmb(oshst)
 
 
 /*
