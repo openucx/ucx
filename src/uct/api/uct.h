@@ -1093,7 +1093,7 @@ ucs_status_t uct_component_query(uct_component_h component,
  * must be created before communication resources.
  *
  * @param [in]  md_name         Memory domain name, as returned from @ref
- *                              uct_query_md_resources.
+ *                              uct_component_query.
  * @param [in]  config          MD configuration options. Should be obtained
  *                              from uct_md_config_read() function, or point to
  *                              MD-specific structure which extends uct_md_config_t.
