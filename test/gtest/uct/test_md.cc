@@ -34,7 +34,7 @@ void* test_md::alloc_thread(void *arg)
         int count = ucs::rand() % 100;
         std::vector<void*> buffers;
         for (int i = 0; i < count; ++i) {
-            buffers.push_back(malloc(ucs::rand() % (256*1024)));
+            buffers.push_back(malloc(ucs::rand() % (256 * UCS_KBYTE)));
         }
         std::for_each(buffers.begin(), buffers.end(), free);
     }
@@ -177,12 +177,12 @@ UCS_TEST_P(test_md, rkey_ptr) {
 
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
-    size = 1024 * 1024 * sizeof(unsigned);
+    size = sizeof(unsigned) * UCS_MBYTE;
     status = uct_md_mem_alloc(md(), &size, (void **)&rva,
                               UCT_MD_MEM_ACCESS_ALL,
                               "test", &memh);
     ASSERT_UCS_OK(status);
-    EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
+    EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, size);
 
     // pack
     status = uct_md_query(md(), &md_attr);
@@ -271,9 +271,9 @@ UCS_TEST_P(test_md, mem_type_owned) {
         UCS_TEST_SKIP_R("MD owns only host memory");
     }
 
-    alloc_memory(&address, 1024, NULL, md_attr.cap.mem_type);
+    alloc_memory(&address, UCS_KBYTE, NULL, md_attr.cap.mem_type);
 
-    ret = uct_md_is_mem_type_owned(md(), address, 1024);
+    ret = uct_md_is_mem_type_owned(md(), address, UCS_KBYTE);
     EXPECT_TRUE(ret > 0);
 }
 
@@ -337,7 +337,7 @@ UCS_TEST_P(test_md, reg_perf) {
                              << " registration is not supported by " << GetParam();
             continue;
         }
-        for (size_t size = 4096; size <= 4 * 1024 * 1024; size *= 2) {
+        for (size_t size = 4 * UCS_KBYTE; size <= 4 * UCS_MBYTE; size *= 2) {
             alloc_memory(&ptr, size, NULL, mem_type);
 
             ucs_time_t start_time = ucs_get_time();
@@ -379,7 +379,7 @@ UCS_TEST_P(test_md, reg_advise) {
 
     check_caps(UCT_MD_FLAG_REG|UCT_MD_FLAG_ADVISE, "registration&advise");
 
-    size = 128 * 1024 * 1024;
+    size = 128 * UCS_MBYTE;
     address = malloc(size);
     ASSERT_TRUE(address != NULL);
 
@@ -389,7 +389,8 @@ UCS_TEST_P(test_md, reg_advise) {
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), memh, (char *)address + 7,
+                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mem_dereg(md(), memh);
@@ -405,7 +406,7 @@ UCS_TEST_P(test_md, alloc_advise) {
 
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_ADVISE, "allocation&advise");
 
-    orig_size = size = 128 * 1024 * 1024;
+    orig_size = size = 128 * UCS_MBYTE;
 
     status = uct_md_mem_alloc(md(), &size, &address,
                               UCT_MD_MEM_FLAG_NONBLOCK|
@@ -416,7 +417,8 @@ UCS_TEST_P(test_md, alloc_advise) {
     EXPECT_TRUE(address != NULL);
     EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), memh, (char *)address + 7,
+                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     memset(address, 0xBB, size);

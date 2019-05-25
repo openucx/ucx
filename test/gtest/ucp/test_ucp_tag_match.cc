@@ -609,7 +609,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
 }
 
 UCS_TEST_P(test_ucp_tag_match, rndv_exp_huge_mix) {
-    const size_t sizes[] = { 1000, 2000, 2500ul * 1024 * 1024 };
+    const size_t sizes[] = { 1000, 2000, 2500ul * UCS_MBYTE };
 
     /* small sizes should warm-up tag cache */
     for (int i = 0; i < 3; ++i) {
