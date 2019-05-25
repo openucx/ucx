@@ -140,11 +140,13 @@ uct_tcp_iface_handle_events(uct_tcp_ep_t *ep, uint32_t epoll_events)
 {
     unsigned count = 0;
 
+    ucs_assertv(ep->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED, "ep=%p", ep);
+
     if (epoll_events & EPOLLIN) {
-        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_RX);
+        count += uct_tcp_ep_progress_rx(ep);
     }
     if (epoll_events & EPOLLOUT) {
-        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
+        count += uct_tcp_ep_progress_tx(ep);
     }
 
     return count;
@@ -414,6 +416,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.sndbuf        = config->sockopt_sndbuf;
     self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
+    kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
     self->seg_size = config->seg_size + sizeof(uct_tcp_am_hdr_t);
 
@@ -472,24 +475,57 @@ err:
     return status;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
+static void uct_tcp_iface_ep_list_cleanup(uct_tcp_iface_t *iface,
+                                          ucs_list_link_t *ep_list)
 {
     uct_tcp_ep_t *ep, *tmp;
+
+    ucs_list_for_each_safe(ep, tmp, ep_list, list) {
+        uct_tcp_ep_destroy_internal(&ep->super.super);
+    }
+}
+
+static void uct_tcp_iface_eps_cleanup(uct_tcp_iface_t *iface)
+{
+    ucs_list_link_t *ep_list;
+    khint_t iter;
+
+    uct_tcp_iface_ep_list_cleanup(iface, &iface->ep_list);
+
+    /* don't use kh_foreach* here, because it is not safe */
+    iter = kh_begin(&iface->ep_cm_map);
+    while (iter != kh_end(&iface->ep_cm_map)) {
+        if (!kh_exist(&iface->ep_cm_map, iter)) {
+            iter++;
+            continue;
+        }
+
+        ep_list = kh_value(&iface->ep_cm_map, iter);
+        uct_tcp_iface_ep_list_cleanup(iface, ep_list);
+
+        /* ensure the next iteration */
+        iter = kh_begin(&iface->ep_cm_map);
+    }
+
+    kh_destroy_inplace(uct_tcp_cm_eps, &iface->ep_cm_map);
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
+{
     ucs_status_t status;
 
     ucs_debug("tcp_iface %p: destroying", self);
 
-    uct_base_iface_progress_disable(&self->super.super, UCT_PROGRESS_SEND|
-                                                        UCT_PROGRESS_RECV);
+    uct_base_iface_progress_disable(&self->super.super,
+                                    UCT_PROGRESS_SEND |
+                                    UCT_PROGRESS_RECV);
 
     status = ucs_async_remove_handler(self->listen_fd, 1);
     if (status != UCS_OK) {
         ucs_warn("failed to remove handler for server socket fd=%d", self->listen_fd);
     }
 
-    ucs_list_for_each_safe(ep, tmp, &self->ep_list, list) {
-        uct_tcp_ep_destroy(&ep->super.super);
-    }
+    uct_tcp_iface_eps_cleanup(self);
 
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);

@@ -8,21 +8,53 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/string.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/algorithm/crc.h>
+
 #include <net/if.h>
 
-#define UCT_TCP_NAME "tcp"
+#define UCT_TCP_NAME                "tcp"
 
 /* How many events to wait for in epoll_wait */
-#define UCT_TCP_MAX_EVENTS        16
+#define UCT_TCP_MAX_EVENTS          16
 
+/* How long should be string to keep [%s:%s] string
+ * where %s value can be -/Tx/Rx */
+#define UCT_TCP_EP_CTX_CAPS_STR_MAX 8
+
+#define UCT_TCP_SOCKET_ADDR_EQUAL(_sa1, _sa2) \
+    ({ \
+        ucs_status_t status; \
+        int cmp; \
+        \
+        cmp = ucs_sockaddr_cmp((const struct sockaddr*)&(_sa1), \
+                               (const struct sockaddr*)&(_sa2), \
+                               &status); \
+        ucs_assert_always(status == UCS_OK); \
+        (cmp == 0); \
+    })
+
+#define UCT_TCP_SOCKET_ADDR_HASH(_sa) \
+    ({ \
+        ucs_status_t status; \
+        size_t addr_size; \
+        uint32_t hash_code; \
+        \
+        status = ucs_sockaddr_sizeof((const struct sockaddr*)&(_sa), \
+                                     &addr_size); \
+        ucs_assert_always(status == UCS_OK); \
+        \
+        hash_code = ucs_crc32(0, (const void *)&(_sa), addr_size); \
+        hash_code; \
+    })
 
 /**
  * TCP context type
  */
 typedef enum uct_tcp_ep_ctx_type {
     UCT_TCP_EP_CTX_TYPE_TX,
-    UCT_TCP_EP_CTX_TYPE_RX,
-    UCT_TCP_EP_CTX_TYPE_LAST
+    UCT_TCP_EP_CTX_TYPE_RX
 } uct_tcp_ep_ctx_type_t;
 
 
@@ -43,12 +75,16 @@ typedef struct uct_tcp_ep uct_tcp_ep_t;
 typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
 
 
+KHASH_INIT(uct_tcp_cm_eps, struct sockaddr_in, ucs_list_link_t*,
+           1, UCT_TCP_SOCKET_ADDR_HASH, UCT_TCP_SOCKET_ADDR_EQUAL);
+
+
 /**
  * TCP Connection Manager state
  */
 typedef struct uct_tcp_cm_state {
-    const char            *name;                              /* CM state name */
-    uct_tcp_ep_progress_t progress[UCT_TCP_EP_CTX_TYPE_LAST]; /* TX and RX progress functions */
+    const char            *name;       /* CM state name */
+    uct_tcp_ep_progress_t tx_progress; /* TX progress function */
 } uct_tcp_cm_state_t;
 
 
@@ -56,8 +92,9 @@ typedef struct uct_tcp_cm_state {
  * TCP Connection Manager event
  */
 typedef enum uct_tcp_cm_conn_event {
-    UCT_TCP_CM_CONN_REQ,
-    UCT_TCP_CM_CONN_ACK
+    UCT_TCP_CM_CONN_REQ          = UCS_BIT(0),
+    UCT_TCP_CM_CONN_ACK          = UCS_BIT(1),
+    UCT_TCP_CM_CONN_ACK_WITH_REQ = UCT_TCP_CM_CONN_REQ | UCT_TCP_CM_CONN_ACK,
 } uct_tcp_cm_conn_event_t;
 
 
@@ -112,6 +149,8 @@ struct uct_tcp_ep {
 typedef struct uct_tcp_iface {
     uct_base_iface_t              super;             /* Parent class */
     int                           listen_fd;         /* Server socket */
+    khash_t(uct_tcp_cm_eps)       ep_cm_map;         /* Map of endpoints that don't
+                                                      * have one of the context cap */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     int                           epfd;              /* Event poll set of sockets */
@@ -181,19 +220,34 @@ ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
 ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
                                uct_ep_h *ep_p);
 
+const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer);
+
+ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
+                                    uct_tcp_ep_ctx_type_t cap);
+
+ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
+                                       uct_tcp_ep_ctx_type_t cap);
+
+ucs_status_t uct_tcp_ep_move_ctx_cap(uct_tcp_ep_t *from_ep, uct_tcp_ep_t *to_ep,
+                                     uct_tcp_ep_ctx_type_t ctx_cap);
+
+void uct_tcp_ep_destroy_internal(uct_ep_h tl_ep);
+
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
 void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
+
+unsigned uct_tcp_ep_peer_addr_to_itself(const uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
-unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep);
-
 unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove);
+
+void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
                                  const void *payload, unsigned length);
@@ -211,14 +265,26 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp);
 
+ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t event);
+
+unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep, void *pkt, uint32_t length);
+
 unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep);
 
-unsigned uct_tcp_cm_conn_ack_rx_progress(uct_tcp_ep_t *ep);
-
-unsigned uct_tcp_cm_conn_req_rx_progress(uct_tcp_ep_t *ep);
+uct_tcp_ep_conn_state_t
+uct_tcp_cm_set_conn_state(uct_tcp_ep_t *ep,
+                          uct_tcp_ep_conn_state_t new_conn_state);
 
 void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                                   uct_tcp_ep_conn_state_t new_conn_state);
+
+ucs_status_t uct_tcp_cm_add_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
+
+void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
+
+uct_tcp_ep_t *uct_tcp_cm_search_ep(uct_tcp_iface_t *iface,
+                                   const struct sockaddr_in *peer_addr,
+                                   uct_tcp_ep_ctx_type_t with_ctx_type);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr_in *peer_addr,
@@ -226,10 +292,9 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
 
-static inline unsigned
-uct_tcp_ep_progress(uct_tcp_ep_t *ep, uct_tcp_ep_ctx_type_t ctx_type)
+static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 {
-    return uct_tcp_ep_cm_state[ep->conn_state].progress[ctx_type](ep);
+    return uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
 }
 
 
