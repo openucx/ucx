@@ -1202,7 +1202,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    /* Need to check MAX_BCOPY value if it is enabled only */
+    /* Need to check TM_SEG_SIZE value if it is enabled only */
     if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
         if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
             /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is

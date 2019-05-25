@@ -61,6 +61,8 @@ enum {
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
+    size_t                  seg_size;      /* Maximal size of copy-out sends */
+
     struct {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many fragments can be batched to one post send */

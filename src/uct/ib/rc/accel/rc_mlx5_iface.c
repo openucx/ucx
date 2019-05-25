@@ -339,16 +339,16 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     init_attr->rx_cq_len = config->super.super.rx.queue_len + iface->tm.num_tags * 3 +
                            config->super.super.rx.queue_len /
                            IBV_DEVICE_MAX_UNEXP_COUNT;
-    init_attr->seg_size  = ucs_max(config->tm.max_bcopy,
-                                   config->super.super.super.max_bcopy);
+    init_attr->seg_size  = ucs_max(config->tm.seg_size,
+                                   config->super.super.seg_size);
     return;
 
 out_tm_disabled:
 #else
-    iface->tm.enabled         = 0;
+    iface->tm.enabled    = 0;
 #endif
     init_attr->rx_cq_len = config->super.super.rx.queue_len;
-    init_attr->seg_size  = config->super.super.super.max_bcopy;
+    init_attr->seg_size  = config->super.super.seg_size;
 }
 
 static ucs_status_t

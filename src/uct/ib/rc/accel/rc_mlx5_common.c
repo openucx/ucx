@@ -35,9 +35,14 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "-1 means no limit.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
 
-  {"TM_MAX_BCOPY", "48k",
-   "Maximal size of copy-out sends when tag-matching offload is enabled",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+  {"TM_SEG_SIZE", "48k",
+   "Maximal size of copy-out sends when tag-matching offload is enabled.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TM_MAX_BCOPY", NULL, "",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };

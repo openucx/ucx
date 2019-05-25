@@ -35,6 +35,10 @@ static ucs_config_field_t uct_self_iface_config_table[] = {
      ucs_offsetof(uct_self_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+    {"SEG_SIZE", "8k",
+     "Size of copy-out buffer",
+     ucs_offsetof(uct_self_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -184,7 +188,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                               UCS_STATS_ARG(UCT_SELF_NAME));
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
-    self->send_size   = config->super.max_bcopy;
+    self->send_size   = config->seg_size;
 
     status = ucs_mpool_init(&self->msg_mp, 0, self->send_size, 0,
                             UCS_SYS_CACHE_LINE_SIZE,
