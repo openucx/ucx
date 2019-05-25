@@ -795,6 +795,11 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg)
     strncpy(buf, (char*)arg, max);
 }
 
+static inline int ucs_config_is_deprecated_field(const ucs_config_field_t *field)
+{
+    return (field->offset == UCS_CONFIG_DEPRECATED_FIELD_OFFSET);
+}
+
 static inline int ucs_config_is_alias_field(const ucs_config_field_t *field)
 {
     return (field->dfl_value == NULL);
@@ -861,7 +866,8 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     void *var;
 
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -936,6 +942,10 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
         } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
                    !strcmp(name + prefix_len, field->name))
         {
+            if (ucs_config_is_deprecated_field(field)) {
+                return UCS_ERR_NO_ELEM;
+            }
+
             ucs_config_parser_release_field(field, var);
             status = ucs_config_parser_parse_field(field, value, var);
             if (status != UCS_OK) {
@@ -948,11 +958,13 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
     return (count == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
 }
 
-static void ucs_config_parser_mark_env_var_used(const char *name)
+static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 {
     khiter_t iter;
     char *key;
     int ret;
+
+    *added = 0;
 
     if (!ucs_global_opts.warn_unused_env_vars) {
         return;
@@ -972,8 +984,10 @@ static void ucs_config_parser_mark_env_var_used(const char *name)
     }
 
     kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
+    *added = 1;
 out:
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
+    return ;
 }
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
@@ -986,6 +1000,7 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
     const char *env_value;
     void *var;
     char buf[256];
+    int added;
 
     /* Put prefix in the buffer. Later we replace only the variable name part */
     snprintf(buf, sizeof(buf) - 1, "%s%s", prefix, table_prefix ? table_prefix : "");
@@ -1020,9 +1035,20 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             /* Read and parse environment variable */
             strncpy(buf + prefix_len, field->name, sizeof(buf) - prefix_len - 1);
             env_value = getenv(buf);
-            if (env_value != NULL) {
+            if (env_value == NULL) {
+                continue;
+            }
+
+            ucs_config_parser_mark_env_var_used(buf, &added);
+
+            if (ucs_config_is_deprecated_field(field)) {
+                if (added && !ignore_errors) {
+                    ucs_warn("%s is deprecated (set %s%s=n to suppress this warning)",
+                             buf, UCS_CONFIG_PREFIX,
+                             UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
+                }
+            } else {
                 ucs_config_parser_release_field(field, var);
-                ucs_config_parser_mark_env_var_used(buf);
                 status = ucs_config_parser_parse_field(field, env_value, var);
                 if (status != UCS_OK) {
                     /* If set to ignore errors, restore the default value */
@@ -1139,7 +1165,8 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
 
     ucs_config_field_t *field;
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -1161,7 +1188,8 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields)
     ucs_config_field_t *field;
 
     for (field = fields; field->name; ++field) {
-        if (ucs_config_is_alias_field(field)) {
+        if (ucs_config_is_alias_field(field) ||
+            ucs_config_is_deprecated_field(field)) {
             continue;
         }
 
@@ -1222,9 +1250,16 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
     ucs_assert(!ucs_list_is_empty(prefix_list));
     head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
 
-    field->parser.write(value_buf, sizeof(value_buf) - 1, (char*)opts + field->offset,
-                        field->parser.arg);
-    field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
+    if (ucs_config_is_deprecated_field(field)) {
+        snprintf(value_buf, sizeof(value_buf), " (deprecated)");
+        snprintf(syntax_buf, sizeof(syntax_buf), "N/A");
+    } else {
+        snprintf(value_buf, sizeof(value_buf), "=");
+        field->parser.write(value_buf + 1, sizeof(value_buf) - 2,
+                            (char*)opts + field->offset,
+                            field->parser.arg);
+        field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
+    }
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "#\n");
@@ -1261,7 +1296,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         fprintf(stream, "#\n");
     }
 
-    fprintf(stream, "%s%s%s=%s\n", env_prefix, head->prefix, name, value_buf);
+    fprintf(stream, "%s%s%s%s\n", env_prefix, head->prefix, name, value_buf);
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "\n");
@@ -1311,6 +1346,10 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                               aliased_field->name);
             }
         } else {
+            if (ucs_config_is_deprecated_field(field) &&
+                !(flags & UCS_CONFIG_PRINT_HIDDEN)) {
+                continue;
+            }
             ucs_config_parser_print_field(stream, opts, env_prefix, prefix_list,
                                           field->name, field, flags, NULL);
         }

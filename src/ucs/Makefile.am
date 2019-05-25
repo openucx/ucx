@@ -42,6 +42,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/preprocessor.h \
 	sys/string.h \
 	sys/sock.h \
+	sys/stubs.h \
 	time/time_def.h \
 	type/class.h \
 	type/init_once.h \
@@ -130,6 +131,7 @@ libucs_la_SOURCES = \
 	sys/string.c \
 	sys/sys.c \
 	sys/sock.c \
+	sys/stubs.c \
 	time/time.c \
 	time/timer_wheel.c \
 	time/timerq.c \

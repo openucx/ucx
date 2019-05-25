@@ -141,6 +141,15 @@
     sizeof(((_type*)0)->_field)
 
 /**
+ * @param _type   Structure type.
+ * @param _field  Field of structure.
+ *
+ * @return Type of _field in _type.
+ */
+#define ucs_field_type(_type, _field) \
+    typeof(((_type*)0)->_field)
+
+/**
  * Prevent compiler from reordering instructions
  */
 #define ucs_compiler_fence()       asm volatile(""::: "memory")

@@ -19,6 +19,7 @@ BEGIN_C_DECLS
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/stubs.h>
 #include <ucs/type/status.h>
 
 

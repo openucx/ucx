@@ -540,6 +540,11 @@ UCS_CONFIG_DEFINE_ARRAY(alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
 
 ucs_config_field_t uct_iface_config_table[] = {
+  {"MAX_SHORT", "",
+   "The configuration parameter replaced by: "
+   "UCX_<IB transport>_TX_MIN_INLINE for IB, UCX_MM_FIFO_SIZE for MM",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+
   {"MAX_BCOPY", "8192",
    "Maximal size of copy-out sends. The transport is allowed to support any size\n"
    "up to this limit, the actual size can be lower due to transport constraints.",

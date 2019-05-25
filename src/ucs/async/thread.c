@@ -14,7 +14,7 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/checker.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/stubs.h>
 
 
 #define UCS_ASYNC_EPOLL_MAX_EVENTS      16
