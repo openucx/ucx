@@ -136,7 +136,7 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd)
 
 ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
                                 ucs_event_set_handler_t event_set_handler,
-                                ucs_event_set_extra_arg *args)
+                                void *args)
 {
     int nready;
     struct epoll_event ep_events[UCS_EVENT_EPOLL_MAX_EVENTS];
