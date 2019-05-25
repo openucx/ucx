@@ -1239,8 +1239,9 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
     device_list = ibv_get_device_list(&num_devices);
     if (device_list == NULL) {
         ucs_debug("Failed to get IB device list, assuming no devices are present");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        return UCS_OK;
     }
 
     resources = ucs_calloc(num_devices, sizeof(*resources), "ib resources");
@@ -1259,7 +1260,6 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
 
 out_free_device_list:
     ibv_free_device_list(device_list);
-out:
     return status;
 }
 
