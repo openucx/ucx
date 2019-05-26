@@ -175,7 +175,7 @@ static ucs_status_t ucs_async_thread_start(ucs_async_thread_t **thread_p)
     thread->stop   = 0;
     thread->refcnt = 1;
 
-    status = ucs_timerq_init(&thread->timerq);
+    status = ucs_timerq_init(&thread->timerq, 0);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -384,7 +384,7 @@ static ucs_status_t ucs_async_thread_add_timer(ucs_async_context_t *async,
         goto err;
     }
 
-    status = ucs_timerq_add(&thread->timerq, timer_id, interval);
+    status = ucs_timerq_add(&thread->timerq, timer_id, interval, NULL);
     if (status != UCS_OK) {
         goto err_stop;
     }
@@ -402,7 +402,7 @@ static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
                                                   int timer_id)
 {
     ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
-    ucs_timerq_remove(&thread->timerq, timer_id);
+    ucs_timerq_remove(&thread->timerq, timer_id, NULL);
     ucs_async_pipe_push(&thread->wakeup);
     ucs_async_thread_stop();
     return UCS_OK;

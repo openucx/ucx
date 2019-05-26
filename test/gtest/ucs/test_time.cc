@@ -69,7 +69,7 @@ UCS_TEST_F(test_time, timerq) {
         ucs_timer_t *timer;
         unsigned counter1, counter2;
 
-        status = ucs_timerq_init(&timerq);
+        status = ucs_timerq_init(&timerq, 0);
         ASSERT_UCS_OK(status);
 
         EXPECT_TRUE(ucs_timerq_is_empty(&timerq));
