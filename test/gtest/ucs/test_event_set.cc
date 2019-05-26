@@ -40,11 +40,11 @@ protected:
 
 const char *test_event_set::evfd_data = UCS_EVENT_SET_TEST_STRING;
 
-static void event_set_func1(int fd, int events, void *args)
+static void event_set_func1(int fd, int events, void *arg)
 {
     char buf[MAX_BUF_LEN];
-    char *extra_str = (char *)((void**)args)[0];
-    int *extra_num = (int *)((void**)args)[1];
+    char *extra_str = (char *)((void**)arg)[0];
+    int *extra_num = (int *)((void**)arg)[1];
     int n;
     memset(buf, 0, MAX_BUF_LEN);
 
@@ -59,12 +59,12 @@ static void event_set_func1(int fd, int events, void *args)
     EXPECT_EQ(*extra_num, UCS_EVENT_SET_EXTRA_NUM);
 }
 
-static void event_set_func2(int fd, int events, void *args)
+static void event_set_func2(int fd, int events, void *arg)
 {
     EXPECT_EQ(UCS_EVENT_SET_EVWRITE, events);
 }
 
-static void event_set_func3(int fd, int events, void *args)
+static void event_set_func3(int fd, int events, void *arg)
 {
     ADD_FAILURE();
 }
@@ -73,8 +73,8 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     pthread_t tid;
     int ret;
     int pipefd[2];
-    void *args[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
-                     (void*)&UCS_EVENT_SET_EXTRA_NUM };
+    void *arg[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
+                    (void*)&UCS_EVENT_SET_EXTRA_NUM };
     ucs_sys_event_set_t *event_set = NULL;
     ucs_status_t status;
 
@@ -96,7 +96,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, 50, event_set_func1, args);
+    status = ucs_event_set_wait(event_set, 50, event_set_func1, arg);
     EXPECT_EQ(UCS_OK, status);
     ucs_event_set_cleanup(event_set);
 

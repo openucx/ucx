@@ -136,7 +136,7 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd)
 
 ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
                                 ucs_event_set_handler_t event_set_handler,
-                                void *args)
+                                void *arg)
 {
     int nready;
     struct epoll_event ep_events[UCS_EVENT_EPOLL_MAX_EVENTS];
@@ -157,7 +157,7 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
 
     for (i=0; i < nready; i++) {
         int events = ucs_event_set_map_to_events(ep_events[i].events);
-        event_set_handler(ep_events[i].data.fd, events, args);
+        event_set_handler(ep_events[i].data.fd, events, arg);
     }
     return UCS_OK;
 }
