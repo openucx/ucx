@@ -1042,35 +1042,6 @@ extern const char *uct_alloc_method_names[];
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Query for memory resources.
- * @deprecated Replaced by @ref uct_query_components and @ref uct_component_query.
- *
- * Obtain the list of memory domain resources available on the current system.
- *
- * @param [out] resources_p     Filled with a pointer to an array of resource
- *                              descriptors.
- * @param [out] num_resources_p Filled with the number of resources in the array.
- *
- * @return Error code.
- */
-ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Release the list of resources returned from @ref uct_query_md_resources.
- * @deprecated Replaced by @ref uct_release_component_list.
- *
- * This routine releases the memory associated with the list of resources
- * allocated by @ref uct_query_md_resources.
- *
- * @param [in] resources  Array of resource descriptors to release.
- */
-void uct_release_md_resource_list(uct_md_resource_desc_t *resources);
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Query for list of components.
  *
  * Obtain the list of transport components available on the current system.
@@ -1122,7 +1093,7 @@ ucs_status_t uct_component_query(uct_component_h component,
  * must be created before communication resources.
  *
  * @param [in]  md_name         Memory domain name, as returned from @ref
- *                              uct_query_md_resources.
+ *                              uct_component_query.
  * @param [in]  config          MD configuration options. Should be obtained
  *                              from uct_md_config_read() function, or point to
  *                              MD-specific structure which extends uct_md_config_t.
