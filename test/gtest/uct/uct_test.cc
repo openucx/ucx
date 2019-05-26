@@ -145,7 +145,7 @@ uct_test::uct_test() {
                                 &m_md_config);
     ASSERT_UCS_OK(status);
 
-    status = uct_md_open(GetParam()->md_name.c_str(), m_md_config, &pd);
+    status = uct_md_open(NULL, GetParam()->md_name.c_str(), m_md_config, &pd);
     ASSERT_UCS_OK(status);
 
     status = uct_md_query(pd, &pd_attr);
@@ -277,7 +277,8 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             {
                 scoped_log_handler slh(hide_errors_logger);
-                status = uct_md_open(iter->rsc_desc.md_name, md_config, &md);
+                status = uct_md_open(NULL, iter->rsc_desc.md_name, md_config,
+                                     &md);
             }
             uct_config_release(md_config);
             if (status != UCS_OK) {
@@ -550,7 +551,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            UCS_THREAD_MODE_SINGLE);
 
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           resource.md_name.c_str(), md_config);
+                           NULL, resource.md_name.c_str(), md_config);
 
     status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
@@ -643,7 +644,7 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
             status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
             ASSERT_UCS_OK(status);
 
-            status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+            status = uct_rkey_unpack(NULL, rkey_buffer, rkey_bundle);
             ASSERT_UCS_OK(status);
 
             free(rkey_buffer);
@@ -687,7 +688,7 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
     ucs_status_t status;
 
     if (rkey.rkey != UCT_INVALID_RKEY) {
-        status = uct_rkey_release(&rkey);
+        status = uct_rkey_release(NULL, &rkey);
         ASSERT_UCS_OK(status);
     }
 

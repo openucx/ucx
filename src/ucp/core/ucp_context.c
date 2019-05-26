@@ -754,7 +754,7 @@ static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
     }
 
     /* Open MD */
-    status = uct_md_open(md_rsc->md_name, md_config, &tl_md->md);
+    status = uct_md_open(NULL, md_rsc->md_name, md_config, &tl_md->md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         return status;

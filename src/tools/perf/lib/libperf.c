@@ -730,7 +730,8 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
 
         if (remote_info->rkey_size > 0) {
-            status = uct_rkey_unpack(rkey_buffer, &perf->uct.peers[i].rkey);
+            status = uct_rkey_unpack(NULL, rkey_buffer,
+                                     &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
                 goto err_destroy_eps;
@@ -764,7 +765,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 err_destroy_eps:
     for (i = 0; i < group_size; ++i) {
         if (perf->uct.peers[i].rkey.type != NULL) {
-            uct_rkey_release(&perf->uct.peers[i].rkey);
+            uct_rkey_release(NULL, &perf->uct.peers[i].rkey);
         }
         if (perf->uct.peers[i].ep != NULL) {
             uct_ep_destroy(perf->uct.peers[i].ep);
@@ -791,7 +792,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
             if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
-                uct_rkey_release(&perf->uct.peers[i].rkey);
+                uct_rkey_release(NULL, &perf->uct.peers[i].rkey);
             }
             if (perf->uct.peers[i].ep) {
                 uct_ep_destroy(perf->uct.peers[i].ep);
@@ -1234,7 +1235,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                 goto out_release_components_list;
             }
 
-            status = uct_md_open(component_attr.md_resources[md_index].md_name,
+            status = uct_md_open(NULL,
+                                 component_attr.md_resources[md_index].md_name,
                                  md_config, &md);
             uct_config_release(md_config);
             if (status != UCS_OK) {

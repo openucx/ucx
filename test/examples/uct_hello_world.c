@@ -327,7 +327,8 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
             CHKERR_JUMP(UCS_OK != status, "read PD config",
                         release_component_list);
 
-            status = uct_md_open(component_attr.md_resources[md_index].md_name,
+            status = uct_md_open(NULL,
+                                 component_attr.md_resources[md_index].md_name,
                                  md_config, &iface_p->md);
             uct_config_release(md_config);
             CHKERR_JUMP(UCS_OK != status, "open memory domains",

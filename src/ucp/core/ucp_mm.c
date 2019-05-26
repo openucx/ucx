@@ -459,7 +459,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
             goto err_dreg_mem;
         }
 
-        status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+        status = uct_rkey_unpack(NULL, rkey_buffer, rkey_bundle);
         if (status != UCS_OK) {
             ucs_error("failed to unpack key from md[%d]: %s",
                       md_index, ucs_status_string(status));
@@ -487,7 +487,7 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
     ucp_context_h context = worker->context;
 
     if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
-        uct_rkey_release(rkey_bundle);
+        uct_rkey_release(NULL, rkey_bundle);
     }
 
     ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,

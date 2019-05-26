@@ -52,8 +52,8 @@ typedef struct uct_config_bundle {
 } uct_config_bundle_t;
 
 
-ucs_status_t uct_md_open(const char *md_name, const uct_md_config_t *config,
-                         uct_md_h *md_p)
+ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
+                         const uct_md_config_t *config, uct_md_h *md_p)
 {
     uct_md_component_t *mdc;
     ucs_status_t status;
@@ -366,7 +366,8 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return md->ops->mkey_pack(md, memh, rbuf);
 }
 
-ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob)
+ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
+                             uct_rkey_bundle_t *rkey_ob)
 {
     uct_md_component_t *mdc;
     ucs_status_t status;
@@ -389,15 +390,16 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
     return UCS_ERR_UNSUPPORTED;
 }
 
-ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, uint64_t remote_addr,
-                          void **local_addr_p)
+ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,
+                          uint64_t remote_addr, void **local_addr_p)
 {
     uct_md_component_t *mdc = rkey_ob->type;
     return mdc->rkey_ptr(mdc, rkey_ob->rkey, rkey_ob->handle, remote_addr,
                          local_addr_p);
 }
 
-ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob)
+ucs_status_t uct_rkey_release(uct_component_h component,
+                              const uct_rkey_bundle_t *rkey_ob)
 {
     uct_md_component_t *mdc = rkey_ob->type;
     return mdc->rkey_release(mdc, rkey_ob->rkey, rkey_ob->handle);

@@ -1092,6 +1092,8 @@ ucs_status_t uct_component_query(uct_component_h component,
  * are performed in the context of a specific memory domain. Therefore it
  * must be created before communication resources.
  *
+ * @param [in]  component       Component on which to open the memory domain,
+ *                              as returned from @ref uct_query_components.
  * @param [in]  md_name         Memory domain name, as returned from @ref
  *                              uct_component_query.
  * @param [in]  config          MD configuration options. Should be obtained
@@ -1101,8 +1103,8 @@ ucs_status_t uct_component_query(uct_component_h component,
  *
  * @return Error code.
  */
-ucs_status_t uct_md_open(const char *md_name, const uct_md_config_t *config,
-                         uct_md_h *md_p);
+ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
+                         const uct_md_config_t *config, uct_md_h *md_p);
 
 /**
  * @ingroup UCT_RESOURCE
@@ -1837,12 +1839,20 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
  *
  * @brief Unpack a remote key.
  *
+ * @param [in]  component    Component on which to unpack the remote key.
  * @param [in]  rkey_buffer  Packed remote key buffer.
  * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
  *
+ * @note The remote key must be unpacked with the same component which was used
+ *       to pack it. For example, if a remote device address on the remote
+ *       memory domain which was used to pack the key is reachable by a
+ *       transport on a local component, then that component is eligible to
+ *       unpack the key.
+ *
  * @return Error code.
  */
-ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob);
+ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
+                             uct_rkey_bundle_t *rkey_ob);
 
 
 /**
@@ -1854,6 +1864,8 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
  * described by the rkey bundle. The MD must support
  * @ref UCT_MD_FLAG_RKEY_PTR flag.
  *
+ * @param [in]  component    Component on which to obtain the pointer to the
+ *                           remote key.
  * @param [in]  rkey_ob      A remote key bundle as returned by
  *                           the @ref uct_rkey_unpack function.
  * @param [in]  remote_addr  A remote address within the memory area described
@@ -1861,11 +1873,15 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
  * @param [out] addr_p       A pointer that can be used for direct access to
  *                           the remote memory.
  *
+ * @note The component used to obtain a local pointer to the remote memory must
+ *       be the same component which was used to pack the remote key. See notes
+ *       section for @ref uct_rkey_unpack.
+ *
  * @return Error code if the remote memory cannot be accessed directly or
  *         the remote address is not valid.
  */
-ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, uint64_t remote_addr,
-                          void **addr_p);
+ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,
+                          uint64_t remote_addr, void **addr_p);
 
 
 /**
@@ -1873,9 +1889,11 @@ ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, uint64_t remote_addr,
  *
  * @brief Release a remote key.
  *
+ * @param [in]  component    Component which was used to unpack the remote key.
  * @param [in]  rkey_ob      Remote key to release.
  */
-ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
+ucs_status_t uct_rkey_release(uct_component_h component,
+                              const uct_rkey_bundle_t *rkey_ob);
 
 
 /**
