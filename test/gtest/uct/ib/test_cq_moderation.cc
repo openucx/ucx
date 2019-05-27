@@ -12,13 +12,12 @@ extern "C" {
 #include <poll.h>
 #include <infiniband/verbs.h>
 
-static const unsigned nsec_per_usec = (UCS_NSEC_PER_SEC / UCS_USEC_PER_SEC);
-
-/* wait for 3 usecs to get statistics */
+/* wait for 3 secs to get statistics */
 static const unsigned long test_period = (3ul * UCS_USEC_PER_SEC);
 static const unsigned moderation_period = 1000; /* usecs */
-static const unsigned event_limit = (40 * test_period / moderation_period / nsec_per_usec);
-static const unsigned max_repeats = 1000;
+/* use multiplier 2 because we have same iface to send/recv which may produce 2x events */
+static const unsigned event_limit = (2 * test_period / moderation_period);
+static const unsigned max_repeats = 60; /* max 3 minutes per test */
 
 class test_uct_cq_moderation : public uct_test {
 protected:
@@ -135,7 +134,7 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
 
         ucs_time_t tm = ucs_get_time();
 
-        while ((ucs_get_time() - tm) < test_period) {
+        while ((ucs_time_to_usec(ucs_get_time()) - ucs_time_to_usec(tm)) < test_period) {
             polled = poll(&pfd, 1, 0);
             if (polled > 0) {
                 events++;
