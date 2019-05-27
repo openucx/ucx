@@ -182,8 +182,8 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
     /* Check event code */
     switch (siginfo->si_code) {
     case SI_TIMER:
-        ucs_trace_async("timer signal uid=%d", siginfo->si_int);
-        ucs_async_signal_dispatch_timer(siginfo->si_int);
+        ucs_trace_async("timer signal uid=%d", siginfo->si_value.sival_int);
+        ucs_async_signal_dispatch_timer(siginfo->si_value.sival_int);
         return;
     case POLL_IN:
     case POLL_OUT:
