@@ -348,6 +348,7 @@ err:
 
 #else
 
+/* TODO: split this function into DV and EXP implementations */
 static ucs_status_t uct_ib_mlx5_check_dc(uct_ib_device_t *dev)
 {
     ucs_status_t status = UCS_OK;
