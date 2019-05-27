@@ -3,7 +3,11 @@
 %bcond_with    cuda
 %bcond_with    gdrcopy
 %bcond_without ib
+%if 0%{?fedora} >= 30
+%bcond_with ib_cm
+%else
 %bcond_without ib_cm
+%endif
 %bcond_with    knem
 %bcond_without rdmacm
 %bcond_with    rocm
