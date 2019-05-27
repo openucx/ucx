@@ -133,41 +133,6 @@ static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
 #  define IBV_EXP_PREFETCH_WRITE_ACCESS IBV_EXP_ACCESS_LOCAL_WRITE
 #endif
 
-static inline ucs_status_t uct_ib_prefetch_mr(struct ibv_mr *mr,
-                                              void *addr, size_t length)
-{
-    int ret = -1;
-#if HAVE_DECL_IBV_ADVISE_MR
-    struct ibv_sge sg_list;
-
-    sg_list.lkey   = mr->lkey;
-    sg_list.addr   = (uintptr_t)addr;
-    sg_list.length = length;
-
-    ret = ibv_advise_mr(mr->pd, IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
-                        IB_UVERBS_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
-#  define ibv_prefetch_func_name "ibv_advise_mr"
-#elif HAVE_DECL_IBV_EXP_PREFETCH_MR
-    struct ibv_exp_prefetch_attr attr = {};
-
-    attr.flags     = IBV_EXP_PREFETCH_WRITE_ACCESS;
-    attr.addr      = addr;
-    attr.length    = length;
-
-    ret = ibv_exp_prefetch_mr(mr, &attr);
-#  define ibv_prefetch_func_name "ibv_exp_prefetch_mr"
-#else
-#  define ibv_prefetch_func_name "UNDEFINED"
-#endif
-    if (ret) {
-        ucs_error("%s addr=%p length=%zu returned %d: %m",
-                  ibv_prefetch_func_name, addr, length, ret);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
 /*
  * DC support
  */

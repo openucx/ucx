@@ -429,6 +429,7 @@ static ucs_status_t
 uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, size_t length)
 {
 #if HAVE_PREFETCH
+    int ret;
     if ((memh->flags & UCT_IB_MEM_FLAG_ODP)) {
         if ((addr < memh->mr->addr) ||
             (addr + length > memh->mr->addr + memh->mr->length)) {
@@ -437,7 +438,33 @@ uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, si
         ucs_debug("memh %p prefetch %p length %llu", memh, addr,
                   (unsigned long long)length);
 
-        return UCS_PROFILE_CALL(uct_ib_prefetch_mr, memh->mr, addr, length);
+        UCS_PROFILE_CODE("uct_ib_prefetch_mr") {
+#  if HAVE_DECL_IBV_ADVISE_MR
+            struct ibv_sge sg_list;
+
+            sg_list.lkey   = memh->mr->lkey;
+            sg_list.addr   = (uintptr_t)addr;
+            sg_list.length = length;
+
+            ret = ibv_advise_mr(memh->mr->pd, IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+                                IB_UVERBS_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+#    define ibv_prefetch_func_name "ibv_advise_mr"
+#  elif HAVE_DECL_IBV_EXP_PREFETCH_MR
+            struct ibv_exp_prefetch_attr attr = {};
+
+            attr.flags     = IBV_EXP_PREFETCH_WRITE_ACCESS;
+            attr.addr      = addr;
+            attr.length    = length;
+
+            ret = ibv_exp_prefetch_mr(memh->mr, &attr);
+#    define ibv_prefetch_func_name "ibv_exp_prefetch_mr"
+#  endif
+            if (ret) {
+                ucs_error("%s addr=%p length=%zu returned %d: %m",
+                          ibv_prefetch_func_name, addr, length, ret);
+                return UCS_ERR_IO_ERROR;
+            }
+        }
     }
 #endif
     return UCS_OK;
@@ -1145,16 +1172,16 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     ucs_status_t status;
     int ret;
 
-    md->super.ops                      = &uct_ib_md_ops;
-    md->super.component                = &uct_ib_mdc;
-    md->config                         = md_config->ext;
+    md->super.ops       = &uct_ib_md_ops;
+    md->super.component = &uct_ib_mdc;
+    md->config          = md_config->ext;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
                                   ucs_stats_get_root(),
                                   "%s-%p", ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     if (md_config->fork_init != UCS_NO) {
@@ -1231,6 +1258,7 @@ err_cleanup_device:
     uct_ib_device_cleanup(&md->dev);
 err_release_stats:
     UCS_STATS_NODE_FREE(md->stats);
+err:
     return status;
 }
 
