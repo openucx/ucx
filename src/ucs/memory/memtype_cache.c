@@ -29,8 +29,13 @@ typedef enum {
 
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
-    return ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN, sizeof(ucs_pgt_dir_t),
-                        "memtype_cache_pgdir");
+    void *ptr;
+    int ret;
+
+    ret = ucs_posix_memalign(&ptr,
+                             ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                             sizeof(ucs_pgt_dir_t), "memtype_cache_pgdir");
+    return (ret == 0) ? ptr : NULL;
 }
 
 static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
@@ -49,15 +54,17 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
 {
     ucs_memtype_cache_region_t *region;
     ucs_status_t status;
+    int ret;
 
     ucs_trace("memtype_cache: insert 0x%lx..0x%lx mem_type %d", start, end,
               mem_type);
 
     /* Allocate structure for new region */
-    region = ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN,
-                          sizeof(ucs_memtype_cache_region_t),
-                          "memtype_cache_region");
-    if (region == NULL) {
+    ret = ucs_posix_memalign((void **)&region,
+                             ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                             sizeof(ucs_memtype_cache_region_t),
+                             "memtype_cache_region");
+    if (ret != 0) {
         ucs_warn("failed to allocate memtype_cache region");
         return;
     }

@@ -132,9 +132,10 @@ static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void *
     uintptr_t ps = ucs_get_page_size();
     uct_ib_mlx5_dbrec_page_t *page;
     size_t size = ucs_align_up(*size_p + sizeof(*page), ps);
+    int ret;
 
-    page = ucs_memalign(ps, size, "devx dbrec");
-    if (page == NULL) {
+    ret = ucs_posix_memalign((void **)&page, ps, size, "devx dbrec");
+    if (ret != 0) {
         goto err;
     }
 
@@ -392,8 +393,9 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    md->zero_buf = ucs_memalign(ucs_get_page_size(), ucs_get_page_size(), "zero umem");
-    if (md->zero_buf == NULL) {
+    ret = ucs_posix_memalign(&md->zero_buf, ucs_get_page_size(),
+                             ucs_get_page_size(), "zero umem");
+    if (ret != 0) {
         ucs_error("failed to allocate zero buffer: %m");
         goto err_release_dbrec;
     }

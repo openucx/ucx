@@ -80,8 +80,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
     if (tx != NULL) {
-        qp->devx.wq_buf = ucs_memalign(ucs_get_page_size(), len, "qp umem");
-        if (qp->devx.wq_buf == NULL) {
+        ret = ucs_posix_memalign(&qp->devx.wq_buf, ucs_get_page_size(), len,
+                                 "qp umem");
+        if (ret != 0) {
             ucs_error("failed to allocate QP buffer of %d bytes: %m", len);
             goto err_uar;
         }

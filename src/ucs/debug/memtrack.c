@@ -200,11 +200,19 @@ void *ucs_realloc(void *ptr, size_t size, const char *name)
     return ptr;
 }
 
-void *ucs_memalign(size_t boundary, size_t size, const char *name)
+int ucs_posix_memalign(void **ptr, size_t boundary, size_t size, const char *name)
 {
-    void *ptr = memalign(boundary, size);
-    ucs_memtrack_allocated(ptr, size, name);
-    return ptr;
+    int ret;
+
+#if HAVE_POSIX_MEMALIGN
+    ret = posix_memalign(ptr, boundary, size);
+#else
+#error "Port me"
+#endif
+    if (ret == 0) {
+        ucs_memtrack_allocated(*ptr, size, name);
+    }
+    return ret;
 }
 
 void ucs_free(void *ptr)
