@@ -167,7 +167,7 @@ public class UcpEndpointTest {
 
         UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
         UcxRequest request = ep.putNonBlocking(src, memory.getAddress(), rkey,
-            new UcxCallback(){
+            new UcxCallback() {
                 @Override
                 public void onSuccess(UcxRequest request) {
                     rkey.close();
@@ -207,7 +207,7 @@ public class UcpEndpointTest {
         src2.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT + UcpMemoryTest.RANDOM_TEXT);
 
         AtomicInteger receivedMessages = new AtomicInteger(0);
-        worker2.recvNonBlocking(dst1, 0, new UcxCallback() {
+        worker2.recvTaggedNonBlocking(dst1, 0, 0, new UcxCallback() {
             @Override
             public void onSuccess(UcxRequest request) {
                 assertEquals(dst1, src1);
@@ -215,7 +215,7 @@ public class UcpEndpointTest {
             }
         });
 
-        worker2.recvNonBlocking(dst2, 1, new UcxCallback(){
+        worker2.recvTaggedNonBlocking(dst2, 1, -1, new UcxCallback() {
             @Override
             public void onSuccess(UcxRequest request) {
                 assertEquals(dst2, src2);
@@ -226,8 +226,8 @@ public class UcpEndpointTest {
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
             .setUcpAddress(worker2.getAddress()));
 
-        ep.sendNonBlocking(src1, 0, null);
-        ep.sendNonBlocking(src2, 1, null);
+        ep.sendTaggedNonBlocking(src1, 0, null);
+        ep.sendTaggedNonBlocking(src2, 1, null);
 
         while (receivedMessages.get() != 2) {
             worker1.progress();

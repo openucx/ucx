@@ -50,7 +50,7 @@ JNIEnv* get_jni_env();
 /**
  * @brief Send callback used to invoke java callback class on completion of ucp operations.
  */
-void send_callback(void *request, ucs_status_t status);
+void jucx_request_callback(void *request, ucs_status_t status);
 
 /**
  * @brief Recv callback used to invoke java callback class on completion of ucp recv_nb operation.

@@ -102,24 +102,25 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * to the {@code recvBuffer}. In order to notify the application about completion of the receive
      * operation the UCP library will invoke the call-back {@code callback} when the received
      * message is in the receive buffer and ready for application access.
+     *
+     * @param tagMask - bit mask that indicates the bits that are used for the matching of the
+     * incoming tag against the expected tag.
      */
-    public UcxRequest recvNonBlocking(ByteBuffer recvBuffer, long tag,
-                                      UcxCallback callback) {
+    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, long tag, long tagMask,
+                                            UcxCallback callback) {
         if (!recvBuffer.isDirect()) {
             throw new UcxException("Recv buffer must be direct.");
         }
-        if (callback == null) {
-            callback = new UcxCallback();
-        }
-        return recvNonBlockingNative(getNativeId(), recvBuffer, tag, callback);
+        return recvTaggedNonBlockingNative(getNativeId(), recvBuffer, tag, tagMask, callback);
     }
 
     /**
      * Non-blocking receive operation. Invokes
-     * {@link UcpWorker#recvNonBlocking(ByteBuffer, long, UcxCallback)} with default 0 tag.
+     * {@link UcpWorker#recvTaggedNonBlocking(ByteBuffer, long, long, UcxCallback)}
+     * with default tag=0 and tagMask=0.
      */
-    public UcxRequest recvNonBlocking(ByteBuffer recvBuffer, UcxCallback callback) {
-        return recvNonBlocking(recvBuffer, 0, callback);
+    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, UcxCallback callback) {
+        return recvTaggedNonBlocking(recvBuffer, 0, 0, callback);
     }
 
 
@@ -155,6 +156,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
     private static native void signalWorkerNative(long workerId);
 
-    private static native UcxRequest recvNonBlockingNative(long workerId, ByteBuffer recvBuffer,
-                                                           long tag, UcxCallback callback);
+    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, ByteBuffer recvBuffer,
+                                                                 long tag, long tagMask,
+                                                                 UcxCallback callback);
 }

@@ -162,22 +162,25 @@ static inline void call_on_error(jobject callback, ucs_status_t status)
     env->CallVoidMethod(callback, on_error, status, error_msg);
 }
 
-void send_callback(void *request, ucs_status_t status)
+void jucx_request_callback(void *request, ucs_status_t status)
 {
     struct jucx_context *ctx = (struct jucx_context *)request;
     while (ctx->jucx_request == NULL) {
         pthread_yield();
     }
     ucs_memory_cpu_load_fence();
-    if (status == UCS_OK) {
-        call_on_success(ctx->callback, ctx->jucx_request);
-    } else {
-        call_on_error(ctx->callback, status);
-    }
-
     JNIEnv *env = get_jni_env();
     set_jucx_request_completed(env, ctx->jucx_request);
-    env->DeleteGlobalRef(ctx->callback);
+
+    if (ctx->callback != NULL) {
+        if (status == UCS_OK) {
+            call_on_success(ctx->callback, ctx->jucx_request);
+        } else {
+            call_on_error(ctx->callback, status);
+        }
+        env->DeleteGlobalRef(ctx->callback);
+    }
+
     env->DeleteGlobalRef(ctx->jucx_request);
     ctx->callback = NULL;
     ctx->jucx_request = NULL;
@@ -186,7 +189,7 @@ void send_callback(void *request, ucs_status_t status)
 
 void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info)
 {
-    send_callback(request, status);
+    jucx_request_callback(request, status);
 }
 
 jobject process_request(void *request, jobject callback)
@@ -198,15 +201,21 @@ jobject process_request(void *request, jobject callback)
 
     // If request is a pointer set context callback and rkey.
     if (UCS_PTR_IS_PTR(request)) {
-        ((struct jucx_context *)request)->callback = env->NewGlobalRef(callback);
+        if (callback != NULL) {
+            ((struct jucx_context *)request)->callback = env->NewGlobalRef(callback);
+        }
         ucs_memory_cpu_store_fence();
         ((struct jucx_context *)request)->jucx_request = env->NewGlobalRef(jucx_request);
     } else {
         if (UCS_PTR_IS_ERR(request)) {
             JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
-            call_on_error(callback, UCS_PTR_STATUS(request));
+            if (callback != NULL) {
+                call_on_error(callback, UCS_PTR_STATUS(request));
+            }
         } else if (UCS_PTR_STATUS(request) == UCS_OK) {
-            call_on_success(callback, jucx_request);
+            if (callback != NULL) {
+                call_on_success(callback, jucx_request);
+            }
         }
         set_jucx_request_completed(env, jucx_request);
     }
