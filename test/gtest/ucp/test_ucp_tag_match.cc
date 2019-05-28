@@ -18,7 +18,7 @@ public:
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         if (RUNNING_ON_VALGRIND) {
-            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MAX_BCOPY", "8k"));
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
         }
         modify_config("TM_THRESH",  "1");
 

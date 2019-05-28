@@ -24,6 +24,25 @@ public:
     test_many2one_am() : m_am_count(0) {
     }
 
+    void init() {
+        std::string val = "16k";
+        std::string name;
+
+        if (has_ib()) {
+            name = "IB_SEG_SIZE";
+        } else if (has_transport("tcp") ||
+                   has_transport("mm")  ||
+                   has_transport("self")) {
+            name = "SEG_SIZE";
+        }
+
+        if (!name.empty()) {
+            modify_config(name, val);
+        }
+
+        uct_test::init();
+    }
+
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
                                    unsigned flags) {
         test_many2one_am *self = reinterpret_cast<test_many2one_am*>(arg);
@@ -76,7 +95,7 @@ protected:
 };
 
 
-UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
+UCS_TEST_P(test_many2one_am, am_bcopy)
 {
     const unsigned num_sends = 1000 / ucs::test_time_multiplier();
     ucs_status_t status;

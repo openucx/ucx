@@ -286,8 +286,6 @@ typedef struct uct_tl_component {
  * Specific transport extend this structure.
  */
 struct uct_iface_config {
-    size_t            max_bcopy;
-
     struct {
         uct_alloc_method_t  *methods;
         unsigned            count;

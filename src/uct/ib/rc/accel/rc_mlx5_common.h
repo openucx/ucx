@@ -289,13 +289,13 @@ typedef struct uct_rc_mlx5_iface_common {
  * Common RC/DC mlx5 interface configuration
  */
 typedef struct uct_rc_mlx5_iface_common_config {
-    uct_rc_iface_config_t             super;
-    uct_ib_mlx5_iface_config_t        mlx5_common;
-    unsigned                          tx_max_bb;
+    uct_rc_iface_config_t      super;
+    uct_ib_mlx5_iface_config_t mlx5_common;
+    unsigned                   tx_max_bb;
     struct {
-        int                  enable;
-        unsigned             list_size;
-        size_t               max_bcopy;
+        int                    enable;
+        unsigned               list_size;
+        size_t                 seg_size;
     } tm;
 } uct_rc_mlx5_iface_common_config_t;
 

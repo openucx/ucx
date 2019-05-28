@@ -18,6 +18,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+  {"SEG_SIZE", "8k",
+   "Size of copy-out buffer",
+   ucs_offsetof(uct_tcp_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"PREFER_DEFAULT", "y",
    "Give higher priority to the default network interface on the host",
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
@@ -98,7 +102,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_EVENT_RECV;
 
     attr->cap.am.max_short = attr->cap.am.max_bcopy =
-        iface->am_buf_size - sizeof(uct_tcp_am_hdr_t);
+        iface->seg_size - sizeof(uct_tcp_am_hdr_t);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
                                 &attr->bandwidth);
@@ -411,9 +415,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
 
-    self->am_buf_size = config->super.max_bcopy + sizeof(uct_tcp_am_hdr_t);
+    self->seg_size = config->seg_size + sizeof(uct_tcp_am_hdr_t);
 
-    status = ucs_mpool_init(&self->tx_mpool, 0, self->am_buf_size,
+    status = ucs_mpool_init(&self->tx_mpool, 0, self->seg_size,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->tx_mpool.bufs_grow == 0) ?
                             32 : config->tx_mpool.bufs_grow,
@@ -423,7 +427,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
-    status = ucs_mpool_init(&self->rx_mpool, 0, self->am_buf_size * 2,
+    status = ucs_mpool_init(&self->rx_mpool, 0, self->seg_size * 2,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->rx_mpool.bufs_grow == 0) ?
                             32 : config->rx_mpool.bufs_grow,
