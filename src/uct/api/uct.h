@@ -1843,7 +1843,7 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
  * @param [in]  rkey_buffer  Packed remote key buffer.
  * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
  *
- * @note The remote key must be unpacked with the same component which was used
+ * @note The remote key must be unpacked with the same component that was used
  *       to pack it. For example, if a remote device address on the remote
  *       memory domain which was used to pack the key is reachable by a
  *       transport on a local component, then that component is eligible to
@@ -1874,7 +1874,7 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
  *                           the remote memory.
  *
  * @note The component used to obtain a local pointer to the remote memory must
- *       be the same component which was used to pack the remote key. See notes
+ *       be the same component that was used to pack the remote key. See notes
  *       section for @ref uct_rkey_unpack.
  *
  * @return Error code if the remote memory cannot be accessed directly or
