@@ -18,6 +18,9 @@
 
 #include <errno.h>
 
+#include <ucs/type/status.h>
+#include <ucs/debug/log.h>
+
 #ifndef HAVE_VERBS_EXP_H
 #  define IBV_EXP_SEND_INLINE              IBV_SEND_INLINE
 #  define IBV_EXP_SEND_SIGNALED            IBV_SEND_SIGNALED
@@ -101,12 +104,33 @@
 #  define IBV_EXP_ODP_CAPS(_attr, _xport)           0
 #endif
 
-#if !HAVE_DECL_IBV_EXP_ACCESS_ON_DEMAND
-#  define IBV_EXP_ACCESS_ON_DEMAND                  0
+#if HAVE_ODP
+#  if HAVE_VERBS_EXP_H
+#    define IBV_ODP_SUPPORT_IMPLICT     IBV_EXP_ODP_SUPPORT_IMPLICIT
+static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
+                                            size_t length, long access)
+{
+    struct ibv_exp_reg_mr_in in = {};
+
+    in.pd         = pd;
+    in.addr       = addr;
+    in.length     = length;
+    in.exp_access = access;
+    return ibv_exp_reg_mr(&in);
+}
+#    define ibv_reg_mr                  uct_ib_reg_mr
+#    define IBV_ACCESS_ON_DEMAND        IBV_EXP_ACCESS_ON_DEMAND
+#    define ibv_reg_mr_func_name        "ibv_exp_reg_mr"
+#  else
+#    define ibv_reg_mr_func_name        "ibv_reg_mr"
+#  endif
+#else
+#  define IBV_ACCESS_ON_DEMAND          0
+#  define ibv_reg_mr_func_name          "ibv_reg_mr"
 #endif
 
 #if !HAVE_DECL_IBV_EXP_PREFETCH_WRITE_ACCESS
-#  define IBV_EXP_PREFETCH_WRITE_ACCESS             IBV_EXP_ACCESS_LOCAL_WRITE
+#  define IBV_EXP_PREFETCH_WRITE_ACCESS IBV_EXP_ACCESS_LOCAL_WRITE
 #endif
 
 /*

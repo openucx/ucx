@@ -173,10 +173,8 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_rc_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
-    uct_rc_iface_t *iface        = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
-    rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super);
 
     return UCS_OK;
 }
@@ -199,8 +197,6 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     if (status != UCS_OK) {
         return status;
     }
-
-    ep->atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
 
     return UCS_OK;
 }
