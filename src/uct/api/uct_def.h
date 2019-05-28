@@ -337,16 +337,20 @@ typedef void
  */
 typedef void
 (*uct_listener_conn_request_callback_t)(uct_listener_h listener, void *arg,
-                                        const char *dev_name,
+                                        const char *local_dev_name,
+                                        const uct_device_addr_t *remote_dev_addr,
+                                        size_t remote_dev_addr_length,
                                         uct_conn_request_h conn_request,
-                                        const void *conn_priv_data,
-                                        size_t length);
+                                        const void *priv_data,
+                                        size_t priv_data_length);
 
 
 typedef void (*uct_ep_server_connected_cb_t)(uct_ep_h ep, void *arg,
                                              ucs_status_t status);
 
 typedef void (*uct_ep_client_connected_cb_t)(uct_ep_h ep, void *arg,
+                                             const uct_device_addr_t *remote_dev_addr,
+                                             size_t remote_dev_addr_length,
                                              const void *conn_priv_data,
                                              size_t length, ucs_status_t status);
 

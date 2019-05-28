@@ -70,12 +70,16 @@ enum {
  * Flags which specify which address fields are present
  */
 enum {
-    UCT_IB_ADDRESS_FLAG_LID      = UCS_BIT(0),
-    UCT_IB_ADDRESS_FLAG_IF_ID    = UCS_BIT(1),
-    UCT_IB_ADDRESS_FLAG_SUBNET16 = UCS_BIT(2),
-    UCT_IB_ADDRESS_FLAG_SUBNET64 = UCS_BIT(3),
-    UCT_IB_ADDRESS_FLAG_GID  = UCS_BIT(4),
-    UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB = UCS_BIT(5),
+    /**
+     * This is a 0-value constant which can not be or'ed with other flags and
+     * means that the address contains full AH attributes. */
+    UCT_IB_ADDRESS_FLAG_AH_ATTRS       = 0,
+    UCT_IB_ADDRESS_FLAG_LID            = UCS_BIT(0),
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(1),
+    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(2),
+    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(3),
+    UCT_IB_ADDRESS_FLAG_GID            = UCS_BIT(4),
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB  = UCS_BIT(5),
     UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(6)
 };
 

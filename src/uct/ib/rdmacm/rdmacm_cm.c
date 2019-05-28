@@ -14,6 +14,7 @@
 #include "rdmacm_cm.h"
 #include "rdmacm_iface.h"
 
+#include <uct/ib/base/ib_iface.h>
 #include <ucs/async/async.h>
 
 #include <poll.h>
@@ -44,7 +45,7 @@ typedef struct uct_rdmacm_cep {
     /* TODO: Allocate separately to reduce memory consumption. These fields are
      *       relevant only for connection establishment. */
     struct {
-        char                              priv_data[UCT_RDMACM_CM_MAX_CONN_PRIV];
+        char                              priv_data[UCT_RDMACM_TCP_PRIV_DATA_LEN];
         uct_sockaddr_priv_pack_callback_t priv_pack_cb;
         union {
             struct {
@@ -264,14 +265,17 @@ uct_cm_ops_t uct_rdmacm_cm_ops = {
     .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cep_t)
 };
 
-
 static int
 uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
 {
-    struct rdma_conn_param      conn_param;
-    uct_rdmacm_priv_data_hdr_t  *hdr;
-    uct_rdmacm_cep_t            *cep;
-    uct_rdmacm_listener_t       *listener;
+    struct rdma_conn_param     conn_param;
+    uct_rdmacm_priv_data_hdr_t *hdr;
+    uct_rdmacm_cep_t           *cep;
+    uct_rdmacm_listener_t      *listener;
+    char                       dev_name[UCT_DEVICE_NAME_MAX];
+    uct_device_addr_t          *dev_addr;
+    ucs_status_t               status;
+    size_t                     addr_length;
 
     switch (event->event) {
     case RDMA_CM_EVENT_ADDR_RESOLVED:
@@ -282,8 +286,8 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         ucs_assert(event->id == cep->id);
         rdma_ack_cm_event(event);
         hdr = (uct_rdmacm_priv_data_hdr_t *)cep->wireup.priv_data;
-        hdr->length = cep->wireup.priv_pack_cb(cep->user_data,
-                                               cep->id->verbs->device->name,
+        uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
+        hdr->length = cep->wireup.priv_pack_cb(cep->user_data, dev_name,
                                                hdr + 1);
         hdr->status = (hdr->length < 0) ? hdr->length : UCS_OK;
 
@@ -296,10 +300,15 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         listener = event->listen_id->context;
         hdr      = (uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
         if (hdr->status == UCS_OK) {
+            uct_rdmacm_cm_id_to_dev_name(event->id, dev_name);
+            status = uct_rdmacm_cm_id_to_dev_addr(event->id, &dev_addr,
+                                                  &addr_length);
+            ucs_assert_always(status == UCS_OK);
+
             listener->conn_request_cb(&listener->super, listener->user_data,
-                                      event->id->verbs->device->name,
-                                      (uct_conn_request_h)event, hdr + 1,
-                                      hdr->length);
+                                      dev_name, dev_addr, addr_length, event,
+                                      hdr + 1, hdr->length);
+            ucs_free(dev_addr);
             return 0;
             /* Do not ack event here, ep create does this */
         }
@@ -316,9 +325,18 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         }
         cep = event->id->context;
         hdr = (uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
-        cep->wireup.client.connected_cb(&cep->super.super, cep->user_data,
-                                        hdr + 1, hdr->length, hdr->status);
-        return rdma_ack_cm_event(event);
+        status = uct_rdmacm_cm_id_to_dev_addr(event->id, &dev_addr,
+                                              &addr_length);
+        if (status == UCS_OK) {
+            cep->wireup.client.connected_cb(&cep->super.super, cep->user_data,
+                                            dev_addr, addr_length,  hdr + 1,
+                                            hdr->length, hdr->status);
+            ucs_free(dev_addr);
+            return rdma_ack_cm_event(event);
+        } else {
+            rdma_ack_cm_event(event);
+            return status;
+        }
     case RDMA_CM_EVENT_ESTABLISHED:
         cep = event->id->context;
         cep->wireup.server.connected_cb(&cep->super.super, cep->user_data,

@@ -201,7 +201,7 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
     return UCS_OK;
 }
 
-static void ucp_wireup_remote_connected(ucp_ep_h ep)
+void ucp_wireup_remote_connected(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 

@@ -123,4 +123,6 @@ static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_
            !(flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 }
 
+void ucp_wireup_remote_connected(ucp_ep_h ep);
+
 #endif

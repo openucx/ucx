@@ -475,7 +475,7 @@ int uct_test::max_connections()
 }
 
 const std::string uct_test::entity::server_priv_data = "Server private data";
-std::string uct_test::entity::client_priv_data = "";
+std::vector<char> uct_test::entity::client_priv_data;
 size_t uct_test::entity::client_cb_arg = 0;
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
@@ -837,11 +837,14 @@ ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
 {
     size_t *max_conn_priv = (size_t*)arg;
     size_t priv_data_len;
+    client_priv_data.resize(54);
+    ucs::fill_random(&client_priv_data[0], 54);
+    priv_data_len = client_priv_data.size();
+//    client_priv_data = "Client private data";
+//    priv_data_len = 1 + client_priv_data.length();
 
-    client_priv_data = "Client private data";
-    priv_data_len = 1 + client_priv_data.length();
-
-    memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
+//    memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
+    memcpy(priv_data, client_priv_data.data(), client_priv_data.size());
     EXPECT_LE(priv_data_len, (*max_conn_priv));
 
     return priv_data_len;
@@ -877,21 +880,21 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     if (m_cm) {
         params.field_mask = UCT_EP_PARAM_FIELD_CM                       |
                             UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB    |
-                            UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB;
+                            UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB |
+                            UCT_EP_PARAM_FIELD_USER_DATA;
         params.cm                           = m_cm;
         params.sockaddr_connected_cb.client = connected_cb;
         params.disconnected_cb              = disconnected_cb;
-        
     } else {
         params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
         params.iface      = m_iface;
-        params.user_data  = user_data;
     }
     params.field_mask       |= UCT_EP_PARAM_FIELD_USER_DATA         |
                                UCT_EP_PARAM_FIELD_SOCKADDR          |
                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS |
                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
     params.iface             = iface();
+    params.user_data         = user_data;
     params.sockaddr          = &ucs_remote_addr;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
     params.sockaddr_pack_cb  = client_priv_data_cb;

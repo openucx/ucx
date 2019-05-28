@@ -105,11 +105,15 @@ public:
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
 
-        EXPECT_EQ(std::string(reinterpret_cast<const char *>
-                              (uct_test::entity::client_priv_data.c_str())),
-                  std::string(reinterpret_cast<const char *>(conn_priv_data)));
+//        EXPECT_EQ(std::string(reinterpret_cast<const char *>
+//                              (uct_test::entity::client_priv_data.c_str())),
+//                  std::string(reinterpret_cast<const char *>(conn_priv_data)));
+        std::vector<char> tmp(length);
+        memcpy(&tmp[0], conn_priv_data, length);
+        EXPECT_EQ(uct_test::entity::client_priv_data, tmp);
 
-        EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
+//        EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
+        EXPECT_EQ(uct_test::entity::client_priv_data.size(), length);
         if (self->delay_conn_reply) {
             self->delayed_conn_reqs.push(conn_request);
         } else {
@@ -360,17 +364,24 @@ public:
         m_client->client_cb_arg = m_client->cm_attr().max_conn_priv;
     }
 protected:
-    static void
-    conn_request_cb(uct_listener_h listener, void *arg, const char *dev_name,
-                    uct_conn_request_h conn_request, const void *conn_priv_data,
-                    size_t length) {
+    static void conn_request_cb(uct_listener_h listener, void *arg,
+                                const char *dev_name,
+                                const uct_device_addr_t *remote_dev_addr,
+                                size_t remote_dev_addr_length,
+                                uct_conn_request_h conn_request,
+                                const void *conn_priv_data, size_t length) {
         test_uct_cm_sockaddr *self;
 
         self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        EXPECT_EQ(entity::client_priv_data.length() + 1, length);
-        EXPECT_EQ(entity::client_priv_data,
-                  std::string(static_cast<const char *>(conn_priv_data)));
+//        EXPECT_EQ(entity::client_priv_data.length() + 1, length);
+//        EXPECT_EQ(entity::client_priv_data,
+//                  std::string(static_cast<const char *>(conn_priv_data)));
+
+        EXPECT_EQ(entity::client_priv_data.size(), length);
+        std::vector<char> tmp(length);
+        memcpy(&tmp[0], conn_priv_data, length);
+        EXPECT_EQ(entity::client_priv_data, tmp);
 
         self->m_server->accept(conn_request, server_connected_cb,
                                server_disconnected_cb, self);
@@ -395,7 +406,10 @@ protected:
     }
 
     static void
-    client_connected_cb(uct_ep_h ep, void *arg, const void *conn_priv_data,
+    client_connected_cb(uct_ep_h ep, void *arg,
+                        const uct_device_addr_t *remote_dev_addr,
+                        size_t remote_dev_addr_length,
+                        const void *conn_priv_data,
                         size_t length, ucs_status_t status) {
         test_uct_cm_sockaddr *self;
 
@@ -449,7 +463,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
     m_client->connect(0, *m_server, 0, m_connect_addr,
                       client_connected_cb, client_disconnected_cb, this);
 
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_CONNECT_REQUESTED);
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_CONNECT_REQUESTED, 600.0);
     EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CONNECT_REQUESTED);
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |

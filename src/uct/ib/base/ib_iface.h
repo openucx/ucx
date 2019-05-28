@@ -309,27 +309,37 @@ size_t uct_ib_address_size(uct_ib_iface_t *iface);
 /**
  * Pack IB address.
  *
- * @param [in]  dev        IB device. TODO remove this.
  * @param [in]  gid        GID address to pack.
  * @param [in]  lid        LID address to pack.
- * @param [out] ib_addr    Filled with packed ib address. Size of the structure
- *                         must be at least what @ref uct_ib_address_size() returns
- *                         for the given scope.
+ * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
+ *                         must be at least what @ref uct_ib_address_size()
+ *                         returns for the given scope, uct_ib_address_t::flags
+ *                         must be initialized by a caller.
  */
-void uct_ib_address_pack(uct_ib_iface_t *iface,
-                         const union ibv_gid *gid, uint16_t lid,
-                         uct_ib_address_t *ib_addr);
-
+void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
+                          uct_ib_address_t *ib_addr);
 
 /**
  * Unpack IB address.
  *
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] lid        Filled with address LID, or 0 if not present.
+ * @param [out] gid        Filled with address GID, or 0 if not present.
  */
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
                            union ibv_gid *gid);
 
+/**
+ * Unpack IB address to AH attributes.
+ *
+ * @param [in]  ib_addr    IB address to unpack.
+ * @param [out] ah_attrs   Filled with address AH attributes, or 0 if not present.
+ */
+ucs_status_t uct_ib_address_unpack_ah_attrs(const uct_ib_address_t *ib_addr,
+                                            struct ibv_ah_attr *ah_attr);
+
+void uct_ib_iface_set_device_address_flags(uct_iface_h tl_iface,
+                                           uct_ib_address_t *ib_addr);
 
 /**
  * Convert IB address to a human-readable string.
@@ -524,10 +534,13 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 {
     union ibv_gid  gid;
     uint16_t       lid;
+    ucs_status_t   status;
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
-
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_bits, ah_attr);
+    status = uct_ib_address_unpack_ah_attrs(ib_addr, ah_attr);
+    if (status != UCS_OK) {
+        uct_ib_address_unpack(ib_addr, &lid, &gid);
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_bits, ah_attr);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE

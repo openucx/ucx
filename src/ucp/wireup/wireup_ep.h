@@ -95,4 +95,11 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
 
+ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
+                                         void *priv_data);
+
+ucs_status_t ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep,
+                                         const uct_device_addr_t *dev_addr,
+                                         const uct_ep_addr_t *ep_addr);
+
 #endif

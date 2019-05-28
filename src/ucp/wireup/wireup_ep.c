@@ -28,7 +28,7 @@ static inline ucs_queue_elem_t* ucp_wireup_ep_req_priv(uct_pending_req_t *req)
     return (ucs_queue_elem_t*)req->priv;
 }
 
-static ucs_status_t
+ucs_status_t
 ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
                             const uct_ep_addr_t *ep_addr)
 {
@@ -572,45 +572,24 @@ err:
     return status;
 }
 
-static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
-                                                       const char *dev_name,
-                                                       void *priv_data)
+static ucs_status_t
+ucp_wireup_sockaddr_select_tl_iface(ucp_worker_h worker, const char *dev_name,
+                                    uct_iface_h *tl_iface_p,
+                                    ucp_rsc_index_t *tl_rsc_idx_p)
 {
-    ucp_wireup_client_data_t *client_data = priv_data;
-    const size_t dev_name_length          = strlen(dev_name);
-    ucp_ep_h ep                           = arg;
-    ucp_wireup_ep_t *wireup_ep            = (ucp_wireup_ep_t *)ep->uct_eps[ucp_ep_config(ep)->key.wireup_lane];
-    ucs_status_t status                   = UCS_ERR_NO_DEVICE;
-    size_t max_conn_priv                  = 0;
-    uct_iface_h tl_iface                  = NULL;
-    uct_ep_h tl_ep                        = NULL;
-    uct_cm_attr_t cm_attr;
-    uct_ep_params_t tl_ep_params;
-    ucp_rsc_index_t tl_rsc_idx;
+    const size_t    dev_name_length = strlen(dev_name);
+    uct_iface_h     tl_iface;
     ucp_rsc_index_t num_tls;
     ucp_rsc_index_t iface_idx;
-    ucp_rsc_index_t cm_idx;
+    ucp_rsc_index_t tl_rsc_idx;
 
-    UCS_ASYNC_BLOCK(&ep->worker->async);
-
-    for (cm_idx = 0; cm_idx < ep->worker->num_cms; ++cm_idx) {
-        status = uct_cm_query(ep->worker->cms[cm_idx], &cm_attr);
-        ucs_assert(status == UCS_OK);
-        /* TODO: build map */
-        max_conn_priv = ucs_max(max_conn_priv, cm_attr.max_conn_priv);
-    }
-
-    if (max_conn_priv == 0) {
-        goto out;
-    }
-
-    num_tls = ep->worker->context->num_tls;
+    num_tls = worker->context->num_tls;
     for (tl_rsc_idx = 0; tl_rsc_idx < num_tls; ++tl_rsc_idx) {
-        if (!strncmp(ep->worker->context->tl_rscs[tl_rsc_idx].tl_rsc.dev_name,
+        if (!strncmp(worker->context->tl_rscs[tl_rsc_idx].tl_rsc.dev_name,
                      dev_name, dev_name_length)) {
-            for (iface_idx = 0; iface_idx < ep->worker->num_ifaces; ++iface_idx) {
-                if (ep->worker->ifaces[iface_idx].rsc_index == tl_rsc_idx) {
-                    tl_iface = ep->worker->ifaces[iface_idx].iface;
+            for (iface_idx = 0; iface_idx < worker->num_ifaces; ++iface_idx) {
+                if (worker->ifaces[iface_idx].rsc_index == tl_rsc_idx) {
+                    tl_iface = worker->ifaces[iface_idx].iface;
                     /* TODO: select the best one */
                     break;
                 }
@@ -624,6 +603,58 @@ static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
     }
 
     if (tl_iface == NULL) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *tl_iface_p   = tl_iface;
+    *tl_rsc_idx_p = tl_rsc_idx;
+    return UCS_OK;
+}
+
+static void
+ucp_wireup_sockaddr_set_tl_lane(ucp_ep_h ucp_ep, uct_ep_h tl_ep,
+                                ucp_rsc_index_t tl_rsc_idx)
+{
+    ucp_ep_config_key_t key     = ucp_ep_config(ucp_ep)->key;
+    ucp_lane_index_t wireup_idx = key.wireup_lane;
+    ucp_wireup_ep_t *wireup_ep  = (ucp_wireup_ep_t *)ucp_ep->uct_eps[wireup_idx];
+
+    key.lanes[wireup_idx].rsc_index = tl_rsc_idx;
+    ucp_ep->cfg_index = ucp_worker_get_ep_config(ucp_ep->worker, &key);
+    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, tl_ep);
+}
+
+ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
+                                         void *priv_data)
+{
+    ucp_wireup_client_data_t *client_data = priv_data;
+    ucp_ep_h ep                           = arg;
+    size_t max_conn_priv                  = 0;
+    uct_iface_h tl_iface                  = NULL;
+    uct_ep_h tl_ep                        = NULL;
+    uct_cm_attr_t cm_attr;
+    uct_ep_params_t tl_ep_params;
+    ucp_rsc_index_t tl_rsc_idx;
+    ucp_rsc_index_t cm_idx;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+
+    for (cm_idx = 0; cm_idx < ep->worker->num_cms; ++cm_idx) {
+        status = uct_cm_query(ep->worker->cms[cm_idx], &cm_attr);
+        ucs_assert(status == UCS_OK);
+        /* TODO: build map */
+        max_conn_priv = ucs_max(max_conn_priv, cm_attr.max_conn_priv);
+    }
+
+    if (max_conn_priv == 0) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto out;
+    }
+
+    status = ucp_wireup_sockaddr_select_tl_iface(ep->worker, dev_name,
+                                                 &tl_iface, &tl_rsc_idx);
+    if (status != UCS_OK) {
         goto out;
     }
 
@@ -634,14 +665,7 @@ static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
         goto out;
     }
 
-    ucp_ep_config_key_t key = ucp_ep_config(ep)->key;
-    ucp_lane_index_t lane = key.num_lanes++;
-    key.lanes[lane].dst_md_index = UCP_NULL_RESOURCE;
-    key.lanes[lane].rsc_index    = tl_rsc_idx;
-    key.lanes[lane].proxy_lane   = UCP_NULL_LANE;
-    ep->cfg_index = ucp_worker_get_ep_config(ep->worker, &key);
-    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, tl_ep);
-    ep->uct_eps[lane] = tl_ep;
+    ucp_wireup_sockaddr_set_tl_lane(ep, tl_ep, tl_rsc_idx);
 
     void* ucp_addr;
     size_t ucp_addr_size;
@@ -663,7 +687,36 @@ static ssize_t ucp_wireup_sockaddr_client_priv_pack_cb(void *arg,
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return (status == UCS_OK) ?
-           (sizeof(client_data) + ucp_addr_size) : status;
+           (sizeof(*client_data) + ucp_addr_size) : status;
+}
+
+static void
+ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
+                                        const uct_device_addr_t *remote_dev_addr,
+                                        size_t remote_dev_addr_length,
+                                        const void *conn_priv_data,
+                                        size_t length, ucs_status_t status)
+{
+    ucp_ep_h         ucp_ep      = (ucp_ep_h)arg;
+    ucp_lane_index_t wireup_idx  = ucp_ep_config(ucp_ep)->key.wireup_lane;
+    ucp_wireup_ep_t *wireup_ep   = (ucp_wireup_ep_t *)ucp_ep->uct_eps[wireup_idx];
+    ucp_wireup_client_data_t *client_data =
+            (ucp_wireup_client_data_t *)conn_priv_data;
+    ucp_unpacked_address_t unpacked_address;
+
+    ucs_assert_always(status == UCS_OK);
+    ucp_ep_update_dest_ep_ptr(ucp_ep, client_data->ep_ptr);
+    ucp_address_unpack(ucp_ep->worker, client_data + 1,
+                       UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                       UCP_ADDRESS_PACK_FLAG_EP_ADDR, &unpacked_address);
+    ucs_assert(unpacked_address.address_count == 1);
+    status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
+                                         remote_dev_addr,
+                                         unpacked_address.address_list[0].ep_addr);
+    /* TODO: invoke err handling */
+    ucs_assert_always(status == UCS_OK);
+    ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
+    ucp_wireup_remote_connected(ucp_ep);
 }
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
@@ -687,8 +740,8 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
     cm_lane_params.user_data                    = ucp_ep;
     cm_lane_params.sockaddr                     = &params->sockaddr;
     cm_lane_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
-    cm_lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_client_priv_pack_cb;
-    cm_lane_params.sockaddr_connected_cb.client = NULL;
+    cm_lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_priv_pack_cb;
+    cm_lane_params.sockaddr_connected_cb.client = ucp_wireup_sockaddr_client_connected_cb;
     cm_lane_params.disconnected_cb              = NULL;
 
     ucs_assert(worker->num_cms == 1);

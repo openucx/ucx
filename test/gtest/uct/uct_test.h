@@ -159,7 +159,7 @@ protected:
         void flush() const;
 
         static const std::string server_priv_data;
-        static std::string client_priv_data;
+        static std::vector<char> client_priv_data;
         static size_t      client_cb_arg;
 
     private:

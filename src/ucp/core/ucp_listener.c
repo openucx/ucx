@@ -61,8 +61,8 @@ void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
     ucp_conn_request_h               conn_request = arg;
-    ucp_listener_h                   listener     = conn_request->listener;
-    const ucp_wireup_client_data_t   *client_data = &conn_request->client_data;
+    ucp_listener_h                   listener     = conn_request->ucp_listener;
+//    const ucp_wireup_client_data_t   *client_data = &conn_request->client_data;
     ucp_worker_h                     worker;
     ucp_ep_h                         ep;
     ucs_status_t                     status;
@@ -77,9 +77,9 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     worker = listener->is_wcm ? listener->wcm.worker : listener->wiface.worker;
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, client_data, &ep);
+    status = ucp_ep_create_accept(worker, conn_request, &ep);
 
-    if (status != UCS_OK) {
+    if ((status != UCS_OK) || listener->is_wcm) {
         goto out;
     }
 
@@ -153,7 +153,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
         return;
     }
 
-    conn_request->listener = listener;
+    conn_request->ucp_listener = listener;
     conn_request->uct_req  = uct_req;
     memcpy(&conn_request->client_data, conn_priv_data, length);
 
@@ -270,17 +270,19 @@ out:
 }
 
 static void ucp_listener_conn_request_cb(uct_listener_h listener, void *arg,
-                                         const char *dev_name,
+                                         const char *local_dev_name,
+                                         const uct_device_addr_t *remote_dev_addr,
+                                         size_t remote_dev_addr_length,
                                          uct_conn_request_h conn_request,
-                                         const void *conn_priv_data,
-                                         size_t length)
+                                         const void *priv_data,
+                                         size_t priv_data_length)
 {
     ucp_listener_h ucp_listener = arg;
     uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
     ucp_conn_request_h ucp_conn_request;
 
     ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, client_data) +
-                                  length, "ucp_conn_request_h");
+                                  priv_data_length, "ucp_conn_request_h");
     if (ucp_conn_request == NULL) {
         ucs_error("failed to allocate connect request, rejecting connection request %p on TL listener %p, reason %s",
                   conn_request, listener, ucs_status_string(UCS_ERR_NO_MEMORY));
@@ -288,9 +290,29 @@ static void ucp_listener_conn_request_cb(uct_listener_h listener, void *arg,
         ucs_assert_always(0);
     }
 
-    ucp_conn_request->listener = ucp_listener;
-    ucp_conn_request->uct_req  = conn_request;
-    memcpy(&ucp_conn_request->client_data, conn_priv_data, length);
+    ucp_conn_request->remote_dev_addr = ucs_malloc(remote_dev_addr_length,
+                                                   "remote device address");
+    if (ucp_conn_request->remote_dev_addr == NULL) {
+        ucs_error("failed to allocate device address, rejecting connection request %p on TL listener %p, reason %s",
+                  conn_request, listener, ucs_status_string(UCS_ERR_NO_MEMORY));
+        /* TODO: CM reject */
+        ucs_assert_always(0);
+    }
+
+    ucp_conn_request->ucp_listener = ucp_listener;
+    ucp_conn_request->uct_listener = listener;
+    ucp_conn_request->uct_req      = conn_request;
+    memcpy(ucp_conn_request->remote_dev_addr, remote_dev_addr,
+           remote_dev_addr_length);
+    memcpy(&ucp_conn_request->client_data, priv_data, priv_data_length);
+
+    /* TODO: temporary to cheack addr !!! */
+    ucp_unpacked_address_t remote_address;
+    ucp_address_unpack(ucp_listener->wcm.worker,
+                                (ucp_wireup_client_data_t*)priv_data + 1,
+                                UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                                UCP_ADDRESS_PACK_FLAG_EP_ADDR,
+                                &remote_address);
 
     uct_worker_progress_register_safe(ucp_listener->wcm.worker->uct,
                                       ucp_listener_conn_request_progress,

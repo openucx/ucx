@@ -350,8 +350,10 @@ typedef struct ucp_wireup_client_data {
 
 
 typedef struct ucp_conn_request {
-    ucp_listener_h              listener;
+    ucp_listener_h              ucp_listener;
+    uct_listener_h              uct_listener;
     uct_conn_request_h          uct_req;
+    uct_device_addr_t           *remote_dev_addr;
     ucp_wireup_client_data_t    client_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -382,7 +384,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const char *message, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_client_data_t *client_data,
+                                  const ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,

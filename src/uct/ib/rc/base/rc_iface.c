@@ -6,6 +6,7 @@
 
 #include "rc_iface.h"
 #include "rc_ep.h"
+#include "ucs/async/async.h"
 
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
@@ -731,8 +732,47 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
-                                     struct ibv_ah_attr *ah_attr)
+                                     const uct_ib_address_t *ib_addr)
 {
+    struct ibv_qp_attr *qp_attr[2];
+    int *qp_attr_mask[2];
+    int ret;
+
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&lock);
+    qp_attr[0] = (struct ibv_qp_attr *)(ib_addr + 1);
+    qp_attr[1] = qp_attr[0] + 1;
+    qp_attr_mask[0] = (int *)(qp_attr[1] + 1);
+    qp_attr_mask[1] = qp_attr_mask[0] + 1;
+
+    qp_attr[0]->dest_qp_num = dest_qp_num;
+//    qp_attr[1]->dest_qp_num = dest_qp_num;
+    qp_attr[0]->qp_state = IBV_QPS_RTR;
+    qp_attr[1]->qp_state = IBV_QPS_RTS;
+
+//    *qp_attr_mask[0] |= IBV_QP_STATE;
+//    *qp_attr_mask[1] |= IBV_QP_STATE;
+//    *qp_attr_mask[0] |= IBV_QP_DEST_QPN;
+//    *qp_attr_mask[1] |= IBV_QP_DEST_QPN;
+
+    ucs_warn("modifying QP num 0x%x to dest QP num 0x%x state %d", qp->qp_num, dest_qp_num, qp->state);
+
+    ret = ibv_modify_qp(qp, qp_attr[0], *qp_attr_mask[0]);
+    if (ret) {
+        ucs_error("error modifying QP to RTR: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+    ucs_warn("modifying QP num 0x%x to dest QP num 0x%x state %d", qp->qp_num, dest_qp_num, qp->state);
+    ret = ibv_modify_qp(qp, qp_attr[1], *qp_attr_mask[1]);
+    if (ret) {
+        ucs_error("error modifying QP to RTS: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+    ucs_warn("modifying QP num 0x%x to dest QP num 0x%x state %d", qp->qp_num, dest_qp_num, qp->state);
+    pthread_mutex_unlock(&lock);
+
+/*
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
     uct_ib_device_t *dev;
@@ -751,13 +791,16 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     qp_attr.ah_attr               = *ah_attr;
+    qp_attr.ah_attr.dlid          = 0; // ?
+    qp_attr.ah_attr.grh.hop_limit = 255;
+    qp_attr.ah_attr.static_rate   = 0;
     qp_attr_mask                  = IBV_QP_STATE              |
-                                    IBV_QP_AV                 |
-                                    IBV_QP_PATH_MTU           |
                                     IBV_QP_DEST_QPN           |
                                     IBV_QP_RQ_PSN             |
+                                    IBV_QP_PATH_MTU           |
                                     IBV_QP_MAX_DEST_RD_ATOMIC |
-                                    IBV_QP_MIN_RNR_TIMER;
+                                    IBV_QP_MIN_RNR_TIMER      |
+                                    IBV_QP_AV;
 
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     dev = uct_ib_iface_device(&iface->super);
@@ -805,6 +848,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
               qp_attr.max_rd_atomic);
+*/
 
     return UCS_OK;
 }

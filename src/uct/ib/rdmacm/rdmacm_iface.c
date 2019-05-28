@@ -6,6 +6,8 @@
 #include "rdmacm_iface.h"
 #include "rdmacm_ep.h"
 #include <uct/base/uct_worker.h>
+#include <uct/ib/base/ib_device.h>
+#include <uct/ib/base/ib_iface.h>
 #include <ucs/sys/string.h>
 
 
@@ -249,11 +251,98 @@ static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
     iface->cm_id_quota++;
 }
 
-static void uct_rdmacm_iface_cm_id_to_dev_name(struct rdma_cm_id *cm_id,
-                                               char *dev_name)
+void uct_rdmacm_cm_id_to_dev_name(struct rdma_cm_id *cm_id, char *dev_name)
 {
     ucs_snprintf_zero(dev_name, UCT_DEVICE_NAME_MAX, "%s:%d",
-                      ibv_get_device_name(cm_id->verbs->device), cm_id->port_num);
+                      ibv_get_device_name(cm_id->verbs->device),
+                      cm_id->port_num);
+}
+
+
+//static size_t uct_rdmacm_cm_fill_addr_flags(const struct rdma_cm_id *id,
+//                                            const union ibv_gid *gid,
+//                                            int link_layer,
+//                                            uct_ib_address_t *addr)
+//{
+//    if (link_layer == IBV_LINK_LAYER_ETHERNET) {
+//        addr->flags = (UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
+//                       UCT_IB_ADDRESS_FLAG_GID);
+//        return sizeof(uct_ib_address_t) + sizeof(union ibv_gid);  /* raw gid */
+//    } else {
+//        addr->flags = (UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
+//                       UCT_IB_ADDRESS_FLAG_LID);
+//    }
+//
+//    if (gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+//        addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
+//        if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+//             UCT_IB_SITE_LOCAL_PREFIX)) {
+//            addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
+//            return sizeof(uct_ib_address_t) +
+//                   sizeof(uint16_t) + /* lid */
+//                   sizeof(uint64_t) + /* if_id */
+//                   sizeof(uint16_t);  /* subnet16 */
+//        }
+//        addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
+//        return sizeof(uct_ib_address_t) +
+//               sizeof(uint16_t) + /* lid */
+//               sizeof(uint64_t) + /* if_id */
+//               sizeof(uint64_t);  /* subnet64 */
+//    }
+//    return sizeof(uct_ib_address_t) + sizeof(uint16_t); /* lid */
+//}
+
+ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
+                                          uct_device_addr_t **dev_addr_p,
+                                          size_t *dev_addr_len_p)
+{
+    uct_ib_address_t *dev_addr;
+    struct ibv_qp_attr qp_attr[2] = { {0} };
+    int qp_attr_mask[2] = {0};
+//    union ibv_gid gid;
+
+    qp_attr[0].qp_state = IBV_QPS_RTR;
+    if (rdma_init_qp_attr(cm_id, &qp_attr[0], &qp_attr_mask[0])) {
+        return UCS_ERR_IO_ERROR;
+    }
+    qp_attr[1].qp_state = IBV_QPS_RTS;
+    if (rdma_init_qp_attr(cm_id, &qp_attr[1], &qp_attr_mask[1])) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+/*
+    if (ibv_query_gid(cm_id->verbs, cm_id->port_num, qp_attr.ah_attr.grh.sgid_index, &gid)) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    struct ibv_port_attr port_arrt;
+    if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_arrt)) {
+        return UCS_ERR_IO_ERROR;
+    }
+*/
+
+//    uct_ib_address_t addr_dummy;
+    size_t addr_length = sizeof(*dev_addr) + sizeof(qp_attr) + sizeof(qp_attr_mask);//uct_rdmacm_cm_fill_addr_flags(cm_id, &gid,
+                                                                     //                      port_arrt.link_layer,
+                                                                     //                      &addr_dummy);
+    dev_addr = ucs_malloc(addr_length, "IB device address");
+    if (dev_addr == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    dev_addr->flags = UCT_IB_ADDRESS_FLAG_AH_ATTRS;
+    uint8_t *p = (uint8_t *)(dev_addr + 1);
+    memcpy(p, &qp_attr, sizeof(qp_attr));
+    p += sizeof(qp_attr);
+    memcpy(p, &qp_attr_mask, sizeof(qp_attr_mask));
+
+//    *dev_addr = addr_dummy;
+//    uct_ib_address_pack(&gid, port_arrt.lid, dev_addr);
+
+    *dev_addr_p     = (uct_device_addr_t *)dev_addr;
+    *dev_addr_len_p = addr_length;
+
+    return UCS_OK;
 }
 
 static unsigned
@@ -314,7 +403,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             conn_param.private_data = ucs_alloca(UCT_RDMACM_MAX_CONN_PRIV +
                                                  sizeof(uct_rdmacm_priv_data_hdr_t));
 
-            uct_rdmacm_iface_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
+            uct_rdmacm_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
             priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name,

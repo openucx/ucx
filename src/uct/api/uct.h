@@ -978,12 +978,12 @@ struct uct_ep_params {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Connection manager attributes: capabilities and limitations.
+ * @brief Connection manager attributes, capabilities and limitations.
  */
 struct uct_cm_attr {
     size_t      max_conn_priv;  /**< Max size of the connection manager's
                                      private data used for connection
-                                     establishment with sockaddr */
+                                     establishment with sockaddr. */
 };
 
 
