@@ -189,6 +189,11 @@ static void print_result(int is_server, char *recv_message)
  */
 static void request_wait(ucp_worker_h ucp_worker, test_req_t *request)
 {
+    /*  if operation was completed immediately */
+    if (request == NULL){
+        return;
+    }
+    
     while (request->complete == 0) {
         ucp_worker_progress(ucp_worker);
     }
@@ -220,14 +225,15 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
                     ucs_status_string(UCS_PTR_STATUS(request)));
             ret = -1;
             goto out;
-        } else if (UCS_PTR_STATUS(request) != UCS_OK) {
+        } else {
             request_wait(ucp_worker, request);
         }
     } else {
         /* Server receives a message from the client using the stream API */
         request = ucp_stream_recv_nb(ep, &recv_message, 1,
                                      ucp_dt_make_contig(TEST_STRING_LEN),
-                                     stream_recv_cb, &length , 0);
+                                     stream_recv_cb, &length,
+                                     UCP_STREAM_RECV_FLAG_WAITALL);
         if (UCS_PTR_IS_ERR(request)) {
             fprintf(stderr, "unable to receive UCX message (%s)\n",
                     ucs_status_string(UCS_PTR_STATUS(request)));
@@ -235,8 +241,8 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
             goto out;
         } else {
             request_wait(ucp_worker, request);
-            printf("UCX data message was received\n");
         }
+        printf("UCX data message was received\n");
     }
 
     print_result(is_server, recv_message);
