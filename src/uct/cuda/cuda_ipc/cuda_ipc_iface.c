@@ -427,7 +427,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_mpool_cleanup(&self->event_desc, 1);
-    if (self->eventfd != -1) close(self->eventfd);
+    if (self->eventfd != -1) {
+        close(self->eventfd);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_iface_t, uct_base_iface_t);
