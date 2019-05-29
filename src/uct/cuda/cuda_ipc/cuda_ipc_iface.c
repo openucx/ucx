@@ -130,10 +130,12 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_get(uct_iface_h tl_iface, int *f
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
-    iface->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-    if (iface->eventfd == -1) {
-        ucs_error("Failed to create event fd: %m");
-        return UCS_ERR_IO_ERROR;
+    if (-1 == iface->eventfd) {
+        iface->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+        if (iface->eventfd == -1) {
+            ucs_error("Failed to create event fd: %m");
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     *fd_p = iface->eventfd;
