@@ -19,6 +19,7 @@
 #include <ucm/bistro/bistro.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/debug/assert.h>
 
 #include <sys/mman.h>
@@ -31,6 +32,13 @@
 
 #define UCM_HOOK_STR \
     ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ?  "reloc" : "bistro")
+
+#define UCM_FIRE_EVENT(_event, _mask, _data, _call)                           \
+    do {                                                                      \
+        (_data)->fired_events = 0;                                            \
+        _call;                                                                \
+        (_data)->out_events &= ~((_event) & (_mask)) | (_data)->fired_events; \
+    } while(0)
 
 extern const char *ucm_mmap_hook_modes[];
 
@@ -47,6 +55,11 @@ typedef struct ucm_mmap_func {
     ucm_mmap_hook_type_t hook_type;
 } ucm_mmap_func_t;
 
+typedef struct ucm_mmap_test_events_data {
+    int fired_events;
+    int out_events;
+} ucm_mmap_test_events_data_t;
+
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0, UCM_HOOK_BOTH},
     { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0, UCM_HOOK_BOTH},
@@ -62,68 +75,108 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
 };
 
 static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
-                                         ucm_event_t *event, void *arg)
+                                         ucm_event_t *event, void *fired_events)
 {
-    int *out_events = arg;
-
-    *out_events |= event_type;
+    *(int*)fired_events |= event_type;
 }
 
-void ucm_fire_mmap_events(int events)
+/* Fire events with pre/post action. The problem is in call sequence: we
+ * can't just fire single event - most of the system calls require set of
+ * calls to eliminate resource leaks or data corruption, such sequence
+ * produces additional events which may affect to event handling. To
+ * exclude additional events from processing used pre/post actions where
+ * set of handled events is cleared and evaluated for every system call */
+static void
+ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
 {
+    int shmid;
     void *p;
 
     if (events & (UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP|
                   UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
-        p = mmap(NULL, 0, 0, 0, -1 ,0);
-        p = mremap(p, 0, 0, 0);
-        munmap(p, 0);
+        UCM_FIRE_EVENT(events, UCM_EVENT_MMAP|UCM_EVENT_VM_MAPPED,
+                       data, p = mmap(NULL, ucm_get_page_size(), PROT_READ | PROT_WRITE,
+                                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+        /* generate MAP event */
+        UCM_FIRE_EVENT(events, UCM_EVENT_MREMAP|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
+                       data, p = mremap(p, ucm_get_page_size(),
+                                        ucm_get_page_size() * 2, MREMAP_MAYMOVE));
+        /* generate UNMAP event */
+        UCM_FIRE_EVENT(events, UCM_EVENT_MREMAP|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
+                       data, p = mremap(p, ucm_get_page_size() * 2, ucm_get_page_size(), 0));
+        /* generate UNMAP event */
+        UCM_FIRE_EVENT(events, UCM_EVENT_MMAP|UCM_EVENT_VM_MAPPED,
+                       data, p = mmap(p, ucm_get_page_size(), PROT_READ | PROT_WRITE,
+                                      MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+        UCM_FIRE_EVENT(events, UCM_EVENT_MUNMAP|UCM_EVENT_VM_UNMAPPED,
+                       data, munmap(p, ucm_get_page_size()));
     }
 
     if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
-        p = shmat(0, NULL, 0);
-        shmdt(p);
+        shmid = shmget(IPC_PRIVATE, ucm_get_page_size(), IPC_CREAT | SHM_R | SHM_W);
+        if (shmid == -1) {
+            ucm_debug("shmget failed: %m");
+            return;
+        }
+
+        UCM_FIRE_EVENT(events, UCM_EVENT_SHMAT|UCM_EVENT_VM_MAPPED,
+                       data, p = shmat(shmid, NULL, 0));
+        UCM_FIRE_EVENT(events, UCM_EVENT_SHMAT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
+                       data, p = shmat(shmid, p, SHM_REMAP));
+        shmctl(shmid, IPC_RMID, NULL);
+        UCM_FIRE_EVENT(events, UCM_EVENT_SHMDT|UCM_EVENT_VM_UNMAPPED,
+                       data, shmdt(p));
     }
 
     if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
-        (void)sbrk(ucm_get_page_size());
-        (void)sbrk(-ucm_get_page_size());
+        UCM_FIRE_EVENT(events, UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED,
+                       data, (void)sbrk(ucm_get_page_size()));
+        UCM_FIRE_EVENT(events, UCM_EVENT_SBRK|UCM_EVENT_VM_UNMAPPED,
+                       data, (void)sbrk(-ucm_get_page_size()));
     }
 
     if (events & UCM_EVENT_MADVISE) {
-        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
-                 MAP_PRIVATE|MAP_ANON, -1, 0);
+        UCM_FIRE_EVENT(events, UCM_EVENT_MMAP|UCM_EVENT_VM_MAPPED, data,
+                       p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
+                                MAP_PRIVATE|MAP_ANON, -1, 0));
         if (p != MAP_FAILED) {
-            madvise(p, ucm_get_page_size(), MADV_NORMAL);
-            munmap(p, ucm_get_page_size());
+            UCM_FIRE_EVENT(events, UCM_EVENT_MADVISE, data,
+                           madvise(p, ucm_get_page_size(), MADV_NORMAL));
+            UCM_FIRE_EVENT(events, UCM_EVENT_MUNMAP|UCM_EVENT_VM_UNMAPPED, data,
+                           munmap(p, ucm_get_page_size()));
         } else {
             ucm_debug("mmap failed: %m");
         }
     }
 }
 
+void ucm_fire_mmap_events(int events)
+{
+    ucm_mmap_test_events_data_t data;
+
+    ucm_fire_mmap_events_internal(events, &data);
+}
+
 ucs_status_t ucm_mmap_test_events(int events, int *out_events)
 {
     ucm_event_handler_t handler;
+    ucm_mmap_test_events_data_t data;
 
-    /* Install a temporary event handler which will add the supported event
-     * type to out_events bitmap.
-     */
-    handler.events   = events;
-    handler.priority = -1;
-    handler.cb       = ucm_mmap_event_test_callback;
-    handler.arg      = out_events;
-    *out_events      = 0;
+    handler.events    = events;
+    handler.priority  = -1;
+    handler.cb        = ucm_mmap_event_test_callback;
+    handler.arg       = &data.fired_events;
+    data.out_events   = events;
 
     ucm_event_handler_add(&handler);
-
-    ucm_fire_mmap_events(events);
-
+    ucm_fire_mmap_events_internal(events, &data);
     ucm_event_handler_remove(&handler);
+
+    *out_events = data.out_events;
 
     ucm_debug("mmap test: got 0x%x out of 0x%x", *out_events, events);
 
-    /* Return success iff we caught all wanted events */
+    /* Return success if we caught all wanted events */
     if (!ucs_test_all_flags(*out_events, events)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -135,7 +188,7 @@ ucs_status_t ucm_mmap_test_events(int events, int *out_events)
 static ucs_status_t ucm_mmap_test(int events)
 {
     static int installed_events = 0;
-    int out_events;
+    int out_events              = 0; /* GCC bug: it reports compilation fail if not initialized */
     ucs_status_t status;
 
     if (ucs_test_all_flags(installed_events, events)) {

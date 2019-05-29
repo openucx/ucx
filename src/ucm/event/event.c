@@ -28,14 +28,6 @@
 #include <errno.h>
 
 
-#define UCM_NATIVE_EVENT_VM_MAPPED (UCM_EVENT_MMAP  | UCM_EVENT_MREMAP | \
-                                    UCM_EVENT_SHMAT | UCM_EVENT_SBRK)
-
-#define UCM_NATIVE_EVENT_VM_UNMAPPED (UCM_EVENT_MMAP   | UCM_EVENT_MUNMAP | \
-                                      UCM_EVENT_MREMAP | UCM_EVENT_SHMDT  | \
-                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK   | \
-                                      UCM_EVENT_MADVISE)
-
 UCS_LIST_HEAD(ucm_event_installer_list);
 
 static pthread_spinlock_t ucm_kh_lock;
@@ -599,14 +591,6 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
 ucs_status_t ucm_test_events(int events)
 {
     int out_events;
-
-    if (events & UCM_EVENT_VM_MAPPED) {
-        events |= UCM_NATIVE_EVENT_VM_MAPPED;
-    }
-
-    if (events & UCM_EVENT_VM_UNMAPPED) {
-        events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
-    }
 
     return ucm_mmap_test_events(events, &out_events);
 }
