@@ -168,9 +168,10 @@ uct_rdamcm_cm_fill_conn_param(struct rdma_conn_param *conn_param,
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status = UCS_OK;
-    struct rdma_cm_event *event;
+    char dev_name[UCT_DEVICE_NAME_MAX];
     struct rdma_conn_param conn_param;
     uct_rdmacm_priv_data_hdr_t *hdr;
+    struct rdma_cm_event *event;
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
         return UCS_ERR_INVALID_PARAM;
@@ -227,9 +228,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
 
         self->id          = event->id;
         self->id->context = self;
+        uct_rdmacm_cm_id_to_dev_name(self->id, dev_name);
         hdr = (uct_rdmacm_priv_data_hdr_t *)self->wireup.priv_data;
-        hdr->length = self->wireup.priv_pack_cb(self->user_data,
-                                                self->id->verbs->device->name,
+        hdr->length = self->wireup.priv_pack_cb(self->user_data, dev_name,
                                                 hdr + 1);
         if ((hdr->length < 0) || (hdr->length > UCT_RDMACM_CM_MAX_CONN_PRIV)) {
             status = UCS_ERR_INVALID_PARAM;

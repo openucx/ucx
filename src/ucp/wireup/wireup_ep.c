@@ -632,6 +632,7 @@ ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
     size_t max_conn_priv                  = 0;
     uct_iface_h tl_iface                  = NULL;
     uct_ep_h tl_ep                        = NULL;
+    ucp_worker_iface_t *wiface;
     uct_cm_attr_t cm_attr;
     uct_ep_params_t tl_ep_params;
     ucp_rsc_index_t tl_rsc_idx;
@@ -684,6 +685,9 @@ ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
     memcpy(client_data + 1, ucp_addr, ucp_addr_size);
     ucs_free(ucp_addr);
 
+    wiface = ucp_worker_iface(ep->worker, tl_rsc_idx);
+    ucp_worker_iface_progress_ep(wiface);
+
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return (status == UCS_OK) ?
@@ -717,6 +721,7 @@ ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
     ucs_assert_always(status == UCS_OK);
     ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
     ucp_wireup_remote_connected(ucp_ep);
+    ucp_ep_flush_state_reset(ucp_ep);
 }
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,

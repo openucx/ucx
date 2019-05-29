@@ -734,44 +734,34 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      const uct_ib_address_t *ib_addr)
 {
-    struct ibv_qp_attr *qp_attr[2];
-    int *qp_attr_mask[2];
+    struct ibv_qp_attr *qp_attrs[2];
+    int *qp_attr_masks[2];
     int ret;
 
-    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    if (ib_addr->flags == UCT_IB_ADDRESS_FLAG_AH_ATTRS) {
+        /* TODO: try to pack AH_ATTRS/GID only and reuse common code below */
+        qp_attrs[0] = (struct ibv_qp_attr *)(ib_addr + 1);
+        qp_attrs[1] = qp_attrs[0] + 1;
+        qp_attr_masks[0] = (int *)(qp_attrs[1] + 1);
+        qp_attr_masks[1] = qp_attr_masks[0] + 1;
 
-    pthread_mutex_lock(&lock);
-    qp_attr[0] = (struct ibv_qp_attr *)(ib_addr + 1);
-    qp_attr[1] = qp_attr[0] + 1;
-    qp_attr_mask[0] = (int *)(qp_attr[1] + 1);
-    qp_attr_mask[1] = qp_attr_mask[0] + 1;
+        qp_attrs[0]->dest_qp_num = dest_qp_num;
+        qp_attrs[0]->qp_state    = IBV_QPS_RTR;
+        qp_attrs[1]->qp_state    = IBV_QPS_RTS;
 
-    qp_attr[0]->dest_qp_num = dest_qp_num;
-//    qp_attr[1]->dest_qp_num = dest_qp_num;
-    qp_attr[0]->qp_state = IBV_QPS_RTR;
-    qp_attr[1]->qp_state = IBV_QPS_RTS;
+        ret = ibv_modify_qp(qp, qp_attrs[0], *qp_attr_masks[0]);
+        if (ret) {
+            ucs_error("error modifying QP to RTR: %m");
+            return UCS_ERR_IO_ERROR;
+        }
 
-//    *qp_attr_mask[0] |= IBV_QP_STATE;
-//    *qp_attr_mask[1] |= IBV_QP_STATE;
-//    *qp_attr_mask[0] |= IBV_QP_DEST_QPN;
-//    *qp_attr_mask[1] |= IBV_QP_DEST_QPN;
-
-    ucs_warn("modifying QP num 0x%x to dest QP num 0x%x state %d", qp->qp_num, dest_qp_num, qp->state);
-
-    ret = ibv_modify_qp(qp, qp_attr[0], *qp_attr_mask[0]);
-    if (ret) {
-        ucs_error("error modifying QP to RTR: %m");
-        return UCS_ERR_IO_ERROR;
+        ret = ibv_modify_qp(qp, qp_attrs[1], *qp_attr_masks[1]);
+        if (ret) {
+            ucs_error("error modifying QP to RTS: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+        return UCS_OK;
     }
-    ucs_warn("modifying QP num 0x%x to dest QP num 0x%x state %d", qp->qp_num, dest_qp_num, qp->state);
-    ret = ibv_modify_qp(qp, qp_attr[1], *qp_attr_mask[1]);
-    if (ret) {
-        ucs_error("error modifying QP to RTS: %m");
-        return UCS_ERR_IO_ERROR;
-    }
-    ucs_warn("modifying QP num 0x%x to dest QP num 0x%x state %d", qp->qp_num, dest_qp_num, qp->state);
-    pthread_mutex_unlock(&lock);
-
 /*
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
@@ -780,7 +770,6 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     struct ibv_qp_attr qp_attr;
 #endif
     long qp_attr_mask;
-    int ret;
 
     memset(&qp_attr, 0, sizeof(qp_attr));
 
