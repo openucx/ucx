@@ -130,6 +130,12 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_get(uct_iface_h tl_iface, int *f
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
+    iface->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (iface->eventfd == -1) {
+        ucs_error("Failed to create event fd: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
     *fd_p = iface->eventfd;
     return UCS_OK;
 }
@@ -160,24 +166,23 @@ static void uct_cuda_ipc_common_cb(void *cuda_ipc_iface)
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 static void CUDA_CB myHostFn(void *iface)
-{
-    uct_cuda_ipc_common_cb(iface);
-}
 #else
-void CUDA_CB myHostCallback(CUstream hStream,  CUresult status, void *iface)
+static void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
+                                   void *iface)
+#endif
 {
     uct_cuda_ipc_common_cb(iface);
 }
-#endif
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
-                              ucs_queue_head_t *event_q, unsigned max_events)
+                              ucs_queue_head_t *event_q)
 {
     unsigned count = 0;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     ucs_queue_iter_t iter;
     ucs_status_t status;
+    unsigned max_events = iface->config.max_poll;
 
     ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
         status = UCT_CUDADRV_FUNC(cuEventQuery(cuda_ipc_event->event));
@@ -212,26 +217,24 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
 static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    unsigned max_events         = iface->config.max_poll;
 
-    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q,
-                                         max_events);
+    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q);
 }
 
 static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
                                                     unsigned events)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    unsigned max_events         = iface->config.max_poll;
     int ret;
     int i;
     uint64_t dummy;
     ucs_status_t status;
 
-    if (uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q,
-                                      max_events)) {
+    if (uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q)) {
         return UCS_ERR_BUSY;
     }
+
+    ucs_assert(iface->eventfd != -1);
 
     do {
         ret = read(iface->eventfd, &dummy, sizeof(dummy));
@@ -242,7 +245,7 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
             if (errno == EAGAIN) {
                 break;
             } else if (errno != EINTR) {
-                ucs_error("Read from internal event fd failed: %m");
+                ucs_error("read from internal event fd failed: %m");
                 status = UCS_ERR_IO_ERROR;
                 return status;
             } else {
@@ -250,11 +253,9 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
             }
         } else {
             ucs_assert(ret == 0);
-            goto add_cbs;
         }
     } while (ret != 0);
 
- add_cbs:
     if (iface->streams_initialized) {
         for (i = 0; i < iface->device_count; i++) {
 #if (__CUDACC_VER_MAJOR__ >= 100000)
@@ -399,19 +400,11 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_IO_ERROR;
     }
 
-    self->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-    if (self->eventfd == -1) {
-        ucs_error("Failed to create event fd: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err;
-    }
-
+    self->eventfd = -1;
     self->streams_initialized = 0;
     ucs_queue_head_init(&self->outstanding_d2d_event_q);
 
     return UCS_OK;
-err:
-    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
@@ -432,9 +425,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_mpool_cleanup(&self->event_desc, 1);
-    if (self->eventfd != -1) {
-        close(self->eventfd);
-    }
+    if (self->eventfd != -1) close(self->eventfd);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_iface_t, uct_base_iface_t);
