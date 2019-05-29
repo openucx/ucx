@@ -192,12 +192,13 @@ static ucs_status_t request_wait(ucp_worker_h ucp_worker, test_req_t *request)
 {
     ucs_status_t status;
 
+    /*  if operation was completed immediately */
+    if (request == NULL) {
+        return UCS_OK;
+    }
+    
     if (UCS_PTR_IS_ERR(request)) {
         return UCS_PTR_STATUS(request);
-    }
-    /*  if operation was completed immediately */
-    else if (request == NULL) {
-        return UCS_OK;
     }
     
     while (request->complete == 0) {
@@ -242,7 +243,7 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
     status = request_wait(ucp_worker, request);
     if (status != UCS_OK){
         fprintf(stderr, "unable to %s UCX message (%s)\n",
-                is_server ? "recieve": "send",
+                is_server ? "receive": "send",
                 ucs_status_string(status));
         ret = -1;
     } else {
