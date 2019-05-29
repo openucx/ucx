@@ -95,6 +95,8 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
 static void
 ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
 {
+    size_t sbrk_size;
+    int sbrk_mask;
     int shmid;
     void *p;
 
@@ -135,10 +137,18 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
     }
 
     if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
-        UCM_FIRE_EVENT(events, UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED,
-                       data, (void)sbrk(ucm_get_page_size()));
-        UCM_FIRE_EVENT(events, UCM_EVENT_SBRK|UCM_EVENT_VM_UNMAPPED,
-                       data, (void)sbrk(-ucm_get_page_size()));
+        if (RUNNING_ON_VALGRIND) {
+            /* on valgrind, doing a non-trivial sbrk() causes heap corruption */
+            sbrk_size = 0;
+            sbrk_mask = UCM_EVENT_SBRK;
+        } else {
+            sbrk_size = ucm_get_page_size();
+            sbrk_mask = UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED;
+        }
+        UCM_FIRE_EVENT(events, (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED) & sbrk_mask,
+                       data, (void)sbrk(sbrk_size));
+        UCM_FIRE_EVENT(events, (UCM_EVENT_SBRK|UCM_EVENT_VM_UNMAPPED) & sbrk_mask,
+                       data, (void)sbrk(-sbrk_size));
     }
 
     if (events & UCM_EVENT_MADVISE) {
