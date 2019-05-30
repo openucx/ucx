@@ -324,17 +324,6 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
     }
 }
 
-ucs_status_t uct_ib_address_unpack_ah_attrs(const uct_ib_address_t *ib_addr,
-                                            struct ibv_ah_attr *ah_attr)
-{
-    if (ib_addr->flags != UCT_IB_ADDRESS_FLAG_AH_ATTRS) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    memcpy(ah_attr, ib_addr + 1, sizeof(*ah_attr));
-    return UCS_OK;
-}
-
 const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
                                size_t max)
 {

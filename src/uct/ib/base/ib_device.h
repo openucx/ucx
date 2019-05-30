@@ -70,10 +70,6 @@ enum {
  * Flags which specify which address fields are present
  */
 enum {
-    /**
-     * This is a 0-value constant which can not be or'ed with other flags and
-     * means that the address contains full AH attributes. */
-    UCT_IB_ADDRESS_FLAG_AH_ATTRS       = 0,
     UCT_IB_ADDRESS_FLAG_LID            = UCS_BIT(0),
     UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(1),
     UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(2),
