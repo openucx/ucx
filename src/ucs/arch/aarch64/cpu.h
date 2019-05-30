@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -28,14 +28,36 @@ BEGIN_C_DECLS
 /**
  * Assume the worst - weak memory ordering.
  */
-#define ucs_memory_bus_fence()        asm volatile ("dsb sy" ::: "memory");
-#define ucs_memory_bus_store_fence()  asm volatile ("dsb st" ::: "memory");
-#define ucs_memory_bus_load_fence()   asm volatile ("dsb ld" ::: "memory");
-#define ucs_memory_bus_wc_flush()
-#define ucs_memory_cpu_fence()        asm volatile ("dmb ish" ::: "memory");
-#define ucs_memory_cpu_store_fence()  asm volatile ("dmb ishst" ::: "memory");
-#define ucs_memory_cpu_load_fence()   asm volatile ("dmb ishld" ::: "memory");
-#define ucs_memory_cpu_wc_fence()     asm volatile ("dmb st" ::: "memory");
+
+#define ucs_aarch64_dmb(_op)          asm volatile ("dmb " #_op ::: "memory")
+#define ucs_aarch64_dsb(_op)          asm volatile ("dsb " #_op ::: "memory")
+#define ucs_aarch64_isb(_op)          asm volatile ("isb " #_op ::: "memory")
+
+/* The macro is used to serialize stores accross Normal NC (or Device) and WB memory.
+ * (see Arm Spec, B2.7.2)
+ */
+#define ucs_memory_bus_fence()        ucs_aarch64_dsb(oshsy)
+#define ucs_memory_bus_store_fence()  ucs_aarch64_dsb(oshst)
+#define ucs_memory_bus_load_fence()   ucs_aarch64_dsb(oshld)
+
+/* The macro is used to flush all pending stores from write combining buffer.
+ * Some uarch "auto" flush the stores once cache line is full (no need for additional barrier).
+ */
+#if defined(HAVE_AARCH64_THUNDERX2)
+#define ucs_memory_bus_cacheline_wc_flush()
+#else
+/* The macro is used to flush stores to Normal NC or Device memory */
+#define ucs_memory_bus_cacheline_wc_flush()     ucs_aarch64_dmb(oshst)
+#endif
+
+#define ucs_memory_cpu_fence()        ucs_aarch64_dmb(ish)
+#define ucs_memory_cpu_store_fence()  ucs_aarch64_dmb(ishst)
+#define ucs_memory_cpu_load_fence()   ucs_aarch64_dmb(ishld)
+
+/* The macro is used to serialize stores to Normal NC or Device memory
+ * (see Arm Spec, B2.7.2)
+ */
+#define ucs_memory_cpu_wc_fence()     ucs_aarch64_dmb(oshst)
 
 
 /*
@@ -150,12 +172,13 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
     for (ptr = ucs_align_down((uintptr_t)start, dcache); ptr < (uintptr_t)end; ptr += dcache) {
         asm volatile ("dc cvau, %0" :: "r" (ptr) : "memory");
     }
-    asm volatile ("dsb ish" ::: "memory");
+    ucs_aarch64_dsb(ish);
 
     for (ptr = ucs_align_down((uintptr_t)start, icache); ptr < (uintptr_t)end; ptr += icache) {
         asm volatile ("ic ivau, %0" :: "r" (ptr) : "memory");
     }
-    asm volatile ("dsb ish; isb" ::: "memory");
+    ucs_aarch64_dsb(ish);
+    ucs_aarch64_isb();
 #endif
 }
 #endif
