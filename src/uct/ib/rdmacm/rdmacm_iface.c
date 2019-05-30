@@ -297,47 +297,22 @@ ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                                           size_t *dev_addr_len_p)
 {
     uct_ib_address_t *dev_addr;
-    struct ibv_qp_attr qp_attr[2] = { {0} };
-    int qp_attr_mask[2] = {0};
-//    union ibv_gid gid;
+    struct ibv_qp_attr qp_attr;
+    int qp_attr_mask;
 
-    qp_attr[0].qp_state = IBV_QPS_RTR;
-    if (rdma_init_qp_attr(cm_id, &qp_attr[0], &qp_attr_mask[0])) {
-        return UCS_ERR_IO_ERROR;
-    }
-    qp_attr[1].qp_state = IBV_QPS_RTS;
-    if (rdma_init_qp_attr(cm_id, &qp_attr[1], &qp_attr_mask[1])) {
+    qp_attr.qp_state = IBV_QPS_RTR;
+    if (rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask)) {
         return UCS_ERR_IO_ERROR;
     }
 
-/*
-    if (ibv_query_gid(cm_id->verbs, cm_id->port_num, qp_attr.ah_attr.grh.sgid_index, &gid)) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    struct ibv_port_attr port_arrt;
-    if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_arrt)) {
-        return UCS_ERR_IO_ERROR;
-    }
-*/
-
-//    uct_ib_address_t addr_dummy;
-    size_t addr_length = sizeof(*dev_addr) + sizeof(qp_attr) + sizeof(qp_attr_mask);//uct_rdmacm_cm_fill_addr_flags(cm_id, &gid,
-                                                                     //                      port_arrt.link_layer,
-                                                                     //                      &addr_dummy);
+    size_t addr_length = sizeof(*dev_addr) + sizeof(qp_attr.ah_attr);
     dev_addr = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
     dev_addr->flags = UCT_IB_ADDRESS_FLAG_AH_ATTRS;
-    uint8_t *p = (uint8_t *)(dev_addr + 1);
-    memcpy(p, &qp_attr, sizeof(qp_attr));
-    p += sizeof(qp_attr);
-    memcpy(p, &qp_attr_mask, sizeof(qp_attr_mask));
-
-//    *dev_addr = addr_dummy;
-//    uct_ib_address_pack(&gid, port_arrt.lid, dev_addr);
+    memcpy(dev_addr + 1, &qp_attr.ah_attr, sizeof(qp_attr.ah_attr));
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;

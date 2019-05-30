@@ -732,37 +732,8 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
-                                     const uct_ib_address_t *ib_addr)
+                                     const struct ibv_ah_attr *ah_attr)
 {
-    struct ibv_qp_attr *qp_attrs[2];
-    int *qp_attr_masks[2];
-    int ret;
-
-    if (ib_addr->flags == UCT_IB_ADDRESS_FLAG_AH_ATTRS) {
-        /* TODO: try to pack AH_ATTRS/GID only and reuse common code below */
-        qp_attrs[0] = (struct ibv_qp_attr *)(ib_addr + 1);
-        qp_attrs[1] = qp_attrs[0] + 1;
-        qp_attr_masks[0] = (int *)(qp_attrs[1] + 1);
-        qp_attr_masks[1] = qp_attr_masks[0] + 1;
-
-        qp_attrs[0]->dest_qp_num = dest_qp_num;
-        qp_attrs[0]->qp_state    = IBV_QPS_RTR;
-        qp_attrs[1]->qp_state    = IBV_QPS_RTS;
-
-        ret = ibv_modify_qp(qp, qp_attrs[0], *qp_attr_masks[0]);
-        if (ret) {
-            ucs_error("error modifying QP to RTR: %m");
-            return UCS_ERR_IO_ERROR;
-        }
-
-        ret = ibv_modify_qp(qp, qp_attrs[1], *qp_attr_masks[1]);
-        if (ret) {
-            ucs_error("error modifying QP to RTS: %m");
-            return UCS_ERR_IO_ERROR;
-        }
-        return UCS_OK;
-    }
-/*
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
     uct_ib_device_t *dev;
@@ -770,6 +741,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     struct ibv_qp_attr qp_attr;
 #endif
     long qp_attr_mask;
+    int ret;
 
     memset(&qp_attr, 0, sizeof(qp_attr));
 
@@ -780,9 +752,6 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     qp_attr.ah_attr               = *ah_attr;
-    qp_attr.ah_attr.dlid          = 0; // ?
-    qp_attr.ah_attr.grh.hop_limit = 255;
-    qp_attr.ah_attr.static_rate   = 0;
     qp_attr_mask                  = IBV_QP_STATE              |
                                     IBV_QP_DEST_QPN           |
                                     IBV_QP_RQ_PSN             |
@@ -837,7 +806,6 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
               qp_attr.max_rd_atomic);
-*/
 
     return UCS_OK;
 }
