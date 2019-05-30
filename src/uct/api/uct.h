@@ -1848,6 +1848,8 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
  *       memory domain which was used to pack the key is reachable by a
  *       transport on a local component, then that component is eligible to
  *       unpack the key.
+ *       If the remote key buffer cannot be unpacked with the given component,
+ *       UCS_ERR_INVALID_PARAM will be returned.
  *
  * @return Error code.
  */
