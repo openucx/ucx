@@ -359,21 +359,21 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 }
 
 UCS_TEST_P(test_ucp_peer_failure, basic) {
-    do_test(1024, /* msg_size */
+    do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
             false, /* force_close */
             false /* must_fail */);
 }
 
 UCS_TEST_P(test_ucp_peer_failure, zcopy, "ZCOPY_THRESH=1023") {
-    do_test(1024, /* msg_size */
+    do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
             false, /* force_close */
             true /* must_fail */);
 }
 
-UCS_TEST_P(test_ucp_peer_failure, bcopy_multi, "MAX_BCOPY?=512", "RC_TM_ENABLE?=n") {
-    do_test(1024, /* msg_size */
+UCS_TEST_P(test_ucp_peer_failure, bcopy_multi, "SEG_SIZE?=512", "RC_TM_ENABLE?=n") {
+    do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
             false, /* force_close */
             false /* must_fail */);

@@ -21,7 +21,7 @@ public:
         if (has_transport("tcp")) {
             /* Set `SO_SNDBUF` and `SO_RCVBUF` socket options to minimum
              * values to reduce the testing time for `pending_fairness` test */
-            modify_config("SNDBUF", "1024");
+            modify_config("SNDBUF", "1k");
             modify_config("RCVBUF", "128");
         }
     }

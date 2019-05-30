@@ -175,8 +175,8 @@ UCS_TEST_P(test_ucp_tag_offload, post_dif_buckets)
     }
 }
 
-UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096",
-                                                     "TM_THRESH=1024")
+UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4k",
+                                                     "TM_THRESH=1k")
 {
     uint64_t small_val      = 0xFAFA;
     const size_t big_size   = 5000;
@@ -213,8 +213,8 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096",
     }
 }
 
-UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096",
-                                                       "TM_THRESH=1024")
+UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4k",
+                                                       "TM_THRESH=1k")
 {
     uint64_t small_val      = 0xFAFA;
     const size_t big_size   = 5000;

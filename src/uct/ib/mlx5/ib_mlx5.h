@@ -135,6 +135,8 @@ typedef struct uct_ib_mlx5_md {
     uct_ib_md_t              super;
     uint32_t                 flags;
     ucs_mpool_t              dbrec_pool;
+    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
+    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
 } uct_ib_mlx5_md_t;
 
 
@@ -348,6 +350,19 @@ typedef struct uct_ib_mlx5_iface_common {
     uct_ib_mlx5_iface_res_domain_t   *res_domain;
 } uct_ib_mlx5_iface_common_t;
 
+
+/**
+ * Calculate unique id for atomic
+ */
+uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md);
+
+static inline uint8_t uct_ib_mlx5_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
+{
+    ucs_assert(ucs_derived_of(iface->super.md, uct_ib_md_t)->dev.flags &
+               UCT_IB_DEVICE_FLAG_MLX5_PRM);
+    return uct_ib_mlx5_md_get_atomic_mr_id(ucs_derived_of(iface->super.md,
+                                           uct_ib_mlx5_md_t));
+}
 
 ucs_status_t uct_ib_mlx5_iface_init_res_domain(uct_ib_iface_t *iface,
                                                uct_ib_mlx5_iface_common_t *mlx5);

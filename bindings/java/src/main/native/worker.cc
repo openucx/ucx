@@ -118,3 +118,30 @@ Java_org_ucx_jucx_ucp_UcpWorker_waitWorkerNative(JNIEnv *env, jclass cls, jlong 
         JNU_ThrowExceptionByStatus(env, status);
     }
 }
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+{
+    ucs_status_t status = ucp_worker_signal((ucp_worker_h)ucp_worker_ptr);
+
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_ucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jclass cls,
+                                                      jlong ucp_worker_ptr, jobject recv_buf,
+                                                      jlong tag, jlong tagMask, jobject callback)
+{
+    size_t recv_msg_size = env->GetDirectBufferCapacity(recv_buf);
+    ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
+                                                env->GetDirectBufferAddress(recv_buf),
+                                                recv_msg_size,
+                                                ucp_dt_make_contig(1), tag, tagMask,
+                                                recv_callback);
+
+    ucs_trace_req("JUCX: recv_nb request %p, msg size: %zu, tag: %ld", request, recv_msg_size, tag);
+
+    return process_request(request, callback);
+}

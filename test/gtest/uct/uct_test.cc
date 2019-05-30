@@ -413,6 +413,10 @@ bool uct_test::has_rc_or_dc() const {
     return (has_rc() || has_transport("dc_mlx5"));
 }
 
+bool uct_test::has_ib() const {
+    return (has_rc_or_dc() || has_ud());
+}
+
 void uct_test::stats_activate()
 {
     ucs_stats_cleanup();

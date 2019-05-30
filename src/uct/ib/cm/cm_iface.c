@@ -274,10 +274,10 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_trace_func("");
 
-    init_attr.tx_cq_len      = 1;
-    init_attr.rx_cq_len      = config->super.rx.queue_len;
-    init_attr.seg_size       = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
-                                       config->super.super.max_bcopy);
+    init_attr.tx_cq_len = 1;
+    init_attr.rx_cq_len = config->super.rx.queue_len;
+    init_attr.seg_size  = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
+                                  config->super.seg_size);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, md, worker,
                               params, &config->super, &init_attr);

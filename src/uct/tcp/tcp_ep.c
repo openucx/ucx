@@ -366,8 +366,7 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     return send_length > 0;
 }
 
-static ucs_status_t
-uct_tcp_ep_io_err_handler_cb(void *arg, int errno)
+static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
 {
     uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -375,12 +374,12 @@ uct_tcp_ep_io_err_handler_cb(void *arg, int errno)
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
 
-    if ((errno == ECONNRESET) &&
+    if ((io_errno == ECONNRESET) &&
         (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
         (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */) {
         ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
                   "was dropped by the peer",
-                  ep, errno, strerror(errno),
+                  ep, io_errno, strerror(io_errno),
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
                                    str_local_addr, UCS_SOCKADDR_STRING_LEN),
                   ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
@@ -470,13 +469,13 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         }
 
         /* post the entire AM buffer */
-        recv_length = iface->am_buf_size;
+        recv_length = iface->seg_size;
     } else if (ep->rx.length - ep->rx.offset < sizeof(*hdr)) {
         ucs_assert(ep->rx.buf != NULL);
 
         /* do partial receive of the remaining part of the hdr
          * and post the entire AM buffer */
-        recv_length = iface->am_buf_size - ep->rx.length;
+        recv_length = iface->seg_size - ep->rx.length;
     } else {
         ucs_assert(ep->rx.buf != NULL);
 
@@ -501,7 +500,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         }
 
         hdr = ep->rx.buf + ep->rx.offset;
-        ucs_assert(hdr->length <= (iface->am_buf_size - sizeof(uct_tcp_am_hdr_t)));
+        ucs_assert(hdr->length <= (iface->seg_size - sizeof(uct_tcp_am_hdr_t)));
 
         if (remainder < sizeof(*hdr) + hdr->length) {
             goto out;
@@ -581,7 +580,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     uct_tcp_am_hdr_t *hdr;
 
     UCT_CHECK_LENGTH(length + sizeof(header), 0,
-                     iface->am_buf_size - sizeof(uct_tcp_am_hdr_t),
+                     iface->seg_size - sizeof(uct_tcp_am_hdr_t),
                      "am_short");
 
     status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);

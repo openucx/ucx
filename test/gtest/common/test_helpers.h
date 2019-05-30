@@ -417,6 +417,14 @@ private:
     std::string       m_old_value;
 };
 
+class ucx_env_cleanup {
+public:
+    ucx_env_cleanup();
+    ~ucx_env_cleanup();
+private:
+    std::vector<std::string> ucx_env_storage;
+};
+
 template <typename T>
 std::string to_string(const T& value) {
     std::stringstream ss;

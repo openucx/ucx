@@ -117,7 +117,7 @@ typedef struct uct_tcp_iface {
     int                           epfd;              /* Event poll set of sockets */
     ucs_mpool_t                   tx_mpool;          /* TX memory pool */
     ucs_mpool_t                   rx_mpool;          /* RX memory pool */
-    size_t                        am_buf_size;       /* AM buffer size */
+    size_t                        seg_size;          /* AM buffer size */
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
                                                       * are in progress */
@@ -142,6 +142,7 @@ typedef struct uct_tcp_iface {
  */
 typedef struct uct_tcp_iface_config {
     uct_iface_config_t            super;
+    size_t                        seg_size;
     int                           prefer_default;
     unsigned                      max_poll;
     int                           sockopt_nodelay;

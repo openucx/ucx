@@ -21,6 +21,11 @@
 
 #define UCT_IB_MD_DEFAULT_GID_INDEX 0   /**< The gid index used by default for an IB/RoCE port */
 
+#define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
+                                  IBV_ACCESS_REMOTE_WRITE | \
+                                  IBV_ACCESS_REMOTE_READ | \
+                                  IBV_ACCESS_REMOTE_ATOMIC)
+
 /**
  * IB MD statistics counters
  */
@@ -47,7 +52,6 @@ typedef struct uct_ib_md_ext_config {
                                                 enabled on the Ethernet network */
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
-    int                      enable_contig_pages; /** Enable contiguous pages */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
     int                      enable_gpudirect_rdma; /** Enable GPUDirect RDMA */
 #if HAVE_EXP_UMR
@@ -70,26 +74,7 @@ typedef struct uct_ib_mem {
     uint32_t                atomic_rkey;
     uint32_t                flags;
     struct ibv_mr           *mr;
-#if HAVE_EXP_UMR
-    struct ibv_mr           *atomic_mr;
-#endif
 } uct_ib_mem_t;
-
-struct uct_ib_md;
-
-typedef struct uct_ib_md_ops {
-    ucs_status_t            (*open)(struct ibv_device *ibv_device,
-                                    struct uct_ib_md **p_md);
-    void                    (*cleanup)(struct uct_ib_md *);
-
-    size_t                  memh_struct_size;
-    ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
-                                              uct_ib_mem_t *memh,
-                                              off_t offset);
-    ucs_status_t            (*dereg_atomic_key)(struct uct_ib_md *md,
-                                                uct_ib_mem_t *memh);
-} uct_ib_md_ops_t;
-
 
 /**
  * IB memory domain.
@@ -101,10 +86,7 @@ typedef struct uct_ib_md {
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
-    uct_ib_md_ops_t          *ops;
-    /* keep it in md because pd is needed to create umr_qp/cq */
-    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
-    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+    struct uct_ib_md_ops     *ops;
     UCS_STATS_NODE_DECLARE(stats);
     uct_ib_md_ext_config_t   config;    /* IB external configuration */
     struct {
@@ -140,6 +122,20 @@ typedef struct uct_ib_md_config {
 
     UCS_CONFIG_ARRAY_FIELD(ucs_config_bw_spec_t, device) pci_bw; /**< List of PCI BW for devices */
 } uct_ib_md_config_t;
+
+
+typedef struct uct_ib_md_ops {
+    ucs_status_t            (*open)(struct ibv_device *ibv_device,
+                                    const uct_ib_md_config_t *md_config,
+                                    struct uct_ib_md **p_md);
+    void                    (*cleanup)(struct uct_ib_md *);
+
+    size_t                  memh_struct_size;
+    ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
+                                              uct_ib_mem_t *memh);
+    ucs_status_t            (*dereg_atomic_key)(struct uct_ib_md *md,
+                                                uct_ib_mem_t *memh);
+} uct_ib_md_ops_t;
 
 
 /**
@@ -178,12 +174,6 @@ typedef struct uct_ib_md_ops_entry {
 
 
 extern uct_md_component_t uct_ib_mdc;
-
-
-/**
- * Calculate unique id for atomic
- */
-uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md);
 
 
 static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
@@ -237,13 +227,10 @@ void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *devic
 ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 
+ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
+                                   struct ibv_device *ib_device,
+                                   const uct_ib_md_config_t *md_config);
+
 void uct_ib_md_close(uct_md_h uct_md);
-
-ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
-                                         uct_ib_mem_t *memh,
-                                         off_t offset);
-
-ucs_status_t uct_ib_verbs_dereg_atomic_key(uct_ib_md_t *md,
-                                           uct_ib_mem_t *memh);
 
 #endif

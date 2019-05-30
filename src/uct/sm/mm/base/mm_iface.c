@@ -29,6 +29,10 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      "Size of the receive FIFO in the memory-map UCTs.",
      ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
 
+    {"SEG_SIZE", "8k",
+     "Size of send/receive buffers for copy-out sends.",
+     ucs_offsetof(uct_mm_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
     {"FIFO_RELEASE_FACTOR", "0.5",
      "Frequency of resource releasing on the receiver's side in the MM UCT.\n"
      "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1).",
@@ -497,7 +501,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->config.fifo_size         = mm_config->fifo_size;
     self->config.fifo_elem_size    = mm_config->fifo_elem_size;
-    self->config.seg_size          = mm_config->super.super.max_bcopy;
+    self->config.seg_size          = mm_config->seg_size;
     self->fifo_release_factor_mask = UCS_MASK(ucs_ilog2(ucs_max((int)
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
                                      1)));

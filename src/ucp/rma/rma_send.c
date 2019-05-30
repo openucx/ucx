@@ -11,6 +11,7 @@
 
 #include <ucp/dt/dt_contig.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/stubs.h>
 
 
 #define UCP_RMA_CHECK_BUFFER(_buffer, _action) \
