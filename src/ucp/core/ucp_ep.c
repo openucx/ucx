@@ -124,6 +124,8 @@ err:
 
 void ucp_ep_delete(ucp_ep_h ep)
 {
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_wireup_msg_ack_cb_pred, ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
