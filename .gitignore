@@ -63,3 +63,4 @@ tags
 .pydevproject
 /ucx-*.*.*
 /v*.*.*
+org_ucx_jucx_*.h
