@@ -361,7 +361,7 @@ static inline uct_ib_device_t* uct_ib_iface_device(uct_ib_iface_t *iface)
     return &uct_ib_iface_md(iface)->dev;
 }
 
-static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)
+static inline struct ibv_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)
 {
     return uct_ib_device_port_attr(uct_ib_iface_device(iface), iface->config.port_num);
 }
