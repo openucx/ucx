@@ -82,14 +82,19 @@ typedef struct ucs_config_global_list_entry {
 
 
 #define UCS_CONFIG_REGISTER_TABLE(_fields, _name, _prefix, _type) \
+    static ucs_config_global_list_entry_t _fields##_config_entry; \
     UCS_STATIC_INIT { \
+        ucs_config_global_list_entry_t *entry = &_fields##_config_entry; \
         extern ucs_list_link_t ucs_config_global_list; \
-        static ucs_config_global_list_entry_t entry; \
-        entry.fields = _fields; \
-        entry.name   = _name; \
-        entry.prefix = _prefix; \
-        entry.size   = sizeof(_type); \
-        ucs_list_add_tail(&ucs_config_global_list, &entry.list); \
+        entry->fields = _fields; \
+        entry->name   = _name; \
+        entry->prefix = _prefix; \
+        entry->size   = sizeof(_type); \
+        ucs_list_add_tail(&ucs_config_global_list, &entry->list); \
+    } \
+    \
+    UCS_STATIC_CLEANUP { \
+        ucs_list_del(&_fields##_config_entry.list); \
     }
 
 
