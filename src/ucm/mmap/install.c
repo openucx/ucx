@@ -71,6 +71,7 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
 
 void ucm_fire_mmap_events(int events)
 {
+    int shmid;
     void *p;
 
     if (events & (UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP|
@@ -81,8 +82,11 @@ void ucm_fire_mmap_events(int events)
     }
 
     if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
-        p = shmat(0, NULL, 0);
+        shmid = shmget(IPC_PRIVATE, ucm_get_page_size(),
+                       IPC_CREAT | SHM_R | SHM_W);
+        p = shmat(shmid, NULL, 0);
         shmdt(p);
+        shmctl(shmid, IPC_RMID, NULL);
     }
 
     if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
