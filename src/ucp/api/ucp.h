@@ -350,8 +350,7 @@ enum ucp_worker_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_listener_attr_field {
-    UCP_LISTENER_ATTR_FIELD_PORT           = UCS_BIT(0), /**< Port used for listening */
-    UCP_LISTENER_ATTR_FIELD_NUM_TRANSPORTS = UCS_BIT(1)  /**< Number of listening transports */
+    UCP_LISTENER_ATTR_FIELD_PORT           = UCS_BIT(0) /**< Port used for listening */
 };
 
 
@@ -880,16 +879,10 @@ typedef struct ucp_listener_attr {
     uint64_t              field_mask;
 
     /**
-     * The ports on which the listener is listening for incoming connection
-     * requests. The ports are returned in host byte order.
+     * The port on which the listener is listening for incoming connection
+     * requests. The port is returned in host byte order.
      */
-    int                   ports[8];
-
-    /**
-     * Number of transports that are used for listening for incoming connection
-     * connection requests.
-     */
-    int                   num_listening_transports;
+    int                   port;
 } ucp_listener_attr_t;
 
 

@@ -83,9 +83,6 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
-    /** Transport to use for sending a connection request from
-     *  the client to the server in client/server mode */
-    char                                   *cm_tl;
 } ucp_context_config_t;
 
 
@@ -100,6 +97,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
     UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
+    /** Array of transports for client-server transports and port selection */
+    UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
     /** Configuration saved directly in the context */
@@ -203,6 +202,12 @@ typedef struct ucp_context {
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
+
+        /* Array of sockaddr transports */
+        struct {
+            char                  cm_tl_name[UCT_TL_NAME_MAX];
+        } *sockadrr_tls;
+        unsigned                  num_sockaddr_tls;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;

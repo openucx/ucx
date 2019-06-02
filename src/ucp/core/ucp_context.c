@@ -98,6 +98,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"SOCKADDR_TLS", "rdmacm,sockcm",
+   "Priority of sockaddr transports for client/server connection establishment.",
+   ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {"SOCKADDR_AUX_TLS", "ud,ud_x",
    "Transports to use for exchanging additional address information while\n"
    "establishing client/server connection. ",
@@ -106,11 +110,6 @@ static ucs_config_field_t ucp_config_table[] = {
   {"WARN_INVALID_CONFIG", "y",
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
-
-  {"CM_TRANSPORT", "rdmacm",
-   "Transport to use for initiating a connection from the client side while\n"
-   "establishing client/server connection",
-   ucs_offsetof(ucp_config_t, ctx.cm_tl), UCS_CONFIG_TYPE_STRING},
 
   {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
@@ -1131,37 +1130,11 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     }
 }
 
-static void ucp_context_set_config_ext(ucp_context_h context,
-                                       const ucp_config_t *config)
-{
-    context->config.ext = config->ctx;
-    context->config.ext.cm_tl = strdup(config->ctx.cm_tl);
-
-    /* Need to check TM_SEG_SIZE value if it is enabled only */
-    if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
-        if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
-            /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
-             * scattered to UCP user buffer. Make sure that bounce buffer is used for
-             * messages which can not fit SW RNDV hdr. */
-            context->config.ext.tm_max_bb_size = sizeof(ucp_request_hdr_t);
-            ucs_info("UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
-                     context->config.ext.tm_max_bb_size, sizeof(ucp_request_hdr_t));
-        }
-
-        if (context->config.ext.tm_max_bb_size > context->config.ext.seg_size) {
-            context->config.ext.tm_max_bb_size = context->config.ext.seg_size;
-            ucs_info("Wrong UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
-                     context->config.ext.tm_max_bb_size,
-                     context->config.ext.seg_size);
-        }
-    }
-}
-
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
 {
-    unsigned i, num_alloc_methods, method;
+    unsigned i, num_alloc_methods, method, num_sockaddr_tls;
     const char *method_name;
     ucs_status_t status;
 
@@ -1169,7 +1142,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
 
-    ucp_context_set_config_ext(context, config);
+    context->config.ext = config->ctx;
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
         /* num_eps were set via the env variable. Override current value */
@@ -1236,6 +1209,50 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    /* Need to check TM_SEG_SIZE value if it is enabled only */
+    if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
+        if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
+            /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
+             * scattered to UCP user buffer. Make sure that bounce buffer is used for
+             * messages which can not fit SW RNDV hdr. */
+            context->config.ext.tm_max_bb_size = sizeof(ucp_request_hdr_t);
+            ucs_info("UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bb_size, sizeof(ucp_request_hdr_t));
+        }
+
+        if (context->config.ext.tm_max_bb_size > context->config.ext.seg_size) {
+            context->config.ext.tm_max_bb_size = context->config.ext.seg_size;
+            ucs_info("Wrong UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bb_size,
+                     context->config.ext.seg_size);
+        }
+    }
+
+    /* Make sure that a list of sockadrr transports exists and save it */
+    if (config->sockaddr_cm_tls.count == 0) {
+        ucs_error("No sockaddr transports specified - aborting");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free;
+    }
+
+    num_sockaddr_tls = config->sockaddr_cm_tls.count;
+    context->config.num_sockaddr_tls = num_sockaddr_tls;
+
+    /* Allocate an array to hold the sockaddr transports list */
+    context->config.sockadrr_tls = ucs_calloc(num_sockaddr_tls,
+                                              sizeof(*context->config.sockadrr_tls),
+                                              "ucp_sockaddr_tls");
+    if (context->config.sockadrr_tls == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free;
+    }
+
+    for (i = 0; i < num_sockaddr_tls; i++) {
+        ucs_strncpy_zero(context->config.sockadrr_tls[i].cm_tl_name,
+                         config->sockaddr_cm_tls.cm_tls[i],
+                         UCT_TL_NAME_MAX);
+    }
+
     return UCS_OK;
 
 err_free:
@@ -1248,7 +1265,7 @@ err:
 static void ucp_free_config(ucp_context_h context)
 {
     ucs_free(context->config.alloc_methods);
-    ucs_free(context->config.ext.cm_tl);
+    ucs_free(context->config.sockadrr_tls);
 }
 
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {

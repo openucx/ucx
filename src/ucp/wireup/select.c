@@ -1469,32 +1469,38 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
     ucp_rsc_index_t tl_id;
     ucp_md_index_t md_index;
     uct_md_h md;
+    int i;
 
-    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        resource = &context->tl_rscs[tl_id];
-        if (!(resource->flags & UCP_TL_RSC_FLAG_SOCKADDR)) {
-            continue;
+    /* Go over the sockaddr transports priority list and try to use the transports
+     * one by one for the client side */
+    for (i = 0; i < context->config.num_sockaddr_tls; i++) {
+        for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+            resource = &context->tl_rscs[tl_id];
+            if (strcmp(context->config.sockadrr_tls[i].cm_tl_name,
+                       resource->tl_rsc.tl_name) ||
+                !(resource->flags & UCP_TL_RSC_FLAG_SOCKADDR)) {
+                continue;
+            }
+
+            md_index = resource->md_index;
+            md       = context->tl_mds[md_index].md;
+            ucs_assert(context->tl_mds[md_index].attr.cap.flags &
+                       UCT_MD_FLAG_SOCKADDR);
+
+            /* The client selects the transport for sockaddr according to the
+             * configuration. We rely on the server having this transport available
+             * as well */
+            if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
+                                              UCT_SOCKADDR_ACC_REMOTE)) {
+                *rsc_index_p = tl_id;
+                return UCS_OK;
+            }
+
+            ucs_debug("md %s cannot reach %s",
+                      context->tl_mds[md_index].rsc.md_name,
+                      ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
+                                       sizeof(saddr_str)));
         }
-
-        md_index = resource->md_index;
-        md       = context->tl_mds[md_index].md;
-        ucs_assert(context->tl_mds[md_index].attr.cap.flags &
-                   UCT_MD_FLAG_SOCKADDR);
-
-        /* The client selects the transport for sockaddr according to the
-         * configuration. We rely on the server having this transport available
-         * as well */
-        if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
-                                          UCT_SOCKADDR_ACC_REMOTE) &&
-            (!strcmp(context->config.ext.cm_tl, resource->tl_rsc.tl_name))) {
-            *rsc_index_p = tl_id;
-            return UCS_OK;
-        }
-
-        ucs_debug("md %s cannot reach %s or doesn't match the configured transport: %s ",
-                  context->tl_mds[md_index].rsc.md_name,
-                  ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
-                                   sizeof(saddr_str)), context->config.ext.cm_tl);
     }
 
     return UCS_ERR_UNREACHABLE;

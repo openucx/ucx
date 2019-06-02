@@ -66,7 +66,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     ucp_worker_h                     worker;
     ucp_ep_h                         ep;
     ucs_status_t                     status;
-    ucp_worker_iface_t               listening_wiface;
+    ucp_worker_iface_t               *listening_wiface;
 
     ucs_trace_func("listener=%p", listener);
 
@@ -75,8 +75,8 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         return 1;
     }
 
-    listening_wiface = listener->wifaces[conn_request->wiface_idx];
-    worker = listening_wiface.worker;
+    listening_wiface = &listener->wifaces[conn_request->wiface_idx];
+    worker           = listening_wiface->worker;
 
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
@@ -99,7 +99,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         goto out;
     }
 
-    status = uct_iface_accept(listening_wiface.iface, conn_request->uct_req);
+    status = uct_iface_accept(listening_wiface->iface, conn_request->uct_req);
     if (status != UCS_OK) {
         ucp_ep_destroy_internal(ep);
         goto out;
@@ -119,7 +119,7 @@ out:
     if (status != UCS_OK) {
         ucs_error("connection request failed on listener %p with status %s",
                   listener, ucs_status_string(status));
-        uct_iface_reject(listening_wiface.iface, conn_request->uct_req);
+        uct_iface_reject(listening_wiface->iface, conn_request->uct_req);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -176,7 +176,6 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
             /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
              * that he can wake-up on this event */
             ucp_worker_signal_internal(listener->wifaces[i].worker);
-
             break;
         }
     }
@@ -190,16 +189,8 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
 
 ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *attr)
 {
-    int i;
-
-    if (attr->field_mask & UCP_LISTENER_ATTR_FIELD_NUM_TRANSPORTS) {
-        attr->num_listening_transports = listener->num_wifaces;
-    }
-
     if (attr->field_mask & UCP_LISTENER_ATTR_FIELD_PORT) {
-        for (i = 0; i < listener->num_wifaces; i++) {
-            attr->ports[i] = listener->wifaces[i].attr.listen_port;
-        }
+        attr->port = listener->wifaces[0].attr.listen_port;
     }
 
     return UCS_OK;
@@ -209,15 +200,16 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                  const ucp_listener_params_t *params,
                                  ucp_listener_h *listener_p)
 {
-    ucp_context_h context = worker->context;
+    ucp_context_h context   = worker->context;
+    ucp_listener_h listener = NULL;
+    int i, sockaddr_tls     = 0;
+    uint16_t port;
     ucp_tl_resource_desc_t *resource;
     uct_iface_params_t iface_params;
-    ucp_listener_h listener = NULL;
     ucp_rsc_index_t tl_id;
     ucs_status_t status;
     ucp_tl_md_t *tl_md;
     char saddr_str[UCS_SOCKADDR_STRING_LEN];
-    int sockaddr_tls = 0;
     ucp_worker_iface_t *tmp;
 
     if (!(params->field_mask & UCP_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
@@ -254,57 +246,84 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         listener->arg       = params->conn_handler.arg;
     }
 
+    status = ucs_sockaddr_get_port(params->sockaddr.addr, &port);
+    if (status != UCS_OK) {
+       goto err_free_listener;
+    }
+
     /* Go through all the available resources and for each one, check if the given
      * sockaddr is accessible from its md. Start listening on all the mds that
      * satisfy this.
+     * If the given port is set to 0, i.e. use a random port, the first transport
+     * in the sockaddr priority list from the environment configuration will
+     * dictate the port to listen on for the other sockaddr transports in the list.
      * */
-    ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        resource = &context->tl_rscs[tl_id];
-        tl_md    = &context->tl_mds[resource->md_index];
+    for (i = 0; i < context->config.num_sockaddr_tls; i++) {
+        ucs_for_each_bit(tl_id, context->tl_bitmap) {
+            resource = &context->tl_rscs[tl_id];
+            tl_md    = &context->tl_mds[resource->md_index];
 
-        if (!(tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) ||
-            !uct_md_is_sockaddr_accessible(tl_md->md, &params->sockaddr,
-                                           UCT_SOCKADDR_ACC_LOCAL)) {
-            continue;
+            if (strcmp(context->config.sockadrr_tls[i].cm_tl_name,
+                       resource->tl_rsc.tl_name) ||
+                !(tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) ||
+                !uct_md_is_sockaddr_accessible(tl_md->md, &params->sockaddr,
+                                               UCT_SOCKADDR_ACC_LOCAL)) {
+                continue;
+            }
+
+            tmp = ucs_realloc(listener->wifaces,
+                              sizeof(*listener->wifaces) * (sockaddr_tls + 1),
+                              "listener wifaces");
+            if (tmp == NULL) {
+                ucs_error("Failed to allocate listener wifaces");
+                status = UCS_ERR_NO_MEMORY;
+                goto err_free_listener_wifaces;
+            }
+
+            listener->wifaces = tmp;
+
+            iface_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                                                          UCT_IFACE_PARAM_FIELD_SOCKADDR;
+            iface_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER;
+            iface_params.mode.sockaddr.conn_request_cb  = ucp_listener_conn_request_callback;
+            iface_params.mode.sockaddr.conn_request_arg = listener;
+            iface_params.mode.sockaddr.listen_sockaddr  = params->sockaddr;
+            iface_params.mode.sockaddr.cb_flags         = UCT_CB_FLAG_ASYNC;
+
+            if (port) {
+                status = ucs_sockaddr_set_port((struct sockaddr *)
+                                               iface_params.mode.sockaddr.listen_sockaddr.addr,
+                                               port);
+                if (status != UCS_OK) {
+                    ucs_debug("failed to set port %d on iface %s",
+                              listener->wifaces[sockaddr_tls].attr.listen_port,
+                              resource->tl_rsc.tl_name);
+                    continue;
+                }
+            }
+
+            status = ucp_worker_iface_open(worker, tl_id, &iface_params,
+                                           &listener->wifaces[sockaddr_tls]);
+            if (status != UCS_OK) {
+                ucs_debug("failed to open listener iface on %s", tl_md->rsc.md_name);
+                continue;
+            }
+
+            status = ucp_worker_iface_init(worker, tl_id, &listener->wifaces[sockaddr_tls]);
+            if ((status != UCS_OK) ||
+                ((context->config.features & UCP_FEATURE_WAKEUP) &&
+                 !(listener->wifaces[sockaddr_tls].attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC))) {
+                ucp_worker_iface_cleanup(&listener->wifaces[sockaddr_tls]);
+                continue;
+            }
+
+            port = listener->wifaces[sockaddr_tls].attr.listen_port;
+
+            sockaddr_tls++;
+            ucs_trace("listener %p: accepting connections on %s on port %d",
+                      listener, tl_md->rsc.md_name, port);
+            break;
         }
-
-        tmp = ucs_realloc(listener->wifaces,
-                          sizeof(*listener->wifaces) * (sockaddr_tls + 1),
-                          "listener wifaces");
-        if (tmp == NULL) {
-            ucs_error("Failed to allocate listener wifaces");
-            status = UCS_ERR_NO_MEMORY;
-            goto err_free_listener_wifaces;
-        }
-
-        listener->wifaces = tmp;
-
-        iface_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
-                                                      UCT_IFACE_PARAM_FIELD_SOCKADDR;
-        iface_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER;
-        iface_params.mode.sockaddr.conn_request_cb  = ucp_listener_conn_request_callback;
-        iface_params.mode.sockaddr.conn_request_arg = listener;
-        iface_params.mode.sockaddr.listen_sockaddr  = params->sockaddr;
-        iface_params.mode.sockaddr.cb_flags         = UCT_CB_FLAG_ASYNC;
-
-        status = ucp_worker_iface_open(worker, tl_id, &iface_params,
-                                       &listener->wifaces[sockaddr_tls]);
-        if (status != UCS_OK) {
-            ucs_debug("failed to open listener iface on %s", tl_md->rsc.md_name);
-            continue;
-        }
-
-        status = ucp_worker_iface_init(worker, tl_id, &listener->wifaces[sockaddr_tls]);
-        if ((status != UCS_OK) ||
-            ((context->config.features & UCP_FEATURE_WAKEUP) &&
-            !(listener->wifaces[sockaddr_tls].attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC))) {
-            ucp_worker_iface_cleanup(&listener->wifaces[sockaddr_tls]);
-            continue;
-        }
-
-        sockaddr_tls++;
-        ucs_trace("listener %p: accepting connections on %s", listener,
-                  tl_md->rsc.md_name);
     }
 
     if (!sockaddr_tls) {
