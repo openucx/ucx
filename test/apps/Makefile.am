@@ -13,7 +13,8 @@ endif
 noinst_PROGRAMS = \
 	test_ucp_dlopen \
 	test_ucs_dlopen \
-	test_link_map
+	test_link_map \
+	test_dlopen_cfg_print
 
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
@@ -33,6 +34,13 @@ test_link_map_SOURCES  = test_link_map.c
 test_link_map_CPPFLAGS = $(BASE_CPPFLAGS)
 test_link_map_CFLAGS   = $(BASE_CFLAGS)
 test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
+
+test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
+test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \
+	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so \
+	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir)/libuct.so
+test_dlopen_cfg_print_CFLAGS   = $(BASE_CFLAGS)
+test_dlopen_cfg_print_LDADD    = -ldl
 
 if HAVE_TCMALLOC
 noinst_PROGRAMS       += test_tcmalloc
