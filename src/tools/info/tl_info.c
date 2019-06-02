@@ -385,7 +385,7 @@ static void print_md_info(const uct_component_attr_t *component_attr,
         goto out;
     }
 
-    status = uct_md_open(md_name, md_config, &md);
+    status = uct_md_open(NULL, md_name, md_config, &md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         printf("# < failed to open memory domain %s >\n", md_name);

@@ -68,7 +68,7 @@ void test_md::init()
 {
     ucs::test_base::init();
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           GetParam().c_str(), m_md_config);
+                           NULL, GetParam().c_str(), m_md_config);
 
     ucs_status_t status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
@@ -197,11 +197,11 @@ UCS_TEST_P(test_md, rkey_ptr) {
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
 
     // unpack
-    status = uct_rkey_unpack(rkey_buffer, &rkey_bundle);
+    status = uct_rkey_unpack(NULL, rkey_buffer, &rkey_bundle);
     ASSERT_UCS_OK(status);
 
     // get direct ptr
-    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva, (void **)&lva);
+    status = uct_rkey_ptr(NULL, &rkey_bundle, (uintptr_t)rva, (void **)&lva);
     ASSERT_UCS_OK(status);
     // check direct access
     // read
@@ -218,15 +218,17 @@ UCS_TEST_P(test_md, rkey_ptr) {
 
     // check bounds
     //
-    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)(rva-1), (void **)&lva);
+    status = uct_rkey_ptr(NULL, &rkey_bundle, (uintptr_t)(rva-1),
+                          (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
-    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva+size, (void **)&lva);
+    status = uct_rkey_ptr(NULL, &rkey_bundle, (uintptr_t)rva+size,
+                          (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
     free(rkey_buffer);
     uct_md_mem_free(md(), memh);
-    uct_rkey_release(&rkey_bundle);
+    uct_rkey_release(NULL, &rkey_bundle);
 }
 
 UCS_TEST_P(test_md, alloc) {
