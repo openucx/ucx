@@ -8,7 +8,8 @@
 #
 
 ## 1.5.2 (TBD)
-
+Bugfixes:
+- Fix segfault when libuct.so is reloaded - issue #3558
 
 ## 1.5.1 (April 1, 2019)
 Bugfixes:
