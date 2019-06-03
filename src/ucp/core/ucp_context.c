@@ -759,8 +759,7 @@ static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
         return status;
     }
 
-    /* Open MD */
-    status = uct_md_open(md_rsc->md_name, md_config, &tl_md->md);
+    status = uct_md_open(NULL, md_rsc->md_name, md_config, &tl_md->md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         return status;
@@ -1454,3 +1453,15 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 }
 
+uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
+{
+    ucp_rsc_index_t rsc_index;
+
+    for (rsc_index = 0; rsc_index < context->num_mds; ++rsc_index) {
+        if (strstr(context->tl_mds[rsc_index].rsc.md_name, md_name)) {
+            return context->tl_mds[rsc_index].md;
+        }
+    }
+
+    return NULL;
+}
