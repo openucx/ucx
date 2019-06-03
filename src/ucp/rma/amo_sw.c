@@ -215,7 +215,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     } else {
         /* atomic operation with result */
         req = ucp_request_get(worker);
-        ucs_assert(req != NULL);
+        if (req == NULL) {
+            ucs_error("failed to allocate atomic reply");
+            return UCS_OK;
+        }
 
         switch (atomicreqh->length) {
         case sizeof(uint32_t):
