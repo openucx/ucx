@@ -1474,7 +1474,7 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
     /* Go over the sockaddr transports priority list and try to use the transports
      * one by one for the client side */
     for (i = 0; i < context->config.num_sockaddr_tls; i++) {
-        for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        ucs_for_each_bit(tl_id, context->tl_bitmap) {
             resource = &context->tl_rscs[tl_id];
             if (strcmp(context->config.sockadrr_tls[i].cm_tl_name,
                        resource->tl_rsc.tl_name) ||

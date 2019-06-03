@@ -350,7 +350,7 @@ enum ucp_worker_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_listener_attr_field {
-    UCP_LISTENER_ATTR_FIELD_PORT           = UCS_BIT(0) /**< Port used for listening */
+    UCP_LISTENER_ATTR_FIELD_PORT = UCS_BIT(0) /**< Port used for listening */
 };
 
 

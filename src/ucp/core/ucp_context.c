@@ -1227,16 +1227,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    /* Parse the sockadrr transports priority list */
+    context->config.num_sockaddr_tls = config->sockaddr_cm_tls.count;
+
     /* Make sure that a list of sockadrr transports exists and save it */
     if (config->sockaddr_cm_tls.count == 0) {
-        ucs_error("No sockaddr transports specified - aborting");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err_free;
+        ucs_warn("No sockaddr transports specified");
+        goto out;
     }
 
     num_sockaddr_tls = config->sockaddr_cm_tls.count;
-    context->config.num_sockaddr_tls = num_sockaddr_tls;
-
     /* Allocate an array to hold the sockaddr transports list */
     context->config.sockadrr_tls = ucs_calloc(num_sockaddr_tls,
                                               sizeof(*context->config.sockadrr_tls),
@@ -1252,6 +1252,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                          UCT_TL_NAME_MAX);
     }
 
+out:
     return UCS_OK;
 
 err_free:
