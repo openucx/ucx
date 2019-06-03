@@ -1438,7 +1438,6 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key,
                                   int print_cfg)
 {
-    ucp_ep_config_t *config;
     unsigned config_idx;
 
     /* Search for the given key in the ep_config array */
@@ -1455,11 +1454,7 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
 
     /* Create new configuration */
     config_idx = worker->ep_config_count++;
-    config     = &worker->ep_config[config_idx];
-
-    memset(config, 0, sizeof(*config));
-    config->key = *key;
-    ucp_ep_config_init(worker, config);
+    ucp_ep_config_init(worker, &worker->ep_config[config_idx], key);
 
     if (print_cfg) {
         ucp_worker_print_used_tls(key, worker->context, config_idx);
@@ -1667,8 +1662,19 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     }
 }
 
+static void ucp_worker_destroy_ep_configs(ucp_worker_h worker)
+{
+    unsigned i;
+
+    for (i = 0; i < worker->ep_config_count; ++i) {
+        ucp_ep_config_cleanup(worker, &worker->ep_config[i]);
+    }
+    worker->ep_config_count = 0;
+}
+
 void ucp_worker_destroy(ucp_worker_h worker)
 {
+
     ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -1677,6 +1683,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_remove_am_handlers(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
+    ucp_worker_destroy_ep_configs(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);

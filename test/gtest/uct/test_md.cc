@@ -200,11 +200,12 @@ UCS_TEST_P(test_md, rkey_ptr) {
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
 
     // unpack
-    status = uct_rkey_unpack(NULL, rkey_buffer, &rkey_bundle);
+    status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
     ASSERT_UCS_OK(status);
 
     // get direct ptr
-    status = uct_rkey_ptr(NULL, &rkey_bundle, (uintptr_t)rva, (void **)&lva);
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva,
+                          (void **)&lva);
     ASSERT_UCS_OK(status);
     // check direct access
     // read
@@ -221,17 +222,17 @@ UCS_TEST_P(test_md, rkey_ptr) {
 
     // check bounds
     //
-    status = uct_rkey_ptr(NULL, &rkey_bundle, (uintptr_t)(rva-1),
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)(rva-1),
                           (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
-    status = uct_rkey_ptr(NULL, &rkey_bundle, (uintptr_t)rva+size,
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva+size,
                           (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
     free(rkey_buffer);
     uct_md_mem_free(md(), memh);
-    uct_rkey_release(NULL, &rkey_bundle);
+    uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
 UCS_TEST_P(test_md, alloc) {

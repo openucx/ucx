@@ -55,18 +55,26 @@ typedef struct uct_config_bundle {
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
                          const uct_md_config_t *config, uct_md_h *md_p)
 {
+    uct_md_component_t *mdc;
     ucs_status_t status;
     uct_md_h md;
 
-    ucs_assert(!strncmp(md_name, component->name, strlen(component->name)));
-    status = component->md_open(md_name, config, &md);
-    if (status != UCS_OK) {
-        return status;
+    ucs_list_for_each(mdc, &uct_md_components_list, list) {
+        if (!strncmp(md_name, mdc->name, strlen(mdc->name))) {
+            ucs_assert(mdc == component);
+            status = mdc->md_open(md_name, config, &md);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            ucs_assert_always(md->component == mdc);
+            *md_p = md;
+            return UCS_OK;
+        }
     }
 
-    ucs_assert_always(md->component == component);
-    *md_p = md;
-    return UCS_OK;
+    ucs_error("MD '%s' does not exist", md_name);
+    return UCS_ERR_NO_DEVICE;
 }
 
 void uct_md_close(uct_md_h md)
@@ -355,47 +363,43 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
+#if ENABLE_DEBUG_DATA
     void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
+#else
+    void *rbuf = rkey_buffer + UCT_MD_COMPONENT_NAME_MAX;
+#endif
     return md->ops->mkey_pack(md, memh, rbuf);
 }
 
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
-    uct_md_component_t *mdc;
-    ucs_status_t status;
     char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(rkey_buffer, mdc->name, UCT_MD_COMPONENT_NAME_MAX)) {
-            status = mdc->rkey_unpack(mdc, rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
-                                      &rkey_ob->rkey, &rkey_ob->handle);
-            if (status == UCS_OK) {
-                rkey_ob->type = mdc;
-            }
-
-            return status;
-        }
+    if (ENABLE_PARAMS_CHECK &&
+        strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
+        ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s", (const char*)rkey_buffer);
+        ucs_error("invalid component for rkey unpack; expected: %s, actual: %s",
+                  mdc_name, component->name);
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s", (const char*)rkey_buffer);
-    ucs_debug("No matching MD component found for '%s'", mdc_name);
-    return UCS_ERR_UNSUPPORTED;
+    return component->rkey_unpack(component,
+                                  rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
+                                  &rkey_ob->rkey, &rkey_ob->handle);
 }
 
 ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,
                           uint64_t remote_addr, void **local_addr_p)
 {
-    uct_md_component_t *mdc = rkey_ob->type;
-    return mdc->rkey_ptr(mdc, rkey_ob->rkey, rkey_ob->handle, remote_addr,
-                         local_addr_p);
+    return component->rkey_ptr(component, rkey_ob->rkey, rkey_ob->handle,
+                               remote_addr, local_addr_p);
 }
 
 ucs_status_t uct_rkey_release(uct_component_h component,
                               const uct_rkey_bundle_t *rkey_ob)
 {
-    uct_md_component_t *mdc = rkey_ob->type;
-    return mdc->rkey_release(mdc, rkey_ob->rkey, rkey_ob->handle);
+    return component->rkey_release(component, rkey_ob->rkey, rkey_ob->handle);
 }
 
 ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)

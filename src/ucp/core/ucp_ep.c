@@ -59,6 +59,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
+    key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
@@ -822,7 +823,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane;
-
+    int i;
 
     if ((key1->num_lanes        != key2->num_lanes)                                ||
         memcmp(key1->rma_lanes,    key2->rma_lanes,    sizeof(key1->rma_lanes))    ||
@@ -845,6 +846,12 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
             (key1->lanes[lane].proxy_lane != key2->lanes[lane].proxy_lane) ||
             (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index))
         {
+            return 0;
+        }
+    }
+
+    for (i = 0; i < ucs_popcount(key1->reachable_md_map); ++i) {
+        if (key1->dst_md_cmpts[i] != key2->dst_md_cmpts[i]) {
             return 0;
         }
     }
@@ -1102,7 +1109,23 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 }
 
-void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
+static void ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
+                                   const ucp_ep_config_key_t *src)
+{
+    unsigned i;
+
+    *dst = *src;
+    dst->dst_md_cmpts = ucs_calloc(ucs_popcount(src->reachable_md_map),
+                                   sizeof(*dst->dst_md_cmpts),
+                                   "ucp_dst_md_cmpts");
+    ucs_assert_always(dst->dst_md_cmpts != NULL); // TODO error on NULL
+    for (i = 0; i < ucs_popcount(src->reachable_md_map); ++i) {
+        dst->dst_md_cmpts[i] = src->dst_md_cmpts[i];
+    }
+}
+
+void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
+                        const ucp_ep_config_key_t *key)
 {
     ucp_context_h context         = worker->context;
     ucp_lane_index_t tag_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
@@ -1117,6 +1140,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     size_t max_am_rndv_thresh;
     double rndv_max_bw;
     int i;
+
+    memset(config, 0, sizeof(*config));
+    ucp_ep_config_key_copy(&config->key, key);
 
     /* Default settings */
     for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -1347,6 +1373,11 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
     }
+}
+
+void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
+{
+    ucs_free(config->key.dst_md_cmpts);
 }
 
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,

@@ -1297,7 +1297,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     /* create memory pool for small rkeys */
     status = ucs_mpool_init(&context->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) + sizeof(uct_rkey_bundle_t) * UCP_RKEY_MPOOL_MAX_MD,
+                            sizeof(ucp_rkey_t) +
+                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
                             &ucp_rkey_mpool_ops, "ucp_rkeys");
     if (status != UCS_OK) {

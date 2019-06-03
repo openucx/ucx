@@ -751,12 +751,76 @@ static void ucp_wireup_print_config(ucp_context_h context,
               title, key->am_lane, key->wireup_lane,
               key->reachable_md_map);
 
+    // todo print md cmpts
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucp_ep_config_lane_info_str(context, key, addr_indices, lane,
                                     UCP_NULL_RESOURCE, lane_info,
                                     sizeof(lane_info));
         ucs_log(log_level, "%s: %s", title, lane_info);
     }
+}
+
+int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
+                            const ucp_address_entry_t *ae)
+{
+    ucp_context_h context      = worker->context;
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+
+    return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
+           uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr);
+}
+
+static void
+ucp_wireup_get_reachable_mds(ucp_worker_h worker, unsigned address_count,
+                             const ucp_address_entry_t *address_list,
+                             const ucp_ep_config_key_t *prev_key,
+                             ucp_ep_config_key_t *key)
+{
+    ucp_context_h context = worker->context;
+    ucp_rsc_index_t ae_cmpts[UCP_MAX_MDS]; /* component index for each address entry */
+    const ucp_address_entry_t *ae;
+    ucp_rsc_index_t cmpt_index;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t dst_md_index;
+    ucp_md_map_t ae_dst_md_map, dst_md_map;
+    unsigned num_dst_mds;
+
+    ae_dst_md_map = 0;
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        for (ae = address_list; ae < address_list + address_count; ++ae) {
+            if (ucp_wireup_is_reachable(worker, rsc_index, ae)) {
+                ae_dst_md_map |= UCS_BIT(ae->md_index);
+                dst_md_index   = context->tl_rscs[rsc_index].md_index;
+                ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
+            }
+        }
+    }
+
+    /* merge with previous configuration */
+    dst_md_map  = ae_dst_md_map | prev_key->reachable_md_map;
+    num_dst_mds = 0;
+    ucs_for_each_bit(dst_md_index, dst_md_map) {
+        cmpt_index = UCP_NULL_RESOURCE;
+        /* remote md is reachable by the provided address */
+        if (UCS_BIT(dst_md_index) & ae_dst_md_map) {
+            cmpt_index = ae_cmpts[dst_md_index];
+        }
+        /* remote md is reachable by previous ep configuration */
+        if (UCS_BIT(dst_md_index) & prev_key->reachable_md_map) {
+            cmpt_index = ucp_ep_config_get_dst_md_cmpt(prev_key, dst_md_index);
+            if (UCS_BIT(dst_md_index) & ae_dst_md_map) {
+                /* we expect previous configuration will not conflict with the
+                 * new one
+                 */
+                ucs_assert_always(cmpt_index == ae_cmpts[dst_md_index]);
+            }
+        }
+        ucs_assert_always(cmpt_index != UCP_NULL_RESOURCE);
+        key->dst_md_cmpts[num_dst_mds++] = cmpt_index;
+    }
+    ucs_assert(num_dst_mds == ucs_popcount(dst_md_map));
+
+    key->reachable_md_map = dst_md_map;
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
@@ -773,14 +837,21 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     ucs_trace("ep %p: initialize lanes", ep);
 
+    ucp_ep_config_key_reset(&key);
+    ucp_ep_config_key_set_params(&key, params);
+
     status = ucp_wireup_select_lanes(ep, params, ep_init_flags, address_count,
                                      address_list, addr_indices, &key);
     if (status != UCS_OK) {
         return status;
     }
 
-    key.reachable_md_map |= ucp_ep_config(ep)->key.reachable_md_map;
+    /* Get all reachable MDs from full remote address list */
+    key.dst_md_cmpts = ucs_alloca(sizeof(*key.dst_md_cmpts) * UCP_MAX_MDS);
+    ucp_wireup_get_reachable_mds(worker, address_count, address_list,
+                                 &ucp_ep_config(ep)->key, &key);
 
+    /* Load new configuration */
     new_cfg_index = ucp_worker_get_ep_config(worker, &key, 1);
     if (ep->cfg_index == new_cfg_index) {
         return UCS_OK; /* No change */
