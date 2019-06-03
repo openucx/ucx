@@ -435,7 +435,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     }
 }
 
-static UCS_F_NOINLINE unsigned ucp_wireup_send_msg_ack(void *arg)
+static unsigned ucp_wireup_send_msg_ack(void *arg)
 {
     ucp_ep_h ep = (ucp_ep_h)arg;
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
@@ -446,7 +446,12 @@ static UCS_F_NOINLINE unsigned ucp_wireup_send_msg_ack(void *arg)
 
     memset(rsc_tli, UCP_NULL_RESOURCE, sizeof(rsc_tli));
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
-    return (status != UCS_OK) ? 0 : 1;
+    return (status == UCS_OK);
+}
+
+int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    return ((elem->arg == arg) && (elem->cb == ucp_wireup_send_msg_ack));
 }
 
 static UCS_F_NOINLINE void
