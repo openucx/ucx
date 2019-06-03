@@ -203,22 +203,32 @@ static void
 ucp_wireup_sockaddr_server_connected_cb(uct_ep_h ep, void *arg,
                                         ucs_status_t status)
 {
-/*
     ucp_ep_h         ucp_ep      = (ucp_ep_h)arg;
     ucp_lane_index_t wireup_idx  = ucp_ep_config(ucp_ep)->key.wireup_lane;
     ucp_wireup_ep_t *wireup_ep   = (ucp_wireup_ep_t *)ucp_ep->uct_eps[wireup_idx];
 
-    ucs_assert_always(status == UCS_OK);
-    status = uct_ep_connect_to_ep(wireup_ep->super.uct_ep, remote_dev_addr,
-                                  conn_priv_data);
-*/
     /* TODO: invoke err handling */
     ucs_assert_always(status == UCS_OK);
-/* TODO:
-    ucp_wireup_ep_disown(&wireup_ep->super.super, wireup_ep->super.uct_ep);
+
     ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
-    uct_ep_destroy(&wireup_ep->super.super);
-*/
+    ucp_wireup_remote_connected(ucp_ep);
+    ucp_ep_flush_state_reset(ucp_ep);
+    ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_CONNECTED;
+}
+
+void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg)
+{
+    ucp_ep_h ucp_ep = (ucp_ep_h)arg;
+
+    ucs_trace_func("uct_ep = %p, ucp_ep = %p, ucp_ep->flags = %xu", ep, ucp_ep,
+                   ucp_ep->flags);
+//    ucs_assert(ucp_ep_get_connected_ep(ucp_ep) == ep);
+    uct_ep_disconnect(ep);
+    ucp_ep->uct_eps[ucp_ep_get_connected_lane(ucp_ep)] = NULL;
+    ucp_ep->flags &= ~UCP_EP_FLAG_SOCKADDR_CONNECTED;
+    if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_FLUSHED) {
+        ucp_ep_disconnected(ucp_ep, 1);
+    }
 }
 
 ucs_status_t
@@ -262,7 +272,7 @@ ucp_ep_create_sockaddr_connected(ucp_worker_h worker,
     lane_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
     lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_priv_pack_cb;
     lane_params.sockaddr_connected_cb.server = ucp_wireup_sockaddr_server_connected_cb;
-    lane_params.disconnected_cb              = NULL;
+    lane_params.disconnected_cb              = ucp_ep_sockaddr_disconnected_cb;
 
     ucs_assert(worker->num_cms == 1);
     for (i = 0; i < worker->num_cms; ++i) {
@@ -568,7 +578,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
 out_free_address:
     ucs_free(remote_address.address_list);
 out:
-    UCS_ASYNC_BLOCK(&worker->async);
+    UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }
 
@@ -869,6 +879,12 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
 
+    ep->flags |= UCP_EP_FLAG_CLOSE_FLUSHED;
+
+    if (ep->flags & UCP_EP_FLAG_SOCKADDR_CONNECTED) {
+        return;
+    }
+
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
      * endpoint cannot be released from pending/completion callback context.
@@ -884,6 +900,8 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h worker = ep->worker;
     void         *request;
+    uct_ep_h     uct_conn_ep;
+    ucs_status_t status;
 
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
@@ -892,13 +910,22 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    uct_conn_ep = ucp_ep_get_connected_ep(ep);
+    if (uct_conn_ep != NULL) {
+        status = uct_ep_disconnect(uct_conn_ep);
+        ucs_assert(status == UCS_OK);
+    }
+
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
                                     NULL, 0, NULL,
                                     ucp_ep_close_flushed_callback, "close");
     if (!UCS_PTR_IS_PTR(request)) {
-        ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+        ep->flags |= UCP_EP_FLAG_CLOSE_FLUSHED;
+        if (!(ep->flags & UCP_EP_FLAG_SOCKADDR_CONNECTED)) {
+            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+        }
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

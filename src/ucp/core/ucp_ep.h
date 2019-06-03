@@ -49,6 +49,8 @@ enum {
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
+    UCP_EP_FLAG_SOCKADDR_CONNECTED     = UCS_BIT(11),/* EP has sockaddr connected lane */
+    UCP_EP_FLAG_CLOSE_FLUSHED          = UCS_BIT(12),/* TODO: check if really needed */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -426,5 +428,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            double bandwidth);
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+
+void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg);
 
 #endif

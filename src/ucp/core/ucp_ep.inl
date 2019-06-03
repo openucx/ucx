@@ -27,6 +27,18 @@ static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
     return ep->am_lane;
 }
 
+static inline ucp_lane_index_t ucp_ep_get_connected_lane(ucp_ep_h ep)
+{
+    return ucp_ep_config(ep)->key.connected_lane;
+}
+
+static inline uct_ep_h ucp_ep_get_connected_ep(ucp_ep_h ep)
+{
+    const ucp_lane_index_t lane = ucp_ep_get_connected_lane(ep);
+
+    return (lane == UCP_NULL_LANE) ? NULL : ep->uct_eps[lane];
+}
+
 static inline ucp_lane_index_t ucp_ep_get_wireup_msg_lane(ucp_ep_h ep)
 {
     ucp_lane_index_t lane = ucp_ep_config(ep)->key.wireup_lane;

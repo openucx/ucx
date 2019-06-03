@@ -119,7 +119,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     void *address;
     unsigned *order = ucs_alloca(ep->worker->context->num_tls * sizeof(*order));
 
-    ucs_assert(ep->cfg_index != (uint8_t)-1);
+    ucs_assert(ep->cfg_index != (ucp_ep_cfg_index_t)-1);
 
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread

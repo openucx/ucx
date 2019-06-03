@@ -722,6 +722,7 @@ ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
     ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
     ucp_wireup_remote_connected(ucp_ep);
     ucp_ep_flush_state_reset(ucp_ep);
+    ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_CONNECTED;
 }
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
@@ -747,7 +748,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
     cm_lane_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
     cm_lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_priv_pack_cb;
     cm_lane_params.sockaddr_connected_cb.client = ucp_wireup_sockaddr_client_connected_cb;
-    cm_lane_params.disconnected_cb              = NULL;
+    cm_lane_params.disconnected_cb              = ucp_ep_sockaddr_disconnected_cb;
 
     ucs_assert(worker->num_cms == 1);
     for (i = 0; i < worker->num_cms; ++i) {

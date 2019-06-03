@@ -236,6 +236,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name)
 {
+    const ucp_lane_index_t connected_lane = ucp_ep_get_connected_lane(ep);
+    int comp_dec                          = 0;
     ucs_status_t status;
     ucp_request_t *req;
 
@@ -264,6 +266,10 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.cb                = req_cb;
     req->send.flush.flushed_cb  = flushed_cb;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
+    if (connected_lane != UCP_NULL_LANE) {
+        comp_dec += !!(req->send.flush.lanes & UCS_BIT(connected_lane));
+        req->send.flush.lanes &= ~UCS_BIT(connected_lane);
+    }
     req->send.flush.prog_id     = UCS_CALLBACKQ_ID_NULL;
     req->send.flush.uct_flags   = uct_flags;
     req->send.flush.worker_req  = worker_req;
@@ -274,6 +280,9 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+    if (connected_lane != UCP_NULL_LANE) {
+        req->send.state.uct_comp.count -= comp_dec;
+    }
 
     ucp_ep_flush_progress(req);
 
