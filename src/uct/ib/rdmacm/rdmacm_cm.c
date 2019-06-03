@@ -141,8 +141,9 @@ ucs_status_t uct_rdmacm_cep_disconnect(uct_ep_h ep)
 uct_base_iface_t dummy_iface = {
     .super = {
         .ops = {
-            .ep_disconnect = uct_rdmacm_cep_disconnect,
-            .ep_destroy    = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cep_t)
+            .ep_pending_purge = (void *)ucs_empty_function_return_success,
+            .ep_disconnect    = uct_rdmacm_cep_disconnect,
+            .ep_destroy       = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cep_t)
         }
     }
 };
