@@ -24,6 +24,7 @@ Bugfixes:
 - Multiple stability fixes in UGNI transport
 - RPM Spec file cleanup
 - Fixing compilation issues with most recent clang and gcc compilers
+- Fixing the wrong name of aliases
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
