@@ -188,7 +188,7 @@ build_docs() {
 	fi
 	../configure --prefix=$ucx_inst --with-docs-only
 	$MAKE clean
-	$MAKE docs
+	make  docs
 	$MAKE clean # FIXME distclean does not work with docs-only
 }
 
