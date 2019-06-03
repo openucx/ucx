@@ -48,7 +48,6 @@ static inline ucs_status_t ucp_rma_wait(ucp_worker_h worker, void *user_req,
         req = (ucp_request_t*)user_req - 1;
         do {
             ucp_worker_progress(worker);
-            status = ucp_request_check_status(user_req);
         } while (!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
         status = req->status;
         ucp_request_release(user_req);
