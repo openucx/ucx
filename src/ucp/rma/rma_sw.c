@@ -130,7 +130,10 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     ucp_request_t *req;
 
     req = ucp_request_get(ep->worker);
-    ucs_assert(req != NULL);
+    if (req == NULL) {
+        ucs_error("failed to allocate put completion");
+        return;
+    }
 
     req->send.ep       = ep;
     req->send.uct.func = ucp_progress_rma_cmpl;
@@ -210,7 +213,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     ucp_request_t *req;
 
     req = ucp_request_get(worker);
-    ucs_assert(req != NULL);
+    if (req == NULL) {
+        ucs_error("failed to allocate get reply");
+        return UCS_OK;
+    }
 
     req->send.ep            = ep;
     req->send.buffer        = (void*)getreqh->address;
