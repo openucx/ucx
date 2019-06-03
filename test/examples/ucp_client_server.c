@@ -228,18 +228,17 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
 
     if (!is_server) {
         /* Client sends a message to the server using the stream API */
-
         request = ucp_stream_send_nb(ep, test_message, 1,
                                      ucp_dt_make_contig(TEST_STRING_LEN),
                                      stream_send_cb, 0);
     } else {
         /* Server receives a message from the client using the stream API */
-        
         request = ucp_stream_recv_nb(ep, &recv_message, 1,
                                      ucp_dt_make_contig(TEST_STRING_LEN),
                                      stream_recv_cb, &length,
                                      UCP_STREAM_RECV_FLAG_WAITALL);
     }
+
     status = request_wait(ucp_worker, request);
     if (status != UCS_OK){
         fprintf(stderr, "unable to %s UCX message (%s)\n",
