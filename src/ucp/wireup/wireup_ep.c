@@ -721,6 +721,7 @@ ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
     ucs_assert_always(status == UCS_OK);
     ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
     ucp_wireup_remote_connected(ucp_ep);
+    ucp_ep_add_connected_lane(ucp_ep, ep);
     ucp_ep_flush_state_reset(ucp_ep);
     ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_CONNECTED;
 }

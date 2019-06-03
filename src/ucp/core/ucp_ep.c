@@ -199,6 +199,27 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     return UCS_OK;
 }
 
+ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
+{
+    ucp_ep_config_key_t new_key;
+
+    if (ucp_ep_get_connected_lane(ucp_ep) != UCP_NULL_LANE) {
+        return UCS_ERR_ALREADY_EXISTS;
+    }
+
+    ucs_assert(ucp_ep_get_connected_ep(ucp_ep) == NULL);
+
+    new_key = ucp_ep_config(ucp_ep)->key;
+    if (new_key.num_lanes == UCP_MAX_LANES) {
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    new_key.connected_lane = new_key.num_lanes++;
+    ucp_ep->uct_eps[new_key.connected_lane] = uct_ep;
+    ucp_ep->cfg_index = ucp_worker_get_ep_config(ucp_ep->worker, &new_key);
+    return UCS_OK;
+}
+
 static void
 ucp_wireup_sockaddr_server_connected_cb(uct_ep_h ep, void *arg,
                                         ucs_status_t status)
@@ -212,6 +233,7 @@ ucp_wireup_sockaddr_server_connected_cb(uct_ep_h ep, void *arg,
 
     ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
     ucp_wireup_remote_connected(ucp_ep);
+    ucp_ep_add_connected_lane(ucp_ep, ep);
     ucp_ep_flush_state_reset(ucp_ep);
     ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_CONNECTED;
 }
@@ -222,7 +244,7 @@ void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg)
 
     ucs_trace_func("uct_ep = %p, ucp_ep = %p, ucp_ep->flags = %xu", ep, ucp_ep,
                    ucp_ep->flags);
-//    ucs_assert(ucp_ep_get_connected_ep(ucp_ep) == ep);
+    ucs_assert(ucp_ep_get_connected_ep(ucp_ep) == ep);
     uct_ep_disconnect(ep);
     ucp_ep->uct_eps[ucp_ep_get_connected_lane(ucp_ep)] = NULL;
     ucp_ep->flags &= ~UCP_EP_FLAG_SOCKADDR_CONNECTED;

@@ -431,4 +431,6 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
 void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg);
 
+ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+
 #endif
