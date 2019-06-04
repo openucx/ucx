@@ -202,7 +202,7 @@ static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)
 static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
                                              uct_dc_iface_config_t *config)
 {
-    struct ibv_qp_cap cap;
+    struct ibv_qp_cap cap = {0};
     ucs_status_t status;
     int i;
 

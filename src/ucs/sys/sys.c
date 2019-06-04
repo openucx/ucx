@@ -569,7 +569,6 @@ static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
 out:
     if (!error_detected) {
         snprintf(p, endp - p, ", please check shared memory limits by 'ipcs -l'");
-        p += strlen(p);
     }
 }
 

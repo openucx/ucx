@@ -7,6 +7,12 @@
 ##
 #
 
+## 1.5.2 (TBD)
+Bugfixes:
+- Fix segfault when libuct.so is reloaded - issue #3558
+- Fix ucx_info crash when printing configuration alias
+- Fix static checker errors
+
 ## 1.5.1 (April 1, 2019)
 Bugfixes:
 - Fix dc_mlx5 transport support check for inbox libmlx5 drivers - issue #3301

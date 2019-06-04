@@ -11,8 +11,8 @@ SUBDIRS = sockaddr
 endif
 
 noinst_PROGRAMS = \
-	test_dlopen
-
+	test_dlopen \
+	test_dlopen_cfg_print
 
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
@@ -20,6 +20,13 @@ test_dlopen_SOURCES  = test_dlopen.c
 test_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) -g -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
 test_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_dlopen_LDADD    = -ldl
+
+test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
+test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \
+	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so \
+	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir)/libuct.so
+test_dlopen_cfg_print_CFLAGS   = $(BASE_CFLAGS)
+test_dlopen_cfg_print_LDADD    = -ldl
 
 if HAVE_TCMALLOC
 noinst_PROGRAMS       += test_tcmalloc
