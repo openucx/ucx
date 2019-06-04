@@ -329,9 +329,16 @@ public:
     void activate_offload_hashing(entity &se, ucp_tag_t tag)
     {
         se.connect(&receiver(), get_ep_params());
-        // Need to send twice, since the first message may not enable hashing
-        // (num_active_iface on worker is increased after unexpected offload handler)
-        send_recv(se, tag, 2048);
+        // Need to send twice:
+        // 1. to ensure that wireup's UCT iface has been closed and
+        //    it is not considered for num_active_iface on worker
+        //    (message has to be less than `UCX_TM_THRESH` value)
+        // 2. to activate tag ofload
+        //    (num_active_ifaces on worker is increased when any message
+        //     is received on any iface. Tag hashing is done when we have
+        //     more than 1 active ifaces and message has to be greater
+        //     than `UCX_TM_THRESH` value)
+        send_recv(se, tag, 8);
         send_recv(se, tag, 2048);
     }
 
