@@ -1076,7 +1076,8 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
                 if (status != UCS_OK) {
                     /* If set to ignore errors, restore the default value */
                     ucs_status_t tmp_status =
-                                    ucs_config_parser_parse_field(field, field->dfl_value, var);
+                        ucs_config_parser_parse_field(field, field->dfl_value,
+                                                      var);
                     if (ignore_errors) {
                         status = tmp_status;
                     }
@@ -1231,9 +1232,9 @@ ucs_config_find_aliased_field(const ucs_config_field_t *fields,
     size_t offset;
 
     for (field = fields; field->name; ++field) {
-
         if (field == alias) {
             /* skip */
+            continue;
         } else if (ucs_config_is_table_field(field)) {
             result = ucs_config_find_aliased_field(field->parser.arg, alias,
                                                    &offset);
@@ -1323,6 +1324,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                     ucs_list_link_t *prefix_list)
 {
     const ucs_config_field_t *field, *aliased_field;
+    ucs_config_parser_prefix_t *head;
     ucs_config_parser_prefix_t inner_prefix;
     size_t alias_table_offset;
 
@@ -1339,26 +1341,29 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
             ucs_list_del(&inner_prefix.list);
         } else if (ucs_config_is_alias_field(field)) {
             if (flags & UCS_CONFIG_PRINT_HIDDEN) {
-                aliased_field = ucs_config_find_aliased_field(fields, field,
-                                                              &alias_table_offset);
+                aliased_field =
+                    ucs_config_find_aliased_field(fields, field,
+                                                  &alias_table_offset);
                 if (aliased_field == NULL) {
                     ucs_fatal("could not find aliased field of %s", field->name);
                 }
-                ucs_config_parser_print_field(stream,
-                                              opts + alias_table_offset,
+
+                head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
+
+                ucs_config_parser_print_field(stream, opts + alias_table_offset,
                                               env_prefix, prefix_list,
                                               field->name, aliased_field,
-                                              flags, "%-*s %s%s",
+                                              flags, "%-*s %s%s%s",
                                               UCP_CONFIG_PARSER_DOCSTR_WIDTH,
                                               "alias of:", env_prefix,
+                                              head->prefix,
                                               aliased_field->name);
             }
         } else {
             ucs_config_parser_print_field(stream, opts, env_prefix, prefix_list,
                                           field->name, field, flags, NULL);
         }
-     }
-
+    }
 }
 
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
