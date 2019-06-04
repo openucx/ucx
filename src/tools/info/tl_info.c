@@ -367,7 +367,8 @@ out:
     return status;
 }
 
-static void print_md_info(const uct_component_attr_t *component_attr,
+static void print_md_info(uct_component_h component,
+                          const uct_component_attr_t *component_attr,
                           const char *md_name, int print_opts,
                           ucs_config_print_flags_t print_flags,
                           const char *req_tl_name)
@@ -385,7 +386,7 @@ static void print_md_info(const uct_component_attr_t *component_attr,
         goto out;
     }
 
-    status = uct_md_open(NULL, md_name, md_config, &md);
+    status = uct_md_open(component, md_name, md_config, &md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         printf("# < failed to open memory domain %s >\n", md_name);
@@ -506,7 +507,8 @@ static void print_uct_component_info(uct_component_h component,
     }
 
     for (i = 0; i < component_attr.md_resource_count; ++i) {
-        print_md_info(&component_attr, component_attr.md_resources[i].md_name,
+        print_md_info(component, &component_attr,
+                      component_attr.md_resources[i].md_name,
                       print_opts, print_flags, req_tl_name);
     }
 }

@@ -41,15 +41,17 @@ void* test_md::alloc_thread(void *arg)
     return NULL;
 }
 
-std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
+std::vector<test_md_param> test_md::enum_mds(const std::string& mdc_name) {
 
     std::vector<md_resource> md_resources = enum_md_resources();
 
-    std::vector<std::string> result;
+    std::vector<test_md_param> result;
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
          iter != md_resources.end(); ++iter) {
         if (iter->cmpt_attr.name == mdc_name) {
-            result.push_back(iter->rsc_desc.md_name);
+            result.push_back(test_md_param());
+            result.back().component = iter->cmpt;
+            result.back().md_name   = iter->rsc_desc.md_name;
         }
     }
 
@@ -60,7 +62,7 @@ test_md::test_md()
 {
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
-                           uct_md_config_read, GetParam().c_str(), NULL, NULL);
+                           uct_md_config_read, GetParam().md_name.c_str(), NULL, NULL);
     memset(&m_md_attr, 0, sizeof(m_md_attr));
 }
 
@@ -68,7 +70,8 @@ void test_md::init()
 {
     ucs::test_base::init();
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           NULL, GetParam().c_str(), m_md_config);
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
 
     ucs_status_t status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
@@ -98,7 +101,7 @@ void test_md::check_caps(uint64_t flags, const std::string& name)
     ASSERT_UCS_OK(status);
     if (!ucs_test_all_flags(md_attr.cap.flags, flags)) {
         std::stringstream ss;
-        ss << name << " is not supported by " << GetParam();
+        ss << name << " is not supported by " << GetParam().md_name;
         UCS_TEST_SKIP_R(ss.str());
     }
 }
@@ -126,7 +129,7 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
     } else {
         std::stringstream ss;
         ss << "can't allocate " << mem_types[mem_type]
-           << " memory for " << GetParam();
+           << " memory for " << GetParam().md_name;
         UCS_TEST_SKIP_R(ss.str());
     }
 }
@@ -293,7 +296,7 @@ UCS_TEST_P(test_md, reg) {
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
             UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
-                             << "registration is not supported by " << GetParam();
+                             << "registration is not supported by " << GetParam().md_name;
             continue;
         }
         for (unsigned i = 0; i < 300; ++i) {
@@ -336,7 +339,7 @@ UCS_TEST_P(test_md, reg_perf) {
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
             UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
-                             << " registration is not supported by " << GetParam();
+                             << " registration is not supported by " << GetParam().md_name;
             continue;
         }
         for (size_t size = 4 * UCS_KBYTE; size <= 4 * UCS_MBYTE; size *= 2) {
@@ -364,7 +367,7 @@ UCS_TEST_P(test_md, reg_perf) {
                 }
             }
 
-            UCS_TEST_MESSAGE << GetParam() << ": Registration time for " <<
+            UCS_TEST_MESSAGE << GetParam().md_name << ": Registration time for " <<
                 mem_types[mem_type] << " memory " << size << " bytes: " <<
                 long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
 
@@ -488,7 +491,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
             sock_addr.addr = ifa->ifa_addr;
 
-            if (!strcmp(GetParam().c_str(), "rdmacm")) {
+            if (GetParam().md_name == "rdmacm") {
                 if (ucs::is_rdmacm_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                         ucs::sockaddr_to_str(ifa->ifa_addr);
@@ -509,7 +512,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         }
     }
 
-    if ((!strcmp(GetParam().c_str(), "rdmacm")) && (!found_ipoib)) {
+    if ((GetParam().md_name == "rdmacm") && !found_ipoib) {
         UCS_TEST_MESSAGE << "Cannot find an IPoIB interface with an IPv4 address on the host";
     }
 

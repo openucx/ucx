@@ -70,7 +70,7 @@ UCS_TEST_P(test_mem, md_alloc) {
         status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_open(NULL, iter->rsc_desc.md_name, md_config, &md);
+        status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
@@ -122,7 +122,7 @@ UCS_TEST_P(test_mem, md_fixed) {
         status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_md_open(NULL, iter->rsc_desc.md_name, md_config, &md);
+        status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
