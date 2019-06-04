@@ -35,7 +35,6 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
 	goto out_free;
     }
 
-    ep->sock_id_ctx->ep = ep;
     ucs_list_add_tail(&iface->used_sock_ids_list, &ep->sock_id_ctx->list);
     ucs_debug("ep %p, new sock_id %d", ep, ep->sock_id_ctx->sock_id);
     status = UCS_OK;
@@ -54,39 +53,34 @@ ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_e
     uct_sockcm_priv_data_hdr_t *hdr;
     ssize_t sent_len = 0;
     ssize_t recv_len = 0;
-    ssize_t offset = 0;
     int connect_confirm = -1;
 
     memset(&conn_param.private_data, 0, UCT_SOCKCM_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
 
     /* pack worker address into private data */
-    hdr->length = ep->pack_cb(ep->pack_cb_arg, "eth0",
+    hdr->length = ep->pack_cb(ep->pack_cb_arg, "DEV_NAME_NULL",
                               (void*)conn_param.private_data);
     if (hdr->length < 0) {
-        ucs_error("sockcm client (iface=%p) failed to fill "
+        ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
                   "private data. status: %s",
-                  iface, ucs_status_string(hdr->length));
+                  iface, ep, ucs_status_string(hdr->length));
         return UCS_ERR_IO_ERROR;
     }
-    hdr->status = UCS_OK;
     conn_param.private_data_len = sizeof(uct_sockcm_conn_param_t);
 
     recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &connect_confirm,
                     sizeof(int), 0);
-    ucs_debug("recv len = %d\n", (int) recv_len);
-    ucs_debug("connect confirm = %d\n", connect_confirm);
+    ucs_debug("recv len = %d connect confirm = %d", (int) recv_len, connect_confirm);
 
-    sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param + offset,
-                    (conn_param.private_data_len - offset), 0);
+    sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param,
+                    conn_param.private_data_len, 0);
     ucs_debug("send_len = %d bytes %m", (int) sent_len);
 
-    if (ep != NULL) {
-        pthread_mutex_lock(&ep->ops_mutex);
-        ep->status = UCS_OK;
-        uct_sockcm_ep_invoke_completions(ep, UCS_OK);
-        pthread_mutex_unlock(&ep->ops_mutex);
-    }
+    pthread_mutex_lock(&ep->ops_mutex);
+    ep->status = UCS_OK;
+    uct_sockcm_ep_invoke_completions(ep, UCS_OK);
+    pthread_mutex_unlock(&ep->ops_mutex);
 
     return UCS_OK;
 }
@@ -208,7 +202,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 
     if (self->sock_id_ctx != NULL) {
         sock_id_ctx     = self->sock_id_ctx;
-        sock_id_ctx->ep = NULL;
         ucs_debug("ep destroy: sock_id %d", sock_id_ctx->sock_id);
     }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);

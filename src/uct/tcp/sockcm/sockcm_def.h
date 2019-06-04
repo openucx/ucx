@@ -31,8 +31,8 @@ typedef struct uct_sockcm_priv_data_hdr {
 
 typedef struct uct_sockcm_conn_param {
     uct_sockcm_priv_data_hdr_t hdr;
-    char                      private_data[UCT_SOCKCM_PRIV_DATA_LEN];
-    unsigned int              private_data_len;
+    char                       private_data[UCT_SOCKCM_PRIV_DATA_LEN];
+    unsigned int               private_data_len;
 } uct_sockcm_conn_param_t;
 
 typedef struct uct_sockcm_ctx {

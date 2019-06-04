@@ -159,7 +159,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     uct_sockcm_conn_param_t conn_param;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    // accept client connection
+    /* accept client connection */
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
@@ -185,9 +185,6 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     }
-
-    return;
-
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -279,6 +276,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
+        self->sockaddr         = param_sockaddr;
         self->is_server        = 1;
     } else {
         self->sock_id          = -1;

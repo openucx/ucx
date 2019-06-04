@@ -47,7 +47,6 @@ ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 static int uct_sockcm_is_addr_route_resolved(int sock_id, struct sockaddr *addr,
                                             int addrlen)
 {
-    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char host[UCS_SOCKADDR_STRING_LEN];
     char serv[UCS_SOCKADDR_STRING_LEN];
     int ret = -1;
@@ -59,37 +58,7 @@ static int uct_sockcm_is_addr_route_resolved(int sock_id, struct sockaddr *addr,
         return 0;
     }
 
-    if (connect(sock_id, addr, addrlen)) {
-
-        if (errno == ECONNREFUSED) {
-            return 1;
-        }
-
-        ucs_debug("connect(addr = %s) failed: %m",
-                   ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
-        return 0;
-    }
-
     return 1;
-}
-
-static int uct_sockcm_is_sockaddr_inaddr_any(struct sockaddr *addr)
-{
-    struct sockaddr_in6 *addr_in6;
-    struct sockaddr_in *addr_in;
-
-    switch (addr->sa_family) {
-    case AF_INET:
-        addr_in = (struct sockaddr_in *)addr;
-        return addr_in->sin_addr.s_addr == INADDR_ANY;
-    case AF_INET6:
-        addr_in6 = (struct sockaddr_in6 *)addr;
-        return !memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr));
-    default:
-        ucs_debug("Invalid address family: %d", addr->sa_family);
-    }
-
-    return 0;
 }
 
 int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
@@ -122,7 +91,7 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
             goto out_destroy_id;
         }
 
-        if (uct_sockcm_is_sockaddr_inaddr_any(param_sockaddr)) {
+        if (ucs_sockaddr_inaddr_any(param_sockaddr)) {
             is_accessible = 1;
             goto out_print;
         }
