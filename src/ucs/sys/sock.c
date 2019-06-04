@@ -312,6 +312,25 @@ ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port)
     }
 }
 
+int ucs_sockaddr_inaddr_any(struct sockaddr *addr)
+{
+    struct sockaddr_in6 *addr_in6;
+    struct sockaddr_in *addr_in;
+
+    switch (addr->sa_family) {
+    case AF_INET:
+        addr_in = (struct sockaddr_in *)addr;
+        return addr_in->sin_addr.s_addr == INADDR_ANY;
+    case AF_INET6:
+        addr_in6 = (struct sockaddr_in6 *)addr;
+        return !memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr));
+    default:
+        ucs_debug("Invalid address family: %d", addr->sa_family);
+    }
+
+    return 0;
+}
+
 const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
 {
     switch (addr->sa_family) {

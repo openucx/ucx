@@ -28,6 +28,9 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
+    uct_sockcm_iface_t  *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
+    uint16_t port;
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
@@ -36,6 +39,14 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                   UCT_IFACE_FLAG_CB_ASYNC               |
                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     iface_attr->max_conn_priv   = UCT_SOCKCM_MAX_CONN_PRIV;
+
+    if (iface->is_server) {
+        if (UCS_OK != ucs_sockaddr_get_port(iface->sockaddr, &port)) {
+            ucs_error("ucs_sockaddr_get_port() failed");
+            return UCS_ERR_IO_ERROR;
+        }
+        iface_attr->listen_port = (int) port;
+    }
 
     return UCS_OK;
 }
@@ -147,7 +158,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     uct_sockcm_conn_param_t conn_param;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    // accept client connection
+    /* accept client connection */
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
@@ -173,9 +184,6 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     }
-
-    return;
-
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -267,6 +275,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
+        self->sockaddr         = param_sockaddr;
         self->is_server        = 1;
     } else {
         self->sock_id          = -1;

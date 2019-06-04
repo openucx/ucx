@@ -276,6 +276,15 @@ int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
                           const struct sockaddr *sa2,
                           ucs_status_t *status_p);
 
+/**
+ * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ *
+ * @return 1 if input is INADDR_ANY or in6addr_any
+ *         0 if not
+ */
+int ucs_sockaddr_inaddr_any(struct sockaddr *addr);
 
 END_C_DECLS
 
