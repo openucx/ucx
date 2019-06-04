@@ -448,6 +448,7 @@ UCS_TEST_P(test_ucp_sockaddr, reject) {
 
 UCS_TEST_P(test_ucp_sockaddr, query_listener) {
     ucp_listener_attr_t listener_attr;
+    ucs_status_t status;
     int i;
 
     listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
@@ -457,7 +458,8 @@ UCS_TEST_P(test_ucp_sockaddr, query_listener) {
                        (const struct sockaddr*)&test_addr);
 
     start_listener(cb_type(), (const struct sockaddr*)&test_addr);
-    ucp_listener_query(receiver().listenerh(), &listener_attr);
+    status = ucp_listener_query(receiver().listenerh(), &listener_attr);
+    EXPECT_UCS_OK(status);
 
     EXPECT_EQ(test_addr.sin_port, htons(listener_attr.port));
 

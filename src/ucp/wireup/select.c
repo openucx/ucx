@@ -1471,36 +1471,31 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
     uct_md_h md;
     int i;
 
-    /* Go over the sockaddr transports priority list and try to use the transports
+    /* Go over the sockaddr transports priority array and try to use the transports
      * one by one for the client side */
     for (i = 0; i < context->config.num_sockaddr_tls; i++) {
-        ucs_for_each_bit(tl_id, context->tl_bitmap) {
-            resource = &context->tl_rscs[tl_id];
-            if (strcmp(context->config.sockadrr_tls[i].cm_tl_name,
-                       resource->tl_rsc.tl_name) ||
-                !(resource->flags & UCP_TL_RSC_FLAG_SOCKADDR)) {
-                continue;
-            }
+        tl_id    = context->config.sockaddr_tl_ids[i];
+        resource = &context->tl_rscs[tl_id];
+        md_index = resource->md_index;
+        md       = context->tl_mds[md_index].md;
 
-            md_index = resource->md_index;
-            md       = context->tl_mds[md_index].md;
-            ucs_assert(context->tl_mds[md_index].attr.cap.flags &
-                       UCT_MD_FLAG_SOCKADDR);
+        ucs_assert(context->tl_mds[md_index].attr.cap.flags &
+                   UCT_MD_FLAG_SOCKADDR);
 
-            /* The client selects the transport for sockaddr according to the
-             * configuration. We rely on the server having this transport available
-             * as well */
-            if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
-                                              UCT_SOCKADDR_ACC_REMOTE)) {
-                *rsc_index_p = tl_id;
-                return UCS_OK;
-            }
-
-            ucs_debug("md %s cannot reach %s",
-                      context->tl_mds[md_index].rsc.md_name,
-                      ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
-                                       sizeof(saddr_str)));
+        /* The client selects the transport for sockaddr according to the
+         * configuration. We rely on the server having this transport available
+         * as well */
+        if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
+                                          UCT_SOCKADDR_ACC_REMOTE)) {
+            *rsc_index_p = tl_id;
+            ucs_debug("sockaddr transport selected: %s", resource->tl_rsc.tl_name);
+            return UCS_OK;
         }
+
+        ucs_debug("md %s cannot reach %s",
+                  context->tl_mds[md_index].rsc.md_name,
+                  ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
+                                   sizeof(saddr_str)));
     }
 
     return UCS_ERR_UNREACHABLE;

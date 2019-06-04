@@ -98,8 +98,9 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_TLS", "rdmacm,sockcm",
-   "Priority of sockaddr transports for client/server connection establishment.",
+  {"SOCKADDR_TLS_PRIORITY", "rdmacm,*",
+   "Priority of sockaddr transports for client/server connection establishment.\n"
+   "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"SOCKADDR_AUX_TLS", "ud,ud_x",
@@ -312,6 +313,19 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
 {
     ucs_config_parser_print_opts(stream, title, config, ucp_config_table, NULL,
                                  print_flags);
+}
+
+static int ucp_find_rsc_array(ucp_rsc_index_t arr[], int count, ucp_rsc_index_t tl_id)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (arr[i] == tl_id) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 /* Search str in the array. If str_suffix is specified, search for
@@ -846,13 +860,67 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
 
     /* Check if any of the context's resources are present in the sockaddr
      * auxiliary transports for the client-server flow */
-    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+    ucs_for_each_bit(tl_id, context->tl_bitmap) {
         if (ucp_is_resource_in_transports_list(context->tl_rscs[tl_id].tl_rsc.tl_name,
                                                tl_names, count, &dummy_flags,
                                                &dummy_mask)) {
             context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id);
         }
     }
+}
+
+static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
+                                        const ucp_config_t *config)
+{
+    const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
+    unsigned num_cfg_sockaddr_tls  = config->sockaddr_cm_tls.count;;
+    int                        idx = 0;
+    ucp_tl_resource_desc_t *resource;
+    ucp_rsc_index_t tl_id;
+    ucp_tl_md_t *tl_md;
+    int j;
+
+    /* Check if a list of sockadrr transports exists */
+    if (config->sockaddr_cm_tls.count == 0) {
+        ucs_debug("No sockaddr transports specified");
+        return;
+    }
+
+    /* Parse the sockadrr transports priority list */
+    for (j = 0; j < num_cfg_sockaddr_tls; j++) {
+        /* go over the proiroty list and find the transport's tl_id in the
+         * context's tl_bitmap. save the tl_id's for the client/server usage later */
+        if (strncmp(sockaddr_tl_names[j], "*", 1)) {
+            ucs_for_each_bit(tl_id, context->tl_bitmap) {
+                resource = &context->tl_rscs[tl_id];
+                tl_md    = &context->tl_mds[resource->md_index];
+                if (!strcmp(config->sockaddr_cm_tls.cm_tls[j],
+                            resource->tl_rsc.tl_name) &&
+                    (tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) &&
+                    (ucp_find_rsc_array(context->config.sockaddr_tl_ids,
+                                        idx, tl_id) == -1)) {
+                    context->config.sockaddr_tl_ids[idx] = tl_id;
+                    idx++;
+                    break;
+                }
+            }
+        } else {
+            /* wildcard - search for all the available sockaddr transports
+             * and add them to the list */
+            ucs_for_each_bit(tl_id, context->tl_bitmap) {
+                resource = &context->tl_rscs[tl_id];
+                tl_md    = &context->tl_mds[resource->md_index];
+                if ((tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) &&
+                    (ucp_find_rsc_array(context->config.sockaddr_tl_ids,
+                                        idx, tl_id) == -1)) {
+                    context->config.sockaddr_tl_ids[idx] = tl_id;
+                    idx++;
+                }
+            }
+        }
+    }
+
+    context->config.num_sockaddr_tls = idx;
 }
 
 static ucs_status_t ucp_check_resources(ucp_context_h context,
@@ -1067,6 +1135,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     ucp_fill_sockaddr_aux_tls_config(context, config);
+    ucp_fill_sockaddr_prio_list(context, config);
 
     uct_release_component_list(uct_components);
     return UCS_OK;
@@ -1133,7 +1202,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
 {
-    unsigned i, num_alloc_methods, method, num_sockaddr_tls;
+    unsigned i, num_alloc_methods, method;
     const char *method_name;
     ucs_status_t status;
 
@@ -1227,32 +1296,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    /* Parse the sockadrr transports priority list */
-    context->config.num_sockaddr_tls = config->sockaddr_cm_tls.count;
-
-    /* Make sure that a list of sockadrr transports exists and save it */
-    if (config->sockaddr_cm_tls.count == 0) {
-        ucs_warn("No sockaddr transports specified");
-        goto out;
-    }
-
-    num_sockaddr_tls = config->sockaddr_cm_tls.count;
-    /* Allocate an array to hold the sockaddr transports list */
-    context->config.sockadrr_tls = ucs_calloc(num_sockaddr_tls,
-                                              sizeof(*context->config.sockadrr_tls),
-                                              "ucp_sockaddr_tls");
-    if (context->config.sockadrr_tls == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free;
-    }
-
-    for (i = 0; i < num_sockaddr_tls; i++) {
-        ucs_strncpy_zero(context->config.sockadrr_tls[i].cm_tl_name,
-                         config->sockaddr_cm_tls.cm_tls[i],
-                         UCT_TL_NAME_MAX);
-    }
-
-out:
     return UCS_OK;
 
 err_free:
@@ -1265,7 +1308,6 @@ err:
 static void ucp_free_config(ucp_context_h context)
 {
     ucs_free(context->config.alloc_methods);
-    ucs_free(context->config.sockadrr_tls);
 }
 
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
