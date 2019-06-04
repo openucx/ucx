@@ -199,23 +199,26 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL
 };
 
-static ucs_status_t uct_ib_mlx5dv_check_odp(uct_ib_mlx5_md_t *md, void *cap) {
+/* assuming a DEVX cabable driver also implements ODP */
+static ucs_status_t uct_ib_mlx5dv_check_odp(uct_ib_mlx5_md_t *md, void *cap)
+{
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
     void *odp;
     int ret;
 
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
-        return UCS_OK;
+        goto no_odp;
     }
 
     odp = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
-    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                                    (UCT_IB_MLX5_CAP_ODP << 1));
     ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, in, sizeof(in),
                                   out, sizeof(out));
     if (ret != 0) {
+        ucs_error("mlx5dv_devx_general_cmd(QUERY_HCA_CAP, ODP) failed: %m");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -223,14 +226,14 @@ static ucs_status_t uct_ib_mlx5dv_check_odp(uct_ib_mlx5_md_t *md, void *cap) {
         !UCT_IB_MLX5DV_GET(odp_cap, odp, rc_odp_caps.send) ||
         !UCT_IB_MLX5DV_GET(odp_cap, odp, rc_odp_caps.write) ||
         !UCT_IB_MLX5DV_GET(odp_cap, odp, rc_odp_caps.read)) {
-        return UCS_OK;
+        goto no_odp;
     }
 
     if ((md->super.dev.flags & UCT_IB_DEVICE_FLAG_DC) &&
         (!UCT_IB_MLX5DV_GET(odp_cap, odp, dc_odp_caps.send) ||
          !UCT_IB_MLX5DV_GET(odp_cap, odp, dc_odp_caps.write) ||
          !UCT_IB_MLX5DV_GET(odp_cap, odp, dc_odp_caps.read))) {
-        return UCS_OK;
+        goto no_odp;
     }
 
     if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
@@ -247,6 +250,10 @@ static ucs_status_t uct_ib_mlx5dv_check_odp(uct_ib_mlx5_md_t *md, void *cap) {
         md->super.dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
+    return UCS_OK;
+
+no_odp:
+    md->super.config.odp.max_size = 0;
     return UCS_OK;
 }
 
@@ -295,7 +302,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
-    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                                    (UCT_IB_MLX5_CAP_GENERAL << 1));
     ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
     if (ret != 0) {
@@ -334,7 +341,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         uint8_t arg_size;
         int cap_ops, mode8b;
 
-        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                                        (UCT_IB_MLX5_CAP_ATOMIC << 1));
         ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
         if (ret != 0) {
@@ -853,6 +860,10 @@ static ucs_status_t uct_ib_mlx5_verbs_md_open(struct ibv_device *ibv_device,
     if (!(uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
         status = UCS_ERR_UNSUPPORTED;
         goto err_free;
+    }
+
+    if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
+        md->super.config.odp.max_size = 0;
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||

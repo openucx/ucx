@@ -64,6 +64,7 @@
 
 /* Read device properties */
 #if HAVE_DECL_IBV_EXP_QUERY_DEVICE
+
 #  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr._attr)
 
 typedef struct ibv_exp_device_attr uct_ib_device_attr;
@@ -87,6 +88,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
     return UCS_OK;
 }
 #elif HAVE_DECL_IBV_QUERY_DEVICE_EX
+
 #  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr.orig_attr._attr)
 
 typedef struct ibv_device_attr_ex uct_ib_device_attr;
@@ -107,6 +109,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 }
 
 #else
+
 #  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr._attr)
 
 typedef struct ibv_device_attr uct_ib_device_attr;
@@ -124,6 +127,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 
     return UCS_OK;
 }
+
 #endif
 
 
