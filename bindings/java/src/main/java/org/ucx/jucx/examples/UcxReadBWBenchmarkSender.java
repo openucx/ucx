@@ -9,44 +9,30 @@ import org.ucx.jucx.UcxCallback;
 import org.ucx.jucx.UcxRequest;
 import org.ucx.jucx.ucp.*;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Stack;
 
-public class UcxReadBWBenchmarkSender {
+
+public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
     public static void main(String[] args) throws IOException {
-        Map<String, String> argsMap = new HashMap<>();
-        for (String arg: args) {
-            String[] parts = arg.split("=");
-            argsMap.put(parts[0], parts[1]);
+        if (!initializeArguments(args)) {
+            return;
         }
 
+        createContextAndWorker();
+
         String serverHost = argsMap.get("s");
-        int serverPort = Integer.parseInt(argsMap.get("p"));
-        long totalSize = Long.parseLong(argsMap.get("t"));
-
-        Stack<Closeable> resources = new Stack<>();
-
-        UcpContext context = new UcpContext(new UcpParams().requestWakeupFeature()
-            .requestRmaFeature().requestTagFeature());
-        resources.push(context);
-        UcpWorker worker = context.newWorker(new UcpWorkerParams());
-        resources.push(worker);
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
         resources.push(endpoint);
 
         // In java ByteBuffer can be allocated up to 2GB (int max size).
-
         if (totalSize >= Integer.MAX_VALUE) {
             throw new IOException("Max size must be no greater then " + Integer.MAX_VALUE);
         }
-        ByteBuffer data = ByteBuffer.allocateDirect((int)totalSize);
+        ByteBuffer data = ByteBuffer.allocateDirect(totalSize);
         byte b = Byte.MIN_VALUE;
         while (data.hasRemaining()) {
             data.put(b++);
@@ -63,7 +49,7 @@ public class UcxReadBWBenchmarkSender {
         ByteBuffer sendData = ByteBuffer.allocateDirect(24 + rkeyBuffer.capacity() +
             workerAddress.capacity());
         sendData.putLong(memory.getAddress());
-        sendData.putInt((int)totalSize);
+        sendData.putInt(totalSize);
         sendData.putInt(rkeyBuffer.capacity());
         sendData.put(rkeyBuffer);
         sendData.putInt(workerAddress.capacity());
@@ -87,8 +73,6 @@ public class UcxReadBWBenchmarkSender {
         }
 
         memory.deregister();
-        while (!resources.empty()) {
-            resources.pop().close();
-        }
+        closeResources();
     }
 }

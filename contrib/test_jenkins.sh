@@ -940,6 +940,10 @@ test_jucx() {
 		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
 	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		if [ -n "$ifaces" ]
+		then
+                        $MAKE -C bindings/java/src/main/native package
+		fi
 		for iface in $ifaces 
 		do
 			if [ -n "$iface" ]
@@ -949,15 +953,14 @@ test_jucx() {
 
                 	if [ -z "$server_ip" ]
                 	then
-		   	   echo "Interface $iface has no IPv4"	
-                   	   continue
+		   	   	echo "Interface $iface has no IPv4"	
+                   	   	continue
                         fi
                         echo "Running standalone benchamrk on $iface"
 
-                        $MAKE -C bindings/java/src/main/native package
                         java -cp bindings/java/src/main/native/build-java/jucx-*.jar org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver s=$server_ip p=$JUCX_TEST_PORT 2>&1 > bindings/java/src/main/native/build-java/jucx_bench.log & 
                         sleep 10
-                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar  org.ucx.jucx.examples.UcxReadBWBenchmarkSender s=$server_ip p=$JUCX_TEST_PORT t=10000000 
+                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar  org.ucx.jucx.examples.UcxReadBWBenchmarkSender s=$server_ip p=$JUCX_TEST_PORT t=10000000
                         cat bindings/java/src/main/native/build-java/jucx_bench.log
 		done
 

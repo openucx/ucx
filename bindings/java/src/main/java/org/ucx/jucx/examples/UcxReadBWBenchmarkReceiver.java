@@ -9,51 +9,29 @@ import org.ucx.jucx.UcxCallback;
 import org.ucx.jucx.UcxRequest;
 import org.ucx.jucx.ucp.*;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Stack;
 
-public class UcxReadBWBenchmarkReceiver {
-
-    private static long bytesInGigabit = 1000L * 1000L * 1000L / 8;
-
-    private static double getBandwith(long nanoTimeDelta, long size) {
-        double sizeInGigabits = (double)size / bytesInGigabit;
-        double secondsElapsed = nanoTimeDelta / 1_000_000_000.0;
-        return sizeInGigabits / secondsElapsed;
-    }
+public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
     public static void main(String[] args) throws IOException {
-        Map<String, String> argsMap = new HashMap<>();
-        for (String arg: args) {
-            String[] parts = arg.split("=");
-            argsMap.put(parts[0], parts[1]);
+        if (!initializeArguments(args)) {
+            return;
         }
 
+        createContextAndWorker();
+
         String serverHost = argsMap.get("s");
-        int serverPort = Integer.parseInt(argsMap.getOrDefault("p", "55443"));
-        int numIterations = Integer.parseInt(argsMap.getOrDefault("n", "5"));
-
-        Stack<Closeable> resources = new Stack<>();
-
-        UcpContext context = new UcpContext(new UcpParams().requestWakeupFeature()
-            .requestRmaFeature().requestTagFeature());
-        resources.push(context);
-        UcpWorker worker = context.newWorker(new UcpWorkerParams());
-        resources.push(worker);
+        InetSocketAddress sockaddr = new InetSocketAddress(serverHost, serverPort);
         UcpListener listener = worker.newListener(
-            new UcpListenerParams().setSockAddr(
-                new InetSocketAddress(serverHost, serverPort)));
+            new UcpListenerParams().setSockAddr(sockaddr));
         resources.push(listener);
 
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
         UcxRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
 
-        System.out.println("Waiting for connections ...");
+        System.out.println("Waiting for connections on " + sockaddr + " ...");
 
         while (!recvRequest.isCompleted()) {
             worker.progress();
@@ -80,10 +58,8 @@ public class UcxReadBWBenchmarkReceiver {
 
         UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(rkey);
         resources.push(remoteKey);
-        // In java ByteBuffer can be allocated up to 2GB (int max size).
-        // To get ByteBuffer of size > 2GB need to mmap file.
-        ByteBuffer data = ByteBuffer.allocateDirect((int)remoteSize);
 
+        ByteBuffer data = ByteBuffer.allocateDirect((int)remoteSize);
         for (int i = 0; i < numIterations; i++) {
             final int iterNum = i;
             UcxRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey, data,
@@ -95,8 +71,8 @@ public class UcxReadBWBenchmarkReceiver {
                         long finishTime = System.nanoTime();
                         data.clear();
                         assert data.hashCode() == remoteHashCode;
-                        double bandwith = getBandwith(finishTime - startTime, remoteSize);
-                        System.out.printf("Iteration %d, bandwith: %.4f GB/s\n", iterNum, bandwith);
+                        double bw = getBandwithGbits(finishTime - startTime, remoteSize);
+                        System.out.printf("Iteration %d, bandwidth: %.4f GB/s\n", iterNum, bw);
                     }
                 });
 
@@ -115,8 +91,6 @@ public class UcxReadBWBenchmarkReceiver {
             worker.progress();
         }
 
-        while (!resources.empty()) {
-            resources.pop().close();
-        }
+        closeResources();
     }
 }
