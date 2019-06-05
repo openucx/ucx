@@ -420,6 +420,23 @@ UCS_TEST_P(test_ucp_sockaddr, listen) {
     listen_and_communicate(cb_type(), false);
 }
 
+UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect) {
+    listen_and_communicate(cb_type(), false);
+
+    for (int j = 0; j < sender().get_num_eps(); j++) {
+        void *dreq = sender().disconnect_nb();
+        if (!UCS_PTR_IS_PTR(dreq)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+        }
+        while (ucp_request_check_status(dreq) == UCS_INPROGRESS) {
+            sender().progress();
+        }
+    }
+    while (1) {
+        receiver().progress();
+    }
+}
+
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
 
     struct sockaddr_in inaddr_any_listen_addr;
