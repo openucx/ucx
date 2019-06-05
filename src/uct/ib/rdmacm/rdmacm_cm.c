@@ -348,6 +348,8 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         cep = event->id->context;
         cep->disconnected_cb(&cep->super.super, cep->user_data);
         return rdma_ack_cm_event(event);
+    case RDMA_CM_EVENT_TIMEWAIT_EXIT:
+        return rdma_ack_cm_event(event);
     default:
         assert(0);
     }
