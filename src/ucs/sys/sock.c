@@ -312,7 +312,7 @@ ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port)
     }
 }
 
-int ucs_sockaddr_inaddr_any(struct sockaddr *addr)
+int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
 {
     struct sockaddr_in6 *addr_in6;
     struct sockaddr_in *addr_in;
