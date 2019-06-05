@@ -430,7 +430,8 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
     }
 
     if (!pkey_already_set) {
-        ucs_error("There is no valid pkey with full membership");
+        ucs_error("There is no valid pkey with full membership on %s:%d",
+                  uct_ib_device_name(dev), iface->config.port_num);
         return UCS_ERR_INVALID_PARAM;
     }
 

@@ -24,14 +24,8 @@ public:
     } recv_desc_t;
 
     test_uct_ib();
-    virtual ~test_uct_ib();
     void init();
     void cleanup();
-    void initialize();
-    void close_device(struct ibv_context *ibctx);
-    struct ibv_context *open_device(struct ibv_device **ibdev = NULL);
-    void get_dev_name_and_port();
-    void query_port(struct ibv_context *ibctx, struct ibv_port_attr *port_attr);
     static ucs_status_t ib_am_handler(void *arg, void *data,
                                       size_t length, unsigned flags);
     bool test_eth_port();
@@ -42,13 +36,9 @@ public:
 
 protected:
     entity *m_e1, *m_e2;
-    static size_t ib_am_handler_counter;
-    bool initialized;
-    struct ibv_device **device_list;
-    int num_devices;
-    std::string dev_name;
-    unsigned port;
-    struct ibv_device *ibdev;
-    struct ibv_context *ibctx;
-    struct ibv_port_attr port_attr;
+    static size_t m_ib_am_handler_counter;
+    std::string m_dev_name;
+    unsigned m_port;
+    struct ibv_context *m_ibctx;
+    struct ibv_port_attr m_port_attr;
 };

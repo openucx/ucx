@@ -11,50 +11,61 @@ test_uct_ib::test_uct_ib() : uct_test() {
     m_e1 = NULL;
     m_e2 = NULL;
 
-    device_list = NULL;
-    num_devices = 0;
-    ibctx       = NULL;
-    ibdev       = NULL;
+    m_ibctx = NULL;
 
-    memset(&port_attr, 0, sizeof(port_attr));
-
-    initialized = false;
-
-    get_dev_name_and_port();
+    memset(&m_port_attr, 0, sizeof(m_port_attr));
 }
 
-test_uct_ib::~test_uct_ib() {
-    if (device_list != NULL) {
-        ibv_free_device_list(device_list);
-        device_list = NULL;
-        num_devices = 0;
-    }
-}
-
-/* don't call uct_test() here, because we don't
- * want to init UCT for all tests */
 void test_uct_ib::init() {
-    ibctx = open_device(&ibdev);
-    query_port(ibctx, &port_attr);
-}
+    size_t colon_pos = GetParam()->dev_name.find(":");
+    std::string port_num_str;
 
-void test_uct_ib::cleanup() {
-    if (ibctx != NULL) {
-        ibv_close_device(ibctx);
-        ibctx = NULL;
-        ibdev = NULL;
+    m_dev_name   = GetParam()->dev_name.substr(0, colon_pos);
+    port_num_str = GetParam()->dev_name.substr(colon_pos + 1);
+
+    /* port number */
+    if (sscanf(port_num_str.c_str(), "%d", &m_port) != 1) {
+        UCS_TEST_ABORT("Failed to get the port number on device: " << m_dev_name);
     }
 
-    if (initialized) {
-        uct_test::cleanup();
-        initialized = false;
-    }
-}
+    std::string abort_reason =
+        "The requested device " + m_dev_name +
+        " wasn't found in the device list.";
+    int num_devices          = 0;
+    struct ibv_device **device_list;
+    int i;
 
-void test_uct_ib::initialize() {
+    /* get device list */
+    device_list = ibv_get_device_list(&num_devices);
+    if (device_list == NULL) {
+        abort_reason = "Failed to get the device list.";
+    }
+
+    /* search for the given device in the device list */
+    for (i = 0; i < num_devices; ++i) {
+        if (strcmp(device_list[i]->name, m_dev_name.c_str())) {
+            continue;
+        }
+
+        /* found this dev_name on the host - open it */
+        m_ibctx = ibv_open_device(device_list[i]);
+        if (m_ibctx == NULL) {
+            abort_reason = "Failed to open the device.";
+        }
+        break;
+    }
+
+    ibv_free_device_list(device_list);
+    if (m_ibctx == NULL) {
+        UCS_TEST_ABORT(abort_reason);
+    }
+
+    if (ibv_query_port(m_ibctx, m_port, &m_port_attr) != 0) {
+        UCS_TEST_ABORT("Failed to query port " << m_port <<
+                       "on device: " << m_dev_name);
+    }
+
     uct_test::init();
-
-    initialized = true;
 
     m_e1 = uct_test::create_entity(0);
     m_entities.push_back(m_e1);
@@ -65,66 +76,16 @@ void test_uct_ib::initialize() {
     m_e1->connect(0, *m_e2, 0);
     m_e2->connect(0, *m_e1, 0);
 
-    test_uct_ib::ib_am_handler_counter = 0;
+    test_uct_ib::m_ib_am_handler_counter = 0;
 }
 
-struct ibv_context *test_uct_ib::open_device(struct ibv_device **ibdev) {
-    struct ibv_context *ibctx = NULL;
-    int i;
-
-    /* get device list */
-    if (device_list == NULL) {
-        device_list = ibv_get_device_list(&num_devices);
-        if (device_list == NULL) {
-            UCS_TEST_ABORT("Failed to get the device list.");
-        }
+void test_uct_ib::cleanup() {
+    if (m_ibctx != NULL) {
+        ibv_close_device(m_ibctx);
+        m_ibctx = NULL;
     }
 
-    /* search for the given device in the device list */
-    for (i = 0; i < num_devices; ++i) {
-        if (strcmp(device_list[i]->name, dev_name.c_str())) {
-            continue;
-        }
-
-        /* found this dev_name on the host - open it */
-        ibctx = ibv_open_device(device_list[i]);
-        if (ibctx == NULL) {
-            UCS_TEST_ABORT("Failed to open the device.");
-        }
-
-        if (ibdev != NULL) {
-            *ibdev = device_list[i];
-        }
-        break;
-    }
-
-    if (ibctx == NULL) {
-        UCS_TEST_ABORT("The requested device " << dev_name <<
-                       " wasn't found in the device list.");
-    }
-
-    return ibctx;
-}
-
-void test_uct_ib::get_dev_name_and_port() {
-    size_t colon_pos = GetParam()->dev_name.find(":");
-    std::string port_num_str;
-
-    dev_name     = GetParam()->dev_name.substr(0, colon_pos);
-    port_num_str = GetParam()->dev_name.substr(colon_pos + 1);
-
-    /* port number */
-    if (sscanf(port_num_str.c_str(), "%d", &port) != 1) {
-        UCS_TEST_ABORT("Failed to get the port number on device: " << dev_name);
-    }
-}
-
-void test_uct_ib::query_port(struct ibv_context *ibctx,
-                             struct ibv_port_attr *port_attr) {
-    if (ibv_query_port(ibctx, port, port_attr) != 0) {
-        UCS_TEST_ABORT("Failed to query port " << port <<
-                       "on device: " << dev_name);
-    }
+    uct_test::cleanup();
 }
 
 ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data,
@@ -138,14 +99,14 @@ ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data,
     if (*test_ib_hdr == 0xbeef) {
         memcpy(my_desc + 1, actual_data , data_length);
     }
-    ++test_uct_ib::ib_am_handler_counter;
+    ++test_uct_ib::m_ib_am_handler_counter;
     return UCS_OK;
 }
 
 bool test_uct_ib::test_eth_port() {
     bool have_valid_gid_idx = false;
 
-    if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+    if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
         return have_valid_gid_idx;
     }
    
@@ -158,19 +119,19 @@ bool test_uct_ib::test_eth_port() {
     ucs_status_t status;
     uint8_t gid_index;
 
-    uct_ib_make_md_name(md_name, ibdev);
+    uct_ib_make_md_name(md_name, m_ibctx->device);
 
     status = uct_ib_md_open(md_name, m_md_config, &uct_md);
     ASSERT_UCS_OK(status);
 
     ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
-    status = uct_ib_device_select_gid_index(&ib_md->dev, port,
+    status = uct_ib_device_select_gid_index(&ib_md->dev, m_port,
                                             md_config->ext.gid_index,
                                             &gid_index);
     ASSERT_UCS_OK(status);
 
     /* check the gid index */
-    if (ibv_query_gid(ibctx, port, gid_index, &gid) != 0) {
+    if (ibv_query_gid(m_ibctx, m_port, gid_index, &gid) != 0) {
         UCS_TEST_ABORT("Failed to query gid (index=" << gid_index << ")");
     }
     if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
@@ -186,7 +147,7 @@ bool test_uct_ib::test_eth_port() {
 }
 
 bool test_uct_ib::lmc_find() {
-    return (port_attr.lmc > 0);
+    return (m_port_attr.lmc > 0);
 }
 
 void test_uct_ib::test_address_pack(uint64_t subnet_prefix) {
@@ -223,7 +184,6 @@ void test_uct_ib::send_recv_short() {
     uint64_t test_ib_hdr = 0xbeef;
     recv_desc_t *recv_buffer;
 
-    initialize();
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
@@ -248,7 +208,7 @@ uct_ib_device_t *test_uct_ib::ib_device(entity *entity) {
     return uct_ib_iface_device(iface);
 }
 
-size_t test_uct_ib::ib_am_handler_counter = 0;
+size_t test_uct_ib::m_ib_am_handler_counter = 0;
 
 UCS_TEST_P(test_uct_ib, non_default_lmc, "IB_LID_PATH_BITS=1")
 {
@@ -275,7 +235,6 @@ UCS_TEST_P(test_uct_ib, non_default_gid_idx, "GID_INDEX=1")
 #endif
 
 UCS_TEST_P(test_uct_ib, address_pack) {
-    initialize();
     test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
     test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_address_pack(0xdeadfeedbeefa880ul);
@@ -383,10 +342,10 @@ public:
         m_buf2            = NULL;
     }
 
-    void initialize() {
+    void init() {
         ucs_status_t status;
 
-        test_uct_ib::initialize();
+        test_uct_ib::init();
 
         check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
                    UCT_IFACE_FLAG_EVENT_SEND_COMP |
@@ -483,8 +442,6 @@ UCS_TEST_P(test_uct_event_ib, tx_cq)
 {
     ucs_status_t status;
 
-    initialize();
-
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(status, UCS_OK);
 
@@ -515,8 +472,6 @@ UCS_TEST_P(test_uct_event_ib, txrx_cq)
     const size_t msg_count = 1;
     ucs_status_t status;
 
-    initialize();
-
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(UCS_OK, status);
 
@@ -532,7 +487,7 @@ UCS_TEST_P(test_uct_event_ib, txrx_cq)
     twait(150); /* Let completion to be generated */
 
     /* Make sure all messages delivered */
-    while ((test_uct_ib::ib_am_handler_counter   < msg_count) ||
+    while ((test_uct_ib::m_ib_am_handler_counter   < msg_count) ||
            (test_uct_event_ib::bcopy_pack_count < msg_count)) {
         progress();
     }

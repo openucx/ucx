@@ -11,21 +11,17 @@ public:
     void init() {
         test_uct_ib::init();
 
-        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
             test_uct_ib::cleanup();
             /* no pkeys for Ethernet */
             UCS_TEST_SKIP_R("skip pkey test for port with Ethernet link type");
         }
     }
 
-    void cleanup() {
-        test_uct_ib::cleanup();
-    }
-
     uint16_t query_pkey(uint16_t pkey_idx) {
         uint16_t pkey;
 
-        if (ibv_query_pkey(ibctx, port, pkey_idx, &pkey)) {
+        if (ibv_query_pkey(m_ibctx, port, pkey_idx, &pkey)) {
             UCS_TEST_ABORT("Failed to query pkey on port " << port <<
                            " on device: " << dev_name);
         }
@@ -37,7 +33,7 @@ public:
             ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
 
         /* check if the configured pkey exists in the port's pkey table */
-        for (uint16_t table_idx = 0; table_idx < port_attr.pkey_tbl_len; table_idx++) {
+        for (uint16_t table_idx = 0; table_idx < m_port_attr.pkey_tbl_len; table_idx++) {
             uint16_t pkey = query_pkey(table_idx);
             if (pkey == ib_config->pkey_value) {
                 return true;
