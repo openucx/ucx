@@ -25,6 +25,7 @@ Bugfixes:
 - RPM Spec file cleanup
 - Fixing compilation issues with most recent clang and gcc compilers
 - Fixing the wrong name of aliases
+- Fix segfault when libuct.so is reloaded - issue #3558
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
