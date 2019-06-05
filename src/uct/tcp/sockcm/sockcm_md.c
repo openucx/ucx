@@ -91,7 +91,7 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
             goto out_destroy_id;
         }
 
-        if (ucs_sockaddr_inaddr_any(param_sockaddr)) {
+        if (ucs_sockaddr_is_inaddr_any(param_sockaddr)) {
             is_accessible = 1;
             goto out_print;
         }
