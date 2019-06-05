@@ -181,9 +181,14 @@ out:
     return status;
 }
 
+static ucm_event_installer_t ucm_rocm_initializer = {
+    .func = ucm_rocmmem_install
+};
+
 UCS_STATIC_INIT {
-    static ucm_event_installer_t rocm_initializer = {
-        .func = ucm_rocmmem_install
-    };
-    ucs_list_add_tail(&ucm_event_installer_list, &rocm_initializer.list);
+    ucs_list_add_tail(&ucm_event_installer_list, &ucm_rocm_initializer.list);
+}
+
+UCS_STATIC_CLEANUP {
+    ucs_list_del(&ucm_rocm_initializer.list);
 }

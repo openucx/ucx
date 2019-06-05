@@ -388,9 +388,14 @@ out:
     return status;
 }
 
+static ucm_event_installer_t ucm_cuda_initializer = {
+    .func = ucm_cudamem_install
+};
+
 UCS_STATIC_INIT {
-    static ucm_event_installer_t cuda_initializer = {
-        .func = ucm_cudamem_install
-    };
-    ucs_list_add_tail(&ucm_event_installer_list, &cuda_initializer.list);
+    ucs_list_add_tail(&ucm_event_installer_list, &ucm_cuda_initializer.list);
+}
+
+UCS_STATIC_CLEANUP {
+    ucs_list_del(&ucm_cuda_initializer.list);
 }

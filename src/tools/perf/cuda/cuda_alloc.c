@@ -94,3 +94,8 @@ UCS_STATIC_INIT {
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA]         = &cuda_allocator;
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] = &cuda_managed_allocator;
 }
+UCS_STATIC_CLEANUP {
+    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA]         = NULL;
+    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] = NULL;
+
+}
