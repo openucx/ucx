@@ -1235,7 +1235,7 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                 goto out_release_components_list;
             }
 
-            status = uct_md_open(NULL,
+            status = uct_md_open(uct_components[cmpt_index],
                                  component_attr.md_resources[md_index].md_name,
                                  md_config, &md);
             uct_config_release(md_config);

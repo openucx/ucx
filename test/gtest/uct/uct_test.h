@@ -37,6 +37,7 @@
 struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
+    uct_component_h         component;
     std::string             md_name;
     cpu_set_t               local_cpus;
     std::string             tl_name;
@@ -46,10 +47,10 @@ struct resource {
     ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
 
     resource();
-    resource(const std::string& md_name, const cpu_set_t& local_cpus,
-             const std::string& tl_name, const std::string& dev_name,
-             uct_device_type_t dev_type);
-    resource(const uct_md_attr_t& md_attr,
+    resource(uct_component_h component, const std::string& md_name,
+             const cpu_set_t& local_cpus, const std::string& tl_name,
+             const std::string& dev_name, uct_device_type_t dev_type);
+    resource(uct_component_h component, const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,
              const uct_tl_resource_desc_t& tl_resource);
 };
@@ -58,8 +59,8 @@ struct resource_speed : public resource {
     double bw;
 
     resource_speed() : resource(), bw(0) { }
-    resource_speed(const uct_worker_h& worker, const uct_md_h& md,
-                   const uct_md_attr_t& md_attr,
+    resource_speed(uct_component_h component, const uct_worker_h& worker,
+                   const uct_md_h& md, const uct_md_attr_t& md_attr,
                    const uct_md_resource_desc_t& md_resource,
                    const uct_tl_resource_desc_t& tl_resource);
 };
@@ -175,6 +176,7 @@ protected:
         static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
                                            void *priv_data);
 
+        const resource             m_resource;
         ucs::handle<uct_md_h>      m_md;
         uct_md_attr_t              m_md_attr;
         mutable async_wrapper      m_async;
@@ -282,10 +284,11 @@ protected:
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
-    static void set_sockaddr_resources(uct_md_h pd, char *md_name, cpu_set_t local_cpus,
+    static void set_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
+                                       cpu_set_t local_cpus,
                                        std::vector<resource>& all_resources);
-    static void set_interface_rscs(char *md_name, cpu_set_t local_cpus,
-                                   struct ifaddrs *ifa,
+    static void set_interface_rscs(const md_resource& md_rsc,
+                                   cpu_set_t local_cpus, struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size);
