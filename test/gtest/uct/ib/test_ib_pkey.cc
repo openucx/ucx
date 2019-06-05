@@ -21,9 +21,9 @@ public:
     uint16_t query_pkey(uint16_t pkey_idx) {
         uint16_t pkey;
 
-        if (ibv_query_pkey(m_ibctx, port, pkey_idx, &pkey)) {
-            UCS_TEST_ABORT("Failed to query pkey on port " << port <<
-                           " on device: " << dev_name);
+        if (ibv_query_pkey(m_ibctx, m_port, pkey_idx, &pkey)) {
+            UCS_TEST_ABORT("Failed to query pkey on port " << m_port <<
+                           " on device: " << m_dev_name);
         }
         return ntohs(pkey) & UCT_IB_PKEY_PARTITION_MASK;
     }
@@ -58,7 +58,7 @@ UCS_TEST_P(test_uct_ib_pkey, non_default_pkey) {
 
 UCS_TEST_P(test_uct_ib_pkey, all_avail_pkeys) {
     /* test all pkeys that are configured for the device */
-    for (uint16_t table_idx = 0; table_idx < port_attr.pkey_tbl_len; table_idx++) {
+    for (uint16_t table_idx = 0; table_idx < m_port_attr.pkey_tbl_len; table_idx++) {
         uint16_t pkey = query_pkey(table_idx);
         if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK)) {
             continue;
