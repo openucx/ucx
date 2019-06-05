@@ -347,9 +347,14 @@ public:
 
         test_uct_ib::init();
 
-        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
-                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                   UCT_IFACE_FLAG_EVENT_RECV);
+        try {
+            check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
+                       UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                       UCT_IFACE_FLAG_EVENT_RECV);
+        } catch (...) {
+            test_uct_ib::cleanup();
+            throw;
+        }
 
         /* create receiver wakeup */
         status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);
