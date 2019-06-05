@@ -45,7 +45,7 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
             ucs_error("ucs_sockaddr_get_port() failed");
             return UCS_ERR_IO_ERROR;
         }
-        iface_attr->listen_port = (int) port;
+        iface_attr->listen_port = (int) ntohs(port);
     }
 
     return UCS_OK;
