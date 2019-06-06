@@ -433,6 +433,13 @@ std::string to_string(const T& value) {
 }
 
 template <typename T>
+std::string to_hex_string(const T& value) {
+    std::stringstream ss;
+    ss << std::hex << value;
+    return ss.str();
+}
+
+template <typename T>
 T from_string(const std::string& str) {
     T value;
     return (std::stringstream(str) >> value).fail() ? 0 : value;

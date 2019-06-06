@@ -163,7 +163,8 @@ gtest_SOURCES += \
 	uct/ib/test_ib.cc \
 	uct/ib/test_ib_md.cc \
 	uct/ib/test_cq_moderation.cc \
-	uct/ib/test_ib_xfer.cc
+	uct/ib/test_ib_xfer.cc \
+	uct/ib/test_ib_pkey.cc
 gtest_CPPFLAGS += \
 	$(IBVERBS_CPPFLAGS)
 gtest_LDADD += \

@@ -389,8 +389,9 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev  = uct_ib_iface_device(iface);
     uint16_t pkey_tbl_len = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    int pkey_already_set  = 0;
     uint16_t pkey_index, port_pkey, pkey;
 
     if (config->pkey_value > UCT_IB_PKEY_PARTITION_MASK) {
@@ -411,24 +412,32 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
 
         pkey = ntohs(port_pkey);
         if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK)) {
-            ucs_debug("skipping send-only pkey[%d]=0x%x", pkey_index, pkey);
+            /* if pkey = 0x0, just skip it w/o debug trace, because 0x0
+             * means that there is no real pkey configured at this index */
+            if (pkey) {
+                ucs_debug("skipping send-only pkey[%d]=0x%x", pkey_index, pkey);
+            }
             continue;
         }
 
         /* take only the lower 15 bits for the comparison */
-        if ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey_value) {
+        if (!pkey_already_set ||
+            ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey_value)) {
             iface->pkey_index = pkey_index;
             iface->pkey_value = pkey;
-            ucs_debug("using pkey[%d] 0x%x on "UCT_IB_IFACE_FMT, iface->pkey_index,
-                      iface->pkey_value, UCT_IB_IFACE_ARG(iface));
-            return UCS_OK;
+            pkey_already_set  = 1;
         }
     }
 
-    ucs_error("The requested pkey: 0x%x, cannot be used. "
-              "It wasn't found or the configured pkey doesn't have full membership.",
-              config->pkey_value);
-    return UCS_ERR_INVALID_PARAM;
+    if (!pkey_already_set) {
+        ucs_error("There is no valid pkey with full membership on %s:%d",
+                  uct_ib_device_name(dev), iface->config.port_num);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_debug("using pkey[%d] 0x%x on "UCT_IB_IFACE_FMT, iface->pkey_index,
+              iface->pkey_value, UCT_IB_IFACE_ARG(iface));
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
