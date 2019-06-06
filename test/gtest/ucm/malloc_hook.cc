@@ -142,10 +142,16 @@ protected:
         event.unset();
     }
 
+    /* use template argument to call/not call vm_unmap handler */
+    template <int C>
     static int bistro_munmap_hook(void *addr, size_t length)
     {
         UCM_BISTRO_PROLOGUE;
         bistro_call_counter++;
+        if (C) {
+            /* notify aggregate vm_munmap event only */
+            ucm_vm_munmap(addr, length);
+        }
         int res = (intptr_t)syscall(SYS_munmap, addr, length);
         UCM_BISTRO_EPILOGUE;
         return res;
@@ -919,7 +925,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     uint64_t UCS_V_UNUSED origin;
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook<0>, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
@@ -981,7 +987,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook<0>, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
@@ -990,6 +996,32 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
 
     status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    /* restore original mmap body */
+    status = ucm_bistro_restore(rp);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
+                     RUNNING_ON_VALGRIND || !skip_on_bistro()) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+    const char *symbol = "munmap";
+    ucm_bistro_restore_point_t *rp = NULL;
+
+    status = event.set(UCM_EVENT_MUNMAP);
+    ASSERT_UCS_OK(status);
+
+    /* set hook to mmap call */
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook<1>, &rp);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE((intptr_t)rp, NULL);
+
+    status = ucm_test_events(UCM_EVENT_MUNMAP);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
+    EXPECT_TRUE(status == UCS_OK);
 
     /* restore original mmap body */
     status = ucm_bistro_restore(rp);
