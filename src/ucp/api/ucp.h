@@ -2060,10 +2060,10 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * buffer.
  *
  * @note The application is responsible for releasing the RKEY object when
- *       it is no longer needed by calling the @ref ucp_rkey_destroy
+ *       it is no longer needed, by calling the @ref ucp_rkey_destroy
  *       "ucp_rkey_destroy()" routine.
  * @note The remote key object can be used for communications only on the
- *       endpoint it was unpacked.
+ *       endpoint on which it was unpacked.
  *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.
