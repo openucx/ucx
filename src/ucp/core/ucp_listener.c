@@ -197,7 +197,7 @@ ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *at
     /* Make sure that all the listening sockaddr ifaces are listening on the same port */
     for (i = 1; i < listener->num_wifaces; i++) {
         if (port != listener->wifaces[i].attr.listen_port) {
-            ucs_error("Different ports detected on the listener: %d and %d",
+            ucs_error("different ports detected on the listener: %d and %d",
                       port, listener->wifaces[i].attr.listen_port);
             return UCS_ERR_IO_ERROR;
         }
@@ -301,7 +301,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
                           sizeof(*listener->wifaces) * (sockaddr_tls + 1),
                           "listener wifaces");
         if (tmp == NULL) {
-            ucs_error("Failed to allocate listener wifaces");
+            ucs_error("failed to allocate listener wifaces");
             status = UCS_ERR_NO_MEMORY;
             goto err_close_listener_wifaces;
         }
@@ -324,7 +324,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                            iface_params.mode.sockaddr.listen_sockaddr.addr,
                                            port);
             if (status != UCS_OK) {
-                ucs_error("failed to set port %d on iface %s",
+                ucs_error("failed to set port parameter (%d) for creating %s iface",
                           listener->wifaces[sockaddr_tls].attr.listen_port,
                           resource->tl_rsc.tl_name);
                 goto err_close_listener_wifaces;
@@ -334,7 +334,10 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         status = ucp_worker_iface_open(worker, tl_id, &iface_params,
                                        &listener->wifaces[sockaddr_tls]);
         if (status != UCS_OK) {
-            ucs_error("failed to open listener iface on %s", tl_md->rsc.md_name);
+            ucs_error("failed to open listener on %s on md %s",
+                      ucs_sockaddr_str(iface_params.mode.sockaddr.listen_sockaddr.addr,
+                                       saddr_str, sizeof(saddr_str)),
+                      tl_md->rsc.md_name);
             goto err_close_listener_wifaces;
         }
 
@@ -350,8 +353,10 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
         sockaddr_tls++;
         listener->num_wifaces = sockaddr_tls;
-        ucs_trace("listener %p: accepting connections on %s on port %d",
-                  listener, tl_md->rsc.md_name, port);
+        ucs_trace("listener %p: accepting connections on %s on %s",
+                  listener, tl_md->rsc.md_name,
+                  ucs_sockaddr_str(iface_params.mode.sockaddr.listen_sockaddr.addr,
+                                   saddr_str, sizeof(saddr_str)));
     }
 
     if (!sockaddr_tls) {

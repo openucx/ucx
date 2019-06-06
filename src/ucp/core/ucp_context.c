@@ -315,19 +315,6 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
                                  print_flags);
 }
 
-static int ucp_find_rsc_array(ucp_rsc_index_t arr[], int count, ucp_rsc_index_t tl_id)
-{
-    int i;
-
-    for (i = 0; i < count; i++) {
-        if (arr[i] == tl_id) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
 /* Search str in the array. If str_suffix is specified, search for
  * 'str:str_suffix' string.
  * @return bitmap of indexes in which the string appears in the array.
@@ -878,7 +865,8 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
 {
     const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
     unsigned num_cfg_sockaddr_tls  = config->sockaddr_cm_tls.count;;
-    int                        idx = 0;
+    uint64_t sa_tls_bitmap         = 0;
+    int idx                        = 0;
     ucp_tl_resource_desc_t *resource;
     ucp_rsc_index_t tl_id;
     ucp_tl_md_t *tl_md;
@@ -886,40 +874,32 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
 
     /* Check if a list of sockadrr transports exists */
     if (config->sockaddr_cm_tls.count == 0) {
-        ucs_debug("No sockaddr transports specified");
+        ucs_debug("no sockaddr transports specified");
         return;
+    }
+
+    /* Set a bitmap of sockaddr transports */
+    for (j = 0; j < context->num_tls; ++j) {
+        resource = &context->tl_rscs[j];
+        tl_md    = &context->tl_mds[resource->md_index];
+        if (tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+            sa_tls_bitmap |= UCS_BIT(j);
+        }
     }
 
     /* Parse the sockadrr transports priority list */
     for (j = 0; j < num_cfg_sockaddr_tls; j++) {
-        /* go over the proiroty list and find the transport's tl_id in the
-         * context's tl_bitmap. save the tl_id's for the client/server usage later */
-        if (strncmp(sockaddr_tl_names[j], "*", 1)) {
-            ucs_for_each_bit(tl_id, context->tl_bitmap) {
-                resource = &context->tl_rscs[tl_id];
-                tl_md    = &context->tl_mds[resource->md_index];
-                if (!strcmp(config->sockaddr_cm_tls.cm_tls[j],
-                            resource->tl_rsc.tl_name) &&
-                    (tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) &&
-                    (ucp_find_rsc_array(context->config.sockaddr_tl_ids,
-                                        idx, tl_id) == -1)) {
-                    context->config.sockaddr_tl_ids[idx] = tl_id;
-                    idx++;
-                    break;
-                }
-            }
-        } else {
-            /* wildcard - search for all the available sockaddr transports
-             * and add them to the list */
-            ucs_for_each_bit(tl_id, context->tl_bitmap) {
-                resource = &context->tl_rscs[tl_id];
-                tl_md    = &context->tl_mds[resource->md_index];
-                if ((tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) &&
-                    (ucp_find_rsc_array(context->config.sockaddr_tl_ids,
-                                        idx, tl_id) == -1)) {
-                    context->config.sockaddr_tl_ids[idx] = tl_id;
-                    idx++;
-                }
+        /* go over the priority list and find the transport's tl_id in the
+         * sockaddr tls bitmap. save the tl_id's for the client/server usage later */
+        ucs_for_each_bit(tl_id, sa_tls_bitmap) {
+            resource = &context->tl_rscs[tl_id];
+            tl_md    = &context->tl_mds[resource->md_index];
+
+            if (!strcmp(sockaddr_tl_names[j], "*") ||
+                !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name, UCT_TL_NAME_MAX)) {
+                context->config.sockaddr_tl_ids[idx] = tl_id;
+                idx++;
+                sa_tls_bitmap &= ~UCS_BIT(tl_id);
             }
         }
     }
