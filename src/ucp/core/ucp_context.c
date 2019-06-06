@@ -758,14 +758,17 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
      return UCS_OK;
 }
 
-static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
+static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
+                                   ucp_rsc_index_t cmpt_index,
+                                   const uct_md_resource_desc_t *md_rsc,
                                    ucp_tl_md_t *tl_md)
 {
     uct_md_config_t *md_config;
     ucs_status_t status;
 
-    /* Save MD resource */
-    tl_md->rsc = *md_rsc;
+    /* Initialize tl_md structure */
+    tl_md->cmpt_index = cmpt_index;
+    tl_md->rsc        = *md_rsc;
 
     /* Read MD configuration */
     status = uct_md_config_read(md_rsc->md_name, NULL, NULL, &md_config);
@@ -773,7 +776,8 @@ static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
         return status;
     }
 
-    status = uct_md_open(NULL, md_rsc->md_name, md_config, &tl_md->md);
+    status = uct_md_open(context->tl_cmpts[cmpt_index].cmpt, md_rsc->md_name,
+                         md_config, &tl_md->md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         return status;
@@ -987,7 +991,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
     mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
         md_index = context->num_mds;
-        status = ucp_fill_tl_md(&uct_component_attr.md_resources[i],
+        status = ucp_fill_tl_md(context, cmpt_index,
+                                &uct_component_attr.md_resources[i],
                                 &context->tl_mds[md_index]);
         if (status != UCS_OK) {
             continue;

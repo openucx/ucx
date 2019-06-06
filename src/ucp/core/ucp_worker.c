@@ -770,6 +770,12 @@ void ucp_worker_iface_event(int fd, void *arg)
     ucp_worker_signal_internal(worker);
 }
 
+static void ucp_worker_uct_iface_close(ucp_worker_iface_t *wiface)
+{
+    uct_iface_close(wiface->iface);
+    wiface->iface = NULL;
+}
+
 static int ucp_worker_iface_find_better(ucp_worker_h worker,
                                         ucp_worker_iface_t *wiface,
                                         ucp_rsc_index_t *better_index)
@@ -872,7 +878,7 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
                           worker);
                 /* Ifaces should not be initialized yet, just close it
                  * (no need for cleanup) */
-                uct_iface_close(wiface->iface);
+                ucp_worker_uct_iface_close(wiface);
             }
         }
     }
@@ -1106,7 +1112,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     return UCS_OK;
 
 out_close_iface:
-    uct_iface_close(wiface->iface);
+    ucp_worker_uct_iface_close(wiface);
     return status;
 }
 
@@ -1119,7 +1125,8 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 
     ucp_worker_iface_disarm(wiface);
 
-    if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
+    if ((wiface->event_fd != -1) &&
+        (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS)) {
         status = ucs_async_remove_handler(wiface->event_fd, 1);
         if (status != UCS_OK) {
             ucs_warn("failed to remove event handler for fd %d: %s",
@@ -1127,7 +1134,7 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
         }
     }
 
-    uct_iface_close(wiface->iface);
+    ucp_worker_uct_iface_close(wiface);
 }
 
 static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,

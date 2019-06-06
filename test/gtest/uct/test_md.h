@@ -11,13 +11,22 @@
 #include "uct_test.h"
 
 
-class test_md : public testing::TestWithParam<std::string>,
+struct test_md_param {
+    uct_component_h  component;
+    std::string      md_name;
+};
+
+static std::ostream& operator<<(std::ostream& os, const test_md_param& md_param) {
+    return os << md_param.md_name;
+}
+
+class test_md : public testing::TestWithParam<test_md_param>,
                 public uct_test_base
 {
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<std::string> enum_mds(const std::string& mdc_name);
+    static std::vector<test_md_param> enum_mds(const std::string& mdc_name);
 
     test_md();
 
