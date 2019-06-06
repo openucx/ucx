@@ -11,7 +11,9 @@ test_uct_ib::test_uct_ib() : uct_test() {
     m_e1 = NULL;
     m_e2 = NULL;
 
-    m_ibctx = NULL;
+    m_ibctx    = NULL;
+    m_port     = 0;
+    m_dev_name = "";
 
     memset(&m_port_attr, 0, sizeof(m_port_attr));
 }
@@ -31,14 +33,14 @@ void test_uct_ib::init() {
     std::string abort_reason =
         "The requested device " + m_dev_name +
         " wasn't found in the device list.";
-    int num_devices          = 0;
     struct ibv_device **device_list;
-    int i;
+    int i, num_devices;
 
     /* get device list */
     device_list = ibv_get_device_list(&num_devices);
     if (device_list == NULL) {
         abort_reason = "Failed to get the device list.";
+        num_devices = 0;
     }
 
     /* search for the given device in the device list */
