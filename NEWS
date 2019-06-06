@@ -8,6 +8,9 @@
 #
 
 ## 1.5.2 (TBD)
+Features:
+- Added support for OmniPath (using Verbs)
+
 Bugfixes:
 - Fix segfault when libuct.so is reloaded - issue #3558
 - Fix ucx_info crash when printing configuration alias
