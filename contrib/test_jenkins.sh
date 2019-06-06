@@ -847,6 +847,10 @@ test_ucs_dlopen() {
 	# Make sure UCM is not unloaded
 	echo "==== Running UCS dlopen test with memhooks ===="
 	./test/apps/test_ucs_dlopen
+
+	# Test global config list integrity after loading/unloading of UCT
+	echo "==== Running test_dlopen_cfg_print ===="
+	./test/apps/test_dlopen_cfg_print
 }
 
 test_ucp_dlopen() {
