@@ -35,12 +35,20 @@ typedef struct uct_rdmacm_listener {
 } uct_rdmacm_listener_t;
 
 
+enum {
+    UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED  = UCS_BIT(0),
+    UCT_RDMACM_CEP_FLAG_REMOTE_DISCONNECTED = UCS_BIT(1)
+};
+
+
 typedef struct uct_rdmacm_cep {
     uct_base_ep_t                     super;
+    unsigned                          flags;
     uct_rdmacm_cm_t                   *cm;
     struct rdma_cm_id                 *id;
     void                              *user_data;
     uct_ep_sockaddr_disconnected_cb_t disconnected_cb;
+    uct_completion_t                  *completion;
 
     /* TODO: Allocate separately to reduce memory consumption. These fields are
      *       relevant only for connection establishment. */
@@ -127,10 +135,13 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cep_t, uct_ep_t);
 
-ucs_status_t uct_rdmacm_cep_disconnect(uct_ep_h ep)
+ucs_status_t uct_rdmacm_cep_disconnect(uct_ep_h ep, uct_completion_t *comp)
 {
     uct_rdmacm_cep_t *cep = ucs_derived_of(ep, uct_rdmacm_cep_t);
 
+    cep->completion = comp;
+    ucs_assert(!(cep->flags & UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED));
+    cep->flags |= UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED;
     if (rdma_disconnect(cep->id)) {
         return UCS_ERR_IO_ERROR;
     }
@@ -190,6 +201,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &dummy_iface);
 
+    self->flags               = 0;
     self->cm                  = ucs_derived_of(params->cm, uct_rdmacm_cm_t);
     self->wireup.priv_pack_cb = (params->field_mask &
                                  UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
@@ -200,6 +212,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
     self->user_data           = (params->field_mask &
                                  UCT_EP_PARAM_FIELD_USER_DATA) ?
                                 params->user_data : NULL;
+    self->completion          = NULL;
 
     /* TODO: to separate server & cliet funcs */
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
@@ -346,7 +359,18 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         return rdma_ack_cm_event(event);
     case RDMA_CM_EVENT_DISCONNECTED:
         cep = event->id->context;
-        cep->disconnected_cb(&cep->super.super, cep->user_data);
+        ucs_assert(!(cep->flags & UCT_RDMACM_CEP_FLAG_REMOTE_DISCONNECTED));
+        cep->flags |= UCT_RDMACM_CEP_FLAG_REMOTE_DISCONNECTED;
+        if (cep->completion != NULL) {
+            ucs_assert(cep->flags & UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED);
+            uct_invoke_completion(cep->completion, UCS_OK);
+        } else if (cep->disconnected_cb != NULL) {
+            if (!(cep->flags & UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED)) {
+                cep->disconnected_cb(&cep->super.super, cep->user_data);
+            }
+        } else {
+            ucs_warn("RDMA_CM_EVENT_DISCONNECTED event is missed");
+        }
         return rdma_ack_cm_event(event);
     case RDMA_CM_EVENT_TIMEWAIT_EXIT:
         return rdma_ack_cm_event(event);

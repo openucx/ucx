@@ -279,10 +279,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
-    req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
-    if (connected_lane != UCP_NULL_LANE) {
-        req->send.state.uct_comp.count -= comp_dec;
-    }
+    req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep) - comp_dec;
 
     ucp_ep_flush_progress(req);
 

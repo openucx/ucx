@@ -40,6 +40,12 @@ public:
                                                          send/recv by STREAM API */
     };
 
+    enum {
+        SEND_DIRECTION_C2S = UCS_BIT(0), /* send data from client to server */
+        SEND_DIRECTION_S2C = UCS_BIT(1), /* send data from server to client */
+        SEND_DIRECTION_2D  = SEND_DIRECTION_C2S | SEND_DIRECTION_S2C /* bidirectional send */
+    };
+
     typedef enum {
         SEND_RECV_TAG,
         SEND_RECV_STREAM
@@ -335,7 +341,8 @@ public:
         sender().connect(&receiver(), ep_params);
     }
 
-    void connect_and_send_recv(const struct sockaddr *connect_addr, bool wakeup)
+    void connect_and_send_recv(const struct sockaddr *connect_addr, bool wakeup,
+                               uint64_t flags)
     {
         {
             scoped_log_handler slh(detect_error_logger);
@@ -345,9 +352,17 @@ public:
             }
         }
 
-        send_recv(sender(), receiver(),
-                  (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
-                  SEND_RECV_TAG, wakeup, cb_type());
+        if (flags & SEND_DIRECTION_C2S) {
+            send_recv(sender(), receiver(),
+                      (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
+                      SEND_RECV_TAG, wakeup, cb_type());
+        }
+
+        if (flags & SEND_DIRECTION_S2C) {
+            send_recv(receiver(), sender(),
+                      (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
+                      SEND_RECV_TAG, wakeup, cb_type());
+        }
     }
 
     void connect_and_reject(const struct sockaddr *connect_addr, bool wakeup)
@@ -364,14 +379,14 @@ public:
     }
 
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
-                                bool wakeup)
+                                bool wakeup, uint64_t flags)
     {
         UCS_TEST_MESSAGE << "Testing "
                          << ucs::sockaddr_to_str(
                                 (const struct sockaddr*)&test_addr);
 
         start_listener(cb_type, (const struct sockaddr*)&test_addr);
-        connect_and_send_recv((const struct sockaddr*)&test_addr, wakeup);
+        connect_and_send_recv((const struct sockaddr*)&test_addr, wakeup, flags);
     }
 
     void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
@@ -384,6 +399,23 @@ public:
         connect_and_reject((const struct sockaddr*)&test_addr, wakeup);
     }
 
+    void client_one_sided_disconnect() {
+        for (int j = 0; j < sender().get_num_eps(); j++) {
+            void *dreq = sender().disconnect_nb();
+            if (dreq == NULL) {
+                continue;
+            }
+            if (!UCS_PTR_IS_PTR(dreq)) {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+            }
+            ucs_status_t status;
+            while ((status = ucp_request_check_status(dreq)) == UCS_INPROGRESS) {
+                sender().progress();
+            }
+            EXPECT_EQ(UCS_OK, status);
+            ucp_request_release(dreq);
+        }
+    }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
@@ -417,23 +449,48 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
-    listen_and_communicate(cb_type(), false);
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_C2S);
 }
 
-UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect) {
-    listen_and_communicate(cb_type(), false);
+UCS_TEST_P(test_ucp_sockaddr, onesided_c2s_disconnect) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_C2S);
+    client_one_sided_disconnect();
+}
 
-    for (int j = 0; j < sender().get_num_eps(); j++) {
-        void *dreq = sender().disconnect_nb();
-        if (!UCS_PTR_IS_PTR(dreq)) {
-            ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
-        }
-        while (ucp_request_check_status(dreq) == UCS_INPROGRESS) {
-            sender().progress();
+UCS_TEST_P(test_ucp_sockaddr, onesided_s2c_disconnect) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_S2C);
+    client_one_sided_disconnect();
+}
+
+UCS_TEST_P(test_ucp_sockaddr, onesided_2d_disconnect) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_2D);
+    client_one_sided_disconnect();
+}
+
+UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_2D);
+
+    std::vector<void *> reqs;
+    for (ucs::ptr_vector<entity>::const_iterator e_iter = m_entities.begin(); \
+         e_iter != m_entities.end(); ++e_iter) {
+        for (int j = 0; j < sender().get_num_eps(); j++) {
+            void *dreq = sender().disconnect_nb();
+            if (!UCS_PTR_IS_PTR(dreq)) {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+            } else {
+                reqs.push_back(dreq);
+            }
         }
     }
-    while (1) {
-        receiver().progress();
+
+    while (!reqs.empty()) {
+        ucs_status_t status;
+        while ((status = ucp_request_check_status(reqs.back())) == UCS_INPROGRESS) {
+            progress();
+        }
+        EXPECT_EQ(UCS_OK, status);
+        ucp_request_release(reqs.back());
+        reqs.pop_back();
     }
 }
 
@@ -448,7 +505,8 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
                         (const struct sockaddr*)&inaddr_any_listen_addr);
 
     start_listener(cb_type(), (const struct sockaddr*)&inaddr_any_listen_addr);
-    connect_and_send_recv((const struct sockaddr*)&test_addr, false);
+    connect_and_send_recv((const struct sockaddr*)&test_addr, false,
+                          SEND_DIRECTION_C2S);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, reject) {
@@ -496,7 +554,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup) {
-    listen_and_communicate(cb_type(), true);
+    listen_and_communicate(cb_type(), true, SEND_DIRECTION_C2S);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_with_wakeup, reject) {

@@ -493,9 +493,9 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
     return UCS_ERR_INVALID_PARAM;
 }
 
-ucs_status_t uct_ep_disconnect(uct_ep_h ep)
+ucs_status_t uct_ep_disconnect(uct_ep_h ep, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_disconnect(ep);
+    return ep->iface->ops.ep_disconnect(ep, comp);
 }
 
 void uct_ep_destroy(uct_ep_h ep)

@@ -1771,8 +1771,9 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  *        sockaddr by connection manager @ref uct_cm_h .
  *
  * @param [in] ep       Endpoint to disconnect.
+ * @param [in] comp     UCT completion.
  */
-ucs_status_t uct_ep_disconnect(uct_ep_h ep);
+ucs_status_t uct_ep_disconnect(uct_ep_h ep, uct_completion_t *comp);
 
 
 /**
