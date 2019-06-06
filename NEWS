@@ -28,7 +28,6 @@ Bugfixes:
 - Fix data race in UCP wireup
 - Fix segfault when libuct.so is reloaded - issue #3558
 
-
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
 - CUDA: gdrcopy 1.3.2, cuda 9.2, ROCm 2.2
