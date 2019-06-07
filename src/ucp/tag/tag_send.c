@@ -139,10 +139,20 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
     req->send.pending_lane = UCP_NULL_LANE;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_is_valid_inline(ucp_ep_h ep, ssize_t memtype_max_eager_short,
+                        ssize_t no_memtype_max_eager_short, ssize_t length)
+{
+    return (ucs_likely(length <= no_memtype_max_eager_short) ||
+            (length <= memtype_max_eager_short &&
+             ucp_memory_type_cache_is_empty(ep->worker->context)));
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag)
 {
+    ucp_ep_config_t *config = ucp_ep_config(ep);
     ucs_status_t status;
     size_t length;
 
@@ -152,13 +162,16 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
 
     length = ucp_contig_dt_length(datatype, count);
 
-    if ((ssize_t)length <= ucp_ep_config(ep)->tag.max_eager_short &&
-        ucp_memory_type_cache_is_empty(ep->worker->context)) {
+    if (ucp_tag_is_valid_inline(ep, config->tag.memtype_max_eager_short,
+                                config->tag.no_memtype_max_eager_short,
+                                (ssize_t) length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
                                  tag, buffer, length);
-    } else if ((ssize_t)length <= ucp_ep_config(ep)->tag.offload.max_eager_short) {
+    } else if (ucp_tag_is_valid_inline(ep, config->tag.offload.memtype_max_eager_short,
+                                       config->tag.offload.no_memtype_max_eager_short,
+                                       (ssize_t)length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
                                         length);

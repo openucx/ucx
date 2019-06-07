@@ -333,8 +333,8 @@ extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
 {
-    return !(context->memtype_cache &&
-             context->memtype_cache->pgtable.num_regions);
+    return (context->memtype_cache &&
+            !context->memtype_cache->pgtable.num_regions);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

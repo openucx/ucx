@@ -206,7 +206,11 @@ typedef struct ucp_ep_config {
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
 
-        ssize_t             max_eager_short;
+        /* Maximal size for eager short when memtype mds present */
+        ssize_t             memtype_max_eager_short;
+
+        /* Maximal size for eager short when memtype mds not present */
+        ssize_t             no_memtype_max_eager_short;
 
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
@@ -238,8 +242,12 @@ typedef struct ucp_ep_config {
         } rndv_send_nbr;
 
         struct {
-            /* Maximal size for eager short */
-            ssize_t         max_eager_short;
+            /* Maximal size for eager short when memtype mds present */
+            ssize_t             memtype_max_eager_short;
+
+            /* Maximal size for eager short when memtype mds not present */
+            ssize_t             no_memtype_max_eager_short;
+
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
             /* Maximal total size for RNDV offload */
