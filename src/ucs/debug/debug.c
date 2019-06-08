@@ -113,8 +113,8 @@ const char *ucs_signal_names[] = {
 static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
 static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
-khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
-khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
+static khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
+static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
 static pthread_spinlock_t ucs_kh_lock;
 
@@ -1199,6 +1199,10 @@ void ucs_debug_init()
     if (ret != 0) {
          ucs_error("failed to initialize spin lock: %s", strerror(ret));
     }
+
+    kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
+    kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
+
     if (ucs_global_opts.handle_errors) {
         ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
