@@ -62,7 +62,7 @@ test_md::test_md()
 {
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
-                           uct_md_config_read, GetParam().md_name.c_str(), NULL, NULL);
+                           uct_md_config_read, GetParam().component, NULL, NULL);
     memset(&m_md_attr, 0, sizeof(m_md_attr));
 }
 

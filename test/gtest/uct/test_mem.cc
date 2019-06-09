@@ -67,7 +67,7 @@ UCS_TEST_P(test_mem, md_alloc) {
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
          iter != md_resources.end(); ++iter) {
 
-        status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
+        status = uct_md_config_read(iter->cmpt, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
         status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
@@ -119,7 +119,7 @@ UCS_TEST_P(test_mem, md_fixed) {
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
          iter != md_resources.end(); ++iter) {
 
-        status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL, &md_config);
+        status = uct_md_config_read(iter->cmpt, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
         status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);

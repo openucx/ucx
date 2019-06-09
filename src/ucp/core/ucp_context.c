@@ -758,7 +758,8 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
     tl_md->rsc        = *md_rsc;
 
     /* Read MD configuration */
-    status = uct_md_config_read(md_rsc->md_name, NULL, NULL, &md_config);
+    status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt, NULL, NULL,
+                                &md_config);
     if (status != UCS_OK) {
         return status;
     }

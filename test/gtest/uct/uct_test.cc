@@ -143,8 +143,7 @@ uct_test::uct_test() {
     uct_md_attr_t pd_attr;
     uct_md_h pd;
 
-    status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
-                                &m_md_config);
+    status = uct_md_config_read(GetParam()->component, NULL, NULL, &m_md_config);
     ASSERT_UCS_OK(status);
 
     status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
@@ -277,8 +276,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
              iter != md_resources.end(); ++iter) {
             uct_md_h md;
             uct_md_config_t *md_config;
-            status = uct_md_config_read(iter->rsc_desc.md_name, NULL, NULL,
-                                        &md_config);
+            status = uct_md_config_read(iter->cmpt, NULL, NULL, &md_config);
             ASSERT_UCS_OK(status);
 
             {

@@ -322,9 +322,9 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
         /* Iterate through memory domain resources */
         for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
-            status = uct_md_config_read(component_attr.md_resources[md_index].md_name,
-                                        NULL, NULL, &md_config);
-            CHKERR_JUMP(UCS_OK != status, "read PD config",
+            status = uct_md_config_read(components[cmpt_index], NULL, NULL,
+                                        &md_config);
+            CHKERR_JUMP(UCS_OK != status, "read MD config",
                         release_component_list);
 
             status = uct_md_open(components[cmpt_index],

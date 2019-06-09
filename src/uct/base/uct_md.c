@@ -289,37 +289,16 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
     return tlc->iface_open(md, worker, params, config, iface_p);
 }
 
-static uct_md_component_t *uct_find_mdc(const char *name)
-{
-    uct_md_component_t *mdc;
-
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(name, mdc->name, strlen(mdc->name))) {
-            return mdc;
-        }
-    }
-    return NULL;
-}
-
-ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
-                                const char *filename,
+ucs_status_t uct_md_config_read(uct_component_h component,
+                                const char *env_prefix, const char *filename,
                                 uct_md_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
-    uct_md_component_t *mdc;
     ucs_status_t status;
 
-    /* find the matching mdc. the search can be by md_name or by mdc_name.
-     * (depending on the caller) */
-    mdc = uct_find_mdc(name);
-    if (mdc == NULL) {
-        ucs_error("MD component does not exist for '%s'", name);
-        status = UCS_ERR_INVALID_PARAM; /* Non-existing MDC */
-        return status;
-    }
-
-    status = uct_config_read(&bundle, mdc->md_config_table,
-                             mdc->md_config_size, env_prefix, mdc->cfg_prefix);
+    status = uct_config_read(&bundle, component->md_config_table,
+                             component->md_config_size, env_prefix,
+                             component->cfg_prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read MD config");
         return status;
