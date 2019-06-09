@@ -115,15 +115,13 @@ bool test_uct_ib::test_eth_port() {
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
     union ibv_gid gid;
     uct_ib_md_config_t *md_config = ucs_derived_of(m_md_config, uct_ib_md_config_t);
-    char md_name[UCT_MD_NAME_MAX];
     uct_md_h uct_md;
     uct_ib_md_t *ib_md;
     ucs_status_t status;
     uint8_t gid_index;
 
-    uct_ib_make_md_name(md_name, m_ibctx->device);
-
-    status = uct_ib_md_open(md_name, m_md_config, &uct_md);
+    status = uct_ib_md_open(ibv_get_device_name(m_ibctx->device), m_md_config,
+                            &uct_md);
     ASSERT_UCS_OK(status);
 
     ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
