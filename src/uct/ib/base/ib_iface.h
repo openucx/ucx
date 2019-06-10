@@ -546,4 +546,10 @@ struct ibv_pd *uct_ib_iface_qp_pd(uct_ib_iface_t *iface)
     return pd;
 }
 
+static UCS_F_ALWAYS_INLINE
+size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
+{
+    return (size_t)ucs_max((ssize_t)(max_inline - min_size), 0);
+}
+
 #endif

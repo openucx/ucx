@@ -268,7 +268,6 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     }
 
     self->config.max_inline = qp_init_attr.cap.max_inline_data;
-    ucs_assert_always(qp_init_attr.cap.max_inline_data >= UCT_UD_MIN_INLINE);
     uct_ib_iface_set_max_iov(&self->super, qp_init_attr.cap.max_send_sge);
 
     memset(&qp_attr, 0, sizeof(qp_attr));
@@ -474,7 +473,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         goto err_rx_mpool;
     }
 
-    self->tx.skb = NULL;
+    ucs_assert_always(data_size >= UCT_UD_MIN_INLINE);
+
+    self->tx.skb               = NULL;
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
 
     ucs_queue_head_init(&self->tx.resend_skbs);
@@ -564,8 +565,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
         return status;
     }
 
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT         |
-                                         UCT_IFACE_FLAG_AM_BCOPY         |
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_BCOPY         |
                                          UCT_IFACE_FLAG_AM_ZCOPY         |
                                          UCT_IFACE_FLAG_CONNECT_TO_EP    |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -576,18 +576,19 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
                                          UCT_IFACE_FLAG_EVENT_RECV       |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
-    iface_attr->cap.am.max_short       = iface->config.max_inline - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
+                                                               sizeof(uct_ud_neth_t));
     iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.min_zcopy       = 0;
     iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
     iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.am.max_hdr         = iface->config.max_inline - sizeof(uct_ud_neth_t);
     /* The first iov is reserved for the header */
     iface_attr->cap.am.max_iov         = uct_ib_iface_get_max_iov(&iface->super) - 1;
 
-    iface_attr->cap.put.max_short      = iface->config.max_inline -
-                                         sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
+    iface_attr->cap.put.max_short      = uct_ib_iface_hdr_size(iface->config.max_inline,
+                                                               sizeof(uct_ud_neth_t) +
+                                                               sizeof(uct_ud_put_hdr_t));
 
     iface_attr->iface_addr_len         = sizeof(uct_ud_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_ud_ep_addr_t);
@@ -595,6 +596,10 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
 
     /* UD lacks of scatter to CQE support */
     iface_attr->latency.overhead      += 10e-9;
+
+    if (iface_attr->cap.am.max_short) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
+    }
 
     return UCS_OK;
 }

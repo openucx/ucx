@@ -537,7 +537,25 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_hdr_t *hdr     = &iface->verbs_common.am_inl_hdr.rc_hdr;
+    uct_rc_hdr_t *hdr;
+    struct ibv_sge sge;
+    int flags;
+
+    if (!iface->fc_desc) {
+        hdr                                   = &iface->verbs_common.am_inl_hdr.rc_hdr;
+        flags                                 = IBV_SEND_INLINE;
+        hdr->am_id                            = UCT_RC_EP_FC_PURE_GRANT;
+        fc_wr.sg_list                         = iface->verbs_common.inl_sge;
+        iface->verbs_common.inl_sge[0].addr   = (uintptr_t)hdr;
+        iface->verbs_common.inl_sge[0].length = sizeof(*hdr);
+    } else {
+        hdr                                   = (uct_rc_hdr_t*)(iface->fc_desc + 1);
+        sge.addr                              = (uintptr_t)hdr;
+        sge.length                            = sizeof(*hdr);
+        sge.lkey                              = iface->fc_desc->lkey;
+        fc_wr.sg_list                         = &sge;
+        flags                                 = 0;
+    }
 
     /* In RC only PURE grant is sent as a separate message. Other FC
      * messages are bundled with AM. */
@@ -545,19 +563,13 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     /* Do not check FC WND here to avoid head-to-head deadlock.
      * Credits grant should be sent regardless of FC wnd state. */
-    ucs_assert(sizeof(*hdr) <= iface->verbs_common.config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    hdr->am_id    = UCT_RC_EP_FC_PURE_GRANT;
-    fc_wr.sg_list = iface->verbs_common.inl_sge;
     fc_wr.opcode  = IBV_WR_SEND;
     fc_wr.next    = NULL;
     fc_wr.num_sge = 1;
 
-    iface->verbs_common.inl_sge[0].addr    = (uintptr_t)hdr;
-    iface->verbs_common.inl_sge[0].length  = sizeof(*hdr);
-
-    uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, IBV_SEND_INLINE, INT_MAX);
+    uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, flags, INT_MAX);
     return UCS_OK;
 }
 

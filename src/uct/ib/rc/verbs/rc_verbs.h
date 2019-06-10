@@ -41,6 +41,7 @@ typedef struct uct_rc_verbs_iface {
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
     uct_rc_verbs_iface_common_t verbs_common;
+    uct_rc_iface_send_desc_t   *fc_desc; /* used when max_inline is zero */
     struct {
         unsigned                tx_max_wr;
     } config;

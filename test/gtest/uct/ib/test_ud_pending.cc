@@ -95,6 +95,8 @@ UCS_TEST_P(test_ud_pending, async_progress) {
     uct_pending_req_t r[N];
     int i;
 
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+
     req_count = 0;
     connect();
 
@@ -114,6 +116,8 @@ UCS_TEST_P(test_ud_pending, async_progress) {
 UCS_TEST_P(test_ud_pending, sync_progress) {
     uct_pending_req_t r[N];
     int i;
+
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     req_count = 0;
     connect();
@@ -136,6 +140,8 @@ UCS_TEST_P(test_ud_pending, err_busy) {
     uct_pending_req_t r[N];
     int i;
 
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+
     req_count = 0;
     connect();
 
@@ -155,6 +161,8 @@ UCS_TEST_P(test_ud_pending, err_busy) {
 
 UCS_TEST_P(test_ud_pending, connect)
 {
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+
     disable_async(m_e1);
     disable_async(m_e2);
     post_pending_reqs();
@@ -163,6 +171,8 @@ UCS_TEST_P(test_ud_pending, connect)
 
 UCS_TEST_P(test_ud_pending, flush)
 {
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+
     disable_async(m_e1);
     disable_async(m_e2);
     post_pending_reqs();
@@ -174,6 +184,9 @@ UCS_TEST_P(test_ud_pending, window)
 {
     int i;
     uct_pending_req_t r;
+
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+
     req_count = 0;
     me = this;
     connect();
@@ -194,6 +207,9 @@ UCS_TEST_P(test_ud_pending, tx_wqe)
     int i;
     uct_pending_req_t r;
     ucs_status_t status;
+
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+
     req_count = 0;
     me = this;
     disable_async(m_e1);
