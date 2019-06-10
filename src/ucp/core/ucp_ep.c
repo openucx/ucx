@@ -459,6 +459,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucp_conn_request_h conn_request = params->conn_request;
     ucp_ep_h           ep;
     ucs_status_t       status;
+    uct_iface_h        iface;
 
     /* coverity[overrun-buffer-val] */
     status = ucp_ep_create_accept(worker, &conn_request->client_data, &ep);
@@ -488,12 +489,11 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
+    iface = conn_request->listener->wifaces[conn_request->wiface_idx].iface;
     if (status == UCS_OK) {
-        status = uct_iface_accept(conn_request->listener->wiface.iface,
-                                  conn_request->uct_req);
+        status = uct_iface_accept(iface, conn_request->uct_req);
     } else {
-        uct_iface_reject(conn_request->listener->wiface.iface,
-                         conn_request->uct_req);
+        uct_iface_reject(iface, conn_request->uct_req);
     }
     ucs_free(params->conn_request);
 

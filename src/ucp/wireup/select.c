@@ -1469,22 +1469,26 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
     ucp_rsc_index_t tl_id;
     ucp_md_index_t md_index;
     uct_md_h md;
+    int i;
 
-    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+    /* Go over the sockaddr transports priority array and try to use the transports
+     * one by one for the client side */
+    for (i = 0; i < context->config.num_sockaddr_tls; i++) {
+        tl_id    = context->config.sockaddr_tl_ids[i];
         resource = &context->tl_rscs[tl_id];
-        if (!(resource->flags & UCP_TL_RSC_FLAG_SOCKADDR)) {
-            continue;
-        }
-
         md_index = resource->md_index;
         md       = context->tl_mds[md_index].md;
+
         ucs_assert(context->tl_mds[md_index].attr.cap.flags &
                    UCT_MD_FLAG_SOCKADDR);
 
+        /* The client selects the transport for sockaddr according to the
+         * configuration. We rely on the server having this transport available
+         * as well */
         if (uct_md_is_sockaddr_accessible(md, &params->sockaddr,
                                           UCT_SOCKADDR_ACC_REMOTE)) {
-            /* TODO use score to prefer best tl rather than using first one */
             *rsc_index_p = tl_id;
+            ucs_debug("sockaddr transport selected: %s", resource->tl_rsc.tl_name);
             return UCS_OK;
         }
 

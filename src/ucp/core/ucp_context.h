@@ -97,6 +97,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
     UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
+    /** Array of transports for client-server transports and port selection */
+    UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
     /** Configuration saved directly in the context */
@@ -166,7 +168,7 @@ typedef struct ucp_context {
     uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
                                                  Not all resources may be used if unified
                                                  mode is enabled. */
-    ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
+    ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
     uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
@@ -200,6 +202,11 @@ typedef struct ucp_context {
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
+
+        /* Array of sockaddr transports indexes.
+         * The indexes appear it the configured priority order */
+        ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
+        unsigned                  num_sockaddr_tls;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;

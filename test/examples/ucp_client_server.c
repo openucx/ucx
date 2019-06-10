@@ -318,7 +318,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr)
         case 'p':
             port = atoi(optarg);
             if ((port < 0) || (port > UINT16_MAX)) {
-                fprintf(stderr, "Wrong server port number %d\n", server_port);
+                fprintf(stderr, "Wrong server port number %d\n", port);
                 return -1;
             }
             server_port = port;
