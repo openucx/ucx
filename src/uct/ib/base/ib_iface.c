@@ -641,12 +641,11 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
         return ibv_cq_ex_to_cq(cq_ex);
     } else if (errno != ENOSYS) {
         return NULL;
-    } else
-        /* if ibv_create_cq_ex returns ENOSYS, fallback to ibv_create_cq */
-#endif
-    {
-        return ibv_create_cq(context, cqe, NULL, channel, comp_vector);
     }
+
+    /* if ibv_create_cq_ex returned ENOSYS, fallback to ibv_create_cq */
+#endif
+    return ibv_create_cq(context, cqe, NULL, channel, comp_vector);
 }
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
