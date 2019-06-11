@@ -123,6 +123,7 @@ protected:
         ucs_status_t status;
         mmap_event<malloc_hook> event(this);
 
+        m_should_call_vm_unmap = false;
         m_got_event = 0;
         ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
@@ -142,13 +143,11 @@ protected:
         event.unset();
     }
 
-    /* use template argument to call/not call vm_unmap handler */
-    template <int C>
     static int bistro_munmap_hook(void *addr, size_t length)
     {
         UCM_BISTRO_PROLOGUE;
         bistro_call_counter++;
-        if (C) {
+        if (m_should_call_vm_unmap) {
             /* notify aggregate vm_munmap event only */
             ucm_vm_munmap(addr, length);
         }
@@ -162,6 +161,7 @@ public:
     static const size_t   small_alloc_size = 10000;
     ucs::ptr_vector<void> m_pts;
     int                   m_got_event;
+    static bool           m_should_call_vm_unmap; /* call/not call vm_unmap handler */
     static volatile int   bistro_call_counter;
 };
 
@@ -175,6 +175,7 @@ static bool skip_on_bistro_without_valgrind() {
 }
 
 int malloc_hook::small_alloc_count            = 1000 / ucs::test_time_multiplier();
+bool malloc_hook::m_should_call_vm_unmap      = false;
 volatile int malloc_hook::bistro_call_counter = 0;
 
 class test_thread {
@@ -925,7 +926,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     uint64_t UCS_V_UNUSED origin;
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook<0>, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
@@ -987,7 +988,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook<0>, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
@@ -1009,11 +1010,13 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
 
+    m_should_call_vm_unmap = true;
+
     status = event.set(UCM_EVENT_MUNMAP);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook<1>, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
