@@ -36,9 +36,9 @@
 #  include <infiniband/mlx5dv.h>
 #else
 #  include <infiniband/mlx5_hw.h>
-#  include "ib_mlx5_hw.h"
+#  include "exp/ib_mlx5_hw.h"
 #endif
-#include "ib_mlx5_dv.h"
+#include "dv/ib_mlx5_dv.h"
 
 #include <netinet/in.h>
 #include <endian.h>
@@ -354,7 +354,23 @@ typedef struct uct_ib_mlx5_iface_common {
 /**
  * Calculate unique id for atomic
  */
-uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md);
+static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
+{
+#if HAVE_EXP_UMR
+    if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
+        return 0;
+    }
+    /* Generate atomic UMR id. We want umrs for same virtual addresses to have
+     * different ids across processes.
+     *
+     * Usually parallel processes running on the same node as part of a single
+     * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
+     */
+    return getpid() % 256;
+#else
+    return 0;
+#endif
+}
 
 static inline uint8_t uct_ib_mlx5_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {
