@@ -15,6 +15,7 @@ Bugfixes:
 - Fix segfault when libuct.so is reloaded - issue #3558
 - Fix ucx_info crash when printing configuration alias
 - Fix static checker errors
+- Fallback to ibv_create_cq() if ibv_create_cq_ex() returns ENOSYS
 
 ## 1.5.1 (April 1, 2019)
 Bugfixes:

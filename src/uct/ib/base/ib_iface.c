@@ -624,9 +624,9 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
                                 struct ibv_comp_channel *channel,
                                 int comp_vector, int ignore_overrun)
 {
-    struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     struct ibv_cq_init_attr_ex cq_attr = {};
+    struct ibv_cq_ex *cq_ex;
 
     cq_attr.cqe = cqe;
     cq_attr.channel = channel;
@@ -636,11 +636,17 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
         cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
     }
 
-    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
-#else
-    cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    cq_ex = ibv_create_cq_ex(context, &cq_attr);
+    if (cq_ex) {
+        return ibv_cq_ex_to_cq(cq_ex);
+    } else if (errno != ENOSYS) {
+        return NULL;
+    } else
+        /* if ibv_create_cq_ex returns ENOSYS, fallback to ibv_create_cq */
 #endif
-    return cq;
+    {
+        return ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    }
 }
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
