@@ -140,11 +140,11 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_tag_is_valid_inline(ucp_ep_h ep, ssize_t memtype_max_eager_short,
-                        ssize_t no_memtype_max_eager_short, ssize_t length)
+ucp_tag_eager_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
+                        ssize_t length)
 {
-    return (ucs_likely(length <= no_memtype_max_eager_short) ||
-            (length <= memtype_max_eager_short &&
+    return (ucs_likely(length <= max_eager_short->memtype_off) ||
+            (length <= max_eager_short->memtype_on &&
              ucp_memory_type_cache_is_empty(ep->worker->context)));
 }
 
@@ -162,16 +162,13 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
 
     length = ucp_contig_dt_length(datatype, count);
 
-    if (ucp_tag_is_valid_inline(ep, config->tag.memtype_max_eager_short,
-                                config->tag.no_memtype_max_eager_short,
-                                (ssize_t) length)) {
+    if (ucp_tag_eager_is_inline(ep, &config->tag.max_eager_short, length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
                                  tag, buffer, length);
-    } else if (ucp_tag_is_valid_inline(ep, config->tag.offload.memtype_max_eager_short,
-                                       config->tag.offload.no_memtype_max_eager_short,
-                                       (ssize_t)length)) {
+    } else if (ucp_tag_eager_is_inline(ep, &config->tag.offload.max_eager_short,
+                                       length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
                                         length);

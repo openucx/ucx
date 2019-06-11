@@ -1147,10 +1147,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
 
-    config->tag.offload.memtype_max_eager_short    = -1;
-    config->tag.offload.no_memtype_max_eager_short = -1;
-    config->tag.memtype_max_eager_short            = -1;
-    config->tag.no_memtype_max_eager_short         = -1;
+    config->tag.offload.max_eager_short.memtype_on   = -1;
+    config->tag.offload.max_eager_short.memtype_off  = -1;
+    config->tag.max_eager_short.memtype_on           = -1;
+    config->tag.max_eager_short.memtype_off          = -1;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
         rsc_index = config->key.lanes[lane].rsc_index;
@@ -1221,10 +1221,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
-            config->tag.offload.memtype_max_eager_short = config->tag.eager.max_short;
+            config->tag.offload.max_eager_short.memtype_on = config->tag.eager.max_short;
 
             if (!context->num_mem_type_mds) {
-                config->tag.offload.no_memtype_max_eager_short = config->tag.eager.max_short;
+                config->tag.offload.max_eager_short.memtype_off = config->tag.eager.max_short;
             }
 
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
@@ -1274,12 +1274,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                               config->key.rma_bw_lanes,
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
-                config->tag.eager                   = config->am;
-                config->tag.lane                    = lane;
-                config->tag.memtype_max_eager_short = config->tag.eager.max_short;
+                config->tag.eager                      = config->am;
+                config->tag.lane                       = lane;
+                config->tag.max_eager_short.memtype_on = config->tag.eager.max_short;
 
                 if (!context->num_mem_type_mds) {
-                    config->tag.no_memtype_max_eager_short = config->tag.eager.max_short;
+                    config->tag.max_eager_short.memtype_off = config->tag.eager.max_short;
                 }
             }
         } else {
