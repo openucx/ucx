@@ -25,6 +25,7 @@ Bugfixes:
 - RPM Spec file cleanup
 - Fixing compilation issues with most recent clang and gcc compilers
 - Fixing the wrong name of aliases
+- Fix data race in UCP wireup
 - Fix segfault when libuct.so is reloaded - issue #3558
 
 Tested configurations:
