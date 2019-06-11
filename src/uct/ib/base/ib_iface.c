@@ -316,7 +316,6 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
         gid->global.subnet_prefix = *(uint64_t*) ptr;
-        ptr += sizeof(uint64_t);
     }
 }
 
