@@ -41,14 +41,12 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         long remoteSize = recvBuffer.getInt();
         int remoteKeySize = recvBuffer.getInt();
         ByteBuffer rkey = ByteBuffer.allocateDirect(remoteKeySize);
-        for (int i = 0; i < remoteKeySize; i++) {
-            rkey.put(recvBuffer.get());
-        }
+        copyBuffer(recvBuffer, rkey, remoteKeySize);
+
         int workerAdressSize = recvBuffer.getInt();
         ByteBuffer workerAddress = ByteBuffer.allocateDirect(workerAdressSize);
-        for (int i = 0; i < workerAdressSize; i++) {
-            workerAddress.put(recvBuffer.get());
-        }
+        copyBuffer(recvBuffer, workerAddress, workerAdressSize);
+
         int remoteHashCode = recvBuffer.getInt();
         System.out.printf("Received connection. Will read %d bytes from remote address %d\n",
             remoteSize, remoteAddress);

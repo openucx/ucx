@@ -12,13 +12,12 @@ import org.ucx.jucx.ucp.UcpWorkerParams;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
 public abstract class UcxBenchmark {
-
-    private static long BYTES_IN_GIGABIT = 125_000_000L;
 
     protected static Map<String, String> argsMap = new HashMap<>();
 
@@ -36,7 +35,11 @@ public abstract class UcxBenchmark {
     protected static int totalSize;
 
     private static String DESCRIPTION = "JUCX benchmark.\n" +
-        "Run: java -cp jucx.jar org.ucx.jucx.examples.BENCHMARK_CLASS [parameter=value]\n\n" +
+        "Run: \n" +
+        "java -cp jucx.jar org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver " +
+        "[s=host] [p=port] [n=number of iterations]\n" +
+        "java -cp jucx.jar org.ucx.jucx.examples.UcxReadBWBenchmarkSender " +
+        "[s=receiver host] [p=receiver port] [t=total size to transfer]\n\n" +
         "Parameters:\n" +
         "h - print help\n" +
         "s - IP address to bind sender listener (default: 0.0.0.0)\n" +
@@ -84,7 +87,7 @@ public abstract class UcxBenchmark {
     }
 
     protected static double getBandwithGbits(long nanoTimeDelta, long size) {
-        double sizeInGigabits = (double)size / BYTES_IN_GIGABIT;
+        double sizeInGigabits = (double)size * 8.0 / 1e9;
         double secondsElapsed = nanoTimeDelta / 1e9;
         return sizeInGigabits / secondsElapsed;
     }
@@ -92,6 +95,12 @@ public abstract class UcxBenchmark {
     protected static void closeResources() throws IOException {
         while (!resources.empty()) {
             resources.pop().close();
+        }
+    }
+
+    protected static void copyBuffer(ByteBuffer src, ByteBuffer dst, int size) {
+        for (int i = 0; i < size; i++) {
+            dst.put(src.get());
         }
     }
 
