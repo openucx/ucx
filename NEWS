@@ -27,6 +27,7 @@ Bugfixes:
 - Fixing the wrong name of aliases
 - Fix data race in UCP wireup
 - Fix segfault when libuct.so is reloaded - issue #3558
+- Fallback to ibv_create_cq() if ibv_create_cq_ex() returns ENOSYS
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
