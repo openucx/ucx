@@ -536,6 +536,27 @@ check_inst_headers() {
 	echo "ok 1 - build successful " >> inst_headers.tap
 }
 
+check_make_distcheck() {
+	echo 1..1 > make_distcheck.tap
+	echo "==== Testing make distcheck ===="
+
+	$MAKEP clean && $MAKEP distclean
+	../contrib/configure-release --enable-gtest --prefix=$PWD/install
+	$MAKEP
+	$MAKEP distcheck
+
+	rm -rf ucx_new
+	mkdir ucx_new
+	tar -zxf $(ls -t ucx*.tar.gz | head -1) -C ucx_new
+	cd ucx_new/ucx*
+	./contrib/configure-release --enable-gtest --prefix=$PWD/install
+	$MAKEP
+	$MAKEP install
+	$MAKEP distclean
+
+	cd ../../../build-test/
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -1254,6 +1275,7 @@ do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
+do_distributed_task 1 4 check_make_distcheck
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then
