@@ -273,7 +273,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     struct ibv_mr *mr;
 
     mr = UCS_PROFILE_NAMED_CALL(ibv_reg_mr_func_name, ibv_reg_mr, md->pd,
-                                address, length, UCT_IB_MEM_ACCESS_FLAGS);
+                                address, length, UCT_IB_MEM_ACCESS_FLAGS | access);
     if (mr == NULL) {
         uct_ib_md_print_mem_reg_err_msg(level, address, length,
                                         UCT_IB_MEM_ACCESS_FLAGS | access);
@@ -892,7 +892,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             return UCS_OK;
 #if HAVE_ODP_IMPLICIT
         } else if (!strcasecmp(md_config->reg_methods.rmtd[i], "odp")) {
-            if (!uct_ib_device_odp_has_global_mr(&md->dev)) {
+            if (!(md->dev.flags & UCT_IB_DEVICE_FLAG_ODP_IMPLICIT)) {
                 ucs_debug("%s: on-demand-paging with global memory region is "
                           "not supported", uct_ib_device_name(&md->dev));
                 continue;
@@ -1174,7 +1174,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_mdc;
-    md->config          = md_config->ext;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1209,11 +1208,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
     ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
 #endif
-
-    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        /* Must be done after we open and query the device */
-        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
-    }
 
     if (strlen(md_config->subnet_prefix) > 0) {
         status = uct_ib_md_parse_subnet_prefix(md_config->subnet_prefix,
@@ -1285,13 +1279,13 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     uct_ib_device_t *dev;
     ucs_status_t status;
     uct_ib_md_t *md;
-    int ret;
 
     md = ucs_calloc(1, sizeof(*md), "ib_md");
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
     dev              = &md->dev;
+    md->config       = md_config->ext;
 
     /* Open verbs context */
     dev->ibv_context = ibv_open_device(ibv_device);
@@ -1301,19 +1295,17 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
-    /* Read device properties */
-    IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
-#if HAVE_DECL_IBV_EXP_QUERY_DEVICE
-    ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
-#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
-    ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
-#else
-    ret = ibv_query_device(dev->ibv_context, &dev->dev_attr);
-#endif
-    if (ret != 0) {
-        ucs_error("ibv_query_device(%s) returned %d: %m", ibv_get_device_name(ibv_device), ret);
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    if (status != UCS_OK) {
         goto err_free_context;
+    }
+
+    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
+        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+    }
+
+    if (uct_ib_device_odp_has_global_mr(&md->dev)) {
+        md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {

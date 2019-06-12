@@ -609,7 +609,7 @@ static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
 {
 #if IBV_HW_TM
     unsigned eager_hdr_size = sizeof(struct ibv_tmh);
-    struct ibv_exp_port_attr* port_attr;
+    struct ibv_port_attr* port_attr;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return;

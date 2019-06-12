@@ -199,6 +199,64 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL
 };
 
+/* assuming a DEVX cabable driver also implements ODP */
+static ucs_status_t uct_ib_mlx5dv_check_odp(uct_ib_mlx5_md_t *md, void *cap)
+{
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
+    void *odp;
+    int ret;
+
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
+        goto no_odp;
+    }
+
+    odp = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
+                                                   (UCT_IB_MLX5_CAP_ODP << 1));
+    ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, in, sizeof(in),
+                                  out, sizeof(out));
+    if (ret != 0) {
+        ucs_error("mlx5dv_devx_general_cmd(QUERY_HCA_CAP, ODP) failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (!UCT_IB_MLX5DV_GET(odp_cap, odp, ud_odp_caps.send) ||
+        !UCT_IB_MLX5DV_GET(odp_cap, odp, rc_odp_caps.send) ||
+        !UCT_IB_MLX5DV_GET(odp_cap, odp, rc_odp_caps.write) ||
+        !UCT_IB_MLX5DV_GET(odp_cap, odp, rc_odp_caps.read)) {
+        goto no_odp;
+    }
+
+    if ((md->super.dev.flags & UCT_IB_DEVICE_FLAG_DC) &&
+        (!UCT_IB_MLX5DV_GET(odp_cap, odp, dc_odp_caps.send) ||
+         !UCT_IB_MLX5DV_GET(odp_cap, odp, dc_odp_caps.write) ||
+         !UCT_IB_MLX5DV_GET(odp_cap, odp, dc_odp_caps.read))) {
+        goto no_odp;
+    }
+
+    if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
+            md->super.config.odp.max_size = 1ul << 55;
+        } else {
+            md->super.config.odp.max_size = 1ul << 28;
+        }
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size) &&
+        UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, null_mkey) &&
+        UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
+        md->super.dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
+    }
+
+    return UCS_OK;
+
+no_odp:
+    md->super.config.odp.max_size = 0;
+    return UCS_OK;
+}
+
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
                                           const uct_ib_md_config_t *md_config,
                                           uct_ib_md_t **p_md)
@@ -235,18 +293,16 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
+    md->super.config = md_config->ext;
 
-    IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
-    ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
-    if (ret != 0) {
-        ucs_error("ibv_query_device_ex() returned %d: %m", ret);
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    if (status != UCS_OK) {
         goto err_free;
     }
 
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
-    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                                    (UCT_IB_MLX5_CAP_GENERAL << 1));
     ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
     if (ret != 0) {
@@ -274,13 +330,18 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
+    status = uct_ib_mlx5dv_check_odp(md, cap);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
                   UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
         uint8_t arg_size;
         int cap_ops, mode8b;
 
-        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                                                        (UCT_IB_MLX5_CAP_ATOMIC << 1));
         ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
         if (ret != 0) {
@@ -453,7 +514,7 @@ static ucs_status_t uct_ib_mlx5_md_umr_qp_create(uct_ib_mlx5_md_t *md)
     uint8_t port_num;
     int ret;
     uct_ib_device_t *ibdev;
-    struct ibv_exp_port_attr *port_attr;
+    struct ibv_port_attr *port_attr;
     int is_roce_v2;
 
     ibdev = &md->super.dev;
@@ -773,7 +834,6 @@ static ucs_status_t uct_ib_mlx5_verbs_md_open(struct ibv_device *ibv_device,
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
     uct_ib_mlx5_md_t *md;
-    int ret;
 
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
@@ -790,24 +850,20 @@ static ucs_status_t uct_ib_mlx5_verbs_md_open(struct ibv_device *ibv_device,
 
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
+    md->super.config = md_config->ext;
 
-    IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
-#if HAVE_DECL_IBV_EXP_QUERY_DEVICE
-    ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
-#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
-    ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
-#else
-#  error accel TL missconfigured
-#endif
-    if (ret != 0) {
-        ucs_error("ibv_query_device() returned %d: %m", ret);
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    if (status != UCS_OK) {
         goto err_free;
     }
 
     if (!(uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
         status = UCS_ERR_UNSUPPORTED;
         goto err_free;
+    }
+
+    if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
+        md->super.config.odp.max_size = 0;
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||

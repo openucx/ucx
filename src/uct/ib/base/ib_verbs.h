@@ -40,12 +40,6 @@
 #  define IBV_EXP_ACCESS_REMOTE_ATOMIC     IBV_ACCESS_REMOTE_ATOMIC
 #  define ibv_exp_reg_shared_mr            ibv_reg_shared_mr_ex
 #  define ibv_exp_reg_shared_mr_in         ibv_reg_shared_mr_in
-#  if HAVE_DECL_IBV_QUERY_DEVICE_EX
-#    define ibv_exp_device_attr            ibv_device_attr_ex
-#    define IBV_DEV_ATTR(_dev, _attr)      ((_dev)->dev_attr.orig_attr._attr)
-#  else
-#    define ibv_exp_device_attr            ibv_device_attr
-#  endif
 #  define ibv_exp_send_wr                  ibv_send_wr
 #  define exp_opcode                       opcode
 #  define ibv_exp_post_send                ibv_post_send
@@ -63,23 +57,77 @@
 
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->exp_access)
 #  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)
-#  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)
 
 #else
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->access)
-#if HAVE_DECL_IBV_EXP_DEVICE_ATTR_RESERVED_2
-#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  do { \
-            (_attr)->comp_mask = 0xffffffff; \
-            (_attr)->comp_mask_2 = (IBV_EXP_DEVICE_ATTR_RESERVED_2 - 1); \
-        } while (0)
-#else
-#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  (_attr)->comp_mask = (IBV_EXP_DEVICE_ATTR_RESERVED - 1)
-#endif /* HAVE_DECL_IBV_EXP_DEVICE_ATTR_RESERVED_2 */
-#  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)    (_attr)->comp_mask = 0
 #endif /* HAVE_VERBS_EXP_H */
 
-#ifndef IBV_DEV_ATTR
+/* Read device properties */
+#if HAVE_DECL_IBV_EXP_QUERY_DEVICE
+
 #  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr._attr)
+
+typedef struct ibv_exp_device_attr uct_ib_device_attr;
+
+static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
+                                               uct_ib_device_attr* attr) {
+    int ret;
+#if HAVE_DECL_IBV_EXP_DEVICE_ATTR_RESERVED_2
+    attr->comp_mask = 0xffffffff;
+    attr->comp_mask_2 = IBV_EXP_DEVICE_ATTR_RESERVED_2 - 1;
+#else
+    attr->comp_mask = IBV_EXP_DEVICE_ATTR_RESERVED - 1;
+#endif
+    ret = ibv_exp_query_device(ctx, attr);
+    if (ret != 0) {
+        ucs_error("ibv_exp_query_device(%s) returned %d: %m",
+                  ibv_get_device_name(ctx->device), ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+#elif HAVE_DECL_IBV_QUERY_DEVICE_EX
+
+#  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr.orig_attr._attr)
+
+typedef struct ibv_device_attr_ex uct_ib_device_attr;
+
+static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
+                                               uct_ib_device_attr* attr) {
+    int ret;
+
+    attr->comp_mask = 0;
+    ret = ibv_query_device_ex(ctx, NULL, attr);
+    if (ret != 0) {
+        ucs_error("ibv_query_device_ex(%s) returned %d: %m",
+                  ibv_get_device_name(ctx->device), ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+#else
+
+#  define IBV_DEV_ATTR(_dev, _attr)        ((_dev)->dev_attr._attr)
+
+typedef struct ibv_device_attr uct_ib_device_attr;
+
+static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
+                                               uct_ib_device_attr* attr) {
+    int ret;
+
+    ret = ibv_query_device(ctx, attr);
+    if (ret != 0) {
+        ucs_error("ibv_query_device(%s) returned %d: %m",
+                  ibv_get_device_name(ctx->device), ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 #endif
 
 
