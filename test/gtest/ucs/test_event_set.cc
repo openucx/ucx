@@ -10,7 +10,8 @@ extern "C" {
 #include <pthread.h>
 }
 
-#define MAX_BUF_LEN 255
+#define MAX_BUF_LEN        255
+#define MAX_EVENT_SET_SIZE 16
 
 static const char *UCS_EVENT_SET_TEST_STRING  = "ucs_event_set test string";
 static const char *UCS_EVENT_SET_EXTRA_STRING = "ucs_event_set extra string";
@@ -40,12 +41,13 @@ protected:
 
 const char *test_event_set::evfd_data = UCS_EVENT_SET_TEST_STRING;
 
-static void event_set_func1(int fd, int events, void *arg)
+static void event_set_func1(void *callback_data, int events, void *arg)
 {
     char buf[MAX_BUF_LEN];
     char *extra_str = (char *)((void**)arg)[0];
     int *extra_num = (int *)((void**)arg)[1];
     int n;
+    int fd = (int)(uintptr_t)callback_data;
     memset(buf, 0, MAX_BUF_LEN);
 
     EXPECT_EQ(UCS_EVENT_SET_EVREAD, events);
@@ -59,12 +61,12 @@ static void event_set_func1(int fd, int events, void *arg)
     EXPECT_EQ(*extra_num, UCS_EVENT_SET_EXTRA_NUM);
 }
 
-static void event_set_func2(int fd, int events, void *arg)
+static void event_set_func2(void *callback_data, int events, void *arg)
 {
     EXPECT_EQ(UCS_EVENT_SET_EVWRITE, events);
 }
 
-static void event_set_func3(int fd, int events, void *arg)
+static void event_set_func3(void *callback_data, int events, void *arg)
 {
     ADD_FAILURE();
 }
@@ -73,6 +75,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     pthread_t tid;
     int ret;
     int pipefd[2];
+    unsigned nread;
     void *arg[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
                     (void*)&UCS_EVENT_SET_EXTRA_NUM };
     ucs_sys_event_set_t *event_set = NULL;
@@ -93,10 +96,13 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     EXPECT_EQ(UCS_OK, status);
     EXPECT_TRUE(event_set != NULL);
 
-    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD);
+    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD,
+                               (void *)(uintptr_t)pipefd[0]);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, 50, event_set_func1, arg);
+    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 50,
+                                event_set_func1, arg, &nread);
+    EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
     ucs_event_set_cleanup(event_set);
 
@@ -112,6 +118,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
     int pipefd[2];
     ucs_sys_event_set_t *event_set = NULL;
     ucs_status_t status;
+    unsigned nread;
 
     if (pipe(pipefd) == -1) {
         UCS_TEST_MESSAGE << strerror(errno);
@@ -128,10 +135,13 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
     EXPECT_EQ(UCS_OK, status);
     EXPECT_TRUE(event_set != NULL);
 
-    status = ucs_event_set_add(event_set, pipefd[1], UCS_EVENT_SET_EVWRITE);
+    status = ucs_event_set_add(event_set, pipefd[1], UCS_EVENT_SET_EVWRITE,
+                               (void *)&pipefd[1]);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, 50, event_set_func2, NULL);
+    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 50,
+                                event_set_func2, NULL, &nread);
+    EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
     ucs_event_set_cleanup(event_set);
 
@@ -147,6 +157,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
     int pipefd[2];
     ucs_sys_event_set_t *event_set = NULL;
     ucs_status_t status;
+    unsigned nread;
 
     if (pipe(pipefd) == -1) {
         UCS_TEST_MESSAGE << strerror(errno);
@@ -163,10 +174,13 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
     EXPECT_EQ(UCS_OK, status);
     EXPECT_TRUE(event_set != NULL);
 
-    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD);
+    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD,
+                               NULL);
     EXPECT_EQ(UCS_OK,status);
 
-    status = ucs_event_set_wait(event_set, 20, event_set_func3, NULL);
+    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 20,
+                                event_set_func3, NULL, &nread);
+    EXPECT_EQ(0u, nread);
     EXPECT_EQ(UCS_OK, status);
     ucs_event_set_cleanup(event_set);
 

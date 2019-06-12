@@ -9,6 +9,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/assert.h>
+#include <ucs/sys/math.h>
 
 #include <sys/epoll.h>
 #include <string.h>
@@ -81,14 +82,14 @@ out_create:
 }
 
 ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int event_fd,
-                               ucs_event_set_type_t events)
+                               ucs_event_set_type_t events, void *callback_data)
 {
     struct epoll_event raw_event;
     int ret;
 
     memset(&raw_event, 0, sizeof(raw_event));
     raw_event.events   = ucs_event_set_map_to_raw_events(events);
-    raw_event.data.fd  = event_fd;
+    raw_event.data.ptr = callback_data;
 
     ret = epoll_ctl(event_set->epfd, EPOLL_CTL_ADD, event_fd, &raw_event);
     if (ret < 0) {
@@ -101,14 +102,14 @@ ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int event_fd,
 }
 
 ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int event_fd,
-                               ucs_event_set_type_t events)
+                               ucs_event_set_type_t events, void *callback_data)
 {
     struct epoll_event raw_event;
     int ret;
 
     memset(&raw_event, 0, sizeof(raw_event));
     raw_event.events   = ucs_event_set_map_to_raw_events(events);
-    raw_event.data.fd  = event_fd;
+    raw_event.data.ptr = callback_data;
 
     ret = epoll_ctl(event_set->epfd, EPOLL_CTL_MOD, event_fd, &raw_event);
     if (ret < 0) {
@@ -134,31 +135,45 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd)
     return UCS_OK;
 }
 
-ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
+ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
+                                unsigned max_events, int timeout_ms,
                                 ucs_event_set_handler_t event_set_handler,
-                                void *arg)
+                                void *arg, unsigned *read_events)
 {
-    int nready;
     struct epoll_event ep_events[UCS_EVENT_EPOLL_MAX_EVENTS];
-    int i;
+    unsigned max_wait_events;
+    int nready, events, i;
 
-    if (event_set_handler == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    ucs_assert(event_set_handler != NULL);
+    ucs_assert(read_events != NULL);
 
-    nready = epoll_wait(event_set->epfd, ep_events, UCS_EVENT_EPOLL_MAX_EVENTS,
+    max_wait_events = ucs_min(max_events, UCS_EVENT_EPOLL_MAX_EVENTS);
+    nready = epoll_wait(event_set->epfd, ep_events, max_wait_events,
                         timeout_ms);
-    if ((nready < 0) && (errno != EINTR)) {
+    if (nready < 0) {
+        *read_events = 0;
+
+        if (errno == EINTR) {
+            return UCS_INPROGRESS;
+        }
+
         ucs_error("epoll_wait() failed: %m");
         return UCS_ERR_IO_ERROR;
     }
+
     ucs_trace_data("epoll_wait(epfd=%d, timeout=%d) returned %d",
                    event_set->epfd, timeout_ms, nready);
 
-    for (i=0; i < nready; i++) {
-        int events = ucs_event_set_map_to_events(ep_events[i].events);
-        event_set_handler(ep_events[i].data.fd, events, arg);
+    for (i = 0; i < nready; i++) {
+        events = ucs_event_set_map_to_events(ep_events[i].events);
+        event_set_handler(ep_events[i].data.ptr, events, arg);
     }
+
+    *read_events = nready;
+    if  ((nready < max_events) && (nready == UCS_EVENT_EPOLL_MAX_EVENTS)) {
+        return UCS_INPROGRESS;
+    }
+
     return UCS_OK;
 }
 
@@ -166,4 +181,14 @@ void ucs_event_set_cleanup(ucs_sys_event_set_t *event_set)
 {
     close(event_set->epfd);
     ucs_free(event_set);
+}
+
+ucs_status_t ucs_event_set_fd_get(ucs_sys_event_set_t *event_set, int *fd_p)
+{
+    if (event_set == NULL) {
+         return UCS_ERR_INVALID_PARAM;
+    }
+
+    *fd_p = event_set->epfd;
+    return UCS_OK;
 }

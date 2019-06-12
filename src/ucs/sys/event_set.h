@@ -19,8 +19,13 @@ typedef struct ucs_sys_event_set ucs_sys_event_set_t;
 /**
  * ucs_event_set_handler call this handler for notifying event
  *
+ * @param [in] callback_data  User data which set in ucs_event_set_add().
+ * @param [in] event          Detection event. Sets of ucs_event_set_type_t.
+ * @param [in] arg            User data which set in ucs_event_set_wait().
+ *
  */
-typedef void (*ucs_event_set_handler_t)(int fd, int event, void *arg);
+typedef void (*ucs_event_set_handler_t)(void *callback_data, int event,
+                                        void *arg);
 
 /**
  * ucs_event_set_type_t member is a bit set composed using the following
@@ -44,26 +49,30 @@ ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p);
 /**
  * Register the target event.
  *
- * @param [in] event_set_p  Event set pointer to initialize.
- * @param [in] event_fd     Register the target file descriptor fd.
- * @param [in] events       Operation events.
+ * @param [in] event_set_p   Event set pointer to initialize.
+ * @param [in] event_fd      Register the target file descriptor fd.
+ * @param [in] events        Operation events.
+ * @param [in] callback_data ucs_event_set_handler_t accepts this data.
  *
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int event_fd,
-                               ucs_event_set_type_t events);
+                               ucs_event_set_type_t events,
+                               void *callback_data);
 
 /**
  * Modify the target event.
  *
- * @param [in] event_set    Event set created by ucs_event_set_create.
- * @param [in] event_fd     Register the target file descriptor fd.
- * @param [in] events       Operation events.
+ * @param [in] event_set     Event set created by ucs_event_set_create.
+ * @param [in] event_fd      Register the target file descriptor fd.
+ * @param [in] events        Operation events.
+ * @param [in] callback_data ucs_event_set_handler_t accepts this data.
  *
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int event_fd,
-                               ucs_event_set_type_t events);
+                               ucs_event_set_type_t events,
+                               void *callback_data);
 
 /**
  * Remove the target event.
@@ -78,16 +87,21 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd);
 /**
  * Wait for an I/O events
  *
- * @param [in] event_set          Event set created by ucs_event_set_create.
- * @param [in] timeout_ms         Timeout period in ms.
- * @param [in] event_set_handler  Callback functions.
- * @param [in] arg                User data variables.
+ * @param [in]  event_set          Event set created by ucs_event_set_create.
+ * @param [in]  max_events         Maximum wait events.
+ * @param [in]  timeout_ms         Timeout period in ms.
+ * @param [in]  event_set_handler  Callback functions.
+ * @param [in]  arg                User data variables.
+ * @param [out] read_events        Number of read events.
  *
- * @return UCS_OK on success or an error code on failure.
+ * @return return UCS_OK on success, UCS_INPROGRESS - call was interrupted by a
+ *         signal handler or there are probably more events to read,
+ *         UCS_ERR_IO_ERROR - an error occurred.
  */
-ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
+ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
+                                unsigned max_events, int timeout_ms,
                                 ucs_event_set_handler_t event_set_handler,
-                                void *arg);
+                                void *arg, unsigned *read_events);
 
 /**
  * Cleanup event set
@@ -96,5 +110,15 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set, int timeout_ms,
  *
  */
 void ucs_event_set_cleanup(ucs_sys_event_set_t *event_set);
+
+/**
+ * Get file descriptor for watching events.
+ *
+ * @param [in]  event_set    Event set created by ucs_event_set_create.
+ * @param [out] fd_p         File descriptor.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_event_set_fd_get(ucs_sys_event_set_t *event_set, int *fd_p);
 
 #endif
