@@ -174,7 +174,7 @@ typedef struct ucp_ep_msg_config {
 
 
 /*
- * Inline thresholds with memtype mds
+ * Thresholds with and without non-host memory
  */
 typedef struct ucp_memtype_thresh {
         ssize_t            memtype_on;

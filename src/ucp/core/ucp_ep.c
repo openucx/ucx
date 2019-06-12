@@ -1035,6 +1035,16 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
               config->tag.rndv.rma_thresh, config->tag.rndv_send_nbr.rma_thresh);
 }
 
+static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_short,
+                                             ssize_t max_short, int num_mem_type_mds)
+{
+    if (!num_mem_type_mds) {
+        max_eager_short->memtype_off = max_short;
+    }
+
+    max_eager_short->memtype_on = max_short;
+}
+
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
@@ -1221,11 +1231,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
-            config->tag.offload.max_eager_short.memtype_on = config->tag.eager.max_short;
-
-            if (!context->num_mem_type_mds) {
-                config->tag.offload.max_eager_short.memtype_off = config->tag.eager.max_short;
-            }
+            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
+                                             config->tag.eager.max_short,
+                                             context->num_mem_type_mds);
 
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
@@ -1276,11 +1284,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                               max_rndv_thresh);
                 config->tag.eager                      = config->am;
                 config->tag.lane                       = lane;
-                config->tag.max_eager_short.memtype_on = config->tag.eager.max_short;
 
-                if (!context->num_mem_type_mds) {
-                    config->tag.max_eager_short.memtype_off = config->tag.eager.max_short;
-                }
+                ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
+                                                 config->tag.eager.max_short,
+                                                 context->num_mem_type_mds);
             }
         } else {
             /* Stub endpoint */
