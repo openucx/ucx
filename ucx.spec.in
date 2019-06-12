@@ -82,7 +82,7 @@ rm -f %{buildroot}%{_libdir}/*.la
 %postun -p /sbin/ldconfig
 
 %changelog
-* Sat Jun 04 2019 Yossi Itigin <yosefe@mellanox.com> 1.5.2-1
+* Tue Jun 04 2019 Yossi Itigin <yosefe@mellanox.com> 1.5.2-1
 - Bump version to 1.5.2
 - See NEWS for details
 * Sat Mar 23 2019 Yossi Itigin <yosefe@mellanox.com> 1.5.1-1
