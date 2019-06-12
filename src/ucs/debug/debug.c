@@ -118,6 +118,7 @@ khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
 static pthread_spinlock_t ucs_kh_lock;
 
+static int ucs_debug_initialized = 0;
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
@@ -1018,7 +1019,7 @@ sighandler_t signal(int signum, sighandler_t handler)
 {
     static sighandler_t (*orig)(int, sighandler_t) = NULL;
 
-    if (ucs_debug_is_error_signal(signum)) {
+    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
         return SIG_DFL;
     }
 
@@ -1043,7 +1044,7 @@ static int orig_sigaction(int signum, const struct sigaction *act,
 
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
 {
-    if (ucs_debug_is_error_signal(signum)) {
+    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
         return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
     }
 
@@ -1214,6 +1215,8 @@ void ucs_debug_init()
 #ifdef HAVE_DETAILED_BACKTRACE
     bfd_init();
 #endif
+
+    ucs_debug_initialized = 1;
 }
 
 void ucs_debug_cleanup(int on_error)
@@ -1221,6 +1224,8 @@ void ucs_debug_cleanup(int on_error)
     char *sym;
     int signum;
     struct sigaction *hndl;
+
+    ucs_debug_initialized = 0;
 
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal(signum));
