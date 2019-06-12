@@ -1037,6 +1037,16 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
               config->tag.rndv.rma_thresh, config->tag.rndv_send_nbr.rma_thresh);
 }
 
+static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_short,
+                                             ssize_t max_short, int num_mem_type_mds)
+{
+    if (!num_mem_type_mds) {
+        max_eager_short->memtype_off = max_short;
+    }
+
+    max_eager_short->memtype_on = max_short;
+}
+
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
@@ -1053,11 +1063,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if ((iface_attr->cap.flags & short_flag) &&
-        (context->config.ext.enable_memtype_cache)) {
+    if ((iface_attr->cap.flags & short_flag)) {
         config->max_short = max_short - hdr_len;
-    } else {
-        config->max_short = -1;
     }
 
     if (iface_attr->cap.flags & bcopy_flag) {
@@ -1149,10 +1156,13 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->stream.proto                = &ucp_stream_am_proto;
     config->am_u.proto                  = &ucp_am_proto;
     config->am_u.reply_proto            = &ucp_am_reply_proto;
-    config->tag.offload.max_eager_short = -1;
-    config->tag.max_eager_short         = -1;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
+
+    config->tag.offload.max_eager_short.memtype_on   = -1;
+    config->tag.offload.max_eager_short.memtype_off  = -1;
+    config->tag.max_eager_short.memtype_on           = -1;
+    config->tag.max_eager_short.memtype_off          = -1;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
         rsc_index = config->key.lanes[lane].rsc_index;
@@ -1217,16 +1227,18 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
             config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
-            config->tag.offload.max_eager_short = config->tag.eager.max_short;
             config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
             config->tag.proto                   = &ucp_tag_offload_proto;
             config->tag.lane                    = lane;
             max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
+            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
+                                             config->tag.eager.max_short,
+                                             context->num_mem_type_mds);
+
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
-            ucs_assert_always(config->tag.offload.max_eager_short >= 0);
 
             if (config->key.am_lane != UCP_NULL_LANE) {
                 /* Must have active messages for using rendezvous */
@@ -1272,9 +1284,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                               config->key.rma_bw_lanes,
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
-                config->tag.eager           = config->am;
-                config->tag.lane            = lane;
-                config->tag.max_eager_short = config->tag.eager.max_short;
+                config->tag.eager                      = config->am;
+                config->tag.lane                       = lane;
+
+                ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
+                                                 config->tag.eager.max_short,
+                                                 context->num_mem_type_mds);
             }
         } else {
             /* Stub endpoint */

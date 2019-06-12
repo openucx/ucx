@@ -173,6 +173,15 @@ typedef struct ucp_ep_msg_config {
 } ucp_ep_msg_config_t;
 
 
+/*
+ * Thresholds with and without non-host memory
+ */
+typedef struct ucp_memtype_thresh {
+        ssize_t            memtype_on;
+        ssize_t            memtype_off;
+} ucp_memtype_thresh_t;
+
+
 typedef struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -206,7 +215,8 @@ typedef struct ucp_ep_config {
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
 
-        ssize_t             max_eager_short;
+        /* Maximal size for eager short. */
+        ucp_memtype_thresh_t max_eager_short;
 
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
@@ -238,8 +248,9 @@ typedef struct ucp_ep_config {
         } rndv_send_nbr;
 
         struct {
-            /* Maximal size for eager short */
-            ssize_t         max_eager_short;
+            /* Maximal size for eager short. */
+            ucp_memtype_thresh_t max_eager_short;
+
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
             /* Maximal total size for RNDV offload */
