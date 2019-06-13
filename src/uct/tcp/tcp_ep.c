@@ -46,23 +46,6 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     }
 };
 
-static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
-{
-    uct_tcp_iface_t *iface         = ucs_derived_of(ep->super.super.iface,
-                                                    uct_tcp_iface_t);
-    struct epoll_event epoll_event = {
-        .data.ptr                  = ep,
-        .events                    = ep->events,
-    };
-    int ret;
-
-    ret = epoll_ctl(iface->epfd, op, ep->fd, &epoll_event);
-    if (ret < 0) {
-        ucs_fatal("epoll_ctl(epfd=%d, op=%d, fd=%d) failed: %m",
-                  iface->epfd, op, ep->fd);
-    }
-}
-
 static inline int uct_tcp_ep_ctx_buf_empty(uct_tcp_ep_ctx_t *ctx)
 {
     ucs_assert((ctx->length == 0) || (ctx->buf != NULL));
@@ -313,22 +296,31 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
     return status;
 }
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
 {
-    int old_events = ep->events;
-    int new_events = (ep->events | add) & ~remove;
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    int old_events         = ep->events;
+    int new_events         = (ep->events | add) & ~remove;
+    ucs_status_t status;
 
     if (new_events != ep->events) {
         ep->events = new_events;
         ucs_trace("tcp_ep %p: set events to %c%c", ep,
-                  (new_events & EPOLLIN)  ? 'i' : '-',
-                  (new_events & EPOLLOUT) ? 'o' : '-');
+                  (new_events & UCS_EVENT_SET_EVREAD)  ? 'i' : '-',
+                  (new_events & UCS_EVENT_SET_EVWRITE) ? 'o' : '-');
         if (new_events == 0) {
-            uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_DEL);
+            status = ucs_event_set_del(iface->event_set, ep->fd);
         } else if (old_events != 0) {
-            uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_MOD);
+            status = ucs_event_set_mod(iface->event_set, ep->fd,
+                                       ep->events, (void *)ep);
         } else {
-            uct_tcp_ep_epoll_ctl(ep, EPOLL_CTL_ADD);
+            status = ucs_event_set_add(iface->event_set, ep->fd,
+                                       ep->events, (void *)ep);
+        }
+        if (status != UCS_OK) {
+            ucs_fatal("Unable to modify event set for tcp_ep %p (fd=%d)", ep,
+                      ep->fd);
         }
     }
 }
@@ -338,7 +330,7 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
 {
     ucs_debug("tcp_ep %p: remote disconnected", ep);
 
-    uct_tcp_ep_mod_events(ep, 0, EPOLLIN);
+    uct_tcp_ep_mod_events(ep, 0, UCS_EVENT_SET_EVREAD);
     uct_tcp_ep_ctx_reset(ctx);
     uct_tcp_ep_destroy(&ep->super.super);
 }
@@ -433,7 +425,7 @@ unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 
     if (uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
         ucs_assert(ucs_queue_is_empty(&ep->pending_q));
-        uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
+        uct_tcp_ep_mod_events(ep, 0, UCS_EVENT_SET_EVWRITE);
     }
 
     return count;
@@ -564,7 +556,7 @@ static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     uct_tcp_ep_send(ep);
 
     if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-        uct_tcp_ep_mod_events(ep, EPOLLOUT, 0);
+        uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
     } else {
         uct_tcp_ep_ctx_reset(&ep->tx);
     }
