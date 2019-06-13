@@ -3,7 +3,7 @@ build:
   - tags
   script:
   - "./autogen.sh"
-  - "./contrib/configure-release --disable-numa"
+  - "./contrib/configure-release --disable-numa --with-java"
   - make -j
   - make dist
   - 'export upload_url=$(curl -s -H "Authorization: token $github_token" "https://api.github.com/repos/openucx/ucx/releases" | python -c "import sys,os,json; d=json.load(sys.stdin); tag=os.environ.get(\"CI_COMMIT_TAG\"); rel = [r for r in d if r[\"tag_name\"] == tag]; url = rel[0][\"upload_url\"] if rel else \"\"; print url" | grep -oP "https\S+assets")'
