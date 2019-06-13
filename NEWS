@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.6.0-rc1 (May 29, 2019)
+## 1.6.0-rc2 (June 13, 2019)
 Features:
 - Modular architecture for UCT transports
 - ROCm transport re-design: support for managed memory, direct copy, ROCm GDR
@@ -27,6 +27,11 @@ Bugfixes:
 - Fixing the wrong name of aliases
 - Fix data race in UCP wireup
 - Fix segfault when libuct.so is reloaded - issue #3558
+- Include Java sources in distribution
+- Handle EADDRNOTAVAIL in rdma_cm connection manager
+- Disable ibcm on RHEL7+ by default
+- Fix data race in UCP proxy endpoint
+- Static checker fixes
 - Fallback to ibv_create_cq() if ibv_create_cq_ex() returns ENOSYS
 
 Tested configurations:
