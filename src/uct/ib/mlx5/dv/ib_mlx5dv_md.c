@@ -25,7 +25,7 @@ typedef struct uct_ib_mlx5_dbrec_page {
 #if HAVE_DEVX
 
 static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
-                                                 uct_ib_mem_t *ib_memh)
+                                                    uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
@@ -112,7 +112,7 @@ out:
 }
 
 static ucs_status_t uct_ib_mlx5_devx_dereg_atomic_key(uct_ib_md_t *ibmd,
-                                                   uct_ib_mem_t *ib_memh)
+                                                      uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     int ret;
@@ -176,7 +176,7 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL
 };
 
-static ucs_status_t uct_ib_mlx5_check_odp(uct_ib_mlx5_md_t *md, void *cap)
+static ucs_status_t uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md, void *cap)
 {
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
@@ -236,8 +236,8 @@ no_odp:
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops;
 
 static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                          const uct_ib_md_config_t *md_config,
-                                          uct_ib_md_t **p_md)
+                                             const uct_ib_md_config_t *md_config,
+                                             uct_ib_md_t **p_md)
 {
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
@@ -308,7 +308,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
-    status = uct_ib_mlx5_check_odp(md, cap);
+    status = uct_ib_mlx5_devx_check_odp(md, cap);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -385,7 +385,8 @@ err:
     return status;
 }
 
-void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd) {
+void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
+{
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
     ucs_mpool_cleanup(&md->dbrec_pool, 1);

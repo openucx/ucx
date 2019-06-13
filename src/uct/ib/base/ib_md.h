@@ -167,16 +167,13 @@ typedef struct uct_ib_md_ops_entry {
             .ops = &_md_ops, \
             .priority = _priority, \
         }; \
-        if (ucs_list_is_empty(&uct_ib_md_ops_list)) { \
-            ucs_list_add_head(&uct_ib_md_ops_list, &entry.list); \
-        } else { \
-            ucs_list_for_each(p, &uct_ib_md_ops_list, list) { \
-                if (p->priority < _priority) { \
-                    ucs_list_insert_before(&p->list, &entry.list); \
-                    break; \
-                } \
+        ucs_list_for_each(p, &uct_ib_md_ops_list, list) { \
+            if (p->priority < _priority) { \
+                ucs_list_insert_before(&p->list, &entry.list); \
+                return; \
             } \
         } \
+        ucs_list_add_tail(&uct_ib_md_ops_list, &entry.list); \
     }
 
 extern uct_md_component_t uct_ib_mdc;
