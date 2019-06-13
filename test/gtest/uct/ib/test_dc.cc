@@ -427,6 +427,31 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     EXPECT_EQ(0, iface->tx.stack_top);
 }
 
+UCS_TEST_P(test_dc, dcs_dci_leak) {
+    int num_eps = 3;
+    ucs_status_t status;
+
+    for (int i = 0; i < num_eps; ++i) {
+        m_e1->connect_to_iface(i, *m_e2);
+    }
+
+    /* Consume all available CQ resources */
+    dc_iface(m_e1)->super.super.tx.cq_available = 1;
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    for (int i = 1; i < num_eps; ++i) {
+        /* If dci is acquired when no CQ resources, it may never be released */
+        status = uct_ep_am_short(m_e1->ep(i), 0, 0, NULL, 0);
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    }
+
+    flush();
+    for (int i = 0; i < num_eps; ++i) {
+        EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, dc_ep(m_e1, i)->dci);
+    }
+    EXPECT_EQ(0, dc_iface(m_e1)->tx.stack_top);
+}
+
 UCS_TEST_P(test_dc, rand_dci_many_eps) {
     uct_dc_mlx5_ep_t *ep;
 
