@@ -541,20 +541,8 @@ check_make_distcheck() {
 	echo "==== Testing make distcheck ===="
 
 	$MAKEP clean && $MAKEP distclean
-	../contrib/configure-release --enable-gtest --prefix=$PWD/install
-	$MAKEP
-	$MAKEP distcheck
-
-	rm -rf ucx_new
-	mkdir ucx_new
-	tar -zxf $(ls -t ucx*.tar.gz | head -1) -C ucx_new
-	cd ucx_new/ucx*
-	./contrib/configure-release --enable-gtest --prefix=$PWD/install
-	$MAKEP
-	$MAKEP install
-	$MAKEP distclean
-
-	cd ../../../build-test/
+	../contrib/configure-release --prefix=$PWD/install
+	$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
 }
 
 run_hello() {
