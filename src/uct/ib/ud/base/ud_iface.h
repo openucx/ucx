@@ -38,6 +38,7 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
     double                        peer_timeout;
+    double                        slow_timer_tick;
     double                        slow_timer_backoff;
     int                           dgid_check;
 } uct_ud_iface_config_t;
