@@ -428,7 +428,7 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
 }
 
 UCS_TEST_P(test_dc, dcs_dci_leak) {
-    int num_eps = 3;
+    const int num_eps = 3;
     ucs_status_t status;
 
     for (int i = 0; i < num_eps; ++i) {
