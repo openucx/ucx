@@ -932,10 +932,10 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     /* set hook to mmap call */
     status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
     ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, NULL);
+    EXPECT_NE((intptr_t)rp, 0);
 
     munmap_f = (munmap_f_t*)ucm_bistro_restore_addr(rp);
-    EXPECT_NE((intptr_t)munmap_f, NULL);
+    EXPECT_NE((intptr_t)munmap_f, 0);
 
     /* save partial body of patched function */
     patched = *(uint64_t*)munmap_f;
@@ -994,7 +994,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     /* set hook to mmap call */
     status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
     ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, NULL);
+    EXPECT_NE((intptr_t)rp, 0);
 
     status = ucm_test_events(UCM_EVENT_MUNMAP);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
@@ -1020,7 +1020,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     /* set hook to mmap call */
     status = ucm_bistro_patch(symbol, (void*)bistro_hook<1>::munmap, &rp);
     ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, NULL);
+    EXPECT_NE((intptr_t)rp, 0);
 
     status = ucm_test_events(UCM_EVENT_MUNMAP);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);

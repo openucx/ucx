@@ -538,11 +538,19 @@ check_inst_headers() {
 
 check_make_distcheck() {
 	echo 1..1 > make_distcheck.tap
-	echo "==== Testing make distcheck ===="
 
-	$MAKEP clean && $MAKEP distclean
-	../contrib/configure-release --prefix=$PWD/install
-	$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
+	# If the gcc version on the host is older than 4.8.5, don't run
+	# due to a compiler bug that reproduces when building with gtest
+	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61886
+	if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
+	then
+		echo "==== Testing make distcheck ===="
+		$MAKEP clean && $MAKEP distclean
+		../contrib/configure-release --prefix=$PWD/install
+		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
+	else
+		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
+	fi
 }
 
 run_hello() {
