@@ -12,6 +12,13 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 
+#define UCM_NATIVE_EVENT_VM_MAPPED (UCM_EVENT_MMAP  | UCM_EVENT_MREMAP | \
+                                    UCM_EVENT_SHMAT | UCM_EVENT_SBRK)
+
+#define UCM_NATIVE_EVENT_VM_UNMAPPED (UCM_EVENT_MMAP   | UCM_EVENT_MUNMAP | \
+                                      UCM_EVENT_MREMAP | UCM_EVENT_SHMDT  | \
+                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK)
+
 
 typedef struct ucm_event_handler {
     ucs_list_link_t       list;

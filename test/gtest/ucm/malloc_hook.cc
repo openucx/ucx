@@ -114,6 +114,26 @@ protected:
 class malloc_hook : public ucs::test {
     friend class mmap_event<malloc_hook>;
 protected:
+    /* use template argument to call/not call vm_unmap handler */
+    /* GCC 4.4.7 doesn't allow to define template static function
+     * with integer template argument. using template inner class
+     * to define static function */
+    template <int C> class bistro_hook {
+    public:
+        static int munmap(void *addr, size_t length)
+        {
+            UCM_BISTRO_PROLOGUE;
+            malloc_hook::bistro_call_counter++;
+            if (C) {
+                /* notify aggregate vm_munmap event only */
+                ucm_vm_munmap(addr, length);
+            }
+            int res = (intptr_t)syscall(SYS_munmap, addr, length);
+            UCM_BISTRO_EPILOGUE;
+            return res;
+        }
+    };
+
     void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     {
         m_got_event = 1;
@@ -140,15 +160,6 @@ protected:
             }
         }
         event.unset();
-    }
-
-    static int bistro_munmap_hook(void *addr, size_t length)
-    {
-        UCM_BISTRO_PROLOGUE;
-        bistro_call_counter++;
-        int res = (intptr_t)syscall(SYS_munmap, addr, length);
-        UCM_BISTRO_EPILOGUE;
-        return res;
     }
 
     void skip_on_bistro() {
@@ -927,7 +938,7 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
     }
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
@@ -1000,7 +1011,7 @@ UCS_TEST_F(malloc_hook, test_event_failed) {
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, NULL);
 
@@ -1009,6 +1020,39 @@ UCS_TEST_F(malloc_hook, test_event_failed) {
 
     status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    /* restore original mmap body */
+    status = ucm_bistro_restore(rp);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_F(malloc_hook, test_event_unmap) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+    const char *symbol = "munmap";
+    ucm_bistro_restore_point_t *rp = NULL;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    if (ucm_global_opts.mmap_hook_mode != UCM_MMAP_HOOK_BISTRO) {
+        UCS_TEST_SKIP_R("skipping on non-BISTRO hooks");
+    }
+
+    status = event.set(UCM_EVENT_MUNMAP);
+    ASSERT_UCS_OK(status);
+
+    /* set hook to mmap call */
+    status = ucm_bistro_patch(symbol, (void*)bistro_hook<1>::munmap, &rp);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE((intptr_t)rp, NULL);
+
+    status = ucm_test_events(UCM_EVENT_MUNMAP);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
+    EXPECT_TRUE(status == UCS_OK);
 
     /* restore original mmap body */
     status = ucm_bistro_restore(rp);
