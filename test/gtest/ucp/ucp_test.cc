@@ -5,6 +5,11 @@
 
 #include "ucp_test.h"
 
+#include <ucp/core/ucp_ep.inl>
+#if HAVE_IB
+#include <uct/ib/ud/base/ud_iface.h>
+#endif
+
 #include <common/test_helpers.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
@@ -657,6 +662,23 @@ void ucp_test_base::entity::warn_existing_eps() const {
                              " was not destroyed during test cleanup()";
         }
     }
+}
+
+void ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
+{
+#if HAVE_IB
+    for (ucp_rsc_index_t rsc_index = 0;
+         rsc_index < this->ucph()->num_tls; ++rsc_index) {
+        ucp_worker_iface_t *wiface =
+            ucp_worker_iface(this->worker(), rsc_index);
+        // check if the iface is ud transport
+        if (wiface->iface->ops.iface_flush == uct_ud_iface_flush) {
+            uct_ud_iface_t *iface =
+                ucs_derived_of(wiface->iface, uct_ud_iface_t);
+            iface->config.peer_timeout = ucs_time_from_sec(timeout_sec);
+        }
+    }
+#endif
 }
 
 void ucp_test_base::entity::cleanup() {
