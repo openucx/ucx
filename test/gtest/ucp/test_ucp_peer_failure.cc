@@ -10,6 +10,10 @@
 extern "C" {
 #include <ucp/core/ucp_worker.h> /* for testing memory consumption */
 #include <ucp/core/ucp_request.h> // for debug
+#include <ucp/core/ucp_ep.inl> // for ucp_ep_config
+#if HAVE_IB
+#include <uct/ib/ud/base/ud_iface.h> // for uct_ud_iface_flush
+#endif
 }
 
 class test_ucp_peer_failure : public ucp_test {
@@ -118,8 +122,6 @@ void test_ucp_peer_failure::set_timeouts() {
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
-    std::string ud_timeout = ucs::to_string<int>(3 * ucs::test_time_multiplier()) + "s";
-    m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", ud_timeout.c_str()));
 }
 
 void test_ucp_peer_failure::err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -286,6 +288,23 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     }
 
     EXPECT_EQ(UCS_OK, m_err_status);
+
+#if HAVE_IB
+    /* Since UCT/UD EP has a SW implementation of reliablity on which peer
+     * failure mechanism is based, we should set small UCT/UD EP timeout
+     * for UCT/UD EPs for sender's UCP EP to reduce testing time */
+    ucp_ep_config_t *ep_config = ucp_ep_config(failing_sender());
+    for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        ucp_rsc_index_t rsc_index  = ep_config->key.lanes[lane].rsc_index;
+        if (rsc_index != UCP_NULL_RESOURCE) {
+            ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
+            if (wiface->iface->ops.iface_flush == uct_ud_iface_flush) {
+                uct_ud_iface_t *iface = ucs_derived_of(wiface->iface, uct_ud_iface_t);
+                iface->config.peer_timeout = ucs_time_from_sec(3.);
+            }
+        }
+    }
+#endif
 
     {
         scoped_log_handler slh(wrap_errors_logger);
