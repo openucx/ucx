@@ -1478,6 +1478,8 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t proxy_lane;
+    ucp_md_index_t dst_md_index;
+    ucp_rsc_index_t cmpt_index;
     char *p, *endp;
     char *desc_str;
     int prio;
@@ -1512,7 +1514,10 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         p += strlen(p);
     }
 
-    snprintf(p, endp - p, "md[%d]", key->lanes[lane].dst_md_index);
+    dst_md_index = key->lanes[lane].dst_md_index;
+    cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
+    snprintf(p, endp - p, "md[%d]/%-8s", dst_md_index,
+             context->tl_cmpts[cmpt_index].attr.name);
     p += strlen(p);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane);
