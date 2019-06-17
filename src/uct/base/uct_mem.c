@@ -128,9 +128,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 }
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
-                mem->md   = md;
+                mem->md       = md;
                 mem->mem_type = md_attr.cap.access_mem_type;
-                mem->memh = memh;
+                mem->memh     = memh;
                 goto allocated;
 
             }

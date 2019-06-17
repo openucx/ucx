@@ -134,7 +134,7 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
         cerr = cudaMallocManaged(address, size);
         ASSERT_TRUE(cerr == cudaSuccess);
 
-        if(fill_buffer) {
+        if (fill_buffer) {
             memcpy(*address, fill_buffer, size);
         }
 #endif
