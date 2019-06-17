@@ -19,7 +19,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5.inl>
-#include <uct/ib/mlx5/ib_mlx5_dv.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 
 #include <uct/ib/ud/base/ud_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>

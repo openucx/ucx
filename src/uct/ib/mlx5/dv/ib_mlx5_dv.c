@@ -4,8 +4,7 @@
 * See file LICENSE for terms.
 */
 
-#include "ib_mlx5.h"
-#include "ib_mlx5_log.h"
+#include <uct/ib/mlx5/ib_mlx5.h>
 
 #if HAVE_DECL_MLX5DV_INIT_OBJ
 ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
