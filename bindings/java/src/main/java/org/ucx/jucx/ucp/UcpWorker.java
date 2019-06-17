@@ -156,7 +156,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
     private static native void signalWorkerNative(long workerId);
 
-    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, ByteBuffer recvBuffer,
+    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, ByteBuffer recvBuf,
                                                                  long tag, long tagMask,
                                                                  UcxCallback callback);
 }

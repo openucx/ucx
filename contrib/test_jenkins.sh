@@ -943,6 +943,36 @@ test_jucx() {
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
+	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		if [ -n "$ifaces" ]
+		then
+                        $MAKE -C bindings/java/src/main/native package
+		fi
+		for iface in $ifaces 
+		do
+			if [ -n "$iface" ]
+                	then
+                   		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+                	fi
+
+                	if [ -z "$server_ip" ]
+                	then
+		   	   	echo "Interface $iface has no IPv4"	
+                   	   	continue
+                        fi
+                        echo "Running standalone benchamrk on $iface"
+
+                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+				 s=$server_ip p=$JUCX_TEST_PORT &
+                        java_pid=$!
+			 sleep 10
+                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
+				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			 wait $java_pid
+		done
+
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
