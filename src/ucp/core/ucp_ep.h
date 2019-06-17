@@ -408,8 +408,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 
-void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
-                        const ucp_ep_config_key_t *key);
+ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
+                                const ucp_ep_config_key_t *key);
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 

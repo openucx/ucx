@@ -84,8 +84,13 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     }
 
     ucp_ep_config_key_reset(&key);
+
+    status = ucp_worker_get_ep_config(worker, &key, 0, &ep->cfg_index);
+    if (status != UCS_OK) {
+        goto err_free_ep;
+    }
+
     ep->worker                      = worker;
-    ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key, 0);
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
     ep->conn_sn                     = -1;
@@ -123,7 +128,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     return UCS_OK;
 
 err_free_ep:
-    ucs_free(ep);
+    ucs_strided_alloc_put(&worker->ep_alloc, ep);
 err:
     return status;
 }
@@ -298,7 +303,11 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     key.rma_bw_lanes[0]       = 0;
     key.amo_lanes[0]          = 0;
 
-    ep->cfg_index             = ucp_worker_get_ep_config(ep->worker, &key, 0);
+    status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ep->am_lane               = 0;
     ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
@@ -1109,8 +1118,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 }
 
-static void ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
-                                   const ucp_ep_config_key_t *src)
+static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
+                                           const ucp_ep_config_key_t *src)
 {
     unsigned i;
 
@@ -1118,14 +1127,20 @@ static void ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
     dst->dst_md_cmpts = ucs_calloc(ucs_popcount(src->reachable_md_map),
                                    sizeof(*dst->dst_md_cmpts),
                                    "ucp_dst_md_cmpts");
-    ucs_assert_always(dst->dst_md_cmpts != NULL); // TODO error on NULL
+    if (dst->dst_md_cmpts == NULL) {
+        ucs_error("failed to allocate ucp_ep dest component list");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     for (i = 0; i < ucs_popcount(src->reachable_md_map); ++i) {
         dst->dst_md_cmpts[i] = src->dst_md_cmpts[i];
     }
+
+    return UCS_OK;
 }
 
-void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
-                        const ucp_ep_config_key_t *key)
+ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
+                                const ucp_ep_config_key_t *key)
 {
     ucp_context_h context         = worker->context;
     ucp_lane_index_t tag_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
@@ -1138,11 +1153,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     size_t it;
     size_t max_rndv_thresh;
     size_t max_am_rndv_thresh;
+    ucs_status_t status;
     double rndv_max_bw;
     int i;
 
     memset(config, 0, sizeof(*config));
-    ucp_ep_config_key_copy(&config->key, key);
+
+    status = ucp_ep_config_key_copy(&config->key, key);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* Default settings */
     for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -1373,6 +1393,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
     }
+
+    return UCS_OK;
 }
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)

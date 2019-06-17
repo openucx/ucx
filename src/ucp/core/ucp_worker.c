@@ -424,15 +424,20 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     key.num_lanes          = 1;
     key.status             = status;
 
-    ucp_ep->cfg_index = ucp_worker_get_ep_config(worker, &key, 0);
-    ucp_ep->am_lane   = 0;
+    status = ucp_worker_get_ep_config(worker, &key, 0, &ucp_ep->cfg_index);
+    if (status != UCS_OK) {
+        ucs_fatal("ep %p: could not change configuration to error state: %s",
+                  ucp_ep, ucs_status_string(status));
+    }
+
+    ucp_ep->am_lane = 0;
 
     if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_USED);
         ucs_debug("ep %p: calling user error callback %p with arg %p", ucp_ep,
                   ucp_ep_ext_gen(ucp_ep)->err_cb,  ucp_ep_ext_gen(ucp_ep)->user_data);
         ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
-                                       status);
+                                       key.status);
     } else if (!(ucp_ep->flags & UCP_EP_FLAG_USED)) {
         ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
@@ -1323,7 +1328,8 @@ static char* ucp_worker_add_feature_rsc(ucp_context_h context,
 }
 
 static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
-                                      ucp_context_h context, unsigned config_idx)
+                                      ucp_context_h context,
+                                      ucp_ep_cfg_index_t config_idx)
 {
     char info[256]                  = {0};
     ucp_lane_map_t tag_lanes_map    = 0;
@@ -1434,11 +1440,13 @@ out:
  * A 'key' identifies an entry in the ep_config array. An entry holds the key and
  * additional configuration parameters and thresholds.
  */
-unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
-                                  const ucp_ep_config_key_t *key,
-                                  int print_cfg)
+ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
+                                      const ucp_ep_config_key_t *key,
+                                      int print_cfg,
+                                      ucp_ep_cfg_index_t *config_idx_p)
 {
-    unsigned config_idx;
+    ucp_ep_cfg_index_t config_idx;
+    ucs_status_t status;
 
     /* Search for the given key in the ep_config array */
     for (config_idx = 0; config_idx < worker->ep_config_count; ++config_idx) {
@@ -1454,14 +1462,18 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
 
     /* Create new configuration */
     config_idx = worker->ep_config_count++;
-    ucp_ep_config_init(worker, &worker->ep_config[config_idx], key);
+    status = ucp_ep_config_init(worker, &worker->ep_config[config_idx], key);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (print_cfg) {
         ucp_worker_print_used_tls(key, worker->context, config_idx);
     }
 
 out:
-    return config_idx;
+    *config_idx_p = config_idx;
+    return UCS_OK;;
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,

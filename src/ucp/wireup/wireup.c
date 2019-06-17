@@ -830,7 +830,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 {
     ucp_worker_h worker = ep->worker;
     ucp_ep_config_key_t key;
-    uint16_t new_cfg_index;
+    ucp_ep_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
     char str[32];
@@ -852,7 +852,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                  &ucp_ep_config(ep)->key, &key);
 
     /* Load new configuration */
-    new_cfg_index = ucp_worker_get_ep_config(worker, &key, 1);
+    status = ucp_worker_get_ep_config(worker, &key, 1, &new_cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     if (ep->cfg_index == new_cfg_index) {
         return UCS_OK; /* No change */
     }
