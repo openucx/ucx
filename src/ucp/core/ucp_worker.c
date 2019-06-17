@@ -1681,12 +1681,12 @@ static void ucp_worker_destroy_ep_configs(ucp_worker_h worker)
     for (i = 0; i < worker->ep_config_count; ++i) {
         ucp_ep_config_cleanup(worker, &worker->ep_config[i]);
     }
+
     worker->ep_config_count = 0;
 }
 
 void ucp_worker_destroy(ucp_worker_h worker)
 {
-
     ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);

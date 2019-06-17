@@ -789,8 +789,8 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker, unsigned address_count,
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         for (ae = address_list; ae < address_list + address_count; ++ae) {
             if (ucp_wireup_is_reachable(worker, rsc_index, ae)) {
-                ae_dst_md_map |= UCS_BIT(ae->md_index);
-                dst_md_index   = context->tl_rscs[rsc_index].md_index;
+                ae_dst_md_map         |= UCS_BIT(ae->md_index);
+                dst_md_index           = context->tl_rscs[rsc_index].md_index;
                 ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
             }
         }

@@ -211,6 +211,7 @@ ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
                               ucp_md_index_t dst_md_index)
 {
     unsigned index = ucs_popcount(key->reachable_md_map & UCS_MASK(dst_md_index));
+
     return key->dst_md_cmpts[index];
 }
 

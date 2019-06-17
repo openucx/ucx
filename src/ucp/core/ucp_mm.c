@@ -454,7 +454,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     md_attr = &context->tl_mds[md_index].attr;
     if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
         rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-        status = uct_md_mkey_pack(tl_md->md, memh[0], rkey_buffer);
+        status      = uct_md_mkey_pack(tl_md->md, memh[0], rkey_buffer);
         if (status != UCS_OK) {
             ucs_error("failed to pack key from md[%d]: %s",
                       md_index, ucs_status_string(status));

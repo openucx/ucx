@@ -167,7 +167,7 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
 ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
                                 ucp_rkey_h *rkey_p)
 {
-    ucp_context_t *context = ep->worker->context;
+    ucp_context_t         *context   = ep->worker->context;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     unsigned remote_md_index;
     ucp_md_map_t md_map, remote_md_map;

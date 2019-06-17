@@ -1121,8 +1121,6 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
                                            const ucp_ep_config_key_t *src)
 {
-    unsigned i;
-
     *dst = *src;
     dst->dst_md_cmpts = ucs_calloc(ucs_popcount(src->reachable_md_map),
                                    sizeof(*dst->dst_md_cmpts),
@@ -1132,10 +1130,8 @@ static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (i = 0; i < ucs_popcount(src->reachable_md_map); ++i) {
-        dst->dst_md_cmpts[i] = src->dst_md_cmpts[i];
-    }
-
+    memcpy(dst->dst_md_cmpts, src->dst_md_cmpts,
+           ucs_popcount(src->reachable_md_map) * sizeof(*dst->dst_md_cmpts));
     return UCS_OK;
 }
 
