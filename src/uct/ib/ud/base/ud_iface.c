@@ -559,7 +559,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
     {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
-    {"SLOW_TIMER_TICK", "100ms", "Initial time granularity for resending trigger",
+    {"SLOW_TIMER_TICK", "100ms", "Initial timeout for retransmissions",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_tick), UCS_CONFIG_TYPE_TIME},
     {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
