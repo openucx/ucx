@@ -55,8 +55,8 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
     /* if packed data can fit short active message, use it, because it should
      * be faster than bcopy.
      */
-    if ((max_packed_size <= ucp_ep_config(ep)->am.max_short) &&
-        (max_packed_size <= UCS_ALLOCA_MAX_SIZE)) {
+    if ((max_packed_size <= UCS_ALLOCA_MAX_SIZE) &&
+        (max_packed_size <= ucp_ep_config(ep)->am.max_short)) {
         buffer     = ucs_alloca(max_packed_size);
         packed_len = pack_cb(buffer, req);
         ucs_assertv((packed_len >= 0) && (packed_len <= max_packed_size),
@@ -75,7 +75,6 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
 ucs_status_t ucp_proto_progress_am_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-
     ucs_status_t status = ucp_do_am_single(self, req->send.proto.am_id,
                                            ucp_proto_pack,
                                            ucp_proto_max_packed_size());
