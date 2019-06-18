@@ -988,7 +988,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
 
-    status = event.set(UCM_EVENT_MUNMAP);
+    status = event.set(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
@@ -1002,7 +1002,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
 
-    /* restore original mmap body */
+    /* restore original munmap body */
     status = ucm_bistro_restore(rp);
     ASSERT_UCS_OK(status);
 }
@@ -1014,7 +1014,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
 
-    status = event.set(UCM_EVENT_MUNMAP);
+    status = event.set(UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
@@ -1022,13 +1022,19 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     ASSERT_UCS_OK(status);
     EXPECT_NE((intptr_t)rp, 0);
 
+    /* munmap should be broken */
     status = ucm_test_events(UCM_EVENT_MUNMAP);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
 
-    status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
+    /* vm_unmap should be broken as well, because munmap is broken */
+    status = ucm_test_events(UCM_EVENT_MUNMAP);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    /* mmap should still work */
+    status = ucm_test_events(UCM_EVENT_MMAP);
     EXPECT_TRUE(status == UCS_OK);
 
-    /* restore original mmap body */
+    /* restore original munmap body */
     status = ucm_bistro_restore(rp);
     ASSERT_UCS_OK(status);
 }
