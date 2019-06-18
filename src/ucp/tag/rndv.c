@@ -46,6 +46,9 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string(packed_rkey_size));
         }
+
+        ucs_assert(packed_rkey_size <=
+                   ucp_ep_config(sreq->send.ep)->tag.rndv.rkey_size);
     } else {
         rndv_rts_hdr->address = 0;
         packed_rkey_size      = 0;
@@ -57,8 +60,13 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
+    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    size_t packed_rkey_size;
+
     /* send the RTS. the pack_cb will pack all the necessary fields in the RTS */
-    return ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_RTS, ucp_tag_rndv_rts_pack);
+    packed_rkey_size = ucp_ep_config(sreq->send.ep)->tag.rndv.rkey_size;
+    return ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_tag_rndv_rts_pack,
+                            sizeof(ucp_rndv_rts_hdr_t) + packed_rkey_size);
 }
 
 static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
@@ -94,10 +102,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
+    size_t packed_rkey_size;
     ucs_status_t status;
 
     /* send the RTR. the pack_cb will pack all the necessary fields in the RTR */
-    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_RTR, ucp_tag_rndv_rtr_pack);
+    packed_rkey_size = ucp_ep_config(rndv_req->send.ep)->tag.rndv.rkey_size;
+    status = ucp_do_am_single(self, UCP_AM_ID_RNDV_RTR, ucp_tag_rndv_rtr_pack,
+                              sizeof(ucp_rndv_rtr_hdr_t) + packed_rkey_size);
     if (status == UCS_OK) {
         ucp_request_put(rndv_req);
     }
@@ -158,7 +169,7 @@ static void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
     UCS_PROFILE_REQUEST_EVENT(rreq, "send_ats", 0);
 
     rndv_req->send.lane         = ucp_ep_get_am_lane(rndv_req->send.ep);
-    rndv_req->send.uct.func     = ucp_proto_progress_am_bcopy_single;
+    rndv_req->send.uct.func     = ucp_proto_progress_am_single;
     rndv_req->send.proto.am_id  = UCP_AM_ID_RNDV_ATS;
     rndv_req->send.proto.status = UCS_OK;
     rndv_req->send.proto.remote_request = remote_request;
@@ -190,7 +201,7 @@ static void ucp_rndv_send_atp(ucp_request_t *sreq, uintptr_t remote_request)
     ucp_rkey_destroy(sreq->send.rndv_put.rkey);
 
     sreq->send.lane                 = ucp_ep_get_am_lane(sreq->send.ep);
-    sreq->send.uct.func             = ucp_proto_progress_am_bcopy_single;
+    sreq->send.uct.func             = ucp_proto_progress_am_single;
     sreq->send.proto.am_id          = UCP_AM_ID_RNDV_ATP;
     sreq->send.proto.status         = UCS_OK;
     sreq->send.proto.remote_request = remote_request;

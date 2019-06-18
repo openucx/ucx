@@ -46,7 +46,11 @@ struct ucp_proto {
 };
 
 
-ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self);
+ucs_status_t
+ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
+                 uct_pack_callback_t pack_cb, size_t max_packed_size);
+
+ucs_status_t ucp_proto_progress_am_single(uct_pending_req_t *self);
 
 void ucp_proto_am_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
