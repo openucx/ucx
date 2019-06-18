@@ -1710,7 +1710,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     md           Memory domain to detect memory type
  * @param [in]     addr         Memory address to detect.
  * @param [in]     length       Size of memory
- * @param [out]    mem_type     Filled with memory type of the address range if
+ * @param [out]    mem_type_p   Filled with memory type of the address range if
                                 function succeeds
  * @return UCS_OK               If memory type is succussfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
