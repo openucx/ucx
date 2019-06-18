@@ -7,7 +7,7 @@
 #include <common/test_helpers.h>
 
 extern "C" {
-#include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_worker.h>
 #if HAVE_IB
 #include <uct/ib/ud/base/ud_iface.h>
 #endif
@@ -363,7 +363,7 @@ bool ucp_test::check_test_param(const std::string& name,
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params)
-    : m_rejected_cntr(0), m_default_ib_ud_timeout_sec(0)
+    : m_rejected_cntr(0)
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
@@ -665,8 +665,9 @@ void ucp_test_base::entity::warn_existing_eps() const {
     }
 }
 
-void ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
+double ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
 {
+    double prev_timeout_sec = 0.;
 #if HAVE_IB
     for (ucp_rsc_index_t rsc_index = 0;
          rsc_index < ucph()->num_tls; ++rsc_index) {
@@ -677,9 +678,8 @@ void ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
                 ucs_derived_of(wiface->iface, uct_ud_iface_t);
 
             uct_ud_enter(iface);
-            if (!m_default_ib_ud_timeout_sec) {
-                m_default_ib_ud_timeout_sec =
-                    ucs_time_to_sec(iface->config.peer_timeout);
+            if (!prev_timeout_sec) {
+                prev_timeout_sec = ucs_time_to_sec(iface->config.peer_timeout);
             }
 
             iface->config.peer_timeout = ucs_time_from_sec(timeout_sec);
@@ -687,13 +687,7 @@ void ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
         }
     }
 #endif
-}
-
-void ucp_test_base::entity::set_ib_ud_timeout()
-{
-    if (m_default_ib_ud_timeout_sec) {
-       set_ib_ud_timeout(m_default_ib_ud_timeout_sec);
-    }
+    return prev_timeout_sec;
 }
 
 void ucp_test_base::entity::cleanup() {

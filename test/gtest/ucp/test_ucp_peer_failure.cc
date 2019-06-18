@@ -288,7 +288,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     /* Since UCT/UD EP has a SW implementation of reliablity on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
-    sender().set_ib_ud_timeout(3.);
+    double prev_ib_ud_timeout = sender().set_ib_ud_timeout(3.);
 
     {
         scoped_log_handler slh(wrap_errors_logger);
@@ -349,14 +349,15 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
         }
     }
 
+    /* Since we won't test peer failure anymore, reset UCT/UD EP timeout to the
+     * default value to avoid possible UD EP timeout errors under high load */
+    sender().set_ib_ud_timeout(prev_ib_ud_timeout);
+
     /* Check workability of stable pair */
     smoke_test(true);
 
     /* Check that TX polling is working well */
     while (sender().progress());
-
-    /* Set UCT/UD EP timeout to the default value */
-    sender().set_ib_ud_timeout();
 
     /* When all requests on sender are done we need to prevent LOCAL_FLUSH
      * in test teardown. Receiver is killed and doesn't respond on FC requests
