@@ -77,6 +77,9 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {NULL, NULL}, 0}
 };
 
+static pthread_mutex_t ucm_mmap_install_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int ucm_mmap_installed_events = 0; /* events that were reported as installed */
+
 static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
                                          ucm_event_t *event, void *fired_events)
 {
@@ -160,7 +163,8 @@ void ucm_fire_mmap_events(int events)
     ucm_fire_mmap_events_internal(events, &data);
 }
 
-ucs_status_t ucm_mmap_test_events(int events, int *out_events)
+/* Called with lock held */
+static ucs_status_t ucm_mmap_test_events(int events)
 {
     ucm_event_handler_t handler;
     ucm_mmap_test_events_data_t data;
@@ -175,32 +179,27 @@ ucs_status_t ucm_mmap_test_events(int events, int *out_events)
     ucm_fire_mmap_events_internal(events, &data);
     ucm_event_handler_remove(&handler);
 
-    *out_events = data.out_events;
-
-    ucm_debug("mmap test: got 0x%x out of 0x%x", *out_events, events);
+    ucm_debug("mmap test: got 0x%x out of 0x%x", data.out_events, events);
 
     /* Return success if we caught all wanted events */
-    if (!ucs_test_all_flags(*out_events, events)) {
+    if (!ucs_test_all_flags(data.out_events, events)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
 }
 
-/* Called with lock held */
-static ucs_status_t ucm_mmap_test(int events)
+ucs_status_t ucm_mmap_test_installed_events(int events)
 {
-    static int installed_events = 0;
-    int out_events              = 0; /* GCC bug: it reports compilation fail if not initialized */
     ucs_status_t status;
 
-    if (ucs_test_all_flags(installed_events, events)) {
-        /* All requested events are already installed */
-        return UCS_OK;
-    }
-
-    status            = ucm_mmap_test_events(events, &out_events);
-    installed_events |= out_events;
+    /*
+     * return UCS_OK iff all installed events are actually working
+     * we don't check the status of events which were not successfully installed
+     */
+    pthread_mutex_lock(&ucm_mmap_install_mutex);
+    status = ucm_mmap_test_events(events & ucm_mmap_installed_events);
+    pthread_mutex_unlock(&ucm_mmap_install_mutex);
 
     return status;
 }
@@ -253,14 +252,18 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
 
 ucs_status_t ucm_mmap_install(int events)
 {
-    static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
     ucs_status_t status;
 
-    pthread_mutex_lock(&install_mutex);
+    pthread_mutex_lock(&ucm_mmap_install_mutex);
 
-    status = ucm_mmap_test(events);
-    if (status == UCS_OK) {
-        goto out_unlock;
+    if (ucs_test_all_flags(ucm_mmap_installed_events, events)) {
+        /* if we already installed these events, check that they are still
+         * working, and if not - reinstall them.
+         */
+        status = ucm_mmap_test_events(events);
+        if (status == UCS_OK) {
+            goto out_unlock;
+        }
     }
 
     status = ucs_mmap_install_reloc(events);
@@ -269,9 +272,16 @@ ucs_status_t ucm_mmap_install(int events)
         goto out_unlock;
     }
 
-    status = ucm_mmap_test(events);
+    status = ucm_mmap_test_events(events);
+    if (status != UCS_OK) {
+        ucm_debug("failed to install mmap events");
+        goto out_unlock;
+    }
+
+    /* status == UCS_OK */
+    ucm_mmap_installed_events |= events;
 
 out_unlock:
-    pthread_mutex_unlock(&install_mutex);
+    pthread_mutex_unlock(&ucm_mmap_install_mutex);
     return status;
 }

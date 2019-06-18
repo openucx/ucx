@@ -590,9 +590,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
 
 ucs_status_t ucm_test_events(int events)
 {
-    int out_events;
-
-    return ucm_mmap_test_events(events, &out_events);
+    return ucm_mmap_test_installed_events(events);
 }
 
 UCS_STATIC_INIT {
