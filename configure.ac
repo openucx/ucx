@@ -245,7 +245,7 @@ AS_IF([test "x$with_docs_only" = xyes],
          AS_HELP_STRING([--disable-params-check],
                         [Disable checking user parameters passed to API, default: NO]),
          [], 
-         [enable_params_check=no])
+         [enable_params_check=yes])
      AS_IF([test "x$enable_param_check" = xyes],
      	   [AC_DEFINE([ENABLE_PARAMS_CHECK], [0])],
            [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])])
@@ -262,7 +262,8 @@ AS_IF([test "x$with_docs_only" = xyes],
            [AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
             AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1],
                       [Enable packet header inspection/rewriting in UCT/UD])],
-           [AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
+           [AC_DEFINE([ENABLE_DEBUG_DATA], [0])
+            AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [0])])
 
 
      #
@@ -274,10 +275,10 @@ AS_IF([test "x$with_docs_only" = xyes],
                    [],
                    [enable_mt=no])
      AS_IF([test "x$enable_mt" = xyes],
-	   [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])
+           [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])
             mt_enable=Enabled],
            [AC_DEFINE([ENABLE_MT], [0])
-	    mt_enable=Disabled])
+            mt_enable=Disabled])
 
 
      #
@@ -313,7 +314,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      #
      AC_ARG_ENABLE([examples],
                    AS_HELP_STRING([--enable-examples],
-                                   [Enable examples build, default: NO]),
+                                  [Enable examples build, default: NO]),
                    [],
                    [enable_examples=no])
     AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
