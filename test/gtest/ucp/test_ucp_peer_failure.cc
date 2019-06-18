@@ -118,8 +118,6 @@ void test_ucp_peer_failure::set_timeouts() {
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
-    std::string ud_timeout = ucs::to_string<int>(3 * ucs::test_time_multiplier()) + "s";
-    m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", ud_timeout.c_str()));
 }
 
 void test_ucp_peer_failure::err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -286,6 +284,11 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     }
 
     EXPECT_EQ(UCS_OK, m_err_status);
+    
+    /* Since UCT/UD EP has a SW implementation of reliablity on which peer
+     * failure mechanism is based, we should set small UCT/UD EP timeout
+     * for UCT/UD EPs for sender's UCP EP to reduce testing time */
+    double prev_ib_ud_timeout = sender().set_ib_ud_timeout(3.);
 
     {
         scoped_log_handler slh(wrap_errors_logger);
@@ -345,6 +348,10 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
             ucp_request_release(req);
         }
     }
+
+    /* Since we won't test peer failure anymore, reset UCT/UD EP timeout to the
+     * default value to avoid possible UD EP timeout errors under high load */
+    sender().set_ib_ud_timeout(prev_ib_ud_timeout);
 
     /* Check workability of stable pair */
     smoke_test(true);
