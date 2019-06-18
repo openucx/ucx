@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.6.0-rc2 (June 13, 2019)
+## 1.6.0-rc3 (June 19, 2019)
 Features:
 - Modular architecture for UCT transports
 - ROCm transport re-design: support for managed memory, direct copy, ROCm GDR
@@ -33,6 +33,8 @@ Bugfixes:
 - Fix data race in UCP proxy endpoint
 - Static checker fixes
 - Fallback to ibv_create_cq() if ibv_create_cq_ex() returns ENOSYS
+- Fix malloc hooks test
+- Fix checking return status in ucp_client_server example
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
