@@ -201,5 +201,20 @@ case ${host} in
     AC_DEFINE([HAVE_HW_TIMER], [1], [high-resolution hardware timer disabled])
 esac
 
+#
+# Enable built-in memcpy
+#
+AC_ARG_ENABLE([builtin-memcpy],
+	AS_HELP_STRING([--enable-builtin-memcpy],
+	               [Enable builtin memcpy routine, default: YES]),
+	[],
+	[enable_builtin_memcpy=yes])
+
+AS_IF([test "x$enable_builtin_memcpy" != xno],
+	  [AS_MESSAGE([enabling builtin memcpy])
+	   AC_DEFINE([ENABLE_BUILTIN_MEMCPY], [1], [Enable builtin memcpy])],
+	  [AC_DEFINE([ENABLE_BUILTIN_MEMCPY], [0], [Enable builtin memcpy])]
+  )
+
 AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
