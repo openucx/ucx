@@ -1780,7 +1780,7 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
  * @ingroup UCT_MD
  * @brief Read the configuration for a memory domain.
  *
- * @param [in]  component     Component whose configuration to read.
+ * @param [in]  component     Read the configuration of this component.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.
