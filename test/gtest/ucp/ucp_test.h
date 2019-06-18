@@ -105,6 +105,8 @@ public:
 
         void set_ib_ud_timeout(double timeout_sec);
 
+        void set_ib_ud_timeout();
+
         void cleanup();
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
@@ -115,6 +117,7 @@ public:
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
         size_t                          m_rejected_cntr;
+        double                          m_default_ib_ud_timeout_sec;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);

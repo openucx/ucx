@@ -148,6 +148,10 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
             ucs_log_print(buffer_size, short_file, line, level, &tv, log_line);
             log_line = strtok_r(NULL, "\n", &saveptr);
         }
+
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            ucs_assert(0);
+        }
     }
 
     /* flush the log file if the log_level of this message is fatal or error */

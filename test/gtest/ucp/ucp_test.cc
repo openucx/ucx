@@ -4,17 +4,18 @@
 */
 
 #include "ucp_test.h"
+#include <common/test_helpers.h>
 
+extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #if HAVE_IB
 #include <uct/ib/ud/base/ud_iface.h>
 #endif
-
-#include <common/test_helpers.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
-#include <queue>
+}
 
+#include <queue>
 
 namespace ucp {
 const uint32_t MAGIC = 0xd7d7d7d7U;
@@ -362,7 +363,7 @@ bool ucp_test::check_test_param(const std::string& name,
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params)
-    : m_rejected_cntr(0)
+    : m_rejected_cntr(0), m_default_ib_ud_timeout_sec(0)
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
@@ -668,17 +669,31 @@ void ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
 {
 #if HAVE_IB
     for (ucp_rsc_index_t rsc_index = 0;
-         rsc_index < this->ucph()->num_tls; ++rsc_index) {
-        ucp_worker_iface_t *wiface =
-            ucp_worker_iface(this->worker(), rsc_index);
+         rsc_index < ucph()->num_tls; ++rsc_index) {
+        ucp_worker_iface_t *wiface = ucp_worker_iface(worker(), rsc_index);
         // check if the iface is ud transport
         if (wiface->iface->ops.iface_flush == uct_ud_iface_flush) {
             uct_ud_iface_t *iface =
                 ucs_derived_of(wiface->iface, uct_ud_iface_t);
+
+            uct_ud_enter(iface);
+            if (!m_default_ib_ud_timeout_sec) {
+                m_default_ib_ud_timeout_sec =
+                    ucs_time_to_sec(iface->config.peer_timeout);
+            }
+
             iface->config.peer_timeout = ucs_time_from_sec(timeout_sec);
+            uct_ud_leave(iface);
         }
     }
 #endif
+}
+
+void ucp_test_base::entity::set_ib_ud_timeout()
+{
+    if (m_default_ib_ud_timeout_sec) {
+       set_ib_ud_timeout(m_default_ib_ud_timeout_sec);
+    }
 }
 
 void ucp_test_base::entity::cleanup() {

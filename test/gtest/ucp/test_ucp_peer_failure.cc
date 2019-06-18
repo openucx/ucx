@@ -359,6 +359,9 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
      * in test teardown. Receiver is killed and doesn't respond on FC requests
      */
     sender().destroy_worker();
+
+    /* Set UCT/UD EP timeout to the default value */
+    sender().set_ib_ud_timeout();
 }
 
 UCS_TEST_P(test_ucp_peer_failure, basic) {
