@@ -988,7 +988,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
 
-    status = event.set(UCM_EVENT_MUNMAP);
+    status = event.set(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
