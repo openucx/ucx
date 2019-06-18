@@ -1007,7 +1007,7 @@ UCS_TEST_F(malloc_hook, test_event_failed) {
         UCS_TEST_SKIP_R("skipping on non-BISTRO hooks");
     }
 
-    status = event.set(UCM_EVENT_MUNMAP);
+    status = event.set(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
