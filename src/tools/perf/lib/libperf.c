@@ -1228,8 +1228,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
         }
 
         for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
-            status = uct_md_config_read(component_attr.md_resources[md_index].md_name,
-                                        NULL, NULL, &md_config);
+            status = uct_md_config_read(uct_components[cmpt_index], NULL, NULL,
+                                        &md_config);
             if (status != UCS_OK) {
                 goto out_release_components_list;
             }

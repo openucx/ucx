@@ -381,7 +381,7 @@ static void print_md_info(uct_component_h component,
     uct_md_attr_t md_attr;
     uct_md_h md;
 
-    status = uct_md_config_read(md_name, NULL, NULL, &md_config);
+    status = uct_md_config_read(component, NULL, NULL, &md_config);
     if (status != UCS_OK) {
         goto out;
     }

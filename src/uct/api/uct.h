@@ -1778,9 +1778,9 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 
 /**
  * @ingroup UCT_MD
- * @brief Read the configuration of the MD component.
+ * @brief Read the configuration for a memory domain.
  *
- * @param [in]  name          Name of the MD or the MD component.
+ * @param [in]  component     Read the configuration of this component.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.
@@ -1790,8 +1790,8 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
  *
  * @return Error code.
  */
-ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
-                                const char *filename,
+ucs_status_t uct_md_config_read(uct_component_h component,
+                                const char *env_prefix, const char *filename,
                                 uct_md_config_t **config_p);
 
 
