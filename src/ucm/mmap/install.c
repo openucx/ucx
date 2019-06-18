@@ -17,6 +17,7 @@
 #include <ucm/util/reloc.h>
 #include <ucm/util/sys.h>
 #include <ucm/bistro/bistro.h>
+#include <ucs/sys/preprocessor.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
 #include <ucs/arch/bitops.h>
@@ -37,6 +38,8 @@
     do {                                                                      \
         (_data)->fired_events = 0;                                            \
         _call;                                                                \
+        ucm_trace("after %s: fired events = 0x%x", UCS_PP_MAKE_STRING(_call), \
+                  (_data)->fired_events);                                     \
         (_data)->out_events &= ~((_event) & (_mask)) | (_data)->fired_events; \
     } while(0)
 
