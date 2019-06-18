@@ -103,6 +103,9 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
 int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
+int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
+                            const ucp_address_entry_t *ae);
+
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                    unsigned ep_init_flags, unsigned address_count,
                                    const ucp_address_entry_t *address_list,

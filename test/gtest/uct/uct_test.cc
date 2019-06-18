@@ -657,14 +657,14 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
             status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
             ASSERT_UCS_OK(status);
 
-            status = uct_rkey_unpack(NULL, rkey_buffer, rkey_bundle);
+            status = uct_rkey_unpack(m_resource.component, rkey_buffer,
+                                     rkey_bundle);
             ASSERT_UCS_OK(status);
 
             free(rkey_buffer);
         } else {
             rkey_bundle->handle = NULL;
             rkey_bundle->rkey   = UCT_INVALID_RKEY;
-            rkey_bundle->type   = NULL;
         }
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
@@ -677,7 +677,6 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
 
         rkey_bundle->rkey   = UCT_INVALID_RKEY;
         rkey_bundle->handle = NULL;
-        rkey_bundle->type   = NULL;
     }
 }
 
@@ -701,7 +700,7 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
     ucs_status_t status;
 
     if (rkey.rkey != UCT_INVALID_RKEY) {
-        status = uct_rkey_release(NULL, &rkey);
+        status = uct_rkey_release(m_resource.component, &rkey);
         ASSERT_UCS_OK(status);
     }
 
@@ -1031,8 +1030,8 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_end         = NULL;
         m_rkey.rkey   = UCT_INVALID_RKEY;
         m_rkey.handle = NULL;
-        m_rkey.type   = NULL;
     }
+    m_rkey.type  = NULL;
     m_iov.buffer = ptr();
     m_iov.length = length();
     m_iov.count  = 1;

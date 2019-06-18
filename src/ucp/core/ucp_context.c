@@ -1046,15 +1046,16 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_release_components;
     }
 
-    context->tl_cmpts = ucs_calloc(num_uct_components,
-                                   sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
+    context->num_cmpts = num_uct_components;
+    context->tl_cmpts  = ucs_calloc(context->num_cmpts,
+                                    sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
     if (context->tl_cmpts == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_release_components;
     }
 
     max_mds = 0;
-    for (i = 0; i < num_uct_components; ++i) {
+    for (i = 0; i < context->num_cmpts; ++i) {
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
@@ -1078,7 +1079,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Collect resources of each component */
-    for (i = 0; i < num_uct_components; ++i) {
+    for (i = 0; i < context->num_cmpts; ++i) {
         status = ucp_add_component_resources(context, i, dev_cfg_masks,
                                              &tl_cfg_mask, config);
         if (status != UCS_OK) {
@@ -1351,7 +1352,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     /* create memory pool for small rkeys */
     status = ucs_mpool_init(&context->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) + sizeof(uct_rkey_bundle_t) * UCP_RKEY_MPOOL_MAX_MD,
+                            sizeof(ucp_rkey_t) +
+                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
                             &ucp_rkey_mpool_ops, "ucp_rkeys");
     if (status != UCS_OK) {
@@ -1455,15 +1457,22 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 
 void ucp_context_print_info(ucp_context_h context, FILE *stream)
 {
-    ucp_rsc_index_t md_index, rsc_index;
+    ucp_rsc_index_t cmpt_index, md_index, rsc_index;
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP context\n");
     fprintf(stream, "#\n");
 
+    for (cmpt_index = 0; cmpt_index < context->num_cmpts; ++cmpt_index) {
+        fprintf(stream, "#     component %-2d :  %s\n",
+                cmpt_index, context->tl_cmpts[cmpt_index].attr.name);
+    }
+    fprintf(stream, "#\n");
+
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        fprintf(stream, "#            md %-2d :  %s\n",
-                md_index, context->tl_mds[md_index].rsc.md_name);
+        fprintf(stream, "#            md %-2d :  component %-2d %s \n",
+                md_index, context->tl_mds[md_index].cmpt_index,
+                context->tl_mds[md_index].rsc.md_name);
     }
 
     fprintf(stream, "#\n");
