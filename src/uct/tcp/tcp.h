@@ -23,32 +23,6 @@
  * where %s value can be -/Tx/Rx */
 #define UCT_TCP_EP_CTX_CAPS_STR_MAX 8
 
-#define UCT_TCP_SOCKET_ADDR_EQUAL(_sa1, _sa2) \
-    ({ \
-        ucs_status_t status; \
-        int cmp; \
-        \
-        cmp = ucs_sockaddr_cmp((const struct sockaddr*)&(_sa1), \
-                               (const struct sockaddr*)&(_sa2), \
-                               &status); \
-        ucs_assert_always(status == UCS_OK); \
-        (cmp == 0); \
-    })
-
-#define UCT_TCP_SOCKET_ADDR_HASH(_sa) \
-    ({ \
-        ucs_status_t status; \
-        size_t addr_size; \
-        uint32_t hash_code; \
-        \
-        status = ucs_sockaddr_sizeof((const struct sockaddr*)&(_sa), \
-                                     &addr_size); \
-        ucs_assert_always(status == UCS_OK); \
-        \
-        hash_code = ucs_crc32(0, (const void *)&(_sa), addr_size); \
-        hash_code; \
-    })
-
 /**
  * TCP context type
  */
@@ -74,9 +48,32 @@ typedef struct uct_tcp_ep uct_tcp_ep_t;
 
 typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
 
+static inline int uct_tcp_khash_sockaddr_equal(struct sockaddr_in sa1,
+                                               struct sockaddr_in sa2)
+{
+    ucs_status_t status;
+    int cmp;
+
+    cmp = ucs_sockaddr_cmp((const struct sockaddr*)&sa1,
+                           (const struct sockaddr*)&sa2,
+                           &status);
+    ucs_assert(status == UCS_OK);
+    return (cmp == 0);
+}
+
+static inline uint32_t uct_tcp_khash_sockaddr_hash(struct sockaddr_in sa)
+{
+    ucs_status_t status;
+    size_t addr_size;
+
+    status = ucs_sockaddr_sizeof((const struct sockaddr*)&sa,
+                                 &addr_size);
+    ucs_assert(status == UCS_OK);
+    return ucs_crc32(0, (const void *)&sa, addr_size);
+}
 
 KHASH_INIT(uct_tcp_cm_eps, struct sockaddr_in, ucs_list_link_t*,
-           1, UCT_TCP_SOCKET_ADDR_HASH, UCT_TCP_SOCKET_ADDR_EQUAL);
+           1, uct_tcp_khash_sockaddr_hash, uct_tcp_khash_sockaddr_equal);
 
 
 /**
@@ -213,6 +210,10 @@ void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface);
 
 void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface);
 
+void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
+
+void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
+
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
                              uct_tcp_ep_t **ep_p);
@@ -221,6 +222,8 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
                                uct_ep_h *ep_p);
 
 const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer);
+
+void uct_tcp_ep_change_ctx_caps(uct_tcp_ep_t *ep, uint8_t new_caps);
 
 ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
                                     uct_tcp_ep_ctx_type_t cap);
@@ -237,7 +240,7 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
 void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
 
-unsigned uct_tcp_ep_peer_addr_to_itself(const uct_tcp_ep_t *ep);
+unsigned uct_tcp_ep_is_self(const uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
@@ -285,6 +288,8 @@ void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 uct_tcp_ep_t *uct_tcp_cm_search_ep(uct_tcp_iface_t *iface,
                                    const struct sockaddr_in *peer_addr,
                                    uct_tcp_ep_ctx_type_t with_ctx_type);
+
+void uct_tcp_cm_purge_ep(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr_in *peer_addr,

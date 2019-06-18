@@ -481,6 +481,7 @@ static void uct_tcp_iface_ep_list_cleanup(uct_tcp_iface_t *iface,
     uct_tcp_ep_t *ep, *tmp;
 
     ucs_list_for_each_safe(ep, tmp, ep_list, list) {
+        uct_tcp_cm_purge_ep(ep);
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }
 }
@@ -488,26 +489,33 @@ static void uct_tcp_iface_ep_list_cleanup(uct_tcp_iface_t *iface,
 static void uct_tcp_iface_eps_cleanup(uct_tcp_iface_t *iface)
 {
     ucs_list_link_t *ep_list;
-    khint_t iter;
 
     uct_tcp_iface_ep_list_cleanup(iface, &iface->ep_list);
 
-    /* don't use kh_foreach* here, because it is not safe */
-    iter = kh_begin(&iface->ep_cm_map);
-    while (iter != kh_end(&iface->ep_cm_map)) {
-        if (!kh_exist(&iface->ep_cm_map, iter)) {
-            iter++;
-            continue;
-        }
-
-        ep_list = kh_value(&iface->ep_cm_map, iter);
+    kh_foreach_value(&iface->ep_cm_map, ep_list, {
         uct_tcp_iface_ep_list_cleanup(iface, ep_list);
-
-        /* ensure the next iteration */
-        iter = kh_begin(&iface->ep_cm_map);
-    }
+        ucs_free(ep_list);
+    });
 
     kh_destroy_inplace(uct_tcp_cm_eps, &iface->ep_cm_map);
+}
+
+void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_add_tail(&iface->ep_list, &ep->list);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+}
+
+void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_del(&ep->list);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)

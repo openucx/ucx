@@ -125,7 +125,7 @@ static void uct_tcp_ep_close_fd(int *fd_p)
     }
 }
 
-unsigned uct_tcp_ep_peer_addr_to_itself(const uct_tcp_ep_t *ep)
+unsigned uct_tcp_ep_is_self(const uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
@@ -135,8 +135,8 @@ unsigned uct_tcp_ep_peer_addr_to_itself(const uct_tcp_ep_t *ep)
     cmp = ucs_sockaddr_cmp((const struct sockaddr*)&ep->peer_addr,
                            (const struct sockaddr*)&iface->config.ifaddr,
                            &status);
-    ucs_assert_always(status == UCS_OK);
-    return (cmp == 0);
+    ucs_assertv(status == UCS_OK, "ep=%p", ep);
+    return !cmp;
 }
 
 static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
@@ -190,9 +190,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
         goto err_cleanup;
     }
 
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_list_add_tail(&iface->ep_list, &self->list);
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+    uct_tcp_iface_add_ep(self);
 
     ucs_debug("tcp_ep %p: created on iface %p, fd %d", self, iface, self->fd);
     return UCS_OK;
@@ -214,16 +212,17 @@ const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer)
     return str_buffer;
 }
 
-static void uct_tcp_ep_trace_ctx_caps_change(uct_tcp_ep_t *ep,
-                                             uint8_t prev_caps)
+void uct_tcp_ep_change_ctx_caps(uct_tcp_ep_t *ep, uint8_t new_caps)
 {
     char str_prev_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
     char str_cur_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
 
-    ucs_debug("tcp_ep %p: ctx caps changed %s -> %s", ep,
-              uct_tcp_ep_ctx_caps_str(prev_caps, str_prev_ctx_caps),
-              uct_tcp_ep_ctx_caps_str(ep->ctx_caps, str_cur_ctx_caps));
-    ucs_assertv(prev_caps != ep->ctx_caps, "ep=%p", ep);
+    if (ep->ctx_caps != new_caps) {
+        ucs_trace("tcp_ep %p: ctx caps changed %s -> %s", ep,
+                  uct_tcp_ep_ctx_caps_str(ep->ctx_caps, str_prev_ctx_caps),
+                  uct_tcp_ep_ctx_caps_str(new_caps, str_cur_ctx_caps));
+        ep->ctx_caps = new_caps;
+    }
 }
 
 ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
@@ -233,10 +232,8 @@ ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
                                             uct_tcp_iface_t);
     uint8_t prev_caps      = ep->ctx_caps;
 
-    ep->ctx_caps |= UCS_BIT(cap);
-
-    if (!uct_tcp_ep_peer_addr_to_itself(ep) && (prev_caps != ep->ctx_caps)) {
-        uct_tcp_ep_trace_ctx_caps_change(ep, prev_caps);
+    uct_tcp_ep_change_ctx_caps(ep, ep->ctx_caps | UCS_BIT(cap));
+    if (!uct_tcp_ep_is_self(ep) && (prev_caps != ep->ctx_caps)) {
         if (!prev_caps) {
             return uct_tcp_cm_add_ep(iface, ep);
         } else if (ep->ctx_caps == (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
@@ -255,12 +252,10 @@ ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
                                             uct_tcp_iface_t);
     uint8_t prev_caps      = ep->ctx_caps;
 
-    ep->ctx_caps &= ~UCS_BIT(cap);
-    uct_tcp_ep_trace_ctx_caps_change(ep, prev_caps);
-
-    if (!uct_tcp_ep_peer_addr_to_itself(ep)) {
-        if (prev_caps == (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
-                          UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX))) {
+    uct_tcp_ep_change_ctx_caps(ep, ep->ctx_caps & ~UCS_BIT(cap));
+    if (!uct_tcp_ep_is_self(ep)) {
+        if (ucs_test_all_flags(prev_caps, (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
+                                           UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)))) {
             return uct_tcp_cm_add_ep(iface, ep);
         } else if (!ep->ctx_caps) {
             uct_tcp_cm_remove_ep(iface, ep);
@@ -285,8 +280,8 @@ ucs_status_t uct_tcp_ep_move_ctx_cap(uct_tcp_ep_t *from_ep, uct_tcp_ep_t *to_ep,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
-                                            uct_tcp_iface_t);
+    uct_tcp_iface_t UCS_V_UNUSED *iface =
+        ucs_derived_of(self->super.super.iface, uct_tcp_iface_t);
 
     if (self->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) {
         uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_TX);
@@ -296,9 +291,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
         uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_RX);
     }
 
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_list_del(&self->list);
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+    uct_tcp_iface_remove_ep(self);
 
     if (self->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED) {
         uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
