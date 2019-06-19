@@ -143,10 +143,10 @@ static void uct_tcp_iface_handle_events(void *callback_data,
     ucs_assertv(ep->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED, "ep=%p", ep);
 
     if (events & UCS_EVENT_SET_EVREAD) {
-        count += uct_tcp_ep_progress_rx(ep);
+        *count += uct_tcp_ep_progress_rx(ep);
     }
     if (events & UCS_EVENT_SET_EVWRITE) {
-        count += uct_tcp_ep_progress_tx(ep);
+        *count += uct_tcp_ep_progress_tx(ep);
     }
 }
 
