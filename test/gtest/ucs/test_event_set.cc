@@ -70,11 +70,6 @@ static void event_set_func2(void *callback_data, int events, void *arg)
     EXPECT_EQ(UCS_EVENT_SET_EVWRITE, events);
 }
 
-static void event_set_func3(void *callback_data, int events, void *arg)
-{
-    ADD_FAILURE();
-}
-
 UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     pthread_t tid;
     int ret;
@@ -201,3 +196,4 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
     close(pipefd[0]);
     close(pipefd[1]);
 }
+
