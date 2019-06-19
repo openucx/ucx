@@ -6,16 +6,24 @@
 #include <uct/ib/test_ib.h>
 
 
-class test_uct_ib_pkey : public test_uct_ib {
+class test_uct_ib_pkey : public test_uct_ib_with_specific_port {
 public:
-    void init() {
-        test_uct_ib::init();
-
+    void check_port_attr() {
         if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
-            test_uct_ib::cleanup();
             /* no pkeys for Ethernet */
             UCS_TEST_SKIP_R("skip pkey test for port with Ethernet link type");
         }
+    }
+
+    void send_recv_short() {
+        create_connected_entities();
+
+        test_uct_ib::send_recv_short();
+
+        m_e1->destroy_eps();
+        m_e2->destroy_eps();
+        m_entities.remove(m_e1);
+        m_entities.remove(m_e2);
     }
 
     uint16_t query_pkey(uint16_t pkey_idx) {
