@@ -31,7 +31,7 @@ UCS_TEST_P(test_zcopy_comp, issue1440)
     size_t size_large = ucs_min(65536ul, sender->iface_attr().cap.put.max_zcopy);
     ucs_assert(size_large > size_small);
 
-    if (sender->md_attr().cap.mem_type != UCT_MD_MEM_TYPE_HOST) {
+    if (sender->md_attr().cap.access_mem_type != UCT_MD_MEM_TYPE_HOST) {
         std::stringstream ss;
         ss << "test_zcopy_comp is not supported by " << GetParam();
         UCS_TEST_SKIP_R(ss.str());

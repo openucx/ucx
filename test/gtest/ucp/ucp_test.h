@@ -103,6 +103,8 @@ public:
 
         void warn_existing_eps() const;
 
+        double set_ib_ud_timeout(double timeout_sec);
+
         void cleanup();
 
         static void ep_destructor(ucp_ep_h ep, entity *e);

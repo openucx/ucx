@@ -8,14 +8,15 @@
 
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
-    attr->cap.flags         = 0;
-    attr->cap.max_alloc     = 0;
-    attr->cap.reg_mem_types = 0;
-    attr->cap.mem_type      = 0;
-    attr->cap.max_reg       = 0;
-    attr->rkey_packed_size  = 0;
-    attr->reg_cost.overhead = 0;
-    attr->reg_cost.growth   = 0;
+    attr->cap.flags               = 0;
+    attr->cap.max_alloc           = 0;
+    attr->cap.reg_mem_types       = 0;
+    attr->cap.access_mem_type     = UCT_MD_MEM_TYPE_HOST;
+    attr->cap.detect_mem_types    = 0;
+    attr->cap.max_reg             = 0;
+    attr->rkey_packed_size        = 0;
+    attr->reg_cost.overhead       = 0;
+    attr->reg_cost.growth         = 0;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
@@ -30,12 +31,12 @@ static ucs_status_t uct_tcp_md_open(const char *md_name, const uct_md_config_t *
                                     uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close        = ucs_empty_function,
-        .query        = uct_tcp_md_query,
-        .mkey_pack    = ucs_empty_function_return_unsupported,
-        .mem_reg      = ucs_empty_function_return_unsupported,
-        .mem_dereg    = ucs_empty_function_return_unsupported,
-        .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
+        .close              = ucs_empty_function,
+        .query              = uct_tcp_md_query,
+        .mkey_pack          = ucs_empty_function_return_unsupported,
+        .mem_reg            = ucs_empty_function_return_unsupported,
+        .mem_dereg          = ucs_empty_function_return_unsupported,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops          = &md_ops,

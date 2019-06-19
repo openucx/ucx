@@ -23,6 +23,17 @@
  */
 #define UCP_RKEY_MPOOL_MAX_MD     3
 
+
+/**
+ * UCT remote key along with component handle which should be used to release it.
+ *
+ */
+typedef struct ucp_tl_rkey {
+    uct_rkey_bundle_t             rkey;
+    uct_component_h               cmpt;
+} ucp_tl_rkey_t;
+
+
 /**
  * Remote memory key structure.
  * Contains remote keys for UCT MDs.
@@ -41,12 +52,12 @@ typedef struct ucp_rkey {
         ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
         ucp_rma_proto_t           *rma_proto;   /* Protocol for RMAs */
     } cache;
-    ucp_md_map_t                  md_map;  /* Which *remote* MDs have valid memory handles */
-    uct_memory_type_t             mem_type;/* Memory type of remote key memory */
+    ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
+    uct_memory_type_t             mem_type;     /* Memory type of remote key memory */
 #if ENABLE_PARAMS_CHECK
     ucp_ep_h                      ep;
 #endif
-    uct_rkey_bundle_t             uct[0];  /* Remote key for every MD */
+    ucp_tl_rkey_t                 tl_rkey[0];   /* UCT rkey for every remote MD */
 } ucp_rkey_t;
 
 
@@ -137,12 +148,13 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, uct_memory_type_t mem_type,
-                                      unsigned md_index, uct_mem_h *memh,
+                                      ucp_md_index_t md_index, uct_mem_h *memh,
                                       ucp_md_map_t *md_map,
                                       uct_rkey_bundle_t *rkey_bundle);
 
 void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
-                                uct_mem_h *memh, ucp_md_map_t *md_map,
+                                ucp_md_index_t md_index, uct_mem_h *memh,
+                                ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle);
 
 static UCS_F_ALWAYS_INLINE uct_mem_h

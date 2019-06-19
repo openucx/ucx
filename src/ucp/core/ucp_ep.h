@@ -131,6 +131,11 @@ typedef struct ucp_ep_config_key {
      */
     ucp_md_map_t           reachable_md_map;
 
+    /* Array with popcount(reachable_md_map) elements, each entry holds the local
+     * component index to be used for unpacking remote key from each set bit in
+     * reachable_md_map */
+    ucp_rsc_index_t        *dst_md_cmpts;
+
     /* Error handling mode */
     ucp_err_handling_mode_t    err_mode;
     ucs_status_t               status;
@@ -418,7 +423,10 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 
-void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
+ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
+                                const ucp_ep_config_key_t *key);
+
+void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

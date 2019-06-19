@@ -536,6 +536,23 @@ check_inst_headers() {
 	echo "ok 1 - build successful " >> inst_headers.tap
 }
 
+check_make_distcheck() {
+	echo 1..1 > make_distcheck.tap
+
+	# If the gcc version on the host is older than 4.8.5, don't run
+	# due to a compiler bug that reproduces when building with gtest
+	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61886
+	if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
+	then
+		echo "==== Testing make distcheck ===="
+		$MAKEP clean && $MAKEP distclean
+		../contrib/configure-release --prefix=$PWD/install
+		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
+	else
+		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
+	fi
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -943,6 +960,36 @@ test_jucx() {
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
+	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		if [ -n "$ifaces" ]
+		then
+                        $MAKE -C bindings/java/src/main/native package
+		fi
+		for iface in $ifaces 
+		do
+			if [ -n "$iface" ]
+                	then
+                   		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+                	fi
+
+                	if [ -z "$server_ip" ]
+                	then
+		   	   	echo "Interface $iface has no IPv4"	
+                   	   	continue
+                        fi
+                        echo "Running standalone benchamrk on $iface"
+
+                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+				 s=$server_ip p=$JUCX_TEST_PORT &
+                        java_pid=$!
+			 sleep 10
+                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
+				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			 wait $java_pid
+		done
+
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
@@ -1254,6 +1301,7 @@ do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
+do_distributed_task 1 4 check_make_distcheck
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then

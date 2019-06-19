@@ -758,7 +758,8 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
     tl_md->rsc        = *md_rsc;
 
     /* Read MD configuration */
-    status = uct_md_config_read(md_rsc->md_name, NULL, NULL, &md_config);
+    status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt, NULL, NULL,
+                                &md_config);
     if (status != UCS_OK) {
         return status;
     }
@@ -950,12 +951,13 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
 {
     const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
     uct_component_attr_t uct_component_attr;
-    uct_memory_type_t mem_type;
     unsigned num_tl_resources;
-    uint64_t mem_type_mask;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
+    uint64_t mem_type_mask;
+    uint64_t mem_type_bitmap;
+
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
@@ -991,11 +993,11 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
          * don't use it */
         if (num_tl_resources > 0) {
             /* List of memory type MDs */
-            mem_type = context->tl_mds[md_index].attr.cap.mem_type;
-            if (!(mem_type_mask & UCS_BIT(mem_type))) {
-                context->mem_type_tl_mds[context->num_mem_type_mds] = md_index;
-                ++context->num_mem_type_mds;
-                mem_type_mask |= UCS_BIT(mem_type);
+            mem_type_bitmap = context->tl_mds[md_index].attr.cap.detect_mem_types;
+            if (~mem_type_mask & mem_type_bitmap) {
+                context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
+                ++context->num_mem_type_detect_mds;
+                mem_type_mask |= mem_type_bitmap;
             }
             ++context->num_mds;
         } else {
@@ -1026,8 +1028,12 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mds          = 0;
     context->tl_rscs          = NULL;
     context->num_tls          = 0;
-    context->num_mem_type_mds = 0;
     context->memtype_cache    = NULL;
+    context->num_mem_type_detect_mds = 0;
+
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; ++i) {
+        context->mem_type_access_tls[i] = 0;
+    }
 
     status = ucp_check_resource_config(config);
     if (status != UCS_OK) {
@@ -1046,15 +1052,16 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_release_components;
     }
 
-    context->tl_cmpts = ucs_calloc(num_uct_components,
-                                   sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
+    context->num_cmpts = num_uct_components;
+    context->tl_cmpts  = ucs_calloc(context->num_cmpts,
+                                    sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
     if (context->tl_cmpts == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_release_components;
     }
 
     max_mds = 0;
-    for (i = 0; i < num_uct_components; ++i) {
+    for (i = 0; i < context->num_cmpts; ++i) {
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
@@ -1078,7 +1085,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Collect resources of each component */
-    for (i = 0; i < num_uct_components; ++i) {
+    for (i = 0; i < context->num_cmpts; ++i) {
         status = ucp_add_component_resources(context, i, dev_cfg_masks,
                                              &tl_cfg_mask, config);
         if (status != UCS_OK) {
@@ -1089,7 +1096,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     /* Create memtype cache if we have memory type MDs, and it's enabled by
      * configuration
      */
-    if (context->num_mem_type_mds && context->config.ext.enable_memtype_cache) {
+    if (context->num_mem_type_detect_mds && context->config.ext.enable_memtype_cache) {
         status = ucs_memtype_cache_create(&context->memtype_cache);
         if (status != UCS_OK) {
             ucs_debug("could not create memtype cache for mem_type allocations");
@@ -1351,7 +1358,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     /* create memory pool for small rkeys */
     status = ucs_mpool_init(&context->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) + sizeof(uct_rkey_bundle_t) * UCP_RKEY_MPOOL_MAX_MD,
+                            sizeof(ucp_rkey_t) +
+                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
                             &ucp_rkey_mpool_ops, "ucp_rkeys");
     if (status != UCS_OK) {
@@ -1455,15 +1463,22 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 
 void ucp_context_print_info(ucp_context_h context, FILE *stream)
 {
-    ucp_rsc_index_t md_index, rsc_index;
+    ucp_rsc_index_t cmpt_index, md_index, rsc_index;
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP context\n");
     fprintf(stream, "#\n");
 
+    for (cmpt_index = 0; cmpt_index < context->num_cmpts; ++cmpt_index) {
+        fprintf(stream, "#     component %-2d :  %s\n",
+                cmpt_index, context->tl_cmpts[cmpt_index].attr.name);
+    }
+    fprintf(stream, "#\n");
+
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        fprintf(stream, "#            md %-2d :  %s\n",
-                md_index, context->tl_mds[md_index].rsc.md_name);
+        fprintf(stream, "#            md %-2d :  component %-2d %s \n",
+                md_index, context->tl_mds[md_index].cmpt_index,
+                context->tl_mds[md_index].rsc.md_name);
     }
 
     fprintf(stream, "#\n");

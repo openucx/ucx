@@ -730,7 +730,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
 
         if (remote_info->rkey_size > 0) {
-            status = uct_rkey_unpack(NULL, rkey_buffer,
+            status = uct_rkey_unpack(perf->uct.cmpt, rkey_buffer,
                                      &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
@@ -738,7 +738,6 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
             }
         } else {
             perf->uct.peers[i].rkey.handle = NULL;
-            perf->uct.peers[i].rkey.type   = NULL;
             perf->uct.peers[i].rkey.rkey   = UCT_INVALID_RKEY;
         }
 
@@ -764,8 +763,8 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
 err_destroy_eps:
     for (i = 0; i < group_size; ++i) {
-        if (perf->uct.peers[i].rkey.type != NULL) {
-            uct_rkey_release(NULL, &perf->uct.peers[i].rkey);
+        if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
         }
         if (perf->uct.peers[i].ep != NULL) {
             uct_ep_destroy(perf->uct.peers[i].ep);
@@ -792,7 +791,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
             if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
-                uct_rkey_release(NULL, &perf->uct.peers[i].rkey);
+                uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
             }
             if (perf->uct.peers[i].ep) {
                 uct_ep_destroy(perf->uct.peers[i].ep);
@@ -1229,8 +1228,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
         }
 
         for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
-            status = uct_md_config_read(component_attr.md_resources[md_index].md_name,
-                                        NULL, NULL, &md_config);
+            status = uct_md_config_read(uct_components[cmpt_index], NULL, NULL,
+                                        &md_config);
             if (status != UCS_OK) {
                 goto out_release_components_list;
             }
@@ -1254,8 +1253,9 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                     !strcmp(perf->params.uct.dev_name, tl_resources[tl_index].dev_name))
                 {
                     uct_release_tl_resource_list(tl_resources);
-                    perf->uct.md = md;
-                    status       = UCS_OK;
+                    perf->uct.cmpt = uct_components[cmpt_index];
+                    perf->uct.md   = md;
+                    status         = UCS_OK;
                     goto out_release_components_list;
                 }
             }

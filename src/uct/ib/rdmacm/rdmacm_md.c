@@ -21,10 +21,10 @@ static ucs_config_field_t uct_rdmacm_md_config_table[] = {
 static void uct_rdmacm_md_close(uct_md_h md);
 
 static uct_md_ops_t uct_rdmacm_md_ops = {
-    .close                  = uct_rdmacm_md_close,
-    .query                  = uct_rdmacm_md_query,
-    .is_sockaddr_accessible = uct_rdmacm_is_sockaddr_accessible,
-    .is_mem_type_owned      = (void *)ucs_empty_function_return_zero,
+    .close                   = uct_rdmacm_md_close,
+    .query                   = uct_rdmacm_md_query,
+    .is_sockaddr_accessible  = uct_rdmacm_is_sockaddr_accessible,
+    .detect_memory_type      = ucs_empty_function_return_unsupported,
 };
 
 static void uct_rdmacm_md_close(uct_md_h md)
@@ -35,14 +35,15 @@ static void uct_rdmacm_md_close(uct_md_h md)
 
 ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags         = UCT_MD_FLAG_SOCKADDR;
-    md_attr->cap.reg_mem_types = 0;
-    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
-    md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = 0;
-    md_attr->rkey_packed_size  = 0;
-    md_attr->reg_cost.overhead = 0;
-    md_attr->reg_cost.growth   = 0;
+    md_attr->cap.flags            = UCT_MD_FLAG_SOCKADDR;
+    md_attr->cap.reg_mem_types    = 0;
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_reg          = 0;
+    md_attr->rkey_packed_size     = 0;
+    md_attr->reg_cost.overhead    = 0;
+    md_attr->reg_cost.growth      = 0;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }

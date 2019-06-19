@@ -381,7 +381,7 @@ static void print_md_info(uct_component_h component,
     uct_md_attr_t md_attr;
     uct_md_h md;
 
-    status = uct_md_config_read(md_name, NULL, NULL, &md_config);
+    status = uct_md_config_read(component, NULL, NULL, &md_config);
     if (status != UCS_OK) {
         goto out;
     }
@@ -439,6 +439,9 @@ static void print_md_info(uct_component_h component,
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
             printf("#           local memory handle is required for zcopy\n");
+        }
+        if (md_attr.cap.flags & UCT_MD_FLAG_RKEY_PTR) {
+            printf("#           rkey_ptr is supported\n");
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
             printf("#           supports client-server connection establishment via sockaddr\n");

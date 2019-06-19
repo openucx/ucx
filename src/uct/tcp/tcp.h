@@ -11,6 +11,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/algorithm/crc.h>
+#include <ucs/sys/event_set.h>
 
 #include <net/if.h>
 
@@ -131,7 +132,7 @@ struct uct_tcp_ep {
     uint8_t                       ctx_caps;    /* Which contexts are supported */
     int                           fd;          /* Socket file descriptor */
     uct_tcp_ep_conn_state_t       conn_state;  /* State of connection with peer */
-    uint32_t                      events;      /* Current notifications */
+    int                           events;      /* Current notifications */
     uct_tcp_ep_ctx_t              tx;          /* TX resources */
     uct_tcp_ep_ctx_t              rx;          /* RX resources */
     struct sockaddr_in            peer_addr;   /* Remote iface addr */
@@ -150,7 +151,7 @@ typedef struct uct_tcp_iface {
                                                       * have one of the context cap */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
-    int                           epfd;              /* Event poll set of sockets */
+    ucs_sys_event_set_t           *event_set;        /* Event set identifier */
     ucs_mpool_t                   tx_mpool;          /* TX memory pool */
     ucs_mpool_t                   rx_mpool;          /* RX memory pool */
     size_t                        seg_size;          /* AM buffer size */
@@ -248,7 +249,7 @@ void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove);
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove);
 
 void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
 

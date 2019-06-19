@@ -201,16 +201,6 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
     return 0;
 }
 
-static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
-                                   const ucp_address_entry_t *ae)
-{
-    ucp_context_h context      = worker->context;
-    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
-
-    return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr);
-}
-
 /**
  * Select a local and remote transport
  */
@@ -1143,12 +1133,12 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
     for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
-        if (!ep->worker->context->mem_type_tls[mem_type]) {
+        if (!ep->worker->context->mem_type_access_tls[mem_type]) {
             continue;
         }
 
         ucp_wireup_add_bw_lanes(ep, address_count, address_list, &bw_info, 0,
-                                ep->worker->context->mem_type_tls[mem_type],
+                                ep->worker->context->mem_type_access_tls[mem_type],
                                 lane_descs, num_lanes_p);
     }
 
@@ -1260,26 +1250,6 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     return p2p_lane;
 }
 
-static uint64_t
-ucp_wireup_get_reachable_mds(ucp_worker_h worker, unsigned address_count,
-                             const ucp_address_entry_t *address_list)
-{
-    ucp_context_h context  = worker->context;
-    uint64_t reachable_mds = 0;
-    const ucp_address_entry_t *ae;
-    ucp_rsc_index_t rsc_index;
-
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        for (ae = address_list; ae < address_list + address_count; ++ae) {
-            if (ucp_wireup_is_reachable(worker, rsc_index, ae)) {
-                reachable_mds |= UCS_BIT(ae->md_index);
-            }
-        }
-    }
-
-    return reachable_mds;
-}
-
 ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                      unsigned ep_init_flags, unsigned address_count,
                                      const ucp_address_entry_t *address_list,
@@ -1298,8 +1268,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     int need_am = 0;
 
     memset(lane_descs, 0, sizeof(lane_descs));
-    ucp_ep_config_key_reset(key);
-    ucp_ep_config_key_set_params(key, params);
 
     status = ucp_wireup_add_rma_lanes(ep, params, ep_init_flags, address_count,
                                       address_list, lane_descs, &key->num_lanes,
@@ -1398,10 +1366,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                 ucp_wireup_compare_lane_rma_bw_score, lane_descs);
     ucs_qsort_r(key->amo_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_amo_score, lane_descs);
-
-    /* Get all reachable MDs from full remote address list */
-    key->reachable_md_map = ucp_wireup_get_reachable_mds(worker, address_count,
-                                                         address_list);
 
     /* Select lane for wireup messages */
     key->wireup_lane  = ucp_wireup_select_wireup_msg_lane(worker, params,

@@ -157,21 +157,24 @@ typedef struct uct_ib_rcache_region {
 typedef struct uct_ib_md_ops_entry {
     ucs_list_link_t             list;
     uct_ib_md_ops_t             *ops;
+    int                         priority;
 } uct_ib_md_ops_entry_t;
 
 #define UCT_IB_MD_OPS(_md_ops, _priority) \
     UCS_STATIC_INIT { \
         extern ucs_list_link_t uct_ib_md_ops_list; \
-        static uct_ib_md_ops_entry_t entry = { \
+        static uct_ib_md_ops_entry_t *p, entry = { \
             .ops = &_md_ops, \
+            .priority = _priority, \
         }; \
-        if (_priority) { \
-            ucs_list_add_head(&uct_ib_md_ops_list, &entry.list); \
-        } else { \
-            ucs_list_add_tail(&uct_ib_md_ops_list, &entry.list); \
+        ucs_list_for_each(p, &uct_ib_md_ops_list, list) { \
+            if (p->priority < _priority) { \
+                ucs_list_insert_before(&p->list, &entry.list); \
+                return; \
+            } \
         } \
+        ucs_list_add_tail(&uct_ib_md_ops_list, &entry.list); \
     }
-
 
 extern uct_md_component_t uct_ib_mdc;
 

@@ -358,9 +358,8 @@ static ucs_status_t uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
         }
 
         if (connect_ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
-            uct_tcp_ep_mod_events(connect_ep, EPOLLIN, 0);
+            uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
         }
-
         /* Destroy the EP allocated during accepting connection */
         uct_tcp_ep_destroy_internal(&accept_ep->super.super);
     } else /* our iface address less than remote && we are not connected */ {
@@ -518,7 +517,7 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
     status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
     if (status == UCS_INPROGRESS) {
         new_conn_state  = UCT_TCP_EP_CONN_STATE_CONNECTING;
-        req_events      = EPOLLOUT;
+        req_events      = UCS_EVENT_SET_EVWRITE;
         status          = UCS_OK;
     } else if (status == UCS_OK) {
         status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
@@ -527,7 +526,7 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
         }
 
         new_conn_state  = UCT_TCP_EP_CONN_STATE_WAITING_ACK;
-        req_events      = EPOLLIN;
+        req_events      = UCS_EVENT_SET_EVREAD;
     } else {
         new_conn_state  = UCT_TCP_EP_CONN_STATE_CLOSED;
         req_events      = 0;
@@ -554,7 +553,7 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
     }
 
     uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_ACCEPTING);
-    uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
 
     ucs_debug("tcp_iface %p: accepted connection from "
               "%s on %s to tcp_ep %p (fd %d)", iface,

@@ -476,7 +476,10 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
         return UCS_OK;
     }
 
-    if (uct_dc_mlx5_iface_dci_can_alloc(iface)) {
+    /* Do not alloc dci if no CQ resources,
+     * otherwise this dci may never be released. */
+    if (uct_dc_mlx5_iface_dci_can_alloc(iface) &&
+        uct_rc_iface_has_tx_resources(&iface->super.super)) {
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }

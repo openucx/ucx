@@ -60,6 +60,7 @@ ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p)
 
     event_set = ucs_malloc(sizeof(ucs_sys_event_set_t), "ucs_sys_event_set");
     if (event_set == NULL) {
+        ucs_error("unable to allocate memory ucs_sys_event_set_t object");
         status = UCS_ERR_NO_MEMORY;
         goto out_create;
     }
