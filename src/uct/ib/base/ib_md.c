@@ -778,12 +778,6 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
-void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
-{
-    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", UCT_IB_MD_PREFIX,
-             ibv_get_device_name(device));
-}
-
 static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p)
 {
@@ -811,7 +805,8 @@ static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources
     }
 
     for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_md_name(resources[i].md_name, device_list[i]);
+        ucs_snprintf_zero(resources[i].md_name, sizeof(resources[i].md_name),
+                          "%s", ibv_get_device_name(device_list[i]));
     }
 
     *resources_p     = resources;
@@ -1112,7 +1107,6 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
     uct_ib_md_ops_entry_t *md_ops_entry;
-    char tmp_md_name[UCT_MD_NAME_MAX];
     int i, num_devices;
 
     ucs_trace("opening IB device %s", md_name);
@@ -1127,8 +1121,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
 
     ib_device = NULL;
     for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_md_name(tmp_md_name, ib_device_list[i]);
-        if (!strcmp(tmp_md_name, md_name)) {
+        if (!strcmp(ibv_get_device_name(ib_device_list[i]), md_name)) {
             ib_device = ib_device_list[i];
             break;
         }
