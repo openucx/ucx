@@ -63,7 +63,7 @@ static inline int uct_tcp_khash_sockaddr_equal(struct sockaddr_in sa1,
 
 static inline uint32_t uct_tcp_khash_sockaddr_hash(struct sockaddr_in sa)
 {
-    ucs_status_t status;
+    ucs_status_t UCS_V_UNUSED status;
     size_t addr_size;
 
     status = ucs_sockaddr_sizeof((const struct sockaddr*)&sa,
