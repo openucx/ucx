@@ -30,16 +30,17 @@ static ucs_status_t uct_ugni_query_md_resources(uct_md_resource_desc_t **resourc
 
 static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
-    md_attr->cap.flags         = UCT_MD_FLAG_REG       |
-                                 UCT_MD_FLAG_NEED_MEMH |
-                                 UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
-    md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->reg_cost.overhead = 1000.0e-9;
-    md_attr->reg_cost.growth   = 0.007e-9;
+    md_attr->rkey_packed_size     = 3 * sizeof(uint64_t);
+    md_attr->cap.flags            = UCT_MD_FLAG_REG       |
+                                    UCT_MD_FLAG_NEED_MEMH |
+                                    UCT_MD_FLAG_NEED_RKEY;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_reg          = ULONG_MAX;
+    md_attr->reg_cost.overhead    = 1000.0e-9;
+    md_attr->reg_cost.growth      = 0.007e-9;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -176,14 +177,14 @@ static ucs_status_t uct_ugni_md_open(const char *md_name, const uct_md_config_t 
 
     pthread_mutex_lock(&uct_ugni_global_lock);
     static uct_md_ops_t md_ops = {
-        .close        = uct_ugni_md_close,
-        .query        = uct_ugni_md_query,
-        .mem_alloc    = (void*)ucs_empty_function,
-        .mem_free     = (void*)ucs_empty_function,
-        .mem_reg      = uct_ugni_mem_reg,
-        .mem_dereg    = uct_ugni_mem_dereg,
-        .mkey_pack     = uct_ugni_rkey_pack,
-        .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
+        .close              = uct_ugni_md_close,
+        .query              = uct_ugni_md_query,
+        .mem_alloc          = (void*)ucs_empty_function,
+        .mem_free           = (void*)ucs_empty_function,
+        .mem_reg            = uct_ugni_mem_reg,
+        .mem_dereg          = uct_ugni_mem_dereg,
+        .mkey_pack          = uct_ugni_rkey_pack,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
     };
 
     static uct_ugni_md_t md = {

@@ -149,8 +149,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
         /* test mem type if md supports mem type
          * (or) if HOST MD can register mem type
          */
-        if (!((sender().md_attr().cap.mem_type == mem_type) ||
-            (sender().md_attr().cap.mem_type == UCT_MD_MEM_TYPE_HOST &&
+        if (!((sender().md_attr().cap.access_mem_type == mem_type) ||
+            (sender().md_attr().cap.access_mem_type == UCT_MD_MEM_TYPE_HOST &&
 		sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
         }

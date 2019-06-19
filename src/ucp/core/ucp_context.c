@@ -951,12 +951,13 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
 {
     const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
     uct_component_attr_t uct_component_attr;
-    uct_memory_type_t mem_type;
     unsigned num_tl_resources;
-    uint64_t mem_type_mask;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
+    uint64_t mem_type_mask;
+    uint64_t mem_type_bitmap;
+
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
@@ -992,11 +993,11 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
          * don't use it */
         if (num_tl_resources > 0) {
             /* List of memory type MDs */
-            mem_type = context->tl_mds[md_index].attr.cap.mem_type;
-            if (!(mem_type_mask & UCS_BIT(mem_type))) {
-                context->mem_type_tl_mds[context->num_mem_type_mds] = md_index;
-                ++context->num_mem_type_mds;
-                mem_type_mask |= UCS_BIT(mem_type);
+            mem_type_bitmap = context->tl_mds[md_index].attr.cap.detect_mem_types;
+            if (~mem_type_mask & mem_type_bitmap) {
+                context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
+                ++context->num_mem_type_detect_mds;
+                mem_type_mask |= mem_type_bitmap;
             }
             ++context->num_mds;
         } else {
@@ -1027,8 +1028,12 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mds          = 0;
     context->tl_rscs          = NULL;
     context->num_tls          = 0;
-    context->num_mem_type_mds = 0;
     context->memtype_cache    = NULL;
+    context->num_mem_type_detect_mds = 0;
+
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; ++i) {
+        context->mem_type_access_tls[i] = 0;
+    }
 
     status = ucp_check_resource_config(config);
     if (status != UCS_OK) {
@@ -1091,7 +1096,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     /* Create memtype cache if we have memory type MDs, and it's enabled by
      * configuration
      */
-    if (context->num_mem_type_mds && context->config.ext.enable_memtype_cache) {
+    if (context->num_mem_type_detect_mds && context->config.ext.enable_memtype_cache) {
         status = ucs_memtype_cache_create(&context->memtype_cache);
         if (status != UCS_OK) {
             ucs_debug("could not create memtype cache for mem_type allocations");

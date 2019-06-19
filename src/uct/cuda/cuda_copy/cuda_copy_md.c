@@ -24,14 +24,16 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags         = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_CUDA;
-    md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->rkey_packed_size  = 0;
-    md_attr->reg_cost.overhead = 0;
-    md_attr->reg_cost.growth   = 0;
+    md_attr->cap.flags            = UCT_MD_FLAG_REG;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_CUDA;
+    md_attr->cap.detect_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_CUDA) |
+                                    UCS_BIT(UCT_MD_MEM_TYPE_CUDA_MANAGED);
+    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_reg          = ULONG_MAX;
+    md_attr->rkey_packed_size     = 0;
+    md_attr->reg_cost.overhead    = 0;
+    md_attr->reg_cost.growth      = 0;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -116,12 +118,12 @@ static void uct_cuda_copy_md_close(uct_md_h uct_md) {
 }
 
 static uct_md_ops_t md_ops = {
-    .close              = uct_cuda_copy_md_close,
-    .query              = uct_cuda_copy_md_query,
-    .mkey_pack          = uct_cuda_copy_mkey_pack,
-    .mem_reg            = uct_cuda_copy_mem_reg,
-    .mem_dereg          = uct_cuda_copy_mem_dereg,
-    .is_mem_type_owned  = uct_cuda_is_mem_type_owned,
+    .close               = uct_cuda_copy_md_close,
+    .query               = uct_cuda_copy_md_query,
+    .mkey_pack           = uct_cuda_copy_mkey_pack,
+    .mem_reg             = uct_cuda_copy_mem_reg,
+    .mem_dereg           = uct_cuda_copy_mem_dereg,
+    .detect_memory_type  = uct_cuda_base_detect_memory_type,
 };
 
 static ucs_status_t uct_cuda_copy_md_open(const char *md_name, const uct_md_config_t *md_config,
