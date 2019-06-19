@@ -307,8 +307,8 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
     if (new_events != ep->events) {
         ep->events = new_events;
         ucs_trace("tcp_ep %p: set events to %c%c", ep,
-                  (new_events & UCS_EVENT_SET_EVREAD)  ? 'i' : '-',
-                  (new_events & UCS_EVENT_SET_EVWRITE) ? 'o' : '-');
+                  (new_events & UCS_EVENT_SET_EVREAD)  ? 'r' : '-',
+                  (new_events & UCS_EVENT_SET_EVWRITE) ? 'w' : '-');
         if (new_events == 0) {
             status = ucs_event_set_del(iface->event_set, ep->fd);
         } else if (old_events != 0) {
@@ -319,7 +319,7 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
                                        ep->events, (void *)ep);
         }
         if (status != UCS_OK) {
-            ucs_fatal("Unable to modify event set for tcp_ep %p (fd=%d)", ep,
+            ucs_fatal("unable to modify event set for tcp_ep %p (fd=%d)", ep,
                       ep->fd);
         }
     }
