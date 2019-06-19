@@ -299,7 +299,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
 
     /* 3. Destroy the EP allocated during accepting connection
      *    (set its socket `fd` to -1 prior to avoid closing this socket) */
-    uct_tcp_ep_mod_events(accept_ep, 0, EPOLLIN);
+    uct_tcp_ep_mod_events(accept_ep, 0, UCS_EVENT_SET_EVREAD);
     accept_ep->fd = -1;
     uct_tcp_ep_destroy_internal(&accept_ep->super.super);
     accept_ep = NULL;
@@ -322,7 +322,8 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     (*progress_count)++;
 
     /* 6. Now fully connected to the peer */
-    uct_tcp_ep_mod_events(connect_ep, EPOLLIN | EPOLLOUT, 0);
+    uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD |
+                                      UCS_EVENT_SET_EVWRITE, 0);
     uct_tcp_cm_change_conn_state(connect_ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
 
     return UCS_OK;
@@ -358,7 +359,7 @@ static ucs_status_t uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
         }
 
         if (connect_ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
-            uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
+            uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD, 0);
         }
         /* Destroy the EP allocated during accepting connection */
         uct_tcp_ep_destroy_internal(&accept_ep->super.super);
@@ -497,7 +498,7 @@ unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep)
     }
 
     uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_WAITING_ACK);
-    uct_tcp_ep_mod_events(ep, EPOLLIN, 0);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
 
     ucs_assertv((ep->tx.length == 0) && (ep->tx.offset == 0) &&
                 (ep->tx.buf == NULL), "ep=%p", ep);

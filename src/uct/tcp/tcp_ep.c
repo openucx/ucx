@@ -274,6 +274,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
         uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_RX);
     }
 
+    ucs_assertv(!self->ctx_caps, "ep=%p", self);
+
     uct_tcp_iface_remove_ep(self);
 
     if (self->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED) {
@@ -459,7 +461,7 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
     if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) {
         if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) {
             uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_RX);
-            uct_tcp_ep_mod_events(ep, 0, EPOLLIN);
+            uct_tcp_ep_mod_events(ep, 0, UCS_EVENT_SET_EVREAD);
         } else {
             /* If the EP supports RX only, destroy it */
             uct_tcp_ep_destroy_internal(&ep->super.super);
@@ -688,7 +690,7 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     return UCS_OK;
 
 err_no_res:
-    uct_tcp_ep_mod_events(ep, EPOLLOUT, 0);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
     UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;
 }

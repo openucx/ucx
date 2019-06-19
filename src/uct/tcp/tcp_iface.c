@@ -135,17 +135,17 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 }
 
 static void uct_tcp_iface_handle_events(void *callback_data,
-                                        int event_set_events, void *arg)
+                                        int events, void *arg)
 {
     unsigned *count  = (unsigned*)arg;
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)callback_data;
 
     ucs_assertv(ep->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED, "ep=%p", ep);
 
-    if (epoll_events & EPOLLIN) {
+    if (events & UCS_EVENT_SET_EVREAD) {
         count += uct_tcp_ep_progress_rx(ep);
     }
-    if (epoll_events & EPOLLOUT) {
+    if (events & UCS_EVENT_SET_EVWRITE) {
         count += uct_tcp_ep_progress_tx(ep);
     }
 }
