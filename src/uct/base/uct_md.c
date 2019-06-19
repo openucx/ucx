@@ -55,26 +55,17 @@ typedef struct uct_config_bundle {
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
                          const uct_md_config_t *config, uct_md_h *md_p)
 {
-    uct_md_component_t *mdc;
     ucs_status_t status;
     uct_md_h md;
 
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(md_name, mdc->name, strlen(mdc->name))) {
-            ucs_assert(mdc == component);
-            status = mdc->md_open(md_name, config, &md);
-            if (status != UCS_OK) {
-                return status;
-            }
-
-            ucs_assert_always(md->component == mdc);
-            *md_p = md;
-            return UCS_OK;
-        }
+    status = component->md_open(md_name, config, &md);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ucs_error("MD '%s' does not exist", md_name);
-    return UCS_ERR_NO_DEVICE;
+    *md_p = md;
+    ucs_assert_always(md->component == component);
+    return UCS_OK;
 }
 
 void uct_md_close(uct_md_h md)
