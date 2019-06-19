@@ -593,6 +593,48 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief UCT connection manager created by @ref uct_cm_open parameters field
+ *        mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_cm_params_t are
+ * present, for backward compatibility support.
+ */
+enum uct_cm_params_field {
+    /** Enables @ref uct_cm_params::md_name */
+    UCT_CM_PARAM_FIELD_MD_NAME            = UCS_BIT(0),
+
+    /** Enables @ref uct_cm_params::worker */
+    UCT_CM_PARAM_FIELD_WORKER             = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT listener created by @ref uct_listener_create parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_listener_params_t
+ * are present, for backward compatibility support.
+ */
+enum uct_listener_params_field {
+    /** Enables @ref uct_listener_params::cm */
+    UCT_LISTENER_PARAM_FIELD_CM              = UCS_BIT(0),
+
+    /** Enables @ref uct_listener_params::sockaddr */
+    UCT_LISTENER_PARAM_FIELD_SOCKADDR        = UCS_BIT(1),
+
+    /** Enables @ref uct_listener_params::backlog */
+    UCT_LISTENER_PARAM_FIELD_BACKLOG         = UCS_BIT(2),
+
+    /** Enables @ref uct_listener_params::conn_request_cb */
+    UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB = UCS_BIT(3),
+
+    /** Enables @ref uct_listener_params::user_data */
+    UCT_LISTENER_PARAM_FIELD_USER_DATA       = UCS_BIT(4)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT endpoint created by @ref uct_ep_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_ep_params_t are
@@ -600,25 +642,37 @@ typedef enum {
  */
 enum uct_ep_params_field {
     /** Enables @ref uct_ep_params::iface */
-    UCT_EP_PARAM_FIELD_IFACE             = UCS_BIT(0),
+    UCT_EP_PARAM_FIELD_IFACE                  = UCS_BIT(0),
 
     /** Enables @ref uct_ep_params::user_data */
-    UCT_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(1),
+    UCT_EP_PARAM_FIELD_USER_DATA              = UCS_BIT(1),
 
     /** Enables @ref uct_ep_params::dev_addr */
-    UCT_EP_PARAM_FIELD_DEV_ADDR          = UCS_BIT(2),
+    UCT_EP_PARAM_FIELD_DEV_ADDR               = UCS_BIT(2),
 
     /** Enables @ref uct_ep_params::iface_addr */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR        = UCS_BIT(3),
+    UCT_EP_PARAM_FIELD_IFACE_ADDR             = UCS_BIT(3),
 
     /** Enables @ref uct_ep_params::sockaddr */
-    UCT_EP_PARAM_FIELD_SOCKADDR          = UCS_BIT(4),
+    UCT_EP_PARAM_FIELD_SOCKADDR               = UCS_BIT(4),
 
     /** Enables @ref uct_ep_params::sockaddr_cb_flags */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS = UCS_BIT(5),
+    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      = UCS_BIT(5),
 
     /** Enables @ref uct_ep_params::sockaddr_pack_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB  = UCS_BIT(6)
+    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB       = UCS_BIT(6),
+
+    /** Enables @ref uct_ep_params::cm */
+    UCT_EP_PARAM_FIELD_CM                     = UCS_BIT(7),
+
+    /** Enables @ref uct_ep_params::conn_request */
+    UCT_EP_PARAM_FIELD_CONN_REQUEST           = UCS_BIT(8),
+
+    /** Enables @ref uct_ep_params::sockaddr_connect_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    = UCS_BIT(9),
+
+    /** Enables @ref uct_ep_params::disconnect_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB = UCS_BIT(10)
 };
 
 
@@ -840,7 +894,8 @@ struct uct_ep_params {
     uint64_t                          field_mask;
 
     /**
-     * Interface to create the endpoint on. This is a mandatory field.
+     * Interface to create the endpoint on.
+     * @a iface or @a cm field must be initialized but not both.
      */
     uct_iface_h                       iface;
 
@@ -881,13 +936,121 @@ struct uct_ep_params {
 
     /**
      * Callback that will be used for filling the user's private data to be
-     * delivered to the server by @ref uct_sockaddr_conn_request_callback_t.
+     * delivered to the remote peer by the callback on the server or client side.
      * This field is only valid if @ref uct_ep_params_t::sockaddr is set.
      * @note It is never guaranteed that the callaback will be called. If, for
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
      */
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+
+    /**
+     * The connection manager object as created by @ref uct_cm_open.
+     * @a cm or @a iface field must be initialized but not both.
+     */
+    uct_cm_h                          cm;
+
+    /**
+     * Connection request what was passed to
+     * @ref uct_listener_conn_request_callback_t .
+     */
+    uct_conn_request_h                conn_request;
+
+    union {
+        /**
+         * Callback that will be invoked when the endpoint on the client side
+         * is being connected to the server by a connection manager @ref uct_cm_h .
+         */
+        uct_ep_client_connect_cb_t      client;
+
+        /**
+         * Callback that will be invoked when the endpoint on the server side
+         * is being connected to a client by a connection manager @ref uct_cm_h .
+         */
+        uct_ep_server_connect_cb_t      server;
+    } sockaddr_connect_cb;
+
+    /**
+     * Callback that will be invoked when the endpoint is disconnected.
+     */
+    uct_ep_sockaddr_disconnect_cb_t     disconnect_cb;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Connection manager attributes, capabilities and limitations.
+ */
+struct uct_cm_attr {
+    size_t      max_conn_priv;  /**< Max size of the connection manager's
+                                     private data used for connection
+                                     establishment with sockaddr. */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a connection manager object @ref uct_cm_h by
+ * @ref uct_cm_open
+ */
+struct uct_cm_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_params_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                          field_mask;
+
+    /**
+     * Memory domain name, as returned from @ref uct_component_query,
+     * mandatory field.
+     */
+    const char                        *md_name;
+
+    /**
+     * UCT worker, mandatory field.
+     */
+    uct_worker_h                      worker;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a listener object @ref uct_listener_h by
+ * @ref uct_listener_create
+ */
+struct uct_listener_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_listener_params_field. Fields not specified by this mask
+     * would be ignored.
+     */
+    uint64_t                             field_mask;
+
+    /**
+     * Connection manager, mandatory field.
+     */
+    uct_cm_h                             cm;
+
+    /**
+     * Socket address to listen on, a mandatory field.
+     */
+    ucs_sock_addr_t                      sockaddr;
+
+    /**
+     * Backlog of incoming connection requests.
+     */
+    int                                  backlog;
+
+    /**
+     * Callback for an incoming connection request on the server
+     */
+    uct_listener_conn_request_callback_t conn_request_cb;
+
+    /**
+     * User data associated with the listener
+     */
+    void                                 *user_data;
 };
 
 
@@ -1576,6 +1739,23 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  * @return              Error code as defined by @ref ucs_status_t
  */
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Initiate a synchronized disconnection of an endpoint connected to a
+ *        sockaddr by a connection manager @ref uct_cm_h.
+ *
+ * @param [in] ep       Endpoint to disconnect.
+ * @param [in] comp     Completion handle as defined by @ref uct_completion_t.
+ *                      If it is not NULL, the completion callback is
+ *                      called when the completion counter reaches 0 and the
+ *                      remote side has disconnected.
+ *                      If set to NULL, the disconnect callback
+ *                      @ref uct_ep_params::disconnect_cb will be invoked
+ *                      upon a disconnect of the peer.
+ */
+ucs_status_t uct_ep_disconnect(uct_ep_h ep, uct_completion_t *comp);
 
 
 /**
@@ -2691,6 +2871,70 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {
     return iface->ops.iface_progress(iface);
 }
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Open a connection manager.
+ *
+ * Open a specific connection manager. All client server connection
+ * establishment operations are performed in the context of a specific
+ * connection manager.
+ * @note This is an alternative API for
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER and
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT .
+ *
+ * @param [in]  params      Connection management parameters, as defined by
+ *                          @ref uct_cm_params_t
+ * @param [out] cm_p        Filled with a handle to the connection
+ *                          manager.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_cm_open(const uct_cm_params_t *params, uct_cm_h *cm_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Close a connection manager.
+ *
+ * @param [in]  cm    Connection manager to close.
+ */
+void uct_cm_close(uct_cm_h cm);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get connection manager attributes.
+ *
+ * @param [in]  cm      Connection manager to query.
+ * @param [out] cm_attr Filled with connection manager attributes.
+ */
+ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Create a new transport listener object.
+ *
+ * @param [in]  params      User defined @ref uct_listener_params_t
+ *                          configurations for the @a listener_p.
+ * @param [out] listener_p  Filled with handle to the new listener.
+ *
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_listener_create(const uct_listener_params_t *params,
+                                 uct_listener_h *listener_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Destroy a transport listener.
+ *
+ * @param [in]  listener    Listener to destroy.
+ */
+void uct_listener_destroy(uct_listener_h listener);
 
 
 /**

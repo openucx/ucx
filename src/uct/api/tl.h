@@ -153,6 +153,8 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_create)(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
+    ucs_status_t (*ep_disconnect)(uct_ep_h ep, uct_completion_t *comp);
+
     void         (*ep_destroy)(uct_ep_h ep);
 
     ucs_status_t (*ep_get_address)(uct_ep_h ep, uct_ep_addr_t *addr);
@@ -232,6 +234,14 @@ typedef struct uct_iface {
 typedef struct uct_ep {
     uct_iface_h              iface;
 } uct_ep_t;
+
+
+/**
+ * Listener for incoming connections
+ */
+typedef struct uct_listener {
+    uct_cm_h                 cm;
+} uct_listener_t;
 
 
 typedef struct uct_recv_desc uct_recv_desc_t;

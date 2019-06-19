@@ -68,32 +68,39 @@ enum uct_cb_param_flags {
  * @addtogroup UCT_RESOURCE
  * @{
  */
-typedef struct uct_md_component  *uct_component_h;
-typedef struct uct_iface         *uct_iface_h;
-typedef struct uct_iface_config  uct_iface_config_t;
-typedef struct uct_md_config     uct_md_config_t;
-typedef struct uct_ep            *uct_ep_h;
-typedef void *                   uct_mem_h;
-typedef uintptr_t                uct_rkey_t;
-typedef struct uct_md            *uct_md_h;          /**< @brief Memory domain handler */
-typedef struct uct_md_ops        uct_md_ops_t;
-typedef void                     *uct_rkey_ctx_h;
-typedef struct uct_iface_attr    uct_iface_attr_t;
-typedef struct uct_iface_params  uct_iface_params_t;
-typedef struct uct_md_attr       uct_md_attr_t;
-typedef struct uct_completion    uct_completion_t;
-typedef struct uct_pending_req   uct_pending_req_t;
-typedef struct uct_worker        *uct_worker_h;
-typedef struct uct_md            uct_md_t;
-typedef enum uct_am_trace_type   uct_am_trace_type_t;
-typedef struct uct_device_addr   uct_device_addr_t;
-typedef struct uct_iface_addr    uct_iface_addr_t;
-typedef struct uct_ep_addr       uct_ep_addr_t;
-typedef struct uct_ep_params     uct_ep_params_t;
-typedef struct uct_tag_context   uct_tag_context_t;
-typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
-typedef int                      uct_worker_cb_id_t;
-typedef void*                    uct_conn_request_h;
+typedef struct uct_md_component    *uct_component_h;
+typedef struct uct_iface           *uct_iface_h;
+typedef struct uct_iface_config    uct_iface_config_t;
+typedef struct uct_md_config       uct_md_config_t;
+typedef struct uct_ep              *uct_ep_h;
+typedef void *                     uct_mem_h;
+typedef uintptr_t                  uct_rkey_t;
+typedef struct uct_md              *uct_md_h;          /**< @brief Memory domain handler */
+typedef struct uct_md_ops          uct_md_ops_t;
+typedef void                       *uct_rkey_ctx_h;
+typedef struct uct_iface_attr      uct_iface_attr_t;
+typedef struct uct_iface_params    uct_iface_params_t;
+typedef struct uct_md_attr         uct_md_attr_t;
+typedef struct uct_completion      uct_completion_t;
+typedef struct uct_pending_req     uct_pending_req_t;
+typedef struct uct_worker          *uct_worker_h;
+typedef struct uct_md              uct_md_t;
+typedef enum uct_am_trace_type     uct_am_trace_type_t;
+typedef struct uct_device_addr     uct_device_addr_t;
+typedef struct uct_iface_addr      uct_iface_addr_t;
+typedef struct uct_ep_addr         uct_ep_addr_t;
+typedef struct uct_ep_params       uct_ep_params_t;
+typedef struct uct_cm_attr         uct_cm_attr_t;
+typedef struct uct_cm_params       uct_cm_params_t;
+typedef struct uct_cm              uct_cm_t;
+typedef uct_cm_t                   *uct_cm_h;
+typedef struct uct_listener        *uct_listener_h;
+typedef struct uct_listener_params uct_listener_params_t;
+typedef struct uct_tag_context     uct_tag_context_t;
+typedef uint64_t                   uct_tag_t;  /* tag type - 64 bit */
+typedef int                        uct_worker_cb_id_t;
+typedef void*                      uct_conn_request_h;
+
 /**
  * @}
  */
@@ -135,6 +142,25 @@ typedef struct uct_iov {
                              the buffer in bytes */
     unsigned  count;    /**< Number of payload elements in the buffer */
 } uct_iov_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Data received from the remote peer.
+ *
+ * The remote peer's device address, the data received from it and their lengths.
+ * Used with the client-server API on a connection manager.
+ */
+typedef struct uct_cm_remote_data {
+    const uct_device_addr_t *remote_dev_addr;       /**< Address of the remote peer */
+    size_t                  remote_dev_addr_length; /**< Length of the remote device address */
+    const void              *conn_priv_data;        /**< Points to the received data.
+                                                         This is the private data that
+                                                         was passed to
+                                                         @ref uct_ep_params_t::sockaddr_pack_cb */
+    size_t                  conn_priv_data_length;  /**< Length of the received data from
+                                                         the peer. */
+} uct_cm_remote_data_t;
 
 
 /**
@@ -305,15 +331,111 @@ typedef void
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Callback to fill the user's private data on the client side.
+ * @brief Callback to process an incoming connection request message on the
+ *        server side listener in a connection manager.
  *
- * This callback routine will be invoked on the client side before sending the
- * transport's connection request to the server.
- * The callback routine must be set by the client when creating an endpoint.
+ * This callback routine will be invoked on the server side upon receiving an
+ * incoming connection request. It should be set by the server side while
+ * initializing a listener in a connection manager.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
+ *
+ * @param [in]  listener         Transport listener.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_listener_params_t::user_data
+ * @param [in]  local_dev_name   Device name which handles the incoming connection
+ *                               request.
+ * @param [in]  conn_request     Connection request handle.
+ * @param [in]  remote_data      Remote data from the client.
+ *
+ */
+typedef void
+(*uct_listener_conn_request_callback_t)(uct_listener_h listener, void *arg,
+                                        const char *local_dev_name,
+                                        uct_conn_request_h conn_request,
+                                        uct_cm_remote_data_t *remote_data);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process an incoming connection establishment message on the
+ *        server side listener, from the client, which indicates that the client
+ *        side is connected.
+ *
+ * This callback routine will be invoked on the server side upon receiving an
+ * incoming connection establishment message from the client, which is sent
+ * from it once the client is connected to the server. Used to connect the server
+ * side to the client or handle an error message from it - depending on the status field.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
+ *
+ * @param [in]  ep               Transport endpoint.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_ep_params_t::user_data
+ * @param [in]  status           Status set by the client in the incoming message.
+ */
+typedef void (*uct_ep_server_connect_cb_t)(uct_ep_h ep, void *arg,
+                                           ucs_status_t status);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process an incoming connection response message on the
+ *        client side from the server.
+ *
+ * This callback routine will be invoked on the client side upon receiving an
+ * incoming connection response from the server. Used to connect the client side
+ * to the server or handle an error from it - depending on the status field.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
+ *
+ * @param [in]  ep               Transport endpoint.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_ep_params_t::user_data
+ * @param [in]  remote_data      Remote data from the server.
+ * @param [in]  status           Status set by the server in the incoming message.
+ */
+typedef void (*uct_ep_client_connect_cb_t)(uct_ep_h ep, void *arg,
+                                           uct_cm_remote_data_t *remote_data,
+                                           ucs_status_t status);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process an incoming disconnect message.
+ *
+ * This callback routine will be invoked on the client and server sides upon
+ * a disconnect of the remote peer. It will disconnect the given endpoint from
+ * the remote peer.
+ * This callback won't be invoked if @ref uct_ep_disconnect was called with
+ * a completion that is not NULL.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
+ *
+ * @param [in]  ep               Transport endpoint to disconnect.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_ep_params_t::user_data
+ */
+typedef void (*uct_ep_sockaddr_disconnect_cb_t)(uct_ep_h ep, void *arg);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to fill the user's private data in a client-server flow.
+ *
+ * This callback routine will be invoked on the client side, before sending the
+ * transport's connection request to the server, or on the server side before
+ * sending a connection response to the client.
+ * The callback routine must be set when creating an endpoint.
  * The user's private data should be placed inside the priv_data buffer to be
- * sent to the server side.
+ * sent to the remote side.
  * The maximal allowed length of the private data is indicated by the field
- * max_conn_priv inside @ref uct_iface_attr.
+ * max_conn_priv inside @ref uct_iface_attr or inside @uct_cm_attr when using a
+ * connection manager.
  * Communication progress routines should not be called from this callback.
  * It is allowed to call other UCT communication routines from this callback.
  *
@@ -324,7 +446,7 @@ typedef void
  *                         corresponds to the dev_name field inside
  *                         @ref uct_tl_resource_desc_t as returned from
  *                         @ref uct_md_query_tl_resources.
- * @param [out] priv_data  User's private data to be passed to the server side.
+ * @param [out] priv_data  User's private data to be passed to the remote side.
  *
  * @return Negative value indicates an error according to @ref ucs_status_t.
  *         On success, non-negative value indicates actual number of
