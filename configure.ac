@@ -245,9 +245,9 @@ AS_IF([test "x$with_docs_only" = xyes],
                         [Disable checking user parameters passed to API, default: NO]),
          [], 
          [enable_params_check=yes])
-     AS_IF([test "x$enable_param_check" = xyes],
-     	   [AC_DEFINE([ENABLE_PARAMS_CHECK], [0])],
-           [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])])
+     AS_IF([test "x$enable_params_check" = xyes],
+           [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])],
+           [AC_DEFINE([ENABLE_PARAMS_CHECK], [0])])
 
      #
      # Enable collecting data to ease debugging
