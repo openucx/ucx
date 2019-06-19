@@ -34,7 +34,7 @@ int ucm_override_brk(void *addr);
 void *ucm_brk_syscall(void *addr);
 int ucm_override_madvise(void *addr, size_t length, int advice);
 void ucm_fire_mmap_events(int events);
-ucs_status_t ucm_mmap_test_events(int events, int *out_events);
+ucs_status_t ucm_mmap_test_installed_events(int events);
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
