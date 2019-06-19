@@ -66,11 +66,6 @@ static void event_set_func2(void *callback_data, int events, void *arg)
     EXPECT_EQ(UCS_EVENT_SET_EVWRITE, events);
 }
 
-static void event_set_func3(void *callback_data, int events, void *arg)
-{
-    ADD_FAILURE();
-}
-
 UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     pthread_t tid;
     int ret;
@@ -100,7 +95,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
                                (void *)(uintptr_t)pipefd[0]);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 50,
+    status = ucs_event_set_wait(event_set, 1, 50,
                                 event_set_func1, arg, &nread);
     EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
@@ -139,7 +134,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
                                (void *)&pipefd[1]);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 50,
+    status = ucs_event_set_wait(event_set, 1, 50,
                                 event_set_func2, NULL, &nread);
     EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
@@ -151,41 +146,3 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
     close(pipefd[1]);
 }
 
-UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
-    pthread_t tid;
-    int ret;
-    int pipefd[2];
-    ucs_sys_event_set_t *event_set = NULL;
-    ucs_status_t status;
-    unsigned nread;
-
-    if (pipe(pipefd) == -1) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
-
-    ret = pthread_create(&tid, NULL, event_set_tmo_func, (void *)&pipefd);
-    if (ret) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
-
-    status = ucs_event_set_create(&event_set);
-    EXPECT_EQ(UCS_OK, status);
-    EXPECT_TRUE(event_set != NULL);
-
-    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD,
-                               NULL);
-    EXPECT_EQ(UCS_OK,status);
-
-    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 20,
-                                event_set_func3, NULL, &nread);
-    EXPECT_EQ(0u, nread);
-    EXPECT_EQ(UCS_OK, status);
-    ucs_event_set_cleanup(event_set);
-
-    pthread_join(tid, NULL);
-
-    close(pipefd[0]);
-    close(pipefd[1]);
-}

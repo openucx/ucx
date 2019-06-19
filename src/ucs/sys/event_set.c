@@ -142,38 +142,36 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
                                 void *arg, unsigned *read_events)
 {
     struct epoll_event ep_events[UCS_EVENT_EPOLL_MAX_EVENTS];
-    unsigned max_wait_events;
+    unsigned max_wait_events = max_events;
     int nready, events, i;
+    int timeout_wait_ms = timeout_ms;
 
     ucs_assert(event_set_handler != NULL);
     ucs_assert(read_events != NULL);
 
-    max_wait_events = ucs_min(max_events, UCS_EVENT_EPOLL_MAX_EVENTS);
-    nready = epoll_wait(event_set->epfd, ep_events, max_wait_events,
-                        timeout_ms);
-    if (nready < 0) {
-        *read_events = 0;
+    *read_events = 0;
+    do {
+	nready = epoll_wait(event_set->epfd, ep_events, max_wait_events,
+			    timeout_wait_ms);
+        ucs_assert(nready <= max_wait_events);
+	if (nready < 0 && errno != EINTR ) {
+	    ucs_error("epoll_wait() failed: %m");
+	    return UCS_ERR_IO_ERROR;
+	}
 
-        if (errno == EINTR) {
-            return UCS_INPROGRESS;
-        }
+	ucs_trace_data("epoll_wait(epfd=%d, timeout=%d) returned %d",
+		       event_set->epfd, timeout_wait_ms, nready);
 
-        ucs_error("epoll_wait() failed: %m");
-        return UCS_ERR_IO_ERROR;
-    }
+	for (i = 0; i < nready; i++) {
+	    events = ucs_event_set_map_to_events(ep_events[i].events);
+	    event_set_handler(ep_events[i].data.ptr, events, arg);
+	}
 
-    ucs_trace_data("epoll_wait(epfd=%d, timeout=%d) returned %d",
-                   event_set->epfd, timeout_ms, nready);
-
-    for (i = 0; i < nready; i++) {
-        events = ucs_event_set_map_to_events(ep_events[i].events);
-        event_set_handler(ep_events[i].data.ptr, events, arg);
-    }
-
-    *read_events = nready;
-    if  ((nready < max_events) && (nready == UCS_EVENT_EPOLL_MAX_EVENTS)) {
-        return UCS_INPROGRESS;
-    }
+	*read_events    += nready;
+        max_wait_events -= nready;
+        /* After 1st iteration, epoll_wait always returns immediately */
+        timeout_wait_ms = 0;
+    } while (max_wait_events > 0);
 
     return UCS_OK;
 }
