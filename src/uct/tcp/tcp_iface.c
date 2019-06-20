@@ -131,23 +131,21 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
 
-    *fd_p = iface->epfd;
-    return UCS_OK;
+    return ucs_event_set_fd_get(iface->event_set, fd_p);
 }
 
-static inline unsigned
-uct_tcp_iface_handle_events(uct_tcp_ep_t *ep, uint32_t epoll_events)
+static void uct_tcp_iface_handle_events(void *callback_data,
+                                        int event_set_events, void *arg)
 {
-    unsigned count = 0;
+    unsigned *count  = (unsigned*)arg;
+    uct_tcp_ep_t *ep = (uct_tcp_ep_t*)callback_data;
 
-    if (epoll_events & EPOLLIN) {
-        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_RX);
+    if (event_set_events & UCS_EVENT_SET_EVREAD) {
+        *count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_RX);
     }
-    if (epoll_events & EPOLLOUT) {
-        count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
+    if (event_set_events & UCS_EVENT_SET_EVWRITE) {
+        *count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
     }
-
-    return count;
 }
 
 unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
@@ -155,35 +153,20 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     unsigned read_events   = 0;
     unsigned count         = 0;
-    struct epoll_event events[UCT_TCP_MAX_EVENTS];
-    int i, nevents, max_events;
+    unsigned nevents       = 0;
+    ucs_status_t status;
 
     do {
-        max_events = ucs_min(iface->config.max_poll - read_events,
-                             UCT_TCP_MAX_EVENTS);
-
-        nevents = epoll_wait(iface->epfd, events, max_events, 0);
-        if (ucs_unlikely((nevents < 0))) {
-            if (errno == EINTR) {
-                /* force a new loop iteration */
-                nevents = max_events;
-                continue;
-            }
-            ucs_error("epoll_wait(epfd=%d max=%d) failed: %m",
-                      iface->epfd, max_events);
-            return 0;
-        }
-
-        for (i = 0; i < nevents; ++i) {
-            count += uct_tcp_iface_handle_events(events[i].data.ptr,
-                                                 events[i].events);
-        }
-
+        status = ucs_event_set_wait(iface->event_set,
+                                    iface->config.max_poll - read_events,
+                                    0, uct_tcp_iface_handle_events,
+                                    (void *)&count, &nevents);
         read_events += nevents;
-
-        ucs_trace_poll("iface=%p epoll_wait()=%d, total=%u",
+        ucs_trace_poll("iface=%p ucs_event_set_wait(): "
+                       "read events=%u, total=%u",
                        iface, nevents, read_events);
-    } while ((read_events < iface->config.max_poll) && (nevents == max_events));
+    } while ((read_events < iface->config.max_poll) &&
+             (status == UCS_INPROGRESS));
 
     return count;
 }
@@ -448,22 +431,21 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_cleanup_rx_mpool;
     }
 
-    self->epfd = epoll_create(1);
-    if (self->epfd < 0) {
-        ucs_error("epoll_create() failed: %m");
+    status = ucs_event_set_create(&self->event_set);
+    if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
         goto err_cleanup_rx_mpool;
     }
 
     status = uct_tcp_iface_listener_init(self);
     if (status != UCS_OK) {
-        goto err_close_epfd;
+        goto err_cleanup_event_set;
     }
 
     return UCS_OK;
 
-err_close_epfd:
-    close(self->epfd);
+err_cleanup_event_set:
+    ucs_event_set_cleanup(self->event_set);
 err_cleanup_rx_mpool:
     ucs_mpool_cleanup(&self->rx_mpool, 1);
 err_cleanup_tx_mpool:
@@ -495,7 +477,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
     ucs_mpool_cleanup(&self->tx_mpool, 1);
 
     uct_tcp_iface_listen_close(self);
-    close(self->epfd);
+    ucs_event_set_cleanup(self->event_set);
 }
 
 UCS_CLASS_DEFINE(uct_tcp_iface_t, uct_base_iface_t);

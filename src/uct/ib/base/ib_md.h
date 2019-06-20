@@ -225,8 +225,6 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
 }
 
 
-void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device);
-
 ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 

@@ -569,7 +569,7 @@ run_hello() {
 	# set smaller timeouts so the test will complete faster
 	if [[ ${test_args} == *"-e"* ]]
 	then
-		export UCX_UD_TIMEOUT=1s
+		export UCX_UD_TIMEOUT=15s
 		export UCX_RC_TIMEOUT=1ms
 		export UCX_RC_RETRY_COUNT=4
 	fi

@@ -223,27 +223,24 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_unpacked_address_t local_address;
-    unsigned i, mem_type, md_index;
+    unsigned i, mem_type;
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
     ucp_ep_params_t params;
 
-    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
-        worker->mem_type_ep[i] = NULL;
-    }
-
-    if (!context->num_mem_type_mds) {
-        return UCS_OK;
-    }
-
     params.field_mask = 0;
 
-    for (i = 0; i < context->num_mem_type_mds; ++i) {
-        md_index = context->mem_type_tl_mds[i];
-        mem_type = context->tl_mds[md_index].attr.cap.mem_type;
+    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+            continue;
+        }
 
-        status = ucp_address_pack(worker, NULL, context->mem_type_tls[mem_type], NULL,
+        if (!context->mem_type_access_tls[mem_type]) {
+            continue;
+        }
+
+        status = ucp_address_pack(worker, NULL, context->mem_type_access_tls[mem_type], NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
@@ -1281,7 +1278,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
             ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
                                              config->tag.eager.max_short,
-                                             context->num_mem_type_mds);
+                                             context->num_mem_type_detect_mds);
 
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
@@ -1335,7 +1332,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
                                                  config->tag.eager.max_short,
-                                                 context->num_mem_type_mds);
+                                                 context->num_mem_type_detect_mds);
             }
         } else {
             /* Stub endpoint */

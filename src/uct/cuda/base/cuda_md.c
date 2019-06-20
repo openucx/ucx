@@ -10,7 +10,8 @@
 #include <cuda.h>
 
 
-int uct_cuda_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
+ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t length,
+                                              uct_memory_type_t *mem_type_p)
 {
     CUmemorytype memType = 0;
     uint32_t isManaged = 0;
@@ -20,11 +21,21 @@ int uct_cuda_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
     CUresult cu_err;
 
     if (addr == NULL) {
-        return 0;
+        *mem_type_p = UCT_MD_MEM_TYPE_HOST;
+        return UCS_OK;
     }
 
     cu_err = cuPointerGetAttributes(2, attributes, attrdata, (CUdeviceptr)addr);
-    return ((cu_err == CUDA_SUCCESS) && (!isManaged && (memType == CU_MEMORYTYPE_DEVICE)));
+    if ((cu_err == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_DEVICE)) {
+        if (isManaged) {
+            *mem_type_p = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+        } else {
+            *mem_type_p = UCT_MD_MEM_TYPE_CUDA;
+        }
+        return UCS_OK;
+    }
+
+    return UCS_ERR_INVALID_ADDR;
 }
 
 UCS_MODULE_INIT() {

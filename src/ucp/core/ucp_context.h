@@ -160,9 +160,9 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
 
     /* List of MDs which detect non host memory type */
-    ucp_rsc_index_t               mem_type_tl_mds[UCT_MD_MEM_TYPE_LAST];
-    ucp_rsc_index_t               num_mem_type_mds;  /* Number of mem type MDs */
-    ucs_memtype_cache_t           *memtype_cache;    /* mem type allocation cache*/
+    ucp_rsc_index_t               mem_type_detect_mds[UCT_MD_MEM_TYPE_LAST];
+    ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
+    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache*/
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
@@ -171,7 +171,7 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
-    uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
+    uint64_t                      mem_type_access_tls[UCT_MD_MEM_TYPE_LAST];
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
 
@@ -350,10 +350,11 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
 {
     unsigned i, md_index;
     ucm_mem_type_t ucm_mem_type;
+    ucs_status_t status;
 
     *mem_type_p = UCT_MD_MEM_TYPE_HOST;
 
-    if (ucs_likely(!context->num_mem_type_mds)) {
+    if (ucs_likely(!context->num_mem_type_detect_mds)) {
         return UCS_OK;
     }
 
@@ -366,10 +367,10 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
         return UCS_OK;
     }
 
-    for (i = 0; i < context->num_mem_type_mds; ++i) {
-        md_index = context->mem_type_tl_mds[i];
-        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
-            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+    for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
+        md_index = context->mem_type_detect_mds[i];
+        status = uct_md_detect_memory_type(context->tl_mds[md_index].md, addr, length, mem_type_p);
+        if (status == UCS_OK) {
             return UCS_OK;
         }
     }

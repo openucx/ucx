@@ -1133,12 +1133,12 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
     for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
-        if (!ep->worker->context->mem_type_tls[mem_type]) {
+        if (!ep->worker->context->mem_type_access_tls[mem_type]) {
             continue;
         }
 
         ucp_wireup_add_bw_lanes(ep, address_count, address_list, &bw_info, 0,
-                                ep->worker->context->mem_type_tls[mem_type],
+                                ep->worker->context->mem_type_access_tls[mem_type],
                                 lane_descs, num_lanes_p);
     }
 
