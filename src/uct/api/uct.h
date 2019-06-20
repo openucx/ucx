@@ -579,6 +579,16 @@ enum uct_md_mem_flags {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief  Endpoint disconnect flags.
+ */
+enum uct_ep_disconnect_flags {
+    UCT_EP_DISCONNECT_FLAG_CB = UCS_BIT(0)  /**< Invoke the disconnect callback
+                                                 upon remote disconnect .*/
+};
+
+
+/**
  * @ingroup UCT_MD
  * @brief list of UCT memory use advice
  */
@@ -600,11 +610,24 @@ typedef enum {
  * present, for backward compatibility support.
  */
 enum uct_cm_params_field {
-    /** Enables @ref uct_cm_params::md_name */
-    UCT_CM_PARAM_FIELD_MD_NAME            = UCS_BIT(0),
+    /** Enables @ref uct_cm_params::component */
+    UCT_CM_PARAM_FIELD_COMPONENT = UCS_BIT(0),
 
     /** Enables @ref uct_cm_params::worker */
-    UCT_CM_PARAM_FIELD_WORKER             = UCS_BIT(1)
+    UCT_CM_PARAM_FIELD_WORKER    = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT connection manager attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_cm_attr_t are
+ * present, for backward compatibility support.
+ */
+enum uct_cm_attr_field {
+    /** Enables @ref uct_cm_attr::max_conn_priv */
+    UCT_CM_ATTR_FIELD_MAX_CONN_PRIV = UCS_BIT(0)
 };
 
 
@@ -895,7 +918,7 @@ struct uct_ep_params {
 
     /**
      * Interface to create the endpoint on.
-     * @a iface or @a cm field must be initialized but not both.
+     * Either @a iface or @a cm field must be initialized but not both.
      */
     uct_iface_h                       iface;
 
@@ -946,7 +969,7 @@ struct uct_ep_params {
 
     /**
      * The connection manager object as created by @ref uct_cm_open.
-     * @a cm or @a iface field must be initialized but not both.
+     * Either @a cm or @a iface field must be initialized but not both.
      */
     uct_cm_h                          cm;
 
@@ -973,7 +996,7 @@ struct uct_ep_params {
     /**
      * Callback that will be invoked when the endpoint is disconnected.
      */
-    uct_ep_sockaddr_disconnect_cb_t     disconnect_cb;
+    uct_ep_disconnect_cb_t              disconnect_cb;
 };
 
 
@@ -982,9 +1005,18 @@ struct uct_ep_params {
  * @brief Connection manager attributes, capabilities and limitations.
  */
 struct uct_cm_attr {
-    size_t      max_conn_priv;  /**< Max size of the connection manager's
-                                     private data used for connection
-                                     establishment with sockaddr. */
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_attr_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t    field_mask;
+
+    /**
+     * Max size of the connection manager's private data used for connection
+     * establishment with sockaddr.
+     */
+    size_t      max_conn_priv;
 };
 
 
@@ -1002,10 +1034,9 @@ struct uct_cm_params {
     uint64_t                          field_mask;
 
     /**
-     * Memory domain name, as returned from @ref uct_component_query,
-     * mandatory field.
+     * UCT component, mandatory field.
      */
-    const char                        *md_name;
+    uct_component_h                   component;
 
     /**
      * UCT worker, mandatory field.
@@ -1039,16 +1070,17 @@ struct uct_listener_params {
 
     /**
      * Backlog of incoming connection requests.
+     * If not specified, SOMAXCONN, as defined in <sys/socket.h>, will be used.
      */
     int                                  backlog;
 
     /**
-     * Callback for an incoming connection request on the server
+     * Callback function for handling incoming connection requests.
      */
     uct_listener_conn_request_callback_t conn_request_cb;
 
     /**
-     * User data associated with the listener
+     * User data associated with the listener.
      */
     void                                 *user_data;
 };
@@ -1747,6 +1779,16 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * @brief Initiate a synchronized disconnection of an endpoint connected to a
  *        sockaddr by a connection manager @ref uct_cm_h.
  *
+ * This routine will disconnect the given endpoint from its remote peer.
+ * The remote side, should also call this routine when handling the initiator's
+ * disconnect.
+ * After a call to this function, the given endpoint should not be used for
+ * communication anymore.
+ * @ref uct_ep_destroy needs to be called on this endpoint after the remote
+ * disconnect was handled by @ref uct_ep_params::disconnect_cb or after the
+ * completion callback was invoked. @a flags will control which of them will be
+ * called.
+ *
  * @param [in] ep       Endpoint to disconnect.
  * @param [in] comp     Completion handle as defined by @ref uct_completion_t.
  *                      If it is not NULL, the completion callback is
@@ -1755,8 +1797,10 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  *                      If set to NULL, the disconnect callback
  *                      @ref uct_ep_params::disconnect_cb will be invoked
  *                      upon a disconnect of the peer.
+ * @param [in] flags    Flags to control the behavior invoke upon a remote disconnect.
+ *                      see @ref uct_ep_disconnect_flags
  */
-ucs_status_t uct_ep_disconnect(uct_ep_h ep, uct_completion_t *comp);
+ucs_status_t uct_ep_disconnect(uct_ep_h ep, uct_completion_t *comp, unsigned flags);
 
 
 /**
