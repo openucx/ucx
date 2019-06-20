@@ -49,8 +49,8 @@ typedef struct uct_tcp_ep uct_tcp_ep_t;
 
 typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
 
-static inline int uct_tcp_khash_sockaddr_equal(struct sockaddr_in sa1,
-                                               struct sockaddr_in sa2)
+static inline int uct_tcp_khash_sockaddr_in_equal(struct sockaddr_in sa1,
+                                                  struct sockaddr_in sa2)
 {
     ucs_status_t status;
     int cmp;
@@ -59,10 +59,10 @@ static inline int uct_tcp_khash_sockaddr_equal(struct sockaddr_in sa1,
                            (const struct sockaddr*)&sa2,
                            &status);
     ucs_assert(status == UCS_OK);
-    return (cmp == 0);
+    return !cmp;
 }
 
-static inline uint32_t uct_tcp_khash_sockaddr_hash(struct sockaddr_in sa)
+static inline uint32_t uct_tcp_khash_sockaddr_in_hash(struct sockaddr_in sa)
 {
     ucs_status_t UCS_V_UNUSED status;
     size_t addr_size;
@@ -74,7 +74,7 @@ static inline uint32_t uct_tcp_khash_sockaddr_hash(struct sockaddr_in sa)
 }
 
 KHASH_INIT(uct_tcp_cm_eps, struct sockaddr_in, ucs_list_link_t*,
-           1, uct_tcp_khash_sockaddr_hash, uct_tcp_khash_sockaddr_equal);
+           1, uct_tcp_khash_sockaddr_in_hash, uct_tcp_khash_sockaddr_in_equal);
 
 
 /**
