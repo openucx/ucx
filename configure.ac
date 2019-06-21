@@ -357,6 +357,7 @@ AC_CONFIG_FILES([
                  test/mpi/Makefile
                  bindings/java/src/main/native/Makefile
                  bindings/java/pom.xml
+		 man/Makefile man/man1/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

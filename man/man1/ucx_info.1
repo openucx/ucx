@@ -1,0 +1,93 @@
+.\"
+.\" Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+.\" Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+.\" Copyright (C) The University of Tennessee and The University
+.\"               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+.\" Copyright (C) Stony Brook University 2019. ALL RIGHTS RESERVED.
+.\"
+.\" See file LICENSE for terms.
+.\"
+.TH ucx_info 1 "" "openucx"
+.SH NAME
+\fBucx_info\fP \- display information about installed UCX
+.SH SYNOPSIS
+\fBucx_info\fP [options]
+.SH DESCRIPTION
+\fBucx_info\fP displays information about the configuration of UCX.
+.SH OPTIONS
+.IP "-v"
+Show version information
+.IP "-d"
+Show devices and transports
+.IP "-b"
+Show build configuration
+.IP "-y"
+Show type and structures information
+.IP "-s"
+Show system information
+.IP "-c"
+Show UCX configuration
+.IP "-a"
+Show also hidden configuration
+.IP "-f"
+Display fully decorated output
+.LP
+\fBUCP information ("-u" is required):\fP
+.LP
+.IP "-p"
+Show UCP context information
+.IP "-w"
+Show UCP worker information
+.IP "-e"
+Show UCP endpoint configuration
+.IP "-m"
+Show UCP memory map configuration (requires memory size as an argument)
+.LP
+.IP "-u <features>"
+.br
+UCP context features to use. String of one or more of:
+.RS
+.IP "'a'" 4
+: atomic operations
+.IP "'r'" 4
+: remote memory access
+.IP "'t'" 4
+: tag matching
+.IP "'w'" 4
+: wakeup
+.LP
+Modifiers to use in combination with above features:
+.RS
+.IP "'e'" 4
+: error handling
+.RE
+.RE
+.LP
+\fBOther options\fP
+.LP
+.IP "-t <name>"
+Filter devices information using specified transport (requires -d)
+.IP "-n <count>"
+Estimated UCP endpoint count (for ucp_init)
+.IP "-D <type>"
+Set which device types to use when creating UCP context:
+.RS
+.IP "'all'" 8
+: all possible devices (default)
+.IP "'shm'" 8
+: shared memory devices only
+.IP "'net'" 8
+: network devices only
+.IP "'self'" 8
+: self transport only
+.RE
+.IP "-h"
+Show this help message
+.LP
+.SH
+SEE ALSO
+ucx_perftest(1),
+ucx_read_profile(1)
+.SH OPENUCX
+\f(CRhttp://www.openucx.org/\fP
+
