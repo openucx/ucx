@@ -1189,7 +1189,7 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
 static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
 {
-    perf->max_iter = ucs_min(params->warmup_iter, params->max_iter / 10);
+    perf->max_iter = ucs_min(params->warmup_iter, ucs_div_round_up(params->max_iter, 10));
     perf->report_interval = -1;
 }
 
