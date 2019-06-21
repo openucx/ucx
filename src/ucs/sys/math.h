@@ -85,6 +85,9 @@ BEGIN_C_DECLS
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
 
+#define ucs_static_floor(_n) \
+    ((_n) - ((_n) % 1))
+
 static inline double ucs_log2(double x)
 {
     return log(x) / log(2.0);

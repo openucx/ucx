@@ -153,22 +153,23 @@ static void uct_tcp_iface_handle_events(void *callback_data,
 unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
-    unsigned read_events   = 0;
+    unsigned max_events    = iface->config.max_poll;
     unsigned count         = 0;
-    unsigned nevents       = 0;
+    unsigned read_events;
     ucs_status_t status;
 
     do {
-        status = ucs_event_set_wait(iface->event_set,
-                                    iface->config.max_poll - read_events,
+        read_events = ucs_min(ucs_sys_event_set_max_events, max_events);
+        status = ucs_event_set_wait(iface->event_set, &read_events,
                                     0, uct_tcp_iface_handle_events,
-                                    (void *)&count, &nevents);
-        read_events += nevents;
-        ucs_trace_poll("iface=%p ucs_event_set_wait(): "
+                                    (void *)&count);
+        max_events -= read_events;
+        ucs_trace_poll("iface=%p ucs_event_set_wait() returned %d: "
                        "read events=%u, total=%u",
-                       iface, nevents, read_events);
-    } while ((read_events < iface->config.max_poll) &&
-             (status == UCS_INPROGRESS));
+                       iface, status, read_events,
+                       iface->config.max_poll - max_events);
+    } while ((max_events > 0) && (read_events == UCT_TCP_MAX_EVENTS) &&
+             ((status == UCS_OK) || (status == UCS_INPROGRESS)));
 
     return count;
 }

@@ -10,8 +10,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/compiler.h>
 
-#include <sys/epoll.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -20,10 +20,14 @@
 #  include "config.h"
 #endif
 
-#define UCS_EVENT_EPOLL_MAX_EVENTS 16
+
+const unsigned ucs_sys_event_set_max_events =
+    ucs_static_floor(UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event));
+
 
 struct ucs_sys_event_set {
     int epfd;
+    unsigned max_events;
 };
 
 
@@ -72,6 +76,9 @@ ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p)
         status = UCS_ERR_IO_ERROR;
         goto err_free;
     }
+
+    event_set->max_events = ceil(UCS_ALLOCA_MAX_SIZE /
+                                 sizeof(struct epoll_event));
 
     *event_set_p = event_set;
     return UCS_OK;
@@ -137,42 +144,40 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd)
 }
 
 ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
-                                unsigned max_events, int timeout_ms,
+                                unsigned *num_events, int timeout_ms,
                                 ucs_event_set_handler_t event_set_handler,
-                                void *arg, unsigned *read_events)
+                                void *arg)
 {
-    struct epoll_event ep_events[UCS_EVENT_EPOLL_MAX_EVENTS];
-    unsigned max_wait_events = max_events;
-    int nready, events, i;
-    int timeout_wait_ms = timeout_ms;
+    struct epoll_event *events;
+    int nready, i, io_events;
 
     ucs_assert(event_set_handler != NULL);
-    ucs_assert(read_events != NULL);
+    ucs_assert(num_events != NULL);
+    ucs_assert(*num_events <= ucs_sys_event_set_max_events);
 
-    *read_events = 0;
-    do {
-	nready = epoll_wait(event_set->epfd, ep_events, max_wait_events,
-			    timeout_wait_ms);
-        ucs_assert(nready <= max_wait_events);
-	if (nready < 0 && errno != EINTR ) {
-	    ucs_error("epoll_wait() failed: %m");
-	    return UCS_ERR_IO_ERROR;
-	}
+    events = ucs_alloca(sizeof(*events) * *num_events);
+    ucs_assert(events != NULL);
 
-	ucs_trace_data("epoll_wait(epfd=%d, timeout=%d) returned %d",
-		       event_set->epfd, timeout_wait_ms, nready);
+    nready = epoll_wait(event_set->epfd, events, *num_events, timeout_ms);
+    if (nready < 0) {
+        *num_events = 0;
+        if (errno == EINTR) {
+            return UCS_INPROGRESS;
+        }
+        ucs_error("epoll_wait() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
 
-	for (i = 0; i < nready; i++) {
-	    events = ucs_event_set_map_to_events(ep_events[i].events);
-	    event_set_handler(ep_events[i].data.ptr, events, arg);
-	}
+    ucs_assert(nready <= *num_events);
+    ucs_trace_data("epoll_wait(epfd=%d, num_events=%u, timeout=%d) returned %u",
+                   event_set->epfd, *num_events, timeout_ms, nready);
 
-	*read_events    += nready;
-        max_wait_events -= nready;
-        /* After 1st iteration, epoll_wait always returns immediately */
-        timeout_wait_ms = 0;
-    } while (max_wait_events > 0);
+    for (i = 0; i < nready; i++) {
+        io_events = ucs_event_set_map_to_events(events[i].events);
+        event_set_handler(events[i].data.ptr, io_events, arg);
+    }
 
+    *num_events = nready;
     return UCS_OK;
 }
 
