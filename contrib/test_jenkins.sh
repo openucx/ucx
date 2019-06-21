@@ -979,12 +979,14 @@ test_jucx() {
                         fi
                         echo "Running standalone benchamrk on $iface"
 
-                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar \
+                        java -XX:ErrorFile=/scrap/core_files/java_$BUILD_NUMBER_pid%p.log \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar \
 				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
-                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
+                        java -XX:ErrorFile=/scrap/core_files/java_$BUILD_NUMBER_pid%p.log \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
 				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
 			 wait $java_pid
