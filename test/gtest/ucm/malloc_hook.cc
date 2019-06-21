@@ -722,8 +722,7 @@ protected:
 };
 
 
-UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
-
+UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, new_delete, RUNNING_ON_VALGRIND) {
     const size_t size = 8 * 1000 * 1000;
 
     set();
