@@ -159,7 +159,7 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     now = ucs_twheel_get_time(&iface->async.slow_timer);
     diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
-        ucs_debug("ep %p: timeout of %.2f sec (timeout - %.2f sec)",
+        ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
                   ep, ucs_time_to_sec(diff),
                   ucs_time_to_sec(iface->config.peer_timeout));
         iface->super.ops->handle_failure(&iface->super, ep,
