@@ -34,33 +34,13 @@
         PRINT_ZCAP_NO_CHECK(_name, _min, _max, _max_iov) \
     }
 
-#define PRINT_ATOMIC_CAP(_name, _cap_flags) \
-    if ((_cap_flags) & (UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) { \
-        char *s = strduplower(#_name); \
-        char *domain = ""; \
-        if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_CPU) { \
-            domain = ", cpu"; \
-        } else if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_DEVICE) { \
-            domain = ", device"; \
-        } \
-        if (ucs_test_all_flags(_cap_flags, \
-                               UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) \
-        { \
-            printf("#         %12s: 32, 64 bit%s (deprecated)\n", s, domain); \
-        } else { \
-            printf("#         %12s: %d bit%s (deprecated)\n", s, \
-                   ((_cap_flags) & UCT_IFACE_FLAG_##_name##32) ? 32 : 64, domain); \
-        } \
-        free(s); \
-    }
-
 #define PRINT_ATOMIC_POST(_name, _cap)                   \
     print_atomic_info(UCT_ATOMIC_OP_##_name, #_name, "", \
-                      _cap.atomic32.op_flags, _cap.atomic32.op_flags);
+                      _cap.atomic32.op_flags, _cap.atomic64.op_flags);
 
 #define PRINT_ATOMIC_FETCH(_name, _cap, _suffix) \
     print_atomic_info(UCT_ATOMIC_OP_##_name, #_name, _suffix, \
-                      _cap.atomic32.fop_flags, _cap.atomic32.fop_flags);
+                      _cap.atomic32.fop_flags, _cap.atomic64.fop_flags);
 
 static char *strduplower(const char *str)
 {
@@ -243,7 +223,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             iface_attr.cap.atomic64.fop_flags) {
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
                 printf("#               domain: device\n");
-            } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+            }
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
                 printf("#               domain: cpu\n");
             }
 
