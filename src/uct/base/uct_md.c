@@ -350,7 +350,7 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
         strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
         ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s", (const char*)rkey_buffer);
         ucs_error("invalid component for rkey unpack; expected: %s, actual: %s",
-                  mdc_name, component->name);
+                  component->name, mdc_name);
         return UCS_ERR_INVALID_PARAM;
     }
 
