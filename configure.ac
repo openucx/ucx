@@ -3,7 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
-# Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
@@ -219,7 +219,6 @@ AS_IF([test "x$with_docs_only" = xyes],
                         [Compile with frame pointer, useful for profiling, default: NO]),
          [],
          [enable_frame_pointer=no])
-
      AS_IF([test "x$enable_frame_pointer" = xyes],
          [AS_MESSAGE([compiling with frame pointer])
           BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
@@ -237,8 +236,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AS_IF([test "x$enable_fault_injection" = xyes],
         [AS_MESSAGE([enabling with fault injection code])
          AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
-        [:]
-       )
+        [:])
 
 
      #
@@ -247,9 +245,11 @@ AS_IF([test "x$with_docs_only" = xyes],
      AC_ARG_ENABLE([params-check],
          AS_HELP_STRING([--disable-params-check],
                         [Disable checking user parameters passed to API, default: NO]),
-         [AC_DEFINE([ENABLE_PARAMS_CHECK], [0])],
-         [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])])
-
+         [], 
+         [enable_params_check=yes])
+     AS_IF([test "x$enable_params_check" = xyes],
+           [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])],
+           [AC_DEFINE([ENABLE_PARAMS_CHECK], [0])])
 
      #
      # Enable collecting data to ease debugging
@@ -257,12 +257,14 @@ AS_IF([test "x$with_docs_only" = xyes],
      AC_ARG_ENABLE([debug-data],
                    AS_HELP_STRING([--enable-debug-data],
                                   [Enable collecting data to ease debugging, default: NO]),
-         [
-          AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
-          AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1],
-                    [Enable packet header inspection/rewriting in UCT/UD])
-         ],
-         [AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
+		   [], 
+		   [enable_debug_data=no])
+     AS_IF([test "x$enable_debug_data" = xyes],
+           [AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
+            AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1],
+                      [Enable packet header inspection/rewriting in UCT/UD])],
+           [AC_DEFINE([ENABLE_DEBUG_DATA], [0])
+            AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [0])])
 
 
      #
@@ -271,10 +273,13 @@ AS_IF([test "x$with_docs_only" = xyes],
      AC_ARG_ENABLE([mt],
                    AS_HELP_STRING([--enable-mt],
                                   [Enable thread support in UCP and UCT, default: NO]),
-         [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])
-          mt_enable=Enabled],
-         [AC_DEFINE([ENABLE_MT], [0])
-          mt_enable=Disabled])
+                   [],
+                   [enable_mt=no])
+     AS_IF([test "x$enable_mt" = xyes],
+           [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])
+            mt_enable=Enabled],
+           [AC_DEFINE([ENABLE_MT], [0])
+            mt_enable=Disabled])
 
 
      #
@@ -282,8 +287,10 @@ AS_IF([test "x$with_docs_only" = xyes],
      #
      AC_ARG_ENABLE([experimental-api],
                    AS_HELP_STRING([--enable-experimental-api],
-                                  [Enable installing experimental APIs, default: NO]))
-	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" = "xyes"])
+                                  [Enable installing experimental APIs, default: NO]),
+                   [],
+                   [enable_experimental_api=no])
+     AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" = "xyes"])
 
 
      #
@@ -291,9 +298,10 @@ AS_IF([test "x$with_docs_only" = xyes],
      #
      AC_ARG_ENABLE([devel-headers],
                    AS_HELP_STRING([--enable-devel-headers],
-                                  [Enable installing development headers, default: NO]))
-     AM_CONDITIONAL([INSTALL_DEVEL_HEADERS],
-                    [test "x$enable_devel_headers" = "xyes"])
+                                  [Enable installing development headers, default: NO])
+                    [],
+                    [enable_debug_headers=no])
+     AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [test "x$enable_devel_headers" = "xyes"])
 
 
      #
@@ -306,17 +314,16 @@ AS_IF([test "x$with_docs_only" = xyes],
      # Enable examples build
      #
      AC_ARG_ENABLE([examples],
-                   [AS_HELP_STRING([--enable-examples],
-                                   [Enable examples build])],
-                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])],
-                   [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])
-
+                   AS_HELP_STRING([--enable-examples],
+                                  [Enable examples build, default: NO]),
+                   [],
+                   [enable_examples=no])
+    AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
     ]) # Docs only
 
 #
 # Print which transports are built
 #
-AC_MSG_NOTICE([Supported transports: $transports])
 build_modules="${uct_modules}"
 build_modules+="${uct_ib_modules}"
 build_modules+="${uct_cuda_modules}"
