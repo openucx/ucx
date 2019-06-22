@@ -338,6 +338,17 @@ build_debug() {
 }
 
 #
+# Build prof
+#
+build_prof() {
+	echo "==== Build configure-prof ===="
+	../contrib/configure-prof --prefix=$ucx_inst
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
+}
+
+#
 # Build UGNI
 #
 build_ugni() {
@@ -1250,6 +1261,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
