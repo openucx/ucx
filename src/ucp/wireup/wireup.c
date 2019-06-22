@@ -48,7 +48,6 @@ static const char* ucp_wireup_msg_str(uint8_t msg_type)
 
 static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 {
-    const char      *unified_mode_msg = ". try to set UCX_UNIFIED_MODE=n.";
     ucp_context_h   context           = ep->worker->context;
     ucp_ep_config_t *ep_config        = ucp_ep_config(ep);
     ucp_lane_index_t lane             = UCP_NULL_LANE;
@@ -66,7 +65,8 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     if (lane == UCP_NULL_LANE) {
         ucs_fatal("ep %p to %s: could not fine a lane to send CONN_%s%s",
                   ep, ucp_ep_peer_name(ep), ucp_wireup_msg_str(msg_type),
-                  context->config.ext.unified_mode ? unified_mode_msg : "");
+                  context->config.ext.unified_mode ?
+                  ". try to set UCX_UNIFIED_MODE=n." : "");
     }
 
     return lane;
