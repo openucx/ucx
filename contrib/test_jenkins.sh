@@ -52,10 +52,16 @@ else
 fi
 
 #
-# Build command runs with 10 tasks
+# Parallel build command runs with 4 tasks, or number of cores on the system,
+# whichever is lowest
 #
+num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
+[ -z $num_cpus ] && num_cpus=1
+parallel_jobs=4
+[ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+
 MAKE="make"
-MAKEP="make -j10"
+MAKEP="make -j${parallel_jobs}"
 
 
 #
