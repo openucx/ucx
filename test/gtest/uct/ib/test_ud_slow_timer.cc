@@ -118,7 +118,7 @@ UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
     EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
 
-#ifdef UCT_UD_EP_DEBUG_HOOKS
+#if UCT_UD_EP_DEBUG_HOOKS
 /* no traffic - no ticks */
 UCS_TEST_P(test_ud_slow_timer, tick1) {
     connect();
