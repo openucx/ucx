@@ -267,6 +267,11 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     set_rkeys();
 
+    /* Since we don't want to test peer failure on a stable pair
+     * and don't expect EP timeout error on those EPs,
+     * run traffic on a stable pair to connect it */
+    smoke_test(true);
+
     if (!(GetParam().variant & FAIL_IMM)) {
         /* if not fail immediately, run traffic on failing pair to connect it */
         smoke_test(false);
