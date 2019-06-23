@@ -242,6 +242,7 @@ public:
 protected:
     static const int      COUNT           = 40;
     static const unsigned SLEEP_USEC      = 1000;
+    static const int      EVENT_RETRIES   = 10;
     static const int      TIMER_RETRIES   = 100;
     static const int      TIMER_EXP_COUNT = COUNT / 4;
 
@@ -446,8 +447,14 @@ UCS_TEST_P(test_async, many_timers) {
 
 UCS_TEST_P(test_async, ctx_event) {
     local_event le(GetParam());
-    le.push_event();
-    suspend_and_poll(&le, COUNT);
+    for (int retry = 0; retry < EVENT_RETRIES; ++retry) {
+        le.push_event();
+        suspend_and_poll(&le, COUNT);
+        if (le.count() >= 1) {
+            break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (retry + 1);
+    }
     EXPECT_GE(le.count(), 1);
 }
 
@@ -638,13 +645,17 @@ protected:
 UCS_TEST_P(test_async, event_unset_from_handler) {
     local_event_remove_handler le(GetParam());
 
-    le.push_event();
-    suspend_and_poll(&le, COUNT);
-    EXPECT_EQ(1, le.count());
-
-    le.push_event();
-    suspend_and_poll(&le, COUNT);
-    EXPECT_EQ(1, le.count());
+    for (int iter = 0; iter < 5; ++iter) {
+        for (int retry = 0; retry < EVENT_RETRIES; ++retry) {
+            le.push_event();
+            suspend_and_poll(&le, COUNT);
+            if (le.count() >= 1) {
+                break;
+            }
+            UCS_TEST_MESSAGE << "retry " << (retry + 1);
+        }
+        EXPECT_EQ(1, le.count());
+    }
 }
 
 class local_event_add_handler : public local_event {

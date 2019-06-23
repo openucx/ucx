@@ -672,9 +672,8 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
             goto err_no_res;
-        } else {
-            return status;
         }
+        return status;
     }
 
     ucs_assertv(ep->tx.buf == NULL, "ep=%p", ep);
@@ -718,9 +717,9 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
 {
     uct_tcp_ep_t *ep       = ucs_derived_of(uct_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr  = NULL;
     uint32_t payload_length;
     ucs_status_t status;
-    uct_tcp_am_hdr_t *hdr;
 
     UCT_CHECK_LENGTH(length + sizeof(header), 0,
                      iface->seg_size - sizeof(uct_tcp_am_hdr_t),
@@ -730,6 +729,8 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_assertv(hdr != NULL, "ep=%p", ep);
 
     *((uint64_t*)(hdr + 1)) = header;
     memcpy((uint8_t*)(hdr + 1) + sizeof(header), payload, length);
@@ -750,14 +751,16 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
 {
     uct_tcp_ep_t *ep       = ucs_derived_of(uct_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr  = NULL;
     uint32_t payload_length;
     ucs_status_t status;
-    uct_tcp_am_hdr_t *hdr;
 
     status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_assertv(hdr != NULL, "ep=%p", ep);
 
     /* Save the length of the payload, because hdr (ep::buf)
      * can be released inside `uct_tcp_ep_am_send` call */
