@@ -40,7 +40,6 @@ public:
     test_uct_ib_with_specific_port();
     void init();
     void cleanup();
-    void close_device();
     virtual void check_port_attr() = 0;
 
 protected:

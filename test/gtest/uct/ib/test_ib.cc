@@ -173,28 +173,30 @@ void test_uct_ib_with_specific_port::init() {
     try {
         check_port_attr();
     } catch (...) {
-        ibv_close_device(m_ibctx);
-        m_ibctx = NULL;
+        test_uct_ib_with_specific_port::cleanup();
         throw;
     }
-
-    test_uct_ib::init();
 }
 
-void test_uct_ib_with_specific_port::close_device() {
+void test_uct_ib_with_specific_port::cleanup() {
     if (m_ibctx != NULL) {
         ibv_close_device(m_ibctx);
         m_ibctx = NULL;
     }
 }
 
-void test_uct_ib_with_specific_port::cleanup() {
-    close_device();
-    test_uct_ib::cleanup();
-}
-
 class test_uct_ib_lmc : public test_uct_ib_with_specific_port {
 public:
+    void init() {
+        test_uct_ib_with_specific_port::init();
+        test_uct_ib::init();
+    }
+
+    void cleanup() {
+        test_uct_ib::cleanup();
+        test_uct_ib_with_specific_port::cleanup();
+    }
+
     void check_port_attr() {
         /* check if a non zero lmc is set on the port */
         if (!m_port_attr.lmc) {
@@ -211,7 +213,17 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_lmc);
 
 class test_uct_ib_gid_idx : public test_uct_ib_with_specific_port {
 public:
-   void check_port_attr() {
+    void init() {
+        test_uct_ib_with_specific_port::init();
+        test_uct_ib::init();
+    }
+
+    void cleanup() {
+        test_uct_ib::cleanup();
+        test_uct_ib_with_specific_port::cleanup();
+    }
+
+    void check_port_attr() {
         /* check if the provided gid index can be used on the port. */
         if (!test_eth_port()) {
             UCS_TEST_SKIP_R("the configured gid index cannot be used on the port");
