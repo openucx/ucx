@@ -346,7 +346,7 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
 {
     char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
-    if (ENABLE_PARAMS_CHECK &&
+    if (ENABLE_PARAMS_CHECK && ENABLE_DEBUG_DATA &&
         strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
         ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s", (const char*)rkey_buffer);
         ucs_error("invalid component for rkey unpack; expected: %s, actual: %s",
