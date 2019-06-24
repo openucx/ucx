@@ -434,6 +434,9 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
     uct_rc_txqp_t *txqp;
     int16_t available;
 
+    /* TX CQ moderation is not supported with DC yet, can just check for CQ
+     * resources (without updating moderation counters on txqp). */
+    ucs_assert(!iface->super.super.config.tx_moderation);
     if (!uct_rc_iface_have_tx_cqe_avail(&iface->super.super)) {
         UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
                                  UCT_RC_IFACE_STAT_NO_CQE, 1);
