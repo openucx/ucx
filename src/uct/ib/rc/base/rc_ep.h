@@ -166,7 +166,6 @@ enum {
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
-    uint32_t            qp_num;
     ucs_queue_head_t    outstanding;
     /* RC_UNSIGNALED_INF value forces signaled in moderation logic when
      * CQ credits are close to zero (less tx_moderation value) */
@@ -200,14 +199,12 @@ struct uct_rc_ep {
     uct_rc_fc_t         fc;
 };
 
-UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
+UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t);
 
 
 typedef struct uct_rc_ep_address {
     uct_ib_uint24_t  qp_num;
 } UCS_S_PACKED uct_rc_ep_address_t;
-
-ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
@@ -255,7 +252,8 @@ void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op,
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);
 
-ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface
+ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
+                              uint32_t qp_num
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
 

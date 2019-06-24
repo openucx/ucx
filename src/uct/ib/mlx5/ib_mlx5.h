@@ -227,6 +227,7 @@ typedef enum {
 /* MLX5 QP wrapper */
 typedef struct uct_ib_mlx5_qp {
     uct_ib_mlx5_qp_type_t       type;
+    uint32_t                    qp_num;
     union {
         struct {
             struct ibv_qp       *qp;
@@ -237,6 +238,7 @@ typedef struct uct_ib_mlx5_qp {
 
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
+    uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
     uct_ib_mlx5_mmio_reg_t      *reg;
@@ -441,11 +443,10 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 
 ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
                                         uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *txwq,
                                         uct_ib_mlx5_mmio_mode_t mode);
 
-void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_qp_t *qp, uct_ib_mlx5_txwq_t* txwq);
+void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
 /**
  * Reset txwq contents and posting indices.

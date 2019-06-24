@@ -157,8 +157,6 @@ typedef struct uct_rc_mlx5_srq_op {
 /* Command QP work-queue. All tag matching list operations are posted on it. */
 typedef struct uct_rc_mlx5_cmd_qp {
     uct_ib_mlx5_txwq_t            super;
-    uct_ib_mlx5_qp_t              qp;
-    uint32_t                      qp_num;   /* command QP num */
     uct_rc_mlx5_srq_op_t          *ops;     /* array of operations on command QP */
     int                           ops_head; /* points to the next operation to be completed */
     int                           ops_tail; /* points to the last adde operation*/

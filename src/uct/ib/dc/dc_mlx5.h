@@ -92,7 +92,6 @@ typedef struct uct_dc_mlx5_iface_config {
 
 
 typedef struct uct_dc_dci {
-    uct_ib_mlx5_qp_t              qp;
     uct_rc_txqp_t                 txqp; /* DCI qp */
     union {
         uct_dc_mlx5_ep_t          *ep;  /* points to an endpoint that currently
@@ -244,11 +243,11 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
  */
 static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t qp_num)
 {
-    uct_dc_dci_t *dcis = iface->tx.dcis;
+    uct_ib_mlx5_txwq_t *dcis = iface->tx.dci_wqs;
     int i, ndci = iface->tx.ndci;
 
     for (i = 0; i < ndci; i++) {
-        if (dcis[i].txqp.qp_num == qp_num) {
+        if (dcis[i].super.qp_num == qp_num) {
             return i;
         }
     }

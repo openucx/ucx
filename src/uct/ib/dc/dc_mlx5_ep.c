@@ -1230,6 +1230,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
+    uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dci_wqs[dci];
     int16_t outstanding;
     ucs_status_t ep_status;
 
@@ -1281,12 +1282,12 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     status = uct_dc_mlx5_iface_reset_dci(iface, dci);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp_num, ucs_status_string(status));
+                  iface, dci, txwq->super.qp_num, ucs_status_string(status));
     }
 
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp_num, ucs_status_string(status));
+                  iface, dci, txwq->super.qp_num, ucs_status_string(status));
     }
 }

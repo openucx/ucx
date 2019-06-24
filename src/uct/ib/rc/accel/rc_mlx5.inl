@@ -240,11 +240,11 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
         uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
-                                          txqp->qp_num, fm_ce_se, wqe_size,
+                                          txwq->super.qp_num, fm_ce_se, wqe_size,
                                           imm);
     } else {
         uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
-                                 txqp->qp_num, fm_ce_se, wqe_size);
+                                 txwq->super.qp_num, fm_ce_se, wqe_size);
     }
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);
@@ -780,7 +780,7 @@ uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_qp_t *cmd_wq,
     tm = uct_ib_mlx5_txwq_wrap_none(txwq, ctrl + 1);
 
     uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, UCT_RC_MLX5_OPCODE_TAG_MATCHING,
-                             0, cmd_wq->qp_num, 0, wqe_size);
+                             0, txwq->super.qp_num, 0, wqe_size);
 
     uct_rc_mlx5_set_tm_seg(txwq, tm, op_code, next_idx, unexp_cnt,
                            tag, tag_mask, tm_flags);

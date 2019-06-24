@@ -695,14 +695,10 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
 
     status = iface->super.ops->create_qp(&iface->super, &qp_init_attr, qp_p);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
     *cap = qp_init_attr.cap;
-    return status;
-
-err:
-    ibv_destroy_qp(*qp_p);
     return status;
 }
 

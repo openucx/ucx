@@ -24,7 +24,6 @@ typedef struct uct_rc_mlx5_ep {
     struct {
         uct_ib_mlx5_txwq_t  wq;
     } tx;
-    uct_ib_mlx5_qp_t        qp;
     uct_ib_mlx5_qp_t        tm_qp;
     uint16_t                atomic_mr_offset;
 } uct_rc_mlx5_ep_t;

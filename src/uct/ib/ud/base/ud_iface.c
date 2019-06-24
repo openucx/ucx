@@ -302,7 +302,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
 
     return UCS_OK;
 err_destroy_qp:
-    ibv_destroy_qp(self->qp);
+    uct_ib_iface_destroy_qp(self->qp);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -520,7 +520,7 @@ err_tx_mpool:
 err_rx_mpool:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err_qp:
-    ibv_destroy_qp(self->qp);
+    uct_ib_iface_destroy_qp(self->qp);
     ucs_ptr_array_cleanup(&self->eps);
     return status;
 }
@@ -539,7 +539,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
     ucs_mpool_cleanup(&self->rx.mp, 0);
-    ibv_destroy_qp(self->qp);
+    uct_ib_iface_destroy_qp(self->qp);
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
