@@ -135,16 +135,18 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 }
 
 static void uct_tcp_iface_handle_events(void *callback_data,
-                                        int event_set_events, void *arg)
+                                        int events, void *arg)
 {
     unsigned *count  = (unsigned*)arg;
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)callback_data;
 
-    if (event_set_events & UCS_EVENT_SET_EVREAD) {
-        *count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_RX);
+    ucs_assertv(ep->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED, "ep=%p", ep);
+
+    if (events & UCS_EVENT_SET_EVREAD) {
+        *count += uct_tcp_ep_progress_rx(ep);
     }
-    if (event_set_events & UCS_EVENT_SET_EVWRITE) {
-        *count += uct_tcp_ep_progress(ep, UCT_TCP_EP_CTX_TYPE_TX);
+    if (events & UCS_EVENT_SET_EVWRITE) {
+        *count += uct_tcp_ep_progress_tx(ep);
     }
 }
 
@@ -397,6 +399,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.sndbuf        = config->sockopt_sndbuf;
     self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
+    kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
     self->seg_size = config->seg_size + sizeof(uct_tcp_am_hdr_t);
 
@@ -454,24 +457,65 @@ err:
     return status;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
+static void uct_tcp_iface_ep_list_cleanup(uct_tcp_iface_t *iface,
+                                          ucs_list_link_t *ep_list)
 {
     uct_tcp_ep_t *ep, *tmp;
+
+    ucs_list_for_each_safe(ep, tmp, ep_list, list) {
+        uct_tcp_cm_purge_ep(ep);
+        uct_tcp_ep_destroy_internal(&ep->super.super);
+    }
+}
+
+static void uct_tcp_iface_eps_cleanup(uct_tcp_iface_t *iface)
+{
+    ucs_list_link_t *ep_list;
+
+    uct_tcp_iface_ep_list_cleanup(iface, &iface->ep_list);
+
+    kh_foreach_value(&iface->ep_cm_map, ep_list, {
+        uct_tcp_iface_ep_list_cleanup(iface, ep_list);
+        ucs_free(ep_list);
+    });
+
+    kh_destroy_inplace(uct_tcp_cm_eps, &iface->ep_cm_map);
+}
+
+void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_add_tail(&iface->ep_list, &ep->list);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+}
+
+void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_del(&ep->list);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
+{
     ucs_status_t status;
 
     ucs_debug("tcp_iface %p: destroying", self);
 
-    uct_base_iface_progress_disable(&self->super.super, UCT_PROGRESS_SEND|
-                                                        UCT_PROGRESS_RECV);
+    uct_base_iface_progress_disable(&self->super.super,
+                                    UCT_PROGRESS_SEND |
+                                    UCT_PROGRESS_RECV);
 
     status = ucs_async_remove_handler(self->listen_fd, 1);
     if (status != UCS_OK) {
         ucs_warn("failed to remove handler for server socket fd=%d", self->listen_fd);
     }
 
-    ucs_list_for_each_safe(ep, tmp, &self->ep_list, list) {
-        uct_tcp_ep_destroy(&ep->super.super);
-    }
+    uct_tcp_iface_eps_cleanup(self);
 
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);

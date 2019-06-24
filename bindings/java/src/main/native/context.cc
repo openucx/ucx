@@ -47,6 +47,8 @@ Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
                                                          field);
     }
 
+    ucp_params.field_mask |= UCP_PARAM_FIELD_REQUEST_INIT |
+                             UCP_PARAM_FIELD_REQUEST_SIZE;
     ucp_params.request_size = sizeof(struct jucx_context);
     ucp_params.request_init = jucx_request_init;
 

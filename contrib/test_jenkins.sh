@@ -52,10 +52,16 @@ else
 fi
 
 #
-# Build command runs with 10 tasks
+# Parallel build command runs with 4 tasks, or number of cores on the system,
+# whichever is lowest
 #
+num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
+[ -z $num_cpus ] && num_cpus=1
+parallel_jobs=4
+[ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+
 MAKE="make"
-MAKEP="make -j10"
+MAKEP="make -j${parallel_jobs}"
 
 
 #
@@ -332,6 +338,17 @@ build_icc() {
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
+}
+
+#
+# Build prof
+#
+build_prof() {
+	echo "==== Build configure-prof ===="
+	../contrib/configure-prof --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
 	$MAKEP distclean
@@ -1250,6 +1267,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang

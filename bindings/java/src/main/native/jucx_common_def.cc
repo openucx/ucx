@@ -203,8 +203,6 @@ jobject process_request(void *request, jobject callback)
     if (UCS_PTR_IS_PTR(request)) {
         if (callback != NULL) {
             ((struct jucx_context *)request)->callback = env->NewGlobalRef(callback);
-        } else {
-            ((struct jucx_context *)request)->callback = NULL;
         }
         ucs_memory_cpu_store_fence();
         ((struct jucx_context *)request)->jucx_request = env->NewGlobalRef(jucx_request);
