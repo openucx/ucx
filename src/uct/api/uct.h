@@ -579,16 +579,6 @@ enum uct_md_mem_flags {
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief  Endpoint disconnect flags.
- */
-enum uct_ep_disconnect_flags {
-    UCT_EP_DISCONNECT_FLAG_CB = UCS_BIT(0)  /**< Invoke the disconnect callback
-                                                 upon remote disconnect .*/
-};
-
-
-/**
  * @ingroup UCT_MD
  * @brief list of UCT memory use advice
  */
@@ -1783,24 +1773,14 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * The remote side, should also call this routine when handling the initiator's
  * disconnect.
  * After a call to this function, the given endpoint should not be used for
- * communication anymore.
- * @ref uct_ep_destroy needs to be called on this endpoint after the remote
- * disconnect was handled by @ref uct_ep_params::disconnect_cb or after the
- * completion callback was invoked. @a flags will control which of them will be
- * called.
+ * communications anymore.
+ * @ref uct_ep_destroy should be called on this endpoint after invoking this
+ * routine and @ref uct_ep_params::disconnect_cb was called.
  *
  * @param [in] ep       Endpoint to disconnect.
- * @param [in] comp     Completion handle as defined by @ref uct_completion_t.
- *                      If it is not NULL, the completion callback is
- *                      called when the completion counter reaches 0 and the
- *                      remote side has disconnected.
- *                      If set to NULL, the disconnect callback
- *                      @ref uct_ep_params::disconnect_cb will be invoked
- *                      upon a disconnect of the peer.
- * @param [in] flags    Flags to control the behavior invoke upon a remote disconnect.
- *                      see @ref uct_ep_disconnect_flags
+ * @param [in] flags    Reserved for future use.
  */
-ucs_status_t uct_ep_disconnect(uct_ep_h ep, uct_completion_t *comp, unsigned flags);
+ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags);
 
 
 /**
