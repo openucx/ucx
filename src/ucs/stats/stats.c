@@ -16,6 +16,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h>
+#include <ucs/datastruct/khash.h>
 
 #include <sys/ioctl.h>
 #include <linux/futex.h>
@@ -45,6 +46,8 @@ enum {
     UCS_ROOT_STATS_LAST
 };
 
+KHASH_MAP_INIT_INT64(ucs_stats_cls, void*)
+
 typedef struct {
     volatile unsigned    flags;
 
@@ -62,6 +65,8 @@ typedef struct {
         int              signo;
         double           interval;
     };
+
+    khash_t(ucs_stats_cls) cls;
 
     pthread_mutex_t      lock;
     pthread_t            thread;
@@ -112,6 +117,51 @@ static void ucs_stats_clean_node(ucs_stats_node_t *node) {
     ucs_list_del(&node->type_list);
 }
 
+static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
+{
+    ucs_stats_class_t *dup;
+
+    dup = ucs_malloc(sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
+                     "ucs_stats_class_t");
+    if (dup == NULL) {
+        ucs_error("failed to allocate statistics class");
+    }
+
+    dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
+    if (dup->name == NULL) {
+        ucs_error("failed to copy statistics class name");
+    }
+
+    for (dup->num_counters = 0; dup->num_counters < cls->num_counters; dup->num_counters++) {
+        dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
+                                                           "ucs_stats_class_t counter");
+        if (dup->counter_names[dup->num_counters] == NULL) {
+            ucs_error("failed to copy statistics counter name");
+        }
+    }
+
+    return dup;
+}
+
+static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
+{
+    ucs_stats_class_t *dup;
+    khiter_t iter;
+    int r;
+
+    iter = kh_get(ucs_stats_cls, &ucs_stats_context.cls, (uint64_t)cls);
+
+    if (iter != kh_end(&ucs_stats_context.cls)) {
+        return (ucs_stats_class_t*)kh_val(&ucs_stats_context.cls, iter);
+    }
+
+    dup  = ucs_stats_dup_class(cls);
+    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, (uint64_t)cls, &r);
+    kh_val(&ucs_stats_context.cls, iter) = dup;
+
+    return dup;
+}
+
 static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
 {
     ucs_assert(node != &ucs_stats_context.root_node);
@@ -126,6 +176,7 @@ static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
     ucs_list_del(&node->list);
     if (make_inactive) {
         ucs_list_add_tail(&node->parent->children[UCS_STATS_INACTIVE_CHILDREN], &node->list);
+        node->cls = ucs_stats_get_class(node->cls);
     } else {
         ucs_stats_clean_node(node); 
     }
@@ -580,6 +631,7 @@ void ucs_stats_init()
     UCS_STATS_START_TIME(ucs_stats_context.start_time);
     ucs_stats_node_init_root("%s:%d", ucs_get_host_name(), getpid());
     ucs_stats_set_trigger();
+    kh_init_inplace(ucs_stats_cls, &ucs_stats_context.cls);
 
     ucs_debug("statistics enabled, flags: %c%c%c%c%c%c%c",
               (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER)      ? 't' : '-',
@@ -597,6 +649,7 @@ void ucs_stats_cleanup()
         return;
     }
 
+    kh_destroy_inplace(ucs_stats_cls, &ucs_stats_context.cls);
     ucs_stats_unset_trigger();
     ucs_stats_clean_node_recurs(&ucs_stats_context.root_node);
     ucs_stats_close_dest();
