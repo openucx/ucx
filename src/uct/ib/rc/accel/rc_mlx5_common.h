@@ -315,12 +315,6 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
 #define UCT_RC_MLX5_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_mlx5_tmh_priv_data_t, \
                                                         data)
 
-#define UCT_RC_MLX5_CHECK_RES_PTR(_iface, _ep) \
-    UCT_RC_CHECK_CQE_RET(&(_iface)->super, _ep, &(_ep)->txqp, \
-                         UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
-    UCT_RC_CHECK_TXQP_RET(&(_iface)->super, _ep, &(_ep)->txqp, \
-                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
-
 #define UCT_RC_MLX5_CHECK_RNDV_PARAMS(_iovcnt, _header_len, _tm_len, \
                                       _max_inline, _max_rndv_hdr) \
    { \
