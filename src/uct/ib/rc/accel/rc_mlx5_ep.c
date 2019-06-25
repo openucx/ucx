@@ -837,12 +837,12 @@ static ucs_status_t uct_rc_mlx5_ep_tag_qp_create(uct_rc_mlx5_iface_common_t *ifa
             return status;
         }
 
-        ep->tm_qp.type = UCT_IB_MLX5_QP_TYPE_VERBS;
+        ep->tm_qp.type   = UCT_IB_MLX5_QP_TYPE_VERBS;
         ep->tm_qp.qp_num = ep->tm_qp.verbs.qp->qp_num;
 
         status = uct_rc_iface_qp_init(&iface->super, ep->tm_qp.verbs.qp);
         if (status != UCS_OK) {
-            uct_ib_iface_destroy_qp(ep->tm_qp.verbs.qp);
+            uct_ib_destroy_qp(ep->tm_qp.verbs.qp);
             return status;
         }
         uct_rc_iface_add_qp(&iface->super, &ep->super, ep->tm_qp.qp_num);
@@ -894,7 +894,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err:
-    uct_ib_iface_destroy_qp(self->tx.wq.super.verbs.qp);
+    uct_ib_destroy_qp(self->tx.wq.super.verbs.qp);
     return status;
 }
 
@@ -934,8 +934,6 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
     uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
     (void)uct_ib_modify_qp(qp, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(iface, &iface->super.super);
-
-    uct_ib_iface_destroy_qp(qp);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
@@ -949,6 +947,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_mlx5_ep_clean_qp(self, self->tm_qp.verbs.qp);
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
+        uct_ib_destroy_qp(self->tm_qp.verbs.qp);
     }
 #endif
 
@@ -962,6 +961,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_srq_cleanup(&iface->rx.srq, iface->super.rx.srq.srq);
 
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
+    uct_ib_destroy_qp(self->tx.wq.super.verbs.qp);
 }
 
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,

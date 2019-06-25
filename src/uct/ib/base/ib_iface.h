@@ -540,15 +540,4 @@ uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
     fence->fence_flag = 0;
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_ib_iface_destroy_qp(struct ibv_qp *qp)
-{
-    int ret;
-
-    ret = ibv_destroy_qp(qp);
-    if (ret) {
-        ucs_error("ibv_destroy_qp() failed: %m");
-    }
-}
-
 #endif

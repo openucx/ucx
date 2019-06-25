@@ -438,7 +438,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     return UCS_OK;
 
 err:
-    uct_ib_iface_destroy_qp(iface->rx_dct);
+    uct_ib_destroy_qp(iface->rx_dct);
     return UCS_ERR_IO_ERROR;
 }
 
@@ -450,7 +450,7 @@ int uct_dc_mlx5_get_dct_num(uct_dc_mlx5_iface_t *iface)
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
 {
     if (iface->rx_dct != NULL) {
-        uct_ib_iface_destroy_qp(iface->rx_dct);
+        uct_ib_destroy_qp(iface->rx_dct);
         iface->rx_dct = NULL;
     }
 }
@@ -666,7 +666,7 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
     int i;
     for (i = 0; i < max; i++) {
         uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
-        uct_ib_iface_destroy_qp(iface->tx.dci_wqs[i].super.verbs.qp);
+        uct_ib_destroy_qp(iface->tx.dci_wqs[i].super.verbs.qp);
     }
 }
 
@@ -690,21 +690,21 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
             goto err;
         }
 
-        iface->tx.dci_wqs[i].super.type = UCT_IB_MLX5_QP_TYPE_VERBS;
+        iface->tx.dci_wqs[i].super.type   = UCT_IB_MLX5_QP_TYPE_VERBS;
         iface->tx.dci_wqs[i].super.qp_num = iface->tx.dci_wqs[i].super.verbs.qp->qp_num;
 
         status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super.super,
                                   iface->tx.dci_wqs[i].super.qp_num
                                   UCS_STATS_ARG(iface->super.super.stats));
         if (status != UCS_OK) {
-            uct_ib_iface_destroy_qp(iface->tx.dci_wqs[i].super.verbs.qp);
+            uct_ib_destroy_qp(iface->tx.dci_wqs[i].super.verbs.qp);
             goto err;
         }
 
         status = uct_dc_mlx5_iface_dci_connect(iface, i);
         if (status != UCS_OK) {
             uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
-            uct_ib_iface_destroy_qp(iface->tx.dci_wqs[i].super.verbs.qp);
+            uct_ib_destroy_qp(iface->tx.dci_wqs[i].super.verbs.qp);
             goto err;
         }
 

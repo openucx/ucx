@@ -679,7 +679,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap, unsigned max_send_wr)
 {
     uct_ib_qp_attr_t qp_init_attr    = {};
-    static ucs_status_t status;
+    ucs_status_t status;
 
     if (iface->super.config.qp_type == IBV_QPT_RC) {
         qp_init_attr.srq             = iface->rx.srq.srq;
@@ -699,7 +699,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     }
 
     *cap = qp_init_attr.cap;
-    return status;
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)

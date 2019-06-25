@@ -680,8 +680,8 @@ uct_rc_mlx5_add_cmd_qp_op(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_rc_mlx5_srq_op_t *op;
 
-    op      = iface->tm.cmd_wq.ops +
-              (iface->tm.cmd_wq.ops_tail++ & iface->tm.cmd_wq.ops_mask);
+    op      = iface->tm.cmd_qp.ops +
+              (iface->tm.cmd_qp.ops_tail++ & iface->tm.cmd_qp.ops_mask);
     op->tag = tag;
 }
 
@@ -764,13 +764,13 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_qp_t *cmd_wq,
+uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_qp_t *cmd_qp,
                                      unsigned extra_wqe_size, unsigned op_code,
                                      uint16_t next_idx, unsigned unexp_cnt,
                                      uct_tag_t tag, uct_tag_t tag_mask,
                                      unsigned tm_flags)
 {
-    uct_ib_mlx5_txwq_t       *txwq = &cmd_wq->super;
+    uct_ib_mlx5_txwq_t       *txwq = &cmd_qp->super;
     struct mlx5_wqe_ctrl_seg *ctrl = txwq->curr; /* 16 bytes */
     uct_rc_mlx5_wqe_tm_seg_t *tm;                /* 32 bytes */
     unsigned                  wqe_size;
@@ -796,7 +796,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
                                   size_t iovcnt, uct_tag_context_t *ctx)
 {
     uct_rc_mlx5_ctx_priv_t   *priv = uct_rc_mlx5_ctx_priv(ctx);
-    uct_ib_mlx5_txwq_t       *txwq = &iface->tm.cmd_wq.super;
+    uct_ib_mlx5_txwq_t       *txwq = &iface->tm.cmd_qp.super;
     struct mlx5_wqe_data_seg *dptr; /* 16 bytes */
     uct_rc_mlx5_tag_entry_t  *tag_entry;
     uint16_t                 next_idx;
@@ -826,7 +826,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_set_data_seg(dptr, iov->buffer, iov->length,
                              ((uct_ib_mem_t *)(iov->memh))->lkey);
 
-    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, sizeof(*dptr),
+    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_qp, sizeof(*dptr),
                                          UCT_RC_MLX5_TM_OPCODE_APPEND, next_idx,
                                          iface->tm.unexpected_cnt, tag,
                                          tag_mask,
@@ -857,7 +857,7 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_mlx5_add_cmd_qp_op(iface, tag_entry);
     }
 
-    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
+    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_qp, 0,
                                          UCT_RC_MLX5_TM_OPCODE_REMOVE, index,
                                          iface->tm.unexpected_cnt, 0ul, 0ul,
                                          flags);
@@ -870,13 +870,13 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_handle_tm_list_op(uct_rc_mlx5_iface_common_t *iface, int opcode)
 {
-    uct_rc_mlx5_cmd_qp_t *cmd_wq;
+    uct_rc_mlx5_cmd_qp_t *cmd_qp;
     uct_rc_mlx5_srq_op_t *op;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
 
-    cmd_wq = &iface->tm.cmd_wq;
-    op     = cmd_wq->ops + (cmd_wq->ops_head++ & cmd_wq->ops_mask);
+    cmd_qp = &iface->tm.cmd_qp;
+    op     = cmd_qp->ops + (cmd_qp->ops_head++ & cmd_qp->ops_mask);
     uct_rc_mlx5_release_tag_entry(iface, op->tag);
 
     if (opcode == UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE) {
@@ -958,7 +958,7 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
                                       status, release->offset, &release->super);
 
     if (ucs_unlikely(!(++iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
-        uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
+        uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_qp, 0,
                                              UCT_RC_MLX5_TM_OPCODE_NOP, 0,
                                              iface->tm.unexpected_cnt, 0ul, 0ul,
                                              UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);

@@ -239,7 +239,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
-    uct_ib_iface_destroy_qp(qp);
+    uct_ib_destroy_qp(qp);
 
     self->config.max_inline = cap.max_inline_data;
     uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);

@@ -135,7 +135,7 @@ static ucs_status_t uct_ib_mlx5_exp_md_umr_qp_create(uct_ib_mlx5_md_t *md)
     return UCS_OK;
 
 err_destroy_qp:
-    uct_ib_iface_destroy_qp(md->umr_qp);
+    uct_ib_destroy_qp(md->umr_qp);
 err_destroy_cq:
     ibv_destroy_cq(md->umr_cq);
 err:
@@ -442,7 +442,7 @@ void uct_ib_mlx5_exp_md_cleanup(uct_ib_md_t *ibmd)
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
     if (md->umr_qp != NULL) {
-        uct_ib_iface_destroy_qp(md->umr_qp);
+        uct_ib_destroy_qp(md->umr_qp);
     }
     if (md->umr_cq != NULL) {
         ibv_destroy_cq(md->umr_cq);

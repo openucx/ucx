@@ -409,7 +409,7 @@ ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
         return UCS_PTR_STATUS(uar);
     }
 
-    txwq->reg = &uar->super;
+    txwq->reg        = &uar->super;
     txwq->super.type = UCT_IB_MLX5_QP_TYPE_DEVX;
 
     return UCS_OK;

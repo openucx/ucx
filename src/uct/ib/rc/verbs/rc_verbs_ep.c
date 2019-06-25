@@ -448,16 +448,15 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
-
     return UCS_OK;
 }
 
 ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
                                            const uct_ep_addr_t *ep_addr)
 {
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_iface_t *iface              = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    const uct_ib_address_t *ib_addr    = (const uct_ib_address_t *)dev_addr;
     const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
@@ -497,7 +496,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err_qp_cleanup:
-    uct_ib_iface_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
 err:
     return status;
 }
@@ -517,7 +516,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
     ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
     uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
-    uct_ib_iface_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);
