@@ -149,8 +149,6 @@ static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
 {
     ssize_t recv_len          = 0;
-    ssize_t sent_len          = 0;
-    int     connect_confirm   = 42;
     uct_sockcm_iface_t *iface = arg;
     struct sockaddr peer_addr;
     socklen_t addrlen;
@@ -173,14 +171,14 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
               ucs_sockaddr_str(&peer_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN), accept_fd);
 
-    sent_len = send(accept_fd, (char *) &connect_confirm, sizeof(int), 0);
-    ucs_debug("send_len = %d bytes %m", (int) sent_len);
+    /* Unlike rdmacm, socket connect/accept does not permit exchange of
+     * connection parameters but we need to use send/recv on top of that
+     * We simulate that with an explicit receive */
 
     recv_len = recv(accept_fd, (char *) &conn_param,
                     sizeof(uct_sockcm_conn_param_t), 0);
-    ucs_debug("recv len = %d\n", (int) recv_len);
+    ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
 
-    // schedule connection req callback
     if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     }
