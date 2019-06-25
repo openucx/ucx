@@ -17,6 +17,7 @@
 #include <ucm/util/reloc.h>
 #include <ucm/util/sys.h>
 #include <ucm/bistro/bistro.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/preprocessor.h>
@@ -36,11 +37,12 @@
 
 #define UCM_FIRE_EVENT(_event, _mask, _data, _call)                           \
     do {                                                                      \
+        int exp_events = (_event) & (_mask);                                  \
         (_data)->fired_events = 0;                                            \
         _call;                                                                \
-        ucm_trace("after %s: fired events = 0x%x", UCS_PP_MAKE_STRING(_call), \
-                  (_data)->fired_events); \
-        (_data)->out_events &= ~((_event) & (_mask)) | (_data)->fired_events; \
+        ucm_trace("after %s: got 0x%x/0x%x", UCS_PP_MAKE_STRING(_call),       \
+                  (_data)->fired_events, exp_events);                         \
+        (_data)->out_events &= ~exp_events | (_data)->fired_events;           \
     } while(0)
 
 extern const char *ucm_mmap_hook_modes[];
@@ -59,8 +61,8 @@ typedef struct ucm_mmap_func {
 } ucm_mmap_func_t;
 
 typedef struct ucm_mmap_test_events_data {
-    int fired_events;
-    int out_events;
+    uint32_t             fired_events;
+    int                  out_events;
 } ucm_mmap_test_events_data_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
@@ -81,9 +83,16 @@ static pthread_mutex_t ucm_mmap_install_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int ucm_mmap_installed_events = 0; /* events that were reported as installed */
 
 static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
-                                         ucm_event_t *event, void *fired_events)
+                                         ucm_event_t *event, void *arg)
 {
-    *(int*)fired_events |= event_type;
+    ucm_mmap_test_events_data_t *data = arg;
+
+    /* This callback may be called from multiple threads, which are just calling
+     * memory allocations/release, and not testing mmap hooks at the moment.
+     * So in order to ensure the thread which tests events sees all fired
+     * events, use atomic OR operation.
+     */
+    ucs_atomic_or32(&data->fired_events, event_type);
 }
 
 /* Fire events with pre/post action. The problem is in call sequence: we
@@ -182,7 +191,7 @@ static ucs_status_t ucm_mmap_test_events(int events)
     handler.events    = events;
     handler.priority  = -1;
     handler.cb        = ucm_mmap_event_test_callback;
-    handler.arg       = &data.fired_events;
+    handler.arg       = &data;
     data.out_events   = events;
 
     ucm_event_handler_add(&handler);
