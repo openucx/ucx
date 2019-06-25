@@ -20,6 +20,7 @@ static const int   UCS_EVENT_SET_EXTRA_NUM    = 0xFF;
 class test_event_set : public ucs::test {
 public:
     static const char *evfd_data;
+    static pthread_barrier_t barrier;
 
 protected:
     static void* event_set_read_func(void *arg) {
@@ -34,12 +35,15 @@ protected:
     }
 
     static void* event_set_tmo_func(void *arg) {
-        usleep(50);
+        int ret = pthread_barrier_wait(&barrier);
+        EXPECT_TRUE((ret == 0) || (ret == PTHREAD_BARRIER_SERIAL_THREAD));
         return 0;
     }
 };
 
 const char *test_event_set::evfd_data = UCS_EVENT_SET_TEST_STRING;
+
+pthread_barrier_t test_event_set::barrier;
 
 static void event_set_func1(void *callback_data, int events, void *arg)
 {
@@ -100,7 +104,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
                                (void *)(uintptr_t)pipefd[0]);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 50,
+    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, -1,
                                 event_set_func1, arg, &nread);
     EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
@@ -139,7 +143,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
                                (void *)&pipefd[1]);
     EXPECT_EQ(UCS_OK, status);
 
-    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 50,
+    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, -1,
                                 event_set_func2, NULL, &nread);
     EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
@@ -164,6 +168,9 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
         throw ucs::test_abort_exception();
     }
 
+    ret = pthread_barrier_init(&barrier, NULL, 2);
+    EXPECT_EQ(0, ret);
+
     ret = pthread_create(&tid, NULL, event_set_tmo_func, (void *)&pipefd);
     if (ret) {
         UCS_TEST_MESSAGE << strerror(errno);
@@ -178,13 +185,18 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
                                NULL);
     EXPECT_EQ(UCS_OK,status);
 
-    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 20,
+    ret = pthread_barrier_wait(&barrier);
+    EXPECT_TRUE((ret == 0) || (ret == PTHREAD_BARRIER_SERIAL_THREAD));
+
+    pthread_join(tid, NULL);
+    pthread_barrier_destroy(&barrier);
+
+    /* Check for events on pipe fd */
+    status = ucs_event_set_wait(event_set, MAX_EVENT_SET_SIZE, 0,
                                 event_set_func3, NULL, &nread);
     EXPECT_EQ(0u, nread);
     EXPECT_EQ(UCS_OK, status);
     ucs_event_set_cleanup(event_set);
-
-    pthread_join(tid, NULL);
 
     close(pipefd[0]);
     close(pipefd[1]);
