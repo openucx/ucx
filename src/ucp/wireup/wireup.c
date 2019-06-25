@@ -30,6 +30,48 @@ static size_t ucp_wireup_msg_pack(void *dest, void *arg)
     return sizeof(ucp_wireup_msg_t) + req->send.length;
 }
 
+static const char* ucp_wireup_msg_str(uint8_t msg_type)
+{
+    switch (msg_type) {
+    case UCP_WIREUP_MSG_PRE_REQUEST:
+        return "PRE_REQ";
+    case UCP_WIREUP_MSG_REQUEST:
+        return "REQ";
+    case UCP_WIREUP_MSG_REPLY:
+        return "REP";
+    case UCP_WIREUP_MSG_ACK:
+        return "ACK";
+    default:
+        return "<unknown>";
+    }
+}
+
+static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
+{
+    ucp_context_h   context           = ep->worker->context;
+    ucp_ep_config_t *ep_config        = ucp_ep_config(ep);
+    ucp_lane_index_t lane             = UCP_NULL_LANE;
+
+    if (msg_type != UCP_WIREUP_MSG_ACK) {
+        /* for request/response, try wireup_lane first */
+        lane = ep_config->key.wireup_lane;
+    }
+
+    if (lane == UCP_NULL_LANE) {
+        /* fallback to active messages lane */
+        lane = ep_config->key.am_lane;
+    }
+
+    if (lane == UCP_NULL_LANE) {
+        ucs_fatal("ep %p to %s: could not fine a lane to send CONN_%s%s",
+                  ep, ucp_ep_peer_name(ep), ucp_wireup_msg_str(msg_type),
+                  context->config.ext.unified_mode ?
+                  ". try to set UCX_UNIFIED_MODE=n." : "");
+    }
+
+    return lane;
+}
+
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -48,11 +90,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     }
 
     /* send the active message */
-    if (req->send.wireup.type == UCP_WIREUP_MSG_ACK) {
-        req->send.lane = ucp_ep_get_am_lane(ep);
-    } else {
-        req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
-    }
+    req->send.lane = ucp_wireup_get_msg_lane(ep, req->send.wireup.type);
 
     am_flags = 0;
     if ((req->send.wireup.type == UCP_WIREUP_MSG_REQUEST) ||
@@ -1076,12 +1114,9 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     snprintf(p, end - p,
              "WIREUP %s [%s uuid 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %d]",
-             (msg->type == UCP_WIREUP_MSG_PRE_REQUEST ) ? "PRE_REQ" :
-             (msg->type == UCP_WIREUP_MSG_REQUEST     ) ? "REQ" :
-             (msg->type == UCP_WIREUP_MSG_REPLY       ) ? "REP" :
-             (msg->type == UCP_WIREUP_MSG_ACK         ) ? "ACK" : "",
-             unpacked_address.name, unpacked_address.uuid, msg->src_ep_ptr,
-             msg->dest_ep_ptr, msg->conn_sn);
+             ucp_wireup_msg_str(msg->type), unpacked_address.name,
+             unpacked_address.uuid, msg->src_ep_ptr, msg->dest_ep_ptr,
+             msg->conn_sn);
     p += strlen(p);
 
     for (addr_index = 0; addr_index < unpacked_address.address_count; ++addr_index) {
