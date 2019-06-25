@@ -6,11 +6,114 @@
 
 #include <uct/ib/test_ib.h>
 
+test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
 
-test_uct_ib::test_uct_ib() : uct_test() {
-    m_e1 = NULL;
-    m_e2 = NULL;
+void test_uct_ib::create_connected_entities() {
+    m_e1 = uct_test::create_entity(0);
+    m_e2 = uct_test::create_entity(0);
 
+    m_entities.push_back(m_e1);
+    m_entities.push_back(m_e2);
+
+    m_e1->connect(0, *m_e2, 0);
+    m_e2->connect(0, *m_e1, 0);
+}
+
+void test_uct_ib::init() {
+    uct_test::init();
+    create_connected_entities();
+    test_uct_ib::m_ib_am_handler_counter = 0;
+}
+
+ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data,
+                                        size_t length, unsigned flags) {
+    recv_desc_t *my_desc  = (recv_desc_t *) arg;
+    uint64_t *test_ib_hdr = (uint64_t *) data;
+    uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
+    unsigned data_length  = length - sizeof(test_ib_hdr);
+
+    my_desc->length = data_length;
+    if (*test_ib_hdr == 0xbeef) {
+        memcpy(my_desc + 1, actual_data , data_length);
+    }
+    ++test_uct_ib::m_ib_am_handler_counter;
+    return UCS_OK;
+}
+
+void test_uct_ib::send_recv_short() {
+    size_t start_am_counter = test_uct_ib::m_ib_am_handler_counter;
+    uint64_t send_data      = 0xdeadbeef;
+    uint64_t test_ib_hdr    = 0xbeef;
+    recv_desc_t *recv_buffer;
+    ucs_status_t status;
+
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+
+    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
+    recv_buffer->length = 0; /* Initialize length to 0 */
+
+    /* set a callback for the uct to invoke for receiving the data */
+    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler, recv_buffer, 0);
+
+    /* send the data */
+    status = uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr,
+                             &send_data, sizeof(send_data));
+    EXPECT_TRUE((status == UCS_OK) || (status == UCS_INPROGRESS));
+
+    flush();
+    wait_for_value(&test_uct_ib::m_ib_am_handler_counter,
+                   start_am_counter + 1, true);
+
+    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
+    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
+
+    free(recv_buffer);
+}
+
+size_t test_uct_ib::m_ib_am_handler_counter = 0;
+
+class test_uct_ib_addr : public test_uct_ib {
+public:
+    void test_address_pack(uint64_t subnet_prefix) {
+        uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+        static const uint16_t lid_in = 0x1ee7;
+        union ibv_gid gid_in, gid_out;
+        uct_ib_address_t *ib_addr;
+        uint16_t lid_out;
+
+        ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(iface));
+
+        gid_in.global.subnet_prefix = subnet_prefix;
+        gid_in.global.interface_id  = 0xdeadbeef;
+        uct_ib_address_pack(iface, &gid_in, lid_in, ib_addr);
+
+        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
+
+        if (uct_ib_iface_is_roce(iface)) {
+            EXPECT_TRUE(iface->is_global_addr);
+        } else {
+            EXPECT_EQ(lid_in, lid_out);
+        }
+
+        if (iface->is_global_addr) {
+            EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
+            EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
+        }
+
+        free(ib_addr);
+    }
+};
+
+UCS_TEST_P(test_uct_ib_addr, address_pack) {
+    test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_address_pack(0xdeadfeedbeefa880ul);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_addr);
+
+
+test_uct_ib_with_specific_port::test_uct_ib_with_specific_port() {
     m_ibctx    = NULL;
     m_port     = 0;
     m_dev_name = "";
@@ -18,7 +121,7 @@ test_uct_ib::test_uct_ib() : uct_test() {
     memset(&m_port_attr, 0, sizeof(m_port_attr));
 }
 
-void test_uct_ib::init() {
+void test_uct_ib_with_specific_port::init() {
     size_t colon_pos = GetParam()->dev_name.find(":");
     std::string port_num_str;
 
@@ -67,182 +170,104 @@ void test_uct_ib::init() {
                        "on device: " << m_dev_name);
     }
 
-    uct_test::init();
-
-    m_e1 = uct_test::create_entity(0);
-    m_entities.push_back(m_e1);
-
-    m_e2 = uct_test::create_entity(0);
-    m_entities.push_back(m_e2);
-
-    m_e1->connect(0, *m_e2, 0);
-    m_e2->connect(0, *m_e1, 0);
-
-    test_uct_ib::m_ib_am_handler_counter = 0;
+    try {
+        check_port_attr();
+    } catch (...) {
+        test_uct_ib_with_specific_port::cleanup();
+        throw;
+    }
 }
 
-void test_uct_ib::cleanup() {
+void test_uct_ib_with_specific_port::cleanup() {
     if (m_ibctx != NULL) {
         ibv_close_device(m_ibctx);
         m_ibctx = NULL;
     }
-
-    uct_test::cleanup();
 }
 
-ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data,
-                                        size_t length, unsigned flags) {
-    recv_desc_t *my_desc  = (recv_desc_t *) arg;
-    uint64_t *test_ib_hdr = (uint64_t *) data;
-    uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
-    unsigned data_length  = length - sizeof(test_ib_hdr);
-
-    my_desc->length = data_length;
-    if (*test_ib_hdr == 0xbeef) {
-        memcpy(my_desc + 1, actual_data , data_length);
+class test_uct_ib_lmc : public test_uct_ib_with_specific_port {
+public:
+    void init() {
+        test_uct_ib_with_specific_port::init();
+        test_uct_ib::init();
     }
-    ++test_uct_ib::m_ib_am_handler_counter;
-    return UCS_OK;
+
+    void cleanup() {
+        test_uct_ib::cleanup();
+        test_uct_ib_with_specific_port::cleanup();
+    }
+
+    void check_port_attr() {
+        /* check if a non zero lmc is set on the port */
+        if (!m_port_attr.lmc) {
+            UCS_TEST_SKIP_R("lmc is set to zero on an IB port");
+        }
+    }
+};
+
+UCS_TEST_P(test_uct_ib_lmc, non_default_lmc, "IB_LID_PATH_BITS=1") {
+    send_recv_short();
 }
 
-bool test_uct_ib::test_eth_port() {
-    bool have_valid_gid_idx = false;
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_lmc);
 
-    if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
-        return have_valid_gid_idx;
+class test_uct_ib_gid_idx : public test_uct_ib_with_specific_port {
+public:
+    void init() {
+        test_uct_ib_with_specific_port::init();
+        test_uct_ib::init();
     }
+
+    void cleanup() {
+        test_uct_ib::cleanup();
+        test_uct_ib_with_specific_port::cleanup();
+    }
+
+    void check_port_attr() {
+        /* check if the provided gid index can be used on the port. */
+        if (!test_eth_port()) {
+            UCS_TEST_SKIP_R("the configured gid index cannot be used on the port");
+        }
+    }
+
+    bool test_eth_port() {
+        if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
+            return false;
+        }
    
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-    union ibv_gid gid;
-    uct_ib_md_config_t *md_config = ucs_derived_of(m_md_config, uct_ib_md_config_t);
-    uct_md_h uct_md;
-    uct_ib_md_t *ib_md;
-    ucs_status_t status;
-    uint8_t gid_index;
+        union ibv_gid gid;
+        uct_ib_md_config_t *md_config =
+            ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        uct_md_h uct_md;
+        uct_ib_md_t *ib_md;
+        ucs_status_t status;
+        uint8_t gid_index;
 
-    status = uct_ib_md_open(ibv_get_device_name(m_ibctx->device), m_md_config,
-                            &uct_md);
-    ASSERT_UCS_OK(status);
+        status = uct_ib_md_open(ibv_get_device_name(m_ibctx->device), m_md_config,
+                                &uct_md);
+        ASSERT_UCS_OK(status);
 
-    ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
-    status = uct_ib_device_select_gid_index(&ib_md->dev, m_port,
-                                            md_config->ext.gid_index,
-                                            &gid_index);
-    ASSERT_UCS_OK(status);
+        ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
+        status = uct_ib_device_select_gid_index(&ib_md->dev, m_port,
+                                                md_config->ext.gid_index,
+                                                &gid_index);
+        ASSERT_UCS_OK(status);
 
-    /* check the gid index */
-    if (ibv_query_gid(m_ibctx, m_port, gid_index, &gid) != 0) {
-        UCS_TEST_ABORT("Failed to query gid (index=" << gid_index << ")");
+        /* check the gid index */
+        if (ibv_query_gid(m_ibctx, m_port, gid_index, &gid) != 0) {
+            UCS_TEST_ABORT("Failed to query gid (index=" << gid_index << ")");
+        }
+
+        uct_ib_md_close(uct_md);
+        return uct_ib_device_is_gid_raw_empty(gid.raw);
     }
-    if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
-        have_valid_gid_idx = false;
-    } else {
-        have_valid_gid_idx = true;
-    }
+};
 
-    uct_ib_md_close(uct_md);
-#endif
-
-    return have_valid_gid_idx;
-}
-
-bool test_uct_ib::lmc_find() {
-    return (m_port_attr.lmc > 0);
-}
-
-void test_uct_ib::test_address_pack(uint64_t subnet_prefix) {
-    uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
-    static const uint16_t lid_in = 0x1ee7;
-    union ibv_gid gid_in, gid_out;
-    uct_ib_address_t *ib_addr;
-    uint16_t lid_out;
-
-    ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(iface));
-
-    gid_in.global.subnet_prefix = subnet_prefix;
-    gid_in.global.interface_id  = 0xdeadbeef;
-    uct_ib_address_pack(iface, &gid_in, lid_in, ib_addr);
-
-    uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
-
-    if (uct_ib_iface_is_roce(iface)) {
-        EXPECT_TRUE(iface->is_global_addr);
-    } else {
-        EXPECT_EQ(lid_in, lid_out);
-    }
-
-    if (iface->is_global_addr) {
-        EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
-        EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
-    }
-
-    free(ib_addr);
-}
-
-void test_uct_ib::send_recv_short() {
-    uint64_t send_data   = 0xdeadbeef;
-    uint64_t test_ib_hdr = 0xbeef;
-    recv_desc_t *recv_buffer;
-
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
-    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
-    recv_buffer->length = 0; /* Initialize length to 0 */
-
-    /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, 0);
-
-    /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
-
-    short_progress_loop(100.0);
-
-    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
-    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
-
-    free(recv_buffer);
-}
-
-uct_ib_device_t *test_uct_ib::ib_device(entity *entity) {
-    uct_ib_iface_t *iface = ucs_derived_of(entity->iface(), uct_ib_iface_t);
-    return uct_ib_iface_device(iface);
-}
-
-size_t test_uct_ib::m_ib_am_handler_counter = 0;
-
-UCS_TEST_P(test_uct_ib, non_default_lmc, "IB_LID_PATH_BITS=1")
-{
-    /* check if a non zero lmc is set on the port.
-     * skip this test if it isn't. */
-    if (!lmc_find()) {
-        UCS_TEST_SKIP_R("lmc is set to zero on an IB port");
-    }
-
+UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "GID_INDEX=1") {
     send_recv_short();
 }
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-UCS_TEST_P(test_uct_ib, non_default_gid_idx, "GID_INDEX=1")
-{
-    /* check if a non zero gid index can be used on the port.
-     * skip this test if it cannot. */
-    if (!test_eth_port()) {
-        UCS_TEST_SKIP_R("the configured gid index (1) cannot be used on the port");
-    }
-
-    send_recv_short();
-}
-#endif
-
-UCS_TEST_P(test_uct_ib, address_pack) {
-    test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
-    test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
-    test_address_pack(0xdeadfeedbeefa880ul);
-}
-
-
-UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
-
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
 
 class test_uct_ib_utils : public ucs::test {
 };
