@@ -61,13 +61,37 @@ static ucs_status_t uct_sockcm_iface_get_address(uct_iface_h tl_iface, uct_iface
 static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-    return UCS_OK;
+    ucs_status_t status   = UCS_OK;
+    int          *fd      = conn_request;
+    int          accept   = 0;
+    ssize_t      sent_len = -1;
+
+    /* Notify client of accept and close associated fd */
+    sent_len = send(*fd, (char *) &accept, sizeof(accept), 0);
+    ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
+
+    if (sent_len < 0) status = UCS_ERR_IO_ERROR;
+    close(*fd);
+
+    return status;
 }
 
 static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
-    return UCS_OK;
+    ucs_status_t status   = UCS_OK;
+    int          *fd      = conn_request;
+    int          reject = 1;
+    ssize_t      sent_len = -1;
+
+    /* Notify client of rejection and close associated fd */
+    sent_len = send(*fd, (char *) &reject, sizeof(reject), 0);
+    ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
+
+    if (sent_len < 0) status = UCS_ERR_IO_ERROR;
+    close(*fd);
+
+    return status;
 }
 
 static ucs_status_t uct_sockcm_ep_flush(uct_ep_h tl_ep, unsigned flags,
@@ -139,7 +163,7 @@ void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
 static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
                                              uct_sockcm_conn_param_t conn_param)
 {
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, NULL,
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, &conn_param.fd,
 			   conn_param.private_data, conn_param.private_data_len);
 }
 
@@ -154,7 +178,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     uct_sockcm_conn_param_t conn_param;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    /* accept client connection */
+    /* accept initial client connection; iface accept/reject happens later */
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
@@ -178,6 +202,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
 
     if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
+        conn_param.fd = accept_fd;
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     }
 }

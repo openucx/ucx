@@ -51,7 +51,10 @@ ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_e
 {
     uct_sockcm_conn_param_t conn_param;
     uct_sockcm_priv_data_hdr_t *hdr;
+    ucs_status_t status;
+    int conn_status;
     ssize_t sent_len = 0;
+    ssize_t recv_len = 0;
 
     memset(&conn_param.private_data, 0, UCT_SOCKCM_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
@@ -72,9 +75,16 @@ ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_e
                     conn_param.private_data_len, 0);
     ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
+    /* recv to see if listener accepted or not */
+    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &conn_status,
+                    sizeof(conn_status), 0);
+    ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
+
+    status = conn_status ? UCS_ERR_REJECTED : UCS_OK;
+
     pthread_mutex_lock(&ep->ops_mutex);
-    ep->status = UCS_OK;
-    uct_sockcm_ep_invoke_completions(ep, UCS_OK);
+    ep->status = status;
+    uct_sockcm_ep_invoke_completions(ep, status);
     pthread_mutex_unlock(&ep->ops_mutex);
 
     return UCS_OK;
