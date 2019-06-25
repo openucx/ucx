@@ -52,8 +52,6 @@ ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_e
     uct_sockcm_conn_param_t conn_param;
     uct_sockcm_priv_data_hdr_t *hdr;
     ssize_t sent_len = 0;
-    ssize_t recv_len = 0;
-    int connect_confirm = -1;
 
     memset(&conn_param.private_data, 0, UCT_SOCKCM_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
@@ -67,15 +65,12 @@ ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_e
                   iface, ep, ucs_status_string(hdr->length));
         return UCS_ERR_IO_ERROR;
     }
+    ucs_assert(hdr->length + sizeof(int) <= UCT_SOCKCM_PRIV_DATA_LEN);
     conn_param.private_data_len = sizeof(uct_sockcm_conn_param_t);
-
-    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &connect_confirm,
-                    sizeof(int), 0);
-    ucs_debug("recv len = %d connect confirm = %d", (int) recv_len, connect_confirm);
 
     sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param,
                     conn_param.private_data_len, 0);
-    ucs_debug("send_len = %d bytes %m", (int) sent_len);
+    ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
     pthread_mutex_lock(&ep->ops_mutex);
     ep->status = UCS_OK;
