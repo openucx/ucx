@@ -123,21 +123,16 @@ static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
 
     dup = ucs_malloc(sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
                      "ucs_stats_class_t");
-    if (dup == NULL) {
-        ucs_error("failed to allocate statistics class");
-    }
+    ucs_assertv_always(dup != NULL, "failed to allocate statistics class");
 
     dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
-    if (dup->name == NULL) {
-        ucs_error("failed to copy statistics class name");
-    }
+    ucs_assertv_always(dup->name != NULL, "failed to copy statistics class name");
 
     for (dup->num_counters = 0; dup->num_counters < cls->num_counters; dup->num_counters++) {
         dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
                                                            "ucs_stats_class_t counter");
-        if (dup->counter_names[dup->num_counters] == NULL) {
-            ucs_error("failed to copy statistics counter name");
-        }
+        ucs_assertv_always(dup->counter_names[dup->num_counters] != NULL,
+                           "failed to copy statistics counter name");
     }
 
     return dup;
