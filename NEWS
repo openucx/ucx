@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.6.0-rc3 (June 19, 2019)
+## 1.6.0-rc4 (June 27, 2019)
 Features:
 - Modular architecture for UCT transports
 - ROCm transport re-design: support for managed memory, direct copy, ROCm GDR
@@ -35,6 +35,11 @@ Bugfixes:
 - Fallback to ibv_create_cq() if ibv_create_cq_ex() returns ENOSYS
 - Fix malloc hooks test
 - Fix checking return status in ucp_client_server example
+- Fix gdrcopy libdir config value
+- Fix printing atomic capabilities in ucx_info
+- Fix perftest warmup iterations to be non-zero
+- Fixing default values for configure logic
+- Fix race condition updating fired_events from multiple threads
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
