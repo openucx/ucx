@@ -22,11 +22,9 @@ typedef struct uct_sockcm_iface_config {
 struct uct_sockcm_iface {
     uct_base_iface_t                     super;
 
-    int                                  sock_id;
     int                                  listen_fd;
 
     uint8_t                              is_server;
-    struct sockaddr                      *sockaddr;
     /* Fields used only for server side */
     void                                 *conn_request_arg;
     uct_sockaddr_conn_request_callback_t conn_request_cb;
