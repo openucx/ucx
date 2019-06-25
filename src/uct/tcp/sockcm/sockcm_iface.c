@@ -222,7 +222,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_warn("sockcm does not support SIGIO");
     }
 
-    self->sock_id = -1;
     self->listen_fd = -1;
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
@@ -274,10 +273,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
-        self->sockaddr         = param_sockaddr;
         self->is_server        = 1;
     } else {
-        self->sock_id          = -1;
         self->is_server        = 0;
     }
 

@@ -26,7 +26,6 @@ typedef struct uct_sockcm_ep      uct_sockcm_ep_t;
 
 typedef struct uct_sockcm_priv_data_hdr {
     ssize_t length;
-    int8_t  status;
 } uct_sockcm_priv_data_hdr_t;
 
 typedef struct uct_sockcm_conn_param {
