@@ -138,6 +138,19 @@ static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
     return dup;
 }
 
+static void ucs_stats_free_class(ucs_stats_class_t *cls)
+{
+    unsigned i;
+
+    for (i = 0; i < cls->num_counters; i++) {
+        ucs_free((void*)cls->counter_names[i]);
+    }
+
+    ucs_free((void*)cls->name);
+
+    free(cls);
+}
+
 static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
 {
     ucs_stats_class_t *dup;
@@ -640,15 +653,22 @@ void ucs_stats_init()
 
 void ucs_stats_cleanup()
 {
+    ucs_stats_class_t *cls;
+
     if (!ucs_stats_is_active()) {
         return;
     }
 
-    kh_destroy_inplace(ucs_stats_cls, &ucs_stats_context.cls);
     ucs_stats_unset_trigger();
     ucs_stats_clean_node_recurs(&ucs_stats_context.root_node);
     ucs_stats_close_dest();
     ucs_assert(ucs_stats_context.flags == 0);
+
+    kh_foreach_value(&ucs_stats_context.cls, cls, {
+        ucs_stats_free_class(cls);
+    });
+
+    kh_destroy_inplace(ucs_stats_cls, &ucs_stats_context.cls);
 }
 
 void ucs_stats_dump()
