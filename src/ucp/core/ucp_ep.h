@@ -15,7 +15,6 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/stats/stats.h>
 #include <ucs/datastruct/strided_alloc.h>
-#include <ucp/api/ucpx.h>
 
 #define UCP_MAX_IOV                16UL
 
