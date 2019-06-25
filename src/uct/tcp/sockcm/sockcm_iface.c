@@ -29,7 +29,7 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
     uct_sockcm_iface_t  *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
-    uint16_t port;
+    struct sockaddr_in sin;
 
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
@@ -41,11 +41,9 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
     iface_attr->max_conn_priv   = UCT_SOCKCM_MAX_CONN_PRIV;
 
     if (iface->is_server) {
-        if (UCS_OK != ucs_sockaddr_get_port(iface->sockaddr, &port)) {
-            ucs_error("ucs_sockaddr_get_port() failed");
-            return UCS_ERR_IO_ERROR;
-        }
-        iface_attr->listen_port = (int) ntohs(port);
+        socklen_t len = sizeof(sin);
+        getsockname(iface->listen_fd, (struct sockaddr *)&sin, &len);
+        iface_attr->listen_port = ntohs(sin.sin_port);
     }
 
     return UCS_OK;
@@ -221,7 +219,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_warn("sockcm does not support SIGIO");
     }
 
-    self->sock_id = -1;
     self->listen_fd = -1;
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
@@ -273,10 +270,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
-        self->sockaddr         = param_sockaddr;
         self->is_server        = 1;
     } else {
-        self->sock_id          = -1;
         self->is_server        = 0;
     }
 
