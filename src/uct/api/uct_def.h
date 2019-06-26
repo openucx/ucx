@@ -91,7 +91,6 @@ typedef struct uct_iface_addr      uct_iface_addr_t;
 typedef struct uct_ep_addr         uct_ep_addr_t;
 typedef struct uct_ep_params       uct_ep_params_t;
 typedef struct uct_cm_attr         uct_cm_attr_t;
-typedef struct uct_cm_params       uct_cm_params_t;
 typedef struct uct_cm              uct_cm_t;
 typedef uct_cm_t                   *uct_cm_h;
 typedef struct uct_listener        *uct_listener_h;
@@ -192,7 +191,7 @@ typedef struct uct_cm_remote_data {
     size_t                  dev_addr_length;
 
     /**
-     * Points to the received data. This is the private data that was passed to
+     * Pointer to the received data. This is the private data that was passed to
      * @ref uct_ep_params_t::sockaddr_pack_cb.
      */
     const void              *conn_priv_data;
@@ -492,7 +491,7 @@ typedef void (*uct_ep_disconnect_cb_t)(uct_ep_h ep, void *arg);
  * @param [out] priv_data  User's private data to be passed to the remote side.
  *
  * @return Negative value indicates an error according to @ref ucs_status_t.
- *         On success, non-negative value indicates actual number of
+ *         On success, a non-negative value indicates actual number of
  *         bytes written to the @a priv_data buffer.
  */
 typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,

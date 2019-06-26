@@ -593,23 +593,6 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief UCT connection manager created by @ref uct_cm_open parameters field
- *        mask.
- *
- * The enumeration allows specifying which fields in @ref uct_cm_params_t are
- * present, for backward compatibility support.
- */
-enum uct_cm_params_field {
-    /** Enables @ref uct_cm_params::component */
-    UCT_CM_PARAM_FIELD_COMPONENT = UCS_BIT(0),
-
-    /** Enables @ref uct_cm_params::worker */
-    UCT_CM_PARAM_FIELD_WORKER    = UCS_BIT(1)
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief UCT connection manager attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_cm_attr_t are
@@ -964,7 +947,7 @@ struct uct_ep_params {
     uct_cm_h                          cm;
 
     /**
-     * Connection request what was passed to
+     * Connection request that was passed to
      * @ref uct_listener_conn_request_callback_t .
      */
     uct_conn_request_h                conn_request;
@@ -1012,31 +995,6 @@ struct uct_cm_attr {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Parameters for creating a connection manager object @ref uct_cm_h by
- * @ref uct_cm_open
- */
-struct uct_cm_params {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_cm_params_field. Fields not specified by this mask
-     * will be ignored.
-     */
-    uint64_t                          field_mask;
-
-    /**
-     * UCT component, mandatory field.
-     */
-    uct_component_h                   component;
-
-    /**
-     * UCT worker, mandatory field.
-     */
-    uct_worker_h                      worker;
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Parameters for creating a listener object @ref uct_listener_h by
  * @ref uct_listener_create
  */
@@ -1044,12 +1002,12 @@ struct uct_listener_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_listener_params_field. Fields not specified by this mask
-     * would be ignored.
+     * will be ignored.
      */
     uint64_t                             field_mask;
 
     /**
-     * Connection manager, mandatory field.
+     * Connection manager, a mandatory field.
      */
     uct_cm_h                             cm;
 
@@ -1770,9 +1728,9 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  *        sockaddr by a connection manager @ref uct_cm_h.
  *
  * This routine will disconnect the given endpoint from its remote peer.
- * The remote side, should also call this routine when handling the initiator's
+ * The remote side should also call this routine when handling the initiator's
  * disconnect.
- * After a call to this function, the given endpoint should not be used for
+ * After a call to this function, the given endpoint may not be used for
  * communications anymore.
  * @ref uct_ep_destroy should be called on this endpoint after invoking this
  * routine and @ref uct_ep_params::disconnect_cb was called.
@@ -2912,14 +2870,14 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER and
  *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT .
  *
- * @param [in]  params      Connection management parameters, as defined by
- *                          @ref uct_cm_params_t
- * @param [out] cm_p        Filled with a handle to the connection
- *                          manager.
+ * @param [in]  component   Component on which to open the connection manager,
+ *                          as returned from @ref uct_query_components.
+ * @param [in]  worker      Worker on which to open the connection manager.
+ * @param [out] cm_p        Filled with a handle to the connection manager.
  *
  * @return Error code.
  */
-ucs_status_t uct_cm_open(const uct_cm_params_t *params, uct_cm_h *cm_p);
+ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker, uct_cm_h *cm_p);
 
 
 /**
