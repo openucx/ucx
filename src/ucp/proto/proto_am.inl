@@ -305,11 +305,10 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 if (status == UCS_OK) {
                     complete(req, UCS_OK);
                     return UCS_OK;
-                }
-                ucp_request_send_state_advance(req, &state,
-                                               UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
-                                               status);
-                if (!UCS_STATUS_IS_ERR(status)) {
+                } else if (status == UCS_INPROGRESS) {
+                    ucp_request_send_state_advance(req, &state,
+                                                   UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                                   UCS_INPROGRESS);
                     return UCS_OK;
                 }
             }
