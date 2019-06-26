@@ -25,18 +25,24 @@ public:
 
     test_uct_ib();
     void init();
-    void cleanup();
+    void create_connected_entities();
     static ucs_status_t ib_am_handler(void *arg, void *data,
                                       size_t length, unsigned flags);
-    bool test_eth_port();
-    bool lmc_find();
-    void test_address_pack(uint64_t subnet_prefix);
-    void send_recv_short();
-    uct_ib_device_t *ib_device(entity *entity);
+    virtual void send_recv_short();
 
 protected:
     entity *m_e1, *m_e2;
     static size_t m_ib_am_handler_counter;
+};
+
+class test_uct_ib_with_specific_port : public test_uct_ib {
+public:
+    test_uct_ib_with_specific_port();
+    void init();
+    void cleanup();
+    virtual void check_port_attr() = 0;
+
+protected:
     std::string m_dev_name;
     unsigned m_port;
     struct ibv_context *m_ibctx;
