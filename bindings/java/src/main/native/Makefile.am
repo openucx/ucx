@@ -5,7 +5,8 @@
 
 topdir=$(abs_top_builddir)
 javadir=$(top_srcdir)/bindings/java
-MVNCMD=$(MVN) -B -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(topdir)/.deps
+MVNCMD=$(MVN) -B -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(topdir)/.deps \
+              -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
                 org_ucx_jucx_ucp_UcpContext.h \
