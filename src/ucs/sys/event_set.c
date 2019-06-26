@@ -27,7 +27,6 @@ const unsigned ucs_sys_event_set_max_events =
 
 struct ucs_sys_event_set {
     int epfd;
-    unsigned max_events;
 };
 
 
@@ -76,9 +75,6 @@ ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p)
         status = UCS_ERR_IO_ERROR;
         goto err_free;
     }
-
-    event_set->max_events = ceil(UCS_ALLOCA_MAX_SIZE /
-                                 sizeof(struct epoll_event));
 
     *event_set_p = event_set;
     return UCS_OK;
