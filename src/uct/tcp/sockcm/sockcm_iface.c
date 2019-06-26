@@ -187,7 +187,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
         }
     }
 
-    ucs_debug("tcp_iface %p: accepted connection from %s at fd %d %m", iface,
+    ucs_debug("sockcm_iface %p: accepted connection from %s at fd %d %m", iface,
               ucs_sockaddr_str(&peer_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN), accept_fd);
 
@@ -326,6 +326,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
     while (!ucs_list_is_empty(&self->used_sock_ids_list)) {
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_sockcm_ctx_t, list);
+        ucs_async_remove_handler(sock_id_ctx->sock_id, 1);
         close(sock_id_ctx->sock_id);
         ucs_free(sock_id_ctx);
     }
