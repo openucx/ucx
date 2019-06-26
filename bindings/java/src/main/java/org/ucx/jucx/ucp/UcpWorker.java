@@ -111,7 +111,17 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         if (!recvBuffer.isDirect()) {
             throw new UcxException("Recv buffer must be direct.");
         }
-        return recvTaggedNonBlockingNative(getNativeId(), recvBuffer, tag, tagMask, callback);
+        return recvTaggedNonBlockingNative(getNativeId(), recvBuffer, 0L,
+            recvBuffer.capacity(), tag, tagMask, callback);
+    }
+
+    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, long offset, long size,
+                                            long tag, long tagMask, UcxCallback callback) {
+        if (!recvBuffer.isDirect()) {
+            throw new UcxException("Recv buffer must be direct.");
+        }
+        return recvTaggedNonBlockingNative(getNativeId(), recvBuffer, offset, size, tag, tagMask,
+            callback);
     }
 
     /**
@@ -157,6 +167,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void signalWorkerNative(long workerId);
 
     private static native UcxRequest recvTaggedNonBlockingNative(long workerId, ByteBuffer recvBuf,
+                                                                 long offset, long size,
                                                                  long tag, long tagMask,
                                                                  UcxCallback callback);
 }

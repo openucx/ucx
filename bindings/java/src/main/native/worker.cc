@@ -132,16 +132,15 @@ Java_org_ucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, jlon
 JNIEXPORT jobject JNICALL
 Java_org_ucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jclass cls,
                                                       jlong ucp_worker_ptr, jobject recv_buf,
+                                                      jlong offset, jlong size,
                                                       jlong tag, jlong tagMask, jobject callback)
 {
-    size_t recv_msg_size = env->GetDirectBufferCapacity(recv_buf);
     ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
-                                                env->GetDirectBufferAddress(recv_buf),
-                                                recv_msg_size,
-                                                ucp_dt_make_contig(1), tag, tagMask,
+                                                (uint8_t *)env->GetDirectBufferAddress(recv_buf) + offset,
+                                                size, ucp_dt_make_contig(1), tag, tagMask,
                                                 recv_callback);
 
-    ucs_trace_req("JUCX: recv_nb request %p, msg size: %zu, tag: %ld", request, recv_msg_size, tag);
+    ucs_trace_req("JUCX: recv_nb request %p, msg size: %zu, tag: %ld", request, size, tag);
 
     return process_request(request, callback);
 }

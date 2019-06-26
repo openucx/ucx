@@ -31,7 +31,11 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      *                     (see {@link UcpMemory#getRemoteKeyBuffer()}).
      */
     public UcpRemoteKey unpackRemoteKey(ByteBuffer rkeyBuffer) {
-        return unpackRemoteKey(getNativeId(), rkeyBuffer);
+        return unpackRemoteKey(getNativeId(), rkeyBuffer, 0L);
+    }
+
+    public UcpRemoteKey unpackRemoteKey(ByteBuffer rkeyBuffer, long offset) {
+        return unpackRemoteKey(getNativeId(), rkeyBuffer, offset);
     }
 
     private void checkRemoteAccessParams(ByteBuffer buf, UcpRemoteKey remoteKey) {
@@ -40,6 +44,12 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         }
         if (remoteKey.getNativeId() == null) {
             throw new UcxException("Remote key is null.");
+        }
+    }
+
+    public void checkBufferOffsetAndSize(ByteBuffer buf, long offset, long size) {
+        if (offset + size > buf.capacity()) {
+            throw new UcxException("Offset + size must be < " + buf.capacity());
         }
     }
 
@@ -57,8 +67,19 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
         checkRemoteAccessParams(src, remoteKey);
 
-        return putNonBlockingNative(getNativeId(), src, remoteAddress,
-            remoteKey.getNativeId(), callback);
+        return putNonBlockingNative(getNativeId(), src, 0L, src.capacity(),
+            remoteAddress, remoteKey.getNativeId(), callback);
+    }
+
+    public UcxRequest putNonBlocking(ByteBuffer src, long offset, long size,
+                                     long remoteAddress, UcpRemoteKey remoteKey,
+                                     UcxCallback callback) {
+
+        checkRemoteAccessParams(src, remoteKey);
+        checkBufferOffsetAndSize(src, offset, size);
+
+        return putNonBlockingNative(getNativeId(), src, offset, size,
+            remoteAddress, remoteKey.getNativeId(), callback);
     }
 
     /**
@@ -76,7 +97,17 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         checkRemoteAccessParams(dst, remoteKey);
 
         return getNonBlockingNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
-            dst, callback);
+            dst, 0L, dst.capacity(), callback);
+    }
+
+    public UcxRequest getNonBlocking(long remoteAddress, UcpRemoteKey remoteKey,
+                                     ByteBuffer dst, long offset, long size, UcxCallback callback) {
+
+        checkRemoteAccessParams(dst, remoteKey);
+        checkBufferOffsetAndSize(dst, offset, size);
+
+        return getNonBlockingNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
+            dst, offset, size, callback);
     }
 
     /**
@@ -94,7 +125,18 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         if (!sendBuffer.isDirect()) {
             throw new UcxException("Send buffer must be direct.");
         }
-        return sendTaggedNonBlockingNative(getNativeId(), sendBuffer, tag, callback);
+        return sendTaggedNonBlockingNative(getNativeId(), sendBuffer, 0L,
+            sendBuffer.capacity(), tag, callback);
+    }
+
+    public UcxRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, long offset, long size,
+                                            long tag, UcxCallback callback) {
+        if (!sendBuffer.isDirect()) {
+            throw new UcxException("Send buffer must be direct.");
+        }
+        checkBufferOffsetAndSize(sendBuffer, offset, size);
+
+        return sendTaggedNonBlockingNative(getNativeId(), sendBuffer, offset, size, tag, callback);
     }
 
     /**
@@ -109,16 +151,19 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     private static native void destroyEndpointNative(long epId);
 
-    private static native UcpRemoteKey unpackRemoteKey(long epId, ByteBuffer rkeyBuffer);
+    private static native UcpRemoteKey unpackRemoteKey(long epId, ByteBuffer rkeyBuffer, long offset);
 
     private static native UcxRequest putNonBlockingNative(long enpointId, ByteBuffer src,
+                                                          long offset, long size,
                                                           long remoteAddr, long ucpRkeyId,
                                                           UcxCallback callback);
 
     private static native UcxRequest getNonBlockingNative(long enpointId, long remoteAddress,
                                                           long ucpRkeyId, ByteBuffer localData,
+                                                          long offset, long size,
                                                           UcxCallback callback);
 
     private static native UcxRequest sendTaggedNonBlockingNative(long enpointId, ByteBuffer sendBuf,
+                                                                 long offset, long size,
                                                                  long tag, UcxCallback callback);
 }

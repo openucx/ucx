@@ -40,11 +40,11 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         long remoteAddress = recvBuffer.getLong();
         long remoteSize = recvBuffer.getInt();
         int remoteKeySize = recvBuffer.getInt();
-        ByteBuffer rkey = ByteBuffer.allocateDirect(remoteKeySize);
-        copyBuffer(recvBuffer, rkey, remoteKeySize);
+        int rkeyBufferOffset = 16;
 
-        int workerAdressSize = recvBuffer.getInt();
+        int workerAdressSize = recvBuffer.getInt(rkeyBufferOffset + remoteKeySize);
         ByteBuffer workerAddress = ByteBuffer.allocateDirect(workerAdressSize);
+        recvBuffer.position(rkeyBufferOffset + remoteKeySize + 4);
         copyBuffer(recvBuffer, workerAddress, workerAdressSize);
 
         int remoteHashCode = recvBuffer.getInt();
@@ -54,7 +54,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         UcpEndpoint endpoint = worker.newEndpoint(
             new UcpEndpointParams().setUcpAddress(workerAddress).setPeerErrorHadnlingMode());
 
-        UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(rkey);
+        UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(recvBuffer, rkeyBufferOffset);
         resources.push(remoteKey);
 
         ByteBuffer data = ByteBuffer.allocateDirect((int)remoteSize);

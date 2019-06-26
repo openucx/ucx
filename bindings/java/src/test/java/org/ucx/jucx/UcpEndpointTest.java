@@ -240,4 +240,50 @@ public class UcpEndpointTest {
         context1.close();
         context2.close();
     }
+
+    @Test
+    public void testOffsetSize() {
+        int msgSize = 200;
+        int offset = 100;
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestTagFeature();
+        UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+        UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
+        UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        ByteBuffer bigRecvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer bigSendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+
+        UcxRequest recv = worker1.recvTaggedNonBlocking(bigRecvBuffer, offset, msgSize, 0,
+            0,null);
+
+        UcpEndpoint ep = worker2.newEndpoint(new UcpEndpointParams()
+            .setUcpAddress(worker1.getAddress()));
+
+        byte[] msg = new byte[msgSize];
+        for (int i = 0; i < msgSize; i++) {
+            msg[i] = (byte)i;
+        }
+
+        bigSendBuffer.position(offset);
+        bigSendBuffer.put(msg);
+        UcxRequest send = ep.sendTaggedNonBlocking(bigSendBuffer, offset, msgSize, 0,
+            null);
+
+        while (!send.isCompleted() || !recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        bigSendBuffer.clear();
+        assertEquals("Send buffer not equals to recv buffer", bigRecvBuffer, bigSendBuffer);
+
+        ep.close();
+        worker1.close();
+        worker2.close();
+        context1.close();
+        context2.close();
+    }
 }
