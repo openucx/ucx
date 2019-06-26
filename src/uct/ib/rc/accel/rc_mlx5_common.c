@@ -161,8 +161,8 @@ static struct ibv_qp *
 uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
 #if HAVE_STRUCT_MLX5_SRQ_CMD_QP
-    iface->tm.cmd_qp.super.super.type = UCT_IB_MLX5_QP_TYPE_VERBS;
-    iface->tm.cmd_qp.super.super.verbs.qp = NULL;
+    iface->tm.cmd_wq.super.super.verbs.qp = NULL;
+    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_VERBS;
     return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
 #else
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
@@ -177,7 +177,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     port_num  = ibdev->first_port;
     port_attr = uct_ib_device_port_attr(ibdev, port_num);
 
-    iface->tm.cmd_qp.super.super.type = UCT_IB_MLX5_QP_TYPE_VERBS;
+    iface->tm.cmd_wq.super.super.type = UCT_IB_MLX5_QP_TYPE_VERBS;
 
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.send_cq             = iface->super.super.cq[UCT_IB_DIR_RX];
@@ -230,7 +230,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
         goto err_destroy_qp;
     }
 
-    iface->tm.cmd_qp.super.super.verbs.qp = qp;
+    iface->tm.cmd_wq.super.super.verbs.qp = qp;
     return qp;
 
 err_destroy_qp:
@@ -262,18 +262,18 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                    iface->tx.mmio_mode,
-                                   &iface->tm.cmd_qp.super, cmd_qp);
+                                   &iface->tm.cmd_wq.super, cmd_qp);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
     }
 
-    iface->tm.cmd_qp.super.super.qp_num = cmd_qp->qp_num;
-    iface->tm.cmd_qp.ops_mask = iface->tm.cmd_qp_len - 1;
-    iface->tm.cmd_qp.ops_head = iface->tm.cmd_qp.ops_tail = 0;
-    iface->tm.cmd_qp.ops      = ucs_calloc(iface->tm.cmd_qp_len,
+    iface->tm.cmd_wq.super.super.qp_num = cmd_qp->qp_num;
+    iface->tm.cmd_wq.ops_mask = iface->tm.cmd_qp_len - 1;
+    iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
+    iface->tm.cmd_wq.ops      = ucs_calloc(iface->tm.cmd_qp_len,
                                            sizeof(uct_rc_mlx5_srq_op_t),
                                            "srq tag ops");
-    if (iface->tm.cmd_qp.ops == NULL) {
+    if (iface->tm.cmd_wq.ops == NULL) {
         ucs_error("Failed to allocate memory for srq tm ops array");
         status = UCS_ERR_NO_MEMORY;
         goto err_tag_cleanup;
@@ -284,7 +284,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     if (iface->tm.list == NULL) {
         ucs_error("Failed to allocate memory for tag matching list");
         status = UCS_ERR_NO_MEMORY;
-        goto err_cmd_qp_free;
+        goto err_cmd_wq_free;
     }
 
     for (i = 0; i < iface->tm.num_tags; ++i) {
@@ -298,13 +298,13 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
                                   iface->stats);
     if (status != UCS_OK) {
         ucs_error("Failed to allocate tag stats: %s", ucs_status_string(status));
-        goto err_cmd_qp_free;
+        goto err_cmd_wq_free;
     }
 
     return UCS_OK;
 
-err_cmd_qp_free:
-    ucs_free(iface->tm.cmd_qp.ops);
+err_cmd_wq_free:
+    ucs_free(iface->tm.cmd_wq.ops);
 err_tag_cleanup:
     uct_rc_mlx5_tag_cleanup(iface);
 #endif
@@ -315,12 +315,12 @@ err_tag_cleanup:
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        if (iface->tm.cmd_qp.super.super.verbs.qp) {
-            uct_ib_destroy_qp(iface->tm.cmd_qp.super.super.verbs.qp);
+        if (iface->tm.cmd_wq.super.super.verbs.qp) {
+            uct_ib_destroy_qp(iface->tm.cmd_wq.super.super.verbs.qp);
         }
-        uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_qp.super);
+        uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
-        ucs_free(iface->tm.cmd_qp.ops);
+        ucs_free(iface->tm.cmd_wq.ops);
         uct_rc_mlx5_tag_cleanup(iface);
     }
 }

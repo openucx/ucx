@@ -155,14 +155,14 @@ typedef struct uct_rc_mlx5_srq_op {
 
 
 /* Command QP work-queue. All tag matching list operations are posted on it. */
-typedef struct uct_rc_mlx5_cmd_qp {
+typedef struct uct_rc_mlx5_cmd_wq {
     uct_ib_mlx5_txwq_t            super;
     uct_rc_mlx5_srq_op_t          *ops;     /* array of operations on command QP */
     int                           ops_head; /* points to the next operation to be completed */
     int                           ops_tail; /* points to the last adde operation*/
     int                           ops_mask; /* mask which bounds head and tail by
                                                ops array size */
-} uct_rc_mlx5_cmd_qp_t;
+} uct_rc_mlx5_cmd_wq_t;
 
 #if IBV_HW_TM
 #  define UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
@@ -245,7 +245,7 @@ typedef struct uct_rc_mlx5_iface_common {
     } rx;
     uct_ib_mlx5_cq_t                 cq[UCT_IB_DIR_NUM];
     struct {
-        uct_rc_mlx5_cmd_qp_t         cmd_qp;
+        uct_rc_mlx5_cmd_wq_t         cmd_wq;
         uct_rc_mlx5_tag_entry_t      *head;
         uct_rc_mlx5_tag_entry_t      *tail;
         uct_rc_mlx5_tag_entry_t      *list;
