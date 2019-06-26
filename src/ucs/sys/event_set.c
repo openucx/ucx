@@ -22,7 +22,7 @@
 
 
 const unsigned ucs_sys_event_set_max_events =
-    ucs_static_floor(UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event));
+    UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event);
 
 
 struct ucs_sys_event_set {
