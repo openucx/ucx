@@ -259,7 +259,7 @@ public:
         }
 
         uct_ib_md_close(uct_md);
-        return uct_ib_device_is_gid_raw_empty(gid.raw);
+        return !uct_ib_device_is_gid_raw_empty(gid.raw);
     }
 };
 
