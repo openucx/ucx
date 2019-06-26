@@ -23,16 +23,16 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
 
     ep->sock_id_ctx = ucs_malloc(sizeof(*ep->sock_id_ctx), "client sock_id_ctx");
     if (ep->sock_id_ctx == NULL) {
-	status = UCS_ERR_NO_MEMORY;
-	goto out;
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     dest_addr = (struct sockaddr *) &(ep->remote_addr);
 
     status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
-			       &ep->sock_id_ctx->sock_id);
+                               &ep->sock_id_ctx->sock_id);
     if (status != UCS_OK) {
-	goto out_free;
+        goto out_free;
     }
 
     ucs_list_add_tail(&iface->used_sock_ids_list, &ep->sock_id_ctx->list);
@@ -47,14 +47,11 @@ out:
     return status;
 }
 
-ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
+ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
 {
     uct_sockcm_conn_param_t conn_param;
     uct_sockcm_priv_data_hdr_t *hdr;
-    ucs_status_t status;
-    int conn_status;
     ssize_t sent_len = 0;
-    ssize_t recv_len = 0;
 
     memset(&conn_param.private_data, 0, UCT_SOCKCM_PRIV_DATA_LEN);
     hdr = &conn_param.hdr;
@@ -75,18 +72,6 @@ ucs_status_t uct_sockcm_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_e
                     conn_param.private_data_len, 0);
     ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
-    /* recv to see if listener accepted or not */
-    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &conn_status,
-                    sizeof(conn_status), 0);
-    ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
-
-    status = conn_status ? UCS_ERR_REJECTED : UCS_OK;
-
-    pthread_mutex_lock(&ep->ops_mutex);
-    ep->status = status;
-    uct_sockcm_ep_invoke_completions(ep, status);
-    pthread_mutex_unlock(&ep->ops_mutex);
-
     return UCS_OK;
 }
 
@@ -96,6 +81,32 @@ static inline void uct_sockcm_ep_add_to_pending(uct_sockcm_iface_t *iface, uct_s
     ucs_list_add_tail(&iface->pending_eps_list, &ep->list_elem);
     ep->is_on_pending = 1;
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+}
+
+static void uct_sockcm_ep_event_handler(int fd, void *arg)
+{
+    uct_sockcm_iface_t *iface = NULL;
+    ssize_t recv_len          = 0;
+    uct_sockcm_ep_t *ep       = (uct_sockcm_ep_t *) arg;
+    char conn_status;
+    ucs_status_t status;
+
+    /* recv to see if listener accepted or not */
+    recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &conn_status,
+                    sizeof(conn_status), 0);
+    ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
+
+    status = conn_status ? UCS_ERR_REJECTED : UCS_OK;
+
+    pthread_mutex_lock(&ep->ops_mutex);
+    if (status == UCS_OK) {
+        ep->status = status;
+    } else {
+        iface = ucs_derived_of(ep->super.super.iface, uct_sockcm_iface_t);
+        uct_sockcm_ep_set_failed(&iface->super.super, &ep->super.super, status);
+    }
+    uct_sockcm_ep_invoke_completions(ep, status);
+    pthread_mutex_unlock(&ep->ops_mutex);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
@@ -158,7 +169,20 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
-    status = uct_sockcm_send_client_info(iface, self);
+    status = uct_sockcm_ep_send_client_info(iface, self);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucs_sys_fcntl_modfl(self->sock_id_ctx->sock_id, O_NONBLOCK, 0); 
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucs_async_set_event_handler(iface->super.worker->async->mode,
+                                         self->sock_id_ctx->sock_id, POLLIN,
+                                         uct_sockcm_ep_event_handler,
+                                         self, iface->super.worker->async);
     if (status != UCS_OK) {
         goto err;
     }
@@ -186,6 +210,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
     uct_sockcm_iface_t *iface = NULL;
     uct_sockcm_ctx_t *sock_id_ctx;
 
+    ucs_async_remove_handler(self->sock_id_ctx->sock_id, 1);
     iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
 
     ucs_debug("sockcm_ep %p: destroying", self);
