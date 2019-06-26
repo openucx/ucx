@@ -424,7 +424,7 @@ uct_rc_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface, uint16_t res_coun
 
     /* reserve cq credits for every posted operation,
      * in case it would complete with error */
-    iface->tx.cq_available -= res_count;
+    --iface->tx.cq_available;
     txqp->available -= res_count;
 }
 

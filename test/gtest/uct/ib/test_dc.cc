@@ -470,7 +470,8 @@ UCS_TEST_P(test_dc, rand_dci_many_eps) {
     }
 
     /* Try to send on all eps (taking into account available resources) */
-    uint32_t num_sends = ucs_min(num_eps, iface->super.super.tx.cq_available);
+    uint32_t num_sends = ucs_min((unsigned)num_eps,
+                                 iface->super.super.tx.cq_available);
 
     for (unsigned i = 0; i < num_sends; i++) {
         ucs_status_t status = uct_ep_am_short(rand_e->ep(i), 0, 0, NULL, 0);

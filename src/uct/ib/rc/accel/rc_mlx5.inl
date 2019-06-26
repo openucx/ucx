@@ -19,25 +19,27 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *txwq,
                                  uct_rc_txqp_t *txqp, uint16_t hw_ci)
 {
-    uint16_t bb_num;
-
-    bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) - uct_rc_txqp_available(txqp);
-
     /* Must always have positive number of released resources. The first completion
      * will report bb_num=1 (because prev_sw_pi is initialized to -1) and all the rest
      * report the amount of BBs the previous WQE has consumed.
      */
-    ucs_assertv(bb_num > 0, "hw_ci=%d prev_sw_pi=%d available=%d bb_num=%d",
-                hw_ci, txwq->prev_sw_pi, txqp->available, bb_num);
+    ucs_assert(uct_rc_txqp_available(txqp) <
+               uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
 
-    uct_rc_txqp_available_add(txqp, bb_num);
+    txqp->available = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci);
+
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
-    rc_iface->tx.cq_available += bb_num;
+    ++rc_iface->tx.cq_available;
+
     ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
-                "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
-                rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, bb_num,
+                "cq_available=%d tx_cq_len=%d hw_ci=%u txwq=%p txqp=%p",
+                rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, hw_ci,
                 txwq, txqp);
+
+    ucs_assertv(txwq->hw_ci == (uint16_t)(txqp->available + txwq->prev_sw_pi - txwq->bb_max),
+                "hw_ci (%d) != available + prev_swpi - bb_max (%d)",
+                txwq->hw_ci, (uint16_t)(txqp->available + txwq->prev_sw_pi - txwq->bb_max));
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -265,6 +267,12 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         txwq->sig_pi = txwq->prev_sw_pi;
     }
     uct_rc_txqp_posted(txqp, &iface->super, res_count, fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE);
+
+    /* Should be always correct (even if nothing is completed on this WQE yet),
+     * because both hw_ci and prev_sw_pi initialized to 0xffff */
+    ucs_assertv(txwq->hw_ci == (uint16_t)(txqp->available + txwq->prev_sw_pi - txwq->bb_max),
+                "hw_ci (%d) != available + prev_swpi - bb_max (%d)",
+                txwq->hw_ci, (uint16_t)(txqp->available + txwq->prev_sw_pi - txwq->bb_max));
 }
 
 

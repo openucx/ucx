@@ -459,6 +459,14 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
     return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_ib_mlx5_tx_wqe_size(struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    int ds = ctrl->qpn_ds >> 24;
+
+    return ucs_div_round_up(ds * UCT_IB_MLX5_WQE_SEG_SIZE, MLX5_SEND_WQE_BB);
+}
+
 static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
                                                   uct_ib_mlx5_base_av_t *av,
                                                   uint32_t flow_id)

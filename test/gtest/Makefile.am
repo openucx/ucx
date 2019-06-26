@@ -188,7 +188,8 @@ gtest_SOURCES += \
 endif	
 if HAVE_TL_DC
 gtest_SOURCES += \
-	uct/ib/test_dc.cc
+	uct/ib/test_dc.cc \
+	uct/ib/test_mlx5.cc
 endif
 if HAVE_RDMACM
 gtest_SOURCES += \

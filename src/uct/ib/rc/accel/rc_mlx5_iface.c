@@ -174,16 +174,16 @@ static void
 uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                  ucs_status_t status)
 {
-    struct mlx5_cqe64  *cqe    = arg;
-    uct_rc_iface_t     *iface  = ucs_derived_of(ib_iface, uct_rc_iface_t);
-    unsigned           qp_num  = ntohl(cqe->sop_drop_qpn) &
-                                 UCS_MASK(UCT_IB_QPN_ORDER);
-    uct_rc_mlx5_ep_t   *ep     = ucs_derived_of(uct_rc_iface_lookup_ep(iface,
-                                                                       qp_num),
-                                                uct_rc_mlx5_ep_t);
-    ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
-    uct_ib_mlx5_txwq_t txwq_copy;
-    size_t             txwq_size;
+    uct_ib_mlx5_err_cqe_t *ecqe   = arg;
+    uct_rc_iface_t        *iface  = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    unsigned              qp_num  = ntohl(ecqe->s_wqe_opcode_qpn) &
+                                          UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_rc_mlx5_ep_t      *ep     = ucs_derived_of(uct_rc_iface_lookup_ep(iface,
+                                                                          qp_num),
+                                                   uct_rc_mlx5_ep_t);
+    ucs_log_level_t       log_lvl = UCS_LOG_LEVEL_FATAL;
+    uct_ib_mlx5_txwq_t    txwq_copy;
+    size_t                txwq_size;
 
     if (!ep) {
         return;

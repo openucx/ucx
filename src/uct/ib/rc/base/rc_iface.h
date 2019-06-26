@@ -187,16 +187,11 @@ struct uct_rc_iface {
     uct_ib_iface_t              super;
 
     struct {
-        ucs_mpool_t             mp;       /* pool for send descriptors */
-        ucs_mpool_t             fc_mp;    /* pool for FC grant pending requests */
-        ucs_mpool_t             flush_mp; /* pool for flush completions */
-        /* Credits for completions.
-         * May be negative in case mlx5 because we take "num_bb" credits per
-         * post to be able to calculate credits of outstanding ops on failure.
-         * In case of verbs TL we use QWE number, so 1 post always takes 1
-         * credit */
-        signed                  cq_available;
-        uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
+        ucs_mpool_t             mp;           /* pool for send descriptors */
+        ucs_mpool_t             fc_mp;        /* pool for FC grant pending requests */
+        ucs_mpool_t             flush_mp;     /* pool for flush completions */
+        unsigned                cq_available; /* Credits for completions */
+        uct_rc_iface_send_op_t  *free_ops;    /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
         uct_ib_fence_info_t     fi;

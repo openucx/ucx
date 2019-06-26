@@ -829,6 +829,55 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     return nfreed;
 }
 
+/* Get the number of uncompleted wqes */
+unsigned uct_rc_mlx5_common_txqp_wqes_num(uct_ib_mlx5_txwq_t *txwq,
+                                          int16_t available)
+{
+    struct mlx5_wqe_ctrl_seg *ctrl;
+    unsigned wqe_num, wqe_size;
+    uint16_t idx, wqe_cnt, outstanding;
+    int hw_ci;
+
+    outstanding = txwq->bb_max - available;
+
+    wqe_cnt = (txwq->qend - txwq->qstart) / MLX5_SEND_WQE_BB;
+    hw_ci   = available + txwq->prev_sw_pi - txwq->bb_max;
+
+    if (hw_ci == -1) {
+        /* No completions occured on this txwq so far.
+         * Start from the beginning. */
+        idx = 0;
+    } else {
+        /* hw_ci points to the start of the latest completed wqe.
+         * Get its size and move to the next one. */
+        ctrl = uct_ib_mlx5_txwq_wrap_any(txwq,
+                                         UCS_PTR_BYTE_OFFSET(txwq->qstart,
+                                                             (hw_ci % wqe_cnt) *
+                                                             MLX5_SEND_WQE_BB));
+        idx = hw_ci + uct_ib_mlx5_tx_wqe_size(ctrl);
+    }
+    ctrl = uct_ib_mlx5_txwq_wrap_any(txwq,
+             UCS_PTR_BYTE_OFFSET(txwq->qstart, (idx % wqe_cnt) * MLX5_SEND_WQE_BB));
+
+    for (wqe_num = 0; ctrl != txwq->curr; ++wqe_num) {
+        wqe_size = uct_ib_mlx5_tx_wqe_size(ctrl);
+        ctrl     =  uct_ib_mlx5_txwq_wrap_any(txwq,
+                        UCS_PTR_BYTE_OFFSET(ctrl, wqe_size * MLX5_SEND_WQE_BB));
+
+        /* Avoid deadlocks/segafults if wq is corrupted.
+         * wqe_num can not be larger than outstanding + max_wqe_size, because:
+         * - every wqe takes at least 1 BB
+         * - outstanding includes all uncompleted wqes except the last one, plus
+         *   the last completed wqe */
+        if (wqe_num > outstanding + UCT_IB_MLX5_MAX_BB) {
+            ucs_error("wq is corrupted, wqe_num=%u may be innacurate", wqe_num);
+            break;
+        }
+    }
+
+    return wqe_num;
+}
+
 ucs_status_t uct_rc_mlx5_init_res_domain(uct_ib_iface_t *ib_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);

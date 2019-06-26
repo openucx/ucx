@@ -963,13 +963,13 @@ void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                              void *arg, ucs_status_t status)
 {
-    uct_dc_mlx5_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
-    struct mlx5_cqe64    *cqe    = arg;
-    uint32_t             qp_num  = ntohl(cqe->sop_drop_qpn) &
-                                   UCS_MASK(UCT_IB_QPN_ORDER);
-    uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
-    uct_dc_mlx5_ep_t     *ep;
-    ucs_log_level_t      level;
+    uct_dc_mlx5_iface_t   *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_err_cqe_t *ecqe   = arg;
+    uint32_t              qp_num  = ntohl(ecqe->s_wqe_opcode_qpn) &
+                                    UCS_MASK(UCT_IB_QPN_ORDER);
+    uint8_t               dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
+    uct_dc_mlx5_ep_t      *ep;
+    ucs_log_level_t       level;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ep    = NULL;

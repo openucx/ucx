@@ -1230,7 +1230,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
-    int16_t outstanding;
+    uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dci_wqs[dci];
     ucs_status_t ep_status;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
@@ -1239,9 +1239,9 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/
-    outstanding = (int16_t)iface->super.super.config.tx_qp_len -
-                  uct_rc_txqp_available(txqp);
-    iface->super.super.tx.cq_available += outstanding;
+    iface->super.super.tx.cq_available +=
+        uct_rc_mlx5_common_txqp_wqes_num(txwq, uct_rc_txqp_available(txqp));
+
     uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
 
     /* since we removed all outstanding ops on the dci, it should be released */

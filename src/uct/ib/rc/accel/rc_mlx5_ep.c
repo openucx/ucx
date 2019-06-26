@@ -951,10 +951,13 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
     uct_rc_iface_t *rc_iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
 
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
-       is not updated for the error cqe and all outstanding wqes*/
-    rc_iface->tx.cq_available += ep->tx.wq.bb_max -
-                                 uct_rc_txqp_available(&ep->super.txqp);
+       is not updated for the error cqe and all outstanding wqes */
+    rc_iface->tx.cq_available +=
+        uct_rc_mlx5_common_txqp_wqes_num(&ep->tx.wq,
+                                         uct_rc_txqp_available(&ep->super.txqp));
+
     return ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
                                         status);
 }
