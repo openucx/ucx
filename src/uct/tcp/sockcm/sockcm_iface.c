@@ -66,7 +66,7 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
 {
     ucs_status_t status   = UCS_OK;
     int          *fd      = conn_request;
-    int          accept   = 0;
+    char         accept   = 0;
     ssize_t      sent_len = -1;
 
     /* Notify client of accept and close associated fd */
@@ -74,7 +74,6 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
     ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
     if (sent_len < 0) status = UCS_ERR_IO_ERROR;
-    close(*fd);
 
     return status;
 }
@@ -84,7 +83,7 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
 {
     ucs_status_t status   = UCS_OK;
     int          *fd      = conn_request;
-    int          reject = 1;
+    char         reject = 1;
     ssize_t      sent_len = -1;
 
     /* Notify client of rejection and close associated fd */
@@ -92,7 +91,6 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
     ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
     if (sent_len < 0) status = UCS_ERR_IO_ERROR;
-    close(*fd);
 
     return status;
 }
