@@ -71,6 +71,8 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
     sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param,
                     conn_param.private_data_len, 0);
     ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
+    /* TODO: handle when all data is not sent in one op */
+    ucs_assert(sent_len == conn_param.private_data_len);
 
     return UCS_OK;
 }
@@ -210,7 +212,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
     uct_sockcm_iface_t *iface = NULL;
     uct_sockcm_ctx_t *sock_id_ctx;
 
-    ucs_async_remove_handler(self->sock_id_ctx->sock_id, 1);
     iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
 
     ucs_debug("sockcm_ep %p: destroying", self);
