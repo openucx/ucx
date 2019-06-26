@@ -112,17 +112,23 @@ for dev in sorted(dev_list):
     status, dev_attrs = commands.getstatusoutput("ibv_devinfo -d " + dev + " -i " + port)
     if dev_attrs.find("PORT_ACTIVE") == -1:
         continue
-    
+
+    driver_name = os.path.basename(os.readlink("/sys/class/infiniband/%s/device/driver" % dev))
+    dev_name    = driver_name.split("_")[0] # should be mlx4 or mlx5
+    if not dev_name in ['mlx4', 'mlx5']:
+        print "Invalid device name: ", dev_name
+        sys.exit(1)
+
     if dev_attrs.find("Ethernet") == -1:
-        dev_tl_map = am_tls[dev[0:dev.index('_')]]
-        dev_tl_override_map = am_tls[dev[0:dev.index('_')] + "_override"]
+        dev_tl_map = am_tls[dev_name]
+        dev_tl_override_map = am_tls[dev_name + "_override"]
         override = 1
     else:
         fw_ver = open("/sys/class/infiniband/%s/fw_ver" % dev).read()
         if LooseVersion(fw_ver) >= LooseVersion("16.23.0"):
-            dev_tl_map = am_tls[dev[0:dev.index('_')]+"_roce_dc"]
+            dev_tl_map = am_tls[dev_name+"_roce_dc"]
         else:
-            dev_tl_map = am_tls[dev[0:dev.index('_')]+"_roce_no_dc"]
+            dev_tl_map = am_tls[dev_name+"_roce_no_dc"]
         override = 0
 
     for n_eps in sorted(dev_tl_map):

@@ -20,7 +20,7 @@
 #define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
 #define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX
 
-#ifdef UCT_UD_EP_DEBUG_HOOKS
+#if UCT_UD_EP_DEBUG_HOOKS
 /*
    Hooks that allow packet header inspection and rewriting. UCT user can
    set functions that will be called just before packet is put on wire

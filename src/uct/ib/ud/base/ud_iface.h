@@ -72,7 +72,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
 
 
 
-#ifdef UCT_UD_EP_DEBUG_HOOKS
+#if UCT_UD_EP_DEBUG_HOOKS
 
 typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t *neth);
 

@@ -28,7 +28,7 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
             LDFLAGS="-L$ucx_check_gdrcopy_libdir $save_LDFLAGS"
             ])
         AS_IF([test ! -z "$with_gdrcopy_libdir" -a "x$with_gdrcopy_libdir" != "xyes"],
-            [ucx_check_gdrcopy_libdir="$with_nccl_libdir"
+            [ucx_check_gdrcopy_libdir="$with_gdrcopy_libdir"
             LDFLAGS="-L$ucx_check_gdrcopy_libdir $save_LDFLAGS"])
 
         AC_CHECK_HEADERS([gdrapi.h],
