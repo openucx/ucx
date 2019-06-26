@@ -538,10 +538,12 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
         return 0;
     }
 
+    ucs_assertv(recv_length, "ep=%p", ep);
+
     ep->rx.length += recv_length;
     ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, recv_length);
 
-    return recv_length > 0;
+    return 1;
 }
 
 static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
