@@ -253,10 +253,19 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
 void
 ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
+    ucs_assert(req->send.state.uct_comp.count == 0);
+    ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
+    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                  status);
+}
+
+void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self,
+                                         ucs_status_t status)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
     if (req->send.state.dt.offset == req->send.length) {
-        ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
-                                      status);
+        ucp_tag_eager_sync_zcopy_req_complete(req, status);
     } else if (status != UCS_OK) {
         ucs_fatal("error handling is not supported with tag-sync protocol");
     }
@@ -295,14 +304,6 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
                                  &first_hdr, sizeof(first_hdr),
                                  &middle_hdr, sizeof(middle_hdr),
                                  ucp_tag_eager_sync_zcopy_req_complete, 1);
-}
-
-void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status)
-{
-    ucp_request_t *req;
-
-    req = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
-    ucp_tag_eager_sync_zcopy_req_complete(req, status);
 }
 
 const ucp_proto_t ucp_tag_eager_sync_proto = {
