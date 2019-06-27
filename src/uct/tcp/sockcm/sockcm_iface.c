@@ -68,9 +68,13 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
 
     /* Notify client of accept and close associated fd */
     sent_len = send(*fd, (char *) &accept, sizeof(accept), 0);
-    ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
-    if (sent_len < 0) status = UCS_ERR_IO_ERROR;
+    if (sent_len < 0) {
+        ucs_debug("sockcm_listener: unable to send accept");
+        status = UCS_ERR_IO_ERROR;
+    } else {
+        ucs_debug("sockcm_listener: sent accept");
+    }
 
     return status;
 }
@@ -85,9 +89,13 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
 
     /* Notify client of rejection and close associated fd */
     sent_len = send(*fd, (char *) &reject, sizeof(reject), 0);
-    ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
 
-    if (sent_len < 0) status = UCS_ERR_IO_ERROR;
+    if (sent_len < 0) {
+        ucs_debug("sockcm_listener: unable to send reject");
+        status = UCS_ERR_IO_ERROR;
+    } else {
+        ucs_debug("sockcm_listener: sent reject");
+    }
 
     return status;
 }
@@ -175,6 +183,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     int accept_fd;
     uct_sockcm_conn_param_t conn_param;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    uct_sockcm_ctx_t *sock_id_ctx;
 
     /* accept initial client connection; iface accept/reject happens later */
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
@@ -194,6 +203,14 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     /* Unlike rdmacm, socket connect/accept does not permit exchange of
      * connection parameters but we need to use send/recv on top of that
      * We simulate that with an explicit receive */
+
+
+    sock_id_ctx = ucs_malloc(sizeof(uct_sockcm_ctx_t), "accepted sock_id_ctx");
+    if (sock_id_ctx == NULL) {
+        ucs_debug("sockcm_listener: unable to create mem for accepted fd");
+    }
+    sock_id_ctx->sock_id = accept_fd;
+    ucs_list_add_tail(&iface->accepted_sock_ids_list, &sock_id_ctx->list);
 
     recv_len = recv(accept_fd, (char *) &conn_param,
                     sizeof(uct_sockcm_conn_param_t), 0);
@@ -300,6 +317,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_list_head_init(&self->pending_eps_list);
     ucs_list_head_init(&self->used_sock_ids_list);
+    ucs_list_head_init(&self->accepted_sock_ids_list);
 
     return UCS_OK;
 
@@ -327,6 +345,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_sockcm_ctx_t, list);
         ucs_async_remove_handler(sock_id_ctx->sock_id, 1);
+        ucs_debug("cleaning client fd = %d", sock_id_ctx->sock_id);
+        close(sock_id_ctx->sock_id);
+        ucs_free(sock_id_ctx);
+    }
+
+    while (!ucs_list_is_empty(&self->accepted_sock_ids_list)) {
+        sock_id_ctx = ucs_list_extract_head(&self->accepted_sock_ids_list,
+                                            uct_sockcm_ctx_t, list);
+        ucs_debug("cleaning accepted fd = %d", sock_id_ctx->sock_id);
         close(sock_id_ctx->sock_id);
         ucs_free(sock_id_ctx);
     }

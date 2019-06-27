@@ -32,6 +32,7 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
     status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
                                &ep->sock_id_ctx->sock_id);
     if (status != UCS_OK) {
+        ucs_debug("unable to create client socket for sockcm");
         goto out_free;
     }
 
