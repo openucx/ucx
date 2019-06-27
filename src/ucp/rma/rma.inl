@@ -58,7 +58,7 @@ static inline ucs_status_t ucp_rma_wait(ucp_worker_h worker, void *user_req,
 
 static inline void ucp_ep_rma_remote_request_sent(ucp_ep_t *ep)
 {
-    ++ucp_ep_flush_state(ep)->send_sn;
+    ++ucp_ep_flush_state(ep)->sw.send_sn;
     ++ep->worker->flush_ops_count;
 }
 
@@ -68,11 +68,11 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     ucp_request_t *req;
 
     --ep->worker->flush_ops_count;
-    ++flush_state->cmpl_sn;
+    ++flush_state->sw.cmpl_sn;
 
-    ucs_queue_for_each_extract(req, &flush_state->reqs, send.flush.queue,
+    ucs_queue_for_each_extract(req, &flush_state->sw.reqs, send.flush.queue,
                                UCS_CIRCULAR_COMPARE32(req->send.flush.cmpl_sn,
-                                                      <= ,flush_state->cmpl_sn)) {
+                                                      <= ,flush_state->sw.cmpl_sn)) {
         ucp_ep_flush_remote_completed(req);
     }
 }

@@ -60,7 +60,6 @@ enum {
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
     UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
-
 };
 
 
@@ -290,10 +289,18 @@ typedef struct ucp_ep {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_queue_head_t              reqs;         /* Queue of flush requests which
-                                                   are waiting for remote completion */
-    uint32_t                      send_sn;      /* Sequence number of sent operations */
-    uint32_t                      cmpl_sn;      /* Sequence number of completions */
+    union {
+        struct {
+            ucs_queue_head_t              reqs;         /* Queue of flush requests which
+                                                           are waiting for remote completion */
+            uint32_t                      send_sn;      /* Sequence number of sent operations */
+            uint32_t                      cmpl_sn;      /* Sequence number of completions */
+        } sw;
+
+        struct {
+            ucp_request_t                 *req;
+        } close;
+    };
 } ucp_ep_flush_state_t;
 
 

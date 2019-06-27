@@ -756,6 +756,8 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
         status = uct_ep_create(&cm_lane_params, &wireup_ep->sockaddr_ep);
     }
 
+    ucp_ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+
     return status;
 }
 

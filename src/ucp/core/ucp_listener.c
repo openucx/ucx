@@ -17,7 +17,10 @@
 static unsigned ucp_listener_accept_cb_progress(void *arg)
 {
     ucp_ep_h       ep       = arg;
-    ucp_listener_h listener = ucp_ep_ext_gen(ep)->listener;
+    ucp_listener_h listener;
+
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+    listener = ucp_ep_ext_gen(ep)->listener;
 
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
@@ -25,6 +28,7 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     ucs_assert(ep->flags   & UCP_EP_FLAG_LISTENER);
 
     ep->flags &= ~UCP_EP_FLAG_LISTENER;
+    ep->flags &= ~UCP_EP_FLAG_CONNECT_REQ_QUEUED;
     ep->flags |= UCP_EP_FLAG_USED;
     ucp_stream_ep_activate(ep);
     ucp_ep_flush_state_reset(ep);
@@ -36,6 +40,7 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     if (listener && listener->accept_cb) {
         listener->accept_cb(ep, listener->arg);
     }
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
     return 1;
 }

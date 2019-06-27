@@ -48,7 +48,6 @@ typedef struct uct_rdmacm_cep {
     struct rdma_cm_id                 *id;
     void                              *user_data;
     uct_ep_sockaddr_disconnected_cb_t disconnected_cb;
-    uct_completion_t                  *completion;
 
     /* TODO: Allocate separately to reduce memory consumption. These fields are
      *       relevant only for connection establishment. */
@@ -135,11 +134,13 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cep_t, uct_ep_t);
 
-ucs_status_t uct_rdmacm_cep_disconnect(uct_ep_h ep, uct_completion_t *comp)
+ucs_status_t uct_rdmacm_cep_disconnect(uct_ep_h ep, unsigned flags)
 {
     uct_rdmacm_cep_t *cep = ucs_derived_of(ep, uct_rdmacm_cep_t);
 
-    cep->completion = comp;
+    ucs_trace("uct_rdmacm_cep_disconnect on ep %p", cep);
+//    ucs_warn("uct_rdmacm_cep_disconnect on ep %p", cep);
+
     ucs_assert(!(cep->flags & UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED));
     cep->flags |= UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED;
     if (rdma_disconnect(cep->id)) {
@@ -212,7 +213,6 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
     self->user_data           = (params->field_mask &
                                  UCT_EP_PARAM_FIELD_USER_DATA) ?
                                 params->user_data : NULL;
-    self->completion          = NULL;
 
     /* TODO: to separate server & cliet funcs */
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
@@ -279,6 +279,86 @@ uct_cm_ops_t uct_rdmacm_cm_ops = {
     .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_listener_t),
     .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cep_t)
 };
+
+static size_t uct_rdmacm_cm_fill_addr_flags(const struct rdma_cm_id *id,
+                                            const union ibv_gid *gid,
+                                            int link_layer,
+                                            uct_ib_address_t *addr)
+{
+    if (link_layer == IBV_LINK_LAYER_ETHERNET) {
+        addr->flags = (UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
+                       UCT_IB_ADDRESS_FLAG_GID);
+        return sizeof(uct_ib_address_t) + sizeof(union ibv_gid);  /* raw gid */
+    } else {
+        addr->flags = (UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
+                       UCT_IB_ADDRESS_FLAG_LID);
+    }
+
+    if (gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+        addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
+        if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+             UCT_IB_SITE_LOCAL_PREFIX)) {
+            addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
+            return sizeof(uct_ib_address_t) +
+                   sizeof(uint16_t) + /* lid */
+                   sizeof(uint64_t) + /* if_id */
+                   sizeof(uint16_t);  /* subnet16 */
+        }
+        addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
+        return sizeof(uct_ib_address_t) +
+               sizeof(uint16_t) + /* lid */
+               sizeof(uint64_t) + /* if_id */
+               sizeof(uint64_t);  /* subnet64 */
+    }
+    return sizeof(uct_ib_address_t) + sizeof(uint16_t); /* lid */
+}
+
+static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
+                                          uct_device_addr_t **dev_addr_p,
+                                          size_t *dev_addr_len_p)
+{
+    uct_ib_address_t addr_dummy;
+    uct_ib_address_t *dev_addr;
+    struct ibv_qp_attr qp_attr;
+    int qp_attr_mask;
+
+    qp_attr.qp_state = IBV_QPS_RTR;
+    if (rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask)) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+//    dev_addr->flags = UCT_IB_ADDRESS_FLAG_AH_ATTRS;
+
+/*
+    union ibv_gid gid;
+    if (ibv_query_gid(cm_id->verbs, cm_id->port_num,
+                      qp_attr.ah_attr.grh.sgid_index, &gid)) {
+        return UCS_ERR_IO_ERROR;
+    }
+*/
+    struct ibv_port_attr port_arrt;
+    if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_arrt)) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    size_t addr_length = uct_rdmacm_cm_fill_addr_flags(cm_id,
+                                                       &qp_attr.ah_attr.grh.dgid,
+                                                       port_arrt.link_layer,
+                                                       &addr_dummy);
+    dev_addr = ucs_malloc(addr_length, "IB device address");
+    if (dev_addr == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *dev_addr = addr_dummy;
+
+    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid, dev_addr);
+
+    *dev_addr_p     = (uct_device_addr_t *)dev_addr;
+    *dev_addr_len_p = addr_length;
+
+    return UCS_OK;
+}
 
 static int
 uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
@@ -358,16 +438,13 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
                                         UCS_OK);
         return rdma_ack_cm_event(event);
     case RDMA_CM_EVENT_DISCONNECTED:
+        ucs_trace("RDMA_CM_EVENT_DISCONNECTED event");
+//        ucs_warn("RDMA_CM_EVENT_DISCONNECTED event");
         cep = event->id->context;
         ucs_assert(!(cep->flags & UCT_RDMACM_CEP_FLAG_REMOTE_DISCONNECTED));
         cep->flags |= UCT_RDMACM_CEP_FLAG_REMOTE_DISCONNECTED;
-        if (cep->completion != NULL) {
-            ucs_assert(cep->flags & UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED);
-            uct_invoke_completion(cep->completion, UCS_OK);
-        } else if (cep->disconnected_cb != NULL) {
-            if (!(cep->flags & UCT_RDMACM_CEP_FLAG_LOCAL_DISCONNECTED)) {
-                cep->disconnected_cb(&cep->super.super, cep->user_data);
-            }
+        if (cep->disconnected_cb != NULL) {
+            cep->disconnected_cb(&cep->super.super, cep->user_data);
         } else {
             ucs_warn("RDMA_CM_EVENT_DISCONNECTED event is missed");
         }

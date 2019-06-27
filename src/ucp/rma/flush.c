@@ -34,6 +34,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_status_t status;
     uct_ep_h uct_ep;
 
+    UCS_ASYNC_BLOCK(&ep->worker->async);
     ucs_trace("ep %p: progress flush req %p, lanes 0x%x count %d", ep, req,
               req->send.flush.lanes, req->send.state.uct_comp.count);
 
@@ -105,18 +106,19 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         } else {
             /* All pending requests were sent, so 'send_sn' value is up-to-date */
             flush_state = ucp_ep_flush_state(ep);
-            if (flush_state->send_sn == flush_state->cmpl_sn) {
+            if (flush_state->sw.send_sn == flush_state->sw.cmpl_sn) {
                 req->send.flush.sw_done = 1;
                 ucs_trace_req("flush request %p remote completions done", req);
             } else {
-                req->send.flush.cmpl_sn = flush_state->send_sn;
-                ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
+                req->send.flush.cmpl_sn = flush_state->sw.send_sn;
+                ucs_queue_push(&flush_state->sw.reqs, &req->send.flush.queue);
                 ucs_trace_req("added flush request %p to ep remote completion queue"
                               " with sn %d", req, req->send.flush.cmpl_sn);
             }
         }
         req->send.flush.sw_started = 1;
     }
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
 }
 
 static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)

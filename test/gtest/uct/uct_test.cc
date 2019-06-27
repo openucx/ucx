@@ -943,8 +943,7 @@ void uct_test::entity::listen(const uct_listener_params_t &params)
 }
 
 void uct_test::entity::disconnect(uct_ep_h ep) {
-    /* TODO: add test on UCT completion */
-    ASSERT_UCS_OK(uct_ep_disconnect(ep, NULL));
+    ASSERT_UCS_OK(uct_ep_disconnect(ep, 0));
 }
 
 void uct_test::entity::connect_to_ep(unsigned index, entity& other,

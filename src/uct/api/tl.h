@@ -153,7 +153,7 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_create)(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
-    ucs_status_t (*ep_disconnect)(uct_ep_h ep, uct_completion_t *comp);
+    ucs_status_t (*ep_disconnect)(uct_ep_h ep, unsigned flags);
 
     void         (*ep_destroy)(uct_ep_h ep);
 

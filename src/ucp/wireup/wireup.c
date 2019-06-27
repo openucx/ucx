@@ -211,6 +211,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
 
     ucs_trace("ep %p: remote connected", ep);
     ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    ep->flags &= ~UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (ucp_ep_is_lane_p2p(ep, lane)) {

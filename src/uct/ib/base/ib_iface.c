@@ -259,12 +259,6 @@ void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
     }
 
     /* IB, LID */
-    ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
-                     UCT_IB_ADDRESS_FLAG_LID;
-    *(uint16_t*) ptr = lid;
-    ptr += sizeof(uint16_t);
-
-    /* IB, LID */
     ucs_assert(ucs_test_all_flags(ib_addr->flags,
                                   UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
                                   UCT_IB_ADDRESS_FLAG_LID));
@@ -293,14 +287,20 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 {
     const void *ptr = ib_addr + 1;
 
-    gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
-    gid->global.interface_id  = 0;
-    *lid                      = 0;
     memset(gid, 0, sizeof(*gid));
+    *lid = 0;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) {
         memcpy(gid->raw, ptr, sizeof(gid->raw) * sizeof(uint8_t)); /* uint8_t raw[16]; */
+        ucs_assert(!(ib_addr->flags & (UCT_IB_ADDRESS_FLAG_LID      |
+                                       UCT_IB_ADDRESS_FLAG_IF_ID    |
+                                       UCT_IB_ADDRESS_FLAG_SUBNET16 |
+                                       UCT_IB_ADDRESS_FLAG_SUBNET64)));
+        return;
     }
+
+    gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
+    gid->global.interface_id  = 0;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
         *lid = *(uint16_t*)ptr;

@@ -620,9 +620,9 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
-//    uint32_t qp_num;
+    uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
-//    ucs_status_t status;
+    ucs_status_t status;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_bits, &ah_attr);
@@ -631,28 +631,24 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
-/*
         status = uct_rc_iface_qp_connect(&iface->super, ep->tm_qp,
                                          uct_ib_unpack_uint24(rc_addr->qp_num),
                                          &ah_attr);
         if (status != UCS_OK) {
             return status;
         }
-*/
 
         /* Need to connect local ep QP to the one owned by device
          * (and bound to XRQ) on the peer. */
-//        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
+        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
     } else {
-//        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
+        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
-/*
     status = uct_rc_iface_qp_connect(&iface->super, ep->super.txqp.qp, qp_num, &ah_attr);
     if (status != UCS_OK) {
         return status;
     }
-*/
 
     ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
 

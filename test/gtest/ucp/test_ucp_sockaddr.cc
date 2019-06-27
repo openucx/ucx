@@ -272,7 +272,9 @@ public:
             } while (ep_count == 0);
             ASSERT_EQ(1,                  ep_count);
             EXPECT_EQ(to.ep(),            poll_eps.ep);
-            EXPECT_EQ((void *)0xdeadbeef, poll_eps.user_data);
+            /* TODO: unify to the same value */
+            EXPECT_TRUE(((void *)0xdeadbeef == poll_eps.user_data) ||
+                        (this == poll_eps.user_data));
 
             recv_req = ucp_stream_recv_nb(to.ep(), &recv_data, 1,
                                           ucp_dt_make_contig(sizeof(recv_data)),
@@ -357,7 +359,6 @@ public:
                       (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
                       SEND_RECV_TAG, wakeup, cb_type());
         }
-
         if (flags & SEND_DIRECTION_S2C) {
             send_recv(receiver(), sender(),
                       (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
@@ -401,7 +402,7 @@ public:
 
     void client_one_sided_disconnect() {
         for (int j = 0; j < sender().get_num_eps(); j++) {
-            void *dreq = sender().disconnect_nb();
+            void *dreq = sender().disconnect_nb(0, j);
             if (dreq == NULL) {
                 continue;
             }
@@ -410,7 +411,9 @@ public:
             }
             ucs_status_t status;
             while ((status = ucp_request_check_status(dreq)) == UCS_INPROGRESS) {
-                sender().progress();
+                /* TODO: replace the progress() with sender().progress() when
+                         async progress is implemented. */
+                progress();
             }
             EXPECT_EQ(UCS_OK, status);
             ucp_request_release(dreq);
