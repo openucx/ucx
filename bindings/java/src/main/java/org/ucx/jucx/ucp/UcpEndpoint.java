@@ -48,6 +48,9 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     }
 
     public void checkBufferOffsetAndSize(ByteBuffer buf, long offset, long size) {
+        if (offset < 0 || size < 0) {
+            throw new UcxException("Offset and size must be non zero");
+        }
         if (offset + size > buf.capacity()) {
             throw new UcxException("Offset + size must be < " + buf.capacity());
         }
