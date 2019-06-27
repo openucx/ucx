@@ -409,8 +409,8 @@ ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
         return UCS_PTR_STATUS(uar);
     }
 
-    txwq->reg      = &uar->super;
-    txwq->type     = UCT_IB_MLX5_QP_TYPE_DEVX;
+    txwq->reg        = &uar->super;
+    txwq->super.type = UCT_IB_MLX5_QP_TYPE_DEVX;
 
     return UCS_OK;
 }
@@ -498,8 +498,6 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     txwq->bb_max     = qp_info.dv.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(txwq->bb_max > 0);
 
-    txwq->type = UCT_IB_MLX5_QP_TYPE_VERBS;
-
     uct_ib_mlx5_txwq_reset(txwq);
     return UCS_OK;
 }
@@ -509,11 +507,11 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
     uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
                                                  uct_ib_mlx5_devx_uar_t);
 
-    if (txwq->type == UCT_IB_MLX5_QP_TYPE_DEVX) {
+    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_DEVX) {
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
     }
 
-    if (txwq->type == UCT_IB_MLX5_QP_TYPE_VERBS) {
+    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
         uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
     }
 }

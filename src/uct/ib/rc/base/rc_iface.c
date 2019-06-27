@@ -675,12 +675,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
-
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap, unsigned max_send_wr)
 {
     uct_ib_qp_attr_t qp_init_attr    = {};
-    static ucs_status_t status;
+    ucs_status_t status;
 
     if (iface->super.config.qp_type == IBV_QPT_RC) {
         qp_init_attr.srq             = iface->rx.srq.srq;
@@ -695,11 +694,12 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     qp_init_attr.max_inl_recv        = iface->config.rx_inline;
 
     status = iface->super.ops->create_qp(&iface->super, &qp_init_attr, qp_p);
-    if (status == UCS_OK) {
-        *cap = qp_init_attr.cap;
+    if (status != UCS_OK) {
+        return status;
     }
 
-    return status;
+    *cap = qp_init_attr.cap;
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)

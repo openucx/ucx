@@ -224,8 +224,21 @@ typedef enum {
 } uct_ib_mlx5_qp_type_t;
 
 
+/* MLX5 QP wrapper */
+typedef struct uct_ib_mlx5_qp {
+    uct_ib_mlx5_qp_type_t       type;
+    uint32_t                    qp_num;
+    union {
+        struct {
+            struct ibv_qp       *qp;
+        } verbs;
+    };
+} uct_ib_mlx5_qp_t;
+
+
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
+    uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
     uct_ib_mlx5_mmio_reg_t      *reg;
@@ -239,7 +252,6 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    hw_ci;
 #endif
     uct_ib_fence_info_t         fi;
-    uct_ib_mlx5_qp_type_t       type;
 } uct_ib_mlx5_txwq_t;
 
 
