@@ -165,7 +165,7 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
     }
 
     ucs_assert(nready <= *num_events);
-    ucs_trace_data("epoll_wait(epfd=%d, num_events=%u, timeout=%d) returned %u",
+    ucs_trace_poll("epoll_wait(epfd=%d, num_events=%u, timeout=%d) returned %u",
                    event_set->epfd, *num_events, timeout_ms, nready);
 
     for (i = 0; i < nready; i++) {
