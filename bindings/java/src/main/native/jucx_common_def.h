@@ -7,6 +7,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/debug/log.h>
+#include <ucs/profile/profile.h>
 
 #include <jni.h>
 
