@@ -21,7 +21,7 @@
 #endif
 
 
-const unsigned ucs_sys_event_set_max_events =
+const unsigned ucs_sys_event_set_max_wait_events =
     UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event);
 
 
@@ -149,10 +149,9 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
 
     ucs_assert(event_set_handler != NULL);
     ucs_assert(num_events != NULL);
-    ucs_assert(*num_events <= ucs_sys_event_set_max_events);
+    ucs_assert(*num_events <= ucs_sys_event_set_max_wait_events);
 
     events = ucs_alloca(sizeof(*events) * *num_events);
-    ucs_assert(events != NULL);
 
     nready = epoll_wait(event_set->epfd, events, *num_events, timeout_ms);
     if (nready < 0) {

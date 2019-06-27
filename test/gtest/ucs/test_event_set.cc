@@ -103,7 +103,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
                                (void *)(uintptr_t)pipefd[0]);
     EXPECT_EQ(UCS_OK, status);
 
-    nread  = ucs_sys_event_set_max_events;
+    nread  = ucs_sys_event_set_max_wait_events;
     status = ucs_event_set_wait(event_set, &nread, -1, event_set_func1, arg);
     EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
@@ -142,7 +142,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
                                (void *)&pipefd[1]);
     EXPECT_EQ(UCS_OK, status);
 
-    nread  = ucs_sys_event_set_max_events;
+    nread  = ucs_sys_event_set_max_wait_events;
     status = ucs_event_set_wait(event_set, &nread, -1, event_set_func2, NULL);
     EXPECT_EQ(1u, nread);
     EXPECT_EQ(UCS_OK, status);
@@ -191,7 +191,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
     pthread_barrier_destroy(&barrier);
 
     /* Check for events on pipe fd */
-    nread  = ucs_sys_event_set_max_events;
+    nread  = ucs_sys_event_set_max_wait_events;
     status = ucs_event_set_wait(event_set, &nread, 0, event_set_func3, NULL);
     EXPECT_EQ(0u, nread);
     EXPECT_EQ(UCS_OK, status);

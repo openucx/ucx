@@ -40,7 +40,7 @@ typedef enum {
 } ucs_event_set_type_t;
 
 /* The maximum possible number of events based on system constraints */
-extern const unsigned ucs_sys_event_set_max_events;
+extern const unsigned ucs_sys_event_set_max_wait_events;
 
 /**
  * Allocate ucs_sys_event_set_t structure.

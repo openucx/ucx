@@ -159,7 +159,7 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     ucs_status_t status;
 
     do {
-        read_events = ucs_min(ucs_sys_event_set_max_events, max_events);
+        read_events = ucs_min(ucs_sys_event_set_max_wait_events, max_events);
         status = ucs_event_set_wait(iface->event_set, &read_events,
                                     0, uct_tcp_iface_handle_events,
                                     (void *)&count);
