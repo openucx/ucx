@@ -46,7 +46,7 @@ enum {
     UCS_ROOT_STATS_LAST
 };
 
-KHASH_MAP_INIT_INT64(ucs_stats_cls, void*)
+KHASH_MAP_INIT_INT64(ucs_stats_cls, ucs_stats_class_t*)
 
 typedef struct {
     volatile unsigned    flags;
@@ -117,27 +117,6 @@ static void ucs_stats_clean_node(ucs_stats_node_t *node) {
     ucs_list_del(&node->type_list);
 }
 
-static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
-{
-    ucs_stats_class_t *dup;
-
-    dup = ucs_malloc(sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
-                     "ucs_stats_class_t");
-    ucs_assertv_always(dup != NULL, "failed to allocate statistics class");
-
-    dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
-    ucs_assertv_always(dup->name != NULL, "failed to copy statistics class name");
-
-    for (dup->num_counters = 0; dup->num_counters < cls->num_counters; dup->num_counters++) {
-        dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
-                                                           "ucs_stats_class_t counter");
-        ucs_assertv_always(dup->counter_names[dup->num_counters] != NULL,
-                           "failed to copy statistics counter name");
-    }
-
-    return dup;
-}
-
 static void ucs_stats_free_class(ucs_stats_class_t *cls)
 {
     unsigned i;
@@ -147,8 +126,40 @@ static void ucs_stats_free_class(ucs_stats_class_t *cls)
     }
 
     ucs_free((void*)cls->name);
+    ucs_free(cls);
+}
 
-    free(cls);
+static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
+{
+    ucs_stats_class_t *dup;
+
+    dup = ucs_calloc(1, sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
+                     "ucs_stats_class_dup");
+    if (!dup) {
+        ucs_warn("failed to allocate statistics class");
+        return NULL;
+    }
+
+    dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
+    if (!dup->name) {
+        ucs_warn("failed to copy statistics class name");
+        goto failed;
+    }
+
+    for (dup->num_counters = 0; dup->num_counters < cls->num_counters; dup->num_counters++) {
+        dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
+                                                           "ucs_stats_class_t counter");
+        if (!dup->counter_names[dup->num_counters]) {
+            ucs_warn("failed to copy statistics counter name");
+            goto failed;
+        }
+    }
+
+    return dup;
+
+failed:
+    ucs_stats_free_class(dup);
+    return NULL;
 }
 
 static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
@@ -160,12 +171,15 @@ static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
     iter = kh_get(ucs_stats_cls, &ucs_stats_context.cls, (uint64_t)cls);
 
     if (iter != kh_end(&ucs_stats_context.cls)) {
-        return (ucs_stats_class_t*)kh_val(&ucs_stats_context.cls, iter);
+        return kh_val(&ucs_stats_context.cls, iter);
     }
 
-    dup  = ucs_stats_dup_class(cls);
-    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, (uint64_t)cls, &r);
-    kh_val(&ucs_stats_context.cls, iter) = dup;
+    dup = ucs_stats_dup_class(cls);
+    if (dup) {
+        iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, (uint64_t)cls, &r);
+        ucs_assert_always(r != 0); /* initialize a previously empty hash entry */
+        kh_val(&ucs_stats_context.cls, iter) = dup;
+    }
 
     return dup;
 }
@@ -183,8 +197,14 @@ static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
 
     ucs_list_del(&node->list);
     if (make_inactive) {
-        ucs_list_add_tail(&node->parent->children[UCS_STATS_INACTIVE_CHILDREN], &node->list);
         node->cls = ucs_stats_get_class(node->cls);
+        if (node->cls) {
+            ucs_list_add_tail(&node->parent->children[UCS_STATS_INACTIVE_CHILDREN], &node->list);
+        } else {
+            /* failed to allocate class duplicate - remove node */
+            ucs_stats_clean_node(node);
+            ucs_free(node);
+        }
     } else {
         ucs_stats_clean_node(node); 
     }
