@@ -485,7 +485,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     }
 
 err:
-    ibv_destroy_qp(qp);
+    uct_ib_destroy_qp(qp);
 err_qp:
     ibv_destroy_srq(srq);
 err_srq:

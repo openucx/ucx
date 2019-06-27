@@ -516,13 +516,13 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
     return UCS_ERR_NO_PROGRESS;
 }
 
-static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
+static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 {
     ucs_status_t status;
 
-    ucs_assertv(*recv_length, "ep=%p", ep);
+    ucs_assertv(recv_length, "ep=%p", ep);
 
-    status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length, recv_length,
+    status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length, &recv_length,
                                 uct_tcp_ep_io_err_handler_cb, ep);
     if (status != UCS_OK) {
         if (status == UCS_ERR_NO_PROGRESS) {
@@ -535,12 +535,13 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t *recv_length)
         } else {
             uct_tcp_ep_handle_disconnected(ep, &ep->rx);
         }
-        *recv_length = 0;
         return 0;
     }
 
-    ep->rx.length += *recv_length;
-    ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, *recv_length);
+    ucs_assertv(recv_length, "ep=%p", ep);
+
+    ep->rx.length += recv_length;
+    ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, recv_length);
 
     return 1;
 }
@@ -616,7 +617,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         recv_length = hdr->length - (ep->rx.length - ep->rx.offset - sizeof(*hdr));
     }
 
-    if (!uct_tcp_ep_recv(ep, &recv_length)) {
+    if (!uct_tcp_ep_recv(ep, recv_length)) {
         goto out;
     }
 

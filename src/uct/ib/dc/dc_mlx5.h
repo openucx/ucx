@@ -194,7 +194,7 @@ void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_c
 
 ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_rc_txqp_t *dci);
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uint8_t dci);
 
 void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface);
 
@@ -243,11 +243,11 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
  */
 static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t qp_num)
 {
-    uct_dc_dci_t *dcis = iface->tx.dcis;
+    uct_ib_mlx5_txwq_t *dcis = iface->tx.dci_wqs;
     int i, ndci = iface->tx.ndci;
 
     for (i = 0; i < ndci; i++) {
-        if (dcis[i].txqp.qp->qp_num == qp_num) {
+        if (dcis[i].super.qp_num == qp_num) {
             return i;
         }
     }

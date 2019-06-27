@@ -239,7 +239,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
-    ibv_destroy_qp(qp);
+    uct_ib_destroy_qp(qp);
 
     self->config.max_inline = cap.max_inline_data;
     uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);
@@ -357,8 +357,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_fence                 = uct_rc_verbs_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
-    .ep_get_address           = uct_rc_ep_get_address,
-    .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
+    .ep_get_address           = uct_rc_verbs_ep_get_address,
+    .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
     .iface_fence              = uct_rc_iface_fence,
     .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,

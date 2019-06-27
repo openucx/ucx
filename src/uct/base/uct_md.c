@@ -336,7 +336,7 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 #if ENABLE_DEBUG_DATA
     void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
 #else
-    void *rbuf = rkey_buffer + UCT_MD_COMPONENT_NAME_MAX;
+    void *rbuf = rkey_buffer;
 #endif
     return md->ops->mkey_pack(md, memh, rbuf);
 }
@@ -346,17 +346,20 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
 {
     char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
-    if (ENABLE_PARAMS_CHECK &&
-        strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
-        ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s", (const char*)rkey_buffer);
-        ucs_error("invalid component for rkey unpack; expected: %s, actual: %s",
-                  mdc_name, component->name);
-        return UCS_ERR_INVALID_PARAM;
+    if (ENABLE_PARAMS_CHECK && ENABLE_DEBUG_DATA) {
+        if (strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
+            ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s",
+                              (const char*)rkey_buffer);
+            ucs_error("invalid component for rkey unpack; "
+                      "expected: %s, actual: %s", mdc_name, component->name);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        rkey_buffer += UCT_MD_COMPONENT_NAME_MAX;
     }
 
-    return component->rkey_unpack(component,
-                                  rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
-                                  &rkey_ob->rkey, &rkey_ob->handle);
+    return component->rkey_unpack(component, rkey_buffer, &rkey_ob->rkey,
+                                  &rkey_ob->handle);
 }
 
 ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,

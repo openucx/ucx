@@ -749,6 +749,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
 
+    self->tx.wq.super.type = UCT_IB_MLX5_QP_TYPE_VERBS;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);
 
