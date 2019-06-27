@@ -144,7 +144,7 @@ typedef struct uct_iov {
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Remote data attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_cm_remote_data are
@@ -166,7 +166,7 @@ enum uct_cm_remote_data_field {
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Data received from the remote peer.
  *
  * The remote peer's device address, the data received from it and their lengths.
@@ -337,7 +337,7 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to process an incoming connection request on the server side.
  *
  * This callback routine will be invoked on the server side upon receiving an
@@ -369,7 +369,7 @@ typedef void
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to process an incoming connection request on the server side
  *        listener in a connection manager.
  *
@@ -400,7 +400,7 @@ typedef void
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to process an incoming connection establishment acknowledgment
  *        on the server side listener, from the client, which indicates that the
  *        client side is connected.
@@ -423,7 +423,7 @@ typedef void (*uct_ep_server_connect_cb_t)(uct_ep_h ep, void *arg,
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to process an incoming connection response on the client side
  *        from the server.
  *
@@ -446,7 +446,7 @@ typedef void (*uct_ep_client_connect_cb_t)(uct_ep_h ep, void *arg,
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to handle the disconnecion of the remote peer.
  *
  * This callback routine will be invoked on the client and server sides upon
@@ -466,7 +466,7 @@ typedef void (*uct_ep_disconnect_cb_t)(uct_ep_h ep, void *arg);
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to fill the user's private data in a client-server flow.
  *
  * This callback routine will be invoked on the client side, before sending the

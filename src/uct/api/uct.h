@@ -107,6 +107,90 @@ BEGIN_C_DECLS
  */
 
 /**
+ * @defgroup UCT_CLIENT_SERVER   UCT client-server operations
+ * @ingroup UCT_API
+ * @{
+ * Defines client-server operations.
+ * The client-server API allows the connection establishment between an active
+ * side - a client, and its peer - the passive side - a server.
+ * The connection can be established through a UCT transport that supports
+ * listening and connecting via IP address and port (listening can also be on INADDR_ANY).
+ *
+ * The following is a general overview of the operations on the server side:
+ *
+ * Connecting:
+ * @ref uct_cm_open
+ *      Open a connection manager.
+ * @ref uct_listener_create
+ *      Create a listener on the CM and start listening on a given IP,port / INADDR_ANY.
+ * @ref uct_listener_conn_request_callback_t
+ *      This callback is invoked by the UCT transport to handle an incoming connection
+ *      request from a client.
+ *      Accept or reject the client's connection request.
+ * @ref uct_ep_create
+ *      Connect to the client by creating an endpoint in case of accepting its request.
+ * @ref uct_sockaddr_priv_pack_callback_t
+ *      This callback is invoked by the UCT transport to fill the user's private data
+ *      in the server's notification back to the client.
+ *      Send the client a notification of accepting or rejecting the connection request.
+ *      Wait for an acknowledgment from the client, indicating that it is connected.
+ * @ref uct_ep_server_connect_cb_t
+ *      This callback is invoked by the UCT transport to handle the connection
+ *      acknowledgment from the client.
+ *
+ * Disconnecting:
+ * @ref uct_ep_disconnect
+ *      Disconnect the server's endpoint from the client.
+ *      Invoke when initiating a disconnect or when receiving a disconnect
+ *      notification from the remote side.
+ * @ref uct_ep_disconnect_cb_t
+ *      This callback is invoked by the UCT transport to handle the disconnecion
+ *      of the remote peer.
+ * @ref uct_ep_destroy
+ *      Destroy the endpoint connected to the remote peer.
+ *
+ * Destroying the server's resources:
+ * @ref uct_listener_destroy
+ *      Destroy the transport listener.
+ * @ref uct_cm_close
+ *      Close the connection manager.
+ *
+ * The following is a general overview of the operations on the client side:
+ *
+ * Connecting:
+ * @ref uct_cm_open
+ *      Open a connection manager.
+ * @ref uct_ep_create
+ *      Create an endpoint to the server side.
+ * @ref uct_sockaddr_priv_pack_callback_t
+ *      This callback is invoked by the UCT transport to fill the user's private data
+ *      in the connection request to be sent to the server.
+ *      Send the connection request to the server.
+ *      Wait for an acknowledgment from the server, indicating that it is connected.
+ * @ref uct_ep_client_connect_cb_t
+ *      This callback is invoked by the UCT transport to handle a connection response
+ *      from the server.
+ *      Connect to the server.
+ *
+ * Disconnecting:
+ * @ref uct_ep_disconnect
+ *      Disconnect the client's endpoint from the server.
+ *      Invoke when initiating a disconnect or when receiving a disconnect
+ *      notification from the remote side.
+ * @ref uct_ep_disconnect_cb_t
+ *      This callback is invoked by the UCT transport to handle the disconnecion
+ *      of the remote peer.
+ * @ref uct_ep_destroy
+ *      Destroy the endpoint connected to the remote peer.
+ *
+ * Destroying the client's resources:
+ * @ref uct_cm_close
+ *      Close the connection manager.
+ *
+ * @}
+ */
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Memory domain resource descriptor.
  *
@@ -592,7 +676,7 @@ typedef enum {
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief UCT connection manager attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_cm_attr_t are
@@ -605,27 +689,21 @@ enum uct_cm_attr_field {
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief UCT listener created by @ref uct_listener_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_listener_params_t
  * are present, for backward compatibility support.
  */
 enum uct_listener_params_field {
-    /** Enables @ref uct_listener_params::cm */
-    UCT_LISTENER_PARAM_FIELD_CM              = UCS_BIT(0),
-
-    /** Enables @ref uct_listener_params::sockaddr */
-    UCT_LISTENER_PARAM_FIELD_SOCKADDR        = UCS_BIT(1),
-
     /** Enables @ref uct_listener_params::backlog */
-    UCT_LISTENER_PARAM_FIELD_BACKLOG         = UCS_BIT(2),
+    UCT_LISTENER_PARAM_FIELD_BACKLOG         = UCS_BIT(0),
 
     /** Enables @ref uct_listener_params::conn_request_cb */
-    UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB = UCS_BIT(3),
+    UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB = UCS_BIT(1),
 
     /** Enables @ref uct_listener_params::user_data */
-    UCT_LISTENER_PARAM_FIELD_USER_DATA       = UCS_BIT(4)
+    UCT_LISTENER_PARAM_FIELD_USER_DATA       = UCS_BIT(2)
 };
 
 
@@ -974,7 +1052,7 @@ struct uct_ep_params {
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Connection manager attributes, capabilities and limitations.
  */
 struct uct_cm_attr {
@@ -994,7 +1072,7 @@ struct uct_cm_attr {
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Parameters for creating a listener object @ref uct_listener_h by
  * @ref uct_listener_create
  */
@@ -1005,16 +1083,6 @@ struct uct_listener_params {
      * will be ignored.
      */
     uint64_t                             field_mask;
-
-    /**
-     * Connection manager, a mandatory field.
-     */
-    uct_cm_h                             cm;
-
-    /**
-     * Socket address to listen on, a mandatory field.
-     */
-    ucs_sock_addr_t                      sockaddr;
 
     /**
      * Backlog of incoming connection requests.
@@ -1656,7 +1724,7 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Accept connection request.
  *
  * @param [in] iface        Transport interface which generated connection
@@ -1671,7 +1739,7 @@ ucs_status_t uct_iface_accept(uct_iface_h iface,
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Reject connection request. Will invoke an error handler @ref
  *        uct_error_handler_t on the remote transport interface, if set.
  *
@@ -1684,6 +1752,21 @@ ucs_status_t uct_iface_accept(uct_iface_h iface,
  */
 ucs_status_t uct_iface_reject(uct_iface_h iface,
                               uct_conn_request_h conn_request);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Reject connection request.
+ *
+ * @param [in] listener     Listener which will reject the connection request.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_listener_conn_request_callback_t.
+ *
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_listener_reject(uct_listener_h listener,
+                                 uct_conn_request_h conn_request);
 
 
 /**
@@ -1723,7 +1806,7 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Initiate a synchronized disconnection of an endpoint connected to a
  *        sockaddr by a connection manager @ref uct_cm_h.
  *
@@ -2860,7 +2943,7 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Open a connection manager.
  *
  * Open a specific connection manager. All client server connection
@@ -2881,7 +2964,7 @@ ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker, uct_cm_
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Close a connection manager.
  *
  * @param [in]  cm    Connection manager to close.
@@ -2890,7 +2973,7 @@ void uct_cm_close(uct_cm_h cm);
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Get connection manager attributes.
  *
  * @param [in]  cm      Connection manager to query.
@@ -2900,22 +2983,24 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Create a new transport listener object.
  *
+ * @param [in]  cm          Connection manager on which to open the listener.
+ * @param [in]  sockaddr    The sockaddr to listen on.
  * @param [in]  params      User defined @ref uct_listener_params_t
  *                          configurations for the @a listener_p.
  * @param [out] listener_p  Filled with handle to the new listener.
  *
- *
  * @return Error code.
  */
-ucs_status_t uct_listener_create(const uct_listener_params_t *params,
+ucs_status_t uct_listener_create(uct_cm_h cm, ucs_sock_addr_t sockaddr,
+                                 const uct_listener_params_t *params,
                                  uct_listener_h *listener_p);
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Destroy a transport listener.
  *
  * @param [in]  listener    Listener to destroy.
