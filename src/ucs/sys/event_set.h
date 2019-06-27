@@ -92,11 +92,11 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd);
 /**
  * Wait for an I/O events
  *
- * @param [in]  event_set          Event set created by ucs_event_set_create.
- * @param [in/out]  num_events     Number of expected/read events.
- * @param [in]  timeout_ms         Timeout period in ms.
- * @param [in]  event_set_handler  Callback functions.
- * @param [in]  arg                User data variables.
+ * @param [in]     event_set          Event set created by ucs_event_set_create.
+ * @param [in/out] num_events         Number of expected/read events.
+ * @param [in]     timeout_ms         Timeout period in ms.
+ * @param [in]     event_set_handler  Callback functions.
+ * @param [in]     arg                User data variables.
  *
  * @return return UCS_OK on success, UCS_INPROGRESS - call was interrupted by a
  *         signal handler, UCS_ERR_IO_ERROR - an error occurred during waiting

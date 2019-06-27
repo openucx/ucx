@@ -83,7 +83,6 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     int pipefd[2];
     unsigned nread;
     ucs_status_t status;
-    
 
     if (pipe(pipefd) == -1) {
         UCS_TEST_MESSAGE << strerror(errno);
@@ -200,4 +199,4 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
 
     close(pipefd[0]);
     close(pipefd[1]);
-} 
+}
