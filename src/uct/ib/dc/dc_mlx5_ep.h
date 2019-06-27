@@ -379,13 +379,6 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
 }
 
-static inline ucs_status_t
-uct_dc_mlx5_iface_check_txqp(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep, uct_rc_txqp_t *txqp)
-{
-    UCT_RC_CHECK_TXQP(&iface->super.super, ep, txqp);
-    return UCS_OK;
-}
-
 static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     /* take a first available dci from stack.

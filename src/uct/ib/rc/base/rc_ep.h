@@ -76,36 +76,36 @@ enum {
 /*
  * Check for send resources
  */
-#define UCT_RC_CHECK_CQE_RET(_iface, _ep, _txqp, _ret) \
+#define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
         (signed)(_iface)->config.tx_moderation)) { \
+        uct_rc_txqp_t *txqp; \
         if (!uct_rc_iface_have_tx_cqe_avail(_iface)) { \
             UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
             UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
             return _ret; \
         } \
+        txqp = &(_ep)->txqp; \
         /* if unsignaled == RC_UNSIGNALED_INF this value was already saved and \
            next operation will be defenitly signaled */ \
-        if ((_txqp)->unsignaled != RC_UNSIGNALED_INF) { \
-            (_txqp)->unsignaled_store_count++; \
-            (_txqp)->unsignaled_store += (_txqp)->unsignaled; \
-            (_txqp)->unsignaled        = RC_UNSIGNALED_INF; \
+        if (txqp->unsignaled != RC_UNSIGNALED_INF) { \
+            txqp->unsignaled_store_count++; \
+            txqp->unsignaled_store += txqp->unsignaled; \
+            txqp->unsignaled        = RC_UNSIGNALED_INF; \
         } \
     }
 
-#define UCT_RC_CHECK_TXQP_RET(_iface, _ep, _txqp, _ret) \
-    if (uct_rc_txqp_available(_txqp) <= 0) { \
-        UCS_STATS_UPDATE_COUNTER((_txqp)->stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
+#define UCT_RC_CHECK_TXQP_RET(_iface, _ep, _ret) \
+    if (uct_rc_txqp_available(&(_ep)->txqp) <= 0) { \
+        UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
     }
 
-#define UCT_RC_CHECK_CQE(_iface, _ep, _txqp) \
-    UCT_RC_CHECK_CQE_RET(_iface, _ep, _txqp, UCS_ERR_NO_RESOURCE)
-
-#define UCT_RC_CHECK_TXQP(_iface, _ep, _txqp) \
-    UCT_RC_CHECK_TXQP_RET(_iface, _ep, _txqp, UCS_ERR_NO_RESOURCE) \
+#define UCT_RC_CHECK_RES(_iface, _ep) \
+    UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_ERR_NO_RESOURCE) \
+    UCT_RC_CHECK_TXQP_RET(_iface, _ep, UCS_ERR_NO_RESOURCE)
 
 /*
  * check for FC credits and add FC protocol bits (if any)
@@ -158,10 +158,6 @@ enum {
         \
         UCT_RC_UPDATE_FC_WND(_iface, &(_ep)->fc) \
     }
-
-#define UCT_RC_CHECK_RES(_iface, _ep) \
-    UCT_RC_CHECK_CQE(_iface, (_ep), &(_ep)->txqp) \
-    UCT_RC_CHECK_TXQP(_iface, (_ep), &(_ep)->txqp);
 
 
 /* this is a common type for all rc and dc transports */
