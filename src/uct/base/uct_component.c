@@ -51,7 +51,7 @@ ucs_status_t uct_component_query(uct_component_h component,
 {
     uct_md_component_t *mdc = component;
     uct_md_resource_desc_t *resources = NULL;
-    unsigned num_resources;
+    unsigned num_resources = 0;
     ucs_status_t status;
 
     if (component_attr->field_mask & (UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT|
