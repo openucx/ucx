@@ -136,9 +136,10 @@ typedef struct uct_rc_fc_request {
 } uct_rc_fc_request_t;
 
 
-typedef struct uct_rc_fc_config {
+typedef struct uct_rc_common_config {
     double            soft_thresh;
-} uct_rc_fc_config_t;
+    unsigned          tx_cq_moderation; /* How many TX messages are batched to one CQE */
+} uct_rc_common_config_t;
 
 
 struct uct_rc_iface_config {
@@ -293,7 +294,7 @@ typedef struct uct_rc_am_short_hdr {
 
 
 extern ucs_config_field_t uct_rc_iface_config_table[];
-extern ucs_config_field_t uct_rc_fc_config_table[];
+extern ucs_config_field_t uct_rc_common_config_table[];
 
 unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface);
 
@@ -338,7 +339,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
                                      uint32_t imm_data, uint16_t lid, unsigned flags);
 
-ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
+ucs_status_t uct_rc_init_fc_thresh(double soft_thresh,
                                    uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface);
 

@@ -41,9 +41,9 @@ typedef struct uct_rc_verbs_ep {
  */
 typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
+    uct_rc_common_config_t             rc_common;
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
-    uct_rc_fc_config_t                 fc;
     int                                fence;
 } uct_rc_verbs_iface_config_t;
 

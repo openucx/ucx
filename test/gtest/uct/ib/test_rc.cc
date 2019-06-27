@@ -82,6 +82,25 @@ UCS_TEST_P(test_rc, stress_iface_ops) {
     test_iface_ops();
 }
 
+UCS_TEST_P(test_rc, tx_cq_moderation) {
+    unsigned tx_mod   = ucs_min(rc_iface(m_e1)->config.tx_moderation / 4, 8);
+    int16_t init_rsc  = rc_ep(m_e1)->txqp.available;
+
+    send_am_messages(m_e1, tx_mod, UCS_OK);
+
+    int16_t rsc = rc_ep(m_e1)->txqp.available;
+
+    EXPECT_LE(rsc, init_rsc);
+
+    short_progress_loop(100);
+
+    EXPECT_EQ(rsc, rc_ep(m_e1)->txqp.available);
+
+    flush();
+
+    EXPECT_EQ(init_rsc, rc_ep(m_e1)->txqp.available);
+}
+
 UCT_RC_INSTANTIATE_TEST_CASE(test_rc)
 
 

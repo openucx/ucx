@@ -20,7 +20,7 @@
  */
 typedef struct uct_rc_mlx5_iface_config {
     uct_rc_mlx5_iface_common_config_t super;
-    uct_rc_fc_config_t                fc;
+    uct_rc_common_config_t            rc_common;
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
 
@@ -31,8 +31,8 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
    UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
   {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, fc),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, rc_common),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_common_config_table)},
 
   {NULL}
 };
@@ -398,8 +398,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     dev                              = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode               = config->mlx5_common.mmio_mode;
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
-    self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
-                                               self->tx.bb_max / 4);
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
@@ -509,7 +507,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);
 
-    status = uct_rc_init_fc_thresh(&config->fc, &config->super.super, &self->super.super);
+    self->super.super.config.tx_moderation = ucs_min(config->rc_common.tx_cq_moderation,
+                                                     self->super.tx.bb_max / 4);
+
+    status = uct_rc_init_fc_thresh(config->rc_common.soft_thresh,
+                                   &config->super.super, &self->super.super);
     if (status != UCS_OK) {
         return status;
     }

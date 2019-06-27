@@ -39,8 +39,8 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_config_t, fence), UCS_CONFIG_TYPE_BOOL},
 
   {"", "", NULL,
-   ucs_offsetof(uct_rc_verbs_iface_config_t, fc),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
+   ucs_offsetof(uct_rc_verbs_iface_config_t, rc_common),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_common_config_table)},
 
   {NULL}
 };
@@ -195,7 +195,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
                                                self->super.config.tx_qp_len);
-    self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
+    self->super.config.tx_moderation = ucs_min(config->rc_common.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
     self->super.config.fence         = config->fence;
 
@@ -228,7 +228,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     uct_rc_verbs_iface_init_inl_wrs(self);
 
     /* Check FC parameters correctness */
-    status = uct_rc_init_fc_thresh(&config->fc, &config->super, &self->super);
+    status = uct_rc_init_fc_thresh(config->rc_common.soft_thresh,
+                                   &config->super, &self->super);
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
