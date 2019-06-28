@@ -183,8 +183,9 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
-        if (!strcmp(md_name, "rdmacm") && (!ucs::is_rdmacm_netdev(ifa->ifa_name))) {
+        /* If rdmacm/sockcm is tested, make sure that this is an IPoIB or RoCE or ethernet interface */
+        if ((!strcmp(md_name, "rdmacm") && (!ucs::is_rdmacm_netdev(ifa->ifa_name)))
+        || (!strcmp(md_name, "sockcm") && (!ucs::is_sockcm_netdev(ifa->ifa_name)))) {
             continue;
         }
 
