@@ -25,7 +25,7 @@ ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint32_t length)
 
     mpmc->consumer = 0;
     mpmc->producer = 0;
-    mpmc->queue = ucs_malloc(sizeof(int) * mpmc->length, "mpmc");
+    mpmc->queue = ucs_malloc(sizeof(*mpmc->queue) * mpmc->length, "mpmc");
     if (mpmc->queue == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
