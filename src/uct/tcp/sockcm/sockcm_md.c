@@ -68,6 +68,8 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     int sock_id = -1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr *param_sockaddr = NULL;
+    struct sockaddr_in *addr;
+    socklen_t sockaddr_len;
 
     param_sockaddr = (struct sockaddr *) sockaddr->addr;
 
@@ -82,8 +84,20 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     }
 
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
+        addr = (struct sockaddr_in *) param_sockaddr;
+        if (addr->sin_family == AF_INET) {
+            ucs_debug("family = AF_INET");
+            sockaddr_len = sizeof(struct sockaddr_in);
+        } else if (addr->sin_family == AF_INET6) {
+            ucs_debug("family = AF_INET6");
+            sockaddr_len = sizeof(struct sockaddr_in6);
+        } else {
+            ucs_debug("family != AF_INET and != AF_INET6");
+            sockaddr_len = -1;
+        }
+        ucs_debug("addr_len = %ld", (long int) sockaddr_len);
 
-        if (bind(sock_id, param_sockaddr, sockaddr->addrlen)) {
+        if (bind(sock_id, param_sockaddr, sockaddr_len)) {
             ucs_debug("bind(addr = %s) failed: %m",
                       ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
