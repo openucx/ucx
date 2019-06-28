@@ -404,6 +404,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
     } while (ep == NULL);
 
     if (status == UCS_OK) {
+        /* cppcheck-suppress autoVariables */
         *ep_p = &ep->super.super;
     }
     return status;

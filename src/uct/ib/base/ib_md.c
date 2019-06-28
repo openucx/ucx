@@ -753,6 +753,8 @@ static ucs_status_t uct_ib_mem_global_odp_reg(uct_md_h uct_md, void *address,
     if (md->config.odp.prefetch) {
         uct_ib_mem_prefetch_internal(md, &md->global_odp, address, length);
     }
+    
+    /* cppcheck-suppress autoVariables */
     *memh_p = &md->global_odp;
     return UCS_OK;
 }
@@ -1149,6 +1151,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
+    /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
     status = UCS_OK;
 
