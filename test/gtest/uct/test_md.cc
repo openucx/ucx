@@ -446,7 +446,7 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
 
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
 
-    /* go through a linked list of available interfaces */
+    /*  go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
             sock_addr.addr = ifa->ifa_addr;
