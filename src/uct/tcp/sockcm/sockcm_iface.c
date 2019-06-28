@@ -34,7 +34,6 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
     uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
     struct sockaddr_in sin;
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
     uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
