@@ -543,7 +543,6 @@ static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
                  ", total shared memory pages in the system (%lu) would exceed the"
                  " limit in /proc/sys/kernel/shmall (=%lu)",
                  new_shm_tot, ipc_info->shmall);
-        p += strlen(p);
     }
 }
 
