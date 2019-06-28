@@ -496,6 +496,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
     ucs_sock_addr_t sock_addr;
     struct ifaddrs *ifaddr, *ifa;
     int found_ipoib = 0;
+    int found_ip = 0;
 
     check_caps(UCT_MD_FLAG_SOCKADDR, "sockaddr");
 
@@ -516,6 +517,16 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                                                               UCT_SOCKADDR_ACC_REMOTE));
                     found_ipoib = 1;
                 }
+            } else if (!strcmp(GetParam().c_str(), "sockcm")) {
+                if (ucs::is_sockcm_netdev(ifa->ifa_name)) {
+                    UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
+                                        ucs::sockaddr_to_str(ifa->ifa_addr);
+                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                              UCT_SOCKADDR_ACC_LOCAL));
+                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                              UCT_SOCKADDR_ACC_REMOTE));
+                    found_ip = 1;
+                }
             } else {
                 UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                     ucs::sockaddr_to_str(ifa->ifa_addr);
@@ -529,6 +540,10 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 
     if ((GetParam().md_name == "rdmacm") && !found_ipoib) {
         UCS_TEST_MESSAGE << "Cannot find an IPoIB interface with an IPv4 address on the host";
+    }
+
+    if ((!strcmp(GetParam().c_str(), "sockcm")) && (!found_ip)) {
+        UCS_TEST_MESSAGE << "Cannot find an IPv4/IPv6 interface on the host";
     }
 
     freeifaddrs(ifaddr);
@@ -545,6 +560,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                    cuda_ipc, \
                    ib, \
                    ugni, \
+                   sockcm, \
                    rdmacm \
                    )
 
