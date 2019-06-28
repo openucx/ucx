@@ -277,6 +277,11 @@ bool is_inet_addr(const struct sockaddr* ifa_addr);
  */
 bool is_rdmacm_netdev(const char *ifa_name);
 
+/**
+ * Check if the given network device is supported by rdmacm.
+ */
+bool is_sockcm_netdev(const char *ifa_name);
+
 
 /**
  * Get an available port on the host.
