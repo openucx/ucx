@@ -524,8 +524,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
 
-    init_attr->tx_cq_len = config->tx.cq_len;
-
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               &config->super, init_attr);
 
