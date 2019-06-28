@@ -31,7 +31,7 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
-    uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
+    uct_sockcm_iface_t  *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
     struct sockaddr_in sin;
 
     uct_base_iface_query(&iface->super, iface_attr);
