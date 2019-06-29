@@ -78,3 +78,8 @@ tags
 /ucx-*.*.*
 /v*.*.*
 org_ucx_jucx_*.h
+GPATH
+GRTAGS
+GTAGS
+/modules
+*.swp
