@@ -88,10 +88,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of SG entries to reserve in the send WQE.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
 
-  {"TX_CQ_MODERATION", "64",
-   "Maximum number of send WQEs which can be posted without requesting a completion.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
-
 #if HAVE_DECL_IBV_EXP_CQ_MODERATION
   {"TX_EVENT_MOD_COUNT", "0",
    "Number of send completions for which an event would be generated (0 - disabled).",

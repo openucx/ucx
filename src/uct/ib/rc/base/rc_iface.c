@@ -70,11 +70,16 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 };
 
 
-ucs_config_field_t uct_rc_fc_config_table[] = {
+/* Config relevant for rc_mlx5 and rc_verbs only (not for dc) */
+ucs_config_field_t uct_rc_common_config_table[] = {
   {"FC_SOFT_THRESH", "0.5",
    "Threshold for sending soft request for FC credits to the peer. This value\n"
    "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
-   ucs_offsetof(uct_rc_fc_config_t, soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+   ucs_offsetof(uct_rc_common_config_t, soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+
+  {"TX_CQ_MODERATION", "64",
+   "Maximum number of send WQEs which can be posted without requesting a completion.",
+   ucs_offsetof(uct_rc_common_config_t, tx_cq_moderation), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -319,22 +324,21 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
+ucs_status_t uct_rc_init_fc_thresh(double soft_thresh,
                                    uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface)
 {
     /* Check FC parameters correctness */
-    if ((fc_cfg->soft_thresh <= rc_cfg->fc.hard_thresh) ||
-        (fc_cfg->soft_thresh >= 1)) {
+    if ((soft_thresh <= rc_cfg->fc.hard_thresh) || (soft_thresh >= 1)) {
         ucs_error("The factor for soft FC threshold should be bigger"
                   " than FC_HARD_THRESH value and less than 1 (s=%f, h=%f)",
-                  fc_cfg->soft_thresh, rc_cfg->fc.hard_thresh);
+                  soft_thresh, rc_cfg->fc.hard_thresh);
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (rc_cfg->fc.enable) {
         iface->config.fc_soft_thresh = ucs_max((int)(iface->config.fc_wnd_size *
-                                               fc_cfg->soft_thresh), 1);
+                                               soft_thresh), 1);
     } else {
         iface->config.fc_soft_thresh  = 0;
     }
@@ -513,8 +517,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
-    self->config.tx_moderation      = ucs_min(config->super.tx.cq_moderation,
-                                              config->super.tx.queue_len / 4);
     self->config.tx_ops_count       = init_attr->tx_cq_len;
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);

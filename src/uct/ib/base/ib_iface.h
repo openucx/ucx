@@ -70,7 +70,6 @@ struct uct_ib_iface_config {
         size_t              min_inline;      /* Inline space to reserve for sends */
         size_t              inl_resp;        /* Inline space to reserve for responses */
         unsigned            min_sge;         /* How many SG entries to support */
-        unsigned            cq_moderation;   /* How many TX messages are batched to one CQE */
         uct_iface_mpool_config_t mp;
 
         /* Event moderation parameters */
