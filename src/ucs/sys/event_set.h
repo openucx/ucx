@@ -9,8 +9,10 @@
 
 #include <ucs/type/status.h>
 
+#include <sys/epoll.h>
+
 /**
- * ucs_sys_event_set structure used in ucs_event_set_XXX functions.
+ * ucs_sys_event_set_t structure used in ucs_event_set_XXX functions.
  *
  */
 typedef struct ucs_sys_event_set ucs_sys_event_set_t;
@@ -36,6 +38,9 @@ typedef enum {
     UCS_EVENT_SET_EVWRITE = UCS_BIT(1),
     UCS_EVENT_SET_EVNONE =  UCS_BIT(2)
 } ucs_event_set_type_t;
+
+/* The maximum possible number of events based on system constraints */
+extern const unsigned ucs_sys_event_set_max_wait_events;
 
 /**
  * Allocate ucs_sys_event_set_t structure.
@@ -87,21 +92,20 @@ ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd);
 /**
  * Wait for an I/O events
  *
- * @param [in]  event_set          Event set created by ucs_event_set_create.
- * @param [in]  max_events         Maximum wait events.
- * @param [in]  timeout_ms         Timeout period in ms.
- * @param [in]  event_set_handler  Callback functions.
- * @param [in]  arg                User data variables.
- * @param [out] read_events        Number of read events.
+ * @param [in]     event_set          Event set created by ucs_event_set_create.
+ * @param [in/out] num_events         Number of expected/read events.
+ * @param [in]     timeout_ms         Timeout period in ms.
+ * @param [in]     event_set_handler  Callback functions.
+ * @param [in]     arg                User data variables.
  *
  * @return return UCS_OK on success, UCS_INPROGRESS - call was interrupted by a
- *         signal handler or there are probably more events to read,
- *         UCS_ERR_IO_ERROR - an error occurred.
+ *         signal handler, UCS_ERR_IO_ERROR - an error occurred during waiting
+ *         for I/O events.
  */
 ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
-                                unsigned max_events, int timeout_ms,
+                                unsigned *num_events, int timeout_ms,
                                 ucs_event_set_handler_t event_set_handler,
-                                void *arg, unsigned *read_events);
+                                void *arg);
 
 /**
  * Cleanup event set
