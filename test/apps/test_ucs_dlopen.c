@@ -73,7 +73,8 @@ int main(int argc, char **argv)
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (ptr2 == MAP_FAILED) {
         fprintf(stderr, "mmmap() failed: %m\n");
-        return -1;
+        ret = -1;
+        goto failed_mmap;
     }
 
     /* load ucm */
@@ -82,23 +83,23 @@ int main(int argc, char **argv)
     handle = dlopen(filename, RTLD_NOW);
     if (handle == NULL) {
         fprintf(stderr, "failed to open %s: %s\n", filename, dlerror());
-        return -1;
+        ret = -1;
+        goto failed_dlopen;
     }
 
     /* init ucm */
     ret = test_ucm_set_event_handler(handle);
-    if (ret < 0) {
-        return ret;
-    }
 
     /* unload ucp */
     dlclose(handle);
 
+failed_dlopen:
     /* release the memory - could break if UCM is unloaded */
     munmap(ptr2, alloc_size);
+failed_mmap:
     free(ptr1);
 
     printf("done\n");
-    return 0;
+    return ret;
 }
 
