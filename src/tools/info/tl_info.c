@@ -245,14 +245,14 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_EP |
                                     UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-                strncat(buf, " to ep,", sizeof(buf) - 1);
+                strncat(buf, " to ep,", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-                strncat(buf, " to iface,", sizeof(buf) - 1);
+                strncat(buf, " to iface,", sizeof(buf) - strlen(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
         } else {
-            strncat(buf, " none", sizeof(buf) - 1);
+            strncat(buf, " none", sizeof(buf) - strlen(buf) - 1);
         }
         printf("#           connection:%s\n", buf);
 
@@ -277,31 +277,31 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF)) {
-                strncat(buf, " buffer (", sizeof(buf) - 1);
+                strncat(buf, " buffer (", sizeof(buf) - strlen(buf) - 1);
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF) {
-                    strncat(buf, "short,", sizeof(buf) - 1);
+                    strncat(buf, "short,", sizeof(buf) - strlen(buf) - 1);
                 }
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF) {
-                    strncat(buf, "bcopy,", sizeof(buf) - 1);
+                    strncat(buf, "bcopy,", sizeof(buf) - strlen(buf) - 1);
                 }
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF) {
-                    strncat(buf, "zcopy,", sizeof(buf) - 1);
+                    strncat(buf, "zcopy,", sizeof(buf) - strlen(buf) - 1);
                 }
                 buf[strlen(buf) - 1] = '\0';
-                strncat(buf, "),", sizeof(buf) - 1);
+                strncat(buf, "),", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_AM_ID) {
-                strncat(buf, " active-message id,", sizeof(buf) - 1);
+                strncat(buf, " active-message id,", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM) {
-                strncat(buf, " remote access,", sizeof(buf) - 1);
+                strncat(buf, " remote access,", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) {
-                strncat(buf, " peer failure,", sizeof(buf) - 1);
+                strncat(buf, " peer failure,", sizeof(buf) - strlen(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
         } else {
-            strncat(buf, " none", sizeof(buf) - 1);
+            strncat(buf, " none", sizeof(buf) - strlen(buf) - 1);
         }
         printf("#       error handling:%s\n", buf);
     }
