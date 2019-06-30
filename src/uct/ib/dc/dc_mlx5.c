@@ -301,14 +301,15 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
 
     uct_ib_mlx5_iface_fill_attr(ib_iface, &iface->super.mlx5_common, &attr);
     uct_ib_iface_fill_attr(ib_iface, &attr);
-    attr.ibv.cap.max_recv_sge          = 0;
+    attr.ibv.cap.max_recv_sge           = 0;
 
     dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
     dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
     dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
     qp = mlx5dv_create_qp(dev->ibv_context, &attr.ibv, &dv_attr);
     if (qp == NULL) {
-        ucs_error("iface=%p: failed to create DCI: %m", iface);
+        ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
+                  UCT_IB_IFACE_ARG(ib_iface));
         return UCS_ERR_IO_ERROR;
     }
 
@@ -337,9 +338,9 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
         goto err;
     }
 
-    dci->ep      = NULL;
+    dci->ep    = NULL;
 #if ENABLE_ASSERT
-    dci->flags   = 0;
+    dci->flags = 0;
 #endif
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                    iface->super.tx.mmio_mode, &dci->txwq,

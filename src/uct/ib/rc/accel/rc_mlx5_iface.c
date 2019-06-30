@@ -240,8 +240,10 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 #endif
     qp->verbs.qp = mlx5dv_create_qp(dev->ibv_context, &attr->ibv, &dv_attr);
     if (qp->verbs.qp == NULL) {
-        ucs_error("iface=%p: failed to create QP: %m", iface);
-        return UCS_ERR_IO_ERROR;
+        ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT"): failed: %m",
+                  UCT_IB_IFACE_ARG(ib_iface));
+        status = UCS_ERR_IO_ERROR;
+        goto err;
     }
 
     qp->qp_num = qp->verbs.qp->qp_num;
@@ -249,13 +251,13 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     status = uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common,
                                          attr, qp);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 #endif
 
     status = uct_rc_iface_qp_init(&iface->super, qp->verbs.qp);
     if (status != UCS_OK) {
-        goto err;
+        goto err_destory_qp;
     }
 
     if (attr->cap.max_send_wr) {
@@ -265,14 +267,15 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                        qp->verbs.qp);
         if (status != UCS_OK) {
             ucs_error("Failed to get mlx5 QP information");
-            goto err;
+            goto err_destory_qp;
         }
     }
 
     return UCS_OK;
 
-err:
+err_destory_qp:
     ibv_destroy_qp(qp->verbs.qp);
+err:
     return status;
 }
 

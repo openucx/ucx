@@ -275,12 +275,12 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
 
     uct_ib_mlx5_iface_fill_attr(iface, mlx5, attr);
     uct_ib_exp_qp_fill_attr(iface, attr);
-    status =  uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
+    status = uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
     if (status != UCS_OK) {
         return status;
     }
 
-    qp->type = UCT_IB_MLX5_QP_TYPE_VERBS;
+    qp->type   = UCT_IB_MLX5_QP_TYPE_VERBS;
     qp->qp_num = qp->verbs.qp->qp_num;
     return UCS_OK;
 }
