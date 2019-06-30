@@ -130,9 +130,9 @@ BEGIN_C_DECLS
  * @ref uct_ep_create
  *      Connect to the client by creating an endpoint in case of accepting its request.
  * @ref uct_sockaddr_priv_pack_callback_t
- *      This callback is invoked by the UCT transport to fill the user's private data
- *      in the server's notification back to the client.
- *      Send the client a notification of accepting or rejecting the connection request.
+ *      This callback is invoked by the UCT transport to fill auxiliary data in
+ *      the connection acknowledgement or reject notification back to the client.
+ *      Send the client a connection acknowledgement or reject notification.
  *      Wait for an acknowledgment from the client, indicating that it is connected.
  * @ref uct_ep_server_connect_cb_t
  *      This callback is invoked by the UCT transport to handle the connection
@@ -141,17 +141,17 @@ BEGIN_C_DECLS
  * Disconnecting:
  * @ref uct_ep_disconnect
  *      Disconnect the server's endpoint from the client.
- *      Invoke when initiating a disconnect or when receiving a disconnect
+ *      Can be called when initiating a disconnect or when receiving a disconnect
  *      notification from the remote side.
  * @ref uct_ep_disconnect_cb_t
- *      This callback is invoked by the UCT transport to handle the disconnecion
- *      of the remote peer.
+ *      This callback is invoked by the UCT transport when the client side calls
+ *      uct_ep_disconnect as well.
  * @ref uct_ep_destroy
  *      Destroy the endpoint connected to the remote peer.
  *
  * Destroying the server's resources:
  * @ref uct_listener_destroy
- *      Destroy the transport listener.
+ *      Destroy the listener object.
  * @ref uct_cm_close
  *      Close the connection manager.
  *
@@ -161,7 +161,7 @@ BEGIN_C_DECLS
  * @ref uct_cm_open
  *      Open a connection manager.
  * @ref uct_ep_create
- *      Create an endpoint to the server side.
+ *      Create an endpoint for establishing a connection to the server.
  * @ref uct_sockaddr_priv_pack_callback_t
  *      This callback is invoked by the UCT transport to fill the user's private data
  *      in the connection request to be sent to the server.
@@ -175,11 +175,11 @@ BEGIN_C_DECLS
  * Disconnecting:
  * @ref uct_ep_disconnect
  *      Disconnect the client's endpoint from the server.
- *      Invoke when initiating a disconnect or when receiving a disconnect
+ *      Can be called when initiating a disconnect or when receiving a disconnect
  *      notification from the remote side.
  * @ref uct_ep_disconnect_cb_t
- *      This callback is invoked by the UCT transport to handle the disconnecion
- *      of the remote peer.
+ *      This callback is invoked by the UCT transport when the server side calls
+ *      uct_ep_disconnect as well.
  * @ref uct_ep_destroy
  *      Destroy the endpoint connected to the remote peer.
  *
@@ -2987,14 +2987,16 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
  * @brief Create a new transport listener object.
  *
  * @param [in]  cm          Connection manager on which to open the listener.
- * @param [in]  sockaddr    The sockaddr to listen on.
+ * @param [in]  saddr       The socket address to listen on.
+ * @param [in]  socklen     The saddr length.
  * @param [in]  params      User defined @ref uct_listener_params_t
  *                          configurations for the @a listener_p.
  * @param [out] listener_p  Filled with handle to the new listener.
  *
  * @return Error code.
  */
-ucs_status_t uct_listener_create(uct_cm_h cm, ucs_sock_addr_t sockaddr,
+ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
+                                 socklen_t socklen,
                                  const uct_listener_params_t *params,
                                  uct_listener_h *listener_p);
 
