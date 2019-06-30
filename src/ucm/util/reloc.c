@@ -157,7 +157,7 @@ ElfW(Rela) *ucm_reloc_find_sym(void *table, size_t table_size, const char *symbo
 
 
 static ucs_status_t
-ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname,
+ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char UCS_V_UNUSED *phname,
                      int phnum, int phsize,
                      const ucm_reloc_dl_iter_context_t *ctx)
 {
@@ -197,6 +197,11 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     symtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
     strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
     pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
+
+    if ((symtab == NULL) || (strtab == NULL)) {
+        /* no DT_SYMTAB or DT_STRTAB sections are defined */
+        return UCS_OK;
+    }
 
     section_name = ".got.plt";
     reloc        = ucm_reloc_find_sym(jmprel, pltrelsz, ctx->patch->symbol,

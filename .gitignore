@@ -2,6 +2,7 @@
 .project
 .cproject
 .settings
+TAGS
 test/test
 Makefile
 Makefile.in
@@ -35,6 +36,8 @@ depcomp
 .dirstamp
 *.lo
 *.o
+contrib/rpmdef.sh
+bindings/java/pom.xml
 src/ucs/ucs_stats_parser
 test/gtest/gtest
 test/perf/ucx_perftest
@@ -43,6 +46,16 @@ ucx*tar.gz
 src/tools/info/build_config.h
 src/tools/info/ucx_info
 src/tools/perf/ucx_perftest
+src/tools/profile/ucx_read_profile
+test/apps/test_dlopen_cfg_print
+test/apps/test_link_map
+test/apps/test_ucp_dlopen
+test/apps/test_ucs_dlopen
+test/apps/sockaddr/sa
+test/examples/ucp_client_server
+test/examples/ucp_hello_world
+test/examples/uct_hello_world
+test/examples/ucx_profiling
 rpm-dist
 cov_build*
 debian/changelog
@@ -53,6 +66,7 @@ ucx.spec
 ucx.pc
 doc/doxygen-doc
 doc/uml/uct.pdf
+doc/doxygen/header.tex
 test-driver
 src/ucp/api/ucp_version.h
 src/ucp/core/ucp_version.c

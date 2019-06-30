@@ -650,12 +650,15 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
                             int flags, const char *alloc_name, int *shmid)
 {
     char error_string[256];
+#ifdef SHM_HUGETLB
     ssize_t huge_page_size;
+#endif
     size_t alloc_size;
     int sys_errno;
     void *ptr;
     int ret;
 
+#ifdef SHM_HUGETLB
     if (flags & SHM_HUGETLB) {
         huge_page_size = ucs_get_huge_page_size();
         if (huge_page_size <= 0) {
@@ -663,10 +666,11 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
             return UCS_ERR_NO_MEMORY; /* Huge pages not supported */
         }
     }
-
     if (flags & SHM_HUGETLB) {
         alloc_size = ucs_align_up(*size, huge_page_size);
-    } else {
+    } else
+#endif
+    {
         alloc_size = ucs_align_up(*size, ucs_get_page_size());
     }
 
@@ -683,7 +687,10 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
         switch (sys_errno) {
         case ENOMEM:
         case EPERM:
-            if (!(flags & SHM_HUGETLB)) {
+#ifdef SHM_HUGETLB
+            if (!(flags & SHM_HUGETLB))
+#endif
+	    {
                 ucs_error("%s", error_string);
             }
             return UCS_ERR_NO_MEMORY;
