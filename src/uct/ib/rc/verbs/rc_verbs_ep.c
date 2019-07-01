@@ -471,10 +471,10 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(params->iface, uct_rc_verbs_iface_t);
-    struct ibv_qp_cap cap;
+    uct_ib_qp_attr_t attr = {};
     ucs_status_t status;
 
-    status = uct_rc_iface_qp_create(&iface->super, &self->qp, &cap,
+    status = uct_rc_iface_qp_create(&iface->super, &self->qp, &attr,
                                     iface->super.config.tx_qp_len);
     if (status != UCS_OK) {
         goto err;

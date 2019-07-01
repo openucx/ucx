@@ -8,6 +8,7 @@
 #include "rc_verbs_impl.h"
 
 #include <uct/api/uct.h>
+#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
@@ -180,7 +181,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
     ucs_status_t status;
     uct_ib_iface_init_attr_t init_attr = {};
-    struct ibv_qp_cap cap;
+    uct_ib_qp_attr_t attr = {};
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
@@ -235,15 +236,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
 
     /* Create a dummy QP in order to find out max_inline */
-    status = uct_rc_iface_qp_create(&self->super, &qp, &cap,
+    uct_ib_exp_qp_fill_attr(&self->super.super, &attr);
+    status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
                                     self->super.config.tx_qp_len);
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
     uct_ib_destroy_qp(qp);
 
-    self->config.max_inline = cap.max_inline_data;
-    uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);
+    self->config.max_inline = attr.cap.max_inline_data;
+    uct_ib_iface_set_max_iov(&self->super.super, attr.cap.max_send_sge);
 
     if (self->config.max_inline < sizeof(*hdr)) {
         self->fc_desc = ucs_mpool_get(&self->short_desc_mp);
@@ -378,7 +380,6 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp,
     .init_res_domain          = (void*)ucs_empty_function_return_success,
     .cleanup_res_domain       = (void*)ucs_empty_function,
     },

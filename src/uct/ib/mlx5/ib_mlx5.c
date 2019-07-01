@@ -7,7 +7,7 @@
 #include "ib_mlx5.h"
 #include "ib_mlx5.inl"
 #include "ib_mlx5_log.h"
-
+#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/base/ib_device.h>
 #include <ucs/arch/bitops.h>
@@ -269,10 +269,20 @@ void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_iface_common_t *mlx5)
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_iface_common_t *mlx5,
                                          uct_ib_qp_attr_t *attr,
-                                         struct ibv_qp **qp_p)
+                                         uct_ib_mlx5_qp_t *qp)
 {
+    ucs_status_t        status;
+
     uct_ib_mlx5_iface_fill_attr(iface, mlx5, attr);
-    return uct_ib_iface_create_qp(iface, attr, qp_p);
+    uct_ib_exp_qp_fill_attr(iface, attr);
+    status = uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    qp->type   = UCT_IB_MLX5_QP_TYPE_VERBS;
+    qp->qp_num = qp->verbs.qp->qp_num;
+    return UCS_OK;
 }
 
 #if !HAVE_DEVX

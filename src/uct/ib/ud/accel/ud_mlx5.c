@@ -658,8 +658,16 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 struct ibv_qp **qp_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+    uct_ib_mlx5_qp_t qp;
+    ucs_status_t status;
 
-    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common, attr, qp_p);
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common, attr, &qp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *qp_p = qp.verbs.qp;
+    return status;
 }
 
 static ucs_status_t uct_ud_mlx5_init_res_domain(uct_ib_iface_t *ib_iface)
@@ -725,13 +733,13 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .event_cq                 = uct_ud_mlx5_iface_event_cq,
     .handle_failure           = uct_ud_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_ud_mlx5_ep_set_failed,
-    .create_qp                = uct_ud_mlx5_iface_create_qp,
     .init_res_domain          = uct_ud_mlx5_init_res_domain,
     .cleanup_res_domain       = uct_ud_mlx5_cleanup_res_domain,
     },
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .tx_skb                   = uct_ud_mlx5_ep_tx_ctl_skb,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t)
+    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
+    .create_qp                = uct_ud_mlx5_iface_create_qp,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,

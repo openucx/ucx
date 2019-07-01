@@ -93,6 +93,7 @@ typedef struct uct_dc_mlx5_iface_config {
 
 typedef struct uct_dc_dci {
     uct_rc_txqp_t                 txqp; /* DCI qp */
+    uct_ib_mlx5_txwq_t            txwq; /* DCI mlx5 wq */
     union {
         uct_dc_mlx5_ep_t          *ep;  /* points to an endpoint that currently
                                            owns the dci. Relevant only for dcs
@@ -133,7 +134,6 @@ struct uct_dc_mlx5_iface {
     struct {
         /* Array of dcis */
         uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
-        uct_ib_mlx5_txwq_t        dci_wqs[UCT_DC_MLX5_IFACE_MAX_DCIS];
 
         uint8_t                   ndci;                        /* Number of DCIs */
         uct_dc_tx_policy_t        policy;                      /* dci selection algorithm */
@@ -194,8 +194,6 @@ void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_c
 
 ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uint8_t dci);
-
 void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
@@ -214,7 +212,11 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
-ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *dc_mlx5_iface, int dci);
+ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                         uct_dc_dci_t *dci);
+
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                           uct_dc_dci_t *dci);
 
 ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_mlx5_iface_config_t *config);
@@ -243,11 +245,11 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
  */
 static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t qp_num)
 {
-    uct_ib_mlx5_txwq_t *dcis = iface->tx.dci_wqs;
+    uct_dc_dci_t *dcis = iface->tx.dcis;
     int i, ndci = iface->tx.ndci;
 
     for (i = 0; i < ndci; i++) {
-        if (dcis[i].super.qp_num == qp_num) {
+        if (dcis[i].txwq.super.qp_num == qp_num) {
             return i;
         }
     }
