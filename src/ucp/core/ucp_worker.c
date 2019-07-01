@@ -1481,7 +1481,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                ucp_worker_h *worker_p)
 {
     ucs_thread_mode_t uct_thread_mode;
-    ucs_thread_mode_t thread_mode;
     unsigned config_count;
     unsigned name_length;
     ucp_worker_h worker;
@@ -1499,28 +1498,27 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
 #if !ENABLE_MT
-        thread_mode = UCS_THREAD_MODE_SINGLE;
+        uct_thread_mode = UCS_THREAD_MODE_SINGLE;
         if (params->thread_mode != UCS_THREAD_MODE_SINGLE) {
             ucs_debug("forced single thread mode on worker create");
         }
 #else
-        thread_mode = params->thread_mode;
+        if (params->thread_mode != UCS_THREAD_MODE_SINGLE) {
+            /* UCT is serialized by UCP lock or by UCP user */
+            uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
+        } else {
+            uct_thread_mode = UCS_THREAD_MODE_SINGLE;
+        }
+
+        if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
+            worker->flags = UCP_WORKER_FLAG_MT;
+        } else {
+            worker->flags = 0;
+        }
 #endif
     } else {
-        thread_mode = UCS_THREAD_MODE_SINGLE;
-    }
-
-    if (thread_mode == UCS_THREAD_MODE_MULTI) {
-        worker->flags = UCP_WORKER_FLAG_MT;
-    } else {
-        worker->flags = 0;
-    }
-
-    if (thread_mode == UCS_THREAD_MODE_SINGLE) {
+        worker->flags   = 0;
         uct_thread_mode = UCS_THREAD_MODE_SINGLE;
-    } else {
-        /* UCT is serialized by UCP lock or by UCP user */
-        uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
     }
 
     worker->context           = context;
