@@ -86,7 +86,13 @@ resource_speed::resource_speed(uct_component_h component, const uct_worker_h& wo
     uct_config_release(iface_config);
 }
 
-const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
+std::string const uct_test_base::mem_type_names[] = {
+    "host",
+    "cuda",
+    "cuda-managed",
+    "rocm",
+    "rocm-managed"
+};
 
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 

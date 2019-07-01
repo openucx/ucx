@@ -52,7 +52,6 @@ protected:
 
 
     static void* alloc_thread(void *arg);
-    static std::string const mem_types[];
 
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
