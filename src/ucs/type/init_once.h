@@ -44,6 +44,7 @@ typedef struct ucs_init_once {
  * "initialized" to 1. On the next condition check, unlock the mutex and exit.
  */
 #define UCS_INIT_ONCE(_once) \
+    /* coverity[double_unlock] */ \
     for (pthread_mutex_lock(&(_once)->lock); \
          !(_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
          (_once)->initialized = 1)

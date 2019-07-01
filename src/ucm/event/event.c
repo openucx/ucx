@@ -483,7 +483,6 @@ static ucs_status_t ucm_event_install(int events)
     int native_events, malloc_events;
     ucs_status_t status;
 
-    /* coverity[double_unlock] */
     UCS_INIT_ONCE(&init_once) {
         ucm_prevent_dl_unload();
     }
