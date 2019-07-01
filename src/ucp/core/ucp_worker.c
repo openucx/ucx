@@ -1480,7 +1480,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
-    ucs_thread_mode_t uct_thread_mode;
+    ucs_thread_mode_t uct_thread_mode = UCS_THREAD_MODE_SINGLE;
     unsigned config_count;
     unsigned name_length;
     ucp_worker_h worker;
@@ -1506,8 +1506,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         if (params->thread_mode != UCS_THREAD_MODE_SINGLE) {
             /* UCT is serialized by UCP lock or by UCP user */
             uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
-        } else {
-            uct_thread_mode = UCS_THREAD_MODE_SINGLE;
         }
 
         if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
@@ -1516,9 +1514,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
             worker->flags = 0;
         }
 #endif
-    } else {
-        worker->flags   = 0;
-        uct_thread_mode = UCS_THREAD_MODE_SINGLE;
     }
 
     worker->context           = context;
