@@ -240,4 +240,55 @@ public class UcpEndpointTest {
         context1.close();
         context2.close();
     }
+
+    @Test
+    public void testBufferOffset() {
+        int msgSize = 200;
+        int offset = 100;
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestTagFeature();
+        UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+        UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
+        UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        ByteBuffer bigRecvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer bigSendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+
+        bigRecvBuffer.position(offset).limit(offset + msgSize);
+        UcxRequest recv = worker1.recvTaggedNonBlocking(bigRecvBuffer, 0,
+            0,null);
+
+        UcpEndpoint ep = worker2.newEndpoint(new UcpEndpointParams()
+            .setUcpAddress(worker1.getAddress()));
+
+        byte[] msg = new byte[msgSize];
+        for (int i = 0; i < msgSize; i++) {
+            msg[i] = (byte)i;
+        }
+
+        bigSendBuffer.position(offset).limit(offset + msgSize);
+        bigSendBuffer.put(msg);
+        bigSendBuffer.position(offset);
+
+        UcxRequest sent = ep.sendTaggedNonBlocking(bigSendBuffer, 0,null);
+
+        while (!sent.isCompleted() || !recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        bigSendBuffer.position(offset).limit(offset + msgSize);
+        bigRecvBuffer.position(offset).limit(offset + msgSize);
+        final ByteBuffer sendData = bigSendBuffer.slice();
+        final ByteBuffer recvData = bigRecvBuffer.slice();
+        assertEquals("Send buffer not equals to recv buffer", sendData, recvData);
+
+        ep.close();
+        worker1.close();
+        worker2.close();
+        context1.close();
+        context2.close();
+    }
 }
