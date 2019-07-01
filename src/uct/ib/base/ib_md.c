@@ -142,6 +142,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
 
+    {"MLX5_DEVX", "try",
+     "DEVX support\n",
+     ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 

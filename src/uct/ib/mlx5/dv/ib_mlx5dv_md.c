@@ -255,6 +255,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 #endif
 
+    if (md_config->devx == UCS_NO) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
     ctx = mlx5dv_open_device(ibv_device, &dv_attr);
     if (ctx == NULL) {
