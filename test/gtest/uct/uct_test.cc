@@ -648,7 +648,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
         } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
             cuda_mem_alloc(length, mem);
         } else {
-            UCS_TEST_ABORT("wrong memory type");
+            UCS_TEST_SKIP_R("cannot allocate " + mem_type_names[mem_type] +
+                            " memory");
         }
 
         if ((md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
