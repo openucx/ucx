@@ -154,7 +154,7 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
     events = ucs_alloca(sizeof(*events) * *num_events);
 
     nready = epoll_wait(event_set->epfd, events, *num_events, timeout_ms);
-    if (nready < 0) {
+    if (ucs_unlikely(nready < 0)) {
         *num_events = 0;
         if (errno == EINTR) {
             return UCS_INPROGRESS;
