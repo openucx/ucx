@@ -656,7 +656,7 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
             (md_attr().cap.reg_mem_types & UCS_BIT(mem_type))) {
             rkey_buffer = malloc(md_attr().rkey_packed_size);
             if (rkey_buffer == NULL) {
-                UCS_TEST_ABORT("Failed to allocake rkey buffer");
+                UCS_TEST_ABORT("Failed to allocate rkey buffer");
             }
 
             status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
