@@ -404,6 +404,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
     } while (ep == NULL);
 
     if (status == UCS_OK) {
+        /* cppcheck-suppress autoVariables */
         *ep_p = &ep->super.super;
     }
     return status;
@@ -494,9 +495,9 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
 
 static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
 {
-    uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
+    uct_tcp_ep_t *ep                    = (uct_tcp_ep_t*)arg;
+    uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
+                                                         uct_tcp_iface_t);
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
 

@@ -233,6 +233,7 @@ uct_rdmacm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
     md->super.component      = &uct_rdmacm_mdc;
     md->addr_resolve_timeout = md_config->addr_resolve_timeout;
 
+    /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
     status = UCS_OK;
 

@@ -461,9 +461,9 @@ static ucs_status_t parse_ucp_datatype_params(const char *optarg,
 static ucs_status_t parse_message_sizes_params(const char *optarg,
                                                ucx_perf_params_t *params)
 {
-    char *optarg_ptr, *optarg_ptr2;
-    size_t token_num, token_it;
     const char delim = ',';
+    size_t *msg_size_list, token_num, token_it;
+    char *optarg_ptr, *optarg_ptr2;
 
     optarg_ptr = (char *)optarg;
     token_num  = 0;
@@ -474,11 +474,13 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
     }
     ++token_num;
 
-    params->msg_size_list = realloc(params->msg_size_list,
-                                    sizeof(*params->msg_size_list) * token_num);
-    if (NULL == params->msg_size_list) {
+    msg_size_list = realloc(params->msg_size_list,
+                            sizeof(*params->msg_size_list) * token_num);
+    if (NULL == msg_size_list) {
         return UCS_ERR_NO_MEMORY;
     }
+
+    params->msg_size_list = msg_size_list;
 
     optarg_ptr = (char *)optarg;
     errno = 0;
@@ -876,6 +878,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 {
     struct sockaddr_in inaddr;
     struct hostent *he;
+    size_t *msg_size_list, msg_size_cnt;
     ucs_status_t status;
     int optval = 1;
     int sockfd, connfd;
@@ -925,17 +928,33 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         }
 
         close(sockfd);
-        safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
-        if (ctx->params.msg_size_cnt) {
-            ctx->params.msg_size_list = malloc(sizeof(*ctx->params.msg_size_list) *
-                                               ctx->params.msg_size_cnt);
-            if (NULL == ctx->params.msg_size_list) {
+
+        msg_size_cnt = ctx->params.msg_size_cnt;
+
+        ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
+        if (ret) {
+            status = UCS_ERR_IO_ERROR;
+            goto err_close_sockfd;
+        }
+
+        if (ctx->params.msg_size_cnt > msg_size_cnt) {
+            msg_size_list = realloc(ctx->params.msg_size_list,
+                                    sizeof(*ctx->params.msg_size_list) *
+                                    ctx->params.msg_size_cnt);
+            if (NULL == msg_size_list) {
                 status = UCS_ERR_NO_MEMORY;
                 goto err_close_connfd;
             }
-            safe_recv(connfd, ctx->params.msg_size_list,
-                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt,
-                      NULL, NULL);
+
+            ctx->params.msg_size_list = msg_size_list;
+        }
+
+        ret = safe_recv(connfd, ctx->params.msg_size_list,
+                        sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt,
+                        NULL, NULL);
+        if (ret) {
+            status = UCS_ERR_IO_ERROR;
+            goto err_close_sockfd;
         }
 
         ctx->sock_rte_group.connfd    = connfd;
@@ -1411,7 +1430,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
     while ((status = read_batch_file(batch_file, ctx->batch_files[depth],
                                      &line_num, &params,
                                      &ctx->test_names[depth])) == UCS_OK) {
-        status = run_test_recurs(ctx, &params, depth + 1);
+        run_test_recurs(ctx, &params, depth + 1);
         free(params.msg_size_list);
         free(ctx->test_names[depth]);
         ctx->test_names[depth] = NULL;
