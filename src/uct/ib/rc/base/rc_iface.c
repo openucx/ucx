@@ -498,6 +498,18 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
+static int uct_rc_iface_config_limit_value(const char *name,
+                                           int provided, int limit)
+{
+    if (provided > limit) {
+         ucs_warn("using maximal value for %s (%d) instead of %d",
+                  name, limit, provided);
+         return limit;
+     } else {
+         return provided;
+     }
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config,
@@ -521,10 +533,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_qp_fabric_time(config->tx.timeout);
-    self->config.rnr_retry          = ucs_min(config->tx.rnr_retry_count,
-                                              UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.retry_cnt          = ucs_min(config->tx.retry_count,
-                                              UCT_RC_QP_MAX_RETRY_COUNT);
+    self->config.rnr_retry          = uct_rc_iface_config_limit_value(
+                                                  "RNR_RETRY_COUNT",
+                                                  config->tx.rnr_retry_count,
+                                                  UCT_RC_QP_MAX_RETRY_COUNT);
+    self->config.retry_cnt          = uct_rc_iface_config_limit_value(
+                                                  "RETRY_COUNT",
+                                                  config->tx.retry_count,
+                                                  UCT_RC_QP_MAX_RETRY_COUNT);
     self->config.max_rd_atomic      = config->max_rd_atomic;
     self->config.ooo_rw             = config->ooo_rw;
 #if ENABLE_ASSERT
