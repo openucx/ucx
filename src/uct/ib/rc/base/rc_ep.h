@@ -80,19 +80,8 @@ enum {
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
         (signed)(_iface)->config.tx_moderation)) { \
-        uct_rc_txqp_t *txqp; \
-        if (!uct_rc_iface_have_tx_cqe_avail(_iface)) { \
-            UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
-            UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
+        if (uct_rc_ep_check_cqe(_iface, _ep) != UCS_OK) { \
             return _ret; \
-        } \
-        txqp = &(_ep)->txqp; \
-        /* if unsignaled == RC_UNSIGNALED_INF this value was already saved and \
-           next operation will be defenitly signaled */ \
-        if (txqp->unsignaled != RC_UNSIGNALED_INF) { \
-            txqp->unsignaled_store_count++; \
-            txqp->unsignaled_store += txqp->unsignaled; \
-            txqp->unsignaled        = RC_UNSIGNALED_INF; \
         } \
     }
 
@@ -244,6 +233,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
+
+ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);
