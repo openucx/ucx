@@ -136,13 +136,13 @@ static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
     dup = ucs_calloc(1, sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
                      "ucs_stats_class_dup");
     if (!dup) {
-        ucs_warn("failed to allocate statistics class");
+        ucs_error("failed to allocate statistics class");
         goto err;
     }
 
     dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
     if (!dup->name) {
-        ucs_warn("failed to copy statistics class name");
+        ucs_error("failed to allocate statistics class name");
         goto err_free;
     }
 
@@ -150,7 +150,7 @@ static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
         dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
                                                            "ucs_stats_class_t counter");
         if (!dup->counter_names[dup->num_counters]) {
-            ucs_warn("failed to copy statistics counter name");
+            ucs_error("failed to allocate statistics counter name");
             goto err_free;
         }
     }
@@ -170,18 +170,16 @@ static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
     int r;
 
     iter = kh_get(ucs_stats_cls, &ucs_stats_context.cls, cls->name);
-
     if (iter != kh_end(&ucs_stats_context.cls)) {
         return kh_val(&ucs_stats_context.cls, iter);
     }
 
     dup = ucs_stats_dup_class(cls);
-
     if (dup == NULL) {
         return NULL;
     }
 
-    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, cls->name, &r);
+    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, dup->name, &r);
     ucs_assert_always(r != 0); /* initialize a previously empty hash entry */
     kh_val(&ucs_stats_context.cls, iter) = dup;
     return dup;
