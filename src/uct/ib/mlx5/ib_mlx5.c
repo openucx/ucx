@@ -124,7 +124,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    mlx5_cq->cqe_size_log = ucs_ilog2(cqe_size);
+    mlx5_cq->cqe_size_log = __ucs_ilog2_u32(cqe_size);
     ucs_assert_always((1<<mlx5_cq->cqe_size_log) == cqe_size);
 
     /* Set owner bit for all CQEs, so that CQE would look like it is in HW
