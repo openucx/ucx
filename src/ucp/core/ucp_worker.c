@@ -1480,7 +1480,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
-    ucs_thread_mode_t uct_thread_mode = UCS_THREAD_MODE_SINGLE;
+    ucs_thread_mode_t uct_thread_mode;
     unsigned config_count;
     unsigned name_length;
     ucp_worker_h worker;
@@ -1496,6 +1496,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         return UCS_ERR_NO_MEMORY;
     }
 
+    uct_thread_mode = UCS_THREAD_MODE_SINGLE;
+    worker->flags   = 0;
+
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
 #if !ENABLE_MT
         uct_thread_mode = UCS_THREAD_MODE_SINGLE;
@@ -1510,8 +1513,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
         if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
             worker->flags = UCP_WORKER_FLAG_MT;
-        } else {
-            worker->flags = 0;
         }
 #endif
     }
