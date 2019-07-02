@@ -9,6 +9,7 @@
 
 #include <ucs/type/status.h>
 
+#include <sys/types.h>
 #include <stdlib.h>
 #include <stdint.h>
 
