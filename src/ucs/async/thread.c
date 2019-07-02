@@ -40,6 +40,12 @@ typedef struct ucs_async_thread_global_context {
 } ucs_async_thread_global_context_t;
 
 
+typedef struct ucs_async_thread_callback_arg {
+    ucs_async_thread_t *thread;
+    int                *is_missed;
+} ucs_async_thread_callback_arg_t;
+
+
 static ucs_async_thread_global_context_t ucs_async_thread_global_context = {
     .thread    = NULL,
     .use_count = 0,
@@ -65,23 +71,22 @@ static void ucs_async_thread_put(ucs_async_thread_t *thread)
 static void ucs_async_thread_ev_handler(void *callback_data, int event,
                                         void *arg)
 {
-    ucs_async_thread_t *thread = (ucs_async_thread_t *)((void**)arg)[0];
-    int *is_missed             = (int*)((void**)arg)[1];
-    int fd                     = (int)(uintptr_t)callback_data;
     ucs_status_t status;
+    ucs_async_thread_callback_arg_t *cb_arg = (void*)arg;
+    int fd                                  = (int)(uintptr_t)callback_data;
 
     ucs_trace_async("ucs_async_thread_ev_handler(fd=%d, event=%d)",
                     fd, event);
 
-    if (fd == ucs_async_pipe_rfd(&thread->wakeup)) {
+    if (fd == ucs_async_pipe_rfd(&cb_arg->thread->wakeup)) {
         ucs_trace_async("progress thread woken up");
-        ucs_async_pipe_drain(&thread->wakeup);
+        ucs_async_pipe_drain(&cb_arg->thread->wakeup);
         return;
     }
 
     status = ucs_async_dispatch_handlers(&fd, 1);
     if (status == UCS_ERR_NO_PROGRESS) {
-         *is_missed = 1;
+         *cb_arg->is_missed = 1;
     }
 }
 
@@ -90,15 +95,15 @@ static void *ucs_async_thread_func(void *arg)
     ucs_async_thread_t *thread = arg;
     ucs_time_t last_time, curr_time, timer_interval, time_spent;
     int is_missed, timeout_ms;
-    void *cb_arg[2];
     ucs_status_t status;
     unsigned num_events;
+    ucs_async_thread_callback_arg_t cb_arg;
 
-    is_missed  = 0;
-    curr_time  = ucs_get_time();
-    last_time  = ucs_get_time();
-    cb_arg[0] = thread;
-    cb_arg[1] = &is_missed;
+    is_missed        = 0;
+    curr_time        = ucs_get_time();
+    last_time        = ucs_get_time();
+    cb_arg.thread    = thread;
+    cb_arg.is_missed = &is_missed;
 
     while (!thread->stop) {
         num_events = ucs_min(UCS_ASYNC_EPOLL_MAX_EVENTS,
@@ -123,7 +128,8 @@ static void *ucs_async_thread_func(void *arg)
         do {
             status = ucs_event_set_wait(thread->event_set,
                                         &num_events, timeout_ms,
-                                        ucs_async_thread_ev_handler, cb_arg);
+                                        ucs_async_thread_ev_handler,
+                                        (void*)&cb_arg);
         } while (status == UCS_INPROGRESS);
 
         /* Check timers */
