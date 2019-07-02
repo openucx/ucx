@@ -27,7 +27,6 @@ extern "C" {
 #include <cuda_runtime.h>
 #endif
 
-std::string const test_md::mem_types[] = {"host", "cuda", "cuda-managed", "rocm", "rocm-managed"};
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -140,7 +139,7 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
 #endif
     } else {
         std::stringstream ss;
-        ss << "can't allocate " << mem_types[mem_type]
+        ss << "can't allocate " << mem_type_names[mem_type]
            << " memory for " << GetParam().md_name;
         UCS_TEST_SKIP_R(ss.str());
     }
@@ -311,7 +310,7 @@ UCS_TEST_P(test_md, reg) {
     ASSERT_UCS_OK(status);
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
+            UCS_TEST_MESSAGE << mem_type_names[mem_type] << " memory "
                              << "registration is not supported by " << GetParam().md_name;
             continue;
         }
@@ -354,7 +353,7 @@ UCS_TEST_P(test_md, reg_perf) {
     ASSERT_UCS_OK(status);
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
+            UCS_TEST_MESSAGE << mem_type_names[mem_type] << " memory "
                              << " registration is not supported by " << GetParam().md_name;
             continue;
         }
@@ -384,7 +383,7 @@ UCS_TEST_P(test_md, reg_perf) {
             }
 
             UCS_TEST_MESSAGE << GetParam().md_name << ": Registration time for " <<
-                mem_types[mem_type] << " memory " << size << " bytes: " <<
+                mem_type_names[mem_type] << " memory " << size << " bytes: " <<
                 long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
 
             free_memory(ptr, mem_type);

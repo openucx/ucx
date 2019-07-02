@@ -78,6 +78,8 @@ protected:
     };
 
     static std::vector<md_resource> enum_md_resources();
+
+    static std::string const mem_type_names[];
 };
 
 
@@ -292,8 +294,6 @@ protected:
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size);
-    static const char *uct_mem_type_names[];
-
     uct_test::entity* create_entity(size_t rx_headroom,
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);

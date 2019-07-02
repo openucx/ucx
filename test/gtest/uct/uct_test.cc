@@ -86,7 +86,13 @@ resource_speed::resource_speed(uct_component_h component, const uct_worker_h& wo
     uct_config_release(iface_config);
 }
 
-const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
+std::string const uct_test_base::mem_type_names[] = {
+    "host",
+    "cuda",
+    "cuda-managed",
+    "rocm",
+    "rocm-managed"
+};
 
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
@@ -642,7 +648,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
         } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
             cuda_mem_alloc(length, mem);
         } else {
-            UCS_TEST_ABORT("wrong memory type");
+            UCS_TEST_SKIP_R("cannot allocate " + mem_type_names[mem_type] +
+                            " memory");
         }
 
         if ((md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
