@@ -201,7 +201,10 @@ static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_iface_is_dci_rand(uct_dc_mlx5_iface_t
 static UCS_F_ALWAYS_INLINE ucs_arbiter_group_t*
 uct_dc_mlx5_ep_rand_arb_group(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface) &&
+               (ep->dci != UCT_DC_MLX5_EP_NO_DCI));
+    /* If DCI random policy is used, DCI is always assigned to EP */
+    /* coverity[overrun-call] */
     return &iface->tx.dcis[ep->dci].arb_group;
 }
 
