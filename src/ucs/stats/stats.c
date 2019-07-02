@@ -16,6 +16,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h>
+#include <ucs/datastruct/khash.h>
 
 #include <sys/ioctl.h>
 #include <linux/futex.h>
@@ -45,6 +46,8 @@ enum {
     UCS_ROOT_STATS_LAST
 };
 
+KHASH_MAP_INIT_STR(ucs_stats_cls, ucs_stats_class_t*)
+
 typedef struct {
     volatile unsigned    flags;
 
@@ -62,6 +65,8 @@ typedef struct {
         int              signo;
         double           interval;
     };
+
+    khash_t(ucs_stats_cls) cls;
 
     pthread_mutex_t      lock;
     pthread_t            thread;
@@ -112,6 +117,74 @@ static void ucs_stats_clean_node(ucs_stats_node_t *node) {
     ucs_list_del(&node->type_list);
 }
 
+static void ucs_stats_free_class(ucs_stats_class_t *cls)
+{
+    unsigned i;
+
+    for (i = 0; i < cls->num_counters; i++) {
+        ucs_free((void*)cls->counter_names[i]);
+    }
+
+    ucs_free((void*)cls->name);
+    ucs_free(cls);
+}
+
+static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
+{
+    ucs_stats_class_t *dup;
+
+    dup = ucs_calloc(1, sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
+                     "ucs_stats_class_dup");
+    if (!dup) {
+        ucs_error("failed to allocate statistics class");
+        goto err;
+    }
+
+    dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
+    if (!dup->name) {
+        ucs_error("failed to allocate statistics class name");
+        goto err_free;
+    }
+
+    for (dup->num_counters = 0; dup->num_counters < cls->num_counters; dup->num_counters++) {
+        dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
+                                                           "ucs_stats_class_t counter");
+        if (!dup->counter_names[dup->num_counters]) {
+            ucs_error("failed to allocate statistics counter name");
+            goto err_free;
+        }
+    }
+
+    return dup;
+
+err_free:
+    ucs_stats_free_class(dup);
+err:
+    return NULL;
+}
+
+static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
+{
+    ucs_stats_class_t *dup;
+    khiter_t iter;
+    int r;
+
+    iter = kh_get(ucs_stats_cls, &ucs_stats_context.cls, cls->name);
+    if (iter != kh_end(&ucs_stats_context.cls)) {
+        return kh_val(&ucs_stats_context.cls, iter);
+    }
+
+    dup = ucs_stats_dup_class(cls);
+    if (dup == NULL) {
+        return NULL;
+    }
+
+    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, dup->name, &r);
+    ucs_assert_always(r != 0); /* initialize a previously empty hash entry */
+    kh_val(&ucs_stats_context.cls, iter) = dup;
+    return dup;
+}
+
 static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
 {
     ucs_assert(node != &ucs_stats_context.root_node);
@@ -125,7 +198,14 @@ static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
 
     ucs_list_del(&node->list);
     if (make_inactive) {
-        ucs_list_add_tail(&node->parent->children[UCS_STATS_INACTIVE_CHILDREN], &node->list);
+        node->cls = ucs_stats_get_class(node->cls);
+        if (node->cls) {
+            ucs_list_add_tail(&node->parent->children[UCS_STATS_INACTIVE_CHILDREN], &node->list);
+        } else {
+            /* failed to allocate class duplicate - remove node */
+            ucs_stats_clean_node(node);
+            make_inactive = 0;
+        }
     } else {
         ucs_stats_clean_node(node); 
     }
@@ -580,6 +660,7 @@ void ucs_stats_init()
     UCS_STATS_START_TIME(ucs_stats_context.start_time);
     ucs_stats_node_init_root("%s:%d", ucs_get_host_name(), getpid());
     ucs_stats_set_trigger();
+    kh_init_inplace(ucs_stats_cls, &ucs_stats_context.cls);
 
     ucs_debug("statistics enabled, flags: %c%c%c%c%c%c%c",
               (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER)      ? 't' : '-',
@@ -593,6 +674,8 @@ void ucs_stats_init()
 
 void ucs_stats_cleanup()
 {
+    ucs_stats_class_t *cls;
+
     if (!ucs_stats_is_active()) {
         return;
     }
@@ -601,6 +684,12 @@ void ucs_stats_cleanup()
     ucs_stats_clean_node_recurs(&ucs_stats_context.root_node);
     ucs_stats_close_dest();
     ucs_assert(ucs_stats_context.flags == 0);
+
+    kh_foreach_value(&ucs_stats_context.cls, cls, {
+        ucs_stats_free_class(cls);
+    });
+
+    kh_destroy_inplace(ucs_stats_cls, &ucs_stats_context.cls);
 }
 
 void ucs_stats_dump()
