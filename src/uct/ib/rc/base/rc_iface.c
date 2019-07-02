@@ -13,57 +13,59 @@
 #include <ucs/type/class.h>
 
 
-ucs_config_field_t uct_rc_iface_config_table[] = {
+ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
-   ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+   ucs_offsetof(uct_rc_iface_common_config_t, super),
+                UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
   {"PATH_MTU", "default",
    "Path MTU. \"default\" will select the best MTU for the device.",
-   ucs_offsetof(uct_rc_iface_config_t, path_mtu), UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
+   ucs_offsetof(uct_rc_iface_common_config_t, path_mtu),
+                UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
   {"MAX_RD_ATOMIC", "4",
    "Maximal number of outstanding read or atomic replies",
-   ucs_offsetof(uct_rc_iface_config_t, max_rd_atomic), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic), UCS_CONFIG_TYPE_UINT},
 
   {"TIMEOUT", "1.0s",
    "Transport timeout",
-   ucs_offsetof(uct_rc_iface_config_t, tx.timeout), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.timeout), UCS_CONFIG_TYPE_TIME},
 
   {"RETRY_COUNT", "7",
    "Transport retries",
-   ucs_offsetof(uct_rc_iface_config_t, tx.retry_count), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.retry_count), UCS_CONFIG_TYPE_UINT},
 
   {"RNR_TIMEOUT", "1ms",
    "RNR timeout",
-   ucs_offsetof(uct_rc_iface_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_rc_iface_common_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
 
   {"RNR_RETRY_COUNT", "7",
    "RNR retries",
-   ucs_offsetof(uct_rc_iface_config_t, tx.rnr_retry_count), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_retry_count), UCS_CONFIG_TYPE_UINT},
 
   {"TX_CQ_LEN", "4096",
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
-   ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
 
   {"FC_ENABLE", "y",
    "Enable flow control protocol to prevent sender from overwhelming the receiver,\n"
    "thus avoiding RC RnR backoff timer.",
-   ucs_offsetof(uct_rc_iface_config_t, fc.enable), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_rc_iface_common_config_t, fc.enable), UCS_CONFIG_TYPE_BOOL},
 
   {"FC_WND_SIZE", "512",
    "The size of flow control window per endpoint. limits the number of AM\n"
    "which can be sent w/o acknowledgment.",
-   ucs_offsetof(uct_rc_iface_config_t, fc.wnd_size), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_common_config_t, fc.wnd_size), UCS_CONFIG_TYPE_UINT},
 
   {"FC_HARD_THRESH", "0.25",
    "Threshold for sending hard request for FC credits to the peer. This value\n"
    "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
-   ucs_offsetof(uct_rc_iface_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
+   ucs_offsetof(uct_rc_iface_common_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
   {"OOO_RW", "n",
    "Enable out-of-order RDMA data placement",
-   ucs_offsetof(uct_rc_iface_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_rc_iface_common_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
 #endif
 
   {NULL}
@@ -71,15 +73,19 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 
 
 /* Config relevant for rc_mlx5 and rc_verbs only (not for dc) */
-ucs_config_field_t uct_rc_common_config_table[] = {
+ucs_config_field_t uct_rc_iface_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
+
   {"FC_SOFT_THRESH", "0.5",
    "Threshold for sending soft request for FC credits to the peer. This value\n"
    "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
-   ucs_offsetof(uct_rc_common_config_t, soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+   ucs_offsetof(uct_rc_iface_config_t, soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
   {"TX_CQ_MODERATION", "64",
    "Maximum number of send WQEs which can be posted without requesting a completion.",
-   ucs_offsetof(uct_rc_common_config_t, tx_cq_moderation), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_config_t, tx_cq_moderation), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -305,7 +311,7 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 }
 
 static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
-                                      const uct_rc_iface_config_t *config)
+                                      const uct_rc_iface_common_config_t *config)
 {
     enum ibv_mtu port_mtu = uct_ib_iface_port_attr(&iface->super)->active_mtu;
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
@@ -324,21 +330,21 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-ucs_status_t uct_rc_init_fc_thresh(double soft_thresh,
-                                   uct_rc_iface_config_t *rc_cfg,
+ucs_status_t uct_rc_init_fc_thresh(uct_rc_iface_config_t *config,
                                    uct_rc_iface_t *iface)
 {
     /* Check FC parameters correctness */
-    if ((soft_thresh <= rc_cfg->fc.hard_thresh) || (soft_thresh >= 1)) {
+    if ((config->soft_thresh <= config->super.fc.hard_thresh) ||
+        (config->soft_thresh >= 1)) {
         ucs_error("The factor for soft FC threshold should be bigger"
                   " than FC_HARD_THRESH value and less than 1 (s=%f, h=%f)",
-                  soft_thresh, rc_cfg->fc.hard_thresh);
+                  config->soft_thresh, config->super.fc.hard_thresh);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (rc_cfg->fc.enable) {
+    if (config->super.fc.enable) {
         iface->config.fc_soft_thresh = ucs_max((int)(iface->config.fc_wnd_size *
-                                               soft_thresh), 1);
+                                               config->soft_thresh), 1);
     } else {
         iface->config.fc_soft_thresh  = 0;
     }
@@ -479,7 +485,7 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
 }
 
 ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
-                                  const uct_rc_iface_config_t *config)
+                                  const uct_rc_iface_common_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
@@ -500,7 +506,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    const uct_rc_iface_config_t *config,
+                    const uct_rc_iface_common_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;

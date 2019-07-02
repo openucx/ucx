@@ -81,7 +81,8 @@ typedef enum {
 
 
 typedef struct uct_dc_mlx5_iface_config {
-    uct_rc_mlx5_iface_common_config_t   super;
+    uct_rc_iface_common_config_t        super;
+    uct_rc_mlx5_iface_common_config_t   rc_mlx5_common;
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
@@ -217,9 +218,6 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
 
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci);
-
-ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
-                                           uct_dc_mlx5_iface_config_t *config);
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 

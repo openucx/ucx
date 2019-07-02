@@ -29,8 +29,12 @@ static const char *uct_dc_tx_policy_names[] = {
 
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
+    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
+
+    {"RC_", "", NULL,
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, rc_mlx5_common),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
     {"", "", NULL,
@@ -78,10 +82,6 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_ud),
      UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
-
-    {"", "", NULL,
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, super.mlx5_common),
-     UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
     {NULL}
 };
@@ -534,13 +534,11 @@ uct_dc_mlx5_iface_ooo_flag(uct_dc_mlx5_iface_t *iface, uint64_t flag,
 
 static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
-                    const uct_rc_iface_config_t *rc_config)
+                    const uct_rc_iface_common_config_t *rc_config)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
 
 #if IBV_EXP_HW_TM_DC
-    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(rc_config,
-                                                        uct_dc_mlx5_iface_config_t);
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
          struct ibv_exp_create_srq_attr srq_attr      = {};
          struct ibv_exp_srq_dc_offload_params dc_op   = {};
@@ -559,8 +557,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
          srq_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
          srq_attr.dc_offload_params = &dc_op;
 
-         return uct_rc_mlx5_init_rx_tm(&iface->super, &config->super,
-                                       &srq_attr,
+         return uct_rc_mlx5_init_rx_tm(&iface->super, rc_config, &srq_attr,
                                        sizeof(struct ibv_rvh) +
                                        sizeof(struct ibv_ravh), 0);
      }
@@ -692,8 +689,7 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
     }
 }
 
-ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
-                                           uct_dc_mlx5_iface_config_t *config)
+static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
 {
     struct ibv_qp_cap cap = {};
     ucs_status_t status;
@@ -1082,8 +1078,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_ops,
-                              md, worker, params,
-                              &config->super, &init_attr);
+                              md, worker, params, &config->super,
+                              &config->rc_mlx5_common, &init_attr);
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
@@ -1116,7 +1112,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     }
 
     /* create DC initiators */
-    status = uct_dc_mlx5_iface_create_dcis(self, config);
+    status = uct_dc_mlx5_iface_create_dcis(self);
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }

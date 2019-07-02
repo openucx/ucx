@@ -419,12 +419,10 @@ size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
     std::string name, val;
     size_t      tx_queue_len;
 
-    if (has_transport("rc")) {
+    if (has_rc()) {
         name = "RC_IB_TX_QUEUE_LEN";
-    } else if (has_transport("rc_mlx5")) {
-        name = "RC_RC_IB_TX_QUEUE_LEN";
     } else if (has_transport("dc_mlx5")) {
-        name = "DC_RC_RC_IB_TX_QUEUE_LEN";
+        name = "DC_RC_IB_TX_QUEUE_LEN";
     } else if (has_ud()) {
         name = "UD_IB_TX_QUEUE_LEN";
     } else {
