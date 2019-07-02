@@ -13,6 +13,9 @@
 
 #include "dc_mlx5.h"
 
+#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
+
+
 enum {
     /* Indicates that FC grant has been requested, but is not received yet.
      * Flush will not complete until an outgoing grant request is acked.
@@ -254,9 +257,6 @@ enum uct_dc_mlx5_ep_flags {
                                                   dc_mlx5 endpoint */
     UCT_DC_MLX5_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
 };
-
-
-#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
