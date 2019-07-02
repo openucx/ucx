@@ -36,7 +36,7 @@ typedef void (*ucs_event_set_handler_t)(void *callback_data, int event,
 typedef enum {
     UCS_EVENT_SET_EVREAD  = UCS_BIT(0),
     UCS_EVENT_SET_EVWRITE = UCS_BIT(1),
-    UCS_EVENT_SET_EVNONE =  UCS_BIT(2)
+    UCS_EVENT_SET_ET      = UCS_BIT(2)
 } ucs_event_set_type_t;
 
 /* The maximum possible number of events based on system constraints */

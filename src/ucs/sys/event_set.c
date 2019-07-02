@@ -40,6 +40,9 @@ static inline int ucs_event_set_map_to_raw_events(int events)
     if (events & UCS_EVENT_SET_EVWRITE) {
          raw_events |= EPOLLOUT;
     }
+    if (events & UCS_EVENT_SET_ET) {
+        raw_events  |= EPOLLET;
+    }
     return raw_events;
 }
 

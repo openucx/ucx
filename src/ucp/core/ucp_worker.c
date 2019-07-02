@@ -29,6 +29,12 @@
     (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
 
+typedef enum ucp_worker_epfd_op {
+    UCP_WORKER_EPFD_OP_ADD,
+    UCP_WORKER_EPFD_OP_DEL
+} ucp_worker_epfd_op_t;
+
+
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
     .name           = "ucp_worker",
@@ -95,31 +101,36 @@ ucp_worker_iface_latency(ucp_worker_h worker, ucp_worker_iface_t *wiface)
            wiface->attr.latency.growth * worker->context->config.est_num_eps;
 }
 
-static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker, int op,
+static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
+                                             ucp_worker_epfd_op_t op,
                                              int event_fd)
 {
-    struct epoll_event event = {0};
-    int ret;
+    ucs_event_set_type_t events = UCS_EVENT_SET_EVWRITE;
+    ucs_status_t status;
 
     if (!(worker->context->config.features & UCP_FEATURE_WAKEUP)) {
         return UCS_OK;
     }
 
-    memset(&event.data, 0, sizeof(event.data));
-    event.data.ptr = worker->user_data;
-    event.events   = EPOLLIN;
     if (worker->flags & UCP_WORKER_FLAG_EDGE_TRIGGERED) {
-        event.events |= EPOLLET;
+        events |= UCS_EVENT_SET_ET;
     }
 
-    ret = epoll_ctl(worker->epfd, op, event_fd, &event);
-    if (ret == -1) {
-        ucs_error("epoll_ctl(epfd=%d, op=%d, fd=%d) failed: %m", worker->epfd,
-                  op, event_fd);
-        return UCS_ERR_IO_ERROR;
+    switch (op) {
+    case UCP_WORKER_EPFD_OP_ADD:
+        status = ucs_event_set_add(worker->event_set, event_fd,
+                                   events, worker->user_data);
+        break;
+    case UCP_WORKER_EPFD_OP_DEL:
+        status = ucs_event_set_del(worker->event_set, event_fd);
+        break;
+    default:
+        ucs_bug("Unknown operation (%d) was passed", op);
+        status = UCS_ERR_INVALID_PARAM;
+        break;
     }
 
-    return UCS_OK;
+    return status;
 }
 
 static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
@@ -232,6 +243,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
 
     if (!(context->config.features & UCP_FEATURE_WAKEUP)) {
         worker->epfd       = -1;
+        worker->event_set  = NULL;
         worker->eventfd    = -1;
         worker->uct_events = 0;
         status = UCS_OK;
@@ -249,11 +261,14 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
         worker->epfd            = params->event_fd;
         worker->flags          |= UCP_WORKER_FLAG_EXTERNAL_EVENT_FD;
     } else {
-        worker->epfd = epoll_create(context->num_tls);
-        if (worker->epfd == -1) {
-            ucs_error("Failed to create epoll file descriptor: %m");
-            status = UCS_ERR_IO_ERROR;
+        status = ucs_event_set_create(&worker->event_set);
+        if (status != UCS_OK) {
             goto out;
+        }
+
+        status = ucs_event_set_fd_get(worker->event_set, &worker->epfd);
+        if (status != UCS_OK) {
+            goto err_close_event_set;
         }
     }
 
@@ -265,10 +280,10 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
     if (worker->eventfd == -1) {
         ucs_error("Failed to create event fd: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err_close_epfd;
+        goto err_close_event_set;
     }
 
-    ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_ADD, worker->eventfd);
+    ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_ADD, worker->eventfd);
 
     worker->uct_events = 0;
 
@@ -294,8 +309,10 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
 
     return UCS_OK;
 
-err_close_epfd:
-    close(worker->epfd);
+err_close_event_set:
+    ucs_event_set_cleanup(worker->event_set);
+    worker->event_set = NULL;
+    worker->epfd      = -1;
 out:
     return status;
 }
@@ -304,7 +321,9 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
 {
     if ((worker->epfd != -1) &&
         !(worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD)) {
-        close(worker->epfd);
+        ucs_event_set_cleanup(worker->event_set);
+        worker->event_set = NULL;
+        worker->epfd      = -1;
     }
     if (worker->eventfd != -1) {
         close(worker->eventfd);
@@ -316,7 +335,8 @@ static void ucp_worker_iface_disarm(ucp_worker_iface_t *wiface)
     ucs_status_t status;
 
     if (wiface->flags & UCP_WORKER_IFACE_FLAG_ON_ARM_LIST) {
-        status = ucp_worker_wakeup_ctl_fd(wiface->worker, EPOLL_CTL_DEL,
+        status = ucp_worker_wakeup_ctl_fd(wiface->worker,
+                                          UCP_WORKER_EPFD_OP_DEL,
                                           wiface->event_fd);
         ucs_assert_always(status == UCS_OK);
         ucs_list_del(&wiface->arm_list);
@@ -585,7 +605,8 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 
     /* Add to user wakeup */
     if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
-        status = ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_ADD, wiface->event_fd);
+        status = ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_ADD,
+                                          wiface->event_fd);
         ucs_assert_always(status == UCS_OK);
         wiface->flags |= UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
@@ -1596,7 +1617,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
-    /* Create epoll set which combines events from all transports */
+    /* Create UCS event set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
         goto err_req_mp_cleanup;
