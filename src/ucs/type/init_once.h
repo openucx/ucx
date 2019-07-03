@@ -7,6 +7,8 @@
 #ifndef UCS_TYPE_INIT_ONCE_H_
 #define UCS_TYPE_INIT_ONCE_H_
 
+#include <ucs/debug/assert.h>
+
 #include <pthread.h>
 
 
@@ -22,6 +24,16 @@ typedef struct ucs_init_once {
 /* Static initializer for @ref ucs_init_once_t */
 #define UCS_INIT_ONCE_INIITIALIZER \
     { PTHREAD_MUTEX_INITIALIZER, 0 }
+
+
+/* Wrapper to unlock a mutex that always returns 0 to avoid endless loop
+ * and make static analyzers happy - they report "double unlock" warning */
+static inline unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock)
+{
+    int ret = pthread_mutex_unlock(lock);
+    ucs_assert_always(ret == 0);
+    return 0;
+}
 
 
 /*
@@ -45,7 +57,7 @@ typedef struct ucs_init_once {
  */
 #define UCS_INIT_ONCE(_once) \
     for (pthread_mutex_lock(&(_once)->lock); \
-         !(_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
+         !(_once)->initialized || ucs_init_once_mutex_unlock(&(_once)->lock); \
          (_once)->initialized = 1)
 
 #endif
