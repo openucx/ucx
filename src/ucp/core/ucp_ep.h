@@ -25,7 +25,7 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
-#if ENABLE_DEBUG_DATA || ENABLE_ASSERT
+#if ENABLE_DEBUG_DATA || ENABLE_ASSERT || defined(__COVERITY__) || defined(__clang_analyzer__)
 typedef uint32_t                   ucp_ep_flags_t;
 #else
 typedef uint16_t                   ucp_ep_flags_t;
