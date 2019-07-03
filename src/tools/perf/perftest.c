@@ -934,7 +934,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
-            goto err_close_sockfd;
+            goto err_close_connfd;
         }
 
         if (ctx->params.msg_size_cnt > msg_size_cnt) {
@@ -954,7 +954,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
                         NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
-            goto err_close_sockfd;
+            goto err_close_connfd;
         }
 
         ctx->sock_rte_group.connfd    = connfd;
