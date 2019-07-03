@@ -13,6 +13,9 @@
 
 #include "dc_mlx5.h"
 
+#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
+
+
 enum {
     /* Indicates that FC grant has been requested, but is not received yet.
      * Flush will not complete until an outgoing grant request is acked.
@@ -201,7 +204,10 @@ static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_iface_is_dci_rand(uct_dc_mlx5_iface_t
 static UCS_F_ALWAYS_INLINE ucs_arbiter_group_t*
 uct_dc_mlx5_ep_rand_arb_group(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface) &&
+               (ep->dci != UCT_DC_MLX5_EP_NO_DCI));
+    /* If DCI random policy is used, DCI is always assigned to EP */
+    /* coverity[overrun-call] */
     return &iface->tx.dcis[ep->dci].arb_group;
 }
 
@@ -251,9 +257,6 @@ enum uct_dc_mlx5_ep_flags {
                                                   dc_mlx5 endpoint */
     UCT_DC_MLX5_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
 };
-
-
-#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
@@ -377,13 +380,6 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
      */
     ucs_arbiter_group_desched(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
     uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
-}
-
-static inline ucs_status_t
-uct_dc_mlx5_iface_check_txqp(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep, uct_rc_txqp_t *txqp)
-{
-    UCT_RC_CHECK_TXQP(&iface->super.super, ep, txqp);
-    return UCS_OK;
 }
 
 static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)

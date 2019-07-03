@@ -37,7 +37,7 @@ static size_t ucp_proto_pack(void *dest, void *arg)
         return sizeof(*off_rep_hdr);
     }
 
-    ucs_bug("unexpected am_id");
+    ucs_fatal("unexpected am_id");
     return 0;
 }
 

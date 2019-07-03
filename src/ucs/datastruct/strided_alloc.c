@@ -71,7 +71,8 @@ static void ucs_strided_alloc_calc(ucs_strided_alloc_t *sa, size_t *chunk_size,
                         sizeof(ucs_strided_alloc_chunk_t)) / sa->elem_size;
 }
 
-static void ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
+static ucs_status_t
+ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
 {
     size_t chunk_size, elems_per_chunk;
     ucs_strided_alloc_chunk_t *chunk;
@@ -83,7 +84,7 @@ static void ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
 
     chunk = ucs_strided_alloc_chunk_alloc(sa, chunk_size UCS_MEMTRACK_VAL);
     if (chunk == NULL) {
-        return;
+        return UCS_ERR_NO_MEMORY;
     }
 
     chunk_mem = ucs_strided_alloc_chunk_to_mem(chunk);
@@ -95,6 +96,8 @@ static void ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
     ucs_queue_push(&sa->chunks, &chunk->queue);
 
     VALGRIND_MAKE_MEM_NOACCESS(chunk_mem, chunk_size);
+
+    return UCS_OK;
 }
 
 void ucs_strided_alloc_init(ucs_strided_alloc_t *sa, size_t elem_size,
@@ -135,10 +138,14 @@ void ucs_strided_alloc_cleanup(ucs_strided_alloc_t *sa)
 void* ucs_strided_alloc_get(ucs_strided_alloc_t *sa, const char *alloc_name)
 {
     ucs_strided_alloc_elem_t *elem;
+    ucs_status_t status;
     unsigned i;
 
     if (sa->freelist == NULL) {
-        ucs_strided_alloc_grow(sa UCS_MEMTRACK_VAL);
+        status = ucs_strided_alloc_grow(sa UCS_MEMTRACK_VAL);
+        if (status != UCS_OK) {
+            return NULL;
+        }
     }
 
     ucs_assert(sa->freelist != NULL);

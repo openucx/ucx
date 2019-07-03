@@ -70,6 +70,7 @@ uct_sockcm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
     md->super.ops            = &uct_sockcm_md_ops;
     md->super.component      = &uct_sockcm_mdc;
 
+    /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
     return UCS_OK;
 }

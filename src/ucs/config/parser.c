@@ -387,7 +387,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     double  value;
     int     num_fields;
 
-    num_fields = sscanf(buf, "%lf%16s", &value, str);
+    num_fields = sscanf(buf, "%lf%15s", &value, str);
     if (num_fields < 2) {
         return 0;
     }

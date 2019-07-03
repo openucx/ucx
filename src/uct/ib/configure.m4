@@ -132,7 +132,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        save_LDFLAGS="$LDFLAGS"
        save_CFLAGS="$CFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
-       LDFLAGS="$IBVERBS_LDFAGS $LDFLAGS"
+       LDFLAGS="$IBVERBS_LDFLAGS $LDFLAGS"
        CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
        CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
        AC_CHECK_HEADER([infiniband/verbs_exp.h],
