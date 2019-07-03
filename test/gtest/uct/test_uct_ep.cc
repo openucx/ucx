@@ -44,7 +44,6 @@ protected:
 
 UCS_TEST_P(test_uct_ep, disconnect_after_send) {
     ucs_status_t status;
-    unsigned count;
 
 #if HAVE_DC_DV
     if (has_transport("dc_mlx5")) {
@@ -60,10 +59,10 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
                             buffer.memh(),
                             m_sender->iface_attr().cap.am.max_iov);
 
-    for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
+    unsigned max_iter = 300 / ucs::test_time_multiplier();
+    for (unsigned i = 0; i < max_iter; ++i) {
         connect();
-        count = 0;
-        for (;;) {
+        for (unsigned count = 0; count < max_iter; ) {
             status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0, iov, iovcnt,
                                      0, NULL);
             if (status == UCS_ERR_NO_RESOURCE) {
