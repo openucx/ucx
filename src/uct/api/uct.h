@@ -129,6 +129,7 @@ BEGIN_C_DECLS
  *      Accept or reject the client's connection request.
  * @ref uct_ep_create
  *      Connect to the client by creating an endpoint in case of accepting its request.
+ *      The server creates a new endpoint per every connection request that it accepts.
  * @ref uct_sockaddr_priv_pack_callback_t
  *      This callback is invoked by the UCT transport to fill auxiliary data in
  *      the connection acknowledgement or reject notification back to the client.
@@ -148,6 +149,8 @@ BEGIN_C_DECLS
  *      uct_ep_disconnect as well.
  * @ref uct_ep_destroy
  *      Destroy the endpoint connected to the remote peer.
+ *      If this function is called before the endpoint was disconnected, the
+ *      @ref uct_ep_disconnect_cb_t may not be invoked.
  *
  * Destroying the server's resources:
  * @ref uct_listener_destroy
@@ -164,13 +167,15 @@ BEGIN_C_DECLS
  *      Create an endpoint for establishing a connection to the server.
  * @ref uct_sockaddr_priv_pack_callback_t
  *      This callback is invoked by the UCT transport to fill the user's private data
- *      in the connection request to be sent to the server.
+ *      in the connection request to be sent to the server. This connection request
+ *      should be created by the transport.
  *      Send the connection request to the server.
  *      Wait for an acknowledgment from the server, indicating that it is connected.
  * @ref uct_ep_client_connect_cb_t
  *      This callback is invoked by the UCT transport to handle a connection response
  *      from the server.
- *      Connect to the server.
+ *      After invoking this callback, the UCT transport will finalize the client's
+ *      connection to the server.
  *
  * Disconnecting:
  * @ref uct_ep_disconnect
@@ -1807,10 +1812,11 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Initiate a synchronized disconnection of an endpoint connected to a
+ * @brief Initiate a disconnection of an endpoint connected to a
  *        sockaddr by a connection manager @ref uct_cm_h.
  *
- * This routine will disconnect the given endpoint from its remote peer.
+ * This non-blocking routine will disconnect the given endpoint from its remote
+ * peer.
  * The remote side should also call this routine when handling the initiator's
  * disconnect.
  * After a call to this function, the given endpoint may not be used for
@@ -2946,7 +2952,7 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  * @ingroup UCT_CLIENT_SERVER
  * @brief Open a connection manager.
  *
- * Open a specific connection manager. All client server connection
+ * Open a connection manager. All client server connection
  * establishment operations are performed in the context of a specific
  * connection manager.
  * @note This is an alternative API for
@@ -2987,6 +2993,8 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
  * @brief Create a new transport listener object.
  *
  * @param [in]  cm          Connection manager on which to open the listener.
+ *                          This cm should not be closed as long as there are
+ *                          open listeners on it.
  * @param [in]  saddr       The socket address to listen on.
  * @param [in]  socklen     The saddr length.
  * @param [in]  params      User defined @ref uct_listener_params_t
