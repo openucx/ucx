@@ -13,6 +13,7 @@
 #endif
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/stubs.h>
 
 BEGIN_C_DECLS
 
