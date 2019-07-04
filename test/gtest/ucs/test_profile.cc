@@ -13,7 +13,6 @@ extern "C" {
 
 #include <pthread.h>
 #include <fstream>
-#include <set>
 
 
 #if HAVE_PROFILING
@@ -51,9 +50,6 @@ private:
 class test_profile : public testing::TestWithParam<int>,
                      public ucs::test_base {
 public:
-    test_profile();
-    ~test_profile();
-
     UCS_TEST_BASE_IMPL;
 
 protected:
@@ -61,15 +57,10 @@ protected:
     static const int      MAX_LINE;
     static const unsigned NUM_LOCAITONS;
 
-    std::set<int>      m_tids;
-    pthread_spinlock_t m_tids_lock;
-
     struct thread_param {
         test_profile *test;
         int          iters;
     };
-
-    void add_tid(int tid);
 
     static void *profile_thread_func(void *arg);
 
@@ -113,28 +104,9 @@ UCS_PROFILE_FUNC(int, profile_test_func2, (a, b), int a, int b)
 const int test_profile::MAX_LINE           = __LINE__;
 const unsigned test_profile::NUM_LOCAITONS = 12u;
 
-test_profile::test_profile()
-{
-    pthread_spin_init(&m_tids_lock, 0);
-}
-
-test_profile::~test_profile()
-{
-    pthread_spin_destroy(&m_tids_lock);
-}
-
-void test_profile::add_tid(int tid)
-{
-    pthread_spin_lock(&m_tids_lock);
-    m_tids.insert(tid);
-    pthread_spin_unlock(&m_tids_lock);
-}
-
 void *test_profile::profile_thread_func(void *arg)
 {
     const thread_param *param = (const thread_param*)arg;
-
-    param->test->add_tid(ucs_get_tid());
 
     for (int i = 0; i < param->iters; ++i) {
         profile_test_func1();
@@ -326,7 +298,7 @@ UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
 
         if (!ucs::perf_retry_count) {
             UCS_TEST_MESSAGE << "not validating performance";
-            return; /* Skip */
+            return; /* Success */
         } else if (overhead_nsec < EXP_OVERHEAD_NSEC) {
             return; /* Success */
         } else {
