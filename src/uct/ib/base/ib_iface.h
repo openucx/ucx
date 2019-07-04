@@ -146,8 +146,6 @@ struct uct_ib_iface_ops {
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
                                              ucs_status_t status);
-    ucs_status_t            (*init_res_domain)(uct_ib_iface_t *iface);
-    void                    (*cleanup_res_domain)(uct_ib_iface_t *iface);
 };
 
 
