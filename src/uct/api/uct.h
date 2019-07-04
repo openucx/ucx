@@ -150,7 +150,7 @@ BEGIN_C_DECLS
  * @ref uct_ep_destroy
  *      Destroy the endpoint connected to the remote peer.
  *      If this function is called before the endpoint was disconnected, the
- *      @ref uct_ep_disconnect_cb_t may not be invoked.
+ *      @ref uct_ep_disconnect_cb_t will not be invoked.
  *
  * Destroying the server's resources:
  * @ref uct_listener_destroy
@@ -1815,8 +1815,8 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * @brief Initiate a disconnection of an endpoint connected to a
  *        sockaddr by a connection manager @ref uct_cm_h.
  *
- * This non-blocking routine will disconnect the given endpoint from its remote
- * peer.
+ * This non-blocking routine will send a disconnect notification on the endpoint,
+ * so that @ref uct_ep_disconnect_cb_t will be called on the remote peer.
  * The remote side should also call this routine when handling the initiator's
  * disconnect.
  * After a call to this function, the given endpoint may not be used for
