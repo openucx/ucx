@@ -1117,6 +1117,14 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
 
     ucs_trace("opening IB device %s", md_name);
 
+#if !HAVE_DEVX
+    if (md_config->devx == UCS_YES) {
+        ucs_error("DEVX requested but not supported");
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+#endif
+
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
     if (ib_device_list == NULL) {
