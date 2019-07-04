@@ -390,7 +390,10 @@ int print_err_usage()
             "for server)\n");
     fprintf(stderr, "  -p port Set alternative server port (default:13337)\n");
     fprintf(stderr, "  -s size Set test string length (default:16)\n");
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\nExample:\n");
+    fprintf(stderr, "  Server: uct_hello_world -d eth0 -t tcp\n");
+    fprintf(stderr, "  Client: uct_hello_world -d eth0 -t tcp -n localhost\n");
+
     return UCS_ERR_UNSUPPORTED;
 }
 

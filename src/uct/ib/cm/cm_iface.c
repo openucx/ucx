@@ -451,8 +451,6 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     },
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = (void*)ucs_empty_function_return_success,
-    .init_res_domain          = (void*)ucs_empty_function_return_success,
-    .cleanup_res_domain       = (void*)ucs_empty_function,
 };
 
 static int uct_cm_is_module_loaded(uct_md_h md)

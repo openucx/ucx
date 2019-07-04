@@ -125,7 +125,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     }
 
     mlx5_cq->cqe_size_log = ucs_ilog2(cqe_size);
-    ucs_assert_always((1<<mlx5_cq->cqe_size_log) == cqe_size);
+    ucs_assert_always((1ul << mlx5_cq->cqe_size_log) == cqe_size);
 
     /* Set owner bit for all CQEs, so that CQE would look like it is in HW
      * ownership. In this case CQ polling functions will return immediately if
@@ -141,8 +141,8 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 }
 
 static int
-uct_ib_mlx5_iface_res_domain_cmp(uct_ib_mlx5_iface_res_domain_t *res_domain,
-                                 uct_ib_md_t *md, uct_priv_worker_t *worker)
+uct_ib_mlx5_res_domain_cmp(uct_ib_mlx5_res_domain_t *res_domain,
+                           uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
 #if HAVE_IBV_EXP_RES_DOMAIN
     return res_domain->ibv_domain->context == md->dev.ibv_context;
@@ -154,8 +154,8 @@ uct_ib_mlx5_iface_res_domain_cmp(uct_ib_mlx5_iface_res_domain_t *res_domain,
 }
 
 static ucs_status_t
-uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
-                                  uct_ib_md_t *md, uct_priv_worker_t *worker)
+uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
+                            uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
 #if HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain_init_attr attr;
@@ -214,7 +214,7 @@ uct_ib_mlx5_iface_res_domain_init(uct_ib_mlx5_iface_res_domain_t *res_domain,
     return UCS_OK;
 }
 
-static void uct_ib_mlx5_iface_res_domain_cleanup(uct_ib_mlx5_iface_res_domain_t *res_domain)
+static void uct_ib_mlx5_res_domain_cleanup(uct_ib_mlx5_res_domain_t *res_domain)
 {
 #if HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
@@ -244,43 +244,49 @@ static void uct_ib_mlx5_iface_res_domain_cleanup(uct_ib_mlx5_iface_res_domain_t 
 #endif
 }
 
-ucs_status_t uct_ib_mlx5_iface_init_res_domain(uct_ib_iface_t *iface,
-                                               uct_ib_mlx5_iface_common_t *mlx5)
+ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
+                                              uct_ib_mlx5_qp_t *qp)
 {
-    mlx5->res_domain = uct_worker_tl_data_get(iface->super.worker,
-                                              UCT_IB_MLX5_RES_DOMAIN_KEY,
-                                              uct_ib_mlx5_iface_res_domain_t,
-                                              uct_ib_mlx5_iface_res_domain_cmp,
-                                              uct_ib_mlx5_iface_res_domain_init,
-                                              uct_ib_iface_md(iface),
-                                              iface->super.worker);
-    if (UCS_PTR_IS_ERR(mlx5->res_domain)) {
-        return UCS_PTR_STATUS(mlx5->res_domain);
+    qp->verbs.rd = uct_worker_tl_data_get(iface->super.worker,
+                                          UCT_IB_MLX5_RES_DOMAIN_KEY,
+                                          uct_ib_mlx5_res_domain_t,
+                                          uct_ib_mlx5_res_domain_cmp,
+                                          uct_ib_mlx5_res_domain_init,
+                                          uct_ib_iface_md(iface),
+                                          iface->super.worker);
+    if (UCS_PTR_IS_ERR(qp->verbs.rd)) {
+        return UCS_PTR_STATUS(qp->verbs.rd);
     }
+
+    qp->type = UCT_IB_MLX5_QP_TYPE_VERBS;
 
     return UCS_OK;
 }
 
-void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_iface_common_t *mlx5)
+void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp)
 {
-    uct_worker_tl_data_put(mlx5->res_domain, uct_ib_mlx5_iface_res_domain_cleanup);
+    if (qp->verbs.rd != NULL) {
+        uct_worker_tl_data_put(qp->verbs.rd, uct_ib_mlx5_res_domain_cleanup);
+    }
 }
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
-                                         uct_ib_mlx5_iface_common_t *mlx5,
-                                         uct_ib_qp_attr_t *attr,
-                                         uct_ib_mlx5_qp_t *qp)
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uct_ib_qp_attr_t *attr)
 {
-    ucs_status_t        status;
+    ucs_status_t status;
 
-    uct_ib_mlx5_iface_fill_attr(iface, mlx5, attr);
+    status = uct_ib_mlx5_iface_fill_attr(iface, qp, attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_ib_exp_qp_fill_attr(iface, attr);
     status = uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
     if (status != UCS_OK) {
         return status;
     }
 
-    qp->type   = UCT_IB_MLX5_QP_TYPE_VERBS;
     qp->qp_num = qp->verbs.qp->qp_num;
     return UCS_OK;
 }
@@ -523,6 +529,7 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 
     if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
         uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        uct_ib_mlx5_iface_put_res_domain(&txwq->super);
     }
 }
 

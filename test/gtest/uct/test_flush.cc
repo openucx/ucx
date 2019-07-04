@@ -188,6 +188,7 @@ public:
         do {
             status = uct_ep_am_zcopy(sender().ep(0), get_am_id(), NULL, 0, iov,
                                      iovcnt, 0, &zcomp);
+            progress();
         } while (status == UCS_ERR_NO_RESOURCE);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
         if (status == UCS_OK) {

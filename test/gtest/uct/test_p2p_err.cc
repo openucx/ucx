@@ -85,6 +85,8 @@ public:
             }
                 break;
             }
+
+            progress();
         } while (status == UCS_ERR_NO_RESOURCE);
 
         if (status != UCS_OK && status != UCS_INPROGRESS) {

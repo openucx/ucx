@@ -76,7 +76,9 @@ ucs_status_t uct_component_query(uct_component_h component,
 
     }
 
-    if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES) {
+    if ((resources != NULL) &&
+        (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES))
+    {
         memcpy(component_attr->md_resources, resources,
                sizeof(uct_md_resource_desc_t) * num_resources);
     }

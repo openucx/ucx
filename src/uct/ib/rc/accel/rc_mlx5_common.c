@@ -11,12 +11,8 @@
 #include <uct/ib/rc/base/rc_iface.h>
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
-  {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
-
   {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, mlx5_common),
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
   {"TX_MAX_BB", "-1",
@@ -162,6 +158,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
 #if HAVE_STRUCT_MLX5_SRQ_CMD_QP
     iface->tm.cmd_wq.super.super.verbs.qp = NULL;
+    iface->tm.cmd_wq.super.super.verbs.rd = NULL;
     iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_VERBS;
     return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
 #else
@@ -170,6 +167,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     struct ibv_qp_attr qp_attr = {};
     uct_ib_device_t *ibdev = &md->dev;
     struct ibv_port_attr *port_attr;
+    ucs_status_t status;
     struct ibv_qp *qp;
     uint8_t port_num;
     int ret;
@@ -177,7 +175,11 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     port_num  = ibdev->first_port;
     port_attr = uct_ib_device_port_attr(ibdev, port_num);
 
-    iface->tm.cmd_wq.super.super.type = UCT_IB_MLX5_QP_TYPE_VERBS;
+    status = uct_ib_mlx5_iface_get_res_domain(&iface->super.super,
+                                              &iface->tm.cmd_wq.super.super);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.send_cq             = iface->super.super.cq[UCT_IB_DIR_RX];
@@ -186,10 +188,10 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->super.rx.srq.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = ibv_create_qp(md->pd, &qp_init_attr);
+    qp = ibv_create_qp(iface->tm.cmd_wq.super.super.verbs.rd->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
-        goto err;
+        goto err_rd;
     }
 
 
@@ -235,15 +237,15 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
 err_destroy_qp:
     uct_ib_destroy_qp(qp);
+err_rd:
+    uct_ib_mlx5_iface_put_res_domain(&iface->tm.cmd_wq.super.super);
 err:
     return NULL;
 #endif
 }
 #endif
 
-ucs_status_t
-uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_mlx5_iface_common_config_t *config)
+ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface)
 {
     ucs_status_t status = UCS_OK;
 #if IBV_HW_TM
@@ -505,7 +507,7 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 
 #if IBV_HW_TM
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
-                                    const uct_rc_mlx5_iface_common_config_t *config,
+                                    const uct_rc_iface_common_config_t *config,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
                                     unsigned rndv_hdr_len,
                                     unsigned max_cancel_sync_ops)
@@ -534,7 +536,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     /* Create TM-capable XRQ */
     srq_init_attr->base.attr.max_sge   = 1;
     srq_init_attr->base.attr.max_wr    = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                                                 config->super.super.rx.queue_len);
+                                                 config->super.rx.queue_len);
     srq_init_attr->base.attr.srq_limit = 0;
     srq_init_attr->base.srq_context    = iface;
     srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
@@ -562,7 +564,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 #elif HAVE_DECL_IBV_CREATE_SRQ_EX
     srq_init_attr->attr.max_sge        = 1;
     srq_init_attr->attr.max_wr         = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                                                 config->super.super.rx.queue_len);
+                                                 config->super.rx.queue_len);
     srq_init_attr->attr.srq_limit      = 0;
     srq_init_attr->srq_context         = iface;
     srq_init_attr->srq_type            = IBV_SRQT_TM;
@@ -830,18 +832,4 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     mlx5_cq->cq_ci             += nfreed;
 
     return nfreed;
-}
-
-ucs_status_t uct_rc_mlx5_init_res_domain(uct_ib_iface_t *ib_iface)
-{
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
-
-    return uct_ib_mlx5_iface_init_res_domain(ib_iface, &iface->mlx5_common);
-}
-
-void uct_rc_mlx5_cleanup_res_domain(uct_ib_iface_t *ib_iface)
-{
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
-
-    uct_ib_mlx5_iface_cleanup_res_domain(&iface->mlx5_common);
 }
