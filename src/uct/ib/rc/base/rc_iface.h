@@ -148,7 +148,6 @@ typedef struct uct_rc_iface_common_config {
         unsigned             retry_count;
         double               rnr_timeout;
         unsigned             rnr_retry_count;
-        unsigned             cq_len;
     } tx;
 
     struct {
@@ -165,6 +164,7 @@ struct uct_rc_iface_config {
     double                         soft_thresh;
     unsigned                       tx_cq_moderation; /* How many TX messages are
                                                         batched to one CQE */
+    unsigned                       tx_cq_len;
 };
 
 

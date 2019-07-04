@@ -43,10 +43,6 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "RNR retries",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_retry_count), UCS_CONFIG_TYPE_UINT},
 
-  {"TX_CQ_LEN", "4096",
-   "Length of send completion queue. This limits the total number of outstanding signaled sends.",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
-
   {"FC_ENABLE", "y",
    "Enable flow control protocol to prevent sender from overwhelming the receiver,\n"
    "thus avoiding RC RnR backoff timer.",
@@ -86,6 +82,11 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
   {"TX_CQ_MODERATION", "64",
    "Maximum number of send WQEs which can be posted without requesting a completion.",
    ucs_offsetof(uct_rc_iface_config_t, tx_cq_moderation), UCS_CONFIG_TYPE_UINT},
+
+  {"TX_CQ_LEN", "4096",
+   "Length of send completion queue. This limits the total number of outstanding signaled sends.",
+   ucs_offsetof(uct_rc_iface_config_t, tx_cq_len), UCS_CONFIG_TYPE_UINT},
+
 
   {NULL}
 };

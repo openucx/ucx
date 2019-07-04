@@ -532,7 +532,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
     init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
-    init_attr.tx_cq_len   = config->super.super.tx.cq_len;
+    init_attr.tx_cq_len   = config->super.tx_cq_len;
     init_attr.qp_type     = IBV_QPT_RC;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
