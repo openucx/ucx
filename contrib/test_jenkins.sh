@@ -680,8 +680,7 @@ run_ucp_client_server() {
         return
     fi
 
-    ret=`which ibdev2netdev`
-    if [ -z "$ret" ]
+    if ! which ibdev2netdev >&/dev/null
     then
         return
     fi
