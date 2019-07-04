@@ -43,7 +43,7 @@ enum {
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
     UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
-#if ENABLE_ASSERT
+#if ENABLE_ASSERT || defined(__COVERITY__) || defined(__clang_analyzer__)
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
 #else

@@ -105,7 +105,7 @@ typedef struct uct_dc_dci {
                                                 processed. Better have dci num
                                                 groups scheduled than ep num. */
     };
-#if ENABLE_ASSERT
+#if ENABLE_ASSERT || defined(__COVERITY__) || defined(__clang_analyzer__)
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
 } uct_dc_dci_t;

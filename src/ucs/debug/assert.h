@@ -51,7 +51,7 @@ BEGIN_C_DECLS
                            "Fatal: " _fmt, ## __VA_ARGS__)
 
 
-#if ENABLE_ASSERT
+#if ENABLE_ASSERT || defined(__COVERITY__) || defined(__clang_analyzer__)
 
 /**
  * Generate a program bug report if assertions are enabled
