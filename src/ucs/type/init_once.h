@@ -31,7 +31,7 @@ typedef struct ucs_init_once {
 static inline unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock)
 {
     int ret = pthread_mutex_unlock(lock);
-    ucs_assert(ret == 0);
+    ucs_assert_always(ret == 0);
     return 0;
 }
 
