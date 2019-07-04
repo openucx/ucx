@@ -11,12 +11,8 @@
 #include <uct/ib/rc/base/rc_iface.h>
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
-  {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
-
   {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, mlx5_common),
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
   {"TX_MAX_BB", "-1",
@@ -249,9 +245,7 @@ err:
 }
 #endif
 
-ucs_status_t
-uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_mlx5_iface_common_config_t *config)
+ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface)
 {
     ucs_status_t status = UCS_OK;
 #if IBV_HW_TM
@@ -513,7 +507,7 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 
 #if IBV_HW_TM
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
-                                    const uct_rc_mlx5_iface_common_config_t *config,
+                                    const uct_rc_iface_common_config_t *config,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
                                     unsigned rndv_hdr_len,
                                     unsigned max_cancel_sync_ops)
@@ -542,7 +536,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     /* Create TM-capable XRQ */
     srq_init_attr->base.attr.max_sge   = 1;
     srq_init_attr->base.attr.max_wr    = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                                                 config->super.super.rx.queue_len);
+                                                 config->super.rx.queue_len);
     srq_init_attr->base.attr.srq_limit = 0;
     srq_init_attr->base.srq_context    = iface;
     srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
@@ -570,7 +564,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 #elif HAVE_DECL_IBV_CREATE_SRQ_EX
     srq_init_attr->attr.max_sge        = 1;
     srq_init_attr->attr.max_wr         = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                                                 config->super.super.rx.queue_len);
+                                                 config->super.rx.queue_len);
     srq_init_attr->attr.srq_limit      = 0;
     srq_init_attr->srq_context         = iface;
     srq_init_attr->srq_type            = IBV_SRQT_TM;

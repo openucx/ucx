@@ -19,8 +19,8 @@
  * RC mlx5 interface configuration
  */
 typedef struct uct_rc_mlx5_iface_config {
-    uct_rc_mlx5_iface_common_config_t super;
-    uct_rc_common_config_t            rc_common;
+    uct_rc_iface_config_t             super;
+    uct_rc_mlx5_iface_common_config_t rc_mlx5_common;
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
 
@@ -28,11 +28,11 @@ typedef struct uct_rc_mlx5_iface_config {
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
+   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
-  {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, rc_common),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_common_config_table)},
+  {"RC_", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, rc_mlx5_common),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
   {NULL}
 };
@@ -318,7 +318,8 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 #endif
 
 static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
-                                      uct_rc_mlx5_iface_common_config_t *config,
+                                      uct_rc_iface_common_config_t *rc_config,
+                                      uct_rc_mlx5_iface_common_config_t *mlx5_config,
                                       const uct_iface_params_t *params,
                                       uct_ib_iface_init_attr_t *init_attr)
 {
@@ -327,8 +328,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     uint32_t cap_flags                = IBV_DEVICE_TM_FLAGS(dev);
     struct ibv_tmh tmh;
 
-    iface->tm.enabled = config->tm.enable &&
-                        (cap_flags & init_attr->tm_cap_bit);
+    iface->tm.enabled = mlx5_config->tm.enable && (cap_flags & init_attr->tm_cap_bit);
 
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
@@ -358,42 +358,39 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     iface->tm.unexpected_cnt  = 0;
     iface->tm.num_outstanding = 0;
     iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
-                                        config->tm.list_size);
+                                        mlx5_config->tm.list_size);
 
     /* There can be:
      * - up to rx.queue_len RX CQEs
      * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
      * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
     UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
-    init_attr->rx_cq_len = config->super.super.rx.queue_len + iface->tm.num_tags * 3 +
-                           config->super.super.rx.queue_len /
+    init_attr->rx_cq_len = rc_config->super.rx.queue_len + iface->tm.num_tags * 3 +
+                           rc_config->super.rx.queue_len /
                            IBV_DEVICE_MAX_UNEXP_COUNT;
-    init_attr->seg_size  = ucs_max(config->tm.seg_size,
-                                   config->super.super.seg_size);
+    init_attr->seg_size  = ucs_max(mlx5_config->tm.seg_size,
+                                   rc_config->super.seg_size);
     return;
 
 out_tm_disabled:
 #else
     iface->tm.enabled    = 0;
 #endif
-    init_attr->rx_cq_len = config->super.super.rx.queue_len;
-    init_attr->seg_size  = config->super.super.seg_size;
+    init_attr->rx_cq_len = rc_config->super.rx.queue_len;
+    init_attr->seg_size  = rc_config->super.seg_size;
 }
 
 static ucs_status_t
 uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
-                    const uct_rc_iface_config_t *rc_config)
+                    const uct_rc_iface_common_config_t *rc_config)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
 #if IBV_HW_TM
-    uct_rc_mlx5_iface_common_config_t *config = ucs_derived_of(rc_config,
-                                                               uct_rc_mlx5_iface_common_config_t);
-
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
-        return uct_rc_mlx5_init_rx_tm(iface, config, &srq_init_attr,
+        return uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_init_attr,
                                       sizeof(struct ibv_rvh), 0);
     }
 #endif
@@ -413,27 +410,30 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_iface_ops_t *ops,
                     uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
-                    uct_rc_mlx5_iface_common_config_t *config,
+                    uct_rc_iface_common_config_t *rc_config,
+                    uct_rc_mlx5_iface_common_config_t *mlx5_config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_device_t *dev;
     ucs_status_t status;
 
-    uct_rc_mlx5_iface_preinit(self, md, config, params, init_attr);
+    uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
-                              &config->super, init_attr);
+                              rc_config, init_attr);
 
     dev                              = uct_ib_iface_device(&self->super.super);
-    self->tx.mmio_mode               = config->mlx5_common.mmio_mode;
-    self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
+    self->tx.mmio_mode               = mlx5_config->super.mmio_mode;
+    self->tx.bb_max                  = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
 
-    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);
+    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX],
+                                &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_RX], &self->cq[UCT_IB_DIR_RX]);
+    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_RX],
+                                &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         return status;
     }
@@ -444,7 +444,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         return status;
     }
 
-    status = uct_rc_mlx5_iface_common_tag_init(self, config);
+    status = uct_rc_mlx5_iface_common_tag_init(self);
     if (status != UCS_OK) {
         goto cleanup_stats;
     }
@@ -455,7 +455,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
-    status = uct_rc_mlx5_iface_common_dm_init(self, &self->super, &config->mlx5_common);
+    status = uct_rc_mlx5_iface_common_dm_init(self, &self->super,
+                                              &mlx5_config->super);
     if (status != UCS_OK) {
         goto cleanup_tm;
     }
@@ -471,7 +472,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                                   sizeof(uct_rc_iface_send_desc_t) + UCT_IB_MAX_ATOMIC_SIZE,
                                   sizeof(uct_rc_iface_send_desc_t) + UCT_IB_MAX_ATOMIC_SIZE,
                                   UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.super.tx.mp,
+                                  &rc_config->super.tx.mp,
                                   self->super.config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_mlx5_atomic_desc");
@@ -534,13 +535,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.qp_type        = IBV_QPT_RC;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
-                              md, worker, params, &config->super, &init_attr);
+                              md, worker, params, &config->super.super,
+                              &config->rc_mlx5_common, &init_attr);
 
-    self->super.super.config.tx_moderation = ucs_min(config->rc_common.tx_cq_moderation,
+    self->super.super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                      self->super.tx.bb_max / 4);
 
-    status = uct_rc_init_fc_thresh(config->rc_common.soft_thresh,
-                                   &config->super.super, &self->super.super);
+    status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {
         return status;
     }

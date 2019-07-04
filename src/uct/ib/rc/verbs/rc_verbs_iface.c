@@ -39,10 +39,6 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "Request IB fence when API fence requested.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, fence), UCS_CONFIG_TYPE_BOOL},
 
-  {"", "", NULL,
-   ucs_offsetof(uct_rc_verbs_iface_config_t, rc_common),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_common_config_table)},
-
   {NULL}
 };
 
@@ -188,15 +184,15 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
     init_attr.rx_hdr_len  = sizeof(uct_rc_hdr_t);
     init_attr.qp_type     = IBV_QPT_RC;
-    init_attr.rx_cq_len   = config->super.super.rx.queue_len;
-    init_attr.seg_size    = config->super.super.seg_size;
+    init_attr.rx_cq_len   = config->super.super.super.rx.queue_len;
+    init_attr.seg_size    = config->super.super.super.seg_size;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
-                              worker, params, &config->super, &init_attr);
+                              worker, params, &config->super.super, &init_attr);
 
     self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
                                                self->super.config.tx_qp_len);
-    self->super.config.tx_moderation = ucs_min(config->rc_common.tx_cq_moderation,
+    self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
     self->super.config.fence         = config->fence;
 
@@ -218,7 +214,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                       self->config.short_desc_size,
                                   sizeof(uct_rc_iface_send_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.super.tx.mp,
+                                  &config->super.super.super.tx.mp,
                                   self->super.config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_verbs_short_desc");
@@ -229,8 +225,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     uct_rc_verbs_iface_init_inl_wrs(self);
 
     /* Check FC parameters correctness */
-    status = uct_rc_init_fc_thresh(config->rc_common.soft_thresh,
-                                   &config->super, &self->super);
+    status = uct_rc_init_fc_thresh(&config->super, &self->super);
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
