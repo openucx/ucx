@@ -56,6 +56,8 @@ protected:
     static const int      MIN_LINE;
     static const int      MAX_LINE;
     static const unsigned NUM_LOCAITONS;
+    static const char*    PROFILE_FILENAME;
+
 
     struct thread_param {
         test_profile *test;
@@ -103,6 +105,7 @@ UCS_PROFILE_FUNC(int, profile_test_func2, (a, b), int a, int b)
 
 const int test_profile::MAX_LINE           = __LINE__;
 const unsigned test_profile::NUM_LOCAITONS = 12u;
+const char* test_profile::PROFILE_FILENAME = "test.prof";
 
 void *test_profile::profile_thread_func(void *arg)
 {
@@ -185,16 +188,14 @@ void test_profile::test_locations(const ucs_profile_location_t *locations,
 
 void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
 {
-    const char* UCS_PROFILE_FILENAME = "test.prof";
-    const int   ITER                 = 5;
-
-    uint64_t exp_count =       (int_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) ?
+    const int ITER           = 5;
+    uint64_t exp_count       = (int_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) ?
                                ITER : 0;
     uint64_t exp_num_records = (int_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) ?
                                (NUM_LOCAITONS * ITER) : 0;
 
 
-    scoped_profile p(*this, UCS_PROFILE_FILENAME, str_mode.c_str());
+    scoped_profile p(*this, PROFILE_FILENAME, str_mode.c_str());
     run_profiled_code(ITER);
 
     std::string data = p.read();
@@ -262,23 +263,30 @@ class test_profile_perf : public test_profile {
 
 UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
 
+#if defined(__x86_64__) || defined(__powerpc64__)
     const double EXP_OVERHEAD_NSEC = 50.0;
+#else
+    const double EXP_OVERHEAD_NSEC = 150.0;
+#endif
     const int ITERS                = 100;
-    const int COUNT                = 1000000;
+    const int WARMUP_ITERS         = 5;
+    const int COUNT                = 100000;
     double overhead_nsec           = 0.0;
+
+    scoped_profile p(*this, PROFILE_FILENAME, "accum");
 
     for (int retry = 0; retry < (ucs::perf_retry_count + 1); ++retry) {
         ucs_time_t  time_profile_on  = 0;
         ucs_time_t  time_profile_off = 0;
 
-        for (int i = 0; i < ITERS; ++i) {
+        for (int i = 0; i < WARMUP_ITERS + ITERS; ++i) {
             ucs_time_t t;
 
             t = ucs_get_time();
             for (volatile int j = 0; j < COUNT;) {
                 ++j;
             }
-            if (i > 2) {
+            if (i > WARMUP_ITERS) {
                 time_profile_off += ucs_get_time() - t;
             }
 
@@ -288,12 +296,13 @@ UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
                     ++j;
                 }
             }
-            if (i > 2) {
+            if (i > WARMUP_ITERS) {
                 time_profile_on += ucs_get_time() - t;
             }
         }
 
-        overhead_nsec = ucs_time_to_nsec(time_profile_on - time_profile_off) / COUNT;
+        overhead_nsec = ucs_time_to_nsec(time_profile_on - time_profile_off) /
+                        COUNT / ITERS;
         UCS_TEST_MESSAGE << "overhead: " << overhead_nsec << " nsec";
 
         if (!ucs::perf_retry_count) {
