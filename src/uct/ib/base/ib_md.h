@@ -121,6 +121,8 @@ typedef struct uct_ib_md_config {
     char                     *subnet_prefix; /**< Filter of subnet_prefix for IB ports */
 
     UCS_CONFIG_ARRAY_FIELD(ucs_config_bw_spec_t, device) pci_bw; /**< List of PCI BW for devices */
+
+    unsigned                 devx;         /**< DEVX support */
 } uct_ib_md_config_t;
 
 
