@@ -437,8 +437,9 @@ UCS_TEST_P(test_dc, rand_dci_pending_purge) {
     flush();
 }
 
-UCS_TEST_P(test_dc, stress_iface_ops) {
-    test_iface_ops();
+UCS_TEST_P(test_dc, stress_iface_ops, "DC_NUM_DCI=1") {
+
+    test_iface_ops(dc_iface(m_e1)->tx.dcis[0].txqp.available);
 }
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
