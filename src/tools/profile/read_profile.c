@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 
 #define INDENT             4
@@ -319,6 +320,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
                 }
                 action = "NEW ";
             } else {
+                assert(reqid_ctr > 1);
                 hash_it = kh_get(request_ids, &reqids, rec->param64);
                 if (hash_it == kh_end(&reqids)) {
                     reqid = 0; /* could not find request */
