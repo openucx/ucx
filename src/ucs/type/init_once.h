@@ -7,7 +7,6 @@
 #ifndef UCS_TYPE_INIT_ONCE_H_
 #define UCS_TYPE_INIT_ONCE_H_
 
-#include <ucs/debug/assert.h>
 
 #include <pthread.h>
 
@@ -28,12 +27,7 @@ typedef struct ucs_init_once {
 
 /* Wrapper to unlock a mutex that always returns 0 to avoid endless loop
  * and make static analyzers happy - they report "double unlock" warning */
-static inline unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock)
-{
-    int ret = pthread_mutex_unlock(lock);
-    ucs_assert_always(ret == 0);
-    return 0;
-}
+unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
 
 
 /*
