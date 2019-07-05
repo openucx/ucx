@@ -20,7 +20,9 @@
  */
 static inline void ucs_queue_head_init(ucs_queue_head_t *queue)
 {
+#ifdef __clang_analyzer__
     queue->head  = (ucs_queue_elem_t*)(void*)queue;
+#endif
     queue->ptail = &queue->head;
 }
 
