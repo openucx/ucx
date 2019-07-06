@@ -37,8 +37,8 @@ class ucp_test_base : public ucs::test_base {
 public:
     enum {
         SINGLE_THREAD = 42,
-        MULTI_THREAD_CONTEXT,
-        MULTI_THREAD_WORKER
+        MULTI_THREAD_CONTEXT, /* workers are single-threaded, context is mt-shared */
+        MULTI_THREAD_WORKER   /* workers are multi-threaded, cotnext is mt-single */
     };
 
     class entity {

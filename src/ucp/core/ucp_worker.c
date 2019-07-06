@@ -1476,6 +1476,13 @@ out:
     return UCS_OK;;
 }
 
+static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
+};
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -1589,10 +1596,20 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
+    /* create memory pool for small rkeys */
+    status = ucs_mpool_init(&worker->rkey_mp, 0,
+                            sizeof(ucp_rkey_t) +
+                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
+                            &ucp_rkey_mpool_ops, "ucp_rkeys");
+    if (status != UCS_OK) {
+        goto err_req_mp_cleanup;
+    }
+
     /* Create epoll set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
+        goto err_rkey_mp_cleanup;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
@@ -1641,6 +1658,8 @@ err_close_ifaces:
     ucp_tag_match_cleanup(&worker->tm);
 err_wakeup_cleanup:
     ucp_worker_wakeup_cleanup(worker);
+err_rkey_mp_cleanup:
+    ucs_mpool_cleanup(&worker->rkey_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
@@ -1695,6 +1714,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
+    ucs_mpool_cleanup(&worker->rkey_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
