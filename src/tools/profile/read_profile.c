@@ -16,6 +16,7 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <string.h>
+#include <assert.h>
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
@@ -24,6 +25,7 @@
 #define INDENT             4
 #define LESS_COMMAND       "less"
 #define FUNC_NAME_MAX_LEN  35
+#define MAX_THREADS        256
 
 #define TERM_COLOR_CLEAR   "\x1B[0m"
 #define TERM_COLOR_RED     "\x1B[31m"
@@ -35,6 +37,12 @@
 #define TERM_COLOR_WHITE   "\x1B[37m"
 #define TERM_COLOR_GRAY    "\x1B[90m"
 
+#define NAME_COLOR         (opts->raw ? "" : TERM_COLOR_CYAN)
+#define HEAD_COLOR         (opts->raw ? "" : TERM_COLOR_RED)
+#define TS_COLOR           (opts->raw ? "" : TERM_COLOR_WHITE)
+#define LOC_COLOR          (opts->raw ? "" : TERM_COLOR_GRAY)
+#define REQ_COLOR          (opts->raw ? "" : TERM_COLOR_YELLOW)
+#define CLEAR_COLOR        (opts->raw ? "" : TERM_COLOR_CLEAR)
 
 typedef enum {
     TIME_UNITS_NSEC,
@@ -49,6 +57,7 @@ typedef struct options {
     const char                   *filename;
     int                          raw;
     time_units_t                 time_units;
+    int                          thread_list[MAX_THREADS + 1];
 } options_t;
 
 
@@ -64,7 +73,7 @@ typedef struct {
     size_t                       length;
     const ucs_profile_header_t   *header;
     const ucs_profile_location_t *locations;
-    profile_thread_data_t        thread;
+    profile_thread_data_t        *threads;
 } profile_data_t;
 
 
@@ -80,16 +89,17 @@ static int output_pipefds[2] = {-1, -1};
 
 
 static const char* time_units_str[] = {
-    [TIME_UNITS_NSEC] = "nsec",
-    [TIME_UNITS_USEC] = "usec",
-    [TIME_UNITS_MSEC] = "msec",
-    [TIME_UNITS_SEC]  = "sec",
+    [TIME_UNITS_NSEC] = "(nsec)",
+    [TIME_UNITS_USEC] = "(usec)",
+    [TIME_UNITS_MSEC] = "(msec)",
+    [TIME_UNITS_SEC]  = "(sec)",
     [TIME_UNITS_LAST] = NULL
 };
 
 
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
+    uint32_t thread_idx;
     struct stat stat;
     const void *ptr;
     int ret, fd;
@@ -103,14 +113,14 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
 
     ret = fstat(fd, &stat);
     if (ret < 0) {
-        fprintf(stderr, "fstat(%s) failed: %m\n", file_name);
+        fprintf(stderr, "Error: fstat(%s) failed: %m\n", file_name);
         goto out_close;
     }
 
     data->length = stat.st_size;
     data->mem    = mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data->mem == MAP_FAILED) {
-        fprintf(stderr, "mmap(%s, length=%zd) failed: %m\n", file_name,
+        fprintf(stderr, "Error: mmap(%s, length=%zd) failed: %m\n", file_name,
                 data->length);
         ret = -1;
         goto out_close;
@@ -127,14 +137,24 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto err_munmap;
     }
 
-    data->locations        = ptr;
-    ptr                    = data->locations + data->header->num_locations;
-    data->thread.header    = ptr;
-    ptr                    = data->thread.header + 1;
-    data->thread.locations = ptr;
-    ptr                    = data->thread.locations + data->header->num_locations;
-    data->thread.records   = ptr;
-    ptr                    = data->thread.records + data->thread.header->num_records;
+    data->locations = ptr;
+    ptr             = data->locations + data->header->num_locations;
+
+    data->threads   = calloc(data->header->num_threads, sizeof(*data->threads));
+    if (data->threads == NULL) {
+        fprintf(stderr, "Error: failed to allocate threads array\n");
+        goto err_munmap;
+    }
+
+    for (thread_idx = 0; thread_idx < data->header->num_threads; ++thread_idx) {
+        profile_thread_data_t *thread = &data->threads[thread_idx];
+        thread->header    = ptr;
+        ptr               = thread->header + 1;
+        thread->locations = ptr;
+        ptr               = thread->locations + data->header->num_locations;
+        thread->records   = ptr;
+        ptr               = thread->records + thread->header->num_records;
+    }
 
     ret = 0;
 
@@ -149,10 +169,101 @@ err_munmap:
 
 static void release_profile_data(profile_data_t *data)
 {
+    free(data->threads);
     munmap(data->mem, data->length);
 }
 
-static double time_to_usec(profile_data_t *data, options_t *opts, uint64_t time)
+static int parse_thread_list(int *thread_list, const char *str)
+{
+    char *dup, *p, *saveptr, *tailptr;
+    int thread_idx;
+    unsigned index;
+    int ret;
+
+    dup = strdup(str);
+    if (dup == NULL) {
+        ret = -ENOMEM;
+        fprintf(stderr, "Error: failed to duplicate thread list string\n");
+        goto out;
+    }
+
+    index = 0;
+
+    /* the special value 'all' will create an empty thread list, which means
+     * use all threads
+     */
+    if (!strcasecmp(dup, "all")) {
+        goto out_terminate;
+    }
+
+    p = strtok_r(dup, ",", &saveptr);
+    while (p != NULL) {
+        if (index >= MAX_THREADS) {
+            ret = -EINVAL;
+            fprintf(stderr, "Error: up to %d threads are supported\n", MAX_THREADS);
+            goto out;
+        }
+
+        thread_idx = strtol(p, &tailptr, 0);
+        if (*tailptr != '\0') {
+            ret = -ENOMEM;
+            fprintf(stderr, "Error: failed to parse thread number '%s'\n", p);
+            goto out;
+        }
+
+        if (thread_idx <= 0) {
+            ret = -EINVAL;
+            fprintf(stderr, "Error: invalid thread index %d\n", thread_idx);
+            goto out;
+        }
+
+        thread_list[index++] = thread_idx;
+        p = strtok_r(NULL, ",", &saveptr);
+    }
+
+    if (index == 0) {
+        ret = -EINVAL;
+        fprintf(stderr, "Error: empty thread list\n");
+        goto out;
+    }
+
+out_terminate:
+    ret                = 0;
+    thread_list[index] = -1; /* terminator */
+out:
+    free(dup);
+    return ret;
+}
+
+static const char* thread_list_str(const int *thread_list, char *buf, size_t max)
+{
+    char *p, *endp;
+    const int *t;
+    int ret;
+
+    p    = buf;
+    endp = buf + max - 4; /* leave room for "...\0" */
+
+    for (t = thread_list; *t != -1; ++t) {
+        ret = snprintf(p, endp - p, "%d,", *t);
+        if (ret >= endp - p) {
+            /* truncated */
+            strcat(p, "...");
+            return buf;
+        }
+
+        p += strlen(p);
+    }
+
+    if (p >= buf - 1) {
+        *(p - 1) = '\0';
+    } else {
+        *buf = '\0';
+    }
+    return buf;
+}
+
+static double time_to_units(profile_data_t *data, options_t *opts, uint64_t time)
 {
     static const double time_units_val[] = {
         [TIME_UNITS_NSEC] = 1e9,
@@ -175,16 +286,31 @@ static int compare_locations(const void *l1, const void *l2)
 
 static int show_profile_data_accum(profile_data_t *data, options_t *opts)
 {
+    typedef struct {
+        long overall_time; /* overall threads runtime */
+        int  thread_list[MAX_THREADS + 1];
+        int  *last;
+    } location_thread_info_t;
+
     const uint32_t            num_locations          = data->header->num_locations;
     profile_sorted_location_t *sorted_locations      = NULL;
+    location_thread_info_t    *locations_thread_info = NULL;
     const ucs_profile_thread_location_t *thread_location;
+    location_thread_info_t *loc_thread_info;
     profile_sorted_location_t *sorted_loc;
+    const profile_thread_data_t *thread;
     const ucs_profile_location_t *loc;
-    unsigned location_idx;
+    unsigned location_idx, thread_idx;
+    char avg_buf[20], total_buf[20], overall_buf[20];
+    char thread_list_buf[20];
+    char *avg_str, *total_str, *overall_str;
     int ret;
+    int *t;
 
-    sorted_locations = calloc(num_locations, sizeof(*sorted_locations));
-    if (sorted_locations == NULL) {
+    sorted_locations      = calloc(num_locations, sizeof(*sorted_locations));
+    locations_thread_info = calloc(num_locations, sizeof(*locations_thread_info));
+    if ((sorted_locations == NULL) || (locations_thread_info == NULL)) {
+        fprintf(stderr, "Error: failed to allocate locations info\n");
         ret = -ENOMEM;
         goto out;
     }
@@ -194,11 +320,28 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
      * which threads.
      */
     for (location_idx = 0; location_idx < num_locations; ++location_idx) {
-        sorted_loc               = &sorted_locations[location_idx];
-        thread_location          = &data->thread.locations[location_idx];
-        sorted_loc->location_idx = location_idx;
-        sorted_loc->count       += thread_location->count;
-        sorted_loc->total_time  += thread_location->total_time;
+        sorted_loc                      = &sorted_locations[location_idx];
+        loc_thread_info                 = &locations_thread_info[location_idx];
+        sorted_loc->location_idx        = location_idx;
+        loc_thread_info->thread_list[0] = -1;
+        loc_thread_info->last           = loc_thread_info->thread_list;
+        loc_thread_info->overall_time   = 0;
+
+        for (t = opts->thread_list; *t != -1; ++t) {
+            thread_idx              = *t - 1;
+            thread                  = &data->threads[thread_idx];
+            thread_location         = &thread->locations[location_idx];
+            sorted_loc->count      += thread_location->count;
+            sorted_loc->total_time += thread_location->total_time;
+
+            if (thread_location->count > 0) {
+                loc_thread_info->overall_time += thread->header->end_time -
+                                                 thread->header->start_time;
+                *(loc_thread_info->last++)     = thread_idx + 1;
+            }
+        }
+
+        *loc_thread_info->last = -1;
     }
 
     /* Sort locations */
@@ -206,8 +349,20 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
           compare_locations);
 
     /* Print locations */
-    printf("%*s %13s %13s %10s                FILE     FUNCTION\n",
-           FUNC_NAME_MAX_LEN, "NAME", "AVG", "TOTAL", "COUNT");
+    printf("%s%*s %6s %-6s %6s %-6s %13s %12s %18s%-6s  %-*s %s%s\n",
+           HEAD_COLOR,
+           FUNC_NAME_MAX_LEN,
+           "NAME",
+           "AVG", time_units_str[opts->time_units],
+           "TOTAL", time_units_str[opts->time_units],
+           "%OVERALL",
+           "COUNT",
+           "FILE",
+           ":LINE",
+           FUNC_NAME_MAX_LEN,
+           "FUNCTION",
+           "THREADS",
+           CLEAR_COLOR);
 
     for (sorted_loc = sorted_locations;
          sorted_loc < (sorted_locations + num_locations); ++sorted_loc) {
@@ -216,54 +371,59 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
             continue;
         }
 
-        loc = &data->locations[sorted_loc->location_idx];
+        loc             = &data->locations[sorted_loc->location_idx];
+        loc_thread_info = &locations_thread_info[sorted_loc->location_idx];
 
         switch (loc->type) {
-        case UCS_PROFILE_TYPE_SAMPLE:
-            printf("%*.*s %13s %13s %10zu %18s:%-4d %s()\n",
-                   FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
-                   loc->name,
-                   "-",
-                   "-",
-                   sorted_loc->count,
-                   loc->file, loc->line, loc->function);
-            break;
         case UCS_PROFILE_TYPE_SCOPE_END:
-            printf("%*.*s %13.3f %13.0f %10zu %18s:%-4d %s()\n",
-                   FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
-                   loc->name,
-                   time_to_usec(data, opts, sorted_loc->total_time) /
-                   sorted_loc->count,
-                   time_to_usec(data, opts, sorted_loc->total_time),
-                   sorted_loc->count,
-                   loc->file, loc->line, loc->function);
+            snprintf(avg_buf,     sizeof(avg_buf) - 1, "%.3f",
+                     time_to_units(data, opts,
+                                   sorted_loc->total_time / sorted_loc->count));
+            snprintf(total_buf,   sizeof(total_buf) - 1, "%.2f",
+                     time_to_units(data, opts, sorted_loc->total_time));
+            snprintf(overall_buf, sizeof(overall_buf) - 1, "%.3f",
+                     sorted_loc->total_time * 100.0 / loc_thread_info->overall_time);
+
+            avg_str     = avg_buf;
+            total_str   = total_buf;
+            overall_str = overall_buf;
             break;
+        case UCS_PROFILE_TYPE_SAMPLE:
         case UCS_PROFILE_TYPE_REQUEST_EVENT:
-            printf("%*.*s %13s %13s %10zu %18s:%-4d %s()\n",
-                   FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
-                   loc->name,
-                   "n/a",
-                   "n/a",
-                   sorted_loc->count,
-                   loc->file, loc->line, loc->function);
+            avg_str = total_str = overall_str = "n/a";
             break;
         default:
-            break;
+            continue;
         }
-    }
+
+        printf("%s%*.*s%s %13s %13s %13s %12zu %s%18s:%-6d %-*s %-13s%s\n",
+               NAME_COLOR, FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN, loc->name, CLEAR_COLOR,
+               avg_str,
+               total_str,
+               overall_str,
+               sorted_loc->count,
+               LOC_COLOR,
+                   loc->file, loc->line,
+                   FUNC_NAME_MAX_LEN, loc->function,
+                   thread_list_str(loc_thread_info->thread_list, thread_list_buf,
+                                   sizeof(thread_list_buf)),
+               CLEAR_COLOR);
+   }
 
     ret = 0;
 
-    free(sorted_locations);
 out:
+    free(locations_thread_info);
+    free(sorted_locations);
     return ret;
 }
 
 KHASH_MAP_INIT_INT64(request_ids, int)
 
-static void show_profile_data_log(profile_data_t *data, options_t *opts)
+static void show_profile_data_log(profile_data_t *data, options_t *opts,
+                                  int thread_idx)
 {
-    profile_thread_data_t *thread   = &data->thread;
+    profile_thread_data_t *thread   = &data->threads[thread_idx];
     size_t num_recods               = thread->header->num_records;
     const ucs_profile_record_t **stack[UCS_PROFILE_STACK_MAX * 2];
     const ucs_profile_record_t **scope_ends;
@@ -278,13 +438,8 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     khiter_t hash_it;
     int reqid, reqid_ctr = 1;
 
-#define NAME_COLOR       (opts->raw ? "" : TERM_COLOR_CYAN)
-#define TS_COLOR         (opts->raw ? "" : TERM_COLOR_WHITE)
-#define LOC_COLOR        (opts->raw ? "" : TERM_COLOR_GRAY)
-#define REQ_COLOR        (opts->raw ? "" : TERM_COLOR_YELLOW)
-#define CLEAR_COLOR      (opts->raw ? "" : TERM_COLOR_CLEAR)
 #define RECORD_FMT       "%s%10.3f%s%*s"
-#define RECORD_ARG(_ts)  TS_COLOR, time_to_usec(data, opts, (_ts)), CLEAR_COLOR, \
+#define RECORD_ARG(_ts)  TS_COLOR, time_to_units(data, opts, (_ts)), CLEAR_COLOR, \
                          INDENT * nesting, ""
 #define PRINT_RECORD()   printf("%-*s %s%15s:%-4d %s()%s\n", \
                                 (int)(60 + strlen(NAME_COLOR) + \
@@ -297,9 +452,16 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
 
     scope_ends = calloc(1, sizeof(*scope_ends) * num_recods);
     if (scope_ends == NULL) {
-        fprintf(stderr, "Failed to allocate memory\n");
+        fprintf(stderr, "Error: failed to allocate memory for scope ends\n");
         return;
     }
+
+    printf("\n");
+    printf("%sThread %d (tid %d%s)%s\n", HEAD_COLOR, thread_idx + 1,
+           thread->header->tid,
+           (thread->header->tid == data->header->pid) ? ", main" : "",
+           CLEAR_COLOR);
+    printf("\n");
 
     memset(stack, 0, sizeof(stack));
 
@@ -346,8 +508,9 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
             if (se != NULL) {
                 snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s %s%.3f%s {",
                          RECORD_ARG(rec->timestamp - prev_time),
-                         NAME_COLOR, data->locations[se->location].name, CLEAR_COLOR,
-                         TS_COLOR, time_to_usec(data, opts, se->timestamp - rec->timestamp),
+                         NAME_COLOR, data->locations[se->location].name,
+                         CLEAR_COLOR, TS_COLOR,
+                         time_to_units(data, opts, se->timestamp - rec->timestamp),
                          CLEAR_COLOR);
             } else {
                 snprintf(buf, sizeof(buf), "<unfinished>");
@@ -425,7 +588,7 @@ static void close_pipes()
     close(output_pipefds[1]);
 }
 
-static int redirect_output(const profile_data_t *data)
+static int redirect_output(const profile_data_t *data, options_t *opts)
 {
     char *less_argv[] = {LESS_COMMAND,
                          "-R" /* show colors */,
@@ -434,19 +597,29 @@ static int redirect_output(const profile_data_t *data)
     uint64_t num_lines;
     pid_t pid;
     int ret;
+    int *t;
 
     ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &wsz);
     if (ret < 0) {
-        fprintf(stderr, "ioctl(TIOCGWINSZ) failed: %m\n");
+        fprintf(stderr, "Error: ioctl(TIOCGWINSZ) failed: %m\n");
         return ret;
     }
 
     num_lines = 6 + /* header */
-                ((data->header->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) ?
-                                (data->header->num_locations + 2) : 0) +
-                ((data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) ?
-                                (data->thread.header->num_records + 1) : 0) +
                 1; /* footer */
+
+    if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+        num_lines += 1 + /* locations title */
+                     data->header->num_locations + /* locations data */
+                     1; /* locations footer */
+    }
+
+    if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
+        for (t = opts->thread_list; *t != -1; ++t) {
+            num_lines += 3 + /* thread header */
+                         data->threads[*t - 1].header->num_records; /* thread records */
+        }
+    }
 
     if (num_lines <= wsz.ws_row) {
         return 0; /* no need to use 'less' */
@@ -454,13 +627,13 @@ static int redirect_output(const profile_data_t *data)
 
     ret = pipe(output_pipefds);
     if (ret < 0) {
-        fprintf(stderr, "pipe() failed: %m\n");
+        fprintf(stderr, "Error: pipe() failed: %m\n");
         return ret;
     }
 
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "fork() failed: %m\n");
+        fprintf(stderr, "Error: fork() failed: %m\n");
         close_pipes();
         return pid;
     }
@@ -472,7 +645,7 @@ static int redirect_output(const profile_data_t *data)
         /* redirect output to pipe */
         ret = dup2(output_pipefds[1], fileno(stdout));
         if (ret < 0) {
-            fprintf(stderr, "Failed to redirect stdout: %m\n");
+            fprintf(stderr, "Error: failed to redirect stdout: %m\n");
             close_pipes();
             return ret;
         }
@@ -483,7 +656,7 @@ static int redirect_output(const profile_data_t *data)
         /* redirect input from pipe */
         ret = dup2(output_pipefds[0], fileno(stdin));
         if (ret < 0) {
-            fprintf(stderr, "Failed to redirect stdin: %m\n");
+            fprintf(stderr, "Error: failed to redirect stdin: %m\n");
             exit(ret);
         }
 
@@ -494,28 +667,72 @@ static int redirect_output(const profile_data_t *data)
 
 static void show_header(profile_data_t *data, options_t *opts)
 {
+    char buf[80];
+
     printf("\n");
-    printf("   command : %s\n", data->header->cmdline);
+    printf("   ucs lib : %s\n", data->header->ucs_path);
     printf("   host    : %s\n", data->header->hostname);
+    printf("   command : %s\n", data->header->cmdline);
     printf("   pid     : %d\n", data->header->pid);
-    printf("   units   : %s\n", time_units_str[opts->time_units]);
-    printf("\n");
+    printf("   threads : %-3d", data->header->num_threads);
+    if (opts->thread_list[0] != -1) {
+        printf("(showing %s",
+               (opts->thread_list[1] == -1) ? "thread" : "threads");
+        printf(" %s)", thread_list_str(opts->thread_list, buf, sizeof(buf)));
+    }
+    printf("\n\n");
+}
+
+static int compare_int(const void *a, const void *b)
+{
+    return *(const int*)a - *(const int*)b;
 }
 
 static int show_profile_data(profile_data_t *data, options_t *opts)
 {
+    unsigned i, thread_list_len;
     int ret;
+    int *t;
 
-    if (data->header->num_threads != 1) {
+    if (data->header->num_threads > MAX_THREADS) {
         fprintf(stderr, "Error: "
-                "the profile contains %u threads, but only 1 is supported",
-                data->header->num_threads);
+                "the profile contains %u threads, but only up to %d are supported",
+                data->header->num_threads, MAX_THREADS);
         return -EINVAL;
+    }
+
+    /* validate and count thread numbers */
+    if (opts->thread_list[0] == -1) {
+        for (i = 0; i < data->header->num_threads; ++i) {
+            opts->thread_list[i] = i + 1;
+        }
+        opts->thread_list[i] = -1;
+    } else {
+        thread_list_len = 0;
+        for (t = opts->thread_list; *t != -1; ++t) {
+            if (*t > data->header->num_threads) {
+                fprintf(stderr, "Error: thread number %d is out of range (1..%u)\n",
+                        *t, data->header->num_threads);
+                return -EINVAL;
+            }
+
+            ++thread_list_len;
+        }
+        assert(thread_list_len > 0);
+
+        /* sort thread numbers and check for duplicates */
+        qsort(opts->thread_list, thread_list_len, sizeof(int), compare_int);
+        for (t = opts->thread_list; *t != -1; ++t) {
+            if (t[0] == t[1]) {
+                fprintf(stderr, "Error: duplicate thread number %d\n", t[0]);
+                 return -EINVAL;
+            }
+        }
     }
 
     /* redirect output if needed */
     if (!opts->raw) {
-        ret = redirect_output(data);
+        ret = redirect_output(data, opts);
         if (ret < 0) {
             return ret;
         }
@@ -529,7 +746,9 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
     }
 
     if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
-        show_profile_data_log(data, opts);
+        for (t = opts->thread_list; *t != -1; ++t) {
+            show_profile_data_log(data, opts, *t - 1);
+        }
         printf("\n");
     }
 
@@ -541,6 +760,8 @@ static void usage()
     printf("Usage: ucx_read_profile [options] [profile-file]\n");
     printf("Options are:\n");
     printf("  -r              Show raw output\n");
+    printf("  -T <threads>    Comma-separated list of threads to show, "
+           "e.g. \"1,2,3\", or \"all\" to show all threads\n");
     printf("  -t <units>      Select time units to use:\n");
     printf("                     sec  - seconds\n");
     printf("                     msec - milliseconds\n");
@@ -549,17 +770,24 @@ static void usage()
     printf("  -h              Show this help message\n");
 }
 
-int parse_args(int argc, char **argv, options_t *opts)
+static int parse_args(int argc, char **argv, options_t *opts)
 {
-    int c;
+    int ret, c;
 
     opts->raw         = !isatty(fileno(stdout));
     opts->time_units  = TIME_UNITS_USEC;
+    parse_thread_list(opts->thread_list, "all");
 
-    while ( (c = getopt(argc, argv, "hrt:")) != -1 ) {
+    while ( (c = getopt(argc, argv, "rT:t:h")) != -1 ) {
         switch (c) {
         case 'r':
             opts->raw = 1;
+            break;
+        case 'T':
+            ret = parse_thread_list(opts->thread_list, optarg);
+            if (ret < 0) {
+                return ret;
+            }
             break;
         case 't':
             if (!strcasecmp(optarg, "sec")) {
@@ -571,6 +799,8 @@ int parse_args(int argc, char **argv, options_t *opts)
             } else if (!strcasecmp(optarg, "nsec")) {
                 opts->time_units = TIME_UNITS_NSEC;
             } else {
+                fprintf(stderr, "Error: invalid time units '%s'\n\n", optarg);
+                usage();
                 return -1;
             }
             break;
@@ -584,7 +814,7 @@ int parse_args(int argc, char **argv, options_t *opts)
     }
 
     if (optind >= argc) {
-        printf("Error: missing profile file argument\n");
+        printf("Error: missing profile file argument\n\n");
         usage();
         return -1;
     }
@@ -604,8 +834,9 @@ int main(int argc, char **argv)
         return (ret == -127) ? 0 : ret;
     }
 
-    if (read_profile_data(opts.filename, &data) < 0) {
-        return -1;
+    ret = read_profile_data(opts.filename, &data);
+    if (ret < 0) {
+        return ret;
     }
 
     ret = show_profile_data(&data, &opts);
