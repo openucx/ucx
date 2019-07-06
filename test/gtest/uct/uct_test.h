@@ -300,7 +300,7 @@ protected:
     int max_connections();
     int max_connect_batch();
 
-    ucs_status_t send_am_message(entity *e, int wnd, uint8_t am_id = 0, int ep_idx = 0);
+    ucs_status_t send_am_message(entity *e, uint8_t am_id = 0, int ep_idx = 0);
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;

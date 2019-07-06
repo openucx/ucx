@@ -1224,7 +1224,7 @@ void uct_test::entity::async_wrapper::check_miss()
     ucs_async_check_miss(&m_async);
 }
 
-ucs_status_t uct_test::send_am_message(entity *e, int wnd, uint8_t am_id, int ep_idx)
+ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
 {
     ssize_t res;
 
