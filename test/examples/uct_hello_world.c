@@ -32,10 +32,11 @@ typedef struct {
 } cmd_args_t;
 
 typedef struct {
-    uct_iface_attr_t    attr;   /* Interface attributes: capabilities and limitations */
-    uct_iface_h         iface;  /* Communication interface context */
-    uct_md_h            md;     /* Memory domain */
-    uct_worker_h        worker; /* Workers represent allocated resources in a communication thread */
+    uct_iface_attr_t    iface_attr; /* Interface attributes: capabilities and limitations */
+    uct_iface_h         iface;      /* Communication interface context */
+    uct_md_attr_t       md_attr;    /* Memory domain attributes: capabilities and limitations */
+    uct_md_h            md;         /* Memory domain */
+    uct_worker_h        worker;     /* Workers represent allocated resources in a communication thread */
 } iface_info_t;
 
 /* Helper data type for am_short */
@@ -156,12 +157,18 @@ void zcopy_completion_cb(uct_completion_t *self, ucs_status_t status)
 ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
                          const cmd_args_t *cmd_args, char *buf)
 {
+    ucs_status_t status = UCS_OK;
     uct_mem_h memh;
     uct_iov_t iov;
     zcopy_comp_t comp;
 
-    ucs_status_t status = uct_md_mem_reg(if_info->md, buf, cmd_args->test_strlen,
-                                         UCT_MD_MEM_ACCESS_RMA, &memh);
+    if ((if_info->md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+        status = uct_md_mem_reg(if_info->md, buf, cmd_args->test_strlen,
+                                UCT_MD_MEM_ACCESS_RMA, &memh);
+    } else {
+        memh = UCT_MEM_HANDLE_NULL;
+    }
+
     iov.buffer          = buf;
     iov.length          = cmd_args->test_strlen;
     iov.memh            = memh;
@@ -260,22 +267,22 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     /* Get interface attributes */
-    status = uct_iface_query(iface_p->iface, &iface_p->attr);
+    status = uct_iface_query(iface_p->iface, &iface_p->iface_attr);
     CHKERR_JUMP(UCS_OK != status, "query iface", error_iface);
 
     /* Check if current device and transport support required active messages */
     if ((func_am_type == FUNC_AM_SHORT) &&
-        (iface_p->attr.cap.flags & UCT_IFACE_FLAG_AM_SHORT)) {
+        (iface_p->iface_attr.cap.flags & UCT_IFACE_FLAG_AM_SHORT)) {
         return UCS_OK;
     }
 
     if ((func_am_type == FUNC_AM_BCOPY) &&
-        (iface_p->attr.cap.flags & UCT_IFACE_FLAG_AM_BCOPY)) {
+        (iface_p->iface_attr.cap.flags & UCT_IFACE_FLAG_AM_BCOPY)) {
         return UCS_OK;
     }
 
     if ((func_am_type == FUNC_AM_ZCOPY) &&
-        (iface_p->attr.cap.flags & UCT_IFACE_FLAG_AM_ZCOPY)) {
+        (iface_p->iface_attr.cap.flags & UCT_IFACE_FLAG_AM_ZCOPY)) {
         return UCS_OK;
     }
 
@@ -333,6 +340,10 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
             uct_config_release(md_config);
             CHKERR_JUMP(UCS_OK != status, "open memory domains",
                         release_component_list);
+
+            status = uct_md_query(iface_p->md, &iface_p->md_attr);
+            CHKERR_JUMP(UCS_OK != status, "query iface",
+                        close_md);
 
             status = uct_md_query_tl_resources(iface_p->md, &tl_resources,
                                                &num_tl_resources);
@@ -557,11 +568,11 @@ int main(int argc, char **argv)
     CHKERR_JUMP(UCS_OK != status, "find supported device and transport",
                 out_destroy_worker);
 
-    own_dev = (uct_device_addr_t*)calloc(1, if_info.attr.device_addr_len);
+    own_dev = (uct_device_addr_t*)calloc(1, if_info.iface_attr.device_addr_len);
     CHKERR_JUMP(NULL == own_dev, "allocate memory for dev addr",
                 out_destroy_iface);
 
-    own_iface = (uct_iface_addr_t*)calloc(1, if_info.attr.iface_addr_len);
+    own_iface = (uct_iface_addr_t*)calloc(1, if_info.iface_attr.iface_addr_len);
     CHKERR_JUMP(NULL == own_iface, "allocate memory for if addr",
                 out_free_dev_addrs);
 
@@ -581,7 +592,7 @@ int main(int argc, char **argv)
         }
     }
 
-    status = sendrecv(oob_sock, own_dev, if_info.attr.device_addr_len,
+    status = sendrecv(oob_sock, own_dev, if_info.iface_attr.device_addr_len,
                       (void **)&peer_dev);
     CHKERR_JUMP(0 != status, "device exchange", out_free_dev_addrs);
 
@@ -589,19 +600,19 @@ int main(int argc, char **argv)
     CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
 
     /* Get interface address */
-    if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+    if (if_info.iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         status = uct_iface_get_address(if_info.iface, own_iface);
         CHKERR_JUMP(UCS_OK != status, "get interface address", out_free_if_addrs);
 
-        status = sendrecv(oob_sock, own_iface, if_info.attr.iface_addr_len,
+        status = sendrecv(oob_sock, own_iface, if_info.iface_attr.iface_addr_len,
                           (void **)&peer_iface);
         CHKERR_JUMP(0 != status, "ifaces exchange", out_free_if_addrs);
     }
 
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
     ep_params.iface      = if_info.iface;
-    if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-        own_ep = (uct_ep_addr_t*)calloc(1, if_info.attr.ep_addr_len);
+    if (if_info.iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        own_ep = (uct_ep_addr_t*)calloc(1, if_info.iface_attr.ep_addr_len);
         CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
 
         /* Create new endpoint */
@@ -612,7 +623,7 @@ int main(int argc, char **argv)
         status = uct_ep_get_address(ep, own_ep);
         CHKERR_JUMP(UCS_OK != status, "get endpoint address", out_free_ep);
 
-        status = sendrecv(oob_sock, own_ep, if_info.attr.ep_addr_len,
+        status = sendrecv(oob_sock, own_ep, if_info.iface_attr.ep_addr_len,
                           (void **)&peer_ep);
         CHKERR_JUMP(0 != status, "EPs exchange", out_free_ep);
 
@@ -622,7 +633,7 @@ int main(int argc, char **argv)
             status = UCS_ERR_IO_ERROR;
             goto out_free_ep;
         }
-    } else if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+    } else if (if_info.iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         /* Create an endpoint which is connected to a remote interface */
         ep_params.field_mask |= UCT_EP_PARAM_FIELD_DEV_ADDR |
                                 UCT_EP_PARAM_FIELD_IFACE_ADDR;
@@ -635,11 +646,11 @@ int main(int argc, char **argv)
         goto out_free_ep_addrs;
     }
 
-    if (cmd_args.test_strlen > func_am_max_size(cmd_args.func_am_type, &if_info.attr)) {
+    if (cmd_args.test_strlen > func_am_max_size(cmd_args.func_am_type, &if_info.iface_attr)) {
         status = UCS_ERR_UNSUPPORTED;
         fprintf(stderr, "Test string is too long: %ld, max supported: %lu\n",
                 cmd_args.test_strlen,
-                func_am_max_size(cmd_args.func_am_type, &if_info.attr));
+                func_am_max_size(cmd_args.func_am_type, &if_info.iface_attr));
         goto out_free_ep;
     }
 
