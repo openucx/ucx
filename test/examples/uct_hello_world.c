@@ -150,7 +150,9 @@ void zcopy_completion_cb(uct_completion_t *self, ucs_status_t status)
 {
     zcopy_comp_t *comp = (zcopy_comp_t *)self;
     assert((comp->uct_comp.count == 0) && (status == UCS_OK));
-    uct_md_mem_dereg(comp->md, comp->memh);
+    if (comp->memh != UCT_MEM_HANDLE_NULL) {
+        uct_md_mem_dereg(comp->md, comp->memh);
+    }
     desc_holder = (void *)0xDEADBEEF;
 }
 
@@ -162,7 +164,7 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
     uct_iov_t iov;
     zcopy_comp_t comp;
 
-    if ((if_info->md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+    if (if_info->md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
         status = uct_md_mem_reg(if_info->md, buf, cmd_args->test_strlen,
                                 UCT_MD_MEM_ACCESS_RMA, &memh);
     } else {
