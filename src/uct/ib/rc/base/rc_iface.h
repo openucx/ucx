@@ -239,7 +239,7 @@ struct uct_rc_iface {
         enum ibv_mtu         path_mtu;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
-#if ENABLE_ASSERT || defined(__COVERITY__) || defined(__clang_analyzer__)
+#if UCS_ENABLE_ASSERT
         int                  tx_cq_len;
 #endif
         int                  fence;
