@@ -6,6 +6,7 @@
 
 #include "profile.h"
 
+#include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -13,26 +14,35 @@
 #include <pthread.h>
 
 
+typedef struct ucs_profile_global_location {
+    ucs_profile_location_t       super;      /*< Location info */
+    volatile int                 *loc_id_p;  /*< Back-pointer to location index */
+} ucs_profile_global_location_t;
+
+
 /**
  * Profiling global context
  */
 typedef struct ucs_profile_global_context {
 
-    ucs_profile_location_t   *locations;    /**< Array of all locations */
-    unsigned                 num_locations; /**< Number of valid locations */
-    unsigned                 max_locations; /**< Size of locations array */
-    pthread_mutex_t          mutex;         /**< Protects updating the locations array */
+    ucs_profile_global_location_t *locations;    /**< Array of all locations */
+    unsigned                      num_locations; /**< Number of valid locations */
+    unsigned                      max_locations; /**< Size of locations array */
+    pthread_mutex_t               mutex;         /**< Protects updating the locations array */
+    ucs_time_t                    start_time;    /**< Thread context init time */
+    ucs_time_t                    end_time;      /**< Thread end time */
 
     struct {
-        ucs_profile_record_t *start, *end;  /**< Circular log buffer */
-        ucs_profile_record_t *current;      /**< Current log pointer */
-        int                  wraparound;    /**< Whether log was rotated */
+        ucs_profile_record_t      *start, *end;  /**< Circular log buffer */
+        ucs_profile_record_t      *current;      /**< Current log pointer */
+        int                       wraparound;    /**< Whether log was rotated */
     } log;
 
     struct {
-        int                  stack_top;     /**< Index of stack top */
-        ucs_time_t           stack[UCS_PROFILE_STACK_MAX]; /**< Timestamps for each nested scope */
-    } accum;
+        int                       stack_top;     /**< Index of stack top */
+        ucs_time_t                stack[UCS_PROFILE_STACK_MAX]; /**< Timestamps for each nested scope */
+        ucs_profile_thread_location_t *thread_locations; /**< Statistics per location */
+   } accum;
 
 } ucs_profile_global_context_t;
 
@@ -50,26 +60,123 @@ ucs_profile_global_context_t ucs_profile_ctx = {
     .log.current     = NULL,
     .log.wraparound  = 0,
     .accum.stack_top = -1,
+    .accum.thread_locations = NULL,
     .num_locations   = 0,
     .max_locations   = 0,
     .mutex           = PTHREAD_MUTEX_INITIALIZER
 };
 
-static void ucs_profile_file_write_data(int fd, void *data, size_t size)
+static ucs_status_t ucs_profile_file_write_data(int fd, void *data, size_t size)
 {
-    ssize_t written = write(fd, data, size);
-    if (written < 0) {
-        ucs_warn("failed to write %zu bytes to profiling file: %m", size);
-    } else if (size != written) {
-        ucs_warn("wrote only %zd of %zu bytes to profiling file: %m",
-                 written, size);
+    if (size > 0) {
+        ssize_t written = write(fd, data, size);
+        if (written < 0) {
+            ucs_error("failed to write %zu bytes to profiling file: %m", size);
+            return UCS_ERR_IO_ERROR;
+        } else if (size != written) {
+            ucs_error("wrote only %zd of %zu bytes to profiling file: %m",
+                      written, size);
+            return UCS_ERR_IO_ERROR;
+        }
     }
+
+    return UCS_OK;
 }
 
-static void ucs_profile_file_write_records(int fd, ucs_profile_record_t *begin,
-                                           ucs_profile_record_t *end)
+static ucs_status_t
+ucs_profile_file_write_records(int fd, ucs_profile_record_t *begin,
+                               ucs_profile_record_t *end)
 {
-    ucs_profile_file_write_data(fd, begin, (void*)end - (void*)begin);
+    return ucs_profile_file_write_data(fd, begin, (void*)end - (void*)begin);
+}
+
+static ucs_status_t
+ucs_profile_file_write_thread(int fd, ucs_time_t default_end_time)
+{
+    ucs_profile_thread_location_t empty_location = { .total_time = 0, .count = 0 };
+    ucs_profile_thread_header_t thread_hdr;
+    unsigned i, num_locations;
+    ucs_status_t status;
+
+    /* write thread header */
+    memset(&thread_hdr, 0, sizeof(thread_hdr));
+    thread_hdr.tid        = getpid();
+    thread_hdr.start_time = ucs_profile_ctx.start_time;
+    thread_hdr.end_time   = ucs_profile_ctx.end_time;
+
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
+        thread_hdr.num_records = ucs_profile_ctx.log.wraparound ?
+                        (ucs_profile_ctx.log.end     - ucs_profile_ctx.log.start) :
+                        (ucs_profile_ctx.log.current - ucs_profile_ctx.log.start);
+    } else {
+        thread_hdr.num_records = 0;
+    }
+
+    status = ucs_profile_file_write_data(fd, &thread_hdr, sizeof(thread_hdr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* If accumulate mode is not enabled, there are no location entries */
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+        num_locations = ucs_profile_ctx.num_locations;
+    } else {
+        num_locations = 0;
+    }
+
+    /* write profiling information for every location
+     * note: the thread location array may be smaller (or even empty) than the
+     * global list, but it cannot be larger. If it's smaller, we pad with empty
+     * entries
+     */
+    ucs_profile_file_write_data(fd, ucs_profile_ctx.accum.thread_locations,
+                                num_locations *
+                                sizeof(*ucs_profile_ctx.accum.thread_locations));
+    for (i = num_locations; i < ucs_profile_ctx.num_locations; ++i) {
+        status = ucs_profile_file_write_data(fd, &empty_location,
+                                             sizeof(empty_location));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    /* write profiling records */
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
+        if (ucs_profile_ctx.log.wraparound) {
+            status = ucs_profile_file_write_records(fd,
+                                                    ucs_profile_ctx.log.current,
+                                                    ucs_profile_ctx.log.end);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+
+        status = ucs_profile_file_write_records(fd, ucs_profile_ctx.log.start,
+                                                ucs_profile_ctx.log.current);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t ucs_profile_write_locations(int fd)
+{
+    ucs_profile_global_location_t *loc;
+    ucs_status_t status;
+
+    for (loc = ucs_profile_ctx.locations;
+         loc < ucs_profile_ctx.locations + ucs_profile_ctx.num_locations;
+         ++loc)
+    {
+        status = ucs_profile_file_write_data(fd, &loc->super, sizeof(loc->super));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }
 
 static void ucs_profile_write()
@@ -77,11 +184,15 @@ static void ucs_profile_write()
     ucs_profile_header_t header;
     char fullpath[1024] = {0};
     char filename[1024] = {0};
+    ucs_time_t write_time;
+    ucs_status_t status;
     int fd;
 
     if (!ucs_global_opts.profile_mode) {
         return;
     }
+
+    write_time = ucs_get_time();
 
     ucs_fill_filename_template(ucs_global_opts.profile_file,
                                filename, sizeof(filename));
@@ -97,28 +208,28 @@ static void ucs_profile_write()
     memset(&header, 0, sizeof(header));
     ucs_read_file(header.cmdline, sizeof(header.cmdline), 1, "/proc/self/cmdline");
     strncpy(header.hostname, ucs_get_host_name(), sizeof(header.hostname) - 1);
-    header.pid = getpid();
-    header.mode = ucs_global_opts.profile_mode;
+    header.version       = UCS_PROFILE_FILE_VERSION;
+    strncpy(header.ucs_path, ucs_debug_get_lib_path(), sizeof(header.ucs_path) - 1);
+    header.pid           = getpid();
+    header.mode          = ucs_global_opts.profile_mode;
     header.num_locations = ucs_profile_ctx.num_locations;
-    header.num_records   = ucs_profile_ctx.log.wraparound ?
-                    (ucs_profile_ctx.log.end     - ucs_profile_ctx.log.start) :
-                    (ucs_profile_ctx.log.current - ucs_profile_ctx.log.start);
+    header.num_threads   = 1;
     header.one_second    = ucs_time_from_sec(1.0);
     ucs_profile_file_write_data(fd, &header, sizeof(header));
 
     /* write locations */
-    ucs_profile_file_write_data(fd, ucs_profile_ctx.locations,
-                                sizeof(*ucs_profile_ctx.locations) *
-                                ucs_profile_ctx.num_locations);
-
-    /* write records */
-    if (ucs_profile_ctx.log.wraparound > 0) {
-        ucs_profile_file_write_records(fd, ucs_profile_ctx.log.current,
-                                       ucs_profile_ctx.log.end);
+    status = ucs_profile_write_locations(fd);
+    if (status != UCS_OK) {
+        goto out_close_fd;
     }
-    ucs_profile_file_write_records(fd, ucs_profile_ctx.log.start,
-                                   ucs_profile_ctx.log.current);
 
+    /* write threads */
+    status = ucs_profile_file_write_thread(fd, write_time);
+    if (status != UCS_OK) {
+        goto out_close_fd;
+    }
+
+out_close_fd:
     close(fd);
 }
 
@@ -141,7 +252,7 @@ static void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
                                      const char *function, volatile int *loc_id_p)
 {
     ucs_profile_global_context_t *ctx = &ucs_profile_ctx;
-    ucs_profile_location_t *loc;
+    ucs_profile_global_location_t *loc;
     int location;
     int i;
 
@@ -163,11 +274,11 @@ static void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
     for (i = 0; i < ctx->num_locations; ++i) {
         loc = &ctx->locations[i];
 
-        if ((type == loc->type) &&
-            (line == loc->line) &&
-            !strcmp(loc->name, name) &&
-            !strcmp(loc->file, basename(file)) &&
-            !strcmp(loc->function, function)) {
+        if ((type == loc->super.type) &&
+            (line == loc->super.line) &&
+            !strcmp(loc->super.name, name) &&
+            !strcmp(loc->super.file, basename(file)) &&
+            !strcmp(loc->super.function, function)) {
 
             *loc_id_p = i + 1;
             goto out_unlock;
@@ -188,18 +299,34 @@ static void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
             *loc_id_p = 0;
             goto out_unlock;
         }
+
+        if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+            ucs_profile_ctx.accum.thread_locations =
+                            ucs_realloc(ucs_profile_ctx.accum.thread_locations,
+                                        sizeof(*ucs_profile_ctx.accum.thread_locations) *
+                                        ucs_profile_ctx.max_locations,
+                                        "profile_thread_locations");
+            if (ucs_profile_ctx.accum.thread_locations == NULL) {
+                ucs_warn("failed to expand thread locations array");
+                *loc_id_p = 0;
+                goto out_unlock;
+            }
+        }
     }
 
     /* Initialize new location */
     loc             = &ucs_profile_ctx.locations[location];
-    ucs_strncpy_zero(loc->file, basename(file), sizeof(loc->file));
-    ucs_strncpy_zero(loc->function, function, sizeof(loc->function));
-    ucs_strncpy_zero(loc->name, name, sizeof(loc->name));
-    loc->line       = line;
-    loc->type       = type;
-    loc->total_time = 0;
-    loc->count      = 0;
+    ucs_strncpy_zero(loc->super.file, basename(file), sizeof(loc->super.file));
+    ucs_strncpy_zero(loc->super.function, function, sizeof(loc->super.function));
+    ucs_strncpy_zero(loc->super.name, name, sizeof(loc->super.name));
+    loc->super.line = line;
+    loc->super.type = type;
     loc->loc_id_p   = loc_id_p;
+
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+        ucs_profile_ctx.accum.thread_locations[location].total_time = 0;
+        ucs_profile_ctx.accum.thread_locations[location].count      = 0;
+    }
 
     ucs_memory_cpu_store_fence();
     *loc_id_p       = location + 1;
@@ -214,8 +341,8 @@ void ucs_profile_record(ucs_profile_type_t type, const char *name,
 {
     extern ucs_profile_global_context_t ucs_profile_ctx;
     ucs_profile_global_context_t *ctx = &ucs_profile_ctx;
-    ucs_profile_record_t   *rec;
-    ucs_profile_location_t *loc;
+    ucs_profile_record_t          *rec;
+    ucs_profile_thread_location_t *loc;
     ucs_time_t current_time;
     int loc_id;
 
@@ -233,7 +360,7 @@ void ucs_profile_record(ucs_profile_type_t type, const char *name,
 
     current_time = ucs_get_time();
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
-        loc = &ctx->locations[loc_id - 1];
+        loc = &ctx->accum.thread_locations[loc_id - 1];
         switch (type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
             ctx->accum.stack[++ctx->accum.stack_top] = current_time;
@@ -302,9 +429,9 @@ off:
     ucs_trace("profiling is disabled");
 }
 
-static void ucs_profile_reset_locations()
+void ucs_profile_reset_locations()
 {
-    ucs_profile_location_t *loc;
+    ucs_profile_global_location_t *loc;
 
     pthread_mutex_lock(&ucs_profile_ctx.mutex);
     for (loc = ucs_profile_ctx.locations;
@@ -329,21 +456,22 @@ void ucs_profile_global_cleanup()
     ucs_profile_ctx.log.end        = NULL;
     ucs_profile_ctx.log.current    = NULL;
     ucs_profile_ctx.log.wraparound = 0;
-    ucs_profile_reset_locations();
 }
 
 void ucs_profile_dump()
 {
-    ucs_profile_location_t *loc;
+    ucs_profile_thread_location_t *loc;
 
     ucs_profile_write();
 
-    for (loc = ucs_profile_ctx.locations;
-         loc < ucs_profile_ctx.locations + ucs_profile_ctx.num_locations;
-         ++loc)
-    {
-        loc->count      = 0;
-        loc->total_time = 0;
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+        for (loc = ucs_profile_ctx.accum.thread_locations;
+             loc < ucs_profile_ctx.accum.thread_locations + ucs_profile_ctx.num_locations;
+             ++loc)
+        {
+            loc->count      = 0;
+            loc->total_time = 0;
+        }
     }
 
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {

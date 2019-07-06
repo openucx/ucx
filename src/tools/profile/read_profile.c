@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <errno.h>
 
 
 #define INDENT             4
@@ -52,12 +53,26 @@ typedef struct options {
 
 
 typedef struct {
+    const ucs_profile_thread_header_t   *header;
+    const ucs_profile_thread_location_t *locations;
+    const ucs_profile_record_t          *records;
+} profile_thread_data_t;
+
+
+typedef struct {
     void                         *mem;
     size_t                       length;
     const ucs_profile_header_t   *header;
     const ucs_profile_location_t *locations;
-    const ucs_profile_record_t   *records;
+    profile_thread_data_t        thread;
 } profile_data_t;
+
+
+typedef struct {
+    uint64_t                     total_time;
+    size_t                       count;
+    unsigned                     location_idx;
+} profile_sorted_location_t;
 
 
 /* Used to redirect output to a "less" command */
@@ -76,6 +91,7 @@ static const char* time_units_str[] = {
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
     struct stat stat;
+    const void *ptr;
     int ret, fd;
 
     fd = open(file_name, O_RDONLY);
@@ -100,9 +116,26 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto out_close;
     }
 
-    data->header    = data->mem;
-    data->locations = (const void*)(data->header + 1);
-    data->records   = (const void*)(data->locations + data->header->num_locations);
+    ptr             = data->mem;
+
+    data->header    = ptr;
+    ptr             = data->header + 1;
+
+    if (data->header->version != UCS_PROFILE_FILE_VERSION) {
+        fprintf(stderr, "Error: invalid file version, expected: %u, actual: %u\n",
+                UCS_PROFILE_FILE_VERSION, data->header->version);
+        ret = -EINVAL;
+        goto err_munmap;
+    }
+
+    data->locations        = ptr;
+    ptr                    = data->locations + data->header->num_locations;
+    data->thread.header    = ptr;
+    ptr                    = data->thread.header + 1;
+    data->thread.locations = ptr;
+    ptr                    = data->thread.locations + data->header->num_locations;
+    data->thread.records   = ptr;
+    ptr                    = data->thread.records + data->thread.header->num_records;
 
     ret = 0;
 
@@ -110,6 +143,9 @@ out_close:
     close(fd);
 out:
     return ret;
+err_munmap:
+    munmap(data->mem, data->length);
+    goto out_close;
 }
 
 static void release_profile_data(profile_data_t *data)
@@ -131,32 +167,58 @@ static double time_to_usec(profile_data_t *data, options_t *opts, uint64_t time)
 
 static int compare_locations(const void *l1, const void *l2)
 {
-    const ucs_profile_location_t *loc1 = l1;
-    const ucs_profile_location_t *loc2 = l2;
+    const ucs_profile_thread_location_t *loc1 = l1;
+    const ucs_profile_thread_location_t *loc2 = l2;
     return (loc1->total_time > loc2->total_time) ? -1 :
            (loc1->total_time < loc2->total_time) ? +1 :
            0;
 }
 
-static void show_profile_data_accum(profile_data_t *data, options_t *opts)
+static int show_profile_data_accum(profile_data_t *data, options_t *opts)
 {
-    uint32_t num_locations = data->header->num_locations;
-    ucs_profile_location_t *sorted_locations;
-    ucs_profile_location_t *loc;
+    const uint32_t            num_locations          = data->header->num_locations;
+    profile_sorted_location_t *sorted_locations      = NULL;
+    const ucs_profile_thread_location_t *thread_location;
+    profile_sorted_location_t *sorted_loc;
+    const ucs_profile_location_t *loc;
+    unsigned location_idx;
+    int ret;
 
-    sorted_locations = malloc(sizeof(*sorted_locations) * num_locations);
+    sorted_locations = calloc(sizeof(*sorted_locations), num_locations);
     if (sorted_locations == NULL) {
-        return;
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    /* Go over the list of threads provided by the user and accumulate the times
+     * and counts from all threads. In addition, track which calls were made from
+     * which threads.
+     */
+    for (location_idx = 0; location_idx < num_locations; ++location_idx) {
+        sorted_loc               = &sorted_locations[location_idx];
+        thread_location          = &data->thread.locations[location_idx];
+        sorted_loc->location_idx = location_idx;
+        sorted_loc->count       += thread_location->count;
+        sorted_loc->total_time  += thread_location->total_time;
     }
 
     /* Sort locations */
-    memcpy(sorted_locations, data->locations, sizeof(*sorted_locations) * num_locations);
-    qsort(sorted_locations, num_locations, sizeof(*sorted_locations), compare_locations);
+    qsort(sorted_locations, num_locations, sizeof(*sorted_locations),
+          compare_locations);
 
     /* Print locations */
     printf("%*s %13s %13s %10s                FILE     FUNCTION\n",
            FUNC_NAME_MAX_LEN, "NAME", "AVG", "TOTAL", "COUNT");
-    for (loc = sorted_locations; loc < sorted_locations + num_locations; ++loc) {
+
+    for (sorted_loc = sorted_locations;
+         sorted_loc < sorted_locations + num_locations; ++sorted_loc) {
+
+        if (sorted_loc->count == 0) {
+            continue;
+        }
+
+        loc = &data->locations[sorted_loc->location_idx];
+
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SAMPLE:
             printf("%*.*s %13s %13s %10ld %18s:%-4d %s()\n",
@@ -164,16 +226,17 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
                    loc->name,
                    "-",
                    "-",
-                   (long)loc->count,
+                   (long)sorted_loc->count,
                    loc->file, loc->line, loc->function);
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
             printf("%*.*s %13.3f %13.0f %10ld %18s:%-4d %s()\n",
                    FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
-                   time_to_usec(data, opts, loc->total_time) / loc->count,
-                   time_to_usec(data, opts, loc->total_time),
-                   (long)loc->count,
+                   time_to_usec(data, opts, sorted_loc->total_time) /
+                   sorted_loc->count,
+                   time_to_usec(data, opts, sorted_loc->total_time),
+                   (long)sorted_loc->count,
                    loc->file, loc->line, loc->function);
             break;
         case UCS_PROFILE_TYPE_REQUEST_EVENT:
@@ -182,7 +245,7 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
                    loc->name,
                    "n/a",
                    "n/a",
-                   (long)loc->count,
+                   (long)sorted_loc->count,
                    loc->file, loc->line, loc->function);
             break;
         default:
@@ -190,14 +253,19 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
         }
     }
 
+    ret = 0;
+
     free(sorted_locations);
+out:
+    return ret;
 }
 
 KHASH_MAP_INIT_INT64(request_ids, int)
 
 static void show_profile_data_log(profile_data_t *data, options_t *opts)
 {
-    size_t num_recods               = data->header->num_records;
+    profile_thread_data_t *thread   = &data->thread;
+    size_t num_recods               = thread->header->num_records;
     const ucs_profile_record_t **stack[UCS_PROFILE_STACK_MAX * 2];
     const ucs_profile_record_t **scope_ends;
     const ucs_profile_location_t *loc;
@@ -239,11 +307,11 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     /* Find the first record with minimal nesting level, which is the base of call stack */
     nesting         = 0;
     min_nesting     = 0;
-    for (rec = data->records; rec < data->records + num_recods; ++rec) {
+    for (rec = thread->records; rec < thread->records + num_recods; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
-            stack[nesting + UCS_PROFILE_STACK_MAX] = &scope_ends[rec - data->records];
+            stack[nesting + UCS_PROFILE_STACK_MAX] = &scope_ends[rec - thread->records];
             ++nesting;
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
@@ -262,7 +330,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     }
 
     if (num_recods > 0) {
-        prev_time = data->records[0].timestamp;
+        prev_time = thread->records[0].timestamp;
     } else {
         prev_time = 0;
     }
@@ -271,11 +339,11 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
 
     /* Display records */
     nesting = -min_nesting;
-    for (rec = data->records; rec < data->records + num_recods; ++rec) {
+    for (rec = thread->records; rec < thread->records + num_recods; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
-            se = scope_ends[rec - data->records];
+            se = scope_ends[rec - thread->records];
             if (se != NULL) {
                 snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s %s%.3f%s {",
                          RECORD_ARG(rec->timestamp - prev_time),
@@ -358,7 +426,7 @@ static void close_pipes()
     close(output_pipefds[1]);
 }
 
-static int redirect_output(const ucs_profile_header_t *hdr)
+static int redirect_output(const profile_data_t *data)
 {
     char *less_argv[] = {LESS_COMMAND,
                          "-R" /* show colors */,
@@ -375,10 +443,10 @@ static int redirect_output(const ucs_profile_header_t *hdr)
     }
 
     num_lines = 6 + /* header */
-                ((hdr->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) ?
-                                (hdr->num_locations + 2) : 0) +
-                ((hdr->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) ?
-                                (hdr->num_records    + 1) : 0) +
+                ((data->header->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) ?
+                                (data->header->num_locations + 2) : 0) +
+                ((data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) ?
+                                (data->thread.header->num_records + 1) : 0) +
                 1; /* footer */
 
     if (num_lines <= wsz.ws_row) {
@@ -439,8 +507,16 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
 {
     int ret;
 
+    if (data->header->num_threads != 1) {
+        fprintf(stderr, "Error: "
+                "the profile contains %u threads, but only 1 is supported",
+                data->header->num_threads);
+        return -EINVAL;
+    }
+
+    /* redirect output if needed */
     if (!opts->raw) {
-        ret = redirect_output(data->header);
+        ret = redirect_output(data);
         if (ret < 0) {
             return ret;
         }
