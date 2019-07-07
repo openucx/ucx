@@ -232,7 +232,7 @@ void test_rc_flow_control::test_flush_fc_disabled()
 
     /* send active message should be OK */
     get_fc_ptr(m_e1)->fc_wnd = 1;
-    send_am_message(m_e1, 1, UCS_OK);
+    send_am_messages(m_e1, 1, UCS_OK);
     EXPECT_EQ(0, get_fc_ptr(m_e1)->fc_wnd);
 
     /* flush must have resources */

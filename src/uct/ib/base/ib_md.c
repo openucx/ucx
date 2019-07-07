@@ -142,6 +142,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
 
+    {"MLX5_DEVX", "try",
+     "DEVX support\n",
+     ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 
@@ -1112,6 +1116,14 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     int i, num_devices;
 
     ucs_trace("opening IB device %s", md_name);
+
+#if !HAVE_DEVX
+    if (md_config->devx == UCS_YES) {
+        ucs_error("DEVX requested but not supported");
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+#endif
 
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);

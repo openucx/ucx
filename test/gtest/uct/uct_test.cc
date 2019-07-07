@@ -656,7 +656,7 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
             (md_attr().cap.reg_mem_types & UCS_BIT(mem_type))) {
             rkey_buffer = malloc(md_attr().rkey_packed_size);
             if (rkey_buffer == NULL) {
-                UCS_TEST_ABORT("Failed to allocake rkey buffer");
+                UCS_TEST_ABORT("Failed to allocate rkey buffer");
             }
 
             status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
@@ -1224,7 +1224,7 @@ void uct_test::entity::async_wrapper::check_miss()
     ucs_async_check_miss(&m_async);
 }
 
-ucs_status_t uct_test::send_am_message(entity *e, int wnd, uint8_t am_id, int ep_idx)
+ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
 {
     ssize_t res;
 

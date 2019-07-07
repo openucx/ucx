@@ -20,6 +20,9 @@
  */
 static inline void ucs_queue_head_init(ucs_queue_head_t *queue)
 {
+#ifdef __clang_analyzer__
+    queue->head  = (ucs_queue_elem_t*)(void*)queue;
+#endif
     queue->ptail = &queue->head;
 }
 
@@ -194,9 +197,11 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * @param member  Member inside 'elem' which is the queue link.
  */
 #define ucs_queue_for_each(elem, queue, member) \
-    for (*(queue)->ptail = NULL, \
+    /* we set `ptail` field to queue address to not substract NULL pointer */ \
+    for (*(queue)->ptail = (ucs_queue_elem_t*)(void*)(queue), \
              elem = ucs_container_of((queue)->head, typeof(*elem), member); \
-         (elem) != ucs_container_of(NULL, typeof(*elem), member); \
+         (elem) != ucs_container_of((ucs_queue_elem_t*)(void*)(queue), \
+                                    typeof(*elem), member); \
          elem = ucs_container_of(elem->member.next, typeof(*elem), member))
 
 /**
