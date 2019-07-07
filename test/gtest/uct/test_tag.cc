@@ -56,7 +56,7 @@ public:
     void init()
     {
         ucs_status_t status = uct_config_modify(m_iface_config,
-                                                "TM_ENABLE", "y");
+                                                "RC_TM_ENABLE", "y");
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
 
         uct_test::init();
