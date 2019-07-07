@@ -727,6 +727,11 @@ void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
 
     if (force) {
         do {
+            /* coverity wrongly resolves rc's progress to ucp_listener_conn_request_progress
+             * which in turn releases wiface->iface. this leads coverity to assume
+             * that ucp_worker_iface_check_events_do() dereferences a freed pointer
+             * in the subsequent call in the following loop */
+            /* coverity[freed_arg] */
             status = ucp_worker_iface_check_events_do(wiface, &progress_count);
             ucs_assert(progress_count == 0);
         } while (status == UCS_ERR_BUSY);
