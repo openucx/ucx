@@ -15,7 +15,6 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/stubs.h>
-#include <ucs/sys/sys.h>
 #include <ucs/sys/event_set.h>
 
 
@@ -71,9 +70,9 @@ static void ucs_async_thread_put(ucs_async_thread_t *thread)
 static void ucs_async_thread_ev_handler(void *callback_data, int event,
                                         void *arg)
 {
-    ucs_status_t status;
     ucs_async_thread_callback_arg_t *cb_arg = (void*)arg;
     int fd                                  = (int)(uintptr_t)callback_data;
+    ucs_status_t status;
 
     ucs_trace_async("ucs_async_thread_ev_handler(fd=%d, event=%d)",
                     fd, event);
@@ -312,8 +311,7 @@ static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
 
     /* Store file descriptor into void * storage without memory allocation. */
     status = ucs_event_set_add(thread->event_set, event_fd,
-                               UCS_EVENT_SET_EVREAD,
-                               (void *)(uintptr_t)event_fd);
+                               events, (void *)(uintptr_t)event_fd);
     if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
         goto err_removed;
