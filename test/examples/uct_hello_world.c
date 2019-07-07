@@ -493,14 +493,16 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
     }
 
     ret = send(sock, sbuf, slen, 0);
-    if ((ret < 0) || (ret != slen)) {
-        fprintf(stderr, "failed to send buffer\n");
+    if (ret != (int)slen) {
+        fprintf(stderr, "failed to send buffer, return value %d\n", ret);
         return -1;
     }
 
-    ret = recv(sock, &rlen, sizeof(rlen), 0);
+    ret = recv(sock, &rlen, sizeof(rlen), MSG_WAITALL);
     if ((ret != sizeof(rlen)) || (rlen > (SIZE_MAX / 2))) {
-        fprintf(stderr, "failed to receive device address length\n");
+        fprintf(stderr,
+                "failed to receive device address length, return value %d\n",
+                ret);
         return -1;
     }
 
@@ -510,9 +512,10 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
         return -1;
     }
 
-    ret = recv(sock, *rbuf, rlen, 0);
-    if (ret < 0) {
-        fprintf(stderr, "failed to receive device address\n");
+    ret = recv(sock, *rbuf, rlen, MSG_WAITALL);
+    if (ret != (int)rlen) {
+        fprintf(stderr, "failed to receive device address, return value %d\n",
+                ret);
         return -1;
     }
 
