@@ -20,6 +20,9 @@
 #include <string.h>
 
 
+#define UCT_DC_MLX5_MAX_TX_CQ_LEN (16 * UCS_MBYTE)
+
+
 static const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
@@ -1093,8 +1096,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     /* driver will round up to pow of 2 if needed */
     init_attr.tx_cq_len   = config->super.super.tx.queue_len *
                             UCT_IB_MLX5_MAX_BB * config->ndci;
-    /*TODO check caps instead */
-    if (ucs_roundup_pow2(init_attr.tx_cq_len) > (1 << 24)) {
+    /* TODO check caps instead */
+    if (ucs_roundup_pow2(init_attr.tx_cq_len) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
         ucs_error("Can't allocate TX resources, try to decrese dcis number (%d)"
                   " or tx qp length (%d)",
                   config->ndci, config->super.super.tx.queue_len);

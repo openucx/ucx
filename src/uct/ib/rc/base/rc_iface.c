@@ -87,7 +87,6 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
    ucs_offsetof(uct_rc_iface_config_t, tx_cq_len), UCS_CONFIG_TYPE_UINT},
 
-
   {NULL}
 };
 
