@@ -105,6 +105,8 @@ static inline ucs_queue_elem_t *ucs_queue_pull_non_empty(ucs_queue_head_t *queue
  */
 static inline void ucs_queue_del_iter(ucs_queue_head_t *queue, ucs_queue_iter_t iter)
 {
+    ucs_assert((iter != NULL) && (*iter != NULL));
+
     if (queue->ptail == &(*iter)->next) {
         queue->ptail = iter; /* deleting the last element */
         *iter = NULL;        /* make *ptail point to NULL */
