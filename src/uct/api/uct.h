@@ -1821,6 +1821,8 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * disconnect.
  * After a call to this function, the given endpoint may not be used for
  * communications anymore.
+ * The @ref uct_ep_flush / @ref uct_iface_flush routines will guarantee that the
+ * disconnect notification is delivered to the remote peer.
  * @ref uct_ep_destroy should be called on this endpoint after invoking this
  * routine and @ref uct_ep_params::disconnect_cb was called.
  *
