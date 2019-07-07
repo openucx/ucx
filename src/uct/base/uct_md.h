@@ -101,8 +101,12 @@ struct uct_md {
 static UCS_F_ALWAYS_INLINE void*
 uct_md_fill_md_name(uct_md_h md, void *buffer)
 {
+#if ENABLE_DEBUG_DATA
     memcpy(buffer, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
     return (char*)buffer + UCT_MD_COMPONENT_NAME_MAX;
+#else
+    return buffer;
+#endif
 }
 
 

@@ -333,11 +333,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
-#if ENABLE_DEBUG_DATA
     void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
-#else
-    void *rbuf = rkey_buffer;
-#endif
     return md->ops->mkey_pack(md, memh, rbuf);
 }
 
@@ -346,8 +342,9 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
 {
     char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
-    if (ENABLE_PARAMS_CHECK && ENABLE_DEBUG_DATA) {
-        if (strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
+    if (ENABLE_DEBUG_DATA) {
+        if (ENABLE_PARAMS_CHECK &&
+            strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
             ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s",
                               (const char*)rkey_buffer);
             ucs_error("invalid component for rkey unpack; "
