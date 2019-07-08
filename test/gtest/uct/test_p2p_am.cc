@@ -637,18 +637,26 @@ class uct_p2p_am_tx_bufs : public uct_p2p_am_test
 {
 public:
     uct_p2p_am_tx_bufs() : uct_p2p_am_test() {
+        std::string max_bufs_var  = "";
+        std::string bufs_grow_var = "";
         ucs_status_t status1, status2;
 
-        /* can not reduce mpool size below retransmission window
-         * for ud
-         */
+        /* can not reduce mpool size below retransmission window for ud */
         if (has_ud()) {
             m_inited = false;
             return;
         }
 
-        status1 = uct_config_modify(m_iface_config, "IB_TX_MAX_BUFS" , "32");
-        status2 = uct_config_modify(m_iface_config, "IB_TX_BUFS_GROW" , "32");
+        if (has_ib()) {
+            max_bufs_var  = "IB_";
+            bufs_grow_var = "IB_";
+        }
+
+        max_bufs_var  += "TX_MAX_BUFS";
+        bufs_grow_var += "TX_BUFS_GROW";
+
+        status1 = uct_config_modify(m_iface_config, max_bufs_var.c_str() , "32");
+        status2 = uct_config_modify(m_iface_config, bufs_grow_var.c_str(), "32");
         if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
             m_inited = false;
         } else {
@@ -679,8 +687,6 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
     }
     do {
         status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
-        if (status == UCS_OK) {
-        }
     } while (status == UCS_OK);
 
     /* short progress shall release tx buffers and 
