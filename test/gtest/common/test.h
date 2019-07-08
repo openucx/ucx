@@ -230,9 +230,10 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 /*
  * Define test fixture with multiple threads
  */
-#define UCS_MT_TEST_F(test_fixture, test_name, num_threads, ...)\
+#define UCS_MT_TEST_F(test_fixture, test_name, num_threads, ...) \
   UCS_TEST_(test_fixture, test_name, test_fixture, \
-            ::testing::internal::GetTypeId<test_fixture>(), num_threads, 0, __VA_ARGS__)
+            ::testing::internal::GetTypeId<test_fixture>(), \
+            num_threads, 0, "", __VA_ARGS__)
 
 
 /*
@@ -285,13 +286,13 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  * Define parameterized test with modified configuration and check skip condition
  */
 #define UCS_TEST_SKIP_COND_P(test_case_name, test_name, skip_cond, ...) \
-    UCS_TEST_P_(test_case_name, test_name, 1, skip_cond, #skip_cond,  __VA_ARGS__)
+    UCS_TEST_P_(test_case_name, test_name, 1, skip_cond, #skip_cond, __VA_ARGS__)
 
 
 /*
  * Define parameterized test with multiple threads
  */
 #define UCS_MT_TEST_P(test_case_name, test_name, num_threads, ...) \
-    UCS_TEST_P_(test_case_name, test_name, num_threads, 0, __VA_ARGS__)
+    UCS_TEST_P_(test_case_name, test_name, num_threads, 0, "", __VA_ARGS__)
 
 #endif
