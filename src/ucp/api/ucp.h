@@ -429,7 +429,7 @@ enum ucp_send_am_flags {
  * @brief Descriptor flags for Active Message callback.
  *
  * In a callback, if flags is set to UCP_CB_PARAM_FLAG_DATA in
- * a callback then, data was allocated, so if UCS_INPROGRESS is 
+ * a callback then data was allocated, so if UCS_INPROGRESS is 
  * returned from the callback, the data parameter will persist 
  * and the user has to call @ref ucp_am_data_release when data is
  * no longer needed.
@@ -2192,7 +2192,7 @@ ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
 
 /**
  * @ingroup UCP_COMM
- * @brief Send Active Message
+ * @brief Send Active Message.
  *
  * This routine sends an Active Message to an ep. It does not support
  * CUDA memory.
