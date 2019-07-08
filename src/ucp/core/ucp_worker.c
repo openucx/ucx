@@ -1890,8 +1890,6 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
                                     return UCS_ERR_INVALID_PARAM);
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
     status = ucp_worker_arm(worker);
     if (status == UCS_ERR_BUSY) { /* if UCS_ERR_BUSY returned - no poll() must called */
         status = UCS_OK;
@@ -1915,6 +1913,8 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
         nfds         = 1;
     }
 
+    // poll is thread safe system call, though can have unpredictable results
+    // because of using the same descriptor in multiple threads.
     for (;;) {
         ret = poll(pfd, nfds, -1);
         if (ret >= 0) {
@@ -1931,7 +1931,6 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     }
 
 out:
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
