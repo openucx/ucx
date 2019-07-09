@@ -2400,26 +2400,31 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * iov[1], and so on.
  *
  *
- * @param [in] ep            Destination endpoint handle.
- * @param [in] id            Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
- * @param [in] header        Active message header.
- * @param [in] header_length Active message header length in bytes.
- * @param [in] iov           Points to an array of @ref ::uct_iov_t structures.
- *                           The @a iov pointer must be valid address of an array
- *                           of @ref ::uct_iov_t structures. A particular structure
- *                           pointer must be valid address. NULL terminated pointer
- *                           is not required.
- * @param [in] iovcnt        Size of the @a iov data @ref ::uct_iov_t structures
- *                           array. If @a iovcnt is zero, the data is considered empty.
- *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
- *                           "uct_iface_attr::cap::am::max_iov"
- * @param [in] flags         Active message flags, see @ref uct_msg_flags.
- * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
+ * @param [in] ep              Destination endpoint handle.
+ * @param [in] id              Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
+ * @param [in] header          Active message header.
+ * @param [in] header_length   Active message header length in bytes.
+ * @param [in] iov             Points to an array of @ref ::uct_iov_t structures.
+ *                             The @a iov pointer must be valid address of an array
+ *                             of @ref ::uct_iov_t structures. A particular structure
+ *                             pointer must be valid address. NULL terminated pointer
+ *                             is not required.
+ * @param [in] iovcnt          Size of the @a iov data @ref ::uct_iov_t structures
+ *                             array. If @a iovcnt is zero, the data is considered empty.
+ *                             @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                             "uct_iface_attr::cap::am::max_iov"
+ * @param [in] flags           Active message flags, see @ref uct_msg_flags.
+ * @param [in] comp            Completion handle as defined by @ref ::uct_completion_t.
  *
- * @return UCS_INPROGRESS    Some communication operations are still in progress.
- *                           If non-NULL @a comp is provided, it will be updated
- *                           upon completion of these operations.
+ * @return UCS_OK              Operation completed successfully.
+ * @return UCS_INPROGRESS      Some communication operations are still in progress.
+ *                             If non-NULL @a comp is provided, it will be updated
+ *                             upon completion of these operations.
+ * @return UCS_ERR_NO_RESOURCE Could not start the operation now due to lack
+ *                             of send resources.
  *
+ * @note If the operation returns @a UCS_INPROGRESS, @a iov array must be valid and not
+ *       changed until the operation is completed, @a header can be freed or changed.
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
                                             const void *header,
