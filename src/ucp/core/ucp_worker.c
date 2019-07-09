@@ -684,9 +684,10 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
             ucs_trace("armed iface %p", wiface->iface);
 
             /* re-enable events, which were disabled by ucp_suspended_iface_event() */
-            status = ucs_async_modify_handler(wiface->event_fd, POLLIN);
+            status = ucs_async_modify_handler(wiface->event_fd,
+                                              UCS_EVENT_SET_EVREAD);
             if (status != UCS_OK) {
-                ucs_fatal("failed to modify %d event handler to POLLIN: %s",
+                ucs_fatal("failed to modify %d event handler to UCS_EVENT_SET_EVREAD: %s",
                           wiface->event_fd, ucs_status_string(status));
             }
 
