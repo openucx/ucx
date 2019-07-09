@@ -2423,8 +2423,9 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * @return UCS_ERR_NO_RESOURCE Could not start the operation now due to lack
  *                             of send resources.
  *
- * @note If the operation returns @a UCS_INPROGRESS, @a iov array must be valid and not
- *       changed until the operation is completed, @a header can be freed or changed.
+ * @note If the operation returns @a UCS_INPROGRESS, the memory buffers
+ *       pointed to by @a iov array must not be modified until the operation
+ *       is completed by @a comp. @a header can be released or changed
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
                                             const void *header,
