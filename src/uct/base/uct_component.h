@@ -24,6 +24,9 @@ struct uct_md_component {
     ucs_status_t           (*md_open)(const char *md_name, const uct_md_config_t *config,
                                       uct_md_h *md_p);
 
+    ucs_status_t           (*cm_open)(uct_component_h component, uct_worker_h worker,
+                                      uct_cm_h *cm_p);
+
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
 
@@ -56,14 +59,16 @@ struct uct_md_component {
  * @param _cfg_prefix    Prefix for configuration environment vars.
  * @param _cfg_table     Defines the MDC's configuration values.
  * @param _cfg_struct    MDC configuration structure.
+ * @param _cm_open       Function to open a CM.
  */
 #define UCT_MD_COMPONENT_DEFINE(_mdc, _name, _query, _open, _priv, \
                                 _rkey_unpack, _rkey_release, \
-                                _cfg_prefix, _cfg_table, _cfg_struct) \
+                                _cfg_prefix, _cfg_table, _cfg_struct, _cm_open) \
     \
     uct_md_component_t _mdc = { \
         .query_resources = _query, \
         .md_open         = _open, \
+        .cm_open         = _cm_open, \
         .cfg_prefix      = _cfg_prefix, \
         .md_config_table = _cfg_table, \
         .md_config_size  = sizeof(_cfg_struct), \

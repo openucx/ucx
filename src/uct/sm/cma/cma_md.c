@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -158,7 +158,8 @@ UCT_MD_COMPONENT_DEFINE(uct_cma_md_component, "cma",
                         uct_cma_query_md_resources, uct_cma_md_open, NULL,
                         uct_md_stub_rkey_unpack,
                         ucs_empty_function_return_success, "CMA_",
-                        uct_md_config_table, uct_md_config_t)
+                        uct_md_config_table, uct_md_config_t,
+                        ucs_empty_function_return_unsupported)
 
 ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {

@@ -6,7 +6,7 @@
 */
 
 #include "uct_iface.h"
-#include "uct_md.h"
+#include "uct_cm.h"
 
 #include <uct/api/uct.h>
 #include <ucs/async/async.h>
@@ -484,11 +484,13 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
-    if (!(params->field_mask & UCT_EP_PARAM_FIELD_IFACE)) {
-        return UCS_ERR_INVALID_PARAM;
+    if (params->field_mask & UCT_EP_PARAM_FIELD_IFACE) {
+        return params->iface->ops.ep_create(params, ep_p);
+    } else if (params->field_mask & UCT_EP_PARAM_FIELD_CM) {
+        return params->cm->ops->ep_create(params, ep_p);
     }
 
-    return params->iface->ops.ep_create(params, ep_p);
+    return UCS_ERR_INVALID_PARAM;
 }
 
 void uct_ep_destroy(uct_ep_h ep)

@@ -79,4 +79,5 @@ UCT_MD_COMPONENT_DEFINE(uct_sockcm_mdc, UCT_SOCKCM_MD_PREFIX,
                         uct_sockcm_query_md_resources, uct_sockcm_md_open, NULL,
                         ucs_empty_function_return_unsupported,
                         (void*)ucs_empty_function_return_success,
-                        "SOCKCM_", uct_sockcm_md_config_table, uct_sockcm_md_config_t);
+                        "SOCKCM_", uct_sockcm_md_config_table, uct_sockcm_md_config_t,
+                        ucs_empty_function_return_unsupported);

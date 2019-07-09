@@ -314,3 +314,56 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)
+
+class test_uct_cm_sockaddr : public uct_test {
+    friend class uct_test::entity;
+protected:
+public:
+    test_uct_cm_sockaddr() : m_server(NULL), m_client(NULL) {
+    }
+
+    void init() {
+        uint16_t port;
+
+        uct_test::init();
+
+        /* This address is accessible, as it was tested at the resource creation */
+        m_listen_addr  = GetParam()->listen_sock_addr;
+        m_connect_addr = GetParam()->connect_sock_addr;
+
+        port = ucs::get_port();
+        m_listen_addr.set_port(port);
+        m_connect_addr.set_port(port);
+
+        m_server = uct_test::create_entity();
+        m_entities.push_back(m_server);
+        m_client = uct_test::create_entity();
+        m_entities.push_back(m_client);
+
+        /* initiate the client's private data callback argument */
+        m_client->client_cb_arg = m_client->cm_attr().max_conn_priv;
+    }
+
+protected:
+    ucs::sock_addr_storage m_listen_addr, m_connect_addr;
+    entity *m_server, *m_client;
+};
+
+UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
+{
+    ucs_status_t status;
+    size_t i;
+
+    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
+
+    for (i = 0; i < m_entities.size(); ++i) {
+        uct_cm_attr_t attr;
+        attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+        status = uct_cm_query(m_entities.at(i).cm(), &attr);
+        ASSERT_UCS_OK(status);
+        EXPECT_LT(0ul, attr.max_conn_priv);
+    }
+}
+
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
