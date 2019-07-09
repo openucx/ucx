@@ -154,9 +154,9 @@
    Memcheck:Leak
    match-leak-kinds: possible
    fun:calloc
-   obj:/usr/lib64/libibverbs/libhfi1verbs-rdmav22.so
-   obj:/usr/lib64/libibverbs.so.1.5.22.1
-   obj:/usr/lib64/libibverbs.so.1.5.22.1
+   obj:*/libhfi1verbs-rdmav22.so*
+   obj:*/libibverbs.so*
+   ...
    fun:ibv_get_device_list
 }
 {
