@@ -637,8 +637,7 @@ class uct_p2p_am_tx_bufs : public uct_p2p_am_test
 {
 public:
     uct_p2p_am_tx_bufs() : uct_p2p_am_test() {
-        std::string max_bufs_var  = "";
-        std::string bufs_grow_var = "";
+        std::string cfg_prefix = "";
         ucs_status_t status1, status2;
 
         /* can not reduce mpool size below retransmission window for ud */
@@ -648,15 +647,13 @@ public:
         }
 
         if (has_ib()) {
-            max_bufs_var  = "IB_";
-            bufs_grow_var = "IB_";
+            cfg_prefix = "IB_";
         }
 
-        max_bufs_var  += "TX_MAX_BUFS";
-        bufs_grow_var += "TX_BUFS_GROW";
-
-        status1 = uct_config_modify(m_iface_config, max_bufs_var.c_str() , "32");
-        status2 = uct_config_modify(m_iface_config, bufs_grow_var.c_str(), "32");
+        status1 = uct_config_modify(m_iface_config,
+                                    (cfg_prefix + "TX_MAX_BUFS").c_str() , "32");
+        status2 = uct_config_modify(m_iface_config,
+                                    (cfg_prefix + "TX_BUFS_GROW").c_str(), "32");
         if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
             m_inited = false;
         } else {
