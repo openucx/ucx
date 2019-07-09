@@ -193,7 +193,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    ucs_offsetof(ucs_global_opts_t, profile_mode),
    UCS_CONFIG_TYPE_BITMAP(ucs_profile_mode_names)},
 
-  {"PROFILE_FILE", "",
+  {"PROFILE_FILE", "ucx_%h_%p.prof",
    "File name to dump profiling data to.\n"
    "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.\n",
    ucs_offsetof(ucs_global_opts_t, profile_file), UCS_CONFIG_TYPE_STRING},
