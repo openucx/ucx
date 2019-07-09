@@ -40,6 +40,9 @@ static inline int ucs_event_set_map_to_raw_events(int events)
     if (events & UCS_EVENT_SET_EVWRITE) {
          raw_events |= EPOLLOUT;
     }
+    if (events & UCS_EVENT_SET_EVERR) {
+         raw_events |= EPOLLERR;
+    }
     return raw_events;
 }
 
@@ -52,6 +55,9 @@ static inline int ucs_event_set_map_to_events(int raw_events)
     }
     if (raw_events & EPOLLOUT) {
          events |= UCS_EVENT_SET_EVWRITE;
+    }
+    if (raw_events & EPOLLERR) {
+         events |= UCS_EVENT_SET_EVERR;
     }
     return events;
 }
@@ -154,7 +160,7 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
     events = ucs_alloca(sizeof(*events) * *num_events);
 
     nready = epoll_wait(event_set->epfd, events, *num_events, timeout_ms);
-    if (nready < 0) {
+    if (ucs_unlikely(nready < 0)) {
         *num_events = 0;
         if (errno == EINTR) {
             return UCS_INPROGRESS;
