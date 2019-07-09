@@ -148,4 +148,5 @@ static ucs_status_t uct_rocm_copy_md_open(const char *md_name, const uct_md_conf
 UCT_MD_COMPONENT_DEFINE(uct_rocm_copy_md_component, UCT_ROCM_COPY_MD_NAME,
                         uct_rocm_copy_query_md_resources, uct_rocm_copy_md_open, NULL,
                         uct_rocm_copy_rkey_unpack, uct_rocm_copy_rkey_release, "ROCM_COPY_",
-                        uct_rocm_copy_md_config_table, uct_rocm_copy_md_config_t);
+                        uct_rocm_copy_md_config_table, uct_rocm_copy_md_config_t,
+                        ucs_empty_function_return_unsupported);

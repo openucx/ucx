@@ -28,6 +28,7 @@ noinst_HEADERS = \
 	base/uct_iface.h \
 	base/uct_log.h \
 	base/uct_worker.h \
+	base/uct_cm.h \
 	sm/base/sm_ep.h \
 	sm/base/sm_iface.h \
 	sm/mm/base/mm_iface.h \
@@ -48,6 +49,7 @@ libuct_la_SOURCES = \
 	base/uct_component.c \
 	base/uct_iface.c \
 	base/uct_worker.c \
+	base/uct_cm.c \
 	sm/base/sm_ep.c \
 	sm/base/sm_iface.c \
 	sm/mm/base/mm_iface.c \

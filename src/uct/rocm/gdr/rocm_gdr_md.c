@@ -144,4 +144,5 @@ static ucs_status_t uct_rocm_gdr_md_open(const char *md_name, const uct_md_confi
 UCT_MD_COMPONENT_DEFINE(uct_rocm_gdr_md_component, UCT_ROCM_GDR_MD_NAME,
                         uct_rocm_gdr_query_md_resources, uct_rocm_gdr_md_open, NULL,
                         uct_rocm_gdr_rkey_unpack, uct_rocm_gdr_rkey_release, "ROCM_GDR_",
-                        uct_rocm_gdr_md_config_table, uct_rocm_gdr_md_config_t);
+                        uct_rocm_gdr_md_config_table, uct_rocm_gdr_md_config_t,
+                        ucs_empty_function_return_unsupported);

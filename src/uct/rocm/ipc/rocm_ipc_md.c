@@ -174,4 +174,5 @@ UCT_MD_COMPONENT_DEFINE(uct_rocm_ipc_md_component,
                         uct_rocm_ipc_rkey_release,
                         "ROCM_IPC_MD_",
                         uct_rocm_ipc_md_config_table,
-                        uct_rocm_ipc_md_config_t);
+                        uct_rocm_ipc_md_config_t,
+                        ucs_empty_function_return_unsupported);

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
@@ -112,6 +112,8 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
+        entity(const resource& resource, uct_md_config_t *md_config);
+
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle, int mem_type) const;
 
@@ -131,6 +133,10 @@ protected:
 
         uct_worker_h worker() const;
 
+        uct_cm_h cm() const;
+
+        const uct_cm_attr_t& cm_attr() const;
+
         uct_iface_h iface() const;
 
         const uct_iface_attr& iface_attr() const;
@@ -139,22 +145,43 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
+        unsigned num_eps() const;
+
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
-                     const ucs::sock_addr_storage &remote_addr);
+                     const ucs::sock_addr_storage &remote_addr,
+                     uct_ep_client_connect_cb_t connect_cb,
+                     uct_ep_disconnect_cb_t disconnect_cb,
+                     void *user_data);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index, entity& other,
-                                 const ucs::sock_addr_storage &remote_addr);
+                                 const ucs::sock_addr_storage &remote_addr,
+                                 uct_ep_client_connect_cb_t connect_cb,
+                                 uct_ep_disconnect_cb_t disconnect_cb,
+                                 void *user_sata);
+
+        void accept(uct_conn_request_h conn_request,
+                    uct_ep_server_connect_cb_t connect_cb,
+                    uct_ep_disconnect_cb_t disconnect_cb,
+                    void *user_data);
+
+        void listen(const ucs::sock_addr_storage &listen_addr,
+                    const uct_listener_params_t &params);
+
+        void disconnect(uct_ep_h ep);
 
         void flush() const;
 
-        static std::string client_priv_data;
-        static size_t      client_cb_arg;
+        static const std::string server_priv_data;
+        static std::string       client_priv_data;
+//        static std::vector<char> client_priv_data;
+//        static size_t            client_cb_arg;////////////
+        size_t                   client_cb_arg;
 
     private:
         class async_wrapper {
@@ -177,16 +204,22 @@ protected:
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
         static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
                                            void *priv_data);
+        static ssize_t server_priv_data_cb(void *arg, const char *dev_name,
+                                           void *priv_data);
 
-        const resource             m_resource;
-        ucs::handle<uct_md_h>      m_md;
-        uct_md_attr_t              m_md_attr;
-        mutable async_wrapper      m_async;
-        ucs::handle<uct_worker_h>  m_worker;
-        ucs::handle<uct_iface_h>   m_iface;
-        eps_vec_t                  m_eps;
-        uct_iface_attr_t           m_iface_attr;
-        uct_iface_params_t         m_iface_params;
+
+        const resource              m_resource;
+        ucs::handle<uct_md_h>       m_md;
+        uct_md_attr_t               m_md_attr;
+        mutable async_wrapper       m_async;
+        ucs::handle<uct_worker_h>   m_worker;
+        ucs::handle<uct_cm_h>       m_cm;
+        uct_cm_attr_t               m_cm_attr;
+        ucs::handle<uct_listener_h> m_listener;
+        ucs::handle<uct_iface_h>    m_iface;
+        eps_vec_t                   m_eps;
+        uct_iface_attr_t            m_iface_attr;
+        uct_iface_params_t          m_iface_params;
     };
 
     class mapped_buffer {
@@ -248,6 +281,18 @@ protected:
         }
     }
 
+    void wait_for_bits(volatile uint64_t *flag, uint64_t mask,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) *
+                              ucs::test_time_multiplier();
+        while ((ucs_get_time() < deadline) &&
+               (!ucs_test_all_flags(*flag, mask))) {
+            short_progress_loop();
+        }
+    }
+
     template <typename T>
     void wait_for_value(volatile T *var, T value, bool progress,
                         double timeout = DEFAULT_TIMEOUT_SEC) const
@@ -297,6 +342,7 @@ protected:
     uct_test::entity* create_entity(size_t rx_headroom,
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
+    uct_test::entity* create_entity();
     int max_connections();
     int max_connect_batch();
 

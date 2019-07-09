@@ -12,6 +12,11 @@
 #define UCT_RDMACM_MAX_CONN_PRIV \
         (UCT_RDMACM_UDP_PRIV_DATA_LEN) - (sizeof(uct_rdmacm_priv_data_hdr_t))
 
+
+#define UCT_RDMACM_CM_MAX_CONN_PRIV \
+        (UCT_RDMACM_TCP_PRIV_DATA_LEN) - (sizeof(uct_rdmacm_priv_data_hdr_t))
+
+
 typedef struct uct_rdmacm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;
@@ -42,6 +47,8 @@ struct uct_rdmacm_iface {
 };
 
 void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface);
+
+void uct_rdmacm_cm_id_to_dev_name(struct rdma_cm_id *cm_id, char *dev_name);
 
 extern uct_md_component_t uct_rdmacm_mdc;
 

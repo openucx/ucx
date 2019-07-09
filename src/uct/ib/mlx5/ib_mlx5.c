@@ -291,7 +291,7 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-#if !HAVE_DEVX
+#ifndef HAVE_DEVX
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
