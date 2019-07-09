@@ -85,7 +85,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         ByteBuffer sendBuffer = ByteBuffer.allocateDirect(100);
         sendBuffer.asCharBuffer().put("DONE");
-        UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer,null);
+        UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
 
         while (!sent.isCompleted()) {
             worker.progress();

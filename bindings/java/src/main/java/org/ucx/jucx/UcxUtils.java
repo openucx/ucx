@@ -10,7 +10,7 @@ import java.nio.ByteBuffer;
 public class UcxUtils {
 
     /**
-     * Returns native address of direct byte buffer with respect of it's current position.
+     * Returns native address of the current position of a direct byte buffer.
      */
     public static long getAddress(ByteBuffer buffer) {
         return ((sun.nio.ch.DirectBuffer) buffer).address() + buffer.position();

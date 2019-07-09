@@ -21,7 +21,8 @@ public class UcpListenerTest {
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         InetSocketAddress ipv4 = new InetSocketAddress("0.0.0.0", port);
         try {
-            UcpListener ipv4Listener = worker.newListener(new UcpListenerParams().setSockAddr(ipv4));
+            UcpListener ipv4Listener = worker.newListener(
+                new UcpListenerParams().setSockAddr(ipv4));
 
             assertNotNull(ipv4Listener);
             ipv4Listener.close();

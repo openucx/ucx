@@ -258,7 +258,7 @@ public class UcpEndpointTest {
 
         bigRecvBuffer.position(offset).limit(offset + msgSize);
         UcxRequest recv = worker1.recvTaggedNonBlocking(bigRecvBuffer, 0,
-            0,null);
+            0, null);
 
         UcpEndpoint ep = worker2.newEndpoint(new UcpEndpointParams()
             .setUcpAddress(worker1.getAddress()));
@@ -272,7 +272,7 @@ public class UcpEndpointTest {
         bigSendBuffer.put(msg);
         bigSendBuffer.position(offset);
 
-        UcxRequest sent = ep.sendTaggedNonBlocking(bigSendBuffer, 0,null);
+        UcxRequest sent = ep.sendTaggedNonBlocking(bigSendBuffer, 0, null);
 
         while (!sent.isCompleted() || !recv.isCompleted()) {
             worker1.progress();

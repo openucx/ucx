@@ -129,7 +129,7 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
     ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, (void *)laddr, size,
                                           raddr, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
-    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %p",
+    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %zu",
                   request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), raddr, size, laddr);
     return process_request(request, callback);
 }
