@@ -9,8 +9,6 @@
 
 #include <ucs/type/status.h>
 
-#include <sys/epoll.h>
-
 /**
  * ucs_sys_event_set_t structure used in ucs_event_set_XXX functions.
  *
