@@ -103,8 +103,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy)
     entity *receiver = create_entity(sizeof(receive_desc_t));
     m_entities.push_back(receiver);
 
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
-    check_caps(UCT_IFACE_FLAG_CB_SYNC);
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_CB_SYNC);
 
     ucs::ptr_vector<mapped_buffer> buffers;
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {

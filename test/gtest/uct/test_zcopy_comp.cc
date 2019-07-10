@@ -22,10 +22,12 @@ UCS_TEST_P(test_zcopy_comp, issue1440)
     entity *receiver_large = create_entity(0);
     m_entities.push_back(receiver_large);
 
+    if (skip_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("PUT_ZCOPY is unsupported");
+    }
+
     sender->connect(0, *receiver_small, 0);
     sender->connect(1, *receiver_large, 0);
-
-    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
 
     size_t size_small = ucs_max(8ul,     sender->iface_attr().cap.put.min_zcopy);
     size_t size_large = ucs_min(65536ul, sender->iface_attr().cap.put.max_zcopy);

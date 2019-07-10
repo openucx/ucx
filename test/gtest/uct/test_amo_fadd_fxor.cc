@@ -40,23 +40,23 @@ public:
     }
 };
 
-UCS_TEST_P(uct_amo_fadd_fxor_test, fadd32) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test, fadd32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32)) {
     test_fop<uint32_t, UCT_ATOMIC_OP_ADD>(add_op<uint32_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test, fadd64) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test, fadd64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64)) {
     test_fop<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test, fxor32) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test, fxor32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32)) {
     test_fop<uint32_t, UCT_ATOMIC_OP_XOR>(xor_op<uint32_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test, fxor64) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test, fxor64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64)) {
     test_fop<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 
@@ -64,33 +64,39 @@ UCT_INSTANTIATE_TEST_CASE(uct_amo_fadd_fxor_test)
 
 class uct_amo_fadd_fxor_test_inlresp : public uct_amo_fadd_fxor_test {};
 
-UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp0, "IB_TX_INLINE_RESP=0") {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp0,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64),
+                     "IB_TX_INLINE_RESP=0") {
     test_fop<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp32, "IB_TX_INLINE_RESP=32") {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64),
+                     "IB_TX_INLINE_RESP=32") {
     test_fop<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp64, "IB_TX_INLINE_RESP=64") {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64),
+                     "IB_TX_INLINE_RESP=64") {
     test_fop<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp0, "IB_TX_INLINE_RESP=0") {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp0,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64),
+                     "IB_TX_INLINE_RESP=0") {
     test_fop<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp32, "IB_TX_INLINE_RESP=32") {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64),
+                     "IB_TX_INLINE_RESP=32") {
     test_fop<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp64, "IB_TX_INLINE_RESP=64") {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
+UCS_TEST_SKIP_COND_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64),
+                     "IB_TX_INLINE_RESP=64") {
     test_fop<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 

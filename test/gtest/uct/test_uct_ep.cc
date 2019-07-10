@@ -9,6 +9,15 @@ extern "C" {
 }
 #include "uct_test.h"
 
+
+#ifdef HAVE_DC_DV /* skip due to DCI stuck bug */
+#define SKIP_ON_DC_MLX5 \
+    has_transport("dc_mlx5")
+#else
+#define SKIP_ON_DC_MLX5 0
+#endif
+
+
 class test_uct_ep : public uct_test {
 protected:
 
@@ -19,6 +28,13 @@ protected:
 
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
+
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
 
         uct_iface_set_am_handler(m_receiver->iface(), 1,
                                  (uct_am_callback_t)ucs_empty_function_return_success,
@@ -42,16 +58,10 @@ protected:
     entity * m_receiver;
 };
 
-UCS_TEST_P(test_uct_ep, disconnect_after_send) {
+UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
+                     (skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY) ||
+                      SKIP_ON_DC_MLX5)) {
     ucs_status_t status;
-
-#if HAVE_DC_DV
-    if (has_transport("dc_mlx5")) {
-        UCS_TEST_SKIP_R("DCI stuck bug");
-    }
-#endif
-
-    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
 
     mapped_buffer buffer(256, 0, *m_sender);
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer.ptr(),

@@ -34,6 +34,13 @@ public:
 
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
+
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
     }
 
     void initialize() {
@@ -214,14 +221,15 @@ void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callba
     }
 }
 
-UCS_TEST_P(test_uct_pending, pending_op)
+UCS_TEST_SKIP_COND_P(test_uct_pending, pending_op,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                    UCT_IFACE_FLAG_PENDING))
 {
     uint64_t send_data = 0xdeadbeef;
     ucs_status_t status;
     unsigned i, iters, counter = 0;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
     iters = 1000000 / ucs::test_time_multiplier();
 
@@ -266,7 +274,9 @@ UCS_TEST_P(test_uct_pending, pending_op)
     ASSERT_EQ(counter, iters);
 }
 
-UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
+UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                    UCT_IFACE_FLAG_PENDING))
 {
     uint64_t send_data = 0xdeadbeef;
     ucs_status_t status_send, status_pend = UCS_ERR_LAST;
@@ -274,7 +284,6 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     unsigned i, counter = 0;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
     /* set a callback for the uct to invoke when receiving the data */
     install_handler_sync_or_async(m_e2->iface(), 0, am_handler, &counter);
@@ -333,12 +342,12 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     EXPECT_EQ(exp_counter, counter);
 }
 
-UCS_TEST_P(test_uct_pending, pending_purge)
+UCS_TEST_SKIP_COND_P(test_uct_pending, pending_purge,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                    UCT_IFACE_FLAG_PENDING))
 {
     const int num_eps = 5;
     uct_pending_req_t reqs[num_eps];
-
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
      /* set a callback for the uct to invoke when receiving the data */
     install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, NULL);
@@ -360,14 +369,15 @@ UCS_TEST_P(test_uct_pending, pending_purge)
 /*
  * test that the pending op callback is only called from the progress()
  */
-UCS_TEST_P(test_uct_pending, pending_async)
+UCS_TEST_SKIP_COND_P(test_uct_pending, pending_async,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                    UCT_IFACE_FLAG_PENDING))
 {
     pending_send_request_t *req = NULL;
     ucs_status_t status;
     ssize_t packed_len;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
 
     mapped_buffer sbuf(ucs_min(64ul, m_e1->iface_attr().cap.am.max_bcopy), 0,
                        *m_e1);
@@ -409,14 +419,15 @@ UCS_TEST_P(test_uct_pending, pending_async)
  * The issue is a dc transport specific but test may be also useful
  * for other transports
  */
-UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
+UCS_TEST_SKIP_COND_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                    UCT_IFACE_FLAG_PENDING))
 {
     ucs_status_t status;
     ssize_t packed_len;
     int N, max_listen_conn;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
 
     mapped_buffer sbuf(ucs_min(64ul, m_e1->iface_attr().cap.am.max_bcopy), 0,
                        *m_e1);
@@ -470,7 +481,10 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     EXPECT_EQ(0, n_pending);
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
+UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness,
+                     (RUNNING_ON_VALGRIND ||
+                      skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                     UCT_IFACE_FLAG_PENDING)))
 {
     int N = 16;
     uint64_t send_data = 0xdeadbeef;
@@ -478,7 +492,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness, RUNNING_ON_VALGRIND)
     ucs_status_t status;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
+
     if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         N = ucs_min(128, max_connect_batch());
     }

@@ -65,14 +65,19 @@ void uct_p2p_test::init() {
     ucs_assert_always(r != NULL);
 
     /* Create 2 connected endpoints */
-    if (r->loopback) {
-        entity *e = uct_test::create_entity(m_rx_headroom, m_err_handler);
-        m_entities.push_back(e);
-        e->connect(0, *e, 0);
-    } else {
-        entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
-        m_entities.push_back(e1);
+    entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
+    m_entities.push_back(e1);
 
+    try {
+        check_skip_test();
+    } catch (...) {
+        cleanup();
+        throw;
+    }
+
+    if (r->loopback) {
+        e1->connect(0, *e1, 0);
+    } else {
         entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e2);
 

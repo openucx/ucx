@@ -18,8 +18,6 @@ public:
          * and the final value of atomic variable is the and/or of all.
          */
 
-        check_atomics(UCS_BIT(opcode), sizeof(T) == sizeof(uint64_t) ? FOP64 : FOP32);
-
         mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
         T value = rand64();
@@ -42,19 +40,23 @@ public:
     }
 };
 
-UCS_TEST_P(uct_amo_fand_for_test, fand32) {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test, fand32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP32)) {
     test_fop<uint32_t, UCT_ATOMIC_OP_AND>(and_op<uint32_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test, fand64) {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test, fand64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64)) {
     test_fop<uint64_t, UCT_ATOMIC_OP_AND>(and_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test, for32) {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test, for32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP32)) {
     test_fop<uint32_t, UCT_ATOMIC_OP_OR>(or_op<uint32_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test, for64) {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test, for64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64)) {
     test_fop<uint64_t, UCT_ATOMIC_OP_OR>(or_op<uint64_t>);
 }
 
@@ -62,27 +64,39 @@ UCT_INSTANTIATE_TEST_CASE(uct_amo_fand_for_test)
 
 class uct_amo_fand_for_test_inlresp : public uct_amo_fand_for_test {};
 
-UCS_TEST_P(uct_amo_fand_for_test_inlresp, fand64_inlresp0, "IB_TX_INLINE_RESP=0") {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test_inlresp, fand64_inlresp0,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64),
+                     "IB_TX_INLINE_RESP=0") {
     test_fop<uint64_t, UCT_ATOMIC_OP_AND>(and_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test_inlresp, fand64_inlresp32, "IB_TX_INLINE_RESP=32") {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test_inlresp, fand64_inlresp32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64),
+                     "IB_TX_INLINE_RESP=32") {
     test_fop<uint64_t, UCT_ATOMIC_OP_AND>(and_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test_inlresp, fand64_inlresp64, "IB_TX_INLINE_RESP=64") {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test_inlresp, fand64_inlresp64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64),
+                     "IB_TX_INLINE_RESP=64") {
     test_fop<uint64_t, UCT_ATOMIC_OP_AND>(and_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test_inlresp, for64_inlresp0, "IB_TX_INLINE_RESP=0") {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test_inlresp, for64_inlresp0,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64),
+                     "IB_TX_INLINE_RESP=0") {
     test_fop<uint64_t, UCT_ATOMIC_OP_OR>(or_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test_inlresp, for64_inlresp32, "IB_TX_INLINE_RESP=32") {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test_inlresp, for64_inlresp32,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64),
+                     "IB_TX_INLINE_RESP=32") {
     test_fop<uint64_t, UCT_ATOMIC_OP_OR>(or_op<uint64_t>);
 }
 
-UCS_TEST_P(uct_amo_fand_for_test_inlresp, for64_inlresp64, "IB_TX_INLINE_RESP=64") {
+UCS_TEST_SKIP_COND_P(uct_amo_fand_for_test_inlresp, for64_inlresp64,
+                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64),
+                     "IB_TX_INLINE_RESP=64") {
     test_fop<uint64_t, UCT_ATOMIC_OP_OR>(or_op<uint64_t>);
 }
 

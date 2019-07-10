@@ -90,43 +90,43 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
     }
 }
 
-UCS_TEST_P(uct_p2p_rma_test, put_short) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_short,
+                     skip_with_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_short),
                     0ul, sender().iface_attr().cap.put.max_short,
                     TEST_UCT_FLAG_SEND_ZCOPY);
 }
 
-UCS_TEST_P(uct_p2p_rma_test, put_bcopy) {
-    check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_bcopy,
+                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy),
                     0ul, sender().iface_attr().cap.put.max_bcopy,
                     TEST_UCT_FLAG_SEND_ZCOPY);
 }
 
-UCS_TEST_P(uct_p2p_rma_test, put_zcopy) {
-    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_zcopy,
+                     skip_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
                     0ul, sender().iface_attr().cap.put.max_zcopy,
                     TEST_UCT_FLAG_SEND_ZCOPY);
 }
 
-UCS_TEST_P(uct_p2p_rma_test, get_short) {
-    check_caps(UCT_IFACE_FLAG_GET_SHORT);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_short,
+                     skip_with_caps(UCT_IFACE_FLAG_GET_SHORT)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_short),
                     0ul, sender().iface_attr().cap.get.max_short,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
-UCS_TEST_P(uct_p2p_rma_test, get_bcopy) {
-    check_caps(UCT_IFACE_FLAG_GET_BCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_bcopy,
+                     skip_with_caps(UCT_IFACE_FLAG_GET_BCOPY)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_bcopy),
                     1ul, sender().iface_attr().cap.get.max_bcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
-UCS_TEST_P(uct_p2p_rma_test, get_zcopy) {
-    check_caps(UCT_IFACE_FLAG_GET_ZCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy,
+                     skip_with_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                     ucs_max(1ull, sender().iface_attr().cap.get.min_zcopy),
                     sender().iface_attr().cap.get.max_zcopy,

@@ -28,15 +28,20 @@ public:
 
     void init() {
         uct_test::init();
+
+        entity *m_sender = uct_test::create_entity(0);
+        m_entities.push_back(m_sender);
+
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
+
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
-            entity *e = uct_test::create_entity(0);
-            m_entities.push_back(e);
-
-            e->connect(0, *e, 0);
+            m_sender->connect(0, *m_sender, 0);
         } else {
-            entity *m_sender = uct_test::create_entity(0);
-            m_entities.push_back(m_sender);
-
             entity *m_receiver = uct_test::create_entity(0);
             m_entities.push_back(m_receiver);
 
@@ -142,7 +147,6 @@ public:
 
     void test_flush_put_bcopy(flush_func_t flush) {
         const size_t length = 8;
-        check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
@@ -168,7 +172,6 @@ public:
         if (is_flush_cancel()) {
             ASSERT_TRUE(destroy_ep);
         }
-        check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
@@ -220,7 +223,6 @@ public:
         if (is_flush_cancel()) {
             ASSERT_TRUE(destroy_ep);
         }
-        check_caps(UCT_IFACE_FLAG_AM_BCOPY);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
@@ -313,7 +315,6 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
          ASSERT_TRUE(destroy_ep);
      }
      const size_t length = 8;
-     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
      mapped_buffer sendbuf(length, SEED1, sender());
      mapped_buffer recvbuf(length, SEED2, receiver());
      sendbuf.pattern_fill(SEED3);
@@ -423,7 +424,8 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      recvbuf.pattern_check(SEED3);
 }
 
-UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_no_comp) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
+                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -436,11 +438,13 @@ UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_no_comp) {
     }
 }
 
-UCS_TEST_P(uct_flush_test, put_bcopy_flush_iface_no_comp) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_iface_no_comp,
+                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     test_flush_put_bcopy(&uct_flush_test::flush_iface_no_comp);
 }
 
-UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_nb) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_nb,
+                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -453,7 +457,8 @@ UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_nb) {
     }
 }
 
-UCS_TEST_P(uct_flush_test, am_zcopy_flush_ep_no_comp) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_no_comp,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -466,11 +471,13 @@ UCS_TEST_P(uct_flush_test, am_zcopy_flush_ep_no_comp) {
     }
 }
 
-UCS_TEST_P(uct_flush_test, am_zcopy_flush_iface_no_comp) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_iface_no_comp,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     test_flush_am_zcopy(&uct_flush_test::flush_iface_no_comp, true);
 }
 
-UCS_TEST_P(uct_flush_test, am_zcopy_flush_ep_nb) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_nb,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -483,7 +490,8 @@ UCS_TEST_P(uct_flush_test, am_zcopy_flush_ep_nb) {
     }
 }
 
-UCS_TEST_P(uct_flush_test, am_flush_ep_no_comp) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_no_comp,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -496,12 +504,14 @@ UCS_TEST_P(uct_flush_test, am_flush_ep_no_comp) {
     }
 }
 
-UCS_TEST_P(uct_flush_test, am_flush_iface_no_comp) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_iface_no_comp,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
     test_flush_am_disconnect(&uct_flush_test::flush_iface_no_comp, true);
 }
 
-UCS_TEST_P(uct_flush_test, am_flush_ep_nb) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_nb,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -514,7 +524,9 @@ UCS_TEST_P(uct_flush_test, am_flush_ep_nb) {
     }
 }
 
-UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
+UCS_TEST_SKIP_COND_P(uct_flush_test, am_pending_flush_nb,
+                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                    UCT_IFACE_FLAG_PENDING)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 

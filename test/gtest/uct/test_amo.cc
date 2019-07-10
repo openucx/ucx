@@ -21,6 +21,13 @@ void uct_amo_test::init() {
     entity *receiver = uct_test::create_entity(0);
     m_entities.push_back(receiver);
 
+    try {
+        check_skip_test();
+    } catch (...) {
+        cleanup();
+        throw;
+    }
+
     for (unsigned i = 0; i < num_senders(); ++i) {
         entity *sender = uct_test::create_entity(0);
         m_entities.push_back(sender);
