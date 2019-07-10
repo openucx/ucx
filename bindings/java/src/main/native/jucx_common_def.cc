@@ -132,7 +132,7 @@ JNIEnv* get_jni_env()
 {
     void *env;
     jint rs = jvm_global->AttachCurrentThread(&env, NULL);
-    ucs_assert(rs == JNI_OK);
+    ucs_assert_always(rs == JNI_OK);
     return (JNIEnv*)env;
 }
 
