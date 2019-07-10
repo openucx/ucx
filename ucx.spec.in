@@ -29,7 +29,12 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 # UCX currently supports only the following architectures
 ExclusiveArch: aarch64 ppc64le x86_64
 
-BuildRequires: automake autoconf libtool gcc-c++ numactl-devel
+BuildRequires: automake autoconf libtool gcc-c++
+%if "%{_vendor}" == "suse"
+BuildRequires: libnuma-devel
+%else
+BuildRequires: numactl-devel
+%endif
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
 %endif
