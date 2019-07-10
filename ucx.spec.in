@@ -65,6 +65,10 @@ either main memory (RAM) or GPU memory (through CUDA and ROCm libraries).
 In addition, UCX provides efficient intra-node communication, by leveraging the
 following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
 
+%if "%{_vendor}" == "suse"
+%debug_package
+%endif
+
 %package devel
 Requires: %{name}%{?_isa} = %{version}-%{release}
 Summary: Header files required for developing with UCX
