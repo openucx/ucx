@@ -160,13 +160,13 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
                        data, (void)sbrk(-sbrk_size));
     }
 
-    if (events & UCM_EVENT_MADVISE) {
+    if (events & (UCM_EVENT_MADVISE|UCM_EVENT_VM_UNMAPPED)) {
         UCM_FIRE_EVENT(events, UCM_EVENT_MMAP|UCM_EVENT_VM_MAPPED, data,
                        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
                                 MAP_PRIVATE|MAP_ANON, -1, 0));
         if (p != MAP_FAILED) {
             UCM_FIRE_EVENT(events, UCM_EVENT_MADVISE, data,
-                           madvise(p, ucm_get_page_size(), MADV_NORMAL));
+                           madvise(p, ucm_get_page_size(), MADV_DONTNEED));
             UCM_FIRE_EVENT(events, UCM_EVENT_MUNMAP|UCM_EVENT_VM_UNMAPPED, data,
                            munmap(p, ucm_get_page_size()));
         } else {
