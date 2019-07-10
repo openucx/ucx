@@ -1261,6 +1261,38 @@ run_ucx_tl_check() {
 	fi
 }
 
+run_csmock() {
+    echo "1..1" > ucx_csmock_check.tap
+
+    if ! [ -x "$(command -v csmock)" ]; then
+        echo "ok 1 - # SKIP because csmock is not available" >> ucx_csmock_check.tap
+        return
+    fi
+
+    output="csmock.tar.xz"
+    rm -f $output
+    srcrpm=$(ls rpm-dist/*.src.rpm || echo "")
+    if [ -z $srcrpm ]; then
+        ../contrib/configure-release
+        ../contrib/buildrpm.sh -t -s
+        srcrpm=$(ls rpm-dist/*.src.rpm)
+    fi
+
+    csmock -t cppcheck,gcc,shellcheck,clang --print-defects -r epel-7-x86_64 \
+        -o $output $srcrpm
+
+    if [ $? -ne 0 ]; then
+        echo "not ok 1" >> ucx_csmock_check.tap
+    else
+        tar xJf $output
+        if [ -s csmock/scan-results.err ]; then
+            echo "not ok 1" >> ucx_csmock_check.tap
+        else
+            echo "ok 1" >> ucx_csmock_check.tap
+        fi
+    fi
+}
+
 #
 # Run all tests
 #
@@ -1325,6 +1357,11 @@ do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
 do_distributed_task 1 4 check_make_distcheck
+
+if [ -n "$UCX_CSMOCK" ]
+then
+    run_csmock
+fi
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then
