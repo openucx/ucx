@@ -94,7 +94,7 @@
 )
 
 #define ucs_ilog2_or0(_n) \
-    ( (_n) == 0 ? 0 : ucs_ilog2(_n) )
+    ( ((_n) == 0) ? 0 : ucs_ilog2(_n) )
 
 /* Returns the number of 1-bits in x */
 #define ucs_popcount(_n) \

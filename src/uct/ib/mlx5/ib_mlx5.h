@@ -219,9 +219,9 @@ typedef struct uct_ib_mlx5_devx_uar {
 
 
 typedef enum {
-    UCT_IB_MLX5_QP_TYPE_UNDEF,
     UCT_IB_MLX5_QP_TYPE_VERBS,
     UCT_IB_MLX5_QP_TYPE_DEVX,
+    UCT_IB_MLX5_QP_TYPE_LAST
 } uct_ib_mlx5_qp_type_t;
 
 
@@ -468,15 +468,15 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 /**
  * DEVX QP API
  */
-ucs_status_t uct_ib_mlx5dv_create_qp(uct_ib_iface_t *iface,
-                                     uct_ib_mlx5_txwq_t *tx,
-                                     uct_ib_qp_attr_t *attr);
+ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                                        uct_ib_mlx5_txwq_t *tx,
+                                        uct_ib_qp_attr_t *attr);
 
-ucs_status_t uct_ib_mlx5dv_connect_qp(uct_ib_iface_t *iface,
-                                      uct_ib_mlx5_qp_t *qp,
-                                      uint32_t dest_qp_num,
-                                      struct ibv_ah_attr *ah_attr);
+ucs_status_t uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uint32_t dest_qp_num,
+                                         struct ibv_ah_attr *ah_attr);
 
-void uct_ib_mlx5dv_destroy_qp(uct_ib_mlx5_qp_t *qp);
+void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp);
 
 #endif

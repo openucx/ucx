@@ -137,8 +137,7 @@ static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void *
         goto err;
     }
 
-    page->mem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, page, size,
-                                     IBV_ACCESS_LOCAL_WRITE);
+    page->mem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, page, size, 0);
     if (page->mem == NULL) {
         goto err_free;
     }
