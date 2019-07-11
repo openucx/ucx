@@ -68,8 +68,10 @@ ucs_profile_global_context_t ucs_profile_ctx = {
 
 static ucs_status_t ucs_profile_file_write_data(int fd, void *data, size_t size)
 {
+    ssize_t written;
+
     if (size > 0) {
-        ssize_t written = write(fd, data, size);
+        written = write(fd, data, size);
         if (written < 0) {
             ucs_error("failed to write %zu bytes to profiling file: %m", size);
             return UCS_ERR_IO_ERROR;

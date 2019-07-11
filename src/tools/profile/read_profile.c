@@ -116,10 +116,9 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto out_close;
     }
 
-    ptr             = data->mem;
-
-    data->header    = ptr;
-    ptr             = data->header + 1;
+    ptr          = data->mem;
+    data->header = ptr;
+    ptr          = data->header + 1;
 
     if (data->header->version != UCS_PROFILE_FILE_VERSION) {
         fprintf(stderr, "Error: invalid file version, expected: %u, actual: %u\n",
@@ -184,7 +183,7 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
     unsigned location_idx;
     int ret;
 
-    sorted_locations = calloc(sizeof(*sorted_locations), num_locations);
+    sorted_locations = calloc(num_locations, sizeof(*sorted_locations));
     if (sorted_locations == NULL) {
         ret = -ENOMEM;
         goto out;
@@ -211,7 +210,7 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
            FUNC_NAME_MAX_LEN, "NAME", "AVG", "TOTAL", "COUNT");
 
     for (sorted_loc = sorted_locations;
-         sorted_loc < sorted_locations + num_locations; ++sorted_loc) {
+         sorted_loc < (sorted_locations + num_locations); ++sorted_loc) {
 
         if (sorted_loc->count == 0) {
             continue;
@@ -221,31 +220,31 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
 
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SAMPLE:
-            printf("%*.*s %13s %13s %10ld %18s:%-4d %s()\n",
+            printf("%*.*s %13s %13s %10zu %18s:%-4d %s()\n",
                    FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
                    "-",
                    "-",
-                   (long)sorted_loc->count,
+                   sorted_loc->count,
                    loc->file, loc->line, loc->function);
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
-            printf("%*.*s %13.3f %13.0f %10ld %18s:%-4d %s()\n",
+            printf("%*.*s %13.3f %13.0f %10zu %18s:%-4d %s()\n",
                    FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
                    time_to_usec(data, opts, sorted_loc->total_time) /
                    sorted_loc->count,
                    time_to_usec(data, opts, sorted_loc->total_time),
-                   (long)sorted_loc->count,
+                   sorted_loc->count,
                    loc->file, loc->line, loc->function);
             break;
         case UCS_PROFILE_TYPE_REQUEST_EVENT:
-            printf("%*.*s %13s %13s %10ld %18s:%-4d %s()\n",
+            printf("%*.*s %13s %13s %10zu %18s:%-4d %s()\n",
                    FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
                    "n/a",
                    "n/a",
-                   (long)sorted_loc->count,
+                   sorted_loc->count,
                    loc->file, loc->line, loc->function);
             break;
         default:
