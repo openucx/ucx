@@ -53,6 +53,11 @@
             <message key="ws.notPreceded"
                      value="WhitespaceAround: ''{0}'' is not preceded with whitespace."/>
         </module>
+
+        <module name="WhitespaceAfter">
+            <property name="tokens" value="COMMA, SEMI, LITERAL_IF, LITERAL_ELSE, LITERAL_WHILE, LITERAL_DO, LITERAL_FOR, DO_WHILE"/>
+        </module>
+
         <module name="Indentation">
             <property name="basicOffset" value="4"/>
             <property name="braceAdjustment" value="0"/>
