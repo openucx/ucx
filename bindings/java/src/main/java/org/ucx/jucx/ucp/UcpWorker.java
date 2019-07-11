@@ -8,10 +8,7 @@ package org.ucx.jucx.ucp;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 
-import org.ucx.jucx.UcxCallback;
-import org.ucx.jucx.UcxException;
-import org.ucx.jucx.UcxNativeStruct;
-import org.ucx.jucx.UcxRequest;
+import org.ucx.jucx.*;
 
 /**
  * UCP worker is an opaque object representing the communication context.  The
@@ -99,7 +96,9 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * buffer on the current worker. The tag value of the receive message has to match
      * the {@code tag} of sent message. The routine is a non-blocking and therefore returns
      * immediately. The receive operation is considered completed when the message is delivered
-     * to the {@code recvBuffer}. In order to notify the application about completion of the receive
+     * to the {@code recvBuffer} at position {@code recvBuffer.position()} and size
+     * {@code recvBuffer.remaining()}.
+     * In order to notify the application about completion of the receive
      * operation the UCP library will invoke the call-back {@code callback} when the received
      * message is in the receive buffer and ready for application access.
      *
@@ -111,7 +110,14 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         if (!recvBuffer.isDirect()) {
             throw new UcxException("Recv buffer must be direct.");
         }
-        return recvTaggedNonBlockingNative(getNativeId(), recvBuffer, tag, tagMask, callback);
+        return recvTaggedNonBlockingNative(getNativeId(), UcxUtils.getAddress(recvBuffer),
+            recvBuffer.remaining(), tag, tagMask, callback);
+    }
+
+    public UcxRequest recvTaggedNonBlocking(long localAddress, long size, long tag, long tagMask,
+                                            UcxCallback callback) {
+        return recvTaggedNonBlockingNative(getNativeId(), localAddress, size,
+            tag, tagMask, callback);
     }
 
     /**
@@ -156,7 +162,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
     private static native void signalWorkerNative(long workerId);
 
-    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, ByteBuffer recvBuf,
-                                                                 long tag, long tagMask,
+    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, long localAddress,
+                                                                 long size, long tag, long tagMask,
                                                                  UcxCallback callback);
 }

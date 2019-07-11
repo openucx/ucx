@@ -88,10 +88,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of SG entries to reserve in the send WQE.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
 
-  {"TX_CQ_MODERATION", "64",
-   "Maximum number of send WQEs which can be posted without requesting a completion.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
-
 #if HAVE_DECL_IBV_EXP_CQ_MODERATION
   {"TX_EVENT_MOD_COUNT", "0",
    "Number of send completions for which an event would be generated (0 - disabled).",
@@ -493,7 +489,7 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
                 }
             }
 
-            ucs_assert(iface->path_bits_count <= num_path_bits);
+            ucs_assert(iface->path_bits_count < num_path_bits);
             iface->path_bits[iface->path_bits_count] = j;
             iface->path_bits_count++;
         }
@@ -528,22 +524,13 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
         return;
     }
 
-#if HAVE_IB_EXT_ATOMICS
-    attr->ibv.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
-    attr->ibv.max_atomic_arg      = UCT_IB_MAX_ATOMIC_SIZE;
-#endif
-
+    /* MOFED requires this to enable IB spec atomic */
 #if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
     if (uct_ib_iface_device(iface)->dev_attr.exp_atomic_cap ==
                                      IBV_EXP_ATOMIC_HCA_REPLY_BE) {
         attr->ibv.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
         attr->ibv.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
     }
-#endif
-
-#if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    attr->ibv.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    attr->ibv.max_inl_recv         = attr->max_inl_recv;
 #endif
 }
 
@@ -820,11 +807,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = self->ops->init_res_domain(self);
-    if (status != UCS_OK) {
-        goto err_free_path_bits;
-    }
-
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
         ucs_error("ibv_create_comp_channel() failed: %m");
@@ -894,8 +876,6 @@ err_destroy_send_cq:
 err_destroy_comp_channel:
     ibv_destroy_comp_channel(self->comp_channel);
 err_cleanup:
-    self->ops->cleanup_res_domain(self);
-err_free_path_bits:
     ucs_free(self->path_bits);
 err:
     return status;
@@ -920,7 +900,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
-    self->ops->cleanup_res_domain(self);
     ucs_free(self->path_bits);
 }
 

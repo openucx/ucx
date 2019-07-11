@@ -30,6 +30,7 @@ static ucs_stats_class_t uct_ud_iface_stats_class = {
 };
 #endif
 
+/* cppcheck-suppress ctunullpointer */
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
@@ -248,7 +249,8 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 static ucs_status_t
 uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
 {
-    uct_ib_qp_attr_t qp_init_attr      = {};
+    uct_ud_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_ud_iface_ops_t);
+    uct_ib_qp_attr_t qp_init_attr = {};
     struct ibv_qp_attr qp_attr;
     static ucs_status_t status;
     int ret;
@@ -262,7 +264,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_inline_data = ucs_max(config->super.tx.min_inline,
                                                UCT_UD_MIN_INLINE);
 
-    status = self->super.ops->create_qp(&self->super, &qp_init_attr, &self->qp);
+    status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -302,7 +304,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
 
     return UCS_OK;
 err_destroy_qp:
-    ibv_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -520,7 +522,7 @@ err_tx_mpool:
 err_rx_mpool:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err_qp:
-    ibv_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
     ucs_ptr_array_cleanup(&self->eps);
     return status;
 }
@@ -539,7 +541,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
     ucs_mpool_cleanup(&self->rx.mp, 0);
-    ibv_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);

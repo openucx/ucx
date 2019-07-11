@@ -55,6 +55,7 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         sendData.putInt(workerAddress.capacity());
         sendData.put(workerAddress);
         sendData.putInt(data.hashCode());
+        sendData.clear();
 
         endpoint.sendTaggedNonBlocking(sendData, null);
 

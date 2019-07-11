@@ -132,7 +132,7 @@ JNIEnv* get_jni_env()
 {
     void *env;
     jint rs = jvm_global->AttachCurrentThread(&env, NULL);
-    ucs_assert(rs == JNI_OK);
+    ucs_assert_always(rs == JNI_OK);
     return (JNIEnv*)env;
 }
 
@@ -162,7 +162,7 @@ static inline void call_on_error(jobject callback, ucs_status_t status)
     env->CallVoidMethod(callback, on_error, status, error_msg);
 }
 
-void jucx_request_callback(void *request, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, ucs_status_t status)
 {
     struct jucx_context *ctx = (struct jucx_context *)request;
     while (ctx->jucx_request == NULL) {
@@ -174,7 +174,7 @@ void jucx_request_callback(void *request, ucs_status_t status)
 
     if (ctx->callback != NULL) {
         if (status == UCS_OK) {
-            call_on_success(ctx->callback, ctx->jucx_request);
+            UCS_PROFILE_CALL_VOID(call_on_success, ctx->callback, ctx->jucx_request);
         } else {
             call_on_error(ctx->callback, status);
         }
@@ -192,7 +192,7 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
     jucx_request_callback(request, status);
 }
 
-jobject process_request(void *request, jobject callback)
+UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
     jclass jucx_request_cls = env->FindClass("org/ucx/jucx/UcxRequest");

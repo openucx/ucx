@@ -13,6 +13,9 @@
 
 #include "dc_mlx5.h"
 
+#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
+
+
 enum {
     /* Indicates that FC grant has been requested, but is not received yet.
      * Flush will not complete until an outgoing grant request is acked.
@@ -201,7 +204,9 @@ static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_iface_is_dci_rand(uct_dc_mlx5_iface_t
 static UCS_F_ALWAYS_INLINE ucs_arbiter_group_t*
 uct_dc_mlx5_ep_rand_arb_group(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(uct_dc_mlx5_iface_is_dci_rand(iface) &&
+               (ep->dci != UCT_DC_MLX5_EP_NO_DCI));
+    /* If DCI random policy is used, DCI is always assigned to EP */
     return &iface->tx.dcis[ep->dci].arb_group;
 }
 
@@ -251,9 +256,6 @@ enum uct_dc_mlx5_ep_flags {
                                                   dc_mlx5 endpoint */
     UCT_DC_MLX5_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
 };
-
-
-#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
@@ -379,13 +381,6 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
 }
 
-static inline ucs_status_t
-uct_dc_mlx5_iface_check_txqp(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep, uct_rc_txqp_t *txqp)
-{
-    UCT_RC_CHECK_TXQP(&iface->super.super, ep, txqp);
-    return UCS_OK;
-}
-
 static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     /* take a first available dci from stack.
@@ -434,14 +429,22 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
     uct_rc_txqp_t *txqp;
     int16_t available;
 
+    /* TX CQ moderation is not supported with DC yet, can just check for CQ
+     * resources (without updating moderation counters on txqp). */
+    ucs_assert(!iface->super.super.config.tx_moderation);
+    if (!uct_rc_iface_have_tx_cqe_avail(&iface->super.super)) {
+        UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                                 UCT_RC_IFACE_STAT_NO_CQE, 1);
+        goto out_no_res;
+    }
+
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
             return UCS_OK;
         } else {
-            txqp = &iface->tx.dcis[ep->dci].txqp;
-            UCS_STATS_UPDATE_COUNTER(txqp->stats, UCT_RC_TXQP_STAT_QP_FULL, 1);
-            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return UCS_ERR_NO_RESOURCE;
+            UCS_STATS_UPDATE_COUNTER(iface->tx.dcis[ep->dci].txqp.stats,
+                                     UCT_RC_TXQP_STAT_QP_FULL, 1);
+            goto out_no_res;
         }
     }
 
@@ -449,8 +452,7 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
         /* dci is already assigned - keep using it */
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
             (ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) {
-            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return UCS_ERR_NO_RESOURCE;
+            goto out_no_res;
         }
 
         /* if dci has sent more than quota, and there are eps waiting for dci
@@ -463,27 +465,26 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
             !ucs_arbiter_is_empty(uct_dc_mlx5_iface_dci_waitq(iface)))
         {
             ep->flags |= UCT_DC_MLX5_EP_FLAG_TX_WAIT;
-            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return UCS_ERR_NO_RESOURCE;
+            goto out_no_res;
         }
 
         if (available <= 0) {
             UCS_STATS_UPDATE_COUNTER(txqp->stats, UCT_RC_TXQP_STAT_QP_FULL, 1);
-            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return UCS_ERR_NO_RESOURCE;
+            goto out_no_res;
         }
 
         return UCS_OK;
     }
 
-    /* Do not alloc dci if no CQ resources,
+    /* Do not alloc dci if no TX desc resources,
      * otherwise this dci may never be released. */
     if (uct_dc_mlx5_iface_dci_can_alloc(iface) &&
-        uct_rc_iface_has_tx_resources(&iface->super.super)) {
+        !ucs_mpool_is_empty(&iface->super.super.tx.mp)) {
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }
 
+out_no_res:
     /* we will have to wait until someone releases dci */
     UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;
@@ -510,26 +511,19 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
-        ucs_status_t status; \
-        status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+        ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
         if (ucs_unlikely(status != UCS_OK)) { \
             return status; \
         } \
-        UCT_RC_CHECK_CQE(&(_iface)->super.super, _ep, \
-                         &(_iface)->tx.dcis[(_ep)->dci].txqp); \
     }
 
 
 #define UCT_DC_CHECK_RES_PTR(_iface, _ep) \
     { \
-        ucs_status_t status; \
-        status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+        ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
         if (ucs_unlikely(status != UCS_OK)) { \
             return UCS_STATUS_PTR(status); \
         } \
-        UCT_RC_CHECK_CQE_RET(&(_iface)->super.super, _ep, \
-                             &(_iface)->tx.dcis[(_ep)->dci].txqp, \
-                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)); \
     }
 
 

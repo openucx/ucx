@@ -33,7 +33,6 @@ protected:
 
         uct_test::init();
 
-        set_config("IB_TX_CQ_MODERATION=1");
         if (has_rc()) {
             set_config("RC_FC_ENABLE=n");
         }

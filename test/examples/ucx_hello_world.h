@@ -14,13 +14,23 @@
 #include <unistd.h>
 #include <netdb.h>
 
-#define CHKERR_JUMP(_cond, _msg, _label)            \
-do {                                                \
-    if (_cond) {                                    \
-        fprintf(stderr, "Failed to %s\n", _msg);    \
-        goto _label;                                \
-    }                                               \
-} while (0)
+
+#define CHKERR_JUMP(_cond, _msg, _label) \
+    do { \
+        if (_cond) { \
+            fprintf(stderr, "Failed to %s\n", _msg); \
+            goto _label; \
+        } \
+    } while (0)
+
+#define CHKERR_JUMP_RETVAL(_cond, _msg, _label, _retval) \
+    do { \
+        if (_cond) { \
+            fprintf(stderr, "Failed to %s, return value %d\n", _msg, _retval); \
+            goto _label; \
+        } \
+    } while (0)
+
 
 int server_connect(uint16_t server_port)
 {
@@ -104,7 +114,7 @@ static int barrier(int oob_sock)
         return res;
     }
 
-    res = recv(oob_sock, &dummy, sizeof(dummy), 0);
+    res = recv(oob_sock, &dummy, sizeof(dummy), MSG_WAITALL);
 
     /* number of received bytes should be the same as sent */
     return !(res == sizeof(dummy));

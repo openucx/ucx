@@ -132,7 +132,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        save_LDFLAGS="$LDFLAGS"
        save_CFLAGS="$CFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
-       LDFLAGS="$IBVERBS_LDFAGS $LDFLAGS"
+       LDFLAGS="$IBVERBS_LDFLAGS $LDFLAGS"
        CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
        CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
        AC_CHECK_HEADER([infiniband/verbs_exp.h],
@@ -225,7 +225,10 @@ AS_IF([test "x$with_ib" = "xyes"],
             AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
                  AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
                  have_devx=yes
-            ], [], [[#include <infiniband/mlx5dv.h>]])])
+            ], [
+                 AS_IF([test "x$with_devx" != xcheck],
+                       [AC_MSG_ERROR([devx requested but not found])])
+            ], [[#include <infiniband/mlx5dv.h>]])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_hw=no])

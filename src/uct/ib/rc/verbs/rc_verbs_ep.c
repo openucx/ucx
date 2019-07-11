@@ -23,7 +23,8 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     struct ibv_send_wr *bad_wr;
     int ret;
 
-    uct_rc_txqp_check(&ep->super.txqp);
+    ucs_assertv(ep->qp->state == IBV_QPS_RTS, "QP 0x%x state is %d",
+                ep->qp->qp_num, ep->qp->state);
 
     if (!(send_flags & IBV_SEND_SIGNALED)) {
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
@@ -37,10 +38,10 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     wr->send_flags = send_flags;
     wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
-    uct_ib_log_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
+    uct_ib_log_post_send(&iface->super.super, ep->qp, wr, max_log_sge,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_packet_dump : NULL);
 
-    ret = ibv_post_send(ep->super.txqp.qp, wr, &bad_wr);
+    ret = ibv_post_send(ep->qp, wr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_send() returned %d (%m)", ret);
     }
@@ -441,17 +442,63 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
                                            status);
 }
 
+ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
+{
+    uct_rc_verbs_ep_t *ep        = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
+
+    uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
+                                           const uct_ep_addr_t *ep_addr)
+{
+    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_iface_t *iface              = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    const uct_ib_address_t *ib_addr    = (const uct_ib_address_t *)dev_addr;
+    const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
+    uint32_t qp_num;
+    struct ibv_ah_attr ah_attr;
+
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
+                                        ep->super.path_bits, &ah_attr);
+    qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
+
+    return uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr);
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(params->iface, uct_rc_verbs_iface_t);
+    uct_ib_qp_attr_t attr = {};
+    ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
+    status = uct_rc_iface_qp_create(&iface->super, &self->qp, &attr,
+                                    iface->super.config.tx_qp_len);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->qp->qp_num);
+
+    status = uct_rc_iface_qp_init(&iface->super, self->qp);
+    if (status != UCS_OK) {
+        goto err_qp_cleanup;
+    }
+
+    uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
 
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
     uct_ib_fence_info_init(&self->fi);
 
     return UCS_OK;
+
+err_qp_cleanup:
+    uct_ib_destroy_qp(self->qp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
@@ -468,6 +515,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert(self->txcnt.pi >= self->txcnt.ci);
     iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
     ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
+    uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
+    uct_ib_destroy_qp(self->qp);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

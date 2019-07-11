@@ -176,15 +176,14 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
             /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
              * that he can wake-up on this event */
             ucp_worker_signal_internal(listener->wifaces[i].worker);
-            break;
+            return;
         }
     }
 
-    if (i == listener->num_wifaces) {
-        ucs_error("connection request received on listener %p on an unknown interface",
-                  listener);
-        uct_iface_reject(tl_iface, uct_req);
-    }
+    ucs_error("connection request received on listener %p on an unknown interface",
+              listener);
+    uct_iface_reject(tl_iface, uct_req);
+    ucs_free(conn_request);
 }
 
 ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *attr)

@@ -483,7 +483,6 @@ static ucs_status_t ucm_event_install(int events)
     int native_events, malloc_events;
     ucs_status_t status;
 
-    /* coverity[double_unlock] */
     UCS_INIT_ONCE(&init_once) {
         ucm_prevent_dl_unload();
     }
@@ -592,8 +591,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
     ucm_event_leave();
 
     /* Do not release memory while we hold event lock - may deadlock */
-    while (!ucs_list_is_empty(&gc_list)) {
-        elem = ucs_list_extract_head(&gc_list, ucm_event_handler_t, list);
+    ucs_list_for_each_safe(elem, tmp, &gc_list, list) {
         free(elem);
     }
 }

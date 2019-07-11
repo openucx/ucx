@@ -476,27 +476,29 @@ int main(int argc, char **argv)
         oob_sock = client_connect(client_target_name, server_port);
         CHKERR_JUMP(oob_sock < 0, "client_connect\n", err_addr);
 
-        ret = recv(oob_sock, &addr_len, sizeof(addr_len), 0);
-        CHKERR_JUMP(ret < 0, "receive address length\n", err_addr);
+        ret = recv(oob_sock, &addr_len, sizeof(addr_len), MSG_WAITALL);
+        CHKERR_JUMP_RETVAL(ret != (int)sizeof(addr_len),
+                           "receive address length\n", err_addr, ret);
 
         peer_addr_len = addr_len;
         peer_addr = malloc(peer_addr_len);
         CHKERR_JUMP(!peer_addr, "allocate memory\n", err_addr);
 
-        ret = recv(oob_sock, peer_addr, peer_addr_len, 0);
-        CHKERR_JUMP(ret < 0, "receive address\n", err_peer_addr);
+        ret = recv(oob_sock, peer_addr, peer_addr_len, MSG_WAITALL);
+        CHKERR_JUMP_RETVAL(ret != (int)peer_addr_len,
+                           "receive address\n", err_peer_addr, ret);
     } else {
         oob_sock = server_connect(server_port);
         CHKERR_JUMP(oob_sock < 0, "server_connect\n", err_peer_addr);
 
         addr_len = local_addr_len;
         ret = send(oob_sock, &addr_len, sizeof(addr_len), 0);
-        CHKERR_JUMP((ret < 0 || ret != sizeof(addr_len)),
-                    "send address length\n", err_peer_addr);
+        CHKERR_JUMP_RETVAL(ret != (int)sizeof(addr_len),
+                           "send address length\n", err_peer_addr, ret);
 
         ret = send(oob_sock, local_addr, local_addr_len, 0);
-        CHKERR_JUMP((ret < 0 || ret != local_addr_len),
-                    "send address\n", err_peer_addr);
+        CHKERR_JUMP_RETVAL(ret != (int)local_addr_len, "send address\n",
+                           err_peer_addr, ret);
     }
 
     ret = run_test(client_target_name, ucp_worker);

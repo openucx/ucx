@@ -219,13 +219,40 @@ typedef struct uct_ib_mlx5_devx_uar {
 
 
 typedef enum {
+    UCT_IB_MLX5_QP_TYPE_UNDEF,
     UCT_IB_MLX5_QP_TYPE_VERBS,
     UCT_IB_MLX5_QP_TYPE_DEVX,
 } uct_ib_mlx5_qp_type_t;
 
 
+/* resource domain */
+typedef struct uct_ib_mlx5_res_domain {
+    uct_worker_tl_data_t        super;
+#if HAVE_IBV_EXP_RES_DOMAIN
+    struct ibv_exp_res_domain   *ibv_domain;
+#elif HAVE_DECL_IBV_ALLOC_TD
+    struct ibv_td               *td;
+    struct ibv_pd               *pd;
+#endif
+} uct_ib_mlx5_res_domain_t;
+
+
+/* MLX5 QP wrapper */
+typedef struct uct_ib_mlx5_qp {
+    uct_ib_mlx5_qp_type_t              type;
+    uint32_t                           qp_num;
+    union {
+        struct {
+            struct ibv_qp              *qp;
+            uct_ib_mlx5_res_domain_t   *rd;
+        } verbs;
+    };
+} uct_ib_mlx5_qp_t;
+
+
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
+    uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
     uct_ib_mlx5_mmio_reg_t      *reg;
@@ -239,7 +266,6 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    hw_ci;
 #endif
     uct_ib_fence_info_t         fi;
-    uct_ib_mlx5_qp_type_t       type;
 } uct_ib_mlx5_txwq_t;
 
 
@@ -331,26 +357,6 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
 
-
-typedef struct uct_ib_mlx5_iface_res_domain {
-    uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
-    struct ibv_exp_res_domain   *ibv_domain;
-#elif HAVE_DECL_IBV_ALLOC_TD
-    struct ibv_td               *td;
-    struct ibv_pd               *pd;
-#endif
-} uct_ib_mlx5_iface_res_domain_t;
-
-
-/**
- *  MLX5 common iface part
- */
-typedef struct uct_ib_mlx5_iface_common {
-    uct_ib_mlx5_iface_res_domain_t   *res_domain;
-} uct_ib_mlx5_iface_common_t;
-
-
 /**
  * Calculate unique id for atomic
  */
@@ -380,16 +386,14 @@ static inline uint8_t uct_ib_mlx5_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
                                            uct_ib_mlx5_md_t));
 }
 
-ucs_status_t uct_ib_mlx5_iface_init_res_domain(uct_ib_iface_t *iface,
-                                               uct_ib_mlx5_iface_common_t *mlx5);
+ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
+                                              uct_ib_mlx5_qp_t *txwq);
 
-void uct_ib_mlx5_iface_cleanup_res_domain(uct_ib_mlx5_iface_common_t *mlx5);
-
+void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp);
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
-                                         uct_ib_mlx5_iface_common_t *mlx5,
-                                         uct_ib_qp_attr_t *attr,
-                                         struct ibv_qp **qp_p);
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uct_ib_qp_attr_t *attr);
 
 /**
  * Create CQ with DV

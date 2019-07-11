@@ -561,6 +561,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     }
 
     ep = ucs_derived_of(new_ud_ep, uct_ud_mlx5_ep_t);
+    /* cppcheck-suppress autoVariables */
     *new_ep_p = &ep->super.super.super;
     if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
@@ -657,23 +658,16 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *attr,
                                                 struct ibv_qp **qp_p)
 {
-    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+    uct_ib_mlx5_qp_t qp;
+    ucs_status_t status;
 
-    return uct_ib_mlx5_iface_create_qp(ib_iface, &iface->mlx5_common, attr, qp_p);
-}
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, &qp, attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-static ucs_status_t uct_ud_mlx5_init_res_domain(uct_ib_iface_t *ib_iface)
-{
-    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
-
-    return uct_ib_mlx5_iface_init_res_domain(ib_iface, &iface->mlx5_common);
-}
-
-static void uct_ud_mlx5_cleanup_res_domain(uct_ib_iface_t *ib_iface)
-{
-    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
-
-    uct_ib_mlx5_iface_cleanup_res_domain(&iface->mlx5_common);
+    *qp_p = qp.verbs.qp;
+    return status;
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
@@ -725,13 +719,11 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .event_cq                 = uct_ud_mlx5_iface_event_cq,
     .handle_failure           = uct_ud_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_ud_mlx5_ep_set_failed,
-    .create_qp                = uct_ud_mlx5_iface_create_qp,
-    .init_res_domain          = uct_ud_mlx5_init_res_domain,
-    .cleanup_res_domain       = uct_ud_mlx5_cleanup_res_domain,
     },
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .tx_skb                   = uct_ud_mlx5_ep_tx_ctl_skb,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t)
+    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
+    .create_qp                = uct_ud_mlx5_iface_create_qp,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
@@ -747,7 +739,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     ucs_trace_func("");
 
-    init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.flags        = UCT_IB_CQ_IGNORE_OVERRUN;
+
+    self->tx.wq.super.type = UCT_IB_MLX5_QP_TYPE_UNDEF;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);

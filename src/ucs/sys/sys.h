@@ -24,7 +24,6 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/fcntl.h>
-#include <sys/epoll.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/param.h>

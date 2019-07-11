@@ -996,12 +996,14 @@ test_jucx() {
                         fi
                         echo "Running standalone benchamrk on $iface"
 
-                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar \
+                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar \
 				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
-                        java -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
+                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
 				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
 			 wait $java_pid
@@ -1164,7 +1166,8 @@ run_gtest() {
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
+	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
+	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
 	then
 		echo "==== Running valgrind tests, $compiler_name compiler ===="
 

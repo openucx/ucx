@@ -474,22 +474,34 @@ static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
     av->rlid = htons(UCT_IB_MLX5_ROCE_SRC_PORT_MIN | sport);
 }
 
-static void UCS_F_MAYBE_UNUSED
+static ucs_status_t UCS_F_MAYBE_UNUSED
 uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
-                            uct_ib_mlx5_iface_common_t *mlx5,
+                            uct_ib_mlx5_qp_t *qp,
                             uct_ib_qp_attr_t *attr)
-
 {
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_iface_get_res_domain(iface, qp);
+    if (status) {
+        return status;
+    }
+
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     attr->ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
     attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
     attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
-    attr->ibv.pd              = mlx5->res_domain->pd;
+    if (qp->verbs.rd->pd != NULL) {
+        attr->ibv.pd          = qp->verbs.rd->pd;
+    } else {
+        attr->ibv.pd          = uct_ib_iface_md(iface)->pd;
+    }
 #endif
 
 #if HAVE_IBV_EXP_RES_DOMAIN
     attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-    attr->ibv.res_domain      = mlx5->res_domain->ibv_domain;
+    attr->ibv.res_domain      = qp->verbs.rd->ibv_domain;
 #endif
+
+    return UCS_OK;
 }

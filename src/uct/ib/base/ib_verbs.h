@@ -323,6 +323,16 @@ static inline uint32_t uct_ib_unpack_uint24(const uct_ib_uint24_t buf)
     return buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16);
 }
 
+static inline void uct_ib_destroy_qp(struct ibv_qp *qp)
+{
+    int ret;
+
+    ret = ibv_destroy_qp(qp);
+    if (ret) {
+        ucs_warn("ibv_destroy_qp() failed: %m");
+    }
+}
+
 typedef struct uct_ib_qpnum {
     uct_ib_uint24_t qp_num;
 } uct_ib_qpnum_t;

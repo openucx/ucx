@@ -135,7 +135,7 @@ static ucs_status_t uct_ib_mlx5_exp_md_umr_qp_create(uct_ib_mlx5_md_t *md)
     return UCS_OK;
 
 err_destroy_qp:
-    ibv_destroy_qp(md->umr_qp);
+    uct_ib_destroy_qp(md->umr_qp);
 err_destroy_cq:
     ibv_destroy_cq(md->umr_cq);
 err:
@@ -374,8 +374,14 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
+    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+#endif
+
     if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        md->super.config.odp.max_size = 0;
+        md->super.config.odp.max_size = uct_ib_device_odp_max_size(dev);
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
@@ -407,12 +413,6 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
     dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
 #endif
 
-#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
-    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
-    }
-#endif
-
     md->super.ops = &uct_ib_mlx5_md_ops;
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
@@ -442,7 +442,7 @@ void uct_ib_mlx5_exp_md_cleanup(uct_ib_md_t *ibmd)
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
     if (md->umr_qp != NULL) {
-        ibv_destroy_qp(md->umr_qp);
+        uct_ib_destroy_qp(md->umr_qp);
     }
     if (md->umr_cq != NULL) {
         ibv_destroy_cq(md->umr_cq);

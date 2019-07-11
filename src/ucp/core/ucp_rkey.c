@@ -10,6 +10,7 @@
 
 #include <ucp/rma/rma.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/profile/profile.h>
 #include <inttypes.h>
 
 
@@ -164,8 +165,9 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
     ucs_free(rkey_buffer);
 }
 
-ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
-                                ucp_rkey_h *rkey_p)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
+                 ucp_ep_h ep, const void *rkey_buffer,
+                 ucp_rkey_h *rkey_p)
 {
     ucp_context_t         *context   = ep->worker->context;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);

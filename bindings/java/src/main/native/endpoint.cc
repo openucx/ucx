@@ -90,13 +90,11 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_destroyEndpointNative(JNIEnv *env, jclass cls,
 
 JNIEXPORT jobject JNICALL
 Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
-                                                  jlong ep_ptr, jobject rkey_buf)
+                                                  jlong ep_ptr, jlong addr)
 {
     ucp_rkey_h rkey;
 
-    ucs_status_t status = ucp_ep_rkey_unpack((ucp_ep_h) ep_ptr,
-                                             env->GetDirectBufferAddress(rkey_buf),
-                                             &rkey);
+    ucs_status_t status = ucp_ep_rkey_unpack((ucp_ep_h) ep_ptr, (void *)addr, &rkey);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }
@@ -110,48 +108,42 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
 
 JNIEXPORT jobject JNICALL
 Java_org_ucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass cls,
-                                                       jlong ep_ptr, jobject src_buf,
-                                                       jlong dst_addr, jlong rkey_ptr,
-                                                       jobject callback)
+                                                       jlong ep_ptr, jlong laddr,
+                                                       jlong size, jlong raddr,
+                                                       jlong rkey_ptr, jobject callback)
 {
-    void *src_addr =  env->GetDirectBufferAddress(src_buf);
-    size_t src_size = env->GetDirectBufferCapacity(src_buf);
-    ucs_status_ptr_t request = ucp_put_nb((ucp_ep_h) ep_ptr, src_addr, src_size,
-                                          dst_addr, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
+    ucs_status_ptr_t request = ucp_put_nb((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
+                                          (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
     ucs_trace_req("JUCX: put_nb request %p to %s, of size: %zu, raddr: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), src_size, dst_addr);
+                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, raddr);
     return process_request(request, callback);
 }
 
 JNIEXPORT jobject JNICALL
 Java_org_ucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
-                                                       jlong ep_ptr, jlong address,
-                                                       jlong rkey_ptr, jobject dst_buf,
-                                                       jobject callback)
+                                                       jlong ep_ptr, jlong raddr,
+                                                       jlong rkey_ptr, jlong laddr,
+                                                       jlong size, jobject callback)
 {
-    void *result_address = env->GetDirectBufferAddress(dst_buf);
-    size_t result_size = env->GetDirectBufferCapacity(dst_buf);
+    ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, (void *)laddr, size,
+                                          raddr, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
-    ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, result_address, result_size,
-                                          address, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
-
-    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %p",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), address, result_size, result_address);
+    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %zu",
+                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), raddr, size, laddr);
     return process_request(request, callback);
 }
 
 JNIEXPORT jobject JNICALL
 Java_org_ucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, jclass cls,
-                                                              jlong ep_ptr, jobject send_buf,
-                                                              jlong tag, jobject callback)
+                                                              jlong ep_ptr, jlong addr,
+                                                              jlong size, jlong tag,
+                                                              jobject callback)
 {
-    size_t msg_size = env->GetDirectBufferCapacity(send_buf);
-    ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr,
-                                               env->GetDirectBufferAddress(send_buf), msg_size,
+    ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                ucp_dt_make_contig(1), tag, jucx_request_callback);
 
     ucs_trace_req("JUCX: send_nb request %p to %s, size: %zu, tag: %ld",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), msg_size, tag);
+                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, tag);
     return process_request(request, callback);
 }
