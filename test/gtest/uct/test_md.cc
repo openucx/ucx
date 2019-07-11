@@ -517,7 +517,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                                                               UCT_SOCKADDR_ACC_REMOTE));
                     found_ipoib = 1;
                 }
-            } else if (!strcmp(GetParam().c_str(), "sockcm")) {
+            } else if (GetParam().md_name == "sockcm")) {
                 if (ucs::is_sockcm_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                         ucs::sockaddr_to_str(ifa->ifa_addr);
@@ -542,7 +542,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         UCS_TEST_MESSAGE << "Cannot find an IPoIB interface with an IPv4 address on the host";
     }
 
-    if ((!strcmp(GetParam().c_str(), "sockcm")) && (!found_ip)) {
+    if ((GetParam().md_name == "sockcm") && (!found_ip)) {
         UCS_TEST_MESSAGE << "Cannot find an IPv4/IPv6 interface on the host";
     }
 
