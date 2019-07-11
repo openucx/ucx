@@ -125,12 +125,13 @@ static void *ucs_async_thread_func(void *arg)
                                           ucs_min(time_spent, timer_interval));
         }
 
-        do {
-            status = ucs_event_set_wait(thread->event_set,
-                                        &num_events, timeout_ms,
-                                        ucs_async_thread_ev_handler,
-                                        (void*)&cb_arg);
-        } while (status == UCS_INPROGRESS);
+        status = ucs_event_set_wait(thread->event_set,
+                                    &num_events, timeout_ms,
+                                    ucs_async_thread_ev_handler,
+                                    (void*)&cb_arg);
+        if (UCS_STATUS_IS_ERR(status)) {
+            ucs_fatal("ucs_event_set_wait() failed: %d", status);
+        }
 
         /* Check timers */
         curr_time = ucs_get_time();
