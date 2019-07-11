@@ -323,15 +323,13 @@ public:
     }
 
     void init() {
-        uint16_t port;
-
         uct_test::init();
 
         /* This address is accessible, as it was tested at the resource creation */
         m_listen_addr  = GetParam()->listen_sock_addr;
         m_connect_addr = GetParam()->connect_sock_addr;
 
-        port = ucs::get_port();
+        uint16_t port = ucs::get_port();
         m_listen_addr.set_port(port);
         m_connect_addr.set_port(port);
 
@@ -346,7 +344,7 @@ public:
 
 protected:
     ucs::sock_addr_storage m_listen_addr, m_connect_addr;
-    entity *m_server, *m_client;
+    entity                 *m_server, *m_client;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_query)

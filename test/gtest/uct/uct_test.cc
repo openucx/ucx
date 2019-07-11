@@ -472,8 +472,7 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
 }
 
 uct_test::entity* uct_test::create_entity() {
-    entity *new_ent = new entity(*GetParam(), m_md_config);
-    return new_ent;
+    return new entity(*GetParam(), m_md_config);
 }
 
 const uct_test::entity& uct_test::ent(unsigned index) const {
@@ -632,8 +631,8 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     ucs_status_t status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close,
-                           uct_cm_open, resource.component, m_worker);
+    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_cm_h, m_cm, uct_cm_close,
+                                        uct_cm_open, resource.component, m_worker);
 
     m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
     status = uct_cm_query(m_cm, &m_cm_attr);

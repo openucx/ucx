@@ -46,3 +46,17 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
 }
 
 void uct_listener_destroy(uct_listener_h listener){}
+
+
+UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_component_h component)
+{
+    self->ops       = ops;
+    self->component = component;
+    return UCS_OK;
+}
+
+UCS_CLASS_CLEANUP_FUNC(uct_cm_t){}
+
+UCS_CLASS_DEFINE(uct_cm_t, void);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_t, void, uct_cm_ops_t*, uct_component_h);
+UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_t, void);

@@ -249,7 +249,7 @@ UCT_MD_COMPONENT_DEFINE(uct_rdmacm_mdc, UCT_RDMACM_MD_PREFIX,
                         "RDMACM_", uct_rdmacm_md_config_table,
                         uct_rdmacm_md_config_t,
 #if HAVE_RDMACM_QP_LESS
-                        uct_rdmacm_cm_open);
+                        UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_t));
 #else
                         ucs_empty_function_return_unsupported);
 #endif /* HAVE_RDMACM_QP_LESS */

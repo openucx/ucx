@@ -18,15 +18,23 @@ noinst_HEADERS = \
 	rdmacm_md.h \
 	rdmacm_iface.h \
 	rdmacm_ep.h \
-	rdmacm_def.h \
-	rdmacm_cm.h
+	rdmacm_def.h
 
 libuct_rdmacm_la_SOURCES = \
 	rdmacm_md.c \
 	rdmacm_iface.c \
-	rdmacm_ep.c \
-	rdmacm_cm.c
+	rdmacm_ep.c
+
+if HAVE_RDMACM_QP_LESS
+noinst_HEADERS += \
+	rdmacm_cm.h \
+	rdmacm_listener.h
+
+libuct_rdmacm_la_SOURCES += \
+	rdmacm_cm.c \
+	rdmacm_listener.c
+endif # HAVE_RDMACM_QP_LESS
 
 include $(top_srcdir)/config/module.am
 
-endif
+endif # HAVE_RDMACM

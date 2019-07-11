@@ -34,4 +34,6 @@ struct uct_cm {
     uct_component_h component;
 };
 
+UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_component_h);
+
 #endif /* UCT_CM_H_ */
