@@ -23,6 +23,7 @@
 #include <ucs/arch/atomic.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
+#include <sys/epoll.h>
 
 
 #define UCP_WORKER_HEADROOM_SIZE \

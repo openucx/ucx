@@ -132,6 +132,39 @@ protected:
             UCM_BISTRO_EPILOGUE;
             return res;
         }
+
+        static int madvise(void *addr, size_t length, int advise)
+        {
+            UCM_BISTRO_PROLOGUE;
+            malloc_hook::bistro_call_counter++;
+            if (C) {
+                /* notify aggregate vm_munmap event only */
+                ucm_vm_munmap(addr, length);
+            }
+            int res = (intptr_t)syscall(SYS_madvise, addr, length, advise);
+            UCM_BISTRO_EPILOGUE;
+            return res;
+        }
+    };
+
+    class bistro_patch {
+    public:
+        bistro_patch(const char* symbol, void *hook)
+        {
+            ucs_status_t status;
+
+            status = ucm_bistro_patch(symbol, hook, &m_rp);
+            ASSERT_UCS_OK(status);
+            EXPECT_NE((intptr_t)m_rp, 0);
+        }
+
+        ~bistro_patch()
+        {
+            ucm_bistro_restore(m_rp);
+        }
+
+    protected:
+        ucm_bistro_restore_point_t *m_rp;
     };
 
     void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
@@ -398,6 +431,14 @@ void test_thread::test() {
     shmctl(shmid, IPC_RMID, NULL);
 
     EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
+
+    ptr = mmap(NULL, shm_seg_size, PROT_READ|PROT_WRITE,
+               MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(MAP_FAILED, ptr) << strerror(errno);
+    madvise(ptr, shm_seg_size, MADV_DONTNEED);
+
+    EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
+    munmap(ptr, shm_seg_size);
 
     /* Print results */
     pthread_mutex_lock(&lock);
@@ -984,26 +1025,24 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
                      RUNNING_ON_VALGRIND || !skip_on_bistro()) {
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;
-    const char *symbol = "munmap";
-    ucm_bistro_restore_point_t *rp = NULL;
+    const char *symbol_munmap  = "munmap";
+    const char *symbol_madvise = "madvise";
 
     status = event.set(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
-    /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
-    ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, 0);
-
-    status = ucm_test_events(UCM_EVENT_MUNMAP);
-    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
-
-    status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
-    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
-
-    /* restore original munmap body */
-    status = ucm_bistro_restore(rp);
-    ASSERT_UCS_OK(status);
+    /* set hook to munmap call */
+    {
+        bistro_patch patch(symbol_munmap, (void*)bistro_hook<0>::munmap);
+        EXPECT_TRUE(ucm_test_events(UCM_EVENT_MUNMAP)      == UCS_ERR_UNSUPPORTED);
+        EXPECT_TRUE(ucm_test_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+    }
+    /* set hook to madvise call */
+    {
+        bistro_patch patch(symbol_madvise, (void*)bistro_hook<0>::madvise);
+        EXPECT_TRUE(ucm_test_events(UCM_EVENT_MADVISE)     == UCS_ERR_UNSUPPORTED);
+        EXPECT_TRUE(ucm_test_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+    }
 }
 
 UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
@@ -1011,15 +1050,12 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;
     const char *symbol = "munmap";
-    ucm_bistro_restore_point_t *rp = NULL;
 
     status = event.set(UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_hook<1>::munmap, &rp);
-    ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, 0);
+    bistro_patch patch(symbol, (void*)bistro_hook<1>::munmap);
 
     /* munmap should be broken */
     status = ucm_test_events(UCM_EVENT_MUNMAP);
@@ -1032,10 +1068,6 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     /* mmap should still work */
     status = ucm_test_events(UCM_EVENT_MMAP);
     EXPECT_TRUE(status == UCS_OK);
-
-    /* restore original munmap body */
-    status = ucm_bistro_restore(rp);
-    ASSERT_UCS_OK(status);
 }
 
 class malloc_hook_dlopen : public malloc_hook {

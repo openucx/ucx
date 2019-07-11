@@ -9,8 +9,6 @@
 
 #include <ucs/type/status.h>
 
-#include <sys/epoll.h>
-
 /**
  * ucs_sys_event_set_t structure used in ucs_event_set_XXX functions.
  *
@@ -36,7 +34,7 @@ typedef void (*ucs_event_set_handler_t)(void *callback_data, int event,
 typedef enum {
     UCS_EVENT_SET_EVREAD  = UCS_BIT(0),
     UCS_EVENT_SET_EVWRITE = UCS_BIT(1),
-    UCS_EVENT_SET_EVNONE =  UCS_BIT(2)
+    UCS_EVENT_SET_EVERR   = UCS_BIT(2)
 } ucs_event_set_type_t;
 
 /* The maximum possible number of events based on system constraints */

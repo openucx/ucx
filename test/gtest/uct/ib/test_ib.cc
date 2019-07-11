@@ -226,28 +226,23 @@ public:
     }
 
     void check_port_attr() {
-        /* check if the provided gid index can be used on the port. */
-        if (!test_eth_port()) {
-            UCS_TEST_SKIP_R("the configured gid index cannot be used on the port");
-        }
-    }
+        std::stringstream device_str;
+        device_str << ibv_get_device_name(m_ibctx->device) << ":" << m_port;
 
-    bool test_eth_port() {
         if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
-            return false;
+            UCS_TEST_SKIP_R(device_str.str() + " is not Ethernet");
         }
    
         union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
-        uct_md_h uct_md;
+        ucs::handle<uct_md_h> uct_md;
         uct_ib_md_t *ib_md;
         ucs_status_t status;
         uint8_t gid_index;
 
-        status = uct_ib_md_open(ibv_get_device_name(m_ibctx->device), m_md_config,
-                                &uct_md);
-        ASSERT_UCS_OK(status);
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_ib_md_close, uct_ib_md_open,
+                               ibv_get_device_name(m_ibctx->device), m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
         status = uct_ib_device_select_gid_index(&ib_md->dev, m_port,
@@ -255,13 +250,33 @@ public:
                                                 &gid_index);
         ASSERT_UCS_OK(status);
 
+        device_str << " gid index " << static_cast<int>(gid_index);
+
         /* check the gid index */
         if (ibv_query_gid(m_ibctx, m_port, gid_index, &gid) != 0) {
-            UCS_TEST_ABORT("Failed to query gid (index=" << gid_index << ")");
+            UCS_TEST_ABORT("failed to query " + device_str.str());
         }
 
-        uct_ib_md_close(uct_md);
-        return !uct_ib_device_is_gid_raw_empty(gid.raw);
+        /* check if the gid is valid to use */
+        if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
+            UCS_TEST_SKIP_R(device_str.str() + " is empty");
+        }
+
+        struct ibv_ah_attr ah_attr;
+        memset(&ah_attr, 0, sizeof(ah_attr));
+        ah_attr.dlid           = m_port_attr.lid;
+        ah_attr.port_num       = m_port;
+        ah_attr.is_global      = 1;
+        ah_attr.grh.dgid       = gid;
+        ah_attr.grh.sgid_index = gid_index;
+        ah_attr.grh.hop_limit  = 255;
+
+        struct ibv_ah *ah = ibv_create_ah(ib_md->pd, &ah_attr);
+        if (ah == NULL) {
+            UCS_TEST_SKIP_R("failed to create address handle on " + device_str.str());
+        }
+
+        ibv_destroy_ah(ah);
     }
 };
 
