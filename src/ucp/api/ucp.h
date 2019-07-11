@@ -122,7 +122,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_REQUEST_CLEANUP   = UCS_BIT(3), /**< request_cleanup */
     UCP_PARAM_FIELD_TAG_SENDER_MASK   = UCS_BIT(4), /**< tag_sender_mask */
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
-    UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6)  /**< estimated_num_eps */
+    UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
+    UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7)  /**< estimated_num_ppn */
 };
 
 
@@ -709,6 +710,16 @@ typedef struct ucp_params {
      */
     size_t                             estimated_num_eps;
 
+    /**
+     * An optimization hint of how many endpoints will be created on single node.
+     * For example, when used from MPI or SHMEM libraries, this number would specify
+     * the number of processes per node in the job.
+     * Does not affect semantics, but only transport selection criteria and the
+     * resulting performance.
+     * The value can be also set by UCX_NUM_PPN environment variable. In such case
+     * it will override the number of endpoints set by @e estimated_num_ppn
+     */
+    size_t                             estimated_num_ppn;
 } ucp_params_t;
 
 
