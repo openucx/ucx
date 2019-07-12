@@ -9,6 +9,7 @@
 
 #include <ucs/sys/compiler_def.h>
 
+#include <stdint.h>
 #include <endian.h>
 #include <linux/types.h>
 

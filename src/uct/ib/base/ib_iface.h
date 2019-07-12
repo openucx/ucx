@@ -118,7 +118,9 @@ struct uct_ib_iface_config {
 typedef struct uct_ib_qp_attr {
     int                         qp_type;
     struct ibv_qp_cap           cap;
+    int                         port;
     struct ibv_srq              *srq;
+    uint32_t                    srq_num;
     unsigned                    sq_sig_all;
     unsigned                    max_inl_recv;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
