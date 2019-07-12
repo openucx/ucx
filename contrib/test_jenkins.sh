@@ -52,10 +52,16 @@ else
 fi
 
 #
-# Build command runs with 10 tasks
+# Parallel build command runs with 4 tasks, or number of cores on the system,
+# whichever is lowest
 #
+num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
+[ -z $num_cpus ] && num_cpus=1
+parallel_jobs=4
+[ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+
 MAKE="make"
-MAKEP="make -j10"
+MAKEP="make -j${parallel_jobs}"
 
 
 #
@@ -338,6 +344,17 @@ build_debug() {
 }
 
 #
+# Build prof
+#
+build_prof() {
+	echo "==== Build configure-prof ===="
+	../contrib/configure-prof --prefix=$ucx_inst
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
+}
+
+#
 # Build UGNI
 #
 build_ugni() {
@@ -536,6 +553,23 @@ check_inst_headers() {
 	echo "ok 1 - build successful " >> inst_headers.tap
 }
 
+check_make_distcheck() {
+	echo 1..1 > make_distcheck.tap
+
+	# If the gcc version on the host is older than 4.8.5, don't run
+	# due to a compiler bug that reproduces when building with gtest
+	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61886
+	if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
+	then
+		echo "==== Testing make distcheck ===="
+		$MAKEP clean && $MAKEP distclean
+		../contrib/configure-release --prefix=$PWD/install
+		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
+	else
+		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
+	fi
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -552,7 +586,7 @@ run_hello() {
 	# set smaller timeouts so the test will complete faster
 	if [[ ${test_args} == *"-e"* ]]
 	then
-		export UCX_UD_TIMEOUT=1s
+		export UCX_UD_TIMEOUT=15s
 		export UCX_RC_TIMEOUT=1ms
 		export UCX_RC_RETRY_COUNT=4
 	fi
@@ -847,6 +881,10 @@ test_ucs_dlopen() {
 	# Make sure UCM is not unloaded
 	echo "==== Running UCS dlopen test with memhooks ===="
 	./test/apps/test_ucs_dlopen
+
+	# Test global config list integrity after loading/unloading of UCT
+	echo "==== Running test_dlopen_cfg_print ===="
+	./test/apps/test_dlopen_cfg_print
 }
 
 test_ucp_dlopen() {
@@ -929,13 +967,48 @@ test_malloc_hook() {
 test_jucx() {
 	echo "==== Running jucx test ===="
 	echo "1..2" > jucx_tests.tap
-	if module_load dev/jdk && module_load dev/mvn
+	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+	if [ -z "$iface" ]
+        then
+		echo "Failed to find active ib devices." >> jucx_tests.tap
+		return
+	elif module_load dev/jdk && module_load dev/mvn
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
-		export JUCX_TEST_PORT=jucx_port
-		export UCX_ERROR_SIGNALS=""
+		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
-		unset UCX_ERROR_SIGNALS
+	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		if [ -n "$ifaces" ]
+		then
+                        $MAKE -C bindings/java/src/main/native package
+		fi
+		for iface in $ifaces 
+		do
+			if [ -n "$iface" ]
+                	then
+                   		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+                	fi
+
+                	if [ -z "$server_ip" ]
+                	then
+		   	   	echo "Interface $iface has no IPv4"	
+                   	   	continue
+                        fi
+                        echo "Running standalone benchamrk on $iface"
+
+                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+				 s=$server_ip p=$JUCX_TEST_PORT &
+                        java_pid=$!
+			 sleep 10
+                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
+				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			 wait $java_pid
+		done
+
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
@@ -1047,8 +1120,10 @@ run_gtest() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
-	# Run UCT tests for TCP over RDMA devices only
+	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
+	# Report TOP-20 longest test at the end of testing
+	export GTEST_REPORT_LONGEST_TESTS=20
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1091,7 +1166,8 @@ run_gtest() {
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
+	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
+	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
 	then
 		echo "==== Running valgrind tests, $compiler_name compiler ===="
 
@@ -1194,6 +1270,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
@@ -1245,6 +1322,7 @@ do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
+do_distributed_task 1 4 check_make_distcheck
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then

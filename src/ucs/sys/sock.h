@@ -19,16 +19,18 @@ BEGIN_C_DECLS
 
 
 /* A string to hold the IP address and port from a sockaddr */
-#define UCS_SOCKADDR_STRING_LEN          60
+#define UCS_SOCKADDR_STRING_LEN      60
 
-#define UCS_SOCKET_INET_ADDR(_addr)      (((struct sockaddr_in*)(_addr))->sin_addr)
-#define UCS_SOCKET_INET_PORT(_addr)      (((struct sockaddr_in*)(_addr))->sin_port)
+#define UCS_SOCKET_INET_ADDR(_addr)  (((struct sockaddr_in*)(_addr))->sin_addr)
+#define UCS_SOCKET_INET_PORT(_addr)  (((struct sockaddr_in*)(_addr))->sin_port)
 
-#define UCS_SOCKET_INET6_ADDR(_addr)     (((struct sockaddr_in6*)(_addr))->sin6_addr)
-#define UCS_SOCKET_INET6_PORT(_addr)     (((struct sockaddr_in6*)(_addr))->sin6_port)
+#define UCS_SOCKET_INET6_ADDR(_addr) (((struct sockaddr_in6*)(_addr))->sin6_addr)
+#define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
 
 
-typedef void (*ucs_socket_io_err_cb_t)(void *arg, int errno);
+/* Returns `UCS_ERR_NO_PROGRESS` if the default error
+ * handling should be done, otherwise `UCS_OK` */
+typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int io_errno);
 
 
 /**
@@ -264,17 +266,25 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
 /**
  * Return a value indicating the relationships between passed sockaddr structures.
- * 
+ *
  * @param [in]     sa1        Pointer to sockaddr structure #1.
  * @param [in]     sa2        Pointer to sockaddr structure #2.
- * @param [un/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
+ * @param [in/out] status_p   Pointer (can be NULL) to a status: UCS_OK on success
  *                            or UCS_ERR_INVALID_PARAM on failure.
  *
- * @return 0 - not equal, != 0 - equal
+ * @return Returns an integral value indicating the relationship between the
+ *         socket addresses:
+ *         > 0 - the first socket address is greater than the second
+ *               socket address;
+ *         < 0 - the first socket address is lower than the second
+ *               socket address;
+ *         = 0 - the socket addresses are equal.
+ *         Note: it returns a positive integer value in case of error occured
+ *               during comparison.
  */
-int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
-                          const struct sockaddr *sa2,
-                          ucs_status_t *status_p);
+int ucs_sockaddr_cmp(const struct sockaddr *sa1,
+                     const struct sockaddr *sa2,
+                     ucs_status_t *status_p);
 
 /**
  * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)

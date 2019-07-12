@@ -32,16 +32,16 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_PRINT]        = "PRINT"
 };
 
-static unsigned ucs_log_handlers_count = 0;
+static unsigned ucs_log_handlers_count      = 0;
+static int ucs_log_initialized              = 0;
+static char ucs_log_hostname[HOST_NAME_MAX] = {0};
+static int  ucs_log_pid                     = 0;
+static FILE *ucs_log_file                   = NULL;
+static int ucs_log_file_close               = 0;
+static unsigned threads_count               = 0;
+static pthread_spinlock_t threads_lock      = 0;
+static pthread_t threads[128]               = {0};
 static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
-static int ucs_log_initialized         = 0;
-static char ucs_log_hostname[256]      = {0};
-static int  ucs_log_pid                = 0;
-static FILE *ucs_log_file              = NULL;
-static int ucs_log_file_close          = 0;
-static unsigned threads_count          = 0;
-static pthread_spinlock_t threads_lock = 0;
-static pthread_t threads[128]          = {0};
 
 
 static int ucs_log_get_thread_num(void)

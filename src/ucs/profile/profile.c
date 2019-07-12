@@ -293,7 +293,7 @@ void ucs_profile_global_init()
         ucs_profile_ctx.accum.stack_top = -1;
     }
 
-    ucs_info("profiling is enabled");
+    ucs_debug("profiling is enabled");
     return;
 
 disable:

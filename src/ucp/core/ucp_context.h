@@ -97,6 +97,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
     UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
+    /** Array of transports for client-server transports and port selection */
+    UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
     /** Configuration saved directly in the context */
@@ -127,12 +129,22 @@ typedef struct ucp_tl_alias {
 
 
 /**
+ * UCT component
+ */
+typedef struct ucp_tl_cmpt {
+    uct_component_h               cmpt;      /* UCT component handle */
+    uct_component_attr_t          attr;      /* UCT component attributes */
+} ucp_tl_cmpt_t;
+
+
+/**
  * Memory domain.
  */
 typedef struct ucp_tl_md {
-    uct_md_h                      md;       /* Memory domain handle */
-    uct_md_resource_desc_t        rsc;      /* Memory domain resource */
-    uct_md_attr_t                 attr;     /* Memory domain attributes */
+    uct_md_h                      md;         /* Memory domain handle */
+    ucp_rsc_index_t               cmpt_index; /* Index of owning component */
+    uct_md_resource_desc_t        rsc;        /* Memory domain resource */
+    uct_md_attr_t                 attr;       /* Memory domain attributes */
 } ucp_tl_md_t;
 
 
@@ -140,22 +152,26 @@ typedef struct ucp_tl_md {
  * UCP context
  */
 typedef struct ucp_context {
+
+    ucp_tl_cmpt_t                 *tl_cmpts;  /* UCT components */
+    ucp_rsc_index_t               num_cmpts;  /* Number of UCT components */
+
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
 
     /* List of MDs which detect non host memory type */
-    ucp_rsc_index_t               mem_type_tl_mds[UCT_MD_MEM_TYPE_LAST];
-    ucp_rsc_index_t               num_mem_type_mds;  /* Number of mem type MDs */
-    ucs_memtype_cache_t           *memtype_cache;    /* mem type allocation cache*/
+    ucp_rsc_index_t               mem_type_detect_mds[UCT_MD_MEM_TYPE_LAST];
+    ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
+    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache*/
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
                                                  Not all resources may be used if unified
                                                  mode is enabled. */
-    ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
+    ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
-    uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
+    uint64_t                      mem_type_access_tls[UCT_MD_MEM_TYPE_LAST];
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
 
@@ -186,6 +202,11 @@ typedef struct ucp_context {
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
+
+        /* Array of sockaddr transports indexes.
+         * The indexes appear it the configured priority order */
+        ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
+        unsigned                  num_sockaddr_tls;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
@@ -319,8 +340,8 @@ extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
 {
-    return !(context->memtype_cache &&
-             context->memtype_cache->pgtable.num_regions);
+    return (context->memtype_cache &&
+            !context->memtype_cache->pgtable.num_regions);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -329,10 +350,11 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
 {
     unsigned i, md_index;
     ucm_mem_type_t ucm_mem_type;
+    ucs_status_t status;
 
     *mem_type_p = UCT_MD_MEM_TYPE_HOST;
 
-    if (ucs_likely(!context->num_mem_type_mds)) {
+    if (ucs_likely(!context->num_mem_type_detect_mds)) {
         return UCS_OK;
     }
 
@@ -345,10 +367,10 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
         return UCS_OK;
     }
 
-    for (i = 0; i < context->num_mem_type_mds; ++i) {
-        md_index = context->mem_type_tl_mds[i];
-        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
-            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+    for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
+        md_index = context->mem_type_detect_mds[i];
+        status = uct_md_detect_memory_type(context->tl_mds[md_index].md, addr, length, mem_type_p);
+        if (status == UCS_OK) {
             return UCS_OK;
         }
     }

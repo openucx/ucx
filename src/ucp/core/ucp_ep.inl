@@ -193,16 +193,25 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
                               UCP_EP_FLAG_LISTENER)));
-    if (!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID)) {
-        flush_state->send_sn = 0;
-        flush_state->cmpl_sn = 0;
-        ucs_queue_head_init(&flush_state->reqs);
-        ep->flags |= UCP_EP_FLAG_FLUSH_STATE_VALID;
-    } else {
-        ucs_assert(flush_state->send_sn == 0);
-        ucs_assert(flush_state->cmpl_sn == 0);
-        ucs_assert(ucs_queue_is_empty(&flush_state->reqs));
-    }
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
+               ((flush_state->send_sn == 0) &&
+                (flush_state->cmpl_sn == 0) &&
+                ucs_queue_is_empty(&flush_state->reqs)));
+
+    flush_state->send_sn = 0;
+    flush_state->cmpl_sn = 0;
+    ucs_queue_head_init(&flush_state->reqs);
+    ep->flags |= UCP_EP_FLAG_FLUSH_STATE_VALID;
+}
+
+/* get index of the local component which can reach a remote memory domain */
+static inline ucp_rsc_index_t
+ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
+                              ucp_md_index_t dst_md_index)
+{
+    unsigned index = ucs_popcount(key->reachable_md_map & UCS_MASK(dst_md_index));
+
+    return key->dst_md_cmpts[index];
 }
 
 #endif

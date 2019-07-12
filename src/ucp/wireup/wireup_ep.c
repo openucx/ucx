@@ -13,6 +13,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/stubs.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
 

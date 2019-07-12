@@ -545,8 +545,8 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
 
-const unsigned uct_p2p_am_misc::RX_MAX_BUFS = 1024; /* due to hard coded 'grow'
-                                                       parameter in uct_ib_iface_recv_mpool_init */
+const unsigned uct_p2p_am_misc::RX_MAX_BUFS  = 1024; /* due to hard coded 'grow'
+                                                        parameter in uct_ib_iface_recv_mpool_init */
 const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND)
@@ -637,18 +637,23 @@ class uct_p2p_am_tx_bufs : public uct_p2p_am_test
 {
 public:
     uct_p2p_am_tx_bufs() : uct_p2p_am_test() {
+        std::string cfg_prefix = "";
         ucs_status_t status1, status2;
 
-        /* can not reduce mpool size below retransmission window
-         * for ud
-         */
+        /* can not reduce mpool size below retransmission window for ud */
         if (has_ud()) {
             m_inited = false;
             return;
         }
 
-        status1 = uct_config_modify(m_iface_config, "IB_TX_MAX_BUFS" , "32");
-        status2 = uct_config_modify(m_iface_config, "IB_TX_BUFS_GROW" , "32");
+        if (has_ib()) {
+            cfg_prefix = "IB_";
+        }
+
+        status1 = uct_config_modify(m_iface_config,
+                                    (cfg_prefix + "TX_MAX_BUFS").c_str() , "32");
+        status2 = uct_config_modify(m_iface_config,
+                                    (cfg_prefix + "TX_BUFS_GROW").c_str(), "32");
         if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
             m_inited = false;
         } else {
@@ -679,8 +684,6 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
     }
     do {
         status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
-        if (status == UCS_OK) {
-        }
     } while (status == UCS_OK);
 
     /* short progress shall release tx buffers and 

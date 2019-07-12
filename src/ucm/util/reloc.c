@@ -36,9 +36,9 @@ typedef struct ucm_auxv {
 
 
 typedef struct ucm_reloc_dl_iter_context {
-    Dl_info            def_dlinfo;
     ucm_reloc_patch_t  *patch;
     ucs_status_t       status;
+    ElfW(Addr)         libucm_base_addr;  /* Base address to store previous value */
 } ucm_reloc_dl_iter_context_t;
 
 
@@ -156,7 +156,7 @@ ElfW(Rela) *ucm_reloc_find_sym(void *table, size_t table_size, const char *symbo
 
 
 static ucs_status_t
-ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname,
+ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char UCS_V_UNUSED *phname,
                      int phnum, int phsize,
                      const ucm_reloc_dl_iter_context_t *ctx)
 {
@@ -172,8 +172,6 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     void *page;
     int ret;
     int i;
-    Dl_info entry_dlinfo;
-    int success;
 
     page_size = ucm_get_page_size();
 
@@ -198,6 +196,11 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     symtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
     strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
     pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
+
+    if ((symtab == NULL) || (strtab == NULL)) {
+        /* no DT_SYMTAB or DT_STRTAB sections are defined */
+        return UCS_OK;
+    }
 
     section_name = ".got.plt";
     reloc        = ucm_reloc_find_sym(jmprel, pltrelsz, ctx->patch->symbol,
@@ -236,33 +239,28 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
               section_name, ctx->patch->symbol, basename(phname), entry,
               prev_value, ctx->patch->value);
 
-    success = dladdr(prev_value, &entry_dlinfo);
-    ucs_assertv_always(success, "can't find shared object with symbol address %p",
-                       prev_value);
-
     /* store default entry to prev_value to guarantee valid pointers
      * throughout life time of the process */
-    if (ctx->def_dlinfo.dli_fbase == entry_dlinfo.dli_fbase) {
+    if (base == ctx->libucm_base_addr) {
         ctx->patch->prev_value = prev_value;
-        ucm_debug("'%s' prev_value is %p from '%s'", ctx->patch->symbol,
-                  prev_value, basename(entry_dlinfo.dli_fname));
+        ucm_debug("'%s' prev_value is %p'", ctx->patch->symbol, prev_value);
     }
 
     return UCS_OK;
 }
 
-static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void *data)
+static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size,
+                                   void *data)
 {
     ucm_reloc_dl_iter_context_t *ctx = data;
     int phsize;
     int i;
 
-    /* check if module is black-listed for this patch */
+    /* check if shared object is black-listed for this patch */
     if (ctx->patch->blacklist) {
         for (i = 0; ctx->patch->blacklist[i]; i++) {
             if (strstr(info->dlpi_name, ctx->patch->blacklist[i])) {
-                /* module is black-listed */
-                ctx->status = UCS_OK;
+                /* shared object is black-listed */
                 return 0;
             }
         }
@@ -278,27 +276,23 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
     ctx->status = ucm_reloc_modify_got(info->dlpi_addr, info->dlpi_phdr,
                                        info->dlpi_name, info->dlpi_phnum,
                                        phsize, ctx);
-    if (ctx->status == UCS_OK) {
-        return 0; /* continue iteration and patch all objects */
-    } else {
+    if (ctx->status != UCS_OK) {
         return -1; /* stop iteration if got a real error */
     }
+
+    /* Continue iteration and patch all remaining objects. */
+    return 0;
 }
 
 /* called with lock held */
-static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
+static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch,
+                                          ElfW(Addr) libucm_base_addr)
 {
     ucm_reloc_dl_iter_context_t ctx;
-    int                         success;
 
-    /* Find default shared object, usually libc */
-    success = dladdr(getpid, &ctx.def_dlinfo);
-    if (!success) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    ctx.patch  = patch;
-    ctx.status = UCS_OK;
+    ctx.patch              = patch;
+    ctx.status             = UCS_OK;
+    ctx.libucm_base_addr   = libucm_base_addr;
 
     /* Avoid locks here because we don't modify ELF data structures.
      * Worst case the same symbol will be written more than once.
@@ -318,21 +312,25 @@ static void *ucm_dlopen(const char *filename, int flag)
     }
 
     handle = ucm_reloc_orig_dlopen(filename, flag);
-    if (handle != NULL) {
-        /*
-         * Every time a new object is loaded, we must update its relocations
-         * with our list of patches (including dlopen itself). This code is less
-         * efficient and will modify all existing objects every time, but good
-         * enough.
-         */
-        pthread_mutex_lock(&ucm_reloc_patch_list_lock);
-        ucs_list_for_each(patch, &ucm_reloc_patch_list, list) {
-            ucm_debug("in dlopen(%s), re-applying '%s' to %p", filename,
-                      patch->symbol, patch->value);
-            ucm_reloc_apply_patch(patch);
-        }
-        pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
+    if (handle == NULL) {
+        return NULL;
     }
+
+    /*
+     * Every time a new shared object is loaded, we must update its relocations
+     * with our list of patches (including dlopen itself). We have to go over
+     * the entire list of shared objects, since there more objects could be
+     * loaded due to dependencies.
+     */
+
+    pthread_mutex_lock(&ucm_reloc_patch_list_lock);
+    ucs_list_for_each(patch, &ucm_reloc_patch_list, list) {
+        ucm_debug("in dlopen(%s), re-applying '%s' to %p", filename,
+                  patch->symbol, patch->value);
+        ucm_reloc_apply_patch(patch, 0);
+    }
+    pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
+
     return handle;
 }
 
@@ -354,7 +352,7 @@ static ucs_status_t ucm_reloc_install_dlopen()
     ucm_reloc_orig_dlopen = ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
                                                ucm_reloc_dlopen_patch.value);
 
-    status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch);
+    status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch, 0);
     if (status != UCS_OK) {
         return status;
     }
@@ -368,6 +366,15 @@ static ucs_status_t ucm_reloc_install_dlopen()
 ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
 {
     ucs_status_t status;
+    Dl_info dlinfo;
+    int ret;
+
+    /* Take default symbol value from the current library */
+    ret = dladdr(ucm_reloc_modify, &dlinfo);
+    if (!ret) {
+        ucm_error("dladdr() failed to query current library");
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     /* Take lock first to handle a possible race where dlopen() is called
      * from another thread and we may end up not patching it.
@@ -379,7 +386,7 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
         goto out_unlock;
     }
 
-    status = ucm_reloc_apply_patch(patch);
+    status = ucm_reloc_apply_patch(patch, (uintptr_t)dlinfo.dli_fbase);
     if (status != UCS_OK) {
         goto out_unlock;
     }

@@ -26,23 +26,24 @@ std::string resource::name() const {
     return ss.str();
 }
 
-resource::resource() : md_name(""), tl_name(""), dev_name(""),
+resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
                        dev_type(UCT_DEVICE_TYPE_LAST)
 {
     CPU_ZERO(&local_cpus);
 }
 
-resource::resource(const std::string& md_name, const cpu_set_t& local_cpus,
-                   const std::string& tl_name, const std::string& dev_name,
-                   uct_device_type_t dev_type) :
-                   md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
-                   dev_name(dev_name), dev_type(dev_type)
+resource::resource(uct_component_h component, const std::string& md_name,
+                   const cpu_set_t& local_cpus, const std::string& tl_name,
+                   const std::string& dev_name, uct_device_type_t dev_type) :
+                   component(component), md_name(md_name), local_cpus(local_cpus),
+                   tl_name(tl_name), dev_name(dev_name), dev_type(dev_type)
 {
 }
 
-resource::resource(const uct_md_attr_t& md_attr,
+resource::resource(uct_component_h component, const uct_md_attr_t& md_attr,
                    const uct_md_resource_desc_t& md_resource,
                    const uct_tl_resource_desc_t& tl_resource) :
+                   component(component),
                    md_name(md_resource.md_name),
                    local_cpus(md_attr.local_cpus),
                    tl_name(tl_resource.tl_name),
@@ -51,11 +52,12 @@ resource::resource(const uct_md_attr_t& md_attr,
 {
 }
 
-resource_speed::resource_speed(const uct_worker_h& worker,
+resource_speed::resource_speed(uct_component_h component, const uct_worker_h& worker,
                                const uct_md_h& md, const uct_md_attr_t& md_attr,
                                const uct_md_resource_desc_t& md_resource,
                                const uct_tl_resource_desc_t& tl_resource) :
-                               resource(md_attr, md_resource, tl_resource) {
+                               resource(component, md_attr, md_resource,
+                                        tl_resource) {
     ucs_status_t status;
     uct_iface_params_t iface_params = { 0 };
     uct_iface_config_t *iface_config;
@@ -84,18 +86,74 @@ resource_speed::resource_speed(const uct_worker_h& worker,
     uct_config_release(iface_config);
 }
 
-const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
+std::string const uct_test_base::mem_type_names[] = {
+    "host",
+    "cuda",
+    "cuda-managed",
+    "rocm",
+    "rocm-managed"
+};
+
+std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
+
+    static std::vector<uct_test::md_resource> all_md_resources;
+
+    if (all_md_resources.empty()) {
+        uct_component_h *uct_components;
+        unsigned num_components;
+        ucs_status_t status;
+
+        status = uct_query_components(&uct_components, &num_components);
+        ASSERT_UCS_OK(status);
+
+        /* for RAII */
+        ucs::handle<uct_component_h*> cmpt_list(uct_components,
+                                                uct_release_component_list);
+
+        for (unsigned cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
+            uct_component_attr_t component_attr = {0};
+
+            component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+            /* coverity[var_deref_model] */
+            status = uct_component_query(uct_components[cmpt_index], &component_attr);
+            ASSERT_UCS_OK(status);
+
+            /* Save attributes before asking for MD resource list */
+            md_resource md_rsc;
+            md_rsc.cmpt      = uct_components[cmpt_index];
+            md_rsc.cmpt_attr = component_attr;
+
+            std::vector<uct_md_resource_desc_t> md_resources;
+            uct_component_attr_t component_attr_resouces = {0};
+            md_resources.resize(md_rsc.cmpt_attr.md_resource_count);
+            component_attr_resouces.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+            component_attr_resouces.md_resources = &md_resources[0];
+            status = uct_component_query(uct_components[cmpt_index],
+                                         &component_attr_resouces);
+            ASSERT_UCS_OK(status);
+
+            for (unsigned md_index = 0;
+                 md_index < md_rsc.cmpt_attr.md_resource_count; ++md_index) {
+                md_rsc.rsc_desc = md_resources[md_index];
+                all_md_resources.push_back(md_rsc);
+            }
+        }
+    }
+
+    return all_md_resources;
+}
 
 uct_test::uct_test() {
     ucs_status_t status;
     uct_md_attr_t pd_attr;
     uct_md_h pd;
 
-    status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
-                                &m_md_config);
+    status = uct_md_config_read(GetParam()->component, NULL, NULL, &m_md_config);
     ASSERT_UCS_OK(status);
 
-    status = uct_md_open(GetParam()->md_name.c_str(), m_md_config, &pd);
+    status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
+                         m_md_config, &pd);
     ASSERT_UCS_OK(status);
 
     status = uct_md_query(pd, &pd_attr);
@@ -124,8 +182,8 @@ void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
     rsc->connect_sock_addr.set_sock_addr(*connect_addr, size);
 }
 
-void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
-                                  struct ifaddrs *ifa,
+void uct_test::set_interface_rscs(const md_resource& md_rsc,
+                                  cpu_set_t local_cpus, struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
     int i;
@@ -133,8 +191,9 @@ void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
     /* Create two resources on the same interface. the first one will have the
      * ip of the interface and the second one will have INADDR_ANY */
     for (i = 0; i < 2; i++) {
-        resource rsc(std::string(md_name), local_cpus, "sockaddr",
-                     std::string(ifa->ifa_name), UCT_DEVICE_TYPE_NET);
+        resource rsc(md_rsc.cmpt, std::string(md_rsc.rsc_desc.md_name),
+                     local_cpus, "sockaddr", std::string(ifa->ifa_name),
+                     UCT_DEVICE_TYPE_NET);
 
         if (i == 0) {
             /* first rsc */
@@ -172,7 +231,8 @@ void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
     }
 }
 
-void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t local_cpus,
+void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
+                                      cpu_set_t local_cpus,
                                       std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
@@ -193,7 +253,7 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
             uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
             ucs_netif_is_active(ifa->ifa_name)) {
 
-            uct_test::set_interface_rscs(md_name, local_cpus, ifa, all_resources);
+            uct_test::set_interface_rscs(md_rsc, local_cpus, ifa, all_resources);
         }
     }
 
@@ -208,10 +268,6 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
     if (all_resources.empty()) {
         ucs_async_context_t *async;
         uct_worker_h worker;
-        uct_md_resource_desc_t *md_resources;
-        unsigned num_md_resources;
-        uct_tl_resource_desc_t *tl_resources;
-        unsigned num_tl_resources;
         ucs_status_t status;
 
         status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
@@ -220,19 +276,19 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
         status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
         ASSERT_UCS_OK(status);
 
-        status = uct_query_md_resources(&md_resources, &num_md_resources);
-        ASSERT_UCS_OK(status);
+        std::vector<md_resource> md_resources = enum_md_resources();
 
-        for (unsigned i = 0; i < num_md_resources; ++i) {
+        for (std::vector<md_resource>::iterator iter = md_resources.begin();
+             iter != md_resources.end(); ++iter) {
             uct_md_h md;
             uct_md_config_t *md_config;
-            status = uct_md_config_read(md_resources[i].md_name, NULL, NULL,
-                                        &md_config);
+            status = uct_md_config_read(iter->cmpt, NULL, NULL, &md_config);
             ASSERT_UCS_OK(status);
 
             {
                 scoped_log_handler slh(hide_errors_logger);
-                status = uct_md_open(md_resources[i].md_name, md_config, &md);
+                status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name,
+                                     md_config, &md);
             }
             uct_config_release(md_config);
             if (status != UCS_OK) {
@@ -243,6 +299,8 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             status = uct_md_query(md, &md_attr);
             ASSERT_UCS_OK(status);
 
+            uct_tl_resource_desc_t *tl_resources;
+            unsigned num_tl_resources;
             status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
             ASSERT_UCS_OK(status);
 
@@ -250,13 +308,14 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
                 if (tcp_fastest_dev && (std::string("tcp") == tl_resources[j].tl_name)) {
-                    resource_speed rsc(worker, md, md_attr,
-                                       md_resources[i], tl_resources[j]);
+                    resource_speed rsc(iter->cmpt, worker, md, md_attr,
+                                       iter->rsc_desc, tl_resources[j]);
                     if (!tcp_fastest_rsc.bw || (rsc.bw > tcp_fastest_rsc.bw)) {
                         tcp_fastest_rsc = rsc;
                     }
                 } else {
-                    resource rsc(md_attr, md_resources[i], tl_resources[j]);
+                    resource rsc(iter->cmpt, md_attr, iter->rsc_desc,
+                                 tl_resources[j]);
                     all_resources.push_back(rsc);
                 }
             }
@@ -266,15 +325,14 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             }
 
             if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                uct_test::set_sockaddr_resources(md, md_resources[i].md_name,
-                                                 md_attr.local_cpus, all_resources);
+                uct_test::set_sockaddr_resources(*iter, md, md_attr.local_cpus,
+                                                 all_resources);
             }
 
             uct_release_tl_resource_list(tl_resources);
             uct_md_close(md);
         }
 
-        uct_release_md_resource_list(md_resources);
         uct_worker_destroy(worker);
         ucs_async_context_destroy(async);
     }
@@ -365,6 +423,10 @@ bool uct_test::has_rc() const {
 
 bool uct_test::has_rc_or_dc() const {
     return (has_rc() || has_transport("dc_mlx5"));
+}
+
+bool uct_test::has_ib() const {
+    return (has_rc_or_dc() || has_ud());
 }
 
 void uct_test::stats_activate()
@@ -484,8 +546,9 @@ std::string uct_test::entity::client_priv_data = "";
 size_t uct_test::entity::client_cb_arg = 0;
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
-                         uct_iface_params_t *params, uct_md_config_t *md_config) {
-
+                         uct_iface_params_t *params, uct_md_config_t *md_config) :
+    m_resource(resource)
+{
     ucs_status_t status;
 
     if (params->open_mode == UCT_IFACE_OPEN_MODE_DEVICE) {
@@ -504,7 +567,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            UCS_THREAD_MODE_SINGLE);
 
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           resource.md_name.c_str(), md_config);
+                           resource.component, resource.md_name.c_str(),
+                           md_config);
 
     status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
@@ -584,27 +648,28 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
         } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
             cuda_mem_alloc(length, mem);
         } else {
-            UCS_TEST_ABORT("wrong memory type");
+            UCS_TEST_SKIP_R("cannot allocate " + mem_type_names[mem_type] +
+                            " memory");
         }
 
         if ((md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
             (md_attr().cap.reg_mem_types & UCS_BIT(mem_type))) {
             rkey_buffer = malloc(md_attr().rkey_packed_size);
             if (rkey_buffer == NULL) {
-                UCS_TEST_ABORT("Failed to allocake rkey buffer");
+                UCS_TEST_ABORT("Failed to allocate rkey buffer");
             }
 
             status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
             ASSERT_UCS_OK(status);
 
-            status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+            status = uct_rkey_unpack(m_resource.component, rkey_buffer,
+                                     rkey_bundle);
             ASSERT_UCS_OK(status);
 
             free(rkey_buffer);
         } else {
             rkey_bundle->handle = NULL;
             rkey_bundle->rkey   = UCT_INVALID_RKEY;
-            rkey_bundle->type   = NULL;
         }
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
@@ -617,7 +682,6 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
 
         rkey_bundle->rkey   = UCT_INVALID_RKEY;
         rkey_bundle->handle = NULL;
-        rkey_bundle->type   = NULL;
     }
 }
 
@@ -641,7 +705,7 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
     ucs_status_t status;
 
     if (rkey.rkey != UCT_INVALID_RKEY) {
-        status = uct_rkey_release(&rkey);
+        status = uct_rkey_release(m_resource.component, &rkey);
         ASSERT_UCS_OK(status);
     }
 
@@ -971,8 +1035,8 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_end         = NULL;
         m_rkey.rkey   = UCT_INVALID_RKEY;
         m_rkey.handle = NULL;
-        m_rkey.type   = NULL;
     }
+    m_rkey.type  = NULL;
     m_iov.buffer = ptr();
     m_iov.length = length();
     m_iov.count  = 1;
@@ -1160,7 +1224,7 @@ void uct_test::entity::async_wrapper::check_miss()
     ucs_async_check_miss(&m_async);
 }
 
-ucs_status_t uct_test::send_am_message(entity *e, int wnd, uint8_t am_id, int ep_idx)
+ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
 {
     ssize_t res;
 

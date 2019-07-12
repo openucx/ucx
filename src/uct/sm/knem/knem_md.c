@@ -29,14 +29,15 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
 
-    md_attr->rkey_packed_size  = sizeof(uct_knem_key_t);
-    md_attr->cap.flags         = UCT_MD_FLAG_REG |
-                                 UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
-    md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->reg_cost          = md->reg_cost;
+    md_attr->rkey_packed_size     = sizeof(uct_knem_key_t);
+    md_attr->cap.flags            = UCT_MD_FLAG_REG |
+                                    UCT_MD_FLAG_NEED_RKEY;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_reg          = ULONG_MAX;
+    md_attr->reg_cost             = md->reg_cost;
 
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
@@ -227,12 +228,12 @@ static ucs_status_t uct_knem_rkey_release(uct_md_component_t *mdc, uct_rkey_t rk
 }
 
 static uct_md_ops_t md_ops = {
-    .close             = uct_knem_md_close,
-    .query             = uct_knem_md_query,
-    .mkey_pack         = uct_knem_rkey_pack,
-    .mem_reg           = uct_knem_mem_reg,
-    .mem_dereg         = uct_knem_mem_dereg,
-    .is_mem_type_owned = (void *)ucs_empty_function_return_zero
+    .close              = uct_knem_md_close,
+    .query              = uct_knem_md_query,
+    .mkey_pack          = uct_knem_rkey_pack,
+    .mem_reg            = uct_knem_mem_reg,
+    .mem_dereg          = uct_knem_mem_dereg,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
 static inline uct_knem_rcache_region_t* uct_knem_rcache_region_from_memh(uct_mem_h memh)
@@ -269,12 +270,12 @@ static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t uct_knem_md_rcache_ops = {
-    .close             = uct_knem_md_close,
-    .query             = uct_knem_md_query,
-    .mkey_pack         = uct_knem_rkey_pack,
-    .mem_reg           = uct_knem_mem_rcache_reg,
-    .mem_dereg         = uct_knem_mem_rcache_dereg,
-    .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
+    .close              = uct_knem_md_close,
+    .query              = uct_knem_md_query,
+    .mkey_pack          = uct_knem_rkey_pack,
+    .mem_reg            = uct_knem_mem_rcache_reg,
+    .mem_dereg          = uct_knem_mem_rcache_dereg,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
 

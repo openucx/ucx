@@ -149,8 +149,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
         /* test mem type if md supports mem type
          * (or) if HOST MD can register mem type
          */
-        if (!((sender().md_attr().cap.mem_type == mem_type) ||
-            (sender().md_attr().cap.mem_type == UCT_MD_MEM_TYPE_HOST &&
+        if (!((sender().md_attr().cap.access_mem_type == mem_type) ||
+            (sender().md_attr().cap.access_mem_type == UCT_MD_MEM_TYPE_HOST &&
 		sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
         }
@@ -170,10 +170,10 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
 
     ucs::detail::message_stream ms("INFO");
 
-    ms << "memory_type:" << uct_test::uct_mem_type_names[mem_type] << " " << std::flush;
+    ms << "memory_type:" << mem_type_names[mem_type] << " " << std::flush;
 
-    /* Trim at 4GB */
-    max_length = ucs_min(max_length, 4ull * 1124 * 1024 * 1024);
+    /* Trim at 4.1 GB */
+    max_length = ucs_min(max_length, (size_t)(4.1 * (double)UCS_GBYTE));
 
     /* Trim at max. phys memory */
     max_length = ucs_min(max_length, ucs_get_phys_mem_size() / 8);
@@ -185,10 +185,10 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     max_length = ucs_min(max_length, ucs_get_memfree_size() / 4);
 
     /* For large size, slow down if needed */
-    if (max_length > 1 * 1024 * 1024) {
+    if (max_length > UCS_MBYTE) {
         max_length = max_length / ucs::test_time_multiplier();
         if (RUNNING_ON_VALGRIND) {
-            max_length = ucs_min(max_length, 20u * 1024 * 1024);
+            max_length = ucs_min(max_length, 20u * UCS_MBYTE);
         }
     }
 
@@ -210,7 +210,7 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
 
     /* How many times to repeat */
     int repeat_count;
-    repeat_count = (256 * 1024) / ((max_length + min_length) / 2);
+    repeat_count = (256 * UCS_KBYTE) / ((max_length + min_length) / 2);
     if (repeat_count > 1000) {
         repeat_count = 1000;
     }

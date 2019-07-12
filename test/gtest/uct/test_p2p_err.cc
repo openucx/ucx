@@ -85,6 +85,8 @@ public:
             }
                 break;
             }
+
+            progress();
         } while (status == UCS_ERR_NO_RESOURCE);
 
         if (status != UCS_OK && status != UCS_INPROGRESS) {
@@ -177,7 +179,7 @@ UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
 UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
     size_t max_short = sender().iface_attr().cap.put.max_short;
-    if (max_short > (2 * 1024 * 1024)) {
+    if (max_short > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_short too large");
     }
 
@@ -194,7 +196,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
 UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
     check_caps(UCT_IFACE_FLAG_PUT_BCOPY | UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN);
     size_t max_bcopy = sender().iface_attr().cap.put.max_bcopy;
-    if (max_bcopy > (2 * 1024 * 1024)) {
+    if (max_bcopy > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_bcopy too large");
     }
 
@@ -211,7 +213,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
 UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
     size_t max_short = sender().iface_attr().cap.am.max_short;
-    if (max_short > (2 * 1024 * 1024)) {
+    if (max_short > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_short too large");
     }
 
@@ -228,7 +230,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
 UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN);
     size_t max_bcopy = sender().iface_attr().cap.am.max_bcopy;
-    if (max_bcopy > (2 * 1024 * 1024)) {
+    if (max_bcopy > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_bcopy too large");
     }
 
@@ -245,7 +247,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
 UCS_TEST_P(uct_p2p_err_test, invalid_am_zcopy_hdr_length) {
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
     size_t max_hdr = sender().iface_attr().cap.am.max_hdr;
-    if (max_hdr > (2 * 1024 * 1024)) {
+    if (max_hdr > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_hdr too large");
     }
     if (max_hdr + 2 > sender().iface_attr().cap.am.max_bcopy) {

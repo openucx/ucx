@@ -10,7 +10,7 @@ if HAVE_GTEST
 
 # Set default configuration for running tests
 UCX_HANDLE_ERRORS        ?= freeze
-UCX_LOG_LEVEL            ?= info
+UCX_LOG_LEVEL            ?= warn
 UCX_LOG_PRINT_ENABLE     ?= y
 GTEST_FILTER             ?= *
 GTEST_EXTRA_ARGS         ?=
@@ -161,8 +161,10 @@ gtest_SOURCES = \
 if HAVE_IB
 gtest_SOURCES += \
 	uct/ib/test_ib.cc \
+	uct/ib/test_ib_md.cc \
 	uct/ib/test_cq_moderation.cc \
-	uct/ib/test_ib_xfer.cc
+	uct/ib/test_ib_xfer.cc \
+	uct/ib/test_ib_pkey.cc
 gtest_CPPFLAGS += \
 	$(IBVERBS_CPPFLAGS)
 gtest_LDADD += \
@@ -171,10 +173,6 @@ gtest_LDADD += \
 if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_devx.cc
-endif
-if HAVE_MLX5_HW
-gtest_SOURCES += \
-	uct/ib/test_ib_md.cc
 endif
 if HAVE_TL_UD
 gtest_SOURCES += \
@@ -217,6 +215,7 @@ noinst_HEADERS = \
 	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \
+	uct/ib/test_ib.h \
 	uct/test_amo.h \
 	uct/test_p2p_mix.h \
 	uct/test_p2p_rma.h \

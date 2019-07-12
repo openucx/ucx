@@ -63,6 +63,7 @@ enum {
     UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
+    UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
 };
 
 
@@ -116,7 +117,7 @@ KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
  */
 typedef struct uct_ib_device {
     struct ibv_context          *ibv_context;    /* Verbs context */
-    struct ibv_exp_device_attr  dev_attr;        /* Cached device attributes */
+    uct_ib_device_attr          dev_attr;        /* Cached device attributes */
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
@@ -124,7 +125,7 @@ typedef struct uct_ib_device {
     int                         async_events;    /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats);
-    struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
+    struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
     uint8_t                     atomic_arg_sizes;
     uint8_t                     atomic_arg_sizes_be;
@@ -271,7 +272,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
 
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
 
-static inline struct ibv_exp_port_attr*
+static inline struct ibv_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {
     return &dev->port_attr[port_num - dev->first_port];

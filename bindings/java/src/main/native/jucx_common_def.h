@@ -7,6 +7,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/debug/log.h>
+#include <ucs/profile/profile.h>
 
 #include <jni.h>
 
@@ -37,6 +38,7 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss, sockl
 
 struct jucx_context {
     jobject callback;
+    volatile jobject jucx_request;
 };
 
 void jucx_request_init(void *request);
@@ -45,5 +47,22 @@ void jucx_request_init(void *request);
  * @brief Get the jni env object. To be able to call java methods from ucx async callbacks.
  */
 JNIEnv* get_jni_env();
+
+/**
+ * @brief Send callback used to invoke java callback class on completion of ucp operations.
+ */
+void jucx_request_callback(void *request, ucs_status_t status);
+
+/**
+ * @brief Recv callback used to invoke java callback class on completion of ucp recv_nb operation.
+ */
+void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info);
+
+/**
+ * @brief Utility to process request logic: if request is pointer - set callback to request context.
+ * If request is status - call callback directly.
+ * Returns jucx_request object, that could be monitored on completion.
+ */
+jobject process_request(void *request, jobject callback);
 
 #endif

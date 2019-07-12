@@ -145,7 +145,7 @@ void uct_p2p_mix_test::run(unsigned count) {
     if (m_avail_send_funcs.size() == 0) {
         UCS_TEST_SKIP_R("unsupported");
     }
-    if (sender().md_attr().cap.mem_type != UCT_MD_MEM_TYPE_HOST) {
+    if (sender().md_attr().cap.access_mem_type != UCT_MD_MEM_TYPE_HOST) {
         UCS_TEST_SKIP_R("skipping on non-host memory");
     }
 

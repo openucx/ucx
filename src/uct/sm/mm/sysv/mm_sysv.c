@@ -45,6 +45,7 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
         *address_p = NULL;
     }
 
+#ifdef SHM_HUGETLB
     if (hugetlb != UCS_NO) {
         status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
                                 flags | SHM_HUGETLB, alloc_name, &shmid);
@@ -55,6 +56,7 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
 
         ucs_debug("mm failed to allocate %zu bytes with hugetlb", *length_p);
     }
+#endif
 
     if (hugetlb != UCS_YES) {
         status = ucs_sysv_alloc(length_p, SIZE_MAX, address_p, flags, alloc_name,

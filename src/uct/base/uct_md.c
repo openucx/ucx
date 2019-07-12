@@ -52,93 +52,20 @@ typedef struct uct_config_bundle {
 } uct_config_bundle_t;
 
 
-
-ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p)
+ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
+                         const uct_md_config_t *config, uct_md_h *md_p)
 {
-    UCS_MODULE_FRAMEWORK_DECLARE(uct);
-    uct_md_resource_desc_t *resources, *md_resources, *tmp;
-    unsigned i, num_resources, num_md_resources;
-    uct_md_component_t *mdc;
-    ucs_status_t status;
-
-    UCS_MODULE_FRAMEWORK_LOAD(uct, 0);
-
-    resources     = NULL;
-    num_resources = 0;
-
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        status = mdc->query_resources(&md_resources, &num_md_resources);
-        if (status != UCS_OK) {
-            ucs_debug("Failed to query %s* resources: %s", mdc->name,
-                      ucs_status_string(status));
-            continue;
-        }
-
-        if (num_md_resources == 0) {
-            ucs_free(md_resources);
-            continue;
-        }
-
-        tmp = ucs_realloc(resources,
-                          sizeof(*resources) * (num_resources + num_md_resources),
-                          "md_resources");
-        if (tmp == NULL) {
-            ucs_free(md_resources);
-            status = UCS_ERR_NO_MEMORY;
-            goto err;
-        }
-
-        for (i = 0; i < num_md_resources; ++i) {
-            ucs_assertv_always(!strncmp(mdc->name, md_resources[i].md_name,
-                                       strlen(mdc->name)),
-                               "MD name must begin with MD component name."
-                               "MD name: %s MD component name: %s ",
-                               md_resources[i].md_name, mdc->name);
-        }
-        resources = tmp;
-        memcpy(resources + num_resources, md_resources,
-               sizeof(*md_resources) * num_md_resources);
-        num_resources += num_md_resources;
-        ucs_free(md_resources);
-    }
-
-    *resources_p     = resources;
-    *num_resources_p = num_resources;
-    return UCS_OK;
-
-err:
-    ucs_free(resources);
-    return status;
-}
-
-void uct_release_md_resource_list(uct_md_resource_desc_t *resources)
-{
-    ucs_free(resources);
-}
-
-ucs_status_t uct_md_open(const char *md_name, const uct_md_config_t *config,
-                         uct_md_h *md_p)
-{
-    uct_md_component_t *mdc;
     ucs_status_t status;
     uct_md_h md;
 
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(md_name, mdc->name, strlen(mdc->name))) {
-            status = mdc->md_open(md_name, config, &md);
-            if (status != UCS_OK) {
-                return status;
-            }
-
-            ucs_assert_always(md->component == mdc);
-            *md_p = md;
-            return UCS_OK;
-        }
+    status = component->md_open(md_name, config, &md);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ucs_error("MD '%s' does not exist", md_name);
-    return UCS_ERR_NO_DEVICE;
+    *md_p = md;
+    ucs_assert_always(md->component == component);
+    return UCS_OK;
 }
 
 void uct_md_close(uct_md_h md)
@@ -361,37 +288,16 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
     return tlc->iface_open(md, worker, params, config, iface_p);
 }
 
-static uct_md_component_t *uct_find_mdc(const char *name)
-{
-    uct_md_component_t *mdc;
-
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(name, mdc->name, strlen(mdc->name))) {
-            return mdc;
-        }
-    }
-    return NULL;
-}
-
-ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
-                                const char *filename,
+ucs_status_t uct_md_config_read(uct_component_h component,
+                                const char *env_prefix, const char *filename,
                                 uct_md_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
-    uct_md_component_t *mdc;
     ucs_status_t status;
 
-    /* find the matching mdc. the search can be by md_name or by mdc_name.
-     * (depending on the caller) */
-    mdc = uct_find_mdc(name);
-    if (mdc == NULL) {
-        ucs_error("MD component does not exist for '%s'", name);
-        status = UCS_ERR_INVALID_PARAM; /* Non-existing MDC */
-        return status;
-    }
-
-    status = uct_config_read(&bundle, mdc->md_config_table,
-                             mdc->md_config_size, env_prefix, mdc->cfg_prefix);
+    status = uct_config_read(&bundle, component->md_config_table,
+                             component->md_config_size, env_prefix,
+                             component->cfg_prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read MD config");
         return status;
@@ -427,45 +333,46 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
+#if ENABLE_DEBUG_DATA
     void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
+#else
+    void *rbuf = rkey_buffer;
+#endif
     return md->ops->mkey_pack(md, memh, rbuf);
 }
 
-ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob)
+ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
+                             uct_rkey_bundle_t *rkey_ob)
 {
-    uct_md_component_t *mdc;
-    ucs_status_t status;
     char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        if (!strncmp(rkey_buffer, mdc->name, UCT_MD_COMPONENT_NAME_MAX)) {
-            status = mdc->rkey_unpack(mdc, rkey_buffer + UCT_MD_COMPONENT_NAME_MAX,
-                                      &rkey_ob->rkey, &rkey_ob->handle);
-            if (status == UCS_OK) {
-                rkey_ob->type = mdc;
-            }
-
-            return status;
+    if (ENABLE_PARAMS_CHECK && ENABLE_DEBUG_DATA) {
+        if (strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
+            ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s",
+                              (const char*)rkey_buffer);
+            ucs_error("invalid component for rkey unpack; "
+                      "expected: %s, actual: %s", mdc_name, component->name);
+            return UCS_ERR_INVALID_PARAM;
         }
+
+        rkey_buffer += UCT_MD_COMPONENT_NAME_MAX;
     }
 
-    ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s", (const char*)rkey_buffer);
-    ucs_debug("No matching MD component found for '%s'", mdc_name);
-    return UCS_ERR_UNSUPPORTED;
+    return component->rkey_unpack(component, rkey_buffer, &rkey_ob->rkey,
+                                  &rkey_ob->handle);
 }
 
-ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, uint64_t remote_addr,
-                          void **local_addr_p)
+ucs_status_t uct_rkey_ptr(uct_component_h component, uct_rkey_bundle_t *rkey_ob,
+                          uint64_t remote_addr, void **local_addr_p)
 {
-    uct_md_component_t *mdc = rkey_ob->type;
-    return mdc->rkey_ptr(mdc, rkey_ob->rkey, rkey_ob->handle, remote_addr,
-                         local_addr_p);
+    return component->rkey_ptr(component, rkey_ob->rkey, rkey_ob->handle,
+                               remote_addr, local_addr_p);
 }
 
-ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob)
+ucs_status_t uct_rkey_release(uct_component_h component,
+                              const uct_rkey_bundle_t *rkey_ob)
 {
-    uct_md_component_t *mdc = rkey_ob->type;
-    return mdc->rkey_release(mdc, rkey_ob->rkey, rkey_ob->handle);
+    return component->rkey_release(component, rkey_ob->rkey, rkey_ob->handle);
 }
 
 ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
@@ -549,9 +456,10 @@ int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
     return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
 }
 
-int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
+ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
+                                       uct_memory_type_t *mem_type_p)
 {
-    return md->ops->is_mem_type_owned(md, addr, length);
+    return md->ops->detect_memory_type(md, addr, length, mem_type_p);
 }
 
 int uct_md_is_hugetlb(uct_md_h md, uct_mem_h memh)

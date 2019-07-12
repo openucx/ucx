@@ -10,7 +10,9 @@ package org.ucx.jucx;
  */
 
 public class UcxCallback {
-    public void onSuccess() {}
+    public void onSuccess(UcxRequest request) {}
 
-    public void onError(int ucsStatus, String errorMsg) {}
+    public void onError(int ucsStatus, String errorMsg) {
+        throw new UcxException(errorMsg);
+    }
 }

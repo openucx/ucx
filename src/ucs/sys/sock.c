@@ -154,7 +154,8 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
     }
 
     if (conn_status != 0) {
-        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s", fd, strerror(conn_status));
+        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s",
+                  fd, strerror(conn_status));
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -202,10 +203,9 @@ ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
         return UCS_ERR_NO_PROGRESS;
     }
 
-    ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
-              name, fd, data, *length_p);
-    if (err_cb != NULL) {
-        err_cb(err_cb_arg, errno);
+    if ((err_cb != NULL) && (err_cb(err_cb_arg, errno) != UCS_OK)) {
+        ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
+                  name, fd, data, *length_p);
     }
     return UCS_ERR_IO_ERROR;
 }
@@ -344,13 +344,19 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
     }
 }
 
+static unsigned ucs_sockaddr_is_known_af(const struct sockaddr *sa)
+{
+    return ((sa->sa_family == AF_INET) ||
+            (sa->sa_family == AF_INET6));
+}
+
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size)
 {
     uint16_t port;
     size_t str_len;
 
-    if ((sock_addr->sa_family != AF_INET) && (sock_addr->sa_family != AF_INET6)) {
+    if (!ucs_sockaddr_is_known_af(sock_addr)) {
         ucs_strncpy_zero(str, "<invalid address family>", max_size);
         return str;
     }
@@ -373,32 +379,47 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     return str;
 }
 
-int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
-                          const struct sockaddr *sa2,
-                          ucs_status_t *status_p)
+int ucs_sockaddr_cmp(const struct sockaddr *sa1,
+                     const struct sockaddr *sa2,
+                     ucs_status_t *status_p)
 {
+    int result          = 1;
     ucs_status_t status = UCS_OK;
-    int result          = 0;
+    uint16_t port1, port2;
+
+    if (!ucs_sockaddr_is_known_af(sa1) ||
+        !ucs_sockaddr_is_known_af(sa2)) {
+        ucs_error("unknown address family: %d",
+                  !ucs_sockaddr_is_known_af(sa1) ?
+                  sa1->sa_family : sa2->sa_family);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
 
     if (sa1->sa_family != sa2->sa_family) {
+        result = (int)sa1->sa_family - (int)sa2->sa_family;
         goto out;
     }
 
     switch (sa1->sa_family) {
     case AF_INET:
-        result = ((UCS_SOCKET_INET_PORT(sa1) == UCS_SOCKET_INET_PORT(sa2)) &&
-                  (memcmp(&UCS_SOCKET_INET_ADDR(sa1), &UCS_SOCKET_INET_ADDR(sa2),
-                          sizeof(UCS_SOCKET_INET_ADDR(sa1))) == 0));
+        result = memcmp(&UCS_SOCKET_INET_ADDR(sa1),
+                        &UCS_SOCKET_INET_ADDR(sa2),
+                        sizeof(UCS_SOCKET_INET_ADDR(sa1)));
+        port1 = ntohs(UCS_SOCKET_INET_PORT(sa1));
+        port2 = ntohs(UCS_SOCKET_INET_PORT(sa2));
         break;
     case AF_INET6:
-        result = ((UCS_SOCKET_INET6_PORT(sa1) == UCS_SOCKET_INET6_PORT(sa2)) &&
-                  (memcmp(&UCS_SOCKET_INET6_ADDR(sa1), &UCS_SOCKET_INET6_ADDR(sa2),
-                          sizeof(UCS_SOCKET_INET6_ADDR(sa1))) == 0));
+        result = memcmp(&UCS_SOCKET_INET6_ADDR(sa1),
+                        &UCS_SOCKET_INET6_ADDR(sa2),
+                        sizeof(UCS_SOCKET_INET6_ADDR(sa1)));
+        port1 = ntohs(UCS_SOCKET_INET6_PORT(sa1));
+        port2 = ntohs(UCS_SOCKET_INET6_PORT(sa2));
         break;
-    default:
-        ucs_error("unknown address family: %d", sa1->sa_family);
-        status = UCS_ERR_INVALID_PARAM;
-        break;
+    }
+
+    if (!result && (port1 != port2)) {
+        result = (int)port1 - (int)port2;
     }
 
 out:

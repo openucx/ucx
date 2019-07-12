@@ -98,6 +98,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"SOCKADDR_TLS_PRIORITY", "rdmacm,*",
+   "Priority of sockaddr transports for client/server connection establishment.\n"
+   "The '*' wildcard expands to all the available sockaddr transports.",
+   ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {"SOCKADDR_AUX_TLS", "ud,ud_x",
    "Transports to use for exchanging additional address information while\n"
    "establishing client/server connection. ",
@@ -251,10 +256,12 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "shm",   { "mm", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
-  { "ud",    { "ud", "rdmacm", NULL } },
+  { "ud_v",  { "ud", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
-  { "rc",    { "rc", "ud:aux", "rdmacm", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", NULL } },
+  { "ud",    { "ud_mlx5", "ud", "rdmacm", NULL } },
+  { "rc_v",  { "rc", "ud:aux", "rdmacm", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
+  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc", "ud:aux", "rdmacm", NULL } },
   { "dc",    { "dc_mlx5", "rdmacm", NULL } },
   { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
@@ -516,13 +523,14 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
     }
 }
 
-static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
+static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
                                          ucp_rsc_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
                                          uint64_t dev_cfg_masks[],
                                          uint64_t *tl_cfg_mask)
 {
+    ucp_tl_md_t *md = &context->tl_mds[md_index];
     uct_tl_resource_desc_t *tl_resources;
     uct_tl_resource_desc_t sa_rsc;
     ucp_tl_resource_desc_t *tmp;
@@ -710,6 +718,7 @@ static void ucp_free_resources(ucp_context_t *context)
         uct_md_close(context->tl_mds[i].md);
     }
     ucs_free(context->tl_mds);
+    ucs_free(context->tl_cmpts);
 }
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
@@ -736,23 +745,27 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
      return UCS_OK;
 }
 
-static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
+static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
+                                   ucp_rsc_index_t cmpt_index,
+                                   const uct_md_resource_desc_t *md_rsc,
                                    ucp_tl_md_t *tl_md)
 {
     uct_md_config_t *md_config;
     ucs_status_t status;
 
-    /* Save MD resource */
-    tl_md->rsc = *md_rsc;
+    /* Initialize tl_md structure */
+    tl_md->cmpt_index = cmpt_index;
+    tl_md->rsc        = *md_rsc;
 
     /* Read MD configuration */
-    status = uct_md_config_read(md_rsc->md_name, NULL, NULL, &md_config);
+    status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt, NULL, NULL,
+                                &md_config);
     if (status != UCS_OK) {
         return status;
     }
 
-    /* Open MD */
-    status = uct_md_open(md_rsc->md_name, md_config, &tl_md->md);
+    status = uct_md_open(context->tl_cmpts[cmpt_index].cmpt, md_rsc->md_name,
+                         md_config, &tl_md->md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         return status;
@@ -839,13 +852,60 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
 
     /* Check if any of the context's resources are present in the sockaddr
      * auxiliary transports for the client-server flow */
-    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+    ucs_for_each_bit(tl_id, context->tl_bitmap) {
         if (ucp_is_resource_in_transports_list(context->tl_rscs[tl_id].tl_rsc.tl_name,
                                                tl_names, count, &dummy_flags,
                                                &dummy_mask)) {
             context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id);
         }
     }
+}
+
+static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
+                                        const ucp_config_t *config)
+{
+    const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
+    unsigned num_cfg_sockaddr_tls  = config->sockaddr_cm_tls.count;;
+    uint64_t sa_tls_bitmap         = 0;
+    int idx                        = 0;
+    ucp_tl_resource_desc_t *resource;
+    ucp_rsc_index_t tl_id;
+    ucp_tl_md_t *tl_md;
+    int j;
+
+    /* Check if a list of sockadrr transports exists */
+    if (config->sockaddr_cm_tls.count == 0) {
+        ucs_debug("no sockaddr transports specified");
+        return;
+    }
+
+    /* Set a bitmap of sockaddr transports */
+    for (j = 0; j < context->num_tls; ++j) {
+        resource = &context->tl_rscs[j];
+        tl_md    = &context->tl_mds[resource->md_index];
+        if (tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+            sa_tls_bitmap |= UCS_BIT(j);
+        }
+    }
+
+    /* Parse the sockadrr transports priority list */
+    for (j = 0; j < num_cfg_sockaddr_tls; j++) {
+        /* go over the priority list and find the transport's tl_id in the
+         * sockaddr tls bitmap. save the tl_id's for the client/server usage later */
+        ucs_for_each_bit(tl_id, sa_tls_bitmap) {
+            resource = &context->tl_rscs[tl_id];
+            tl_md    = &context->tl_mds[resource->md_index];
+
+            if (!strcmp(sockaddr_tl_names[j], "*") ||
+                !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name, UCT_TL_NAME_MAX)) {
+                context->config.sockaddr_tl_ids[idx] = tl_id;
+                idx++;
+                sa_tls_bitmap &= ~UCS_BIT(tl_id);
+            }
+        }
+    }
+
+    context->config.num_sockaddr_tls = idx;
 }
 
 static ucs_status_t ucp_check_resources(ucp_context_h context,
@@ -883,95 +943,164 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     return ucp_check_tl_names(context);
 }
 
-static ucs_status_t ucp_fill_resources(ucp_context_h context,
-                                       const ucp_config_t *config)
+static ucs_status_t ucp_add_component_resources(ucp_context_h context,
+                                                ucp_rsc_index_t cmpt_index,
+                                                uint64_t *dev_cfg_masks,
+                                                uint64_t *tl_cfg_mask,
+                                                const ucp_config_t *config)
 {
-    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {0};
-    uint64_t tl_cfg_mask = 0;
+    const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
+    uct_component_attr_t uct_component_attr;
     unsigned num_tl_resources;
-    unsigned num_md_resources;
-    uct_md_resource_desc_t *md_rscs;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
     uint64_t mem_type_mask;
-    uct_memory_type_t mem_type;
+    uint64_t mem_type_bitmap;
 
-    context->tl_mds      = NULL;
-    context->num_mds     = 0;
-    context->tl_rscs     = NULL;
-    context->num_tls     = 0;
-    context->num_mem_type_mds = 0;
-    context->memtype_cache = NULL;
-
-    status = ucp_check_resource_config(config);
-    if (status != UCS_OK) {
-        goto err;
-    }
 
     /* List memory domain resources */
-    status = uct_query_md_resources(&md_rscs, &num_md_resources);
+    uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    uct_component_attr.md_resources =
+                    ucs_alloca(tl_cmpt->attr.md_resource_count *
+                               sizeof(*uct_component_attr.md_resources));
+    status = uct_component_query(tl_cmpt->cmpt, &uct_component_attr);
     if (status != UCS_OK) {
-        goto err;
-    }
-
-    /* Error check: Make sure there is at least one MD */
-    if (num_md_resources == 0) {
-        ucs_error("No memory domain resources found");
-        status = UCS_ERR_NO_DEVICE;
-        goto err_release_md_resources;
-    }
-
-    /* Allocate actual array of MDs */
-    context->tl_mds = ucs_malloc(num_md_resources * sizeof(*context->tl_mds),
-                                 "ucp_tl_mds");
-    if (context->tl_mds == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_release_md_resources;
+        goto out;
     }
 
     /* Open all memory domains */
-    md_index = 0;
     mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    for (i = 0; i < num_md_resources; ++i) {
-        status = ucp_fill_tl_md(&md_rscs[i], &context->tl_mds[md_index]);
+    for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
+        md_index = context->num_mds;
+        status = ucp_fill_tl_md(context, cmpt_index,
+                                &uct_component_attr.md_resources[i],
+                                &context->tl_mds[md_index]);
         if (status != UCS_OK) {
             continue;
         }
 
         /* Add communication resources of each MD */
-        status = ucp_add_tl_resources(context, &context->tl_mds[md_index],
-                                      md_index, config, &num_tl_resources,
-                                      dev_cfg_masks, &tl_cfg_mask);
+        status = ucp_add_tl_resources(context, md_index, config,
+                                      &num_tl_resources, dev_cfg_masks,
+                                      tl_cfg_mask);
         if (status != UCS_OK) {
             uct_md_close(context->tl_mds[md_index].md);
-            goto err_free_context_resources;
+            goto out;
         }
 
         /* If the MD does not have transport resources (device or sockaddr),
          * don't use it */
         if (num_tl_resources > 0) {
             /* List of memory type MDs */
-            mem_type = context->tl_mds[md_index].attr.cap.mem_type;
-            if (!(mem_type_mask & UCS_BIT(mem_type))) {
-                context->mem_type_tl_mds[context->num_mem_type_mds] = md_index;
-                ++context->num_mem_type_mds;
-                mem_type_mask |= UCS_BIT(mem_type);
+            mem_type_bitmap = context->tl_mds[md_index].attr.cap.detect_mem_types;
+            if (~mem_type_mask & mem_type_bitmap) {
+                context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
+                ++context->num_mem_type_detect_mds;
+                mem_type_mask |= mem_type_bitmap;
             }
-            ++md_index;
             ++context->num_mds;
         } else {
             ucs_debug("closing md %s because it has no selected transport resources",
-                      md_rscs[i].md_name);
+                      context->tl_mds[md_index].rsc.md_name);
             uct_md_close(context->tl_mds[md_index].md);
         }
     }
 
-    if (context->num_mem_type_mds && context->config.ext.enable_memtype_cache) {
+    status = UCS_OK;
+out:
+    return status;
+}
+
+static ucs_status_t ucp_fill_resources(ucp_context_h context,
+                                       const ucp_config_t *config)
+{
+    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
+    uint64_t tl_cfg_mask                         = 0;
+    uct_component_h *uct_components;
+    unsigned i, num_uct_components;
+    ucs_status_t status;
+    unsigned max_mds;
+
+    context->tl_cmpts         = NULL;
+    context->num_cmpts        = 0;
+    context->tl_mds           = NULL;
+    context->num_mds          = 0;
+    context->tl_rscs          = NULL;
+    context->num_tls          = 0;
+    context->memtype_cache    = NULL;
+    context->num_mem_type_detect_mds = 0;
+
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; ++i) {
+        context->mem_type_access_tls[i] = 0;
+    }
+
+    status = ucp_check_resource_config(config);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_query_components(&uct_components, &num_uct_components);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    if (num_uct_components > UCP_MAX_RESOURCES) {
+        ucs_error("too many components: %u, max: %u", num_uct_components,
+                  UCP_MAX_RESOURCES);
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err_release_components;
+    }
+
+    context->num_cmpts = num_uct_components;
+    context->tl_cmpts  = ucs_calloc(context->num_cmpts,
+                                    sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
+    if (context->tl_cmpts == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_release_components;
+    }
+
+    max_mds = 0;
+    for (i = 0; i < context->num_cmpts; ++i) {
+        memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
+        context->tl_cmpts[i].cmpt = uct_components[i];
+        context->tl_cmpts[i].attr.field_mask =
+                        UCT_COMPONENT_ATTR_FIELD_NAME |
+                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+        status = uct_component_query(context->tl_cmpts[i].cmpt,
+                                     &context->tl_cmpts[i].attr);
+        if (status != UCS_OK) {
+            goto err_free_resources;
+        }
+
+        max_mds += context->tl_cmpts[i].attr.md_resource_count;
+    }
+
+    /* Allocate actual array of MDs */
+    context->tl_mds = ucs_malloc(max_mds * sizeof(*context->tl_mds),
+                                 "ucp_tl_mds");
+    if (context->tl_mds == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_resources;
+    }
+
+    /* Collect resources of each component */
+    for (i = 0; i < context->num_cmpts; ++i) {
+        status = ucp_add_component_resources(context, i, dev_cfg_masks,
+                                             &tl_cfg_mask, config);
+        if (status != UCS_OK) {
+            goto err_free_resources;
+        }
+    }
+
+    /* Create memtype cache if we have memory type MDs, and it's enabled by
+     * configuration
+     */
+    if (context->num_mem_type_detect_mds && context->config.ext.enable_memtype_cache) {
         status = ucs_memtype_cache_create(&context->memtype_cache);
         if (status != UCS_OK) {
             ucs_debug("could not create memtype cache for mem_type allocations");
-            goto err_free_context_resources;
+            goto err_free_resources;
         }
     }
 
@@ -984,15 +1113,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     /* Validate context resources */
     status = ucp_check_resources(context, config);
     if (status != UCS_OK) {
-        goto err_free_context_resources;
+        goto err_free_resources;
     }
 
-    uct_release_md_resource_list(md_rscs);
-
+    /* Warn about devices and transports which were specified explicitly in the
+     * configuration, but are not available
+     */
     if (config->warn_invalid_config) {
-        /* Notify the user if there are devices or transports from the command line
-         * that are not available
-         */
         for (i = 0; i < UCT_DEVICE_TYPE_LAST; ++i) {
             ucp_report_unavailable(&config->devices[i], dev_cfg_masks[i], "device");
         }
@@ -1000,13 +1127,15 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     ucp_fill_sockaddr_aux_tls_config(context, config);
+    ucp_fill_sockaddr_prio_list(context, config);
 
+    uct_release_component_list(uct_components);
     return UCS_OK;
 
-err_free_context_resources:
+err_free_resources:
     ucp_free_resources(context);
-err_release_md_resources:
-    uct_release_md_resource_list(md_rscs);
+err_release_components:
+    uct_release_component_list(uct_components);
 err:
     return status;
 }
@@ -1072,6 +1201,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucp_apply_params(context, params,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
+
     context->config.ext = config->ctx;
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
@@ -1139,7 +1269,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    /* Need to check MAX_BCOPY value if it is enabled only */
+    /* Need to check TM_SEG_SIZE value if it is enabled only */
     if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
         if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
             /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
@@ -1228,7 +1358,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     /* create memory pool for small rkeys */
     status = ucs_mpool_init(&context->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) + sizeof(uct_rkey_bundle_t) * UCP_RKEY_MPOOL_MAX_MD,
+                            sizeof(ucp_rkey_t) +
+                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
                             &ucp_rkey_mpool_ops, "ucp_rkeys");
     if (status != UCS_OK) {
@@ -1332,15 +1463,22 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 
 void ucp_context_print_info(ucp_context_h context, FILE *stream)
 {
-    ucp_rsc_index_t md_index, rsc_index;
+    ucp_rsc_index_t cmpt_index, md_index, rsc_index;
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP context\n");
     fprintf(stream, "#\n");
 
+    for (cmpt_index = 0; cmpt_index < context->num_cmpts; ++cmpt_index) {
+        fprintf(stream, "#     component %-2d :  %s\n",
+                cmpt_index, context->tl_cmpts[cmpt_index].attr.name);
+    }
+    fprintf(stream, "#\n");
+
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        fprintf(stream, "#            md %-2d :  %s\n",
-                md_index, context->tl_mds[md_index].rsc.md_name);
+        fprintf(stream, "#            md %-2d :  component %-2d %s \n",
+                md_index, context->tl_mds[md_index].cmpt_index,
+                context->tl_mds[md_index].rsc.md_name);
     }
 
     fprintf(stream, "#\n");
@@ -1358,3 +1496,15 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 }
 
+uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
+{
+    ucp_rsc_index_t rsc_index;
+
+    for (rsc_index = 0; rsc_index < context->num_mds; ++rsc_index) {
+        if (strstr(context->tl_mds[rsc_index].rsc.md_name, md_name)) {
+            return context->tl_mds[rsc_index].md;
+        }
+    }
+
+    return NULL;
+}

@@ -289,9 +289,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     /* Query all ports */
     for (i = 0; i < dev->num_ports; ++i) {
-        IBV_EXP_PORT_ATTR_SET_COMP_MASK(&dev->port_attr[i]);
-        ret = ibv_exp_query_port(dev->ibv_context, i + dev->first_port,
-                                 &dev->port_attr[i]);
+        ret = ibv_query_port(dev->ibv_context, i + dev->first_port,
+                             &dev->port_attr[i]);
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
             status = UCS_ERR_IO_ERROR;

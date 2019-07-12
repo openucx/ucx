@@ -1568,7 +1568,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker);
  * waiting on a file descriptor from @ref ucp_worker_get_efd to return, even
  * if no event from the underlying interfaces has taken place.
  *
- * @note It’s safe to use this routine from any thread, even if UCX is compiled
+ * @note It's safe to use this routine from any thread, even if UCX is compiled
  *       without multi-threading support and/or initialized with any value of
  *       @ref ucp_params_t::mt_workers_shared and
  *       @ref ucp_worker_params_t::thread_mode parameters
@@ -2060,8 +2060,10 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * buffer.
  *
  * @note The application is responsible for releasing the RKEY object when
- *       it is no longer needed by calling the @ref ucp_rkey_destroy
+ *       it is no longer needed, by calling the @ref ucp_rkey_destroy
  *       "ucp_rkey_destroy()" routine.
+ * @note The remote key object can be used for communications only on the
+ *       endpoint on which it was unpacked.
  *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.

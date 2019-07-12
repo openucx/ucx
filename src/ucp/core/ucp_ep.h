@@ -15,6 +15,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/stats/stats.h>
 #include <ucs/datastruct/strided_alloc.h>
+#include <ucs/debug/assert.h>
 #include <ucp/api/ucpx.h>
 
 #define UCP_MAX_IOV                16UL
@@ -25,7 +26,7 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
-#if ENABLE_DEBUG_DATA || ENABLE_ASSERT
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;
 #else
 typedef uint16_t                   ucp_ep_flags_t;
@@ -131,6 +132,11 @@ typedef struct ucp_ep_config_key {
      */
     ucp_md_map_t           reachable_md_map;
 
+    /* Array with popcount(reachable_md_map) elements, each entry holds the local
+     * component index to be used for unpacking remote key from each set bit in
+     * reachable_md_map */
+    ucp_rsc_index_t        *dst_md_cmpts;
+
     /* Error handling mode */
     ucp_err_handling_mode_t    err_mode;
     ucs_status_t               status;
@@ -173,6 +179,15 @@ typedef struct ucp_ep_msg_config {
 } ucp_ep_msg_config_t;
 
 
+/*
+ * Thresholds with and without non-host memory
+ */
+typedef struct ucp_memtype_thresh {
+        ssize_t            memtype_on;
+        ssize_t            memtype_off;
+} ucp_memtype_thresh_t;
+
+
 typedef struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -206,7 +221,8 @@ typedef struct ucp_ep_config {
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
 
-        ssize_t             max_eager_short;
+        /* Maximal size for eager short. */
+        ucp_memtype_thresh_t max_eager_short;
 
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
@@ -238,8 +254,9 @@ typedef struct ucp_ep_config {
         } rndv_send_nbr;
 
         struct {
-            /* Maximal size for eager short */
-            ssize_t         max_eager_short;
+            /* Maximal size for eager short. */
+            ucp_memtype_thresh_t max_eager_short;
+
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
             /* Maximal total size for RNDV offload */
@@ -345,6 +362,10 @@ typedef struct ucp_wireup_client_data {
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
     uct_conn_request_h          uct_req;
+    uint8_t                     wiface_idx;  /**< Index of the listening wiface in
+                                                  the array of listening wifaces,
+                                                  on which the connection request
+                                                  was received on */
     ucp_wireup_client_data_t    client_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -403,7 +424,10 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 
-void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
+ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
+                                const ucp_ep_config_key_t *key);
+
+void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

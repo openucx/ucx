@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
+
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -203,6 +204,8 @@ double watchdog_get_timeout();
 int watchdog_get_kill_signal();
 int watchdog_start();
 void watchdog_stop();
+
+void analyze_test_results();
 
 class test_abort_exception : public std::exception {
 };
@@ -419,10 +422,25 @@ private:
     std::string       m_old_value;
 };
 
+class ucx_env_cleanup {
+public:
+    ucx_env_cleanup();
+    ~ucx_env_cleanup();
+private:
+    std::vector<std::string> ucx_env_storage;
+};
+
 template <typename T>
 std::string to_string(const T& value) {
     std::stringstream ss;
     ss << value;
+    return ss.str();
+}
+
+template <typename T>
+std::string to_hex_string(const T& value) {
+    std::stringstream ss;
+    ss << std::hex << value;
     return ss.str();
 }
 

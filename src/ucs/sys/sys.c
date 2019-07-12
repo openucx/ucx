@@ -51,7 +51,7 @@ const char *ucs_get_tmpdir()
 
 const char *ucs_get_host_name()
 {
-    static char hostname[256] = {0};
+    static char hostname[HOST_NAME_MAX] = {0};
 
     if (*hostname == 0) {
         gethostname(hostname, sizeof(hostname));
@@ -556,7 +556,6 @@ static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
                  ", total shared memory pages in the system (%lu) would exceed the"
                  " limit in /proc/sys/kernel/shmall (=%lu)",
                  new_shm_tot, ipc_info->shmall);
-        p += strlen(p);
     }
 }
 
@@ -643,7 +642,6 @@ static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
     /* default error message if no useful information was added to the string */
     if (p == errp) {
         snprintf(p, endp - p, ", please check shared memory limits by 'ipcs -l'");
-        p += strlen(p);
     }
 }
 
@@ -651,12 +649,15 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
                             int flags, const char *alloc_name, int *shmid)
 {
     char error_string[256];
+#ifdef SHM_HUGETLB
     ssize_t huge_page_size;
+#endif
     size_t alloc_size;
     int sys_errno;
     void *ptr;
     int ret;
 
+#ifdef SHM_HUGETLB
     if (flags & SHM_HUGETLB) {
         huge_page_size = ucs_get_huge_page_size();
         if (huge_page_size <= 0) {
@@ -664,10 +665,11 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
             return UCS_ERR_NO_MEMORY; /* Huge pages not supported */
         }
     }
-
     if (flags & SHM_HUGETLB) {
         alloc_size = ucs_align_up(*size, huge_page_size);
-    } else {
+    } else
+#endif
+    {
         alloc_size = ucs_align_up(*size, ucs_get_page_size());
     }
 
@@ -684,7 +686,10 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
         switch (sys_errno) {
         case ENOMEM:
         case EPERM:
-            if (!(flags & SHM_HUGETLB)) {
+#ifdef SHM_HUGETLB
+            if (!(flags & SHM_HUGETLB))
+#endif
+	    {
                 ucs_error("%s", error_string);
             }
             return UCS_ERR_NO_MEMORY;
@@ -993,58 +998,4 @@ void ucs_sys_free(void *ptr, size_t length)
             ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
         }
     }
-}
-
-void ucs_empty_function()
-{
-}
-
-unsigned ucs_empty_function_return_zero()
-{
-    return 0;
-}
-
-int64_t ucs_empty_function_return_zero_int64()
-{
-    return 0;
-}
-
-ucs_status_t ucs_empty_function_return_success()
-{
-    return UCS_OK;
-}
-
-ucs_status_t ucs_empty_function_return_unsupported()
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-ucs_status_t ucs_empty_function_return_inprogress()
-{
-    return UCS_INPROGRESS;
-}
-
-ucs_status_t ucs_empty_function_return_no_resource()
-{
-    return UCS_ERR_NO_RESOURCE;
-}
-
-ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource()
-{
-    return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
-}
-
-ucs_status_t ucs_empty_function_return_ep_timeout()
-{
-    return UCS_ERR_ENDPOINT_TIMEOUT;
-}
-
-ssize_t ucs_empty_function_return_bc_ep_timeout()
-{
-    return UCS_ERR_ENDPOINT_TIMEOUT;
-}
-
-ucs_status_t ucs_empty_function_return_busy()
-{
-    return UCS_ERR_BUSY;
 }

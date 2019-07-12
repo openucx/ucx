@@ -291,7 +291,7 @@ UCS_TEST_P(test_ud, flush_iface) {
     validate_flush();
 }
 
-#ifdef UCT_UD_EP_DEBUG_HOOKS
+#if UCT_UD_EP_DEBUG_HOOKS
 
 /* disable ack req,
  * send full window,
@@ -461,7 +461,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     set_tx_win(m_e1, 10);
 
     do {
-        status = send_am_message(m_e1, 1, 0);
+        status = send_am_message(m_e1);
         progress();
     } while (status == UCS_ERR_NO_RESOURCE);
     ASSERT_UCS_OK(status);
@@ -477,7 +477,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     twait(500);
     short_progress_loop();
 
-    status = send_am_message(m_e1, 1, 0);
+    status = send_am_message(m_e1);
     ASSERT_UCS_OK(status);
 
     short_progress_loop();
@@ -923,7 +923,7 @@ UCS_TEST_P(test_ud, res_skb_tx) {
     }
 }
 
-#ifdef UCT_UD_EP_DEBUG_HOOKS
+#if UCT_UD_EP_DEBUG_HOOKS
 /* Simulate loss of ctl packets during simultaneous CREQs.
  * Use-case: CREQ and CREP packets from m_e2 to m_e1 are lost.
  * Check: that both eps (m_e1 and m_e2) are connected finally */

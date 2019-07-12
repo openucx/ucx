@@ -10,7 +10,7 @@
 
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
-
+#include <sys/eventfd.h>
 
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
@@ -75,10 +75,13 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h iface,
     iface_attr->device_addr_len         = sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                          UCT_IFACE_FLAG_PENDING   |
-                                          UCT_IFACE_FLAG_GET_ZCOPY |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY;
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
+                                          UCT_IFACE_FLAG_PENDING                |
+                                          UCT_IFACE_FLAG_GET_ZCOPY              |
+                                          UCT_IFACE_FLAG_PUT_ZCOPY              |
+                                          UCT_IFACE_FLAG_EVENT_SEND_COMP        |
+                                          UCT_IFACE_FLAG_EVENT_RECV;
 
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;
@@ -123,14 +126,65 @@ uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_INPROGRESS;
 }
 
+static ucs_status_t uct_cuda_ipc_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+
+    if (-1 == iface->eventfd) {
+        iface->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+        if (iface->eventfd == -1) {
+            ucs_error("Failed to create event fd: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
+    *fd_p = iface->eventfd;
+    return UCS_OK;
+}
+
+static void uct_cuda_ipc_common_cb(void *cuda_ipc_iface)
+{
+    uct_cuda_ipc_iface_t *iface = cuda_ipc_iface;
+    uint64_t dummy = 1;
+    int ret;
+
+    /* No error handling yet */
+    do {
+        ret = write(iface->eventfd, &dummy, sizeof(dummy));
+        if (ret == sizeof(dummy)) {
+            return;
+        } else if (ret == -1) {
+            if (errno == EAGAIN) {
+                continue;
+            } else if (errno != EINTR) {
+                ucs_error("Signaling wakeup failed: %m");
+                return;
+            }
+        } else {
+            ucs_assert(ret == 0);
+        }
+    } while (ret == 0);
+}
+
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+static void CUDA_CB myHostFn(void *iface)
+#else
+static void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
+                                   void *iface)
+#endif
+{
+    uct_cuda_ipc_common_cb(iface);
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
-                              ucs_queue_head_t *event_q, unsigned max_events)
+                              ucs_queue_head_t *event_q)
 {
     unsigned count = 0;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     ucs_queue_iter_t iter;
     ucs_status_t status;
+    unsigned max_events = iface->config.max_poll;
 
     ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
         status = UCT_CUDADRV_FUNC(cuEventQuery(cuda_ipc_event->event));
@@ -165,10 +219,61 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
 static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    unsigned max_events         = iface->config.max_poll;
 
-    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q,
-                                         max_events);
+    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q);
+}
+
+static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
+                                                    unsigned events)
+{
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    int ret;
+    int i;
+    uint64_t dummy;
+    ucs_status_t status;
+
+    if (uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q)) {
+        return UCS_ERR_BUSY;
+    }
+
+    ucs_assert(iface->eventfd != -1);
+
+    do {
+        ret = read(iface->eventfd, &dummy, sizeof(dummy));
+        if (ret == sizeof(dummy)) {
+            status = UCS_ERR_BUSY;
+            return status;
+        } else if (ret == -1) {
+            if (errno == EAGAIN) {
+                break;
+            } else if (errno != EINTR) {
+                ucs_error("read from internal event fd failed: %m");
+                status = UCS_ERR_IO_ERROR;
+                return status;
+            } else {
+                return UCS_ERR_BUSY;
+            }
+        } else {
+            ucs_assert(ret == 0);
+        }
+    } while (ret != 0);
+
+    if (iface->streams_initialized) {
+        for (i = 0; i < iface->device_count; i++) {
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+            status = UCT_CUDADRV_FUNC(cuLaunchHostFunc(iface->stream_d2d[i],
+                                                       myHostFn, iface));
+#else
+            status = UCT_CUDADRV_FUNC(cuStreamAddCallback(iface->stream_d2d[i],
+                                                          myHostCallback, iface,
+                                                          0));
+#endif
+            if (UCS_OK != status) {
+                return status;
+            }
+        }
+    }
+    return UCS_OK;
 }
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
@@ -185,6 +290,8 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_cuda_ipc_iface_progress,
+    .iface_event_fd_get       = uct_cuda_ipc_iface_event_fd_get,
+    .iface_event_arm          = uct_cuda_ipc_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t),
     .iface_query              = uct_cuda_ipc_iface_query,
     .iface_get_device_address = uct_cuda_ipc_iface_get_device_address,
@@ -295,8 +402,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_IO_ERROR;
     }
 
+    self->eventfd = -1;
     self->streams_initialized = 0;
     ucs_queue_head_init(&self->outstanding_d2d_event_q);
+
     return UCS_OK;
 }
 
@@ -318,6 +427,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_mpool_cleanup(&self->event_desc, 1);
+    if (self->eventfd != -1) {
+        close(self->eventfd);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_iface_t, uct_base_iface_t);

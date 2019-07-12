@@ -145,9 +145,9 @@ public class UcpWorkerParams extends UcxParams {
      *
      * <p>Events on the worker will be reported on the provided event file descriptor.
      * The provided file descriptor must be capable of aggregating notifications
-     * for arbitrary events, for example @c epoll(7) on Linux systems.
+     * for arbitrary events, for example epoll(7) on Linux systems.
      *
-     * <p>{@link userData} will be used as the event user-data on systems which
+     * <p>{@code userData} will be used as the event user-data on systems which
      * support it. For example, on Linux, it will be placed in
      * epoll_data_t::ptr, when returned from epoll_wait(2).</p>
      *

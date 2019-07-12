@@ -77,7 +77,8 @@ enum {
 
 enum {
     UCT_IB_MLX5_CAP_GENERAL = 0,
-    UCT_IB_MLX5_CAP_ATOMIC  = 3
+    UCT_IB_MLX5_CAP_ODP     = 2,
+    UCT_IB_MLX5_CAP_ATOMIC  = 3,
 };
 
 struct uct_ib_mlx5_cmd_hca_cap_bits {
@@ -423,8 +424,40 @@ struct uct_ib_mlx5_atomic_caps_bits {
     uint8_t    reserved_at_2c0[0x540];
 };
 
+struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
+    uint8_t         send[0x1];
+    uint8_t         receive[0x1];
+    uint8_t         write[0x1];
+    uint8_t         read[0x1];
+    uint8_t         atomic[0x1];
+    uint8_t         srq_receive[0x1];
+    uint8_t         reserved_at_6[0x1a];
+};
+
+struct uct_ib_mlx5_odp_cap_bits {
+    uint8_t         reserved_at_0[0x40];
+
+    uint8_t         sig[0x1];
+    uint8_t         reserved_at_41[0x1f];
+
+    uint8_t         reserved_at_60[0x20];
+
+    struct uct_ib_mlx5_odp_per_transport_service_cap_bits rc_odp_caps;
+
+    struct uct_ib_mlx5_odp_per_transport_service_cap_bits uc_odp_caps;
+
+    struct uct_ib_mlx5_odp_per_transport_service_cap_bits ud_odp_caps;
+
+    struct uct_ib_mlx5_odp_per_transport_service_cap_bits xrc_odp_caps;
+
+    struct uct_ib_mlx5_odp_per_transport_service_cap_bits dc_odp_caps;
+
+    uint8_t         reserved_at_100[0x700];
+};
+
 union uct_ib_mlx5_hca_cap_union_bits {
     struct uct_ib_mlx5_cmd_hca_cap_bits cmd_hca_cap;
+    struct uct_ib_mlx5_odp_cap_bits odp_cap;
     struct uct_ib_mlx5_atomic_caps_bits atomic_caps;
     uint8_t    reserved_at_0[0x8000];
 };

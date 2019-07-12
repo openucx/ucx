@@ -357,8 +357,6 @@ void ucs_memtrack_cleanup()
         return;
     }
 
-    pthread_mutex_lock(&ucs_memtrack_context.lock);
-
     ucs_memtrack_generate_report();
 
     /* disable before releasing the stats node */
@@ -373,8 +371,6 @@ void ucs_memtrack_cleanup()
     /* destroy hash tables */
     kh_destroy_inplace(ucs_memtrack_entry_hash, &ucs_memtrack_context.entries);
     kh_destroy_inplace(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs);
-
-    pthread_mutex_unlock(&ucs_memtrack_context.lock);
 }
 
 int ucs_memtrack_is_enabled()

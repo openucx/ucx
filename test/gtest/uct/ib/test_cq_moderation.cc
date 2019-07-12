@@ -12,13 +12,12 @@ extern "C" {
 #include <poll.h>
 #include <infiniband/verbs.h>
 
-static const unsigned nsec_per_usec = (UCS_NSEC_PER_SEC / UCS_USEC_PER_SEC);
-
-/* wait for 3 usecs to get statistics */
-static const unsigned long test_period = (3ul * UCS_USEC_PER_SEC);
-static const unsigned moderation_period = 1000; /* usecs */
-static const unsigned event_limit = (40 * test_period / moderation_period / nsec_per_usec);
-static const unsigned max_repeats = 1000;
+/* wait for 1 sec to get statistics */
+static const unsigned long test_period_usec = (1ul * UCS_USEC_PER_SEC);
+static const unsigned moderation_period_usec = 1000; /* usecs */
+/* use multiplier 2 because we have same iface to send/recv which may produce 2x events */
+static const unsigned event_limit = (2 * test_period_usec / moderation_period_usec);
+static const unsigned max_repeats = 60; /* max 3 minutes per test */
 
 class test_uct_cq_moderation : public uct_test {
 protected:
@@ -28,15 +27,18 @@ protected:
             UCS_TEST_SKIP_R("skipping on valgrind");
         }
 
+        if (!has_rc() && !has_ud()) {
+            UCS_TEST_SKIP_R("unsupported");
+        }
+
         uct_test::init();
 
-        set_config("IB_TX_CQ_MODERATION=1");
-        if (has_rc_or_dc()) {
+        if (has_rc()) {
             set_config("RC_FC_ENABLE=n");
         }
 
-        set_config(std::string("IB_TX_EVENT_MOD_PERIOD=") + ucs::to_string(moderation_period) + "us");
-        set_config(std::string("IB_RX_EVENT_MOD_PERIOD=") + ucs::to_string(moderation_period) + "us");
+        set_config(std::string("IB_TX_EVENT_MOD_PERIOD=") + ucs::to_string(moderation_period_usec) + "us");
+        set_config(std::string("IB_RX_EVENT_MOD_PERIOD=") + ucs::to_string(moderation_period_usec) + "us");
 
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
@@ -135,7 +137,7 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
 
         ucs_time_t tm = ucs_get_time();
 
-        while ((ucs_get_time() - tm) < test_period) {
+        while ((ucs_time_to_usec(ucs_get_time()) - ucs_time_to_usec(tm)) < test_period_usec) {
             polled = poll(&pfd, 1, 0);
             if (polled > 0) {
                 events++;
@@ -150,6 +152,8 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
             ASSERT_UCS_OK(status);
         }
         m_sender->flush();
+        UCS_TEST_MESSAGE << "iteration: " << i + 1 << ", events: " << events
+                         << ", limit: " << event_limit;
         if (events <= event_limit) {
             break;
         }

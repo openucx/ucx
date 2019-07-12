@@ -10,6 +10,7 @@ import org.ucx.jucx.ucp.*;
 import org.ucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.*;
 
@@ -81,6 +82,38 @@ public class UcpWorkerTest {
         ByteBuffer workerAddress = worker.getAddress();
         assertNotNull(workerAddress);
         assertTrue(workerAddress.capacity() > 0);
+        worker.close();
+        context.close();
+    }
+
+    @Test
+    public void testWorkerSleepWakeup() throws InterruptedException {
+        UcpContext context = new UcpContext(new UcpParams()
+            .requestRmaFeature().requestWakeupFeature());
+        UcpWorker worker = context.newWorker(
+            new UcpWorkerParams().requestWakeupRMA());
+
+        AtomicBoolean success = new AtomicBoolean(false);
+        Thread workerProgressThread = new Thread() {
+            @Override
+            public void run() {
+                while (!isInterrupted()) {
+                    if (worker.progress() == 0) {
+                        worker.waitForEvents();
+                    }
+                }
+                success.set(true);
+            }
+        };
+
+        workerProgressThread.start();
+
+        workerProgressThread.interrupt();
+        worker.signal();
+
+        workerProgressThread.join();
+        assertTrue(success.get());
+
         worker.close();
         context.close();
     }

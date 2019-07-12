@@ -20,7 +20,7 @@ static uct_md_ops_t uct_sockcm_md_ops = {
     .close                  = uct_sockcm_md_close,
     .query                  = uct_sockcm_md_query,
     .is_sockaddr_accessible = uct_sockcm_is_sockaddr_accessible,
-    .is_mem_type_owned      = (void *)ucs_empty_function_return_zero,
+    .detect_memory_type     = ucs_empty_function_return_unsupported,
 };
 
 static void uct_sockcm_md_close(uct_md_h md)
@@ -31,14 +31,15 @@ static void uct_sockcm_md_close(uct_md_h md)
 
 ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags         = UCT_MD_FLAG_SOCKADDR;
-    md_attr->cap.reg_mem_types = 0;
-    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
-    md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = 0;
-    md_attr->rkey_packed_size  = 0;
-    md_attr->reg_cost.overhead = 0;
-    md_attr->reg_cost.growth   = 0;
+    md_attr->cap.flags            = UCT_MD_FLAG_SOCKADDR;
+    md_attr->cap.reg_mem_types    = 0;
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_reg          = 0;
+    md_attr->rkey_packed_size     = 0;
+    md_attr->reg_cost.overhead    = 0;
+    md_attr->reg_cost.growth      = 0;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -149,6 +150,7 @@ uct_sockcm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
     md->super.ops            = &uct_sockcm_md_ops;
     md->super.component      = &uct_sockcm_mdc;
 
+    /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
     status = UCS_OK;
 

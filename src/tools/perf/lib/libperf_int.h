@@ -74,6 +74,7 @@ struct ucx_perf_context {
     union {
         struct {
             ucs_async_context_t  async;
+            uct_component_h      cmpt;
             uct_md_h             md;
             uct_worker_h         worker;
             uct_iface_h          iface;

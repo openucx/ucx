@@ -38,6 +38,7 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
     double                        peer_timeout;
+    double                        slow_timer_tick;
     double                        slow_timer_backoff;
     int                           dgid_check;
 } uct_ud_iface_config_t;
@@ -70,7 +71,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
 
 
 
-#ifdef UCT_UD_EP_DEBUG_HOOKS
+#if UCT_UD_EP_DEBUG_HOOKS
 
 typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t *neth);
 
@@ -107,6 +108,8 @@ typedef struct uct_ud_iface_ops {
     void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
                                         int solicited);
     void                      (*ep_free)(uct_ep_h ep);
+    ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
+                                           struct ibv_qp **qp_p);
 } uct_ud_iface_ops_t;
 
 struct uct_ud_iface {

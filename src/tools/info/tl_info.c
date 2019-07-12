@@ -34,33 +34,13 @@
         PRINT_ZCAP_NO_CHECK(_name, _min, _max, _max_iov) \
     }
 
-#define PRINT_ATOMIC_CAP(_name, _cap_flags) \
-    if ((_cap_flags) & (UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) { \
-        char *s = strduplower(#_name); \
-        char *domain = ""; \
-        if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_CPU) { \
-            domain = ", cpu"; \
-        } else if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_DEVICE) { \
-            domain = ", device"; \
-        } \
-        if (ucs_test_all_flags(_cap_flags, \
-                               UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) \
-        { \
-            printf("#         %12s: 32, 64 bit%s (deprecated)\n", s, domain); \
-        } else { \
-            printf("#         %12s: %d bit%s (deprecated)\n", s, \
-                   ((_cap_flags) & UCT_IFACE_FLAG_##_name##32) ? 32 : 64, domain); \
-        } \
-        free(s); \
-    }
-
 #define PRINT_ATOMIC_POST(_name, _cap)                   \
     print_atomic_info(UCT_ATOMIC_OP_##_name, #_name, "", \
-                      _cap.atomic32.op_flags, _cap.atomic32.op_flags);
+                      _cap.atomic32.op_flags, _cap.atomic64.op_flags);
 
 #define PRINT_ATOMIC_FETCH(_name, _cap, _suffix) \
     print_atomic_info(UCT_ATOMIC_OP_##_name, #_name, _suffix, \
-                      _cap.atomic32.fop_flags, _cap.atomic32.fop_flags);
+                      _cap.atomic32.fop_flags, _cap.atomic64.fop_flags);
 
 static char *strduplower(const char *str)
 {
@@ -148,7 +128,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         return;
     }
 
-    printf("#   Device: %s\n", resource->dev_name);
+    printf("#   Transport: %s\n", resource->tl_name);
+    printf("#      Device: %s\n", resource->dev_name);
 
     status = uct_iface_open(md, worker, &iface_params, iface_config, &iface);
     uct_config_release(iface_config);
@@ -242,7 +223,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             iface_attr.cap.atomic64.fop_flags) {
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
                 printf("#               domain: device\n");
-            } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+            }
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
                 printf("#               domain: cpu\n");
             }
 
@@ -263,14 +245,14 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_EP |
                                     UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-                strncat(buf, " to ep,", sizeof(buf) - 1);
+                strncat(buf, " to ep,", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-                strncat(buf, " to iface,", sizeof(buf) - 1);
+                strncat(buf, " to iface,", sizeof(buf) - strlen(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
         } else {
-            strncat(buf, " none", sizeof(buf) - 1);
+            strncat(buf, " none", sizeof(buf) - strlen(buf) - 1);
         }
         printf("#           connection:%s\n", buf);
 
@@ -295,31 +277,31 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF)) {
-                strncat(buf, " buffer (", sizeof(buf) - 1);
+                strncat(buf, " buffer (", sizeof(buf) - strlen(buf) - 1);
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF) {
-                    strncat(buf, "short,", sizeof(buf) - 1);
+                    strncat(buf, "short,", sizeof(buf) - strlen(buf) - 1);
                 }
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF) {
-                    strncat(buf, "bcopy,", sizeof(buf) - 1);
+                    strncat(buf, "bcopy,", sizeof(buf) - strlen(buf) - 1);
                 }
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF) {
-                    strncat(buf, "zcopy,", sizeof(buf) - 1);
+                    strncat(buf, "zcopy,", sizeof(buf) - strlen(buf) - 1);
                 }
                 buf[strlen(buf) - 1] = '\0';
-                strncat(buf, "),", sizeof(buf) - 1);
+                strncat(buf, "),", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_AM_ID) {
-                strncat(buf, " active-message id,", sizeof(buf) - 1);
+                strncat(buf, " active-message id,", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM) {
-                strncat(buf, " remote access,", sizeof(buf) - 1);
+                strncat(buf, " remote access,", sizeof(buf) - strlen(buf) - 1);
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) {
-                strncat(buf, " peer failure,", sizeof(buf) - 1);
+                strncat(buf, " peer failure,", sizeof(buf) - strlen(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
         } else {
-            strncat(buf, " none", sizeof(buf) - 1);
+            strncat(buf, " none", sizeof(buf) - strlen(buf) - 1);
         }
         printf("#       error handling:%s\n", buf);
     }
@@ -351,8 +333,6 @@ static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
     }
 
     printf("#\n");
-    printf("#   Transport: %s\n", tl_name);
-    printf("#\n");
 
     if (num_resources == 0) {
         printf("# (No supported devices found)\n");
@@ -368,7 +348,9 @@ out:
     return status;
 }
 
-static void print_md_info(const char *md_name, int print_opts,
+static void print_md_info(uct_component_h component,
+                          const uct_component_attr_t *component_attr,
+                          const char *md_name, int print_opts,
                           ucs_config_print_flags_t print_flags,
                           const char *req_tl_name)
 {
@@ -380,12 +362,12 @@ static void print_md_info(const char *md_name, int print_opts,
     uct_md_attr_t md_attr;
     uct_md_h md;
 
-    status = uct_md_config_read(md_name, NULL, NULL, &md_config);
+    status = uct_md_config_read(component, NULL, NULL, &md_config);
     if (status != UCS_OK) {
         goto out;
     }
 
-    status = uct_md_open(md_name, md_config, &md);
+    status = uct_md_open(component, md_name, md_config, &md);
     uct_config_release(md_config);
     if (status != UCS_OK) {
         printf("# < failed to open memory domain %s >\n", md_name);
@@ -419,7 +401,7 @@ static void print_md_info(const char *md_name, int print_opts,
     } else {
         printf("#\n");
         printf("# Memory domain: %s\n", md_name);
-        printf("#            component: %s\n", md_attr.component_name);
+        printf("#     Component: %s\n", component_attr->name);
         if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
             printf("#             allocate: %s\n",
                    size_limit_to_str(0, md_attr.cap.max_alloc));
@@ -438,6 +420,9 @@ static void print_md_info(const char *md_name, int print_opts,
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
             printf("#           local memory handle is required for zcopy\n");
+        }
+        if (md_attr.cap.flags & UCT_MD_FLAG_RKEY_PTR) {
+            printf("#           rkey_ptr is supported\n");
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
             printf("#           supports client-server connection establishment via sockaddr\n");
@@ -479,25 +464,59 @@ out:
     ;
 }
 
+static void print_uct_component_info(uct_component_h component,
+                                     int print_opts,
+                                     ucs_config_print_flags_t print_flags,
+                                     const char *req_tl_name)
+{
+    uct_component_attr_t component_attr;
+    ucs_status_t status;
+    unsigned i;
+
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME  |
+                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+    status = uct_component_query(component, &component_attr);
+    if (status != UCS_OK) {
+        printf("#   < failed to query component >\n");
+        return;
+    }
+
+    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
+                                         component_attr.md_resource_count);
+    status = uct_component_query(component, &component_attr);
+    if (status != UCS_OK) {
+        printf("#   < failed to query component resources >\n");
+        return;
+    }
+
+    for (i = 0; i < component_attr.md_resource_count; ++i) {
+        print_md_info(component, &component_attr,
+                      component_attr.md_resources[i].md_name,
+                      print_opts, print_flags, req_tl_name);
+    }
+}
+
 void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
                     const char *req_tl_name)
 {
-    uct_md_resource_desc_t *resources;
-    unsigned i, num_resources;
+    uct_component_h *components;
+    unsigned i, num_components;
     ucs_status_t status;
 
-    status = uct_query_md_resources(&resources, &num_resources);
+    status = uct_query_components(&components, &num_components);
     if (status != UCS_OK) {
-        printf("#   < failed to query MD resources >\n");
+        printf("#   < failed to query UCT components >\n");
         return;
     }
 
     if (print_opts & PRINT_DEVICES) {
-        for (i = 0; i < num_resources; ++i) {
-            print_md_info(resources[i].md_name, print_opts, print_flags, req_tl_name);
+        for (i = 0; i < num_components; ++i) {
+            print_uct_component_info(components[i], print_opts, print_flags,
+                                     req_tl_name);
         }
     }
 
-    uct_release_md_resource_list(resources);
+    uct_release_component_list(components);
 }
 

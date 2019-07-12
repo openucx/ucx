@@ -9,7 +9,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/debug/debug.h>
 #include <ucs/datastruct/khash.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/stubs.h>
 
 
 #define UCS_ASYNC_TIMER_ID_MIN      1000000u
@@ -630,7 +630,7 @@ void ucs_async_global_cleanup()
 {
     int num_elems = kh_size(&ucs_async_global_context.handlers);
     if (num_elems != 0) {
-        ucs_info("async handler table is not empty during exit (contains %d elems)",
+        ucs_warn("async handler table is not empty during exit (contains %d elems)",
                  num_elems);
     }
     ucs_async_method_call_all(cleanup);

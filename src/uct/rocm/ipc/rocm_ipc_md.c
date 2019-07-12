@@ -31,17 +31,18 @@ static ucs_status_t uct_rocm_ipc_query_md_resources(uct_md_resource_desc_t **res
 
 static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->rkey_packed_size  = sizeof(uct_rocm_ipc_key_t);
-    md_attr->cap.flags         = UCT_MD_FLAG_REG |
-                                 UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_ROCM);
-    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_ROCM;
-    md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = ULONG_MAX;
+    md_attr->rkey_packed_size     = sizeof(uct_rocm_ipc_key_t);
+    md_attr->cap.flags            = UCT_MD_FLAG_REG |
+                                    UCT_MD_FLAG_NEED_RKEY;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_ROCM);
+    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_ROCM;
+    md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_reg          = ULONG_MAX;
 
     /* TODO: get accurate number */
-    md_attr->reg_cost.overhead = 9e-9;
-    md_attr->reg_cost.growth   = 0;
+    md_attr->reg_cost.overhead    = 9e-9;
+    md_attr->reg_cost.growth      = 0;
 
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
@@ -121,12 +122,12 @@ static ucs_status_t uct_rocm_ipc_md_open(const char *md_name,
                                          uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close        = (void*)ucs_empty_function,
-        .query        = uct_rocm_ipc_md_query,
-        .mkey_pack    = uct_rocm_ipc_mkey_pack,
-        .mem_reg      = uct_rocm_ipc_mem_reg,
-        .mem_dereg    = uct_rocm_ipc_mem_dereg,
-        .is_mem_type_owned = uct_rocm_base_is_mem_type_owned,
+        .close              = (void*)ucs_empty_function,
+        .query              = uct_rocm_ipc_md_query,
+        .mkey_pack          = uct_rocm_ipc_mkey_pack,
+        .mem_reg            = uct_rocm_ipc_mem_reg,
+        .mem_dereg          = uct_rocm_ipc_mem_dereg,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops       = &md_ops,

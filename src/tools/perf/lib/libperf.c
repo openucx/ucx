@@ -730,14 +730,14 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
 
         if (remote_info->rkey_size > 0) {
-            status = uct_rkey_unpack(rkey_buffer, &perf->uct.peers[i].rkey);
+            status = uct_rkey_unpack(perf->uct.cmpt, rkey_buffer,
+                                     &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
                 goto err_destroy_eps;
             }
         } else {
             perf->uct.peers[i].rkey.handle = NULL;
-            perf->uct.peers[i].rkey.type   = NULL;
             perf->uct.peers[i].rkey.rkey   = UCT_INVALID_RKEY;
         }
 
@@ -763,8 +763,8 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
 err_destroy_eps:
     for (i = 0; i < group_size; ++i) {
-        if (perf->uct.peers[i].rkey.type != NULL) {
-            uct_rkey_release(&perf->uct.peers[i].rkey);
+        if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
         }
         if (perf->uct.peers[i].ep != NULL) {
             uct_ep_destroy(perf->uct.peers[i].ep);
@@ -791,7 +791,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
             if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
-                uct_rkey_release(&perf->uct.peers[i].rkey);
+                uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
             }
             if (perf->uct.peers[i].ep) {
                 uct_ep_destroy(perf->uct.peers[i].ep);
@@ -1189,64 +1189,88 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
 static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
 {
-    perf->max_iter = ucs_min(params->warmup_iter, params->max_iter / 10);
+    perf->max_iter = ucs_min(params->warmup_iter, ucs_div_round_up(params->max_iter, 10));
     perf->report_interval = -1;
 }
 
 static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 {
-    uct_md_resource_desc_t *md_resources;
+    uct_component_h *uct_components;
+    uct_component_attr_t component_attr;
     uct_tl_resource_desc_t *tl_resources;
-    unsigned i, num_md_resources;
-    unsigned j, num_tl_resources;
+    unsigned md_index, num_components;
+    unsigned tl_index, num_tl_resources;
+    unsigned cmpt_index;
     ucs_status_t status;
     uct_md_h md;
     uct_md_config_t *md_config;
 
-    status = uct_query_md_resources(&md_resources, &num_md_resources);
+
+    status = uct_query_components(&uct_components, &num_components);
     if (status != UCS_OK) {
         goto out;
     }
 
-    for (i = 0; i < num_md_resources; ++i) {
-        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
+    for (cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
+
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+        status = uct_component_query(uct_components[cmpt_index], &component_attr);
         if (status != UCS_OK) {
-            goto out_release_md_resources;
+            goto out_release_components_list;
         }
 
-        status = uct_md_open(md_resources[i].md_name, md_config, &md);
-        uct_config_release(md_config);
+        component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+        component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
+                                             component_attr.md_resource_count);
+        status = uct_component_query(uct_components[cmpt_index], &component_attr);
         if (status != UCS_OK) {
-            goto out_release_md_resources;
+            goto out_release_components_list;
         }
 
-        status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
-        if (status != UCS_OK) {
-            uct_md_close(md);
-            goto out_release_md_resources;
-        }
-
-        for (j = 0; j < num_tl_resources; ++j) {
-            if (!strcmp(perf->params.uct.tl_name,  tl_resources[j].tl_name) &&
-                !strcmp(perf->params.uct.dev_name, tl_resources[j].dev_name))
-            {
-                uct_release_tl_resource_list(tl_resources);
-                perf->uct.md = md;
-                status = UCS_OK;
-                goto out_release_md_resources;
+        for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
+            status = uct_md_config_read(uct_components[cmpt_index], NULL, NULL,
+                                        &md_config);
+            if (status != UCS_OK) {
+                goto out_release_components_list;
             }
-        }
 
-        uct_md_close(md);
-        uct_release_tl_resource_list(tl_resources);
+            status = uct_md_open(uct_components[cmpt_index],
+                                 component_attr.md_resources[md_index].md_name,
+                                 md_config, &md);
+            uct_config_release(md_config);
+            if (status != UCS_OK) {
+                goto out_release_components_list;
+            }
+
+            status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
+            if (status != UCS_OK) {
+                uct_md_close(md);
+                goto out_release_components_list;
+            }
+
+            for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
+                if (!strcmp(perf->params.uct.tl_name,  tl_resources[tl_index].tl_name) &&
+                    !strcmp(perf->params.uct.dev_name, tl_resources[tl_index].dev_name))
+                {
+                    uct_release_tl_resource_list(tl_resources);
+                    perf->uct.cmpt = uct_components[cmpt_index];
+                    perf->uct.md   = md;
+                    status         = UCS_OK;
+                    goto out_release_components_list;
+                }
+            }
+
+            uct_md_close(md);
+            uct_release_tl_resource_list(tl_resources);
+        }
     }
 
     ucs_error("Cannot use transport %s on device %s", perf->params.uct.tl_name,
               perf->params.uct.dev_name);
     status = UCS_ERR_NO_DEVICE;
 
-out_release_md_resources:
-    uct_release_md_resource_list(md_resources);
+out_release_components_list:
+    uct_release_component_list(uct_components);
 out:
     return status;
 }

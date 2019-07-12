@@ -9,9 +9,13 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/config/parser.h>
+
 #include <sys/resource.h>
 
 namespace ucs {
+
+typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
 const double test_timeout_in_sec = 60.;
 
@@ -208,6 +212,89 @@ void watchdog_stop()
     pthread_mutex_destroy(&watchdog.mutex);
 }
 
+static bool test_results_cmp(const test_result_t &a, const test_result_t &b)
+{
+    return a.second > b.second;
+}
+
+void analyze_test_results()
+{
+    // GTEST_REPORT_LONGEST_TESTS=100 will report TOP-100 longest tests
+    /* coverity[tainted_data_return] */
+    char *env_p = getenv("GTEST_REPORT_LONGEST_TESTS");
+    if (env_p == NULL) {
+        return;
+    }
+
+    size_t max_name_size = 0;
+    int top_n;
+
+    if (!strcmp(env_p, "*")) {
+        top_n = std::numeric_limits<int>::max();
+    } else {
+        top_n = atoi(env_p);
+        if (!top_n) {
+            return;
+        }
+    }
+
+    ::testing::UnitTest *unit_test = ::testing::UnitTest::GetInstance();
+    std::vector<test_result_t> test_results;
+
+    if (unit_test == NULL) {
+        ADD_FAILURE() << "Unable to get the Unit Test instance";
+        return;
+    }
+
+    for (int i = 0; i < unit_test->total_test_case_count(); i++) {
+        const ::testing::TestCase *test_case = unit_test->GetTestCase(i);
+        if (test_case == NULL) {
+            ADD_FAILURE() << "Unable to get the Test Case instance with index "
+                          << i;
+            return;
+        }
+
+        for (int i = 0; i < test_case->total_test_count(); i++) {
+            const ::testing::TestInfo *test = test_case->GetTestInfo(i);
+            if (test == NULL) {
+                ADD_FAILURE() << "Unable to get the Test Info instance with index "
+                              << i;
+                return;
+            }
+
+            if (test->should_run()) {
+                const ::testing::TestResult *result = test->result();
+                std::string test_name               = test->test_case_name();
+
+                test_name += ".";
+                test_name += test->name();
+
+                test_results.push_back(std::make_pair(test_name,
+                                                      result->elapsed_time()));
+
+                max_name_size = std::max(test_name.size(), max_name_size);
+            }
+        }
+    }
+
+    std::sort(test_results.begin(), test_results.end(), test_results_cmp);
+
+    top_n = std::min((int)test_results.size(), top_n);
+    if (!top_n) {
+        return;
+    }
+
+    int max_index_size = ucs::to_string(top_n).size();
+    std::cout << std::endl << "TOP-" << top_n << " longest tests:" << std::endl;
+
+    for (int i = 0; i < top_n; i++) {
+        std::cout << std::setw(max_index_size - ucs::to_string(i + 1).size() + 1)
+                  << (i + 1) << ". " << test_results[i].first
+                  << std::setw(max_name_size - test_results[i].first.size() + 3)
+                  << " - " << test_results[i].second << " ms" << std::endl;
+    }
+}
+
 int test_time_multiplier()
 {
     int factor = 1;
@@ -273,6 +360,39 @@ scoped_setenv::~scoped_setenv() {
         setenv(m_name.c_str(), m_old_value.c_str(), 1);
     } else {
         unsetenv(m_name.c_str());
+    }
+}
+
+ucx_env_cleanup::ucx_env_cleanup() {
+    const size_t prefix_len = strlen(UCS_CONFIG_PREFIX);
+    char **envp;
+
+    for (envp = environ; *envp != NULL; ++envp) {
+        std::string env_var = *envp;
+
+        if ((env_var.find("=") != std::string::npos) &&
+            (env_var.find(UCS_CONFIG_PREFIX, 0, prefix_len) != std::string::npos)) {
+            ucx_env_storage.push_back(env_var);
+        }
+    }
+
+    for (size_t i = 0; i < ucx_env_storage.size(); i++) {
+        std::string var_name =
+            ucx_env_storage[i].substr(0, ucx_env_storage[i].find("="));
+
+        unsetenv(var_name.c_str());
+    }
+}
+
+ucx_env_cleanup::~ucx_env_cleanup() {
+    while (!ucx_env_storage.empty()) {
+        std::string var_name =
+            ucx_env_storage.back().substr(0, ucx_env_storage.back().find("="));
+        std::string var_value =
+            ucx_env_storage.back().substr(ucx_env_storage.back().find("=") + 1);
+
+        setenv(var_name.c_str(), var_value.c_str(), 1);
+        ucx_env_storage.pop_back();
     }
 }
 

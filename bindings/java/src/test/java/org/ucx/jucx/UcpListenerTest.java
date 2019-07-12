@@ -20,18 +20,25 @@ public class UcpListenerTest {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         InetSocketAddress ipv4 = new InetSocketAddress("0.0.0.0", port);
-        UcpListener ipv4Listener = worker.newListener(new UcpListenerParams().setSockAddr(ipv4));
+        try {
+            UcpListener ipv4Listener = worker.newListener(
+                new UcpListenerParams().setSockAddr(ipv4));
 
-        assertNotNull(ipv4Listener);
-        ipv4Listener.close();
+            assertNotNull(ipv4Listener);
+            ipv4Listener.close();
 
-        InetSocketAddress ipv6 = new InetSocketAddress("::", port);
-        UcpListener ipv6Listener = worker.newListener(
-            new UcpListenerParams().setSockAddr(ipv6));
+            InetSocketAddress ipv6 = new InetSocketAddress("::", port);
+            UcpListener ipv6Listener = worker.newListener(
+                new UcpListenerParams().setSockAddr(ipv6));
 
-        assertNotNull(ipv6Listener);
-        ipv6Listener.close();
-        worker.close();
-        context.close();
+            assertNotNull(ipv6Listener);
+            ipv6Listener.close();
+        } catch (UcxException ex) {
+
+        } finally {
+            worker.close();
+            context.close();
+        }
+
     }
 }

@@ -57,7 +57,6 @@ const ucs_init_once_t test_init_once::INIT_ONCE_INIT = UCS_INIT_ONCE_INIITIALIZE
 UCS_MT_TEST_F(test_init_once, init_once, 10) {
 
     for (int i = 0; i < 100; ++i) {
-        /* coverity[double_unlock] */
         UCS_INIT_ONCE(&m_once) {
             ++m_count;
         }

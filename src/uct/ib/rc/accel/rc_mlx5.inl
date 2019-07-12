@@ -240,11 +240,11 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
         uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
-                                          txqp->qp->qp_num, fm_ce_se, wqe_size,
+                                          txwq->super.qp_num, fm_ce_se, wqe_size,
                                           imm);
     } else {
         uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
-                                 txqp->qp->qp_num, fm_ce_se, wqe_size);
+                                 txwq->super.qp_num, fm_ce_se, wqe_size);
     }
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);
@@ -675,7 +675,7 @@ uct_rc_mlx5_release_tag_entry(uct_rc_mlx5_iface_common_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_add_cmd_qp_op(uct_rc_mlx5_iface_common_t *iface,
+uct_rc_mlx5_add_cmd_wq_op(uct_rc_mlx5_iface_common_t *iface,
                           uct_rc_mlx5_tag_entry_t *tag)
 {
     uct_rc_mlx5_srq_op_t *op;
@@ -780,7 +780,7 @@ uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_wq_t *cmd_wq,
     tm = uct_ib_mlx5_txwq_wrap_none(txwq, ctrl + 1);
 
     uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, UCT_RC_MLX5_OPCODE_TAG_MATCHING,
-                             0, cmd_wq->qp_num, 0, wqe_size);
+                             0, txwq->super.qp_num, 0, wqe_size);
 
     uct_rc_mlx5_set_tm_seg(txwq, tm, op_code, next_idx, unexp_cnt,
                            tag, tag_mask, tm_flags);
@@ -820,7 +820,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     priv->buffer       = iov->buffer; /* Only one iov is supported so far */
     priv->length       = iov->length;
 
-    uct_rc_mlx5_add_cmd_qp_op(iface, tag_entry);
+    uct_rc_mlx5_add_cmd_wq_op(iface, tag_entry);
 
     dptr = uct_ib_mlx5_txwq_wrap_none(txwq, (char*)txwq->curr + ctrl_size);
     uct_ib_mlx5_set_data_seg(dptr, iov->buffer, iov->length,
@@ -854,7 +854,7 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_mlx5_release_tag_entry(iface, tag_entry);
     } else {
         flags = UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ | UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT;
-        uct_rc_mlx5_add_cmd_qp_op(iface, tag_entry);
+        uct_rc_mlx5_add_cmd_wq_op(iface, tag_entry);
     }
 
     uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,

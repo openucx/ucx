@@ -11,6 +11,10 @@
 #include <ifaddrs.h>
 #include <sys/poll.h>
 
+extern "C" {
+#include <ucp/core/ucp_listener.h>
+}
+
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
         UCP_INSTANTIATE_TEST_CASE (_test_case) \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
@@ -444,6 +448,8 @@ UCS_TEST_P(test_ucp_sockaddr, reject) {
 
 UCS_TEST_P(test_ucp_sockaddr, query_listener) {
     ucp_listener_attr_t listener_attr;
+    ucs_status_t status;
+    int i;
 
     listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
 
@@ -452,8 +458,16 @@ UCS_TEST_P(test_ucp_sockaddr, query_listener) {
                        (const struct sockaddr*)&test_addr);
 
     start_listener(cb_type(), (const struct sockaddr*)&test_addr);
-    ucp_listener_query(receiver().listenerh(), &listener_attr);
+    status = ucp_listener_query(receiver().listenerh(), &listener_attr);
+    EXPECT_UCS_OK(status);
+
     EXPECT_EQ(test_addr.sin_port, htons(listener_attr.port));
+
+    /* Make sure that all the listening sockaddr ifaces are listening on the same port */
+    for (i = 0; i < receiver().listenerh()->num_wifaces; i++) {
+        EXPECT_EQ(test_addr.sin_port,
+                  htons(receiver().listenerh()->wifaces[i].attr.listen_port));
+    }
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {

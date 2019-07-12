@@ -4,8 +4,10 @@
 #
 
 topdir=$(abs_top_builddir)
+java_build_dir=$(builddir)/build-java
 javadir=$(top_srcdir)/bindings/java
-MVNCMD=$(MVN) -B -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(topdir)/.deps
+MVNCMD=$(MVN) -B -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(java_build_dir)/.deps \
+              -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
                 org_ucx_jucx_ucp_UcpContext.h \
@@ -52,17 +54,17 @@ libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \
 
 libjucx_la_DEPENDENCIES = Makefile.am Makefile.in Makefile
 
-#Compile Java source code and pack to jar
+# Compile Java source code and pack to jar
 package:
 	$(MVNCMD) package -DskipTests
 
-#Maven install phase
+# Maven install phase
 install-data-hook:
 	$(MVNCMD) install -DskipTests
 
-#Remove all compiled Java files
+# Remove all compiled Java files
 clean-local:
-	$(MVNCMD) clean
+	-rm -rf $(java_build_dir)
 
 test:
 	$(MVNCMD) test

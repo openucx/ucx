@@ -4,6 +4,8 @@
 */
 
 #include <common/test.h>
+#include <fstream>
+
 extern "C" {
 #include <ucs/debug/log.h>
 }
@@ -51,7 +53,7 @@ public:
     }
 
     virtual void check_log_file() {
-        ADD_FAILURE();
+        ADD_FAILURE() << read_logfile();
     }
 
     int do_grep(const char *needle) {
@@ -61,6 +63,13 @@ public:
         return system(cmd);
     }
 
+    std::string read_logfile() {
+        std::stringstream ss;
+        std::ifstream ifs(logfile);
+        ss << ifs.rdbuf();
+        return ss.str();
+    }
+
 protected:
     char logfile[64];
 };
@@ -68,7 +77,7 @@ protected:
 class log_test_info : public log_test {
     virtual void check_log_file() {
         if (do_grep("UCX  INFO  hello world")) {
-            ADD_FAILURE();
+            ADD_FAILURE() << read_logfile();
         }
     }
 };
@@ -83,12 +92,12 @@ class log_test_print : public log_test {
         if (do_grep("UCX  PRINT debug message")) {
             if (ucs_global_opts.log_print_enable) {
                 /* not found but it should be there */
-                ADD_FAILURE();
+                ADD_FAILURE() << read_logfile();
             }
         } else {
             if (!ucs_global_opts.log_print_enable) {
                 /* found but prints disabled!!! */
-                ADD_FAILURE();
+                ADD_FAILURE() << read_logfile();
             }
         }
     }
