@@ -2278,14 +2278,14 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  *
  * @param [in] ep          Destination endpoint handle.
  * @param [in] iov         Points to an array of @ref ::uct_iov_t structures.
- *                         The @a iov pointer must be valid address of an array
+ *                         The @a iov pointer must be a valid address of an array
  *                         of @ref ::uct_iov_t structures. A particular structure
- *                         pointer must be valid address. NULL terminated pointer
- *                         is not required.
+ *                         pointer must be a valid address. A NULL terminated
+ *                         array is not required.
  * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
  *                         array. If @a iovcnt is zero, the data is considered empty.
  *                         @a iovcnt is limited by @ref uct_iface_attr_cap_put_max_iov
- *                         "uct_iface_attr::cap::put::max_iov"
+ *                         "uct_iface_attr::cap::put::max_iov".
  * @param [in] remote_addr Remote address to place the @a iov data.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
  * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
@@ -2341,14 +2341,14 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t 
  *
  * @param [in] ep          Destination endpoint handle.
  * @param [in] iov         Points to an array of @ref ::uct_iov_t structures.
- *                         The @a iov pointer must be valid address of an array
+ *                         The @a iov pointer must be a valid address of an array
  *                         of @ref ::uct_iov_t structures. A particular structure
- *                         pointer must be valid address. NULL terminated pointer
- *                         is not required.
+ *                         pointer must be a valid address. A NULL terminated
+ *                         array is not required.
  * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
  *                         array. If @a iovcnt is zero, the data is considered empty.
  *                         @a iovcnt is limited by @ref uct_iface_attr_cap_get_max_iov
- *                         "uct_iface_attr::cap::get::max_iov"
+ *                         "uct_iface_attr::cap::get::max_iov".
  * @param [in] remote_addr Remote address of the data placed to the @a iov.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
  * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
@@ -2405,14 +2405,14 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * @param [in] header          Active message header.
  * @param [in] header_length   Active message header length in bytes.
  * @param [in] iov             Points to an array of @ref ::uct_iov_t structures.
- *                             The @a iov pointer must be valid address of an array
+ *                             The @a iov pointer must be a valid address of an array
  *                             of @ref ::uct_iov_t structures. A particular structure
- *                             pointer must be valid address. NULL terminated pointer
- *                             is not required.
+ *                             pointer must be a valid address. A NULL terminated
+ *                             array is not required.
  * @param [in] iovcnt          Size of the @a iov data @ref ::uct_iov_t structures
  *                             array. If @a iovcnt is zero, the data is considered empty.
  *                             @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
- *                             "uct_iface_attr::cap::am::max_iov"
+ *                             "uct_iface_attr::cap::am::max_iov".
  * @param [in] flags           Active message flags, see @ref uct_msg_flags.
  * @param [in] comp            Completion handle as defined by @ref ::uct_completion_t.
  *
@@ -2420,12 +2420,12 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * @return UCS_INPROGRESS      Some communication operations are still in progress.
  *                             If non-NULL @a comp is provided, it will be updated
  *                             upon completion of these operations.
- * @return UCS_ERR_NO_RESOURCE Could not start the operation now due to lack
- *                             of send resources.
+ * @return UCS_ERR_NO_RESOURCE Could not start the operation due to lack of send
+ *                             resources.
  *
  * @note If the operation returns @a UCS_INPROGRESS, the memory buffers
  *       pointed to by @a iov array must not be modified until the operation
- *       is completed by @a comp. @a header can be released or changed
+ *       is completed by @a comp. @a header can be released or changed.
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
                                             const void *header,
@@ -2633,8 +2633,8 @@ UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
  * @param [in]  length    Data length.
  *
  * @return UCS_OK              - operation completed successfully.
- * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
- *                               of send resources.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation due to lack of
+ *                               send resources.
  */
 UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
                                                    const void *data, size_t length)
@@ -2695,8 +2695,8 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  * @param [in]  imm       Immediate value which will be available to the
  *                        receiver.
  * @param [in]  iov       Points to an array of @ref uct_iov_t structures.
- *                        A particular structure pointer must be valid address.
- *                        NULL terminated pointer is not required.
+ *                        A particular structure pointer must be a valid address.
+ *                        A NULL terminated array is not required.
  * @param [in]  iovcnt    Size of the @a iov array. If @a iovcnt is zero, the
  *                        data is considered empty. Note that @a iovcnt is
  *                        limited by the corresponding @a max_iov value in
@@ -2707,8 +2707,8 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  *                        can be reused or invalidated.
  *
  * @return UCS_OK              - operation completed successfully.
- * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
- *                               of send resources.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation due to lack of
+ *                               send resources.
  * @return UCS_INPROGRESS      - operation started, and @a comp will be used to
  *                               notify when it's completed.
  */
@@ -2745,7 +2745,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
  *                            value in @ref uct_iface_attr.
  * @param [in]  iov           Points to an array of @ref uct_iov_t structures.
  *                            A particular structure pointer must be valid
- *                            address. NULL terminated pointer is not required.
+ *                            address. A NULL terminated array is not required.
  * @param [in]  iovcnt        Size of the @a iov array. If @a iovcnt is zero,
  *                            the data is considered empty. Note that @a iovcnt
  *                            is limited by the corresponding @a max_iov value
@@ -2813,7 +2813,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_cancel(uct_ep_h ep, void *op)
  * @param [in]  flags         Tag message flags, see @ref uct_msg_flags.
  *
  * @return UCS_OK              - operation completed successfully.
- * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack of
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation due to lack of
  *                               send resources.
  */
 UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
@@ -2840,14 +2840,14 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
  * @param [in]    tag_mask  Mask which specifies what bits of the tag to
  *                          compare.
  * @param [in]    iov       Points to an array of @ref ::uct_iov_t structures.
- *                          The @a iov pointer must be valid address of an array
+ *                          The @a iov pointer must be a valid address of an array
  *                          of @ref ::uct_iov_t structures. A particular structure
- *                          pointer must be valid address. NULL terminated pointer
- *                          is not required.
+ *                          pointer must be a valid address. A NULL terminated
+ *                          array is not required.
  * @param [in]    iovcnt    Size of the @a iov data @ref ::uct_iov_t structures
  *                          array. If @a iovcnt is zero, the data is considered empty.
  *                          @a iovcnt is limited by @ref uct_iface_attr_cap_tag_recv_iov
- *                          "uct_iface_attr::cap::tag::max_iov"
+ *                          "uct_iface_attr::cap::tag::max_iov".
  * @param [inout] ctx       Context associated with this particular tag, "priv" field
  *                          in this structure is used to track the state internally.
  *
