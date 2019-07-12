@@ -1531,7 +1531,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_ep_match_init(&worker->ep_match_ctx);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
-    if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_EXPERIMENTAL)) {
+    if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
         UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
     } else {
@@ -1544,7 +1544,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->user_data = NULL;
     }
 
-    if (context->config.features & UCP_FEATURE_EXPERIMENTAL){
+    if (context->config.features & UCP_FEATURE_AM){
         worker->am_cbs            = NULL;
         worker->am_cb_array_len   = 0;
     }
