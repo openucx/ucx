@@ -175,6 +175,8 @@ namespace ucs {
 extern const double test_timeout_in_sec;
 extern const double watchdog_timeout_default;
 
+extern std::set< const ::testing::TestInfo*> skipped_tests;
+
 typedef enum {
     WATCHDOG_STOP,
     WATCHDOG_RUN,

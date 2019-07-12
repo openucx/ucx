@@ -332,6 +332,8 @@ void test_base::skipped(const test_skip_exception& e) {
         detail::message_stream("SKIP") << "(" << reason << ")";
     }
     m_state = SKIPPED;
+    skipped_tests.insert(::testing::UnitTest::
+                         GetInstance()->current_test_info());
 }
 
 void test_base::init() {
