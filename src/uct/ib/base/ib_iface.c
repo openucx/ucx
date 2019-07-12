@@ -590,16 +590,19 @@ ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
     }
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
-#else
-    cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    if (!cq && (errno == ENOSYS))
 #endif
+    {
+        *inl = 0;
+        cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    }
+
     if (!cq) {
         ucs_error("ibv_create_cq(cqe=%d) failed: %m", cqe);
         return UCS_ERR_IO_ERROR;
     }
 
     *cq_p = cq;
-    *inl  = 0;
     return UCS_OK;
 }
 

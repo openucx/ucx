@@ -1,4 +1,4 @@
-#!/bin/bash -eExl
+#!/bin/bash -eEx
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
@@ -30,7 +30,7 @@ if [ -z "$BUILD_NUMBER" ]; then
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
 	JENKINS_RUN_TESTS=yes
-	JENKINS_TEST_PERF=1
+	JENKINS_TEST_PERF=0
 	TIMEOUT=""
 	TIMEOUT_VALGRIND=""
 else
@@ -714,8 +714,7 @@ run_ucp_client_server() {
         return
     fi
 
-    ret=`which ibdev2netdev`
-    if [ -z "$ret" ]
+    if ! which ibdev2netdev >&/dev/null
     then
         return
     fi
@@ -1328,3 +1327,5 @@ if [ -n "$JENKINS_RUN_TESTS" ]
 then
 	run_tests
 fi
+
+echo "All tests passed"

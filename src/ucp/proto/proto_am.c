@@ -43,7 +43,7 @@ static size_t ucp_proto_pack(void *dest, void *arg)
 
 ucs_status_t
 ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
-                 uct_pack_callback_t pack_cb, size_t max_packed_size)
+                 uct_pack_callback_t pack_cb, ssize_t max_packed_size)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
