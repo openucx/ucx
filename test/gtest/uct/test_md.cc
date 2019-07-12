@@ -517,7 +517,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                                                               UCT_SOCKADDR_ACC_REMOTE));
                     found_ipoib = 1;
                 }
-            } else if (GetParam().md_name == "sockcm")) {
+            } else if (GetParam().md_name == "sockcm") {
                 if (ucs::is_sockcm_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                         ucs::sockaddr_to_str(ifa->ifa_addr);
