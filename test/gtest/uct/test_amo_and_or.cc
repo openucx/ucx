@@ -44,22 +44,22 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(uct_amo_and_or_test, and32,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32)) {
     test_op<uint32_t, UCT_ATOMIC_OP_AND>(and_op<uint32_t>, and_val<uint32_t>);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_and_or_test, add64,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP64)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP64)) {
     test_op<uint64_t, UCT_ATOMIC_OP_AND>(and_op<uint64_t>, and_val<uint64_t>);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_and_or_test, or32,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP32)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP32)) {
     test_op<uint32_t, UCT_ATOMIC_OP_OR>(or_op<uint32_t>, or_val<uint32_t>);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_and_or_test, or64,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP64)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP64)) {
     test_op<uint64_t, UCT_ATOMIC_OP_OR>(or_op<uint64_t>, or_val<uint64_t>);
 }
 

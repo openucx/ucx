@@ -10,14 +10,6 @@ extern "C" {
 #include "uct_test.h"
 
 
-#ifdef HAVE_DC_DV /* skip due to DCI stuck bug */
-#define SKIP_ON_DC_MLX5 \
-    has_transport("dc_mlx5")
-#else
-#define SKIP_ON_DC_MLX5 0
-#endif
-
-
 class test_uct_ep : public uct_test {
 protected:
 
@@ -54,13 +46,21 @@ protected:
         m_sender->destroy_ep(0);
     }
 
+    bool skip_on_ib_dc() {
+#ifdef HAVE_DC_DV /* skip due to DCI stuck bug */
+        return has_transport("dc_mlx5");
+#else
+        return false;
+#endif
+    }
+
     entity * m_sender;
     entity * m_receiver;
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
-                     (skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY) ||
-                      SKIP_ON_DC_MLX5)) {
+                     (!check_caps(UCT_IFACE_FLAG_AM_ZCOPY) ||
+                      skip_on_ib_dc())) {
     ucs_status_t status;
 
     mapped_buffer buffer(256, 0, *m_sender);

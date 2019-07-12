@@ -222,8 +222,8 @@ void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callba
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_pending, pending_op,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                    UCT_IFACE_FLAG_PENDING))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING))
 {
     uint64_t send_data = 0xdeadbeef;
     ucs_status_t status;
@@ -275,8 +275,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_op,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                    UCT_IFACE_FLAG_PENDING))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING))
 {
     uint64_t send_data = 0xdeadbeef;
     ucs_status_t status_send, status_pend = UCS_ERR_LAST;
@@ -343,8 +343,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_pending, pending_purge,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                    UCT_IFACE_FLAG_PENDING))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING))
 {
     const int num_eps = 5;
     uct_pending_req_t reqs[num_eps];
@@ -370,8 +370,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_purge,
  * test that the pending op callback is only called from the progress()
  */
 UCS_TEST_SKIP_COND_P(test_uct_pending, pending_async,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
-                                    UCT_IFACE_FLAG_PENDING))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_PENDING))
 {
     pending_send_request_t *req = NULL;
     ucs_status_t status;
@@ -420,8 +420,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_async,
  * for other transports
  */
 UCS_TEST_SKIP_COND_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
-                                    UCT_IFACE_FLAG_PENDING))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_PENDING))
 {
     ucs_status_t status;
     ssize_t packed_len;
@@ -483,8 +483,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug,
 
 UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness,
                      (RUNNING_ON_VALGRIND ||
-                      skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                     UCT_IFACE_FLAG_PENDING)))
+                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                  UCT_IFACE_FLAG_PENDING)))
 {
     int N = 16;
     uint64_t send_data = 0xdeadbeef;

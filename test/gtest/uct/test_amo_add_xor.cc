@@ -43,22 +43,22 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add32,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32)) {
     test_op<uint32_t, UCT_ATOMIC_OP_ADD>(add_op<uint32_t>);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add64,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64)) {
     test_op<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, xor32,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32)) {
     test_op<uint32_t, UCT_ATOMIC_OP_XOR>(xor_op<uint32_t>);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, xor64,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64)) {
     test_op<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 

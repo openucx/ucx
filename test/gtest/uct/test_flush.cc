@@ -425,7 +425,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -439,12 +439,12 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_iface_no_comp,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     test_flush_put_bcopy(&uct_flush_test::flush_iface_no_comp);
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_nb,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -458,7 +458,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_nb,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_no_comp,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -472,12 +472,12 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_no_comp,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_iface_no_comp,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     test_flush_am_zcopy(&uct_flush_test::flush_iface_no_comp, true);
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_nb,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -491,7 +491,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_nb,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_no_comp,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -505,13 +505,13 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_no_comp,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_iface_no_comp,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
     test_flush_am_disconnect(&uct_flush_test::flush_iface_no_comp, true);
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_nb,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -525,8 +525,8 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_nb,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_pending_flush_nb,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
-                                    UCT_IFACE_FLAG_PENDING)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_PENDING)) {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 

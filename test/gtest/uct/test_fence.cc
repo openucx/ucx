@@ -203,50 +203,50 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, add32,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32))) {
     test_fence<uint32_t, UCT_ATOMIC_OP_ADD>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, add64,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64))) {
     test_fence<uint64_t, UCT_ATOMIC_OP_ADD>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, and32,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP32))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP32))) {
     test_fence<uint32_t, UCT_ATOMIC_OP_AND>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, and64,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP64) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP64) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64))) {
     test_fence<uint64_t, UCT_ATOMIC_OP_AND>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, or32,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP32) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP32))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP32) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP32))) {
     test_fence<uint32_t, UCT_ATOMIC_OP_OR>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, or64,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP64) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP64) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64))) {
     test_fence<uint64_t, UCT_ATOMIC_OP_OR>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, xor32,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32))) {
     test_fence<uint32_t, UCT_ATOMIC_OP_XOR>();
 }
 
 UCS_TEST_SKIP_COND_P(uct_fence_test, xor64,
-                     (check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64) ||
-                      check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64))) {
+                     (!check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64) ||
+                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64))) {
     test_fence<uint64_t, UCT_ATOMIC_OP_XOR>();
 }
 

@@ -15,11 +15,18 @@ extern "C" {
 
 class test_uct_event_fd : public uct_test {
 public:
-    void initialize() {
+    void init() {
         uct_test::init();
 
         m_e1 = uct_test::create_entity(0);
         m_entities.push_back(m_e1);
+
+        try {
+            check_skip_test();
+        } catch(...) {
+            cleanup();
+            throw;
+        }
 
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
@@ -55,7 +62,7 @@ public:
         uct_test::cleanup();
     }
 
-    void test_recv_am(bool signaled);
+    void test_recv_am();
 
     static size_t pack_u64(void *dest, void *arg)
     {
@@ -79,11 +86,12 @@ public:
 protected:
     entity *m_e1, *m_e2;
     static int m_am_count;
+    unsigned m_send_flags, m_arm_flags;
 };
 
 int test_uct_event_fd::m_am_count = 0;
 
-void test_uct_event_fd::test_recv_am(bool signaled)
+void test_uct_event_fd::test_recv_am()
 {
     uint64_t send_data = 0xdeadbeef;
     int am_send_count = 0;
@@ -91,23 +99,9 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     recv_desc_t *recv_buffer;
     struct pollfd wakeup_fd;
     ucs_status_t status;
-    unsigned send_flags;
-    unsigned arm_flags;
 
-    initialize();
-    if (signaled) {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG | UCT_IFACE_FLAG_CB_SYNC |
-                   UCT_IFACE_FLAG_AM_BCOPY);
-        arm_flags  = UCT_EVENT_RECV_SIG;
-        send_flags = UCT_SEND_FLAG_SIGNALED;
-    } else {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV | UCT_IFACE_FLAG_CB_SYNC |
-                   UCT_IFACE_FLAG_AM_BCOPY);
-        arm_flags  = UCT_EVENT_RECV;
-        send_flags = 0;
-    }
-
-    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(send_data));
+    recv_buffer = (recv_desc_t *)malloc(sizeof(*recv_buffer) +
+                                        sizeof(send_data));
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* give a chance to finish connection for some transports (ib/ud, tcp) */
@@ -123,12 +117,12 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     wakeup_fd.events = POLLIN;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    arm(m_e2, arm_flags);
+    arm(m_e2, m_arm_flags);
 
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data */
-    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
+    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, m_send_flags);
     ASSERT_EQ((ssize_t)sizeof(send_data), res);
     ++am_send_count;
 
@@ -137,7 +131,7 @@ void test_uct_event_fd::test_recv_am(bool signaled)
 
     for (;;) {
         if ((progress() == 0) && (m_am_count == am_send_count)) {
-            status = uct_iface_event_arm(m_e2->iface(), arm_flags);
+            status = uct_iface_event_arm(m_e2->iface(), m_arm_flags);
             if (status != UCS_ERR_BUSY) {
                 break;
             }
@@ -145,10 +139,10 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     }
     ASSERT_EQ(UCS_OK, status);
 
-    arm(m_e2, arm_flags);
+    arm(m_e2, m_arm_flags);
 
     /* send the data again */
-    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
+    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, m_send_flags);
     ASSERT_EQ((ssize_t)sizeof(send_data), res);
     ++am_send_count;
 
@@ -164,14 +158,24 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     free(recv_buffer);
 }
 
-UCS_TEST_P(test_uct_event_fd, am)
+UCS_TEST_SKIP_COND_P(test_uct_event_fd, am,
+                     !check_caps(UCT_IFACE_FLAG_EVENT_RECV |
+                                 UCT_IFACE_FLAG_CB_SYNC    |
+                                 UCT_IFACE_FLAG_AM_BCOPY))
 {
-    test_recv_am(false);
+    m_arm_flags  = UCT_EVENT_RECV;
+    m_send_flags = 0;
+    test_recv_am();
 }
 
-UCS_TEST_P(test_uct_event_fd, sig_am)
+UCS_TEST_SKIP_COND_P(test_uct_event_fd, sig_am,
+                     !check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG |
+                                 UCT_IFACE_FLAG_CB_SYNC        |
+                                 UCT_IFACE_FLAG_AM_BCOPY))
 {
-    test_recv_am(true);
+    m_arm_flags  = UCT_EVENT_RECV_SIG;
+    m_send_flags = UCT_SEND_FLAG_SIGNALED;
+    test_recv_am();
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event_fd);

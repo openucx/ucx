@@ -8,39 +8,49 @@
 
 
 class test_zcopy_comp : public uct_test {
+    void init() {
+        uct_test::init();
+
+        m_sender = create_entity(0);
+        m_entities.push_back(m_sender);
+
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
+    }
+
+protected:
+    entity *m_sender;
 };
 
 
-UCS_TEST_P(test_zcopy_comp, issue1440)
+UCS_TEST_SKIP_COND_P(test_zcopy_comp, issue1440,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
 {
-    entity *sender = create_entity(0);
-    m_entities.push_back(sender);
-
     entity *receiver_small = create_entity(0);
     m_entities.push_back(receiver_small);
 
     entity *receiver_large = create_entity(0);
     m_entities.push_back(receiver_large);
 
-    if (skip_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
-        UCS_TEST_SKIP_R("PUT_ZCOPY is unsupported");
-    }
+    m_sender->connect(0, *receiver_small, 0);
+    m_sender->connect(1, *receiver_large, 0);
 
-    sender->connect(0, *receiver_small, 0);
-    sender->connect(1, *receiver_large, 0);
-
-    size_t size_small = ucs_max(8ul,     sender->iface_attr().cap.put.min_zcopy);
-    size_t size_large = ucs_min(65536ul, sender->iface_attr().cap.put.max_zcopy);
+    size_t size_small = ucs_max(8ul,     m_sender->iface_attr().cap.put.min_zcopy);
+    size_t size_large = ucs_min(65536ul, m_sender->iface_attr().cap.put.max_zcopy);
     ucs_assert(size_large > size_small);
 
-    if (sender->md_attr().cap.access_mem_type != UCT_MD_MEM_TYPE_HOST) {
+    if (m_sender->md_attr().cap.access_mem_type != UCT_MD_MEM_TYPE_HOST) {
         std::stringstream ss;
         ss << "test_zcopy_comp is not supported by " << GetParam();
         UCS_TEST_SKIP_R(ss.str());
     }
 
-    mapped_buffer sendbuf_small(size_small, 0, *sender);
-    mapped_buffer sendbuf_large(size_large, 0, *sender);
+    mapped_buffer sendbuf_small(size_small, 0, *m_sender);
+    mapped_buffer sendbuf_large(size_large, 0, *m_sender);
     mapped_buffer recvbuf_small(size_small, 0, *receiver_small);
     mapped_buffer recvbuf_large(size_large, 0, *receiver_large);
 
@@ -54,7 +64,7 @@ UCS_TEST_P(test_zcopy_comp, issue1440)
     while (num_small_sends || num_large_sends) {
         if (num_small_sends) {
             ucs_status_t status;
-            status = uct_ep_put_zcopy(sender->ep(0), sendbuf_small.iov(), 1,
+            status = uct_ep_put_zcopy(m_sender->ep(0), sendbuf_small.iov(), 1,
                                       (uintptr_t)recvbuf_small.ptr(),
                                       recvbuf_small.rkey(), &dummy_comp);
             if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
@@ -63,7 +73,7 @@ UCS_TEST_P(test_zcopy_comp, issue1440)
         }
         if (num_large_sends) {
             ucs_status_t status;
-            status = uct_ep_put_zcopy(sender->ep(1), sendbuf_large.iov(), 1,
+            status = uct_ep_put_zcopy(m_sender->ep(1), sendbuf_large.iov(), 1,
                                       (uintptr_t)recvbuf_large.ptr(),
                                       recvbuf_large.rkey(), &dummy_comp);
             if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
@@ -73,7 +83,7 @@ UCS_TEST_P(test_zcopy_comp, issue1440)
         progress();
     }
 
-    sender->flush();
+    m_sender->flush();
 }
 
 

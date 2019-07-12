@@ -278,8 +278,8 @@ protected:
     virtual bool has_ib() const;
 
     bool is_caps_supported(uint64_t required_flags);
-    bool skip_with_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
-    void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;

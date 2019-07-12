@@ -95,12 +95,12 @@ public:
 
 
 UCS_TEST_SKIP_COND_P(uct_amo_cswap_test, cswap32,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32)) {
     test_cswap<uint32_t>(static_cast<send_func_t>(&uct_amo_cswap_test::cswap32));
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_cswap_test, cswap64,
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64)) {
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64)) {
     test_cswap<uint64_t>(static_cast<send_func_t>(&uct_amo_cswap_test::cswap64));
 }
 

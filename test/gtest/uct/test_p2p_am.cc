@@ -316,9 +316,9 @@ private:
 };
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_sync,
-                     (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) ||
-                     skip_with_caps(UCT_IFACE_FLAG_CB_SYNC,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     ((UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) ||
+                      !check_caps(UCT_IFACE_FLAG_CB_SYNC,
+                                  UCT_IFACE_FLAG_AM_DUP))) {
 
     ucs_status_t status;
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
@@ -360,8 +360,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_sync,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async,
-                     skip_with_caps(UCT_IFACE_FLAG_CB_ASYNC,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     !check_caps(UCT_IFACE_FLAG_CB_ASYNC,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     ucs_status_t status;
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
@@ -404,9 +404,9 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async_response,
-                     skip_with_caps(UCT_IFACE_FLAG_CB_SYNC |
-                                    UCT_IFACE_FLAG_CB_ASYNC,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     !check_caps(UCT_IFACE_FLAG_CB_SYNC |
+                                 UCT_IFACE_FLAG_CB_ASYNC,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     ucs_status_t status;
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
 
@@ -506,8 +506,8 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_bcopy,
@@ -515,8 +515,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
@@ -525,8 +525,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy_keep_data,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
@@ -535,8 +535,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy_keep_data,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_zcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY,
-                                    UCT_IFACE_FLAG_AM_DUP)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_zcopy,
@@ -551,8 +551,8 @@ const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
                      (RUNNING_ON_VALGRIND || m_rx_buf_limit_failed ||
-                      skip_with_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                     UCT_IFACE_FLAG_CB_SYNC)))
+                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                  UCT_IFACE_FLAG_CB_SYNC)))
 {
     mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short,
                                   10 * sizeof(uint64_t)),
@@ -590,7 +590,7 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_multi,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     ucs_status_t status;
 
     m_am_count = 0;
@@ -663,7 +663,7 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
     ucs_status_t status;
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
-            SEED1, sender());
+                                SEED1, sender());
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
                                       this, UCT_CB_FLAG_ASYNC);

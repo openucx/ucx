@@ -190,7 +190,7 @@ protected:
  * am, put, get, amo, flush and fence
  */
 UCS_TEST_SKIP_COND_P(test_uct_stats, am_short,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_SHORT))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
     uint64_t hdr=0xdeadbeef, send_data=0xfeedf00d;
     ucs_status_t status;
@@ -212,7 +212,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_short,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, am_bcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     ssize_t v;
     ucs_status_t status;
@@ -233,7 +233,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_bcopy,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, am_zcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
 {
     ucs_status_t status;
 
@@ -257,7 +257,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_zcopy,
 
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, put_short,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_SHORT))
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
 {
     uint64_t send_data=0xfeedf00d;
     ucs_status_t status;
@@ -274,7 +274,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_short,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, put_bcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
 {
     ssize_t v;
 
@@ -290,7 +290,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_bcopy,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, put_zcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
 {
     ucs_status_t status;
 
@@ -311,7 +311,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_zcopy,
 
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, get_bcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_GET_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
 {
     ucs_status_t status;
 
@@ -331,7 +331,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, get_bcopy,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, get_zcopy,
-                     skip_with_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
 {
     ucs_status_t status;
 
@@ -355,7 +355,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, get_zcopy,
 
 #define TEST_STATS_ATOMIC_POST(_op, _val) \
 UCS_TEST_SKIP_COND_P(test_uct_stats, atomic_post_ ## _op ## _val, \
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), OP ## _val)) \
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), OP ## _val)) \
 { \
     ucs_status_t status; \
     init_bufs(sizeof(uint##_val##_t), sizeof(uint##_val##_t)); \
@@ -377,7 +377,7 @@ TEST_STATS_ATOMIC_POST(XOR, 64)
 
 #define TEST_STATS_ATOMIC_FETCH(_op, _val) \
 UCS_TEST_SKIP_COND_P(test_uct_stats, atomic_fetch_## _op ## _val, \
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), FOP ## _val)) \
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), FOP ## _val)) \
 { \
     ucs_status_t status; \
     uint##_val##_t result; \
@@ -405,7 +405,7 @@ TEST_STATS_ATOMIC_FETCH(SWAP, 64)
 
 #define TEST_STATS_ATOMIC_CSWAP(val) \
 UCS_TEST_SKIP_COND_P(test_uct_stats, atomic_cswap##val, \
-                     check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP ## val)) \
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP ## val)) \
 { \
     ucs_status_t status; \
     uint##val##_t result; \
@@ -461,7 +461,7 @@ UCS_TEST_P(test_uct_stats, fence)
  * TODO: full test matrix
  */
 UCS_TEST_SKIP_COND_P(test_uct_stats, flush_wait_iface,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     uint64_t count_wait;
     ucs_status_t status;
@@ -486,7 +486,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, flush_wait_iface,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, flush_wait_ep,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     uint64_t count_wait;
     ucs_status_t status;
@@ -514,7 +514,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, flush_wait_ep,
  * TODO: full test matrix
  */
 UCS_TEST_SKIP_COND_P(test_uct_stats, fence_iface,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     ucs_status_t status;
 
@@ -534,7 +534,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, fence_iface,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, fence_ep,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     ucs_status_t status;
 
@@ -554,7 +554,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, fence_ep,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, tx_no_res,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     uint64_t count;
     ucs_status_t status;
@@ -570,8 +570,8 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, tx_no_res,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_stats, pending_add,
-                     skip_with_caps(UCT_IFACE_FLAG_AM_BCOPY |
-                                    UCT_IFACE_FLAG_PENDING))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_PENDING))
 {
     const size_t num_reqs = 5;
     uct_pending_req_t p_reqs[num_reqs];

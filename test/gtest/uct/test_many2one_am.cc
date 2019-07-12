@@ -41,6 +41,16 @@ public:
         }
 
         uct_test::init();
+
+        m_receiver = create_entity(sizeof(receive_desc_t));
+        m_entities.push_back(m_receiver);
+
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
     }
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
@@ -90,34 +100,32 @@ public:
     static const size_t NUM_SENDERS = 10;
 
 protected:
-    volatile uint32_t            m_am_count;
-    std::vector<receive_desc_t*> m_backlog;
+    volatile uint32_t             m_am_count;
+    std::vector<receive_desc_t*>  m_backlog;
+    entity                       *m_receiver;  
 };
 
 
-UCS_TEST_P(test_many2one_am, am_bcopy)
+UCS_TEST_SKIP_COND_P(test_many2one_am, am_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_CB_SYNC))
 {
     const unsigned num_sends = 1000 / ucs::test_time_multiplier();
     ucs_status_t status;
-
-    entity *receiver = create_entity(sizeof(receive_desc_t));
-    m_entities.push_back(receiver);
-
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_CB_SYNC);
 
     ucs::ptr_vector<mapped_buffer> buffers;
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {
         entity *sender = create_entity(0);
         mapped_buffer *buffer = new mapped_buffer(
                             sender->iface_attr().cap.am.max_bcopy, 0, *sender);
-        sender->connect(0, *receiver, i);
+        sender->connect(0, *m_receiver, i);
         m_entities.push_back(sender);
         buffers.push_back(buffer);
     }
 
     m_am_count = 0;
 
-    status = uct_iface_set_am_handler(receiver->iface(), AM_ID, am_handler,
+    status = uct_iface_set_am_handler(m_receiver->iface(), AM_ID, am_handler,
                                       (void*)this, 0);
     ASSERT_UCS_OK(status);
 
@@ -130,13 +138,14 @@ UCS_TEST_P(test_many2one_am, am_bcopy)
         ssize_t packed_len;
         for (;;) {
             const entity& sender = ent(sender_num + 1);
-            packed_len = uct_ep_am_bcopy(sender.ep(0), AM_ID, mapped_buffer::pack,
+            packed_len = uct_ep_am_bcopy(sender.ep(0), AM_ID,
+                                         mapped_buffer::pack,
                                          (void*)&buffer, 0);
             if (packed_len != UCS_ERR_NO_RESOURCE) {
                 break;
             }
             sender.progress();
-            receiver->progress();
+            m_receiver->progress();
         }
         if (packed_len < 0) {
             ASSERT_UCS_OK((ucs_status_t)packed_len);
@@ -147,7 +156,8 @@ UCS_TEST_P(test_many2one_am, am_bcopy)
         progress();
     }
 
-    status = uct_iface_set_am_handler(receiver->iface(), AM_ID, NULL, NULL, 0);
+    status = uct_iface_set_am_handler(m_receiver->iface(), AM_ID,
+                                      NULL, NULL, 0);
     ASSERT_UCS_OK(status);
 
     check_backlog();

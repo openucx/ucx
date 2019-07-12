@@ -98,7 +98,7 @@ public:
 
     void set_am_handlers()
     {
-        check_caps(UCT_IFACE_FLAG_CB_SYNC);
+        check_caps_skip(UCT_IFACE_FLAG_CB_SYNC);
         std::for_each(m_receivers.begin(), m_receivers.end(),
                       am_handler_setter(this));
     }
@@ -215,8 +215,8 @@ void test_uct_peer_failure::init()
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_SHORT |
-                                    m_required_caps))
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
+                                 m_required_caps))
 {
     {
         scoped_log_handler slh(wrap_errors_logger);
@@ -261,7 +261,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
-                     skip_with_caps(m_required_caps))
+                     !check_caps(m_required_caps))
 {
     set_am_handlers();
 
@@ -296,7 +296,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
-                     skip_with_caps(m_required_caps))
+                     !check_caps(m_required_caps))
 {
     set_am_handlers();
 
@@ -329,7 +329,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
 
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send_after,
-                     skip_with_caps(m_required_caps))
+                     !check_caps(m_required_caps))
 {
     set_am_handlers();
 
@@ -370,8 +370,8 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_cb, desproy_ep_cb,
-                     skip_with_caps(UCT_IFACE_FLAG_PUT_SHORT |
-                                    m_required_caps))
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
+                                 m_required_caps))
 {
     scoped_log_handler slh(wrap_errors_logger);
     kill_receiver();
@@ -447,7 +447,8 @@ size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
 /* Skip under valgrind due to brk segment overflow.
  * See https://bugs.kde.org/show_bug.cgi?id=352742 */
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
-                     (RUNNING_ON_VALGRIND | skip_with_caps(m_required_caps)),
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(m_required_caps)),
                      "RC_TM_ENABLE?=n")
 {
     ucs_time_t timeout  = ucs_get_time() +
