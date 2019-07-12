@@ -1,0 +1,29 @@
+# See https://aka.ms/yaml
+
+trigger:
+  - master
+pr:
+  - master
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Compile
+        displayName: Compile Tests
+        pool:
+          vmImage: 'Ubuntu-16.04'
+        steps:
+          - bash: |
+              ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              mkdir build && cd build
+              ../configure --disable-numa
+            displayName: Configure
+
+          - bash: |
+               cd build
+               gcc -v
+               make -s -j `nproc`
+            displayName: Build gcc 5.4
