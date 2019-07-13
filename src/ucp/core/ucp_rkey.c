@@ -255,7 +255,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
                           rkey_index, remote_md_index, tl_rkey->rkey.rkey);
                 /* FIXME this can make malloc allocated key be released to mpool */
             } else {
-                ucs_error("Failed to unpack remote key from remote md[%d]: %s",
+                ucs_error("failed to unpack remote key from remote md[%d]: %s",
                           remote_md_index, ucs_status_string(status));
                 goto err_destroy;
             }
@@ -266,14 +266,15 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
 
     ucp_rkey_resolve_inner(rkey, ep);
     *rkey_p = rkey;
-    status = UCS_OK;
-    goto out_unlock;
+    status  = UCS_OK;
 
-err_destroy:
-    ucp_rkey_destroy(rkey);
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
+
+err_destroy:
+    ucp_rkey_destroy(rkey);
+    goto out_unlock;
 }
 
 void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)

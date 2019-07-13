@@ -89,8 +89,9 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
             worker_index = i;
         }
-        st = ucp_ep_rkey_unpack(sender().ep(worker_index), rkey_buffer, &rkey[i]);
-        ASSERT_UCS_OK(st);
+        ucs_status_t status = ucp_ep_rkey_unpack(sender().ep(worker_index),
+                                                 rkey_buffer, &rkey[i]);
+        ASSERT_UCS_OK(status);
     }
 #endif
 
