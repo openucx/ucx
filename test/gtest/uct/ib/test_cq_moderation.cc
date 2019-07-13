@@ -43,6 +43,13 @@ protected:
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
 
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
+
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
     }
@@ -115,9 +122,6 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
     struct pollfd pfd;
     ucs_status_t status;
 
-    check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP);
-    check_caps(UCT_IFACE_FLAG_EVENT_RECV);
-
     uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, 0);
 
     connect();
@@ -164,11 +168,15 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
     EXPECT_LE(events, event_limit);
 }
 
-UCS_TEST_P(test_uct_cq_moderation, send_period) {
+UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, send_period,
+                     !check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                 UCT_IFACE_FLAG_EVENT_RECV)) {
     run_test(m_sender->iface());
 }
 
-UCS_TEST_P(test_uct_cq_moderation, recv_period) {
+UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, recv_period,
+                     !check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                 UCT_IFACE_FLAG_EVENT_RECV)) {
     run_test(m_receiver->iface());
 }
 

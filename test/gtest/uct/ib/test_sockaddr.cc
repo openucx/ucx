@@ -75,6 +75,13 @@ public:
         server = uct_test::create_entity(server_params);
         m_entities.push_back(server);
 
+        try {
+            check_skip_test();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
+
         /* if origin port is busy create_entity will retry with other one */
         port = ucs::sock_addr_storage(server->iface_params().mode.sockaddr
                                                             .listen_sockaddr)
@@ -263,9 +270,9 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     EXPECT_EQ(0, err_count);
 }
 
-UCS_TEST_P(test_uct_sockaddr, err_handle)
+UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
-    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
@@ -285,10 +292,9 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
     }
 }
 
-UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
+UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
-    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
-
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
