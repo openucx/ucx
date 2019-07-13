@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/sys/event_set.h>
 #include <pthread.h>
+#include <sys/epoll.h>
 }
 
 #define MAX_BUF_LEN        255
@@ -21,23 +22,109 @@ public:
     static const char *evfd_data;
     static pthread_barrier_t barrier;
 
+    typedef void* (*event_set_pthread_callback_t)(void *arg);
+
+    enum event_set_op_t {
+        EVENT_SET_OP_ADD,
+        EVENT_SET_OP_MOD,
+        EVENT_SET_OP_DEL
+    };
 protected:
     static void* event_set_read_func(void *arg) {
         int *fd = (int *)arg;
         int n;
-        usleep(10000);
+
         n = write(fd[1], evfd_data, strlen(test_event_set::evfd_data));
         if (n == -1) {
             ADD_FAILURE();
         }
+
+        thread_barrier();
         return 0;
     }
 
     static void* event_set_tmo_func(void *arg) {
-        int ret = pthread_barrier_wait(&barrier);
-        EXPECT_TRUE((ret == 0) || (ret == PTHREAD_BARRIER_SERIAL_THREAD));
+        thread_barrier();
         return 0;
     }
+
+    void event_set_init(event_set_pthread_callback_t func) {
+        ucs_status_t status;
+        int ret;
+
+        if (pipe(m_pipefd) == -1) {
+            UCS_TEST_MESSAGE << strerror(errno);
+            throw ucs::test_abort_exception();
+        }
+
+        ret = pthread_barrier_init(&barrier, NULL, 2);
+        EXPECT_EQ(0, ret);
+
+        ret = pthread_create(&m_tid, NULL, func, (void *)&m_pipefd);
+        if (ret) {
+            UCS_TEST_MESSAGE << strerror(errno);
+            throw ucs::test_abort_exception();
+        }
+
+        status = ucs_event_set_create(&m_event_set);
+        EXPECT_UCS_OK(status);
+        EXPECT_TRUE(m_event_set != NULL);
+    }
+
+    void event_set_cleanup() {
+        ucs_event_set_cleanup(m_event_set);
+
+        pthread_join(m_tid, NULL);
+        pthread_barrier_destroy(&barrier);
+
+        close(m_pipefd[0]);
+        close(m_pipefd[1]);
+    }
+
+    void event_set_ctl(event_set_op_t op, int fd, int events) {
+        ucs_status_t status = UCS_OK;
+
+        switch (op) {
+        case EVENT_SET_OP_ADD:
+            status = ucs_event_set_add(m_event_set, fd,
+                                       (ucs_event_set_type_t)events,
+                                       (void *)(uintptr_t)fd);
+            break;
+        case EVENT_SET_OP_MOD:
+            status = ucs_event_set_mod(m_event_set, fd,
+                                       (ucs_event_set_type_t)events,
+                                       (void *)(uintptr_t)fd);
+            break;
+        case EVENT_SET_OP_DEL:
+            status = ucs_event_set_del(m_event_set, fd);
+            break;
+        default:
+            UCS_TEST_MESSAGE << "Unknow Event Set operation";
+            throw ucs::test_abort_exception();
+        }
+
+        EXPECT_UCS_OK(status);
+    }
+
+    void event_set_wait(unsigned exp_event, int timeout_ms,
+                        ucs_event_set_handler_t handler, void *arg) {
+        unsigned nread  = ucs_sys_event_set_max_wait_events;
+        ucs_status_t status;
+
+        /* Check for events on pipe fd */
+        status = ucs_event_set_wait(m_event_set, &nread, 0, handler, arg);
+        EXPECT_EQ(exp_event, nread);
+        EXPECT_UCS_OK(status);
+    }
+
+    static void thread_barrier() {
+        int ret = pthread_barrier_wait(&barrier);
+        EXPECT_TRUE((ret == 0) || (ret == PTHREAD_BARRIER_SERIAL_THREAD));
+    }
+
+    int m_pipefd[2];
+    pthread_t m_tid;
+    ucs_sys_event_set_t *m_event_set;
 };
 
 const char *test_event_set::evfd_data = UCS_EVENT_SET_TEST_STRING;
@@ -55,13 +142,13 @@ static void event_set_func1(void *callback_data, int events, void *arg)
 
     EXPECT_EQ(UCS_EVENT_SET_EVREAD, events);
     n = read(fd, buf, MAX_BUF_LEN);
-    if (n==-1) {
+    if (n == -1) {
         ADD_FAILURE();
         return;
     }
-    EXPECT_TRUE(strcmp(UCS_EVENT_SET_TEST_STRING, buf) == 0);
-    EXPECT_TRUE(strcmp(UCS_EVENT_SET_EXTRA_STRING, extra_str) == 0);
-    EXPECT_EQ(*extra_num, UCS_EVENT_SET_EXTRA_NUM);
+    EXPECT_EQ(0, strcmp(UCS_EVENT_SET_TEST_STRING, buf));
+    EXPECT_EQ(0, strcmp(UCS_EVENT_SET_EXTRA_STRING, extra_str));
+    EXPECT_EQ(UCS_EVENT_SET_EXTRA_NUM, *extra_num);
 }
 
 static void event_set_func2(void *callback_data, int events, void *arg)
@@ -74,129 +161,86 @@ static void event_set_func3(void *callback_data, int events, void *arg)
     ADD_FAILURE();
 }
 
+static void event_set_func4(void *callback_data, int events, void *arg)
+{
+    EXPECT_EQ(UCS_EVENT_SET_EVREAD, events);
+}
+
 UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     void *arg[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
                     (void*)&UCS_EVENT_SET_EXTRA_NUM };
-    ucs_sys_event_set_t *event_set = NULL;
-    pthread_t tid;
-    int ret;
-    int pipefd[2];
-    unsigned nread;
-    ucs_status_t status;
 
-    if (pipe(pipefd) == -1) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
+    event_set_init(event_set_read_func);
+    event_set_ctl(EVENT_SET_OP_ADD, m_pipefd[0],
+                  UCS_EVENT_SET_EVREAD);
 
-    ret = pthread_create(&tid, NULL, event_set_read_func, (void *)&pipefd);
-    if (ret) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
+    thread_barrier();
 
-    status = ucs_event_set_create(&event_set);
-    EXPECT_EQ(UCS_OK, status);
-    EXPECT_TRUE(event_set != NULL);
+    event_set_wait(1u, -1, event_set_func1, arg);
 
-    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD,
-                               (void *)(uintptr_t)pipefd[0]);
-    EXPECT_EQ(UCS_OK, status);
-
-    nread  = ucs_sys_event_set_max_wait_events;
-    status = ucs_event_set_wait(event_set, &nread, -1, event_set_func1, arg);
-    EXPECT_EQ(1u, nread);
-    EXPECT_EQ(UCS_OK, status);
-    ucs_event_set_cleanup(event_set);
-
-    pthread_join(tid, NULL);
-
-    close(pipefd[0]);
-    close(pipefd[1]);
+    event_set_ctl(EVENT_SET_OP_DEL, m_pipefd[0], 0);
+    event_set_cleanup();
 }
 
 UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
-    ucs_sys_event_set_t *event_set = NULL;
-    pthread_t tid;
-    int ret;
-    int pipefd[2];
-    ucs_status_t status;
-    unsigned nread;
+    event_set_init(event_set_read_func);
+    event_set_ctl(EVENT_SET_OP_ADD, m_pipefd[1],
+                  UCS_EVENT_SET_EVWRITE);
 
-    if (pipe(pipefd) == -1) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
+    thread_barrier();
 
-    ret = pthread_create(&tid, NULL, event_set_read_func, (void *)&pipefd);
-    if (ret) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
+    event_set_wait(1u, -1, event_set_func2, NULL);
 
-    status = ucs_event_set_create(&event_set);
-    EXPECT_EQ(UCS_OK, status);
-    EXPECT_TRUE(event_set != NULL);
-
-    status = ucs_event_set_add(event_set, pipefd[1], UCS_EVENT_SET_EVWRITE,
-                               (void *)&pipefd[1]);
-    EXPECT_EQ(UCS_OK, status);
-
-    nread  = ucs_sys_event_set_max_wait_events;
-    status = ucs_event_set_wait(event_set, &nread, -1, event_set_func2, NULL);
-    EXPECT_EQ(1u, nread);
-    EXPECT_EQ(UCS_OK, status);
-    ucs_event_set_cleanup(event_set);
-
-    pthread_join(tid, NULL);
-
-    close(pipefd[0]);
-    close(pipefd[1]);
+    event_set_ctl(EVENT_SET_OP_DEL, m_pipefd[1], 0);
+    event_set_cleanup();
 }
 
 UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
-    ucs_sys_event_set_t *event_set = NULL;
-    pthread_t tid;
-    int ret;
-    int pipefd[2];
-    ucs_status_t status;
-    unsigned nread;
+    event_set_init(event_set_tmo_func);
+    event_set_ctl(EVENT_SET_OP_ADD, m_pipefd[0],
+                  UCS_EVENT_SET_EVREAD);
 
-    if (pipe(pipefd) == -1) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
+    thread_barrier();
+
+    event_set_wait(0u, 0, event_set_func3, NULL);
+
+    event_set_ctl(EVENT_SET_OP_DEL, m_pipefd[0], 0);
+    event_set_cleanup();
+}
+
+UCS_TEST_F(test_event_set, ucs_event_set_trig_modes) {
+    void *arg[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
+                    (void*)&UCS_EVENT_SET_EXTRA_NUM };
+
+    event_set_init(event_set_read_func);
+    event_set_ctl(EVENT_SET_OP_ADD, m_pipefd[0],
+                  UCS_EVENT_SET_EVREAD);
+
+    thread_barrier();
+
+    /* Test level-triggered mode (default) */
+    for (int i = 0; i < 10; i++) {
+        event_set_wait(1u, 0, event_set_func4, NULL);
     }
 
-    ret = pthread_barrier_init(&barrier, NULL, 2);
-    EXPECT_EQ(0, ret);
+    /* Test edge-triggered mode */
+    /* Set edge-triggered mode */
+    event_set_ctl(EVENT_SET_OP_MOD, m_pipefd[0],
+                  (ucs_event_set_type_t)(UCS_EVENT_SET_EVREAD |
+                                         UCS_EVENT_SET_EDGE_TRIGGERED));
 
-    ret = pthread_create(&tid, NULL, event_set_tmo_func, (void *)&pipefd);
-    if (ret) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
+    /* Should have only one event to read */
+    event_set_wait(1u, 0, event_set_func4, NULL);
+
+    /* Should not read nothing */
+    for (int i = 0; i < 10; i++) {
+        event_set_wait(0u, 0, event_set_func1, arg);
     }
 
-    status = ucs_event_set_create(&event_set);
-    EXPECT_EQ(UCS_OK, status);
-    EXPECT_TRUE(event_set != NULL);
+    /* Call the function below directly to read
+     * all outstanding data from pipe fd */
+    event_set_func1((void*)(uintptr_t)m_pipefd[0], UCS_EVENT_SET_EVREAD, arg);
 
-    status = ucs_event_set_add(event_set, pipefd[0], UCS_EVENT_SET_EVREAD,
-                               NULL);
-    EXPECT_EQ(UCS_OK,status);
-
-    ret = pthread_barrier_wait(&barrier);
-    EXPECT_TRUE((ret == 0) || (ret == PTHREAD_BARRIER_SERIAL_THREAD));
-
-    pthread_join(tid, NULL);
-    pthread_barrier_destroy(&barrier);
-
-    /* Check for events on pipe fd */
-    nread  = ucs_sys_event_set_max_wait_events;
-    status = ucs_event_set_wait(event_set, &nread, 0, event_set_func3, NULL);
-    EXPECT_EQ(0u, nread);
-    EXPECT_EQ(UCS_OK, status);
-    ucs_event_set_cleanup(event_set);
-
-    close(pipefd[0]);
-    close(pipefd[1]);
+    event_set_ctl(EVENT_SET_OP_DEL, m_pipefd[0], 0);
+    event_set_cleanup();
 }

@@ -44,6 +44,9 @@ static inline int ucs_event_set_map_to_raw_events(int events)
     if (events & UCS_EVENT_SET_EVERR) {
          raw_events |= EPOLLERR;
     }
+    if (events & UCS_EVENT_SET_EDGE_TRIGGERED) {
+        raw_events  |= EPOLLET;
+    }
     return raw_events;
 }
 
@@ -59,6 +62,9 @@ static inline int ucs_event_set_map_to_events(int raw_events)
     }
     if (raw_events & EPOLLERR) {
          events |= UCS_EVENT_SET_EVERR;
+    }
+    if (raw_events & EPOLLET) {
+        events  |= UCS_EVENT_SET_EDGE_TRIGGERED;
     }
     return events;
 }
