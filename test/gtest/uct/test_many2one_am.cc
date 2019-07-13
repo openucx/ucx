@@ -21,7 +21,7 @@ public:
         unsigned length;
     } receive_desc_t;
 
-    test_many2one_am() : m_am_count(0) {
+    test_many2one_am() : m_am_count(0), m_receiver(NULL) {
     }
 
     void init() {
@@ -45,12 +45,7 @@ public:
         m_receiver = create_entity(sizeof(receive_desc_t));
         m_entities.push_back(m_receiver);
 
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
+        check_skip_test();
     }
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,

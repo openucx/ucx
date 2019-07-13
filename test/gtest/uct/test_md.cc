@@ -78,12 +78,7 @@ void test_md::init()
     ucs_status_t status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
-    try {
-        check_skip_test();
-    } catch(...) {
-        cleanup();
-        throw;
-    }
+    check_skip_test();
 }
 
 void test_md::cleanup()

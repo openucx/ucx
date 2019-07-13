@@ -18,15 +18,10 @@ protected:
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
 
+        check_skip_test();
+
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
-
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
 
         uct_iface_set_am_handler(m_receiver->iface(), 1,
                                  (uct_am_callback_t)ucs_empty_function_return_success,

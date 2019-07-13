@@ -75,12 +75,7 @@ public:
         server = uct_test::create_entity(server_params);
         m_entities.push_back(server);
 
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
+        check_skip_test();
 
         /* if origin port is busy create_entity will retry with other one */
         port = ucs::sock_addr_storage(server->iface_params().mode.sockaddr

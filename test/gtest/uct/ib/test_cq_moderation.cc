@@ -43,12 +43,7 @@ protected:
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
 
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
+        check_skip_test();
 
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);

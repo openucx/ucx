@@ -81,12 +81,7 @@ public:
         entity *sender = uct_test::create_entity(params);
         m_entities.push_back(sender);
 
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
+        check_skip_test();
 
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
             sender->connect(0, *sender, 0);

@@ -21,12 +21,7 @@ public:
         m_e1 = uct_test::create_entity(0);
         m_entities.push_back(m_e1);
 
-        try {
-            check_skip_test();
-        } catch(...) {
-            cleanup();
-            throw;
-        }
+        check_skip_test();
 
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);

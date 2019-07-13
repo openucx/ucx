@@ -33,15 +33,10 @@ public:
         entity *receiver = uct_test::create_entity(0);
         m_entities.push_back(receiver);
 
+        check_skip_test();
+
         entity *sender = uct_test::create_entity(0);
         m_entities.push_back(sender);
-
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
 
         sender->connect(0, *receiver, 1);
         receiver->connect(1, *sender, 0);

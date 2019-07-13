@@ -199,14 +199,9 @@ void test_uct_peer_failure::init()
     m_sender = uct_test::create_entity(p);
     m_entities.push_back(m_sender);
 
-    try {
-        check_skip_test();
-        for (size_t i = 0; i < 2; ++i) {
-            new_receiver();
-        }
-    } catch (...) {
-        cleanup();
-        throw;
+    check_skip_test();
+    for (size_t i = 0; i < 2; ++i) {
+        new_receiver();
     }
 
     m_err_count = 0;

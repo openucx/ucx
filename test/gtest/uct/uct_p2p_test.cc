@@ -68,12 +68,7 @@ void uct_p2p_test::init() {
     entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
     m_entities.push_back(e1);
 
-    try {
-        check_skip_test();
-    } catch (...) {
-        cleanup();
-        throw;
-    }
+    check_skip_test();
 
     if (r->loopback) {
         e1->connect(0, *e1, 0);

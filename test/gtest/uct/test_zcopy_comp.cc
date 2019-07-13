@@ -14,12 +14,7 @@ class test_zcopy_comp : public uct_test {
         m_sender = create_entity(0);
         m_entities.push_back(m_sender);
 
-        try {
-            check_skip_test();
-        } catch (...) {
-            cleanup();
-            throw;
-        }
+        check_skip_test();
     }
 
 protected:
