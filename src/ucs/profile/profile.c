@@ -25,15 +25,12 @@ typedef struct ucs_profile_global_location {
  * Profiling global context
  */
 typedef struct ucs_profile_global_context {
-
     ucs_profile_global_location_t *locations;    /**< Array of all locations */
     unsigned                      num_locations; /**< Number of valid locations */
     unsigned                      max_locations; /**< Size of locations array */
     pthread_mutex_t               mutex;         /**< Protects updating the locations array */
-
     pthread_key_t                 tls_key;       /**< TLS key for per-thread context */
     ucs_list_link_t               thread_list;   /**< List of all thread contexts */
-
 } ucs_profile_global_context_t;
 
 
@@ -63,10 +60,10 @@ typedef struct ucs_profile_thread_context {
 
 
 #define ucs_profile_for_each_location(_var) \
-    for (_var = ucs_profile_global_ctx.locations; \
-         _var < ucs_profile_global_ctx.locations + \
-                ucs_profile_global_ctx.num_locations; \
-         ++_var)
+    for ((_var) = ucs_profile_global_ctx.locations; \
+         (_var) < (ucs_profile_global_ctx.locations + \
+                   ucs_profile_global_ctx.num_locations); \
+         ++(_var))
 
 
 const char *ucs_profile_mode_names[] = {
@@ -132,7 +129,6 @@ ucs_profile_file_write_thread(int fd, ucs_profile_thread_context_t *ctx,
     ucs_debug("profiling context %p: write to file", ctx);
 
     /* write thread header */
-    memset(&thread_hdr, 0, sizeof(thread_hdr));
     thread_hdr.tid          = ctx->tid;
     thread_hdr.start_time   = ctx->start_time;
     if (ctx->is_completed) {
@@ -375,7 +371,7 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
                              const char *file, int line, const char *function,
                              volatile int *loc_id_p)
 {
-    ucs_profile_global_location_t *loc;
+    ucs_profile_global_location_t *loc, *new_locations;
     int loc_id;
 
     pthread_mutex_lock(&ucs_profile_global_ctx.mutex);
@@ -410,16 +406,17 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
     if (ucs_profile_global_ctx.num_locations > ucs_profile_global_ctx.max_locations) {
         ucs_profile_global_ctx.max_locations =
                         2 * ucs_profile_global_ctx.num_locations;
-        ucs_profile_global_ctx.locations =
-                        ucs_realloc(ucs_profile_global_ctx.locations,
+        new_locations = ucs_realloc(ucs_profile_global_ctx.locations,
                                     sizeof(*ucs_profile_global_ctx.locations) *
                                     ucs_profile_global_ctx.max_locations,
                                     "profile_locations");
-        if (ucs_profile_global_ctx.locations == NULL) {
+        if (new_locations == NULL) {
             ucs_warn("failed to expand locations array");
             *loc_id_p = loc_id = 0;
             goto out_unlock;
         }
+
+        ucs_profile_global_ctx.locations = new_locations;
     }
 
     /* Initialize new location */
