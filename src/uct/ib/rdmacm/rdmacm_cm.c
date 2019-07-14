@@ -63,7 +63,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     worker_priv = ucs_derived_of(worker, uct_priv_worker_t);
     status = ucs_async_set_event_handler(worker_priv->async->mode,
-                                         self->ev_ch->fd, POLLIN,
+                                         self->ev_ch->fd, UCS_EVENT_SET_EVREAD,
                                          uct_rdmacm_cm_event_handler, self,
                                          worker_priv->async);
     if (status != UCS_OK) {
