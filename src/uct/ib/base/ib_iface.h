@@ -321,7 +321,15 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
  *                         must be initialized by a caller.
  */
 void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
+                         int is_link_layer_eth, uint8_t is_global_addr,
                           uct_ib_address_t *ib_addr);
+
+/**
+ *
+ */
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
+                               uint16_t lid, uct_ib_address_t *ib_addr);
+
 
 /**
  * Unpack IB address.
@@ -336,14 +344,14 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 /**
  * Set the address flags according to the given parameters.
  */
-void uct_ib_set_device_address_flags(const union ibv_gid *gid, uint8_t is_global_addr,
-                                     int is_link_layer_eth, uct_ib_address_t *ib_addr);
+//void uct_ib_set_device_address_flags(const union ibv_gid *gid, uint8_t is_global_addr,
+//                                     int is_link_layer_eth, uct_ib_address_t *ib_addr);
 
 /**
  * Set the address flags according to the given iface
  */
-void uct_ib_iface_set_device_address_flags(uct_iface_h tl_iface,
-                                           uct_ib_address_t *ib_addr);
+//void uct_ib_iface_set_device_address_flags(uct_iface_h tl_iface,
+//                                           uct_ib_address_t *ib_addr);
 
 /**
  * Convert IB address to a human-readable string.

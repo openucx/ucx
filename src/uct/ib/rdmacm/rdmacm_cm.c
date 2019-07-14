@@ -10,6 +10,7 @@
 #endif
 
 #if HAVE_RDMACM_QP_LESS
+//#if 1
 
 #include "rdmacm_cm.h"
 #include "rdmacm_iface.h"
@@ -328,7 +329,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                                                  size_t *dev_addr_len_p)
 {
     struct ibv_port_attr port_arrt;
-    uct_ib_address_t addr_dummy;
+//    uct_ib_address_t addr_dummy;
     uct_ib_address_t *dev_addr;
     struct ibv_qp_attr qp_attr;
     size_t addr_length;
@@ -350,10 +351,6 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_IO_ERROR;
     }
 
-    uct_ib_set_device_address_flags(&qp_attr.ah_attr.grh.dgid, 0,
-                                    port_arrt.link_layer == IBV_LINK_LAYER_ETHERNET,
-                                    &addr_dummy);
-
     addr_length = uct_ib_addr_size(&qp_attr.ah_attr.grh.dgid, 0,
                                    port_arrt.link_layer == IBV_LINK_LAYER_ETHERNET);
 
@@ -362,9 +359,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_NO_MEMORY;
     }
 
-    *dev_addr = addr_dummy;
+//    uct_ib_set_device_address_flags(&qp_attr.ah_attr.grh.dgid, 0,
+//                                    port_arrt.link_layer == IBV_LINK_LAYER_ETHERNET, dev_addr);
+////                                    &addr_dummy);
 
-    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid, dev_addr);
+//    *dev_addr = addr_dummy;
+
+    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
+                        port_arrt.link_layer == IBV_LINK_LAYER_ETHERNET, 0,
+                        dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;
