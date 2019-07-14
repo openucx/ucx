@@ -57,7 +57,7 @@ public:
         uct_test::cleanup();
     }
 
-    void test_recv_am();
+    void test_recv_am(unsigned arm_flags, unsigned send_flags);
 
     static size_t pack_u64(void *dest, void *arg)
     {
@@ -81,12 +81,11 @@ public:
 protected:
     entity *m_e1, *m_e2;
     static int m_am_count;
-    unsigned m_send_flags, m_arm_flags;
 };
 
 int test_uct_event_fd::m_am_count = 0;
 
-void test_uct_event_fd::test_recv_am()
+void test_uct_event_fd::test_recv_am(unsigned arm_flags, unsigned send_flags)
 {
     uint64_t send_data = 0xdeadbeef;
     int am_send_count = 0;
@@ -112,12 +111,12 @@ void test_uct_event_fd::test_recv_am()
     wakeup_fd.events = POLLIN;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    arm(m_e2, m_arm_flags);
+    arm(m_e2, arm_flags);
 
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data */
-    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, m_send_flags);
+    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
     ASSERT_EQ((ssize_t)sizeof(send_data), res);
     ++am_send_count;
 
@@ -126,7 +125,7 @@ void test_uct_event_fd::test_recv_am()
 
     for (;;) {
         if ((progress() == 0) && (m_am_count == am_send_count)) {
-            status = uct_iface_event_arm(m_e2->iface(), m_arm_flags);
+            status = uct_iface_event_arm(m_e2->iface(), arm_flags);
             if (status != UCS_ERR_BUSY) {
                 break;
             }
@@ -134,10 +133,10 @@ void test_uct_event_fd::test_recv_am()
     }
     ASSERT_EQ(UCS_OK, status);
 
-    arm(m_e2, m_arm_flags);
+    arm(m_e2, arm_flags);
 
     /* send the data again */
-    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, m_send_flags);
+    res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
     ASSERT_EQ((ssize_t)sizeof(send_data), res);
     ++am_send_count;
 
@@ -158,9 +157,7 @@ UCS_TEST_SKIP_COND_P(test_uct_event_fd, am,
                                  UCT_IFACE_FLAG_CB_SYNC    |
                                  UCT_IFACE_FLAG_AM_BCOPY))
 {
-    m_arm_flags  = UCT_EVENT_RECV;
-    m_send_flags = 0;
-    test_recv_am();
+    test_recv_am(UCT_EVENT_RECV, 0);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_event_fd, sig_am,
@@ -168,9 +165,7 @@ UCS_TEST_SKIP_COND_P(test_uct_event_fd, sig_am,
                                  UCT_IFACE_FLAG_CB_SYNC        |
                                  UCT_IFACE_FLAG_AM_BCOPY))
 {
-    m_arm_flags  = UCT_EVENT_RECV_SIG;
-    m_send_flags = UCT_SEND_FLAG_SIGNALED;
-    test_recv_am();
+    test_recv_am(UCT_EVENT_RECV_SIG, UCT_SEND_FLAG_SIGNALED);
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event_fd);

@@ -100,10 +100,7 @@ void test_md::modify_config(const std::string& name, const std::string& value,
 
 bool test_md::check_caps(uint64_t flags)
 {
-    if (md() == NULL) {
-        return true;
-    }
-    return ucs_test_all_flags(m_md_attr.cap.flags, flags);
+    return ((md() == NULL) || ucs_test_all_flags(m_md_attr.cap.flags, flags));
 }
 
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int mem_type)
