@@ -6,6 +6,7 @@
 
 #include "rdmacm_listener.h"
 
+
 UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
                     const struct sockaddr *saddr, socklen_t socklen,
                     const uct_listener_params_t *params)

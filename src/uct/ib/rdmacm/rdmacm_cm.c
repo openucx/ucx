@@ -45,8 +45,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops, component);
 
-    self->worker          = worker;
-    self->ev_ch           = rdma_create_event_channel();
+    self->worker = worker;
+    self->ev_ch  = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
         ucs_error("rdma_create_event_channel failed: %m");
         status = UCS_ERR_IO_ERROR;

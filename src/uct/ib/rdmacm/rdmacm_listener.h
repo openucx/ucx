@@ -23,6 +23,7 @@ typedef struct uct_rdmacm_listener {
     void                                 *user_data;
 } uct_rdmacm_listener_t;
 
+
 UCS_CLASS_DECLARE(uct_rdmacm_listener_t, uct_cm_h, const struct sockaddr *,
                   socklen_t, const uct_listener_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_listener_t, uct_listener_t,
