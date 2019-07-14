@@ -173,8 +173,6 @@ typedef struct ucp_context {
     /* Mask of memory type communication resources */
     uint64_t                      mem_type_access_tls[UCT_MD_MEM_TYPE_LAST];
 
-    ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
-
     struct {
 
         /* Bitmap of features supported by the context */

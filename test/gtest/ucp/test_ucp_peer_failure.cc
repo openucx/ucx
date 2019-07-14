@@ -334,6 +334,8 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
             ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
 
+            m_failing_rkey.reset();
+
             void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
             wait(creq);
 
@@ -363,6 +365,11 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     /* Check that TX polling is working well */
     while (sender().progress());
+
+    /* Destroy rkeys before destroying the worker (which also destroys the
+     * endpoints) */
+    m_failing_rkey.reset();
+    m_stable_rkey.reset();
 
     /* When all requests on sender are done we need to prevent LOCAL_FLUSH
      * in test teardown. Receiver is killed and doesn't respond on FC requests

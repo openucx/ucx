@@ -169,8 +169,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
                  ucp_ep_h ep, const void *rkey_buffer,
                  ucp_rkey_h *rkey_p)
 {
-    ucp_context_t         *context   = ep->worker->context;
-    const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_worker_h  worker = ep->worker;
+    const ucp_ep_config_t *ep_config;
     unsigned remote_md_index;
     ucp_md_map_t md_map, remote_md_map;
     ucp_rsc_index_t cmpt_index;
@@ -182,6 +182,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
     uct_memory_type_t mem_type;
     uint8_t md_size;
     const void *p;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    ep_config = ucp_ep_config(ep);
 
     /* Count the number of remote MDs in the rkey buffer */
     p = rkey_buffer;
@@ -200,16 +204,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
      * We keep all of them to handle a future transport switch.
      */
     if (md_count <= UCP_RKEY_MPOOL_MAX_MD) {
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
-        rkey = ucs_mpool_get_inline(&context->rkey_mp);
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+        rkey = ucs_mpool_get_inline(&worker->rkey_mp);
     } else {
         rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->tl_rkey[0]) * md_count),
                           "ucp_rkey");
     }
     if (rkey == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto out_unlock;
     }
 
     /* Read memory type */
@@ -242,7 +244,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
             tl_rkey       = &rkey->tl_rkey[rkey_index];
             cmpt_index    = ucp_ep_config_get_dst_md_cmpt(&ep_config->key,
                                                           remote_md_index);
-            tl_rkey->cmpt = context->tl_cmpts[cmpt_index].cmpt;
+            tl_rkey->cmpt = worker->context->tl_cmpts[cmpt_index].cmpt;
 
             status = uct_rkey_unpack(tl_rkey->cmpt, p, &tl_rkey->rkey);
             if (status == UCS_OK) {
@@ -255,7 +257,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
                           rkey_index, remote_md_index, tl_rkey->rkey.rkey);
                 /* FIXME this can make malloc allocated key be released to mpool */
             } else {
-                ucs_error("Failed to unpack remote key from remote md[%d]: %s",
+                ucs_error("failed to unpack remote key from remote md[%d]: %s",
                           remote_md_index, ucs_status_string(status));
                 goto err_destroy;
             }
@@ -266,12 +268,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
 
     ucp_rkey_resolve_inner(rkey, ep);
     *rkey_p = rkey;
-    return UCS_OK;
+    status  = UCS_OK;
+
+out_unlock:
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+    return status;
 
 err_destroy:
     ucp_rkey_destroy(rkey);
-err:
-    return status;
+    goto out_unlock;
 }
 
 void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
@@ -338,7 +343,7 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
 void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
     unsigned remote_md_index, rkey_index;
-    ucp_context_h UCS_V_UNUSED context;
+    ucp_worker_h UCS_V_UNUSED worker;
 
     rkey_index = 0;
     ucs_for_each_bit(remote_md_index, rkey->md_map) {
@@ -348,11 +353,11 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     }
 
     if (ucs_popcount(rkey->md_map) <= UCP_RKEY_MPOOL_MAX_MD) {
-        context = ucs_container_of(ucs_mpool_obj_owner(rkey), ucp_context_t,
-                                   rkey_mp);
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
+        worker = ucs_container_of(ucs_mpool_obj_owner(rkey), ucp_worker_t,
+                                  rkey_mp);
+        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
         ucs_mpool_put_inline(rkey);
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     } else {
         ucs_free(rkey);
     }
