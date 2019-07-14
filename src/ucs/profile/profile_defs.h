@@ -94,7 +94,7 @@ typedef struct ucs_profile_thread_header {
     uint64_t                 start_time;     /**< Time of thread start */
     uint64_t                 end_time;       /**< Time of thread exit */
     uint64_t                 num_records;    /**< Number of records for the thread */
-} ucs_profile_thread_header_t;
+} UCS_S_PACKED ucs_profile_thread_header_t;
 
 
 /**

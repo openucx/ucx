@@ -10,6 +10,7 @@
 #include <ucs/config/types.h>
 #include <ucs/time/time_def.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/event_set.h>
 
 BEGIN_C_DECLS
 
@@ -37,7 +38,7 @@ typedef void (*ucs_async_event_cb_t)(int id, void *arg);
  *
  * @param mode            Thread or signal.
  * @param event_fd        File descriptor to set handler for.
- * @param events          Events to wait on (POLLxx/EPOLLxx bits).
+ * @param events          Events to wait on (UCS_EVENT_SET_EVxxx bits).
  * @param cb              Callback function to execute.
  * @param arg             Argument to callback.
  * @param async           Async context to which events are delivered.
@@ -91,7 +92,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync);
  * Modify events mask for an existing event handler (event file).
  *
  * @param fd        File descriptor modify events for.
- * @param events    New set of events to wait on (POLLxx/EPOLLxx bits).
+ * @param events    New set of events to wait on (UCS_EVENT_SET_EVxxx bits).
  *
  * @return Error code as defined by @ref ucs_status_t.
  */

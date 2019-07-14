@@ -346,7 +346,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     status = ucs_async_set_event_handler(self->super.super.worker->async->mode,
-                                         self->cmdev->fd, POLLIN,
+                                         self->cmdev->fd, UCS_EVENT_SET_EVREAD,
                                          uct_cm_iface_event_handler, self,
                                          self->super.super.worker->async);
     if (status != UCS_OK) {
