@@ -317,6 +317,7 @@ UCS_TEST_P(test_profile, log_accum) {
 }
 
 INSTANTIATE_TEST_CASE_P(st, test_profile, ::testing::Values(1));
+INSTANTIATE_TEST_CASE_P(mt, test_profile, ::testing::Values(2, 4, 8));
 
 class test_profile_perf : public test_profile {
 };
