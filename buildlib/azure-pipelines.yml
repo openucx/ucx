@@ -1,0 +1,60 @@
+# See https://aka.ms/yaml
+
+trigger:
+  - master
+pr:
+  - master
+
+resources:
+  containers:
+    - container: centos7
+      image: ucfconsort.azurecr.io/ucx/centos7:1
+      endpoint: ucfconsort_registry
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Compile
+        displayName: Compile Tests
+        pool:
+          vmImage: 'Ubuntu-16.04'
+        steps:
+          - bash: |
+              ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              mkdir build && cd build
+              ../configure --disable-numa
+            displayName: Configure
+
+          - bash: |
+               cd build
+               gcc -v
+               make -s -j `nproc`
+            displayName: Build gcc 5.4
+
+      # Perform test builds on relevant distributions.
+      - job: Distros
+        displayName: Test Build for
+        strategy:
+          matrix:
+            centos7:
+              CONTAINER: centos7
+              CONFIGURE_OPTS:
+        container: $[ variables['CONTAINER'] ]
+        steps:
+          - bash: |
+              ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              mkdir build && cd build
+              ../configure $(CONFIGURE_OPTS)
+            displayName: Configure
+
+          - bash: |
+               cd build
+               gcc -v
+               make -s -j `nproc`
+            displayName: Build for $(CONTAINER)

@@ -273,6 +273,14 @@ void ucs_profile_record(ucs_profile_type_t type, const char *name,
                         uint32_t param32, uint64_t param64, const char *file,
                         int line, const char *function, volatile int *loc_id_p);
 
+
+/**
+ * Reset the internal array of profiling locations.
+ * Used for testing purposes only.
+ */
+void ucs_profile_reset_locations();
+
+
 END_C_DECLS
 
 #endif
