@@ -9,6 +9,7 @@ extern "C" {
 }
 #include "uct_test.h"
 
+
 class test_uct_ep : public uct_test {
 protected:
 
@@ -16,6 +17,8 @@ protected:
         uct_test::init();
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
+
+        check_skip_test();
 
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
@@ -38,20 +41,22 @@ protected:
         m_sender->destroy_ep(0);
     }
 
+    bool skip_on_ib_dc() {
+#ifdef HAVE_DC_DV /* skip due to DCI stuck bug */
+        return has_transport("dc_mlx5");
+#else
+        return false;
+#endif
+    }
+
     entity * m_sender;
     entity * m_receiver;
 };
 
-UCS_TEST_P(test_uct_ep, disconnect_after_send) {
+UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
+                     (!check_caps(UCT_IFACE_FLAG_AM_ZCOPY) ||
+                      skip_on_ib_dc())) {
     ucs_status_t status;
-
-#if HAVE_DC_DV
-    if (has_transport("dc_mlx5")) {
-        UCS_TEST_SKIP_R("DCI stuck bug");
-    }
-#endif
-
-    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
 
     mapped_buffer buffer(256, 0, *m_sender);
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer.ptr(),

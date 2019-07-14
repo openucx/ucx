@@ -77,9 +77,8 @@ int test_ud_slow_timer::tick_count = 0;
 
 
 /* single packet received without progress */
-UCS_TEST_P(test_ud_slow_timer, tx1) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud_slow_timer, tx1,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     EXPECT_UCS_OK(tx(m_e1));
     wait_for_rx_sn(1);
@@ -88,10 +87,9 @@ UCS_TEST_P(test_ud_slow_timer, tx1) {
 }
 
 /* multiple packets received without progress */
-UCS_TEST_P(test_ud_slow_timer, txn) {
-    unsigned i, N=42;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(test_ud_slow_timer, txn,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+    unsigned i, N = 42;
 
     connect();
     set_tx_win(m_e1, 1024);
@@ -129,10 +127,8 @@ UCS_TEST_P(test_ud_slow_timer, tick1) {
 }
 
 /* ticks while tx  window is not empty */
-UCS_TEST_P(test_ud_slow_timer, tick2) {
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud_slow_timer, tick2,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     tick_count = 0;
     ep(m_e1)->timer_hook = tick_counter;
@@ -143,9 +139,8 @@ UCS_TEST_P(test_ud_slow_timer, tick2) {
 
 /* retransmit one packet */
 
-UCS_TEST_P(test_ud_slow_timer, retransmit1) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud_slow_timer, retransmit1,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     ep(m_e2)->rx.rx_hook = drop_packet;
     EXPECT_UCS_OK(tx(m_e1));
@@ -159,11 +154,10 @@ UCS_TEST_P(test_ud_slow_timer, retransmit1) {
 }
 
 /* retransmit many packets */
-UCS_TEST_P(test_ud_slow_timer, retransmitn) {
+UCS_TEST_SKIP_COND_P(test_ud_slow_timer, retransmitn,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
 
-    unsigned i, N=42;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+    unsigned i, N = 42;
 
     connect();
     set_tx_win(m_e1, 1024);
@@ -181,12 +175,11 @@ UCS_TEST_P(test_ud_slow_timer, retransmitn) {
 }
 
 
-UCS_TEST_P(test_ud_slow_timer, partial_drop) {
+UCS_TEST_SKIP_COND_P(test_ud_slow_timer, partial_drop,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
 
-    unsigned i, N=24;
+    unsigned i, N = 24;
     int orig_avail;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     connect();
     set_tx_win(m_e1, 1024);

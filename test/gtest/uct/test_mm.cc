@@ -24,6 +24,9 @@ public:
         m_e1 = uct_test::create_entity(0);
         m_entities.push_back(m_e1);
 
+        check_caps_skip(UCT_IFACE_FLAG_AM_SHORT |
+                        UCT_IFACE_FLAG_CB_SYNC);
+
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
 
@@ -77,9 +80,9 @@ UCS_TEST_P(test_uct_mm, open_for_posix) {
         }
 
         initialize();
-        check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_CB_SYNC);
 
-        recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
+        recv_buffer = (recv_desc_t *)malloc(sizeof(*recv_buffer) +
+                                            sizeof(uint64_t));
         recv_buffer->length = 0; /* Initialize length to 0 */
 
         /* set a callback for the uct to invoke for receiving the data */

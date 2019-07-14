@@ -360,16 +360,28 @@ bool uct_test::is_caps_supported(uint64_t required_flags) {
     return ret;
 }
 
-void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
+bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
-        (*iter)->check_caps(required_flags, invalid_flags);
+        if (!(*iter)->check_caps(required_flags, invalid_flags)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void uct_test::check_caps_skip(uint64_t required_flags, uint64_t invalid_flags) {
+    if (!check_caps(required_flags, invalid_flags)) {
+        UCS_TEST_SKIP_R("unsupported");
     }
 }
 
-void uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
+bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
     FOR_EACH_ENTITY(iter) {
-        (*iter)->check_atomics(required_ops, mode);
+        if (!(*iter)->check_atomics(required_ops, mode)) {
+            return false;
+        }
     }
+    return true;
 }
 
 void uct_test::modify_config(const std::string& name, const std::string& value,
@@ -729,19 +741,15 @@ bool uct_test::entity::is_caps_supported(uint64_t required_flags) {
     return ucs_test_all_flags(iface_flags, required_flags);
 }
 
-void uct_test::entity::check_caps(uint64_t required_flags,
+bool uct_test::entity::check_caps(uint64_t required_flags,
                                   uint64_t invalid_flags)
 {
     uint64_t iface_flags = iface_attr().cap.flags;
-    if (!ucs_test_all_flags(iface_flags, required_flags)) {
-        UCS_TEST_SKIP_R("unsupported");
-    }
-    if (iface_flags & invalid_flags) {
-        UCS_TEST_SKIP_R("unsupported");
-    }
+    return (ucs_test_all_flags(iface_flags, required_flags) &&
+            !(iface_flags & invalid_flags));
 }
 
-void uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
+bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
 {
     uint64_t amo;
 
@@ -763,9 +771,7 @@ void uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
         break;
     }
 
-    if (!ucs_test_all_flags(amo, required_ops)) {
-        UCS_TEST_SKIP_R("unsupported");
-    }
+    return ucs_test_all_flags(amo, required_ops);
 }
 
 uct_md_h uct_test::entity::md() const {

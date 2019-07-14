@@ -315,16 +315,12 @@ private:
     tracer_ctx_t                 m_recv_tracer;
 };
 
-UCS_TEST_P(uct_p2p_am_test, am_sync) {
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_sync,
+                     ((UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) ||
+                      !check_caps(UCT_IFACE_FLAG_CB_SYNC,
+                                  UCT_IFACE_FLAG_AM_DUP))) {
 
     ucs_status_t status;
-
-    if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
-        UCS_TEST_SKIP_R("SELF doesn't use progress");
-    }
-
-    check_caps(UCT_IFACE_FLAG_CB_SYNC, UCT_IFACE_FLAG_AM_DUP);
-
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     unsigned am_count = m_am_count = 0;
 
@@ -363,10 +359,10 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
     ASSERT_UCS_OK(status);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_async) {
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async,
+                     !check_caps(UCT_IFACE_FLAG_CB_ASYNC,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     ucs_status_t status;
-
-    check_caps(UCT_IFACE_FLAG_CB_ASYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     unsigned am_count = m_am_count = 0;
@@ -407,13 +403,13 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
     ASSERT_UCS_OK(status);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_async_response) {
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async_response,
+                     !check_caps(UCT_IFACE_FLAG_CB_SYNC |
+                                 UCT_IFACE_FLAG_CB_ASYNC,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     ucs_status_t status;
-
-    check_caps(UCT_IFACE_FLAG_CB_SYNC | UCT_IFACE_FLAG_CB_ASYNC,
-               UCT_IFACE_FLAG_AM_DUP);
-
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+
     m_am_posted = m_am_count = 0;
     m_pending_req.posted = false;
 
@@ -509,16 +505,18 @@ public:
     bool m_rx_buf_limit_failed;
 };
 
-UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_DUP);
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_bcopy,
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
@@ -526,8 +524,9 @@ UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_DUP);
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_bcopy_keep_data,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
@@ -535,8 +534,9 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
-    check_caps(UCT_IFACE_FLAG_AM_ZCOPY, UCT_IFACE_FLAG_AM_DUP);
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY,
+                                 UCT_IFACE_FLAG_AM_DUP)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_zcopy,
@@ -549,7 +549,10 @@ const unsigned uct_p2p_am_misc::RX_MAX_BUFS  = 1024; /* due to hard coded 'grow'
                                                         parameter in uct_ib_iface_recv_mpool_init */
 const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
-UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND)
+UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
+                     (RUNNING_ON_VALGRIND || m_rx_buf_limit_failed ||
+                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                  UCT_IFACE_FLAG_CB_SYNC)))
 {
     mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short,
                                   10 * sizeof(uint64_t)),
@@ -560,12 +563,6 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND)
     if (&sender() == &receiver()) {
         UCS_TEST_SKIP_R("skipping on loopback");
     }
-
-    if (m_rx_buf_limit_failed) {
-        UCS_TEST_SKIP_R("Current transport doesn't have rx memory pool");
-    }
-
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_CB_SYNC);
 
     /* set a callback for the uct to invoke for receiving the data */
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
@@ -592,9 +589,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs, RUNNING_ON_VALGRIND)
     EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 6));
 }
 
-UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
+UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_multi,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     ucs_status_t status;
 
     m_am_count = 0;
@@ -667,7 +663,7 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
     ucs_status_t status;
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
-            SEED1, sender());
+                                SEED1, sender());
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
                                       this, UCT_CB_FLAG_ASYNC);

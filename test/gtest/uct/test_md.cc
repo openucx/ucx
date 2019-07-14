@@ -77,6 +77,8 @@ void test_md::init()
 
     ucs_status_t status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
+
+    check_skip_test();
 }
 
 void test_md::cleanup()
@@ -96,16 +98,9 @@ void test_md::modify_config(const std::string& name, const std::string& value,
     }
 }
 
-void test_md::check_caps(uint64_t flags, const std::string& name)
+bool test_md::check_caps(uint64_t flags)
 {
-    uct_md_attr_t md_attr;
-    ucs_status_t status = uct_md_query(md(), &md_attr);
-    ASSERT_UCS_OK(status);
-    if (!ucs_test_all_flags(md_attr.cap.flags, flags)) {
-        std::stringstream ss;
-        ss << name << " is not supported by " << GetParam().md_name;
-        UCS_TEST_SKIP_R(ss.str());
-    }
+    return ((md() == NULL) || ucs_test_all_flags(m_md_attr.cap.flags, flags));
 }
 
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int mem_type)
@@ -178,8 +173,9 @@ void test_md::free_memory(void *address, int mem_type)
     }
 }
 
-UCS_TEST_P(test_md, rkey_ptr) {
-
+UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
+                     !check_caps(UCT_MD_FLAG_ALLOC |
+                                 UCT_MD_FLAG_RKEY_PTR)) {
     size_t size;
     uct_md_attr_t md_attr;
     void *rkey_buffer;
@@ -189,7 +185,6 @@ UCS_TEST_P(test_md, rkey_ptr) {
     uct_rkey_bundle_t rkey_bundle;
     unsigned i;
 
-    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = sizeof(unsigned) * UCS_MBYTE;
     status = uct_md_mem_alloc(md(), &size, (void **)&rva,
@@ -246,13 +241,12 @@ UCS_TEST_P(test_md, rkey_ptr) {
     uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
-UCS_TEST_P(test_md, alloc) {
+UCS_TEST_SKIP_COND_P(test_md, alloc,
+                     !check_caps(UCT_MD_FLAG_ALLOC)) {
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-
-    check_caps(UCT_MD_FLAG_ALLOC, "allocation");
 
     for (unsigned i = 0; i < 300; ++i) {
         size = orig_size = ucs::rand() % 65536;
@@ -297,14 +291,13 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
     }
 }
 
-UCS_TEST_P(test_md, reg) {
+UCS_TEST_SKIP_COND_P(test_md, reg,
+                     !check_caps(UCT_MD_FLAG_REG)) {
     size_t size;
     uct_md_attr_t md_attr;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-
-    check_caps(UCT_MD_FLAG_REG, "registration");
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
@@ -341,13 +334,12 @@ UCS_TEST_P(test_md, reg) {
     }
 }
 
-UCS_TEST_P(test_md, reg_perf) {
+UCS_TEST_SKIP_COND_P(test_md, reg_perf,
+                     !check_caps(UCT_MD_FLAG_REG)) {
     static const unsigned count = 10000;
     ucs_status_t status;
     uct_md_attr_t md_attr;
     void *ptr;
-
-    check_caps(UCT_MD_FLAG_REG, "registration");
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
@@ -391,13 +383,13 @@ UCS_TEST_P(test_md, reg_perf) {
     }
 }
 
-UCS_TEST_P(test_md, reg_advise) {
+UCS_TEST_SKIP_COND_P(test_md, reg_advise,
+                     !check_caps(UCT_MD_FLAG_REG |
+                                 UCT_MD_FLAG_ADVISE)) {
     size_t size;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-
-    check_caps(UCT_MD_FLAG_REG|UCT_MD_FLAG_ADVISE, "registration&advise");
 
     size = 128 * UCS_MBYTE;
     address = malloc(size);
@@ -418,13 +410,13 @@ UCS_TEST_P(test_md, reg_advise) {
     free(address);
 }
 
-UCS_TEST_P(test_md, alloc_advise) {
+UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
+                     !check_caps(UCT_MD_FLAG_ALLOC |
+                                 UCT_MD_FLAG_ADVISE)) {
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-
-    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_ADVISE, "allocation&advise");
 
     orig_size = size = 128 * UCS_MBYTE;
 
@@ -449,11 +441,10 @@ UCS_TEST_P(test_md, alloc_advise) {
  * reproduce issue #1284, main thread is registering memory while another thread
  * allocates and releases memory.
  */
-UCS_TEST_P(test_md, reg_multi_thread) {
+UCS_TEST_SKIP_COND_P(test_md, reg_multi_thread,
+                     !check_caps(UCT_MD_FLAG_REG)) {
     ucs_status_t status;
     uct_md_attr_t md_attr;
-
-    check_caps(UCT_MD_FLAG_REG, "registration");
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
@@ -492,12 +483,11 @@ UCS_TEST_P(test_md, reg_multi_thread) {
     pthread_join(thread_id, NULL);
 }
 
-UCS_TEST_P(test_md, sockaddr_accessibility) {
+UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
+                     !check_caps(UCT_MD_FLAG_SOCKADDR)) {
     ucs_sock_addr_t sock_addr;
     struct ifaddrs *ifaddr, *ifa;
     int found_ipoib = 0;
-
-    check_caps(UCT_MD_FLAG_SOCKADDR, "sockaddr");
 
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
 
