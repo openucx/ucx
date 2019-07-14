@@ -8,7 +8,6 @@
 extern "C" {
 #include <ucs/sys/event_set.h>
 #include <pthread.h>
-#include <sys/epoll.h>
 }
 
 #define MAX_BUF_LEN        255
@@ -29,6 +28,7 @@ public:
         EVENT_SET_OP_MOD,
         EVENT_SET_OP_DEL
     };
+
 protected:
     static void* event_set_read_func(void *arg) {
         int *fd = (int *)arg;
@@ -53,21 +53,24 @@ protected:
         int ret;
 
         if (pipe(m_pipefd) == -1) {
-            UCS_TEST_MESSAGE << strerror(errno);
-            throw ucs::test_abort_exception();
+            UCS_TEST_ABORT("pipe() failed with error - " <<
+                           strerror(errno));
         }
 
         ret = pthread_barrier_init(&barrier, NULL, 2);
-        EXPECT_EQ(0, ret);
+        if (ret) {
+            UCS_TEST_ABORT("pthread_barrier_init() failed with error - " <<
+                           strerror(errno));
+        }
 
         ret = pthread_create(&m_tid, NULL, func, (void *)&m_pipefd);
         if (ret) {
-            UCS_TEST_MESSAGE << strerror(errno);
-            throw ucs::test_abort_exception();
+            UCS_TEST_ABORT("pthread_create() failed with error - " <<
+                           strerror(errno));
         }
 
         status = ucs_event_set_create(&m_event_set);
-        EXPECT_UCS_OK(status);
+        ASSERT_UCS_OK(status);
         EXPECT_TRUE(m_event_set != NULL);
     }
 
@@ -99,8 +102,7 @@ protected:
             status = ucs_event_set_del(m_event_set, fd);
             break;
         default:
-            UCS_TEST_MESSAGE << "Unknow Event Set operation";
-            throw ucs::test_abort_exception();
+            UCS_TEST_ABORT("unknown event set operation - " << op);
         }
 
         EXPECT_UCS_OK(status);
@@ -122,8 +124,8 @@ protected:
         EXPECT_TRUE((ret == 0) || (ret == PTHREAD_BARRIER_SERIAL_THREAD));
     }
 
-    int m_pipefd[2];
-    pthread_t m_tid;
+    int                  m_pipefd[2];
+    pthread_t            m_tid;
     ucs_sys_event_set_t *m_event_set;
 };
 
@@ -141,6 +143,7 @@ static void event_set_func1(void *callback_data, int events, void *arg)
     memset(buf, 0, MAX_BUF_LEN);
 
     EXPECT_EQ(UCS_EVENT_SET_EVREAD, events);
+
     n = read(fd, buf, MAX_BUF_LEN);
     if (n == -1) {
         ADD_FAILURE();
