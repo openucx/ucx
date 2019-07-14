@@ -483,6 +483,10 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
     return new_ent;
 }
 
+uct_test::entity* uct_test::create_entity() {
+    return new entity(*GetParam(), m_md_config);
+}
+
 const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
@@ -620,8 +624,32 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     uct_iface_progress_enable(m_iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     m_iface_params = *params;
+
+    memset(&m_cm_attr, 0, sizeof(m_cm_attr));
 }
 
+uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+    memset(&m_iface_attr,   0, sizeof(m_iface_attr));
+    memset(&m_iface_params, 0, sizeof(m_iface_params));
+
+    UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
+                           uct_worker_create, &m_async.m_async,
+                           UCS_THREAD_MODE_SINGLE);
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
+                           uct_md_open, resource.component,
+                           resource.md_name.c_str(), md_config);
+
+    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    ASSERT_UCS_OK(status);
+
+    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_cm_h, m_cm, uct_cm_close,
+                                        uct_cm_open, resource.component, m_worker);
+
+    m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(m_cm, &m_cm_attr);
+    ASSERT_UCS_OK(status);
+}
 
 void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const {
 #if HAVE_CUDA
@@ -784,6 +812,14 @@ const uct_md_attr& uct_test::entity::md_attr() const {
 
 uct_worker_h uct_test::entity::worker() const {
     return m_worker;
+}
+
+uct_cm_h uct_test::entity::cm() const {
+    return m_cm;
+}
+
+const uct_cm_attr_t& uct_test::entity::cm_attr() const {
+    return m_cm_attr;
 }
 
 uct_iface_h uct_test::entity::iface() const {

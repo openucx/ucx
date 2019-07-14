@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -106,8 +106,9 @@ typedef struct uct_mm_mapper_ops {
     UCT_MD_COMPONENT_DEFINE(_var, _name, \
                             _var##_query_md_resources, _var##_md_open, _ops, \
                             uct_mm_rkey_unpack, \
-                            uct_mm_rkey_release, _cfg_prefix, _prefix##_md_config_table, \
-                            _prefix##_md_config_t)
+                            uct_mm_rkey_release, _cfg_prefix, \
+                            _prefix##_md_config_table, _prefix##_md_config_t, \
+                            ucs_empty_function_return_unsupported)
 
 
 /**

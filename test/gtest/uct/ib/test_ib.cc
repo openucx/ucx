@@ -81,11 +81,11 @@ public:
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
 
-        ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(iface));
+        ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
-        uct_ib_address_pack(iface, &gid_in, lid_in, ib_addr);
+        uct_ib_iface_address_pack(iface, &gid_in, lid_in, ib_addr);
 
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 

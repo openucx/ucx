@@ -302,22 +302,42 @@ int uct_ib_iface_is_roce(uct_ib_iface_t *iface);
 /**
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(uct_ib_iface_t *iface);
+size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
+                           int is_link_layer_eth);
+
+
+/**
+ * @return IB address size of the given iface.
+ */
+size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 
 
 /**
  * Pack IB address.
  *
- * @param [in]  dev        IB device. TODO remove this.
  * @param [in]  gid        GID address to pack.
  * @param [in]  lid        LID address to pack.
- * @param [out] ib_addr    Filled with packed ib address. Size of the structure
- *                         must be at least what @ref uct_ib_address_size() returns
- *                         for the given scope.
+ * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
+ *                         must be at least what @ref uct_ib_address_size()
+ *                         returns for the given scope.
  */
-void uct_ib_address_pack(uct_ib_iface_t *iface,
-                         const union ibv_gid *gid, uint16_t lid,
+void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
+                         int is_link_layer_eth, uint8_t is_global_addr,
                          uct_ib_address_t *ib_addr);
+
+
+/**
+ * Pack the IB address of the given iface.
+ *
+ * @param [in]  iface      Iface whose IB address to pack.
+ * @param [in]  gid        GID address to pack.
+ * @param [in]  lid        LID address to pack.
+ * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
+ *                         must be at least what @ref uct_ib_address_size()
+ *                         returns for the given scope.
+ */
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
+                               uint16_t lid, uct_ib_address_t *ib_addr);
 
 
 /**
@@ -325,6 +345,7 @@ void uct_ib_address_pack(uct_ib_iface_t *iface,
  *
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] lid        Filled with address LID, or 0 if not present.
+ * @param [out] gid        Filled with address GID, or 0 if not present.
  */
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
                            union ibv_gid *gid);
