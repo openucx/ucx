@@ -312,7 +312,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     /* Register to IB async events */
     if (dev->async_events) {
         status = ucs_async_set_event_handler(UCS_ASYNC_THREAD_LOCK_TYPE,
-                                             dev->ibv_context->async_fd, POLLIN,
+                                             dev->ibv_context->async_fd,
+                                             UCS_EVENT_SET_EVREAD,
                                              uct_ib_async_event_handler, dev,
                                              NULL);
         if (status != UCS_OK) {

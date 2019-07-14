@@ -79,9 +79,10 @@ public:
     }
 
     void set_handler(ucs_async_context_t *async) {
-        ucs_status_t status = ucs_async_set_event_handler(mode(), event_fd(),
-                                                          POLLIN, cb, this,
-                                                          async);
+        ucs_status_t status =
+            ucs_async_set_event_handler(mode(), event_fd(),
+                                        UCS_EVENT_SET_EVREAD,
+                                        cb, this, async);
         ASSERT_UCS_OK(status);
         base::set_handler();
     }
@@ -565,7 +566,7 @@ UCS_TEST_P(test_async, modify_event) {
     suspend_and_poll(&le, COUNT);
     EXPECT_EQ(le.count(), count);
 
-    ucs_async_modify_handler(le.event_id(), POLLIN);
+    ucs_async_modify_handler(le.event_id(), UCS_EVENT_SET_EVREAD);
     count = le.count();
     le.push_event();
     for (int i = 0; i < TIMER_RETRIES; ++i) {
@@ -688,9 +689,10 @@ protected:
     virtual void handler() {
          base::handler();
          if (!m_event_set) {
-             ucs_status_t status = ucs_async_set_event_handler(mode(), m_pipefd[0],
-                                                               POLLIN, dummy_cb,
-                                                               this, &m_async);
+             ucs_status_t status =
+                 ucs_async_set_event_handler(mode(), m_pipefd[0],
+                                             UCS_EVENT_SET_EVREAD,
+                                             dummy_cb, this, &m_async);
              ASSERT_UCS_OK(status);
              m_event_set = true;
          }
