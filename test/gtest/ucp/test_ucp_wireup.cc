@@ -699,10 +699,8 @@ UCS_TEST_P(test_ucp_wireup_2sided, no_loopback_with_delay) {
     test_connect_loopback(true, false);
 }
 
-UCS_TEST_P(test_ucp_wireup_2sided, async_connect) {
-    if (!(GetParam().ctx_params.features & UCP_FEATURE_TAG)) {
-        UCS_TEST_SKIP_R("The test requires UCP_FEATURE_TAG");
-    }
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
+                     !(GetParam().ctx_params.features & UCP_FEATURE_TAG)) {
     sender().connect(&receiver(), get_ep_params());
     ucp_ep_h send_ep = sender().ep();
     std::vector<void *> reqs;

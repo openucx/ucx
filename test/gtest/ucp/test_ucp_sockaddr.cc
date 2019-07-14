@@ -438,11 +438,8 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
     connect_and_send_recv((const struct sockaddr*)&test_addr, false);
 }
 
-UCS_TEST_P(test_ucp_sockaddr, reject) {
-    if (GetParam().variant > 0) {
-        UCS_TEST_SKIP_R("Not parameterized test");
-    }
-
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, reject,
+                     (GetParam().variant > 0)) {
     listen_and_reject(ucp_test_base::entity::LISTEN_CB_REJECT, false);
 }
 
@@ -510,11 +507,8 @@ UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup) {
     listen_and_communicate(cb_type(), true);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_with_wakeup, reject) {
-    if (GetParam().variant > 0) {
-        UCS_TEST_SKIP_R("Invalid test parameter");
-    }
-
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_with_wakeup, reject,
+                     (GetParam().variant > 0)) {
     listen_and_reject(ucp_test_base::entity::LISTEN_CB_REJECT, true);
 }
 

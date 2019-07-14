@@ -25,11 +25,8 @@ UCS_TEST_F(test_time, time_calc) {
 
 /* This test is only useful when used with high-precision timers */
 #if HAVE_HW_TIMER
-UCS_TEST_F(test_time, get_time) {
-    if (ucs::test_time_multiplier() > 1) {
-        UCS_TEST_SKIP;
-    }
-
+UCS_TEST_SKIP_COND_F(test_time, get_time,
+                     (ucs::test_time_multiplier() > 1)) {
     ucs_time_t time1 = ucs_get_time();
     ucs_time_t time2 = ucs_get_time();
     EXPECT_GE(time2, time1);

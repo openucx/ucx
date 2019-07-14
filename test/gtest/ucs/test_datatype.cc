@@ -222,14 +222,11 @@ UCS_TEST_F(test_datatype, queue_iter) {
     }
 }
 
-UCS_TEST_F(test_datatype, queue_perf) {
+UCS_TEST_SKIP_COND_F(test_datatype, queue_perf,
+                     (ucs::test_time_multiplier() > 1)) {
     const size_t count = 100000000ul;
     ucs_queue_head_t head;
     ucs_queue_elem_t elem;
-
-    if (ucs::test_time_multiplier() > 1) {
-        UCS_TEST_SKIP;
-    }
 
     ucs_queue_head_init(&head);
     ucs_queue_push(&head, &elem);
@@ -470,14 +467,11 @@ UCS_TEST_F(test_datatype, ptr_array_placeholder) {
     ucs_ptr_array_cleanup(&pa);
 }
 
-UCS_TEST_F(test_datatype, ptr_array_perf) {
+UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
+                     (ucs::test_time_multiplier() > 1)) {
     const unsigned count = 10000000;
     ucs_ptr_array_t pa;
     uint32_t value;
-
-    if (ucs::test_time_multiplier() > 1) {
-        UCS_TEST_SKIP;
-    }
 
     ucs_time_t insert_start_time = ucs_get_time();
     ucs_ptr_array_init(&pa, 0, "ptr_array test");

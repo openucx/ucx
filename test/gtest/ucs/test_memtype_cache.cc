@@ -34,16 +34,13 @@ protected:
 };
 
 #if HAVE_CUDA
-UCS_TEST_F(test_memtype_cache, basic_cuda) {
+UCS_TEST_SKIP_COND_F(test_memtype_cache, basic_cuda,
+                     /* skip if unable to set CUDA device */
+                     (cudaSetDevice(0) != cudaSuccess)) {
     cudaError_t cerr;
     void *ptr;
     ucm_mem_type_t ucm_mem_type;
     ucs_status_t status;
-
-    /* set cuda device */
-    if (cudaSetDevice(0) != cudaSuccess) {
-        UCS_TEST_SKIP_R("can't set cuda device");
-    }
 
     cerr = cudaMalloc(&ptr, 64);
     EXPECT_EQ(cerr, cudaSuccess);
