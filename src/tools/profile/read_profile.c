@@ -44,6 +44,10 @@
 #define REQ_COLOR          (opts->raw ? "" : TERM_COLOR_YELLOW)
 #define CLEAR_COLOR        (opts->raw ? "" : TERM_COLOR_CLEAR)
 
+#define print_error(_fmt, ...) \
+    fprintf(stderr, "Error: " _fmt "\n", ## __VA_ARGS__)
+
+
 typedef enum {
     TIME_UNITS_NSEC,
     TIME_UNITS_USEC,
@@ -106,22 +110,22 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
 
     fd = open(file_name, O_RDONLY);
     if (fd < 0) {
-        fprintf(stderr, "Failed to open %s: %m\n", file_name);
+        print_error("failed to open %s: %m", file_name);
         ret = fd;
         goto out;
     }
 
     ret = fstat(fd, &stat);
     if (ret < 0) {
-        fprintf(stderr, "Error: fstat(%s) failed: %m\n", file_name);
+        print_error("fstat(%s) failed: %m", file_name);
         goto out_close;
     }
 
     data->length = stat.st_size;
     data->mem    = mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data->mem == MAP_FAILED) {
-        fprintf(stderr, "Error: mmap(%s, length=%zd) failed: %m\n", file_name,
-                data->length);
+        print_error("mmap(%s, length=%zd) failed: %m", file_name,
+                    data->length);
         ret = -1;
         goto out_close;
     }
@@ -131,8 +135,8 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
     ptr          = data->header + 1;
 
     if (data->header->version != UCS_PROFILE_FILE_VERSION) {
-        fprintf(stderr, "Error: invalid file version, expected: %u, actual: %u\n",
-                UCS_PROFILE_FILE_VERSION, data->header->version);
+        print_error("invalid file version, expected: %u, actual: %u",
+                    UCS_PROFILE_FILE_VERSION, data->header->version);
         ret = -EINVAL;
         goto err_munmap;
     }
@@ -142,7 +146,7 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
 
     data->threads   = calloc(data->header->num_threads, sizeof(*data->threads));
     if (data->threads == NULL) {
-        fprintf(stderr, "Error: failed to allocate threads array\n");
+        print_error("failed to allocate threads array");
         goto err_munmap;
     }
 
@@ -183,7 +187,7 @@ static int parse_thread_list(int *thread_list, const char *str)
     dup = strdup(str);
     if (dup == NULL) {
         ret = -ENOMEM;
-        fprintf(stderr, "Error: failed to duplicate thread list string\n");
+        print_error("failed to duplicate thread list string");
         goto out;
     }
 
@@ -200,20 +204,20 @@ static int parse_thread_list(int *thread_list, const char *str)
     while (p != NULL) {
         if (index >= MAX_THREADS) {
             ret = -EINVAL;
-            fprintf(stderr, "Error: up to %d threads are supported\n", MAX_THREADS);
+            print_error("up to %d threads are supported", MAX_THREADS);
             goto out;
         }
 
         thread_idx = strtol(p, &tailptr, 0);
         if (*tailptr != '\0') {
             ret = -ENOMEM;
-            fprintf(stderr, "Error: failed to parse thread number '%s'\n", p);
+            print_error("failed to parse thread number '%s'", p);
             goto out;
         }
 
         if (thread_idx <= 0) {
             ret = -EINVAL;
-            fprintf(stderr, "Error: invalid thread index %d\n", thread_idx);
+            print_error("invalid thread index %d", thread_idx);
             goto out;
         }
 
@@ -223,7 +227,7 @@ static int parse_thread_list(int *thread_list, const char *str)
 
     if (index == 0) {
         ret = -EINVAL;
-        fprintf(stderr, "Error: empty thread list\n");
+        print_error("empty thread list");
         goto out;
     }
 
@@ -310,7 +314,7 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
     sorted_locations      = calloc(num_locations, sizeof(*sorted_locations));
     locations_thread_info = calloc(num_locations, sizeof(*locations_thread_info));
     if ((sorted_locations == NULL) || (locations_thread_info == NULL)) {
-        fprintf(stderr, "Error: failed to allocate locations info\n");
+        print_error("failed to allocate locations info");
         ret = -ENOMEM;
         goto out;
     }
@@ -452,7 +456,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
 
     scope_ends = calloc(1, sizeof(*scope_ends) * num_recods);
     if (scope_ends == NULL) {
-        fprintf(stderr, "Error: failed to allocate memory for scope ends\n");
+        print_error("failed to allocate memory for scope ends");
         return;
     }
 
@@ -601,7 +605,7 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
 
     ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &wsz);
     if (ret < 0) {
-        fprintf(stderr, "Error: ioctl(TIOCGWINSZ) failed: %m\n");
+        print_error("ioctl(TIOCGWINSZ) failed: %m");
         return ret;
     }
 
@@ -627,13 +631,13 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
 
     ret = pipe(output_pipefds);
     if (ret < 0) {
-        fprintf(stderr, "Error: pipe() failed: %m\n");
+        print_error("pipe() failed: %m");
         return ret;
     }
 
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "Error: fork() failed: %m\n");
+        print_error("fork() failed: %m");
         close_pipes();
         return pid;
     }
@@ -645,7 +649,7 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
         /* redirect output to pipe */
         ret = dup2(output_pipefds[1], fileno(stdout));
         if (ret < 0) {
-            fprintf(stderr, "Error: failed to redirect stdout: %m\n");
+            print_error("failed to redirect stdout: %m");
             close_pipes();
             return ret;
         }
@@ -656,7 +660,7 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
         /* redirect input from pipe */
         ret = dup2(output_pipefds[0], fileno(stdin));
         if (ret < 0) {
-            fprintf(stderr, "Error: failed to redirect stdin: %m\n");
+            print_error("failed to redirect stdin: %m");
             exit(ret);
         }
 
@@ -695,9 +699,8 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
     int *t;
 
     if (data->header->num_threads > MAX_THREADS) {
-        fprintf(stderr, "Error: "
-                "the profile contains %u threads, but only up to %d are supported",
-                data->header->num_threads, MAX_THREADS);
+        print_error("the profile contains %u threads, but only up to %d are "
+                    "supported", data->header->num_threads, MAX_THREADS);
         return -EINVAL;
     }
 
@@ -711,8 +714,8 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
         thread_list_len = 0;
         for (t = opts->thread_list; *t != -1; ++t) {
             if (*t > data->header->num_threads) {
-                fprintf(stderr, "Error: thread number %d is out of range (1..%u)\n",
-                        *t, data->header->num_threads);
+                print_error("thread number %d is out of range (1..%u)",
+                            *t, data->header->num_threads);
                 return -EINVAL;
             }
 
@@ -724,8 +727,8 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
         qsort(opts->thread_list, thread_list_len, sizeof(int), compare_int);
         for (t = opts->thread_list; *t != -1; ++t) {
             if (t[0] == t[1]) {
-                fprintf(stderr, "Error: duplicate thread number %d\n", t[0]);
-                 return -EINVAL;
+                print_error("duplicate thread number %d", t[0]);
+                return -EINVAL;
             }
         }
     }
@@ -799,7 +802,7 @@ static int parse_args(int argc, char **argv, options_t *opts)
             } else if (!strcasecmp(optarg, "nsec")) {
                 opts->time_units = TIME_UNITS_NSEC;
             } else {
-                fprintf(stderr, "Error: invalid time units '%s'\n\n", optarg);
+                print_error("invalid time units '%s'\n", optarg);
                 usage();
                 return -1;
             }
@@ -814,7 +817,7 @@ static int parse_args(int argc, char **argv, options_t *opts)
     }
 
     if (optind >= argc) {
-        printf("Error: missing profile file argument\n\n");
+        print_error("missing profile file argument\n");
         usage();
         return -1;
     }
