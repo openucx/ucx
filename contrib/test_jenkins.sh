@@ -181,6 +181,17 @@ get_active_ib_devices() {
 }
 
 #
+# Get list of active IP interfaces
+#
+get_active_ip_ifaces() {
+	ip_ifaces_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	for ip_iface in $ip_ifaces_list
+	do
+		echo "$ip_iface"
+	done
+}
+
+#
 # Prepare build environment
 #
 prepare() {
@@ -358,68 +369,68 @@ build_prof() {
 # Build UGNI
 #
 build_ugni() {
-    echo 1..1 > build_ugni.tap
+	echo 1..1 > build_ugni.tap
 
-    echo "==== Build with cray-ugni ===="
-    #
-    # Point pkg-config to contrib/cray-ugni-mock, and replace
-    # PKG_CONFIG_TOP_BUILD_DIR with source dir, since the mock .pc files contain
-    # relative paths.
-    #
-    ../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
-        PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
-        PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
-    $MAKEP clean
-    $MAKEP
+	echo "==== Build with cray-ugni ===="
+	#
+	# Point pkg-config to contrib/cray-ugni-mock, and replace
+	# PKG_CONFIG_TOP_BUILD_DIR with source dir, since the mock .pc files contain
+	# relative paths.
+	#
+	../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
+		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
+		PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
+	$MAKEP clean
+	$MAKEP
 
-    # make sure UGNI transport is enabled
-    grep '#define HAVE_TL_UGNI 1' config.h
+	# make sure UGNI transport is enabled
+	grep '#define HAVE_TL_UGNI 1' config.h
 
-    $MAKE  distcheck
-    $MAKEP distclean
+	$MAKE  distcheck
+	$MAKEP distclean
 
-    module unload dev/cray-ugni
-    echo "ok 1 - build successful " >> build_ugni.tap
+	module unload dev/cray-ugni
+	echo "ok 1 - build successful " >> build_ugni.tap
 }
 
 #
 # Build CUDA
 #
 build_cuda() {
-    echo 1..1 > build_cuda.tap
-    if module_load dev/cuda
-    then
-        if module_load dev/gdrcopy
-        then
-            echo "==== Build with enable cuda, gdr_copy ===="
-            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
-            $MAKEP clean
-            $MAKEP
-            $MAKEP distclean
+	echo 1..1 > build_cuda.tap
+	if module_load dev/cuda
+	then
+		if module_load dev/gdrcopy
+		then
+			echo "==== Build with enable cuda, gdr_copy ===="
+			../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
+			$MAKEP clean
+			$MAKEP
+			$MAKEP distclean
 
-            ../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-            $MAKEP clean
-            $MAKEP
-            $MAKEP distclean
-            module unload dev/gdrcopy
-        fi
+			../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+			$MAKEP clean
+			$MAKEP
+			$MAKEP distclean
+			module unload dev/gdrcopy
+		fi
 
-        echo "==== Build with enable cuda, w/o gdr_copy ===="
-        ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-        $MAKEP clean
-        $MAKEP
+		echo "==== Build with enable cuda, w/o gdr_copy ===="
+		../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
+		$MAKEP clean
+		$MAKEP
 
-        module unload dev/cuda
+		module unload dev/cuda
 
-        echo "==== Running test_link_map with cuda build but no cuda module ===="
-        env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
+		echo "==== Running test_link_map with cuda build but no cuda module ===="
+		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
 
-        $MAKEP distclean
-        echo "ok 1 - build successful " >> build_cuda.tap
-    else
-        echo "==== Not building with cuda flags ===="
-        echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
-    fi
+		$MAKEP distclean
+		echo "ok 1 - build successful " >> build_cuda.tap
+	else
+		echo "==== Not building with cuda flags ===="
+		echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
+	fi
 }
 
 #
@@ -522,22 +533,22 @@ build_jucx() {
 # Build with armclang compiler
 #
 build_armclang() {
-    echo 1..1 > build_armclang.tap
-    if module_load arm-compiler/latest
-    then
-        echo "==== Build with armclang compiler ===="
-        ../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
-        $MAKEP clean
-        $MAKEP
-        $MAKEP install
-        UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-        $MAKEP distclean
-        echo "ok 1 - build successful " >> build_armclang.tap
-        module unload arm-compiler/latest
-    else
-        echo "==== Not building with armclang compiler ===="
-        echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
-    fi
+	echo 1..1 > build_armclang.tap
+	if module_load arm-compiler/latest
+	then
+		echo "==== Build with armclang compiler ===="
+		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
+		$MAKEP clean
+		$MAKEP
+		$MAKEP install
+		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
+		$MAKEP distclean
+		echo "ok 1 - build successful " >> build_armclang.tap
+		module unload arm-compiler/latest
+	else
+		echo "==== Not building with armclang compiler ===="
+		echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
+	fi
 }
 
 check_inst_headers() {
@@ -590,7 +601,7 @@ run_hello() {
 		export UCX_RC_TIMEOUT=1ms
 		export UCX_RC_RETRY_COUNT=4
 	fi
-	
+
 	# hello-world example
 	tcp_port=$((10000 + EXECUTOR_NUMBER))
 
@@ -599,7 +610,7 @@ run_hello() {
 
 	sleep 15
 
-	# temporary disable 
+	# temporary disable
 	if [[ ${test_args} == *"-e"* ]]
 	then
 		set +Ee
@@ -652,7 +663,7 @@ run_uct_hello() {
 			echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} ===="
 			run_hello uct  -d ${ucx_dev} -t "rc" ${send_func}
 		done
-		for ucx_dev in $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+		for ucx_dev in $(get_active_ip_iface)
 		do
 			echo "==== Running UCT hello world server on tcp/${ucx_dev} with sending ${send_func} ===="
 			run_hello uct -d ${ucx_dev} -t "tcp" ${send_func}
@@ -662,67 +673,65 @@ run_uct_hello() {
 }
 
 run_client_server() {
+	test_name=ucp_client_server
 
-    test_name=ucp_client_server
+	if [ ! -x ${test_name} ]
+	then
+		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
+			-lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+			-Wl,-rpath=${ucx_inst}/lib
+	fi
 
-    if [ ! -x ${test_name} ]
-    then
-        gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-            -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-            -Wl,-rpath=${ucx_inst}/lib
-    fi
+	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+	if [ -n "$iface" ]
+	then
+		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+	fi
 
-    iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
-    if [ -n "$iface" ]
-    then
-        server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
-    fi
+	if [ -z "$server_ip" ]
+	then
+		# if there is no inet (IPv4) address, bail
+		return
+	fi
 
-    if [ -z "$server_ip" ]
-    then
-        # if there is no inet (IPv4) address, bail
-        return
-    fi
+	ibdev=`ibdev2netdev | grep $iface | awk '{print $1}'`
+	node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
+	if [ $node_guid == "0000:0000:0000:0000" ]
+	then
+		return
+	fi
 
-    ibdev=`ibdev2netdev | grep $iface | awk '{print $1}'`
-    node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
-    if [ $node_guid == "0000:0000:0000:0000" ]
-    then
-        return
-    fi
+	server_port=$((10000 + EXECUTOR_NUMBER))
 
-    server_port=$((10000 + EXECUTOR_NUMBER))
+	# run server side
+	./${test_name} -p ${server_port} &
+	hw_server_pid=$!
 
-    # run server side
-    ./${test_name} -p ${server_port} &
-    hw_server_pid=$!
+	sleep 15
 
-    sleep 15
+	# need to be ran in background to reflect application PID in $!
+	./${test_name} -a ${server_ip} -p ${server_port} &
+	hw_client_pid=$!
 
-    # need to be ran in background to reflect application PID in $!
-    ./${test_name} -a ${server_ip} -p ${server_port} &
-    hw_client_pid=$!
-
-    wait ${hw_client_pid}
-    kill -9 ${hw_server_pid}
+	wait ${hw_client_pid}
+	kill -9 ${hw_server_pid}
 }
 
 run_ucp_client_server() {
+	if [ ! -r /dev/infiniband/rdma_cm  ]
+	then
+		return
+	fi
 
-    if [ ! -r /dev/infiniband/rdma_cm  ]
-    then
-        return
-    fi
+	if ! which ibdev2netdev >&/dev/null
+	then
+		return
+	fi
 
-    if ! which ibdev2netdev >&/dev/null
-    then
-        return
-    fi
+	echo "==== Running UCP client-server  ===="
+	run_client_server
 
-    echo "==== Running UCP client-server  ===="
-    run_client_server
-
-    rm -f ./ucp_client_server
+	rm -f ./ucp_client_server
 }
 
 #
@@ -981,7 +990,7 @@ test_jucx() {
 		then
                         $MAKE -C bindings/java/src/main/native package
 		fi
-		for iface in $ifaces 
+		for iface in $ifaces
 		do
 			if [ -n "$iface" ]
                 	then
@@ -990,7 +999,7 @@ test_jucx() {
 
                 	if [ -z "$server_ip" ]
                 	then
-		   	   	echo "Interface $iface has no IPv4"	
+		   	   	echo "Interface $iface has no IPv4"
                    	   	continue
                         fi
                         echo "Running standalone benchamrk on $iface"
