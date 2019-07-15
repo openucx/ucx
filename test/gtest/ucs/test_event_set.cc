@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/sys/event_set.h>
 #include <pthread.h>
+#include <sys/epoll.h>
 }
 
 #define MAX_BUF_LEN        255
@@ -16,7 +17,12 @@ static const char *UCS_EVENT_SET_TEST_STRING  = "ucs_event_set test string";
 static const char *UCS_EVENT_SET_EXTRA_STRING = "ucs_event_set extra string";
 static const int   UCS_EVENT_SET_EXTRA_NUM    = 0xFF;
 
-class test_event_set : public ucs::test {
+enum {
+    UCS_EVENT_SET_EXTERNAL_FD = UCS_BIT(0),
+};
+
+class test_event_set : public ucs::test_base,
+                       public ::testing::TestWithParam<int> {
 public:
     static const char *evfd_data;
     static pthread_barrier_t barrier;
@@ -29,7 +35,26 @@ public:
         EVENT_SET_OP_DEL
     };
 
+    UCS_TEST_BASE_IMPL;
+
 protected:
+    void init() {
+        if (GetParam() & UCS_EVENT_SET_EXTERNAL_FD) {
+            m_ext_fd = epoll_create(1);
+            ASSERT_TRUE(m_ext_fd > 0);
+        } else {
+            m_ext_fd = -1;
+        }
+    }
+
+    void cleanup() {
+        if (GetParam() & UCS_EVENT_SET_EXTERNAL_FD) {
+            ASSERT_NE(-1, m_ext_fd);
+            close(m_ext_fd);
+            m_ext_fd = -1;
+        }
+    }
+
     static void* event_set_read_func(void *arg) {
         int *fd = (int *)arg;
         int n;
@@ -69,7 +94,11 @@ protected:
                            strerror(errno));
         }
 
-        status = ucs_event_set_create(&m_event_set);
+        if (GetParam() & UCS_EVENT_SET_EXTERNAL_FD) {
+            status = ucs_event_set_create_from_fd(&m_event_set, m_ext_fd);
+        } else {
+            status = ucs_event_set_create(&m_event_set);
+        }
         ASSERT_UCS_OK(status);
         EXPECT_TRUE(m_event_set != NULL);
     }
@@ -125,6 +154,7 @@ protected:
     }
 
     int                  m_pipefd[2];
+    int                  m_ext_fd;
     pthread_t            m_tid;
     ucs_sys_event_set_t *m_event_set;
 };
@@ -169,7 +199,7 @@ static void event_set_func4(void *callback_data, int events, void *arg)
     EXPECT_EQ(UCS_EVENT_SET_EVREAD, events);
 }
 
-UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
+UCS_TEST_P(test_event_set, ucs_event_set_read_thread) {
     void *arg[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
                     (void*)&UCS_EVENT_SET_EXTRA_NUM };
 
@@ -185,7 +215,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_read_thread) {
     event_set_cleanup();
 }
 
-UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
+UCS_TEST_P(test_event_set, ucs_event_set_write_thread) {
     event_set_init(event_set_read_func);
     event_set_ctl(EVENT_SET_OP_ADD, m_pipefd[1],
                   UCS_EVENT_SET_EVWRITE);
@@ -198,7 +228,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_write_thread) {
     event_set_cleanup();
 }
 
-UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
+UCS_TEST_P(test_event_set, ucs_event_set_tmo_thread) {
     event_set_init(event_set_tmo_func);
     event_set_ctl(EVENT_SET_OP_ADD, m_pipefd[0],
                   UCS_EVENT_SET_EVREAD);
@@ -211,7 +241,7 @@ UCS_TEST_F(test_event_set, ucs_event_set_tmo_thread) {
     event_set_cleanup();
 }
 
-UCS_TEST_F(test_event_set, ucs_event_set_trig_modes) {
+UCS_TEST_P(test_event_set, ucs_event_set_trig_modes) {
     void *arg[] = { (void*)UCS_EVENT_SET_EXTRA_STRING,
                     (void*)&UCS_EVENT_SET_EXTRA_NUM };
 
@@ -247,3 +277,8 @@ UCS_TEST_F(test_event_set, ucs_event_set_trig_modes) {
     event_set_ctl(EVENT_SET_OP_DEL, m_pipefd[0], 0);
     event_set_cleanup();
 }
+
+INSTANTIATE_TEST_CASE_P(ext_fd, test_event_set,
+                        ::testing::Values(static_cast<int>(
+                                              UCS_EVENT_SET_EXTERNAL_FD)));
+INSTANTIATE_TEST_CASE_P(int_fd, test_event_set, ::testing::Values(0));

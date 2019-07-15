@@ -181,6 +181,11 @@ get_active_ib_devices() {
 }
 
 #
+# Get list of active IP interfaces
+#
+
+
+#
 # Prepare build environment
 #
 prepare() {

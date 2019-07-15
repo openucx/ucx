@@ -207,7 +207,8 @@ typedef struct ucp_worker {
 
     unsigned                      flush_ops_count;/* Number of pending operations */
 
-    int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
+    int                           event_fd;      /* Allocated (on-demand) event fd for wakeup */
+    ucs_sys_event_set_t           *event_set;    /* Allocated UCS event set for wakeup */
     int                           eventfd;       /* Event fd to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
     ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */

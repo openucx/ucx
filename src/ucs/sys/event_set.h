@@ -42,6 +42,18 @@ typedef enum {
 extern const unsigned ucs_sys_event_set_max_wait_events;
 
 /**
+ * Allocate ucs_sys_event_set_t structure and assign provided file
+ * descriptor to wait for events on.
+ *
+ * @param [out] event_set_p  Event set pointer to initialize.
+ * @param [in]  event_fd     File descriptor to wait for events on.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_event_set_create_from_fd(ucs_sys_event_set_t **event_set_p,
+                                          int event_fd);
+
+/**
  * Allocate ucs_sys_event_set_t structure.
  *
  * @param [out] event_set_p  Event set pointer to initialize.
@@ -118,7 +130,8 @@ void ucs_event_set_cleanup(ucs_sys_event_set_t *event_set);
  * Get file descriptor for watching events.
  *
  * @param [in]  event_set    Event set created by ucs_event_set_create.
- * @param [out] fd_p         File descriptor.
+ * @param [out] fd_p         File descriptor that is used by Event set to wait
+ *                           for events on.
  *
  * @return UCS_OK on success or an error code on failure.
  */
