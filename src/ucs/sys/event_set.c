@@ -26,7 +26,7 @@ enum {
 };
 
 struct ucs_sys_event_set {
-    int epfd;
+    int      epfd;
     unsigned flags;
 };
 
@@ -73,47 +73,55 @@ static inline int ucs_event_set_map_to_events(int raw_events)
     return events;
 }
 
-ucs_status_t ucs_event_set_create_from_fd(ucs_sys_event_set_t **event_set_p,
-                                          int event_fd)
+static ucs_sys_event_set_t *ucs_event_set_alloc(int event_fd, unsigned flags)
 {
     ucs_sys_event_set_t *event_set;
 
     event_set = ucs_malloc(sizeof(ucs_sys_event_set_t), "ucs_sys_event_set");
     if (event_set == NULL) {
         ucs_error("unable to allocate memory ucs_sys_event_set_t object");
+        return NULL;
+    }
+
+    event_set->flags = flags;
+    event_set->epfd  = event_fd;
+    return event_set;
+}
+
+ucs_status_t ucs_event_set_create_from_fd(ucs_sys_event_set_t **event_set_p,
+                                          int event_fd)
+{
+    *event_set_p = ucs_event_set_alloc(event_fd,
+                                       UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD);
+    if (*event_set_p == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    event_set->flags = UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD;
-    event_set->epfd  = event_fd;
-    *event_set_p     = event_set;
     return UCS_OK;
 }
 
 ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p)
 {
     ucs_status_t status;
-    int epfd;
+    int event_fd;
 
     /* Create epoll set the thread will wait on */
-    epfd = epoll_create(1);
-    if (epfd < 0) {
+    event_fd = epoll_create(1);
+    if (event_fd < 0) {
         ucs_error("epoll_create() failed: %m");
         return UCS_ERR_IO_ERROR;
     }
 
-    status = ucs_event_set_create_from_fd(event_set_p, epfd);
-    if (status != UCS_OK) {
-        goto err_close_epfd;
+    *event_set_p = ucs_event_set_alloc(event_fd, 0);
+    if (*event_set_p == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_close_event_fd;
     }
-
-    /* Remove flag assigned in `ucs_event_set_create_from_fd` */
-    (*event_set_p)->flags &= ~UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD;
 
     return UCS_OK;
 
-err_close_epfd:
-    close(epfd);
+err_close_event_fd:
+    close(event_fd);
     return status;
 }
 
