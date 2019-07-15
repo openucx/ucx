@@ -78,11 +78,9 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
     EXPECT_EQ(send_data, recv_data);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_unexp_rqfree) {
-    if (GetParam().variant == RECV_REQ_EXTERNAL) {
-        UCS_TEST_SKIP_R("request free cannot be used for external requests");
-    }
-
+UCS_TEST_SKIP_COND_P(test_ucp_tag_match, send_recv_unexp_rqfree,
+                     /* request free cannot be used for external requests */
+                     (GetParam().variant == RECV_REQ_EXTERNAL)) {
     request *my_recv_req;
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;

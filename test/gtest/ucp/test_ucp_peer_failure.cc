@@ -405,14 +405,11 @@ UCS_TEST_P(test_ucp_peer_failure, force_close, "RC_FC_ENABLE?=n") {
             false /* must_fail */);
 }
 
-UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure, disable_sync_send,
+                     !(GetParam().variant & TEST_TAG)) {
     const size_t        max_size = UCS_MBYTE;
     std::vector<char>   buf(max_size, 0);
     void                *req;
-
-    if (!(GetParam().variant & TEST_TAG)) {
-        UCS_TEST_SKIP_R("Skip non-tagged variant");
-    }
 
     sender().connect(&receiver(), get_ep_params());
 

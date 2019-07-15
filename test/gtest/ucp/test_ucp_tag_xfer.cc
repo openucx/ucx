@@ -43,6 +43,15 @@ public:
         test_ucp_tag::init();
     }
 
+    bool skip_on_ib_dc() {
+#if HAVE_DC_DV
+        // skip due to DCI stuck bug
+        return has_transport("dc_x");
+#else
+        return false;
+#endif
+    }
+
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
                             const std::string& name,
@@ -584,12 +593,8 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
-#if HAVE_DC_DV
-    if (has_transport("dc_x")) {
-        UCS_TEST_SKIP_R("DCI stuck bug");
-    }
-#endif
+UCS_TEST_SKIP_COND_P(test_ucp_tag_xfer, generic_err_unexp,
+                     skip_on_ib_dc()) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, false, false);
 }
 
