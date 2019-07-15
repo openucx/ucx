@@ -34,24 +34,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_qp_attr_t *attr)
 {
-#if HAVE_DEVX
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev = &md->super.dev;
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_in)] = {};
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_out)] = {};
-    uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
-    uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
-    ucs_status_t status = UCS_ERR_NO_MEMORY;
-    struct mlx5dv_pd dvpd = {};
-    struct mlx5dv_cq dvscq = {};
-    struct mlx5dv_cq dvrcq = {};
-    struct mlx5dv_srq dvsrq = {};
-    struct mlx5dv_obj dv = {};
     uct_ib_mlx5_devx_uar_t *uar;
-    int max_tx, max_rx, len_tx, len;
-    int dvflags;
-    void *qpc;
-    int ret;
+    ucs_status_t status;
 
     uct_ib_iface_fill_attr(iface, attr);
 
@@ -66,6 +51,36 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err;
     }
 
+    return uct_ib_mlx5_devx_create_qp_impl(md, uar, qp, tx, attr);
+
+err:
+    uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+    return status;
+}
+
+ucs_status_t uct_ib_mlx5_devx_create_qp_impl(uct_ib_mlx5_md_t *md,
+                                             uct_ib_mlx5_devx_uar_t *uar,
+                                             uct_ib_mlx5_qp_t *qp,
+                                             uct_ib_mlx5_txwq_t *tx,
+                                             uct_ib_qp_attr_t *attr)
+{
+#if HAVE_DEVX
+    uct_ib_device_t *dev = &md->super.dev;
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_in)] = {};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_out)] = {};
+    uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
+    uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
+    ucs_status_t status = UCS_ERR_NO_MEMORY;
+    struct mlx5dv_pd dvpd = {};
+    struct mlx5dv_cq dvscq = {};
+    struct mlx5dv_cq dvrcq = {};
+    struct mlx5dv_srq dvsrq = {};
+    struct mlx5dv_obj dv = {};
+    int max_tx, max_rx, len_tx, len;
+    int dvflags;
+    void *qpc;
+    int ret;
+
     max_tx = ucs_roundup_pow2_or0(attr->cap.max_send_wr);
     max_rx = ucs_roundup_pow2_or0(attr->cap.max_recv_wr);
     len_tx = max_tx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
@@ -75,7 +90,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         qp->devx.wq_buf = ucs_memalign(ucs_get_page_size(), len, "qp umem");
         if (qp->devx.wq_buf == NULL) {
             ucs_error("failed to allocate QP buffer of %d bytes: %m", len);
-            goto err_uar;
+            goto err;
         }
 
         qp->devx.mem = mlx5dv_devx_umem_reg(dev->ibv_context, qp->devx.wq_buf, len, 0);
@@ -136,6 +151,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     if (qp->devx.mem == NULL) {
         UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, 1);
         UCT_IB_MLX5DV_SET(qpc, qpc, offload_type, 1);
+        UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, 0xffffff);
     } else {
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem->umem_id);
     }
@@ -145,8 +161,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                           out, sizeof(out));
     if (!qp->devx.obj) {
-        ucs_error("mlx5dv_devx_obj_create(QP) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(create_qp_out, out, syndrome));
+        if (!attr->suppress_log) {
+            ucs_error("mlx5dv_devx_obj_create(QP) failed, syndrome %x: %m",
+                      UCT_IB_MLX5DV_GET(create_qp_out, out, syndrome));
+        }
         goto err_free_db;
     }
 
@@ -193,8 +211,6 @@ err_free_mem:
     }
 err_free_buf:
     ucs_free(qp->devx.wq_buf);
-err_uar:
-    uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
 err:
     return status;
 #else

@@ -233,6 +233,89 @@ no_odp:
     return UCS_OK;
 }
 
+static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
+{
+    struct ibv_srq_init_attr_ex srq_attr = {};
+    struct ibv_cq_init_attr_ex cq_attr = {};
+    uct_ib_mlx5_devx_uar_t uar = {};
+    uct_ib_qp_attr_t qp_attr = {};
+    uct_ib_mlx5_qp_t qp = {};
+    ucs_status_t status;
+    struct ibv_srq *srq;
+    struct ibv_cq *cq;
+    struct ibv_pd *pd;
+
+    if (!(md->super.dev.dev_attr.tm_caps.flags & IBV_TM_CAP_RC)) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_mlx5_devx_uar_init(&uar, md, UCT_IB_MLX5_MMIO_MODE_BF_POST);
+    if (status != UCS_OK) {
+        goto err_uar;
+    }
+
+    status = UCS_ERR_IO_ERROR;
+    pd = ibv_alloc_pd(md->super.dev.ibv_context);
+    if (pd == NULL) {
+        ucs_error("ibv_alloc_pd() failed: %m");
+        goto err_pd;
+    }
+
+    cq_attr.cqe = 1;
+    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(md->super.dev.ibv_context, &cq_attr));
+    if (cq == NULL) {
+        ucs_error("ibv_create_cq() failed: %m");
+        goto err_cq;
+    }
+
+    srq_attr.attr.max_sge        = 1;
+    srq_attr.attr.max_wr         = IBV_DEVICE_MIN_UWQ_POST;
+    srq_attr.srq_type            = IBV_SRQT_TM;
+    srq_attr.pd                  = pd;
+    srq_attr.cq                  = cq;
+    srq_attr.tm_cap.max_num_tags = 1;
+    srq_attr.tm_cap.max_ops      = 1;
+    srq_attr.comp_mask          |= IBV_SRQ_INIT_ATTR_TYPE |
+                                   IBV_SRQ_INIT_ATTR_PD |
+                                   IBV_SRQ_INIT_ATTR_CQ |
+                                   IBV_SRQ_INIT_ATTR_TM;
+
+    srq = ibv_create_srq_ex(md->super.dev.ibv_context, &srq_attr);
+    if (srq == NULL) {
+        ucs_error("ibv_create_srq_ex() failed: %m");
+        goto err_srq;
+    }
+
+    qp_attr.srq          = srq;
+    qp_attr.qp_type      = IBV_QPT_RC;
+    qp_attr.ibv.pd       = pd;
+    qp_attr.ibv.send_cq  = cq;
+    qp_attr.ibv.recv_cq  = cq;
+    qp_attr.port         = 1;
+    qp_attr.suppress_log = 1;
+
+    status = uct_ib_mlx5_devx_create_qp_impl(md, &uar, &qp, NULL, &qp_attr);
+    if (status != UCS_OK) {
+        md->super.dev.dev_attr.tm_caps.flags &= ~IBV_TM_CAP_RC;
+        status = UCS_OK;
+        goto err_qp;
+    }
+
+    uct_ib_mlx5_devx_destroy_qp(&qp);
+    status = UCS_OK;
+
+err_qp:
+    ibv_destroy_srq(srq);
+err_srq:
+    ibv_destroy_cq(cq);
+err_cq:
+    ibv_dealloc_pd(pd);
+err_pd:
+    uct_ib_mlx5_devx_uar_cleanup(&uar);
+err_uar:
+    return status;
+}
+
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops;
 
 static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
@@ -379,6 +462,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                             UCS_SYS_CACHE_LINE_SIZE,
                             ucs_get_page_size() / UCS_SYS_CACHE_LINE_SIZE - 1,
                             UINT_MAX, &uct_ib_mlx5_dbrec_ops, "devx dbrec");
+    if (status != UCS_OK) {
+        goto err_free;
+    }
+
+    status = uct_ib_mlx5_devx_check_rndv(md);
     if (status != UCS_OK) {
         goto err_free;
     }
