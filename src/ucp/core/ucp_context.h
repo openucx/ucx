@@ -77,7 +77,7 @@ typedef struct ucp_context_config {
     unsigned                               max_rndv_lanes;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
-    /** Estimated number of endpoints per node */
+    /** Estimated number of processes per node */
     size_t                                 estimated_num_ppn;
     /** Memtype cache */
     int                                    enable_memtype_cache;

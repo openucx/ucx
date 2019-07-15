@@ -712,9 +712,9 @@ typedef struct ucp_params {
 
     /**
      * An optimization hint for single node. For example, when used from MPI or
-     * OpenSHMEM libraries, this number would specify the number of processes per
-     * node in the job. Does not affect semantics, only transport selection criteria
-     * and the resulting performance.
+     * OpenSHMEM libraries, this number would specify the number of Processes Per
+     * Node (PPN) in the job. Does not affect semantics, only transport selection
+     * criteria and the resulting performance.
      * The value can be also set by the UCX_NUM_PPN environment variable, which
      * will override the number of endpoints set by @e estimated_num_ppn
      */

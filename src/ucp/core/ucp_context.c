@@ -228,8 +228,9 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
 
   {"NUM_PPN", "auto",
-   "An optimization hint for single node. Does not affect semantics, only transport\n"
-   "selection criteria and the resulting performance.\n",
+   "An optimization hint for the number of processes expected to be launched\n"
+   "on a single node. Does not affect semantics, only transport selection criteria\n"
+   "and the resulting performance.\n",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
   {"RNDV_FRAG_SIZE", "256k",
