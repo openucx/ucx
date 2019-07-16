@@ -233,6 +233,8 @@ no_odp:
     return UCS_OK;
 }
 
+/* Check whether FW supports DEVX create QP without work queue
+ * required for HW TM rendezvous protocol */
 static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
 {
     struct ibv_srq_init_attr_ex srq_attr = {};
@@ -251,21 +253,21 @@ static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
 
     status = uct_ib_mlx5_devx_uar_init(&uar, md, UCT_IB_MLX5_MMIO_MODE_BF_POST);
     if (status != UCS_OK) {
-        goto err_uar;
+        goto err;
     }
 
     status = UCS_ERR_IO_ERROR;
     pd = ibv_alloc_pd(md->super.dev.ibv_context);
     if (pd == NULL) {
         ucs_error("ibv_alloc_pd() failed: %m");
-        goto err_pd;
+        goto err_free_uar;
     }
 
     cq_attr.cqe = 1;
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(md->super.dev.ibv_context, &cq_attr));
     if (cq == NULL) {
         ucs_error("ibv_create_cq() failed: %m");
-        goto err_cq;
+        goto err_dealloc_pd;
     }
 
     srq_attr.attr.max_sge        = 1;
@@ -283,7 +285,7 @@ static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
     srq = ibv_create_srq_ex(md->super.dev.ibv_context, &srq_attr);
     if (srq == NULL) {
         ucs_error("ibv_create_srq_ex() failed: %m");
-        goto err_srq;
+        goto err_destroy_cq;
     }
 
     qp_attr.srq          = srq;
@@ -298,21 +300,21 @@ static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
     if (status != UCS_OK) {
         md->super.dev.dev_attr.tm_caps.flags &= ~IBV_TM_CAP_RC;
         status = UCS_OK;
-        goto err_qp;
+        goto err_destroy_srq;
     }
 
     uct_ib_mlx5_devx_destroy_qp(&qp);
     status = UCS_OK;
 
-err_qp:
+err_destroy_srq:
     ibv_destroy_srq(srq);
-err_srq:
+err_destroy_cq:
     ibv_destroy_cq(cq);
-err_cq:
+err_dealloc_pd:
     ibv_dealloc_pd(pd);
-err_pd:
+err_free_uar:
     uct_ib_mlx5_devx_uar_cleanup(&uar);
-err_uar:
+err:
     return status;
 }
 

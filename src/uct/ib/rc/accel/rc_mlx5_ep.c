@@ -618,11 +618,16 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr)
 {
-    if (qp->type == UCT_IB_MLX5_QP_TYPE_DEVX) {
+    switch (qp->type) {
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
+        return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
         return uct_ib_mlx5_devx_connect_qp(&iface->super.super, qp, qp_num, ah_attr);
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        break;
     }
 
-    return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
+    return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
@@ -890,14 +895,10 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, uct_ib_mlx5_qp_t *qp)
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
 
-    if (qp->type == UCT_IB_MLX5_QP_TYPE_DEVX) {
-        return;
-    }
-
     /* Make the HW generate CQEs for all in-progress SRQ receives from the QP,
      * so we clean them all before ibv_modify_qp() can see them.
      */
-#if HAVE_DECL_IBV_CMD_MODIFY_QP
+#if HAVE_DECL_IBV_CMD_MODIFY_QP && !HAVE_DEVX
     struct ibv_qp_attr qp_attr;
     struct ibv_modify_qp cmd;
     int ret;
@@ -912,7 +913,7 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, uct_ib_mlx5_qp_t *qp)
         ucs_warn("modify qp 0x%x to RESET failed: %m", qp->qp_num);
     }
 #else
-    (void)uct_ib_modify_qp(qp->verbs.qp, IBV_QPS_ERR);
+    (void)uct_ib_mlx5_modify_qp(qp, IBV_QPS_ERR);
 #endif
 
     iface->super.rx.srq.available += uct_rc_mlx5_iface_commom_clean(
@@ -923,7 +924,7 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, uct_ib_mlx5_qp_t *qp)
      * completions for this QP (both send and receive) during ibv_destroy_qp().
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
-    (void)uct_ib_modify_qp(qp->verbs.qp, IBV_QPS_RESET);
+    (void)uct_ib_mlx5_modify_qp(qp, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(iface, &iface->super.super);
 }
 
