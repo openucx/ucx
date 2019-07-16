@@ -162,22 +162,92 @@ uct_base_iface_t dummy_iface = {
     }
 };
 
-static void
-uct_rdamcm_cm_fill_other_conn_param(struct rdma_conn_param *conn_param,
-                                    const uct_rdmacm_priv_data_hdr_t *hdr)
+static ucs_status_t uct_rdmacm_create_dummy_cq_qp(struct rdma_cm_id *id,
+                                                  struct ibv_cq **cq_p,
+                                                  struct ibv_qp **qp_p)
 {
-    static uint32_t qp_num = 0xffffff;
+    struct ibv_qp_init_attr qp_init_attr;
+    ucs_status_t status;
+    struct ibv_cq *cq;
+    struct ibv_qp *qp;
 
-    /* conn_param->private_data should be filled outside this function */
-    conn_param->private_data_len    = sizeof(*hdr) + hdr->length;
-    conn_param->responder_resources = 1;    //remove. all needs to be 0. with memset to 0 before calling this function
-    conn_param->initiator_depth     = 1;    //remove
-    conn_param->retry_count         = 7;    //remove
-    conn_param->rnr_retry_count     = 7;    //remove
-    conn_param->qp_num              = qp_num--;/// create (only create) dummy ud qp (to get a unique qp_num) on the rdmacm_id and destroy this qp when this rdmacm_id is destoryed
-    if (qp_num == 0) {
-        qp_num = 0xffffff;
+    /* Create a dummy completion queue */
+    cq = ibv_create_cq(id->verbs, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        ucs_error("ibv_create_cq() failed: %m");
+        status =  UCS_ERR_IO_ERROR;
+        goto out;
     }
+
+    /* Create a dummy UD qp */
+    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
+    qp_init_attr.send_cq = cq;
+    qp_init_attr.recv_cq = cq;
+    qp_init_attr.qp_type = IBV_QPT_UD;
+    qp_init_attr.cap.max_send_wr  = 2;
+    qp_init_attr.cap.max_recv_wr  = 2;
+    qp_init_attr.cap.max_send_sge = 1;
+    qp_init_attr.cap.max_recv_sge = 1;
+
+    qp = ibv_create_qp(id->pd, &qp_init_attr);
+    if (qp == NULL) {
+        ucs_error("failed to create a dummy ud qp. %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out_destroy_cq;
+    }
+
+    ucs_debug("created ud QP %p with qp_num: 0x%x and cq %p on rdmacm_id %p",
+              qp, qp->qp_num, cq, id);
+
+    *cq_p = cq;
+    *qp_p = qp;
+
+    return UCS_OK;
+
+out_destroy_cq:
+    ibv_destroy_cq(cq);
+out:
+    return status;
+}
+
+static ucs_status_t
+uct_rdamcm_cm_fill_other_conn_param(struct rdma_conn_param *conn_param,
+                                    const uct_rdmacm_priv_data_hdr_t *hdr,
+                                    uct_rdmacm_cep_t *cep)
+{
+//    static uint32_t qp_num = 0xffffff;
+//
+//    /* conn_param->private_data should be filled outside this function */
+//    conn_param->private_data_len    = sizeof(*hdr) + hdr->length;
+//    conn_param->responder_resources = 1;    //remove. all needs to be 0. with memset to 0
+//                                            //    before calling this function
+//    conn_param->initiator_depth     = 1;    //remove
+//    conn_param->retry_count         = 7;    //remove
+//    conn_param->rnr_retry_count     = 7;    //remove
+//    conn_param->qp_num              = qp_num--;/// create (only create) dummy ud qp (to get a unique qp_num) on the rdmacm_id and destroy this qp when this rdmacm_id is destoryed
+//    if (qp_num == 0) {
+//        qp_num = 0xffffff;
+//    }
+//
+//    return UCS_OK;
+
+    /////////CREATES a diff of around 100ms in many_conns/clients* gtests on p2p2 interface
+    /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
+    ucs_status_t status;
+    struct ibv_qp *qp;
+    struct ibv_cq *cq;
+
+    status = uct_rdmacm_create_dummy_cq_qp(cep->id, &cq, &qp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    cep->cq                      = cq;
+    cep->qp                      = qp;
+    conn_param->qp_num           = qp->qp_num;
+    conn_param->private_data_len = sizeof(*hdr) + hdr->length;
+
+    return UCS_OK;
 }
 
 static ucs_status_t uct_rdamcm_cm_init_client_ep(uct_rdmacm_cep_t *cep,
@@ -247,7 +317,10 @@ static ucs_status_t uct_rdamcm_cm_init_server_ep(uct_rdmacm_cep_t *cep,
 
     memcpy((void*)conn_param.private_data, &hdr, sizeof(uct_rdmacm_priv_data_hdr_t));
 
-    uct_rdamcm_cm_fill_other_conn_param(&conn_param, &hdr);
+    status = uct_rdamcm_cm_fill_other_conn_param(&conn_param, &hdr, cep);
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     if (rdma_accept(event->id, &conn_param)) {
         ucs_error("rdma_accept(on id=%p) failed: %m", event->id);
@@ -300,15 +373,35 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
         status = uct_rdamcm_cm_init_server_ep(self, params);
     }
 
-    ucs_debug("created an RDMACM endpoint %p on CM %p. rdmacm_id: %p",
-              self, self->cm, self->id);
+    if (status == UCS_OK) {
+        ucs_debug("created an RDMACM endpoint %p on CM %p. rdmacm_id: %p",
+                  self, self->cm, self->id);
+    }
 
     return status;
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cep_t)
 {
+    uct_priv_worker_t *worker_priv;
+    int ret;
+
+    worker_priv = ucs_derived_of(self->cm->worker, uct_priv_worker_t);
+
+    UCS_ASYNC_BLOCK(worker_priv->async);
+
+    ret = ibv_destroy_qp(self->qp);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+    }
+
+    ret = ibv_destroy_cq(self->cq);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+    }
+
     rdma_destroy_id(self->id);
+    UCS_ASYNC_UNBLOCK(worker_priv->async);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_cep_t, uct_ep_t);
@@ -404,6 +497,8 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
                       ucs_sockaddr_str(remote_addr, ip_port_str,
                                        UCS_SOCKADDR_STRING_LEN));
         }
+        cep = (uct_rdmacm_cep_t *)event->id->context;
+        ucs_assert(event->id == cep->id);
         break;
     case RDMA_CM_EVENT_ROUTE_RESOLVED:
         /* Client side event */
@@ -429,7 +524,10 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         hdr.status = UCS_OK;
 
         memcpy((void*)conn_param.private_data, &hdr, sizeof(uct_rdmacm_priv_data_hdr_t));
-        uct_rdamcm_cm_fill_other_conn_param(&conn_param, &hdr);
+        status = uct_rdamcm_cm_fill_other_conn_param(&conn_param, &hdr, cep);
+        if (status != UCS_OK) {
+            break;
+        }
 
         if (rdma_connect(cep->id, &conn_param)) {
             ucs_error("rdma_connect(to addr=%s) failed: %m",
