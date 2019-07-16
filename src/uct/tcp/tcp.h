@@ -41,6 +41,7 @@ typedef enum uct_tcp_ep_conn_state {
     UCT_TCP_EP_CONN_STATE_CONNECTING,
     UCT_TCP_EP_CONN_STATE_ACCEPTING,
     UCT_TCP_EP_CONN_STATE_WAITING_ACK,
+    UCT_TCP_EP_CONN_STATE_WAITING_REQ,
     UCT_TCP_EP_CONN_STATE_CONNECTED
 } uct_tcp_ep_conn_state_t;
 
@@ -90,9 +91,13 @@ typedef struct uct_tcp_cm_state {
  * TCP Connection Manager event
  */
 typedef enum uct_tcp_cm_conn_event {
-    UCT_TCP_CM_CONN_REQ          = UCS_BIT(0),
-    UCT_TCP_CM_CONN_ACK          = UCS_BIT(1),
-    UCT_TCP_CM_CONN_ACK_WITH_REQ = UCT_TCP_CM_CONN_REQ | UCT_TCP_CM_CONN_ACK,
+    UCT_TCP_CM_CONN_REQ               = UCS_BIT(0),
+    UCT_TCP_CM_CONN_ACK               = UCS_BIT(1),
+    UCT_TCP_CM_CONN_WAIT_REQ          = UCS_BIT(2),
+    UCT_TCP_CM_CONN_ACK_WITH_REQ      = (UCT_TCP_CM_CONN_REQ |
+                                         UCT_TCP_CM_CONN_ACK),
+    UCT_TCP_CM_CONN_ACK_WITH_WAIT_REQ = (UCT_TCP_CM_CONN_WAIT_REQ |
+                                         UCT_TCP_CM_CONN_ACK)
 } uct_tcp_cm_conn_event_t;
 
 
