@@ -16,11 +16,38 @@ extern "C" {
 
 
 static JavaVM *jvm_global;
+static jclass jucx_request_cls;
+static jfieldID completed_field;
+static jmethodID on_success;
+static jmethodID jucx_request_constructor;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
-   ucs_debug_disable_signals();
-   jvm_global = jvm;
-   return JNI_VERSION_1_1;
+    ucs_debug_disable_signals();
+    jvm_global = jvm;
+    JNIEnv* env;
+    if (jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_1) != JNI_OK) {
+       return JNI_ERR;
+    }
+
+    jclass jucx_request_cls_local = env->FindClass("org/ucx/jucx/UcxRequest");
+    jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
+    jclass jucx_callback_cls = env->FindClass("org/ucx/jucx/UcxCallback");
+    completed_field = env->GetFieldID(jucx_request_cls, "completed", "Z");
+    on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
+                                  "(Lorg/ucx/jucx/UcxRequest;)V");
+    jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
+    return JNI_VERSION_1_1;
+}
+
+extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved) {
+    JNIEnv* env;
+    if (jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_1) != JNI_OK) {
+        return;
+    }
+
+    if (jucx_request_cls != NULL) {
+        env->DeleteGlobalRef(jucx_request_cls);
+    }
 }
 
 /**
@@ -138,17 +165,12 @@ JNIEnv* get_jni_env()
 
 static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request)
 {
-    jclass jucx_request_cls = env->GetObjectClass(jucx_request);
-    jfieldID field = env->GetFieldID(jucx_request_cls, "completed", "Z");
-    env->SetBooleanField(jucx_request, field, true);
+    env->SetBooleanField(jucx_request, completed_field, true);
 }
 
 static inline void call_on_success(jobject callback, jobject request)
 {
     JNIEnv *env = get_jni_env();
-    jclass callback_cls = env->GetObjectClass(callback);
-    jmethodID on_success = env->GetMethodID(callback_cls, "onSuccess",
-                                            "(Lorg/ucx/jucx/UcxRequest;)V");
     env->CallVoidMethod(callback, on_success, request);
 }
 
@@ -195,9 +217,7 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
-    jclass jucx_request_cls = env->FindClass("org/ucx/jucx/UcxRequest");
-    jmethodID constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
-    jobject jucx_request = env->NewObject(jucx_request_cls, constructor);
+    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor);
 
     // If request is a pointer set context callback and rkey.
     if (UCS_PTR_IS_PTR(request)) {
