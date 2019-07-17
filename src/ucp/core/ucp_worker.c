@@ -335,7 +335,8 @@ static void ucp_worker_iface_disarm(ucp_worker_iface_t *wiface)
     ucs_status_t status;
 
     if (wiface->flags & UCP_WORKER_IFACE_FLAG_ON_ARM_LIST) {
-        status = ucp_worker_wakeup_ctl_fd(wiface->worker, UCP_WORKER_EPFD_OP_DEL,
+        status = ucp_worker_wakeup_ctl_fd(wiface->worker,
+                                          UCP_WORKER_EPFD_OP_DEL,
                                           wiface->event_fd);
         ucs_assert_always(status == UCS_OK);
         ucs_list_del(&wiface->arm_list);
