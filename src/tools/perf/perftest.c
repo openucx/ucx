@@ -501,37 +501,43 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
     return UCS_OK;
 }
 
-static void init_test_params(ucx_perf_params_t *params)
+static ucs_status_t init_test_params(ucx_perf_params_t *params)
 {
     memset(params, 0, sizeof(*params));
-    params->api             = UCX_PERF_API_LAST;
-    params->command         = UCX_PERF_CMD_LAST;
-    params->test_type       = UCX_PERF_TEST_TYPE_LAST;
-    params->thread_mode     = UCS_THREAD_MODE_SINGLE;
-    params->thread_count    = 1;
-    params->async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
-    params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    params->max_outstanding = 1;
-    params->warmup_iter     = 10000;
-    params->am_hdr_size     = 8;
-    params->alignment       = ucs_get_page_size();
-    params->max_iter        = 1000000l;
-    params->max_time        = 0.0;
-    params->report_interval = 1.0;
-    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
-    params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
-    params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
-    params->mem_type        = UCT_MD_MEM_TYPE_HOST;
-    params->msg_size_cnt    = 1;
-    params->iov_stride      = 0;
+    params->api               = UCX_PERF_API_LAST;
+    params->command           = UCX_PERF_CMD_LAST;
+    params->test_type         = UCX_PERF_TEST_TYPE_LAST;
+    params->thread_mode       = UCS_THREAD_MODE_SINGLE;
+    params->thread_count      = 1;
+    params->async_mode        = UCS_ASYNC_THREAD_LOCK_TYPE;
+    params->wait_mode         = UCX_PERF_WAIT_MODE_LAST;
+    params->max_outstanding   = 1;
+    params->warmup_iter       = 10000;
+    params->am_hdr_size       = 8;
+    params->alignment         = ucs_get_page_size();
+    params->max_iter          = 1000000l;
+    params->max_time          = 0.0;
+    params->report_interval   = 1.0;
+    params->flags             = UCX_PERF_TEST_FLAG_VERBOSE;
+    params->uct.fc_window     = UCT_PERF_TEST_MAX_FC_WINDOW;
+    params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
+    params->mem_type          = UCT_MD_MEM_TYPE_HOST;
+    params->msg_size_cnt      = 1;
+    params->iov_stride        = 0;
     params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     strcpy(params->uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->uct.tl_name,  TL_RESOURCE_NAME_NONE);
 
-    params->msg_size_list    = malloc(sizeof(*params->msg_size_list) *
-                                      params->msg_size_cnt);
+    params->msg_size_list     = malloc(sizeof(*params->msg_size_list) *
+                                     params->msg_size_cnt);
+    if (params->msg_size_list == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
     params->msg_size_list[0] = 8;
+
+    return UCS_OK;
 }
 
 static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
@@ -730,7 +736,11 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
 
     ucx_perf_global_init(); /* initialize memory types */
 
-    init_test_params(&ctx->params);
+    status = init_test_params(&ctx->params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ctx->server_addr            = NULL;
     ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
@@ -1376,14 +1386,24 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     return UCS_OK;
 }
 
-static void clone_params(ucx_perf_params_t *dest, const ucx_perf_params_t *src)
+static ucs_status_t clone_params(ucx_perf_params_t *dest,
+                                 const ucx_perf_params_t *src)
 {
     size_t msg_size_list_size;
 
     *dest               = *src;
     msg_size_list_size  = dest->msg_size_cnt * sizeof(*dest->msg_size_list);
     dest->msg_size_list = malloc(msg_size_list_size);
-    memcpy(dest->msg_size_list, src->msg_size_list, msg_size_list_size);
+    if (dest->msg_size_list != NULL) {
+        memcpy(dest->msg_size_list, src->msg_size_list, msg_size_list_size);
+        return UCS_OK;
+    }
+
+    if (msg_size_list_size != 0) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
@@ -1420,7 +1440,11 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    clone_params(&params, parent_params);
+    status = clone_params(&params, parent_params);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     line_num = 0;
     while ((status = read_batch_file(batch_file, ctx->batch_files[depth],
                                      &line_num, &params,
@@ -1430,12 +1454,20 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         free(ctx->test_names[depth]);
         ctx->test_names[depth] = NULL;
 
-        clone_params(&params, parent_params);
+        status = clone_params(&params, parent_params);
+        if (status != UCS_OK) {
+            goto out;
+        }
     }
-    free(params.msg_size_list);
 
+    if (status == UCS_ERR_NO_ELEM) {
+        status = UCS_OK;
+    }
+
+    free(params.msg_size_list);
+out:
     fclose(batch_file);
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t run_test(struct perftest_context *ctx)
