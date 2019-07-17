@@ -266,6 +266,7 @@ ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_confi
     mm_md->super.ops = &uct_mm_md_ops;
     mm_md->super.component = mdc;
 
+    /* cppcheck-suppress autoVariables */
     *md_p = &mm_md->super;
     return UCS_OK;
 

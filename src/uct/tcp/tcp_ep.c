@@ -255,6 +255,7 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
     if (status == UCS_OK) {
         ucs_debug("tcp_ep %p: connected to %s:%d", tcp_ep,
                   inet_ntoa(dest_addr.sin_addr), ntohs(dest_addr.sin_port));
+        /* cppcheck-suppress autoVariables */
         *ep_p = &tcp_ep->super.super;
     }
     return status;
