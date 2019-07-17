@@ -421,6 +421,8 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
     uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
     status = uct_ep_create(&uct_ep_params, &next_ep);
     if (status != UCS_OK) {
+        /* make Coverity happy */
+        ucs_assert(next_ep == NULL);
         goto err;
     }
 
