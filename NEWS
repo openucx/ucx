@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.6.0-rc5 (July 13 , 2019)
+## 1.6.0 (July 17, 2019)
 Features:
 - Modular architecture for UCT transports
 - ROCm transport re-design: support for managed memory, direct copy, ROCm GDR
