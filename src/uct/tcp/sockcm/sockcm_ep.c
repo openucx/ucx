@@ -217,6 +217,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 
     ucs_debug("sockcm_ep %p: destroying", self);
 
+    ucs_async_remove_handler(self->sock_id_ctx->sock_id, 0);
+
     UCS_ASYNC_BLOCK(iface->super.worker->async);
     if (self->is_on_pending) {
         ucs_list_del(&self->list_elem);

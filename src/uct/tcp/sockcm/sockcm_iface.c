@@ -70,11 +70,13 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
     sent_len = send(*fd, (char *) &accept, sizeof(accept), 0);
 
     if (sent_len < 0) {
-        ucs_debug("sockcm_listener: unable to send accept");
+        ucs_debug("sockcm_listener: unable to send accept on %d %m", *fd);
         status = UCS_ERR_IO_ERROR;
     } else {
         ucs_debug("sockcm_listener: sent accept");
     }
+
+    ucs_free(conn_request);
 
     return status;
 }
@@ -91,11 +93,13 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
     sent_len = send(*fd, (char *) &reject, sizeof(reject), 0);
 
     if (sent_len < 0) {
-        ucs_debug("sockcm_listener: unable to send reject");
+        ucs_debug("sockcm_listener: unable to send reject on %d %m", *fd);
         status = UCS_ERR_IO_ERROR;
     } else {
         ucs_debug("sockcm_listener: sent reject");
     }
+
+    ucs_free(conn_request);
 
     return status;
 }
@@ -169,7 +173,13 @@ void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
 static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
                                              uct_sockcm_conn_param_t conn_param)
 {
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, &conn_param.fd,
+    int *sock_fd;
+    sock_fd = ucs_malloc(sizeof(int), "sock_fd");
+
+    *sock_fd = conn_param.fd;
+    ucs_debug("process conn req: accepted fd %d %m", *sock_fd);
+
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, sock_fd,
 			   conn_param.private_data, conn_param.private_data_len);
 }
 
@@ -210,7 +220,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
         ucs_debug("sockcm_listener: unable to create mem for accepted fd");
     }
     sock_id_ctx->sock_id = accept_fd;
-    ucs_list_add_tail(&iface->accepted_sock_ids_list, &sock_id_ctx->list);
+    ucs_list_add_tail(&iface->used_sock_ids_list, &sock_id_ctx->list);
 
     recv_len = recv(accept_fd, (char *) &conn_param,
                     sizeof(uct_sockcm_conn_param_t), 0);
@@ -219,6 +229,8 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
         conn_param.fd = accept_fd;
         uct_sockcm_iface_process_conn_req(iface, conn_param);
+    } else {
+        ucs_error("sockcm_iface %p:did not receive the full message on %d\n", iface, conn_param.fd);
     }
 }
 
@@ -317,7 +329,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_list_head_init(&self->pending_eps_list);
     ucs_list_head_init(&self->used_sock_ids_list);
-    ucs_list_head_init(&self->accepted_sock_ids_list);
 
     return UCS_OK;
 
@@ -344,16 +355,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
     while (!ucs_list_is_empty(&self->used_sock_ids_list)) {
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_sockcm_ctx_t, list);
-        ucs_async_remove_handler(sock_id_ctx->sock_id, 1);
         ucs_debug("cleaning client fd = %d", sock_id_ctx->sock_id);
-        close(sock_id_ctx->sock_id);
-        ucs_free(sock_id_ctx);
-    }
-
-    while (!ucs_list_is_empty(&self->accepted_sock_ids_list)) {
-        sock_id_ctx = ucs_list_extract_head(&self->accepted_sock_ids_list,
-                                            uct_sockcm_ctx_t, list);
-        ucs_debug("cleaning accepted fd = %d", sock_id_ctx->sock_id);
         close(sock_id_ctx->sock_id);
         ucs_free(sock_id_ctx);
     }
