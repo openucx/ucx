@@ -235,7 +235,7 @@ ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                              uint32_t request_flags)
 {
     req->flags              = UCP_REQUEST_FLAG_CALLBACK | request_flags;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     req->flags             |= UCP_REQUEST_FLAG_STREAM_RECV;
     req->status             = UCS_OK; /* for ucp_request_recv_data_unpack() */
 #endif

@@ -549,7 +549,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                                   UCT_RC_QP_MAX_RETRY_COUNT);
     self->config.max_rd_atomic      = config->max_rd_atomic;
     self->config.ooo_rw             = config->ooo_rw;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
 
