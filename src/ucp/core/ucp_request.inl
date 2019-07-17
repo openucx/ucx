@@ -166,6 +166,7 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
 {
     ucs_status_t status;
 
+    /* coverity[address_free] */
     status = req->send.uct.func(&req->send.uct);
     if (status == UCS_OK) {
         /* Completed the operation */
