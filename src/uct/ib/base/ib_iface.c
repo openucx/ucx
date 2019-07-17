@@ -480,7 +480,7 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
                 }
             }
 
-            ucs_assert(iface->path_bits_count <= num_path_bits);
+            ucs_assert(iface->path_bits_count < num_path_bits);
             iface->path_bits[iface->path_bits_count] = j;
             iface->path_bits_count++;
         }
