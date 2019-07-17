@@ -42,11 +42,24 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
                                  socklen_t socklen, const uct_listener_params_t *params,
                                  uct_listener_h *listener_p)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    if (!ucs_test_all_flags(params->field_mask,
+                            UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return cm->ops->listener_create(cm, saddr, socklen, params, listener_p);
 }
 
-void uct_listener_destroy(uct_listener_h listener){}
+void uct_listener_destroy(uct_listener_h listener)
+{
+    listener->cm->ops->listener_destroy(listener);
+}
 
+ucs_status_t uct_listener_reject(uct_listener_h listener,
+                                 uct_conn_request_h conn_request)
+{
+    return listener->cm->ops->listener_reject(listener, conn_request);
+}
 
 UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_component_h component)
 {

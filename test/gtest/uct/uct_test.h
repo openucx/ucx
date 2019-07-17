@@ -157,6 +157,8 @@ protected:
         void connect_to_sockaddr(unsigned index, entity& other,
                                  const ucs::sock_addr_storage &remote_addr);
 
+        void listen(const ucs::sock_addr_storage &listen_addr,
+                            const uct_listener_params_t &params);
         void flush() const;
 
         static std::string client_priv_data;

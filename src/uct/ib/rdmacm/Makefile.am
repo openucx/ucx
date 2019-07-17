@@ -28,11 +28,13 @@ libuct_rdmacm_la_SOURCES = \
 if HAVE_RDMACM_QP_LESS
 noinst_HEADERS += \
 	rdmacm_cm.h \
-	rdmacm_listener.h
+	rdmacm_listener.h \
+	rdmacm_cm_ep.h
 
 libuct_rdmacm_la_SOURCES += \
 	rdmacm_cm.c \
-	rdmacm_listener.c
+	rdmacm_listener.c \
+	rdmacm_cm_ep.c
 endif # HAVE_RDMACM_QP_LESS
 
 include $(top_srcdir)/config/module.am

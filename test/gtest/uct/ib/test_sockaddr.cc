@@ -344,6 +344,25 @@ public:
     }
 
 protected:
+
+    void cm_start_listen() {
+        uct_listener_params_t params;
+
+        params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
+                                 UCT_LISTENER_PARAM_FIELD_USER_DATA;
+        params.conn_request_cb = cm_conn_request_cb;
+        params.user_data       = static_cast<test_uct_cm_sockaddr *>(this);
+        m_server->listen(m_listen_addr, params);
+    }
+
+    static void
+    cm_conn_request_cb(uct_listener_h listener, void *arg,
+                       const char *local_dev_name,
+                       uct_conn_request_h conn_request,
+                       const uct_cm_remote_data_t *remote_data) {
+    }
+
+protected:
     ucs::sock_addr_storage m_listen_addr, m_connect_addr;
     entity                 *m_server, *m_client;
 };
@@ -363,6 +382,14 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
         ASSERT_UCS_OK(status);
         EXPECT_LT(0ul, attr.max_conn_priv);
     }
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, listen)
+{
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
+
+    cm_start_listen();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
