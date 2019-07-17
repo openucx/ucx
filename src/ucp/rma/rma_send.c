@@ -134,7 +134,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                                  ucp_rma_request_bcopy_completion :
                                  ucp_rma_request_zcopy_completion,
                                  UCP_REQUEST_SEND_PROTO_RMA);
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
     if (length < zcopy_thresh) {

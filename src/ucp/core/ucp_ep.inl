@@ -142,7 +142,7 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 
 static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
 {
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     if (!(ep->flags & UCP_EP_FLAG_DEST_EP)) {
         return 0; /* Let remote side assert if it gets NULL pointer */
     }

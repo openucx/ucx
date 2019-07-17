@@ -93,7 +93,7 @@ typedef enum {
                                            will start from the group that returned STOP */
 } ucs_arbiter_cb_result_t;
 
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
 #define UCS_ARBITER_GUARD                   int guard
 #define UCS_ARBITER_GUARD_INIT(_arbiter)    (_arbiter)->guard = 0
 #define UCS_ARBITER_GUARD_ENTER(_arbiter)   (_arbiter)->guard++

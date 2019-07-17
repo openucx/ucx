@@ -694,7 +694,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
         iface->tx.dcis_stack[i] = i;
         iface->tx.dcis[i].ep    = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
         iface->tx.dcis[i].flags = 0;
 #endif
     }

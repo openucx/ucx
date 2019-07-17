@@ -532,7 +532,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
         if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
             uct_rc_txqp_purge_outstanding(&iface->tx.dcis[ep->dci].txqp,
                                           UCS_ERR_CANCELED, 0);
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
             iface->tx.dcis[ep->dci].flags |= UCT_DC_DCI_FLAG_EP_CANCELED;
 #endif
         }
@@ -918,7 +918,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
               uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
     iface->tx.dcis[self->dci].ep     = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     iface->tx.dcis[self->dci].flags |= UCT_DC_DCI_FLAG_EP_DESTROYED;
 #endif
 }
