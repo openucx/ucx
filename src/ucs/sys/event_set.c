@@ -21,14 +21,18 @@
 #  include "config.h"
 #endif
 
+enum {
+    UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD = UCS_BIT(0),
+};
+
+struct ucs_sys_event_set {
+    int      event_fd;
+    unsigned flags;
+};
+
 
 const unsigned ucs_sys_event_set_max_wait_events =
     UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event);
-
-
-struct ucs_sys_event_set {
-    int epfd;
-};
 
 
 static inline int ucs_event_set_map_to_raw_events(int events)
@@ -69,36 +73,59 @@ static inline int ucs_event_set_map_to_events(int raw_events)
     return events;
 }
 
-ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p)
+static ucs_sys_event_set_t *ucs_event_set_alloc(int event_fd, unsigned flags)
 {
     ucs_sys_event_set_t *event_set;
-    ucs_status_t status;
 
     event_set = ucs_malloc(sizeof(ucs_sys_event_set_t), "ucs_sys_event_set");
     if (event_set == NULL) {
         ucs_error("unable to allocate memory ucs_sys_event_set_t object");
-        status = UCS_ERR_NO_MEMORY;
-        goto out_create;
+        return NULL;
     }
+
+    event_set->flags    = flags;
+    event_set->event_fd = event_fd;
+    return event_set;
+}
+
+ucs_status_t ucs_event_set_create_from_fd(ucs_sys_event_set_t **event_set_p,
+                                          int event_fd)
+{
+    *event_set_p = ucs_event_set_alloc(event_fd,
+                                       UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD);
+    if (*event_set_p == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p)
+{
+    ucs_status_t status;
+    int event_fd;
 
     /* Create epoll set the thread will wait on */
-    event_set->epfd = epoll_create(1);
-    if (event_set->epfd < 0) {
+    event_fd = epoll_create(1);
+    if (event_fd < 0) {
         ucs_error("epoll_create() failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_free;
+        return UCS_ERR_IO_ERROR;
     }
 
-    *event_set_p = event_set;
+    *event_set_p = ucs_event_set_alloc(event_fd, 0);
+    if (*event_set_p == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_close_event_fd;
+    }
+
     return UCS_OK;
 
-err_free:
-    ucs_free(event_set);
-out_create:
+err_close_event_fd:
+    close(event_fd);
     return status;
 }
 
-ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int event_fd,
+ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int fd,
                                ucs_event_set_type_t events, void *callback_data)
 {
     struct epoll_event raw_event;
@@ -108,17 +135,17 @@ ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int event_fd,
     raw_event.events   = ucs_event_set_map_to_raw_events(events);
     raw_event.data.ptr = callback_data;
 
-    ret = epoll_ctl(event_set->epfd, EPOLL_CTL_ADD, event_fd, &raw_event);
+    ret = epoll_ctl(event_set->event_fd, EPOLL_CTL_ADD, fd, &raw_event);
     if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, ADD, fd=%d) failed: %m", event_set->epfd,
-                  event_fd);
+        ucs_error("epoll_ctl(event_fd=%d, ADD, fd=%d) failed: %m",
+                  event_set->event_fd, fd);
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int event_fd,
+ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int fd,
                                ucs_event_set_type_t events, void *callback_data)
 {
     struct epoll_event raw_event;
@@ -128,24 +155,24 @@ ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int event_fd,
     raw_event.events   = ucs_event_set_map_to_raw_events(events);
     raw_event.data.ptr = callback_data;
 
-    ret = epoll_ctl(event_set->epfd, EPOLL_CTL_MOD, event_fd, &raw_event);
+    ret = epoll_ctl(event_set->event_fd, EPOLL_CTL_MOD, fd, &raw_event);
     if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, MOD, fd=%d) failed: %m", event_set->epfd,
-                  event_fd);
+        ucs_error("epoll_ctl(event_fd=%d, MOD, fd=%d) failed: %m",
+                  event_set->event_fd, fd);
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int event_fd)
+ucs_status_t ucs_event_set_del(ucs_sys_event_set_t *event_set, int fd)
 {
     int ret;
 
-    ret = epoll_ctl(event_set->epfd, EPOLL_CTL_DEL, event_fd, NULL);
+    ret = epoll_ctl(event_set->event_fd, EPOLL_CTL_DEL, fd, NULL);
     if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, DEL, fd=%d) failed: %m", event_set->epfd,
-                  event_fd);
+        ucs_error("epoll_ctl(event_fd=%d, DEL, fd=%d) failed: %m",
+                  event_set->event_fd, fd);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -166,7 +193,7 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
 
     events = ucs_alloca(sizeof(*events) * *num_events);
 
-    nready = epoll_wait(event_set->epfd, events, *num_events, timeout_ms);
+    nready = epoll_wait(event_set->event_fd, events, *num_events, timeout_ms);
     if (ucs_unlikely(nready < 0)) {
         *num_events = 0;
         if (errno == EINTR) {
@@ -177,8 +204,9 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
     }
 
     ucs_assert(nready <= *num_events);
-    ucs_trace_poll("epoll_wait(epfd=%d, num_events=%u, timeout=%d) returned %u",
-                   event_set->epfd, *num_events, timeout_ms, nready);
+    ucs_trace_poll("epoll_wait(event_fd=%d, num_events=%u, timeout=%d) "
+                   "returned %u",
+                   event_set->event_fd, *num_events, timeout_ms, nready);
 
     for (i = 0; i < nready; i++) {
         io_events = ucs_event_set_map_to_events(events[i].events);
@@ -191,16 +219,16 @@ ucs_status_t ucs_event_set_wait(ucs_sys_event_set_t *event_set,
 
 void ucs_event_set_cleanup(ucs_sys_event_set_t *event_set)
 {
-    close(event_set->epfd);
+    if (!(event_set->flags & UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD)) {
+        close(event_set->event_fd);
+    }
     ucs_free(event_set);
 }
 
-ucs_status_t ucs_event_set_fd_get(ucs_sys_event_set_t *event_set, int *fd_p)
+ucs_status_t ucs_event_set_fd_get(ucs_sys_event_set_t *event_set,
+                                  int *event_fd_p)
 {
-    if (event_set == NULL) {
-         return UCS_ERR_INVALID_PARAM;
-    }
-
-    *fd_p = event_set->epfd;
+    ucs_assert(event_set != NULL);
+    *event_fd_p = event_set->event_fd;
     return UCS_OK;
 }
