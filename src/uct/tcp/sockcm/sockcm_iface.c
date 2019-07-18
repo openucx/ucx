@@ -42,8 +42,13 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
 
     if (iface->is_server) {
         socklen_t len = sizeof(sin);
-        getsockname(iface->listen_fd, (struct sockaddr *)&sin, &len);
+        if (getsockname(iface->listen_fd, (struct sockaddr *)&sin, &len)) {
+            ucs_error("sockcm_iface: getsockname failed %m");
+            return UCS_ERR_IO_ERROR;
+        }
         iface_attr->listen_port = ntohs(sin.sin_port);
+    } else {
+        iface_attr->listen_port = -1;
     }
 
     return UCS_OK;
@@ -201,8 +206,6 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
         if ((errno != EAGAIN) && (errno != EINTR)) {
             ucs_error("accept() failed: %m");
             return;
-            // FIXME uct_tcp_iface_listen_close(iface);
-            //close(iface->sock_id);
         }
     }
 

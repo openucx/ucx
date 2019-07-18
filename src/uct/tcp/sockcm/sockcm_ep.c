@@ -54,7 +54,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
     uct_sockcm_priv_data_hdr_t *hdr;
     ssize_t sent_len = 0;
 
-    memset(&conn_param.private_data, 0, UCT_SOCKCM_PRIV_DATA_LEN);
+    memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
     hdr = &conn_param.hdr;
 
     /* pack worker address into private data */
@@ -67,13 +67,13 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
         return UCS_ERR_IO_ERROR;
     }
     ucs_assert(hdr->length + sizeof(int) <= UCT_SOCKCM_PRIV_DATA_LEN);
-    conn_param.private_data_len = sizeof(uct_sockcm_conn_param_t);
+    conn_param.private_data_len = hdr->length;
 
     sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param,
-                    conn_param.private_data_len, 0);
+                    sizeof(uct_sockcm_conn_param_t), 0);
     ucs_debug("sockcm_client: send_len = %d bytes %m", (int) sent_len);
     /* TODO: handle when all data is not sent in one op */
-    ucs_assert(sent_len == conn_param.private_data_len);
+    ucs_assert(sent_len == sizeof(uct_sockcm_conn_param_t));
 
     return UCS_OK;
 }

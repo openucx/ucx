@@ -455,7 +455,7 @@ bool is_rdmacm_netdev(const char *ifa_name) {
 
 bool is_sockcm_netdev(const char *ifa_name) {
     char file_name[PATH_MAX];
-    char ch;
+    int ch;
     FILE *fp;
 
     /*
@@ -467,10 +467,15 @@ bool is_sockcm_netdev(const char *ifa_name) {
     if (fp == NULL) {
         return false;
     }
-    ch = fgetc(fp);
-    if (ch == '1') return true;
-    else return false;
-    fclose(fp);
+
+    ch =  fgetc(fp);
+    if ((char) ch == '1') {
+        fclose(fp);
+        return true;
+    } else {
+        fclose(fp);
+        return false;
+    }
 }
 
 uint16_t get_port() {
