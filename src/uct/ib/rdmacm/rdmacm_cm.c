@@ -15,6 +15,11 @@
 #include <rdma/rdma_cma.h>
 
 
+size_t uct_rdmacm_cm_get_max_conn_priv()
+{
+    return UCT_RDMACM_TCP_PRIV_DATA_LEN - sizeof(uct_rdmacm_priv_data_hdr_t);
+}
+
 static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 {
     if (cm_attr->field_mask & UCT_CM_ATTR_FIELD_MAX_CONN_PRIV) {
@@ -22,7 +27,6 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
     }
     return UCS_OK;
 }
-
 
 static void uct_rdmacm_cm_event_handler(int fd, void *arg){}
 

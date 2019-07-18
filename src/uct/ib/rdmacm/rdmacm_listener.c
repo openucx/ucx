@@ -18,7 +18,6 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_listener_t, cm);
 
-    self->id              = NULL;
     self->conn_request_cb = params->conn_request_cb;
     self->user_data       = (params->field_mask & UCT_LISTENER_PARAM_FIELD_USER_DATA) ?
                             params->user_data : NULL;
@@ -30,10 +29,11 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
     }
 
     if (rdma_bind_addr(self->id, (struct sockaddr *)saddr)) {
-        status = (errno == EADDRINUSE || errno == EADDRNOTAVAIL) ?
-                        UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
+        status = ((errno == EADDRINUSE) || (errno == EADDRNOTAVAIL)) ?
+                 UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
         ucs_error("rdma_bind_addr(addr=%s) failed: %m",
-                  ucs_sockaddr_str(saddr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+                  ucs_sockaddr_str(saddr, ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN));
         goto err_destroy_id;
     }
 
@@ -41,7 +41,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
               params->backlog : SOMAXCONN;
     if (rdma_listen(self->id, backlog)) {
         ucs_error("rdma_listen(id:=%p addr=%s backlog=%d) failed: %m",
-                  self->id, ucs_sockaddr_str(saddr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
+                  self->id, ucs_sockaddr_str(saddr, ip_port_str,
+                                             UCS_SOCKADDR_STRING_LEN),
                   backlog);
         status = UCS_ERR_IO_ERROR;
         goto err_destroy_id;

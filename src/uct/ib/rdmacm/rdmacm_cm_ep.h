@@ -10,7 +10,7 @@ typedef struct uct_rdmacm_cep {
     uct_base_ep_t          super;
     uct_rdmacm_cm_t        *cm;
     struct rdma_cm_id      *id;
-    struct ibv_cq          *cq; /* dummy cp used for creating a dummy qp */
+    struct ibv_cq          *cq; /* dummy cq used for creating a dummy qp */
     struct ibv_qp          *qp; /* dummy qp used for generating a unique qp_num */
     void                   *user_data;
     uct_ep_disconnect_cb_t disconnect_cb;

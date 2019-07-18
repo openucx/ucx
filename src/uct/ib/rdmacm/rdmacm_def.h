@@ -35,10 +35,7 @@ typedef struct uct_rdmacm_ctx {
     ucs_list_link_t    list;    /* for list of used cm_ids */
 } uct_rdmacm_ctx_t;
 
-static inline size_t uct_rdmacm_cm_get_max_conn_priv()
-{
-    return UCT_RDMACM_TCP_PRIV_DATA_LEN - sizeof(uct_rdmacm_priv_data_hdr_t);
-}
+size_t uct_rdmacm_cm_get_max_conn_priv();
 
 ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,
                                      struct sockaddr *addr, int timeout_ms,

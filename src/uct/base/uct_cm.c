@@ -42,8 +42,7 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
                                  socklen_t socklen, const uct_listener_params_t *params,
                                  uct_listener_h *listener_p)
 {
-    if (!ucs_test_all_flags(params->field_mask,
-                            UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB)) {
+    if (!(params->field_mask & UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
