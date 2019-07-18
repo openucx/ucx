@@ -37,7 +37,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
     .listener_create  = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_listener_t),
     .listener_reject  = (void*)ucs_empty_function,
     .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_listener_t),
-    .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cep_t)
+    .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_ep_t)
 };
 
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
