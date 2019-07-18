@@ -701,7 +701,7 @@ typedef struct ucp_params {
 
     /**
      * An optimization hint of how many endpoints will be created on this context.
-     * For example, when used from MPI or SHMEM libraries, this number would specify
+     * For example, when used from MPI or SHMEM libraries, this number will specify
      * the number of ranks (or processing elements) in the job.
      * Does not affect semantics, but only transport selection criteria and the
      * resulting performance.
@@ -711,8 +711,8 @@ typedef struct ucp_params {
     size_t                             estimated_num_eps;
 
     /**
-     * An optimization hint for single node. For example, when used from MPI or
-     * OpenSHMEM libraries, this number would specify the number of Processes Per
+     * An optimization hint for a single node. For example, when used from MPI or
+     * OpenSHMEM libraries, this number will specify the number of Processes Per
      * Node (PPN) in the job. Does not affect semantics, only transport selection
      * criteria and the resulting performance.
      * The value can be also set by the UCX_NUM_PPN environment variable, which
