@@ -326,7 +326,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     /* 5. - If found EP is still connecting, tie REQ with ACK and send
      *      it to the peer using new socket fd to ensure that the peer
      *      will be able to receive the data from us
-     *    - If found EP is waiting ACK, tie WAIT_REQ with ACK abd send
+     *    - If found EP is waiting ACK, tie WAIT_REQ with ACK and send
      *      it to the peer using new socket fd to ensure that the peer
      *      will wait for REQ and after receiving the REQ, peer will
      *      be able to receive the data from us */
