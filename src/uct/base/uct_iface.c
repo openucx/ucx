@@ -554,7 +554,7 @@ ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_BCOPY", "",
    "The configuration parameter replaced by: "
    "UCX_<transport>_SEG_SIZE where <transport> is one of: IB, MM, SELF, TCP",
-   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_MEMUNITS},
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"ALLOC", "huge,thp,md,mmap,heap",
    "Priority of methods to allocate intermediate buffers for communication",
