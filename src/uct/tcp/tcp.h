@@ -17,7 +17,7 @@
 
 #define UCT_TCP_NAME                "tcp"
 
-/* How many events to wait for in epoll_wait */
+/* Maximum number of events to wait from event set */
 #define UCT_TCP_MAX_EVENTS          16
 
 /* How long should be string to keep [%s:%s] string
