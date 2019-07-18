@@ -935,7 +935,7 @@ struct uct_ib_mlx5_ads_bits {
     uint8_t         ack_timeout[0x5];
     uint8_t         reserved_at_45[0x3];
     uint8_t         src_addr_index[0x8];
-    uint8_t         reserved_at_50[0x4];
+    uint8_t         log_rtm[0x4];
     uint8_t         stat_rate[0x4];
     uint8_t         hop_limit[0x8];
 
