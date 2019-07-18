@@ -1,4 +1,4 @@
-#!/bin/bash -eEx
+#!/bin/bash -eExl
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
@@ -30,7 +30,7 @@ if [ -z "$BUILD_NUMBER" ]; then
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
 	JENKINS_RUN_TESTS=yes
-	JENKINS_TEST_PERF=0
+	JENKINS_TEST_PERF=1
 	TIMEOUT=""
 	TIMEOUT_VALGRIND=""
 else
@@ -1176,7 +1176,6 @@ run_gtest() {
 			module load tools/valgrind-latest
 		fi
 
-		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes --gen-suppressions=all"
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
@@ -1194,7 +1193,6 @@ run_gtest() {
 	unset GTEST_TAP
 	unset GTEST_REPORT_DIR
 	unset GTEST_EXTRA_ARGS
-	unset VALGRIND_EXTRA_ARGS
 	unset CUDA_VISIBLE_DEVICES
 }
 
@@ -1327,5 +1325,3 @@ if [ -n "$JENKINS_RUN_TESTS" ]
 then
 	run_tests
 fi
-
-echo "All tests passed"
