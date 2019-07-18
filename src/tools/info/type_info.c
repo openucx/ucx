@@ -4,11 +4,11 @@
 * See file LICENSE for terms.
 */
 
-#include "ucx_info.h"
-
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
+
+#include "ucx_info.h"
 
 #include <ucs/async/async_int.h>
 #include <ucs/async/pipe.h>

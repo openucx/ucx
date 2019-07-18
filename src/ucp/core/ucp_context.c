@@ -6,6 +6,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_context.h"
 #include "ucp_request.h"
 #include <ucp/proto/proto.h>
