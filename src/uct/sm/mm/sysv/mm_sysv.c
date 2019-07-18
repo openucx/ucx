@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack.h>

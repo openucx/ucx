@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "event_set.h"
 
 #include <ucs/debug/memtrack.h>
@@ -17,9 +21,6 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
 
 enum {
     UCS_SYS_EVENT_SET_EXTERNAL_EVENT_FD = UCS_BIT(0),
@@ -29,7 +30,6 @@ struct ucs_sys_event_set {
     int      event_fd;
     unsigned flags;
 };
-
 
 const unsigned ucs_sys_event_set_max_wait_events =
     UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event);

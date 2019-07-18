@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
