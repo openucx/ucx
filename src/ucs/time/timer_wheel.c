@@ -24,6 +24,9 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution,
     twheel->now         = current_time;
     twheel->wheel       = ucs_malloc(sizeof(*twheel->wheel) * twheel->num_slots,
                                      "twheel");
+    if (twheel->wheel == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
     for (i = 0; i < twheel->num_slots; i++) {
         ucs_list_head_init(&twheel->wheel[i]);
