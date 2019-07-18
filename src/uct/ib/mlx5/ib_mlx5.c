@@ -373,16 +373,16 @@ static void uct_ib_mlx5_mmio_cleanup(uct_ib_mlx5_mmio_reg_t *reg)
 {
 }
 
-static int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
-                                    uct_ib_mlx5_md_t *md,
-                                    uct_ib_mlx5_mmio_mode_t mmio_mode)
+int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
+                             uct_ib_mlx5_md_t *md,
+                             uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
     return uar->ctx == md->super.dev.ibv_context;
 }
 
-static ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
-                                              uct_ib_mlx5_md_t *md,
-                                              uct_ib_mlx5_mmio_mode_t mmio_mode)
+ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
+                                       uct_ib_mlx5_md_t *md,
+                                       uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
 #if HAVE_DEVX
     uar->uar            = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, 0);
@@ -401,7 +401,7 @@ static ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 #endif
 }
 
-static void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
+void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 {
 #if HAVE_DEVX
     mlx5dv_devx_free_uar(uar->uar);
