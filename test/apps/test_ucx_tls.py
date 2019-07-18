@@ -116,8 +116,8 @@ for dev in sorted(dev_list):
     driver_name = os.path.basename(os.readlink("/sys/class/infiniband/%s/device/driver" % dev))
     dev_name    = driver_name.split("_")[0] # should be mlx4 or mlx5
     if not dev_name in ['mlx4', 'mlx5']:
-        print "Invalid device name: ", dev_name
-        sys.exit(1)
+        print "Skipping unknown device: ", dev_name
+        continue
 
     if dev_attrs.find("Ethernet") == -1:
         dev_tl_map = am_tls[dev_name]

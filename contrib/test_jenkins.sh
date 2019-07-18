@@ -680,8 +680,7 @@ run_ucp_client_server() {
         return
     fi
 
-    ret=`which ibdev2netdev`
-    if [ -z "$ret" ]
+    if ! which ibdev2netdev >&/dev/null
     then
         return
     fi
@@ -1089,7 +1088,8 @@ run_gtest() {
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
+	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
+	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
 	then
 		echo "==== Running valgrind tests, $compiler_name compiler ===="
 
