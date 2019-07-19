@@ -1042,6 +1042,14 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     }
 }
 
+void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
+                              const uct_listener_params_t &params)
+{
+    UCS_TEST_CREATE_HANDLE(uct_listener_h, m_listener, uct_listener_destroy,
+                           uct_listener_create, m_cm, &listen_addr.get_sock_addr(),
+                           listen_addr.get_addr_size(), &params);
+}
+
 void uct_test::entity::flush() const {
     ucs_status_t status;
     do {

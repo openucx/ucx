@@ -13,6 +13,7 @@
 #include <ucs/type/class.h>
 #include <ucs/time/time.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/sock.h>
 #include <rdma/rdma_cma.h>
 #include <sys/poll.h>
 
@@ -33,6 +34,8 @@ typedef struct uct_rdmacm_ctx {
     uct_rdmacm_ep_t    *ep;
     ucs_list_link_t    list;    /* for list of used cm_ids */
 } uct_rdmacm_ctx_t;
+
+size_t uct_rdmacm_cm_get_max_conn_priv();
 
 ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,
                                      struct sockaddr *addr, int timeout_ms,

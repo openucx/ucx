@@ -5,7 +5,7 @@
 */
 
 #include <uct/base/uct_cm.h>
-#include "rdmacm_def.h"
+#include "rdmacm_cm.h"
 
 /**
  * An rdmacm listener for incoming connections requests on the server side.

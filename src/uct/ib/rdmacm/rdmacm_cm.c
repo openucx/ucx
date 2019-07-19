@@ -8,13 +8,17 @@
 #  include "config.h" /* Defines HAVE_RDMACM_QP_LESS */
 #endif
 
-#include "rdmacm_cm.h"
-#include "rdmacm_listener.h"
+#include "rdmacm_cm_ep.h"
 #include <ucs/async/async.h>
 
 #include <poll.h>
 #include <rdma/rdma_cma.h>
 
+
+size_t uct_rdmacm_cm_get_max_conn_priv()
+{
+    return UCT_RDMACM_TCP_PRIV_DATA_LEN - sizeof(uct_rdmacm_priv_data_hdr_t);
+}
 
 static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 {
@@ -23,7 +27,6 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
     }
     return UCS_OK;
 }
-
 
 static void uct_rdmacm_cm_event_handler(int fd, void *arg){}
 
@@ -34,7 +37,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
     .listener_create  = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_listener_t),
     .listener_reject  = (void*)ucs_empty_function,
     .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_listener_t),
-    .ep_create        = (void*)ucs_empty_function
+    .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_ep_t)
 };
 
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
