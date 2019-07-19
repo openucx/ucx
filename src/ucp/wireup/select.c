@@ -5,6 +5,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "wireup.h"
 #include "address.h"
 
@@ -876,7 +880,7 @@ static inline int ucp_wireup_is_am_required(ucp_ep_h ep,
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
         (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | 
                                             UCP_FEATURE_STREAM | 
-                                            UCP_FEATURE_EXPERIMENTAL))) {
+                                            UCP_FEATURE_AM))) {
         return 1;
     }
 

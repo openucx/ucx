@@ -136,6 +136,8 @@ static char *ucs_debug_strdup(const char *str)
     return newstr;
 }
 
+#ifdef HAVE_DETAILED_BACKTRACE
+
 static int dl_match_address(struct dl_phdr_info *info, size_t size, void *data)
 {
     struct dl_address_search *dl = data;
@@ -171,8 +173,6 @@ static int dl_lookup_address(struct dl_address_search *dl)
     }
     return 1;
 }
-
-#ifdef HAVE_DETAILED_BACKTRACE
 
 /*
  * The dl member in file should be initialized
@@ -1154,41 +1154,43 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            (address == ucs_debug_signal_restorer);
 }
 
-static struct dl_address_search *ucs_debug_get_lib_info()
+static ucs_status_t ucs_debug_get_lib_info(Dl_info *dlinfo)
 {
-    static struct dl_address_search dl = {0, NULL, 0};
+    int ret;
 
-    if (dl.address == 0) {
-        dl.address = (unsigned long)&ucs_debug_get_lib_info;
-        if (!dl_lookup_address(&dl)) {
-            dl.filename = NULL;
-            dl.base     = 0;
-        }
+    (void)dlerror();
+    ret = dladdr(ucs_debug_get_lib_info, dlinfo);
+    if (ret == 0) {
+        return UCS_ERR_NO_MEMORY;
     }
 
-    /* If we failed to look up the address, return NULL */
-    return (dl.filename == NULL || dl.base == 0) ? NULL : &dl;
+    return UCS_OK;
 }
 
 const char *ucs_debug_get_lib_path()
 {
-    static char ucs_lib_path[256] = {0};
-    struct dl_address_search *dl;
+    ucs_status_t status;
+    Dl_info dlinfo;
 
-    if (!strlen(ucs_lib_path)) {
-        dl = ucs_debug_get_lib_info();
-        if (dl != NULL) {
-            ucs_expand_path(dl->filename, ucs_lib_path, sizeof(ucs_lib_path));
-        }
+    status = ucs_debug_get_lib_info(&dlinfo);
+    if (status != UCS_OK) {
+        return "<failed to resolve libucs path>";
     }
 
-    return ucs_lib_path;
+    return dlinfo.dli_fname;
 }
 
 unsigned long ucs_debug_get_lib_base_addr()
 {
-    struct dl_address_search *dl = ucs_debug_get_lib_info();
-    return (dl == NULL) ? 0 : dl->base;
+    ucs_status_t status;
+    Dl_info dlinfo;
+
+    status = ucs_debug_get_lib_info(&dlinfo);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return (uintptr_t)dlinfo.dli_fbase;
 }
 
 void ucs_debug_init()

@@ -334,6 +334,8 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
             ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
 
+            m_failing_rkey.reset();
+
             void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
             wait(creq);
 
@@ -363,6 +365,11 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     /* Check that TX polling is working well */
     while (sender().progress());
+
+    /* Destroy rkeys before destroying the worker (which also destroys the
+     * endpoints) */
+    m_failing_rkey.reset();
+    m_stable_rkey.reset();
 
     /* When all requests on sender are done we need to prevent LOCAL_FLUSH
      * in test teardown. Receiver is killed and doesn't respond on FC requests
@@ -398,14 +405,11 @@ UCS_TEST_P(test_ucp_peer_failure, force_close, "RC_FC_ENABLE?=n") {
             false /* must_fail */);
 }
 
-UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure, disable_sync_send,
+                     !(GetParam().variant & TEST_TAG)) {
     const size_t        max_size = UCS_MBYTE;
     std::vector<char>   buf(max_size, 0);
     void                *req;
-
-    if (!(GetParam().variant & TEST_TAG)) {
-        UCS_TEST_SKIP_R("Skip non-tagged variant");
-    }
 
     sender().connect(&receiver(), get_ep_params());
 

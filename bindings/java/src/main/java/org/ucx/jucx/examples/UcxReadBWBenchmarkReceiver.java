@@ -40,9 +40,9 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         long remoteAddress = recvBuffer.getLong();
         long remoteSize = recvBuffer.getInt();
         int remoteKeySize = recvBuffer.getInt();
-        ByteBuffer rkey = ByteBuffer.allocateDirect(remoteKeySize);
-        copyBuffer(recvBuffer, rkey, remoteKeySize);
+        int rkeyBufferOffset = recvBuffer.position();
 
+        recvBuffer.position(rkeyBufferOffset + remoteKeySize);
         int workerAdressSize = recvBuffer.getInt();
         ByteBuffer workerAddress = ByteBuffer.allocateDirect(workerAdressSize);
         copyBuffer(recvBuffer, workerAddress, workerAdressSize);
@@ -54,7 +54,9 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         UcpEndpoint endpoint = worker.newEndpoint(
             new UcpEndpointParams().setUcpAddress(workerAddress).setPeerErrorHadnlingMode());
 
-        UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(rkey);
+
+        recvBuffer.position(rkeyBufferOffset);
+        UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(recvBuffer);
         resources.push(remoteKey);
 
         ByteBuffer data = ByteBuffer.allocateDirect((int)remoteSize);
@@ -83,7 +85,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         ByteBuffer sendBuffer = ByteBuffer.allocateDirect(100);
         sendBuffer.asCharBuffer().put("DONE");
-        UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer,null);
+        UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
 
         while (!sent.isCompleted()) {
             worker.progress();

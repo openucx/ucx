@@ -441,7 +441,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_md_h md, uct_worker_h worke
 
     status = ucs_async_set_event_handler(self->super.super.worker->async->mode,
                                          ucs_async_pipe_rfd(&self->event_pipe),
-                                         POLLIN,
+                                         UCS_EVENT_SET_EVREAD,
                                          uct_ugni_proccess_datagram_pipe,
                                          self, self->super.super.worker->async);
                                  

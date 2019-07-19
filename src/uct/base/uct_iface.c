@@ -5,8 +5,12 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct_iface.h"
-#include "uct_md.h"
+#include "uct_cm.h"
 
 #include <uct/api/uct.h>
 #include <ucs/async/async.h>
@@ -484,11 +488,13 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
-    if (!(params->field_mask & UCT_EP_PARAM_FIELD_IFACE)) {
-        return UCS_ERR_INVALID_PARAM;
+    if (params->field_mask & UCT_EP_PARAM_FIELD_IFACE) {
+        return params->iface->ops.ep_create(params, ep_p);
+    } else if (params->field_mask & UCT_EP_PARAM_FIELD_CM) {
+        return params->cm->ops->ep_create(params, ep_p);
     }
 
-    return params->iface->ops.ep_create(params, ep_p);
+    return UCS_ERR_INVALID_PARAM;
 }
 
 void uct_ep_destroy(uct_ep_h ep)
@@ -548,7 +554,7 @@ ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_BCOPY", "",
    "The configuration parameter replaced by: "
    "UCX_<transport>_SEG_SIZE where <transport> is one of: IB, MM, SELF, TCP",
-   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_MEMUNITS},
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"ALLOC", "huge,thp,md,mmap,heap",
    "Priority of methods to allocate intermediate buffers for communication",

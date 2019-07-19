@@ -33,7 +33,7 @@ public:
     void send_am_messages(entity *e, int wnd, ucs_status_t expected,
                           uint8_t am_id = 0, int ep_idx = 0) {
         for (int i = 0; i < wnd; i++) {
-            EXPECT_EQ(expected, send_am_message(e, wnd, am_id, ep_idx));
+            EXPECT_EQ(expected, send_am_message(e, am_id, ep_idx));
         }
     }
 

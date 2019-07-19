@@ -6,6 +6,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_context.h"
 #include "ucp_request.h"
 #include <ucp/proto/proto.h>
@@ -226,6 +230,12 @@ static ucs_config_field_t ucp_config_table[] = {
    " If set to a value different from \"auto\" it will override the value passed\n"
    "to ucp_init()",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"NUM_PPN", "auto",
+   "An optimization hint for the number of processes expected to be launched\n"
+   "on a single node. Does not affect semantics, only transport selection criteria\n"
+   "and the resulting performance.\n",
+   ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
   {"RNDV_FRAG_SIZE", "256k",
    "RNDV fragment size \n",
@@ -1182,6 +1192,14 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         context->config.est_num_eps = 1;
     }
 
+    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_PPN) {
+        context->config.est_num_ppn = params->estimated_num_ppn;
+    } else {
+        context->config.est_num_ppn = 1;
+    }
+
+    context->config.est_num_ppn = 1;
+
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
         context->mt_lock.mt_type = mt_type;
@@ -1210,6 +1228,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
+
+    if (context->config.ext.estimated_num_ppn != UCS_ULUNITS_AUTO) {
+        /* num_eps were set via the env variable. Override current value */
+        context->config.est_num_ppn = context->config.ext.estimated_num_ppn;
+    }
+    ucs_debug("Estimated number of endpoints per node is %d",
+              context->config.est_num_ppn);
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
@@ -1302,13 +1327,6 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
-    .chunk_alloc   = ucs_mpool_chunk_malloc,
-    .chunk_release = ucs_mpool_chunk_free,
-    .obj_init      = NULL,
-    .obj_cleanup   = NULL
-};
-
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -1356,16 +1374,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_config;
     }
 
-    /* create memory pool for small rkeys */
-    status = ucs_mpool_init(&context->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) +
-                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
-                            &ucp_rkey_mpool_ops, "ucp_rkeys");
-    if (status != UCS_OK) {
-        goto err_free_resources;
-    }
-
     if (dfl_config != NULL) {
         ucp_config_release(dfl_config);
     }
@@ -1377,8 +1385,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
-err_free_resources:
-    ucp_free_resources(context);
 err_free_config:
     ucp_free_config(context);
 err_free_ctx:
@@ -1393,7 +1399,6 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
-    ucs_mpool_cleanup(&context->rkey_mp, 1);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);

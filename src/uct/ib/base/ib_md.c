@@ -1,10 +1,14 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "ib_md.h"
 #include "ib_device.h"
@@ -141,6 +145,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
+
+    {"MLX5_DEVX", "try",
+     "DEVX support\n",
+     ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
 
     {NULL}
 };
@@ -1113,6 +1121,14 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
 
     ucs_trace("opening IB device %s", md_name);
 
+#if !HAVE_DEVX
+    if (md_config->devx == UCS_YES) {
+        ucs_error("DEVX requested but not supported");
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+#endif
+
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
     if (ib_device_list == NULL) {
@@ -1347,4 +1363,5 @@ UCT_MD_COMPONENT_DEFINE(uct_ib_mdc, UCT_IB_MD_PREFIX,
                         uct_ib_query_md_resources, uct_ib_md_open, NULL,
                         uct_ib_rkey_unpack,
                         (void*)ucs_empty_function_return_success /* release */,
-                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t);
+                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t,
+                        ucs_empty_function_return_unsupported);

@@ -107,6 +107,95 @@ BEGIN_C_DECLS
  */
 
 /**
+ * @defgroup UCT_CLIENT_SERVER   UCT client-server operations
+ * @ingroup UCT_API
+ * @{
+ * Defines client-server operations.
+ * The client-server API allows the connection establishment between an active
+ * side - a client, and its peer - the passive side - a server.
+ * The connection can be established through a UCT transport that supports
+ * listening and connecting via IP address and port (listening can also be on INADDR_ANY).
+ *
+ * The following is a general overview of the operations on the server side:
+ *
+ * Connecting:
+ * @ref uct_cm_open
+ *      Open a connection manager.
+ * @ref uct_listener_create
+ *      Create a listener on the CM and start listening on a given IP,port / INADDR_ANY.
+ * @ref uct_listener_conn_request_callback_t
+ *      This callback is invoked by the UCT transport to handle an incoming connection
+ *      request from a client.
+ *      Accept or reject the client's connection request.
+ * @ref uct_ep_create
+ *      Connect to the client by creating an endpoint in case of accepting its request.
+ *      The server creates a new endpoint per every connection request that it accepts.
+ * @ref uct_sockaddr_priv_pack_callback_t
+ *      This callback is invoked by the UCT transport to fill auxiliary data in
+ *      the connection acknowledgement or reject notification back to the client.
+ *      Send the client a connection acknowledgement or reject notification.
+ *      Wait for an acknowledgment from the client, indicating that it is connected.
+ * @ref uct_ep_server_connect_cb_t
+ *      This callback is invoked by the UCT transport to handle the connection
+ *      acknowledgment from the client.
+ *
+ * Disconnecting:
+ * @ref uct_ep_disconnect
+ *      Disconnect the server's endpoint from the client.
+ *      Can be called when initiating a disconnect or when receiving a disconnect
+ *      notification from the remote side.
+ * @ref uct_ep_disconnect_cb_t
+ *      This callback is invoked by the UCT transport when the client side calls
+ *      uct_ep_disconnect as well.
+ * @ref uct_ep_destroy
+ *      Destroy the endpoint connected to the remote peer.
+ *      If this function is called before the endpoint was disconnected, the
+ *      @ref uct_ep_disconnect_cb_t will not be invoked.
+ *
+ * Destroying the server's resources:
+ * @ref uct_listener_destroy
+ *      Destroy the listener object.
+ * @ref uct_cm_close
+ *      Close the connection manager.
+ *
+ * The following is a general overview of the operations on the client side:
+ *
+ * Connecting:
+ * @ref uct_cm_open
+ *      Open a connection manager.
+ * @ref uct_ep_create
+ *      Create an endpoint for establishing a connection to the server.
+ * @ref uct_sockaddr_priv_pack_callback_t
+ *      This callback is invoked by the UCT transport to fill the user's private data
+ *      in the connection request to be sent to the server. This connection request
+ *      should be created by the transport.
+ *      Send the connection request to the server.
+ *      Wait for an acknowledgment from the server, indicating that it is connected.
+ * @ref uct_ep_client_connect_cb_t
+ *      This callback is invoked by the UCT transport to handle a connection response
+ *      from the server.
+ *      After invoking this callback, the UCT transport will finalize the client's
+ *      connection to the server.
+ *
+ * Disconnecting:
+ * @ref uct_ep_disconnect
+ *      Disconnect the client's endpoint from the server.
+ *      Can be called when initiating a disconnect or when receiving a disconnect
+ *      notification from the remote side.
+ * @ref uct_ep_disconnect_cb_t
+ *      This callback is invoked by the UCT transport when the server side calls
+ *      uct_ep_disconnect as well.
+ * @ref uct_ep_destroy
+ *      Destroy the endpoint connected to the remote peer.
+ *
+ * Destroying the client's resources:
+ * @ref uct_cm_close
+ *      Close the connection manager.
+ *
+ * @}
+ */
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Memory domain resource descriptor.
  *
@@ -592,6 +681,38 @@ typedef enum {
 
 
 /**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT connection manager attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_cm_attr_t are
+ * present, for backward compatibility support.
+ */
+enum uct_cm_attr_field {
+    /** Enables @ref uct_cm_attr::max_conn_priv */
+    UCT_CM_ATTR_FIELD_MAX_CONN_PRIV = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener created by @ref uct_listener_create parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_listener_params_t
+ * are present, for backward compatibility support.
+ */
+enum uct_listener_params_field {
+    /** Enables @ref uct_listener_params::backlog */
+    UCT_LISTENER_PARAM_FIELD_BACKLOG         = UCS_BIT(0),
+
+    /** Enables @ref uct_listener_params::conn_request_cb */
+    UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB = UCS_BIT(1),
+
+    /** Enables @ref uct_listener_params::user_data */
+    UCT_LISTENER_PARAM_FIELD_USER_DATA       = UCS_BIT(2)
+};
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief UCT endpoint created by @ref uct_ep_create parameters field mask.
  *
@@ -600,25 +721,37 @@ typedef enum {
  */
 enum uct_ep_params_field {
     /** Enables @ref uct_ep_params::iface */
-    UCT_EP_PARAM_FIELD_IFACE             = UCS_BIT(0),
+    UCT_EP_PARAM_FIELD_IFACE                  = UCS_BIT(0),
 
     /** Enables @ref uct_ep_params::user_data */
-    UCT_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(1),
+    UCT_EP_PARAM_FIELD_USER_DATA              = UCS_BIT(1),
 
     /** Enables @ref uct_ep_params::dev_addr */
-    UCT_EP_PARAM_FIELD_DEV_ADDR          = UCS_BIT(2),
+    UCT_EP_PARAM_FIELD_DEV_ADDR               = UCS_BIT(2),
 
     /** Enables @ref uct_ep_params::iface_addr */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR        = UCS_BIT(3),
+    UCT_EP_PARAM_FIELD_IFACE_ADDR             = UCS_BIT(3),
 
     /** Enables @ref uct_ep_params::sockaddr */
-    UCT_EP_PARAM_FIELD_SOCKADDR          = UCS_BIT(4),
+    UCT_EP_PARAM_FIELD_SOCKADDR               = UCS_BIT(4),
 
     /** Enables @ref uct_ep_params::sockaddr_cb_flags */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS = UCS_BIT(5),
+    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      = UCS_BIT(5),
 
     /** Enables @ref uct_ep_params::sockaddr_pack_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB  = UCS_BIT(6)
+    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB       = UCS_BIT(6),
+
+    /** Enables @ref uct_ep_params::cm */
+    UCT_EP_PARAM_FIELD_CM                     = UCS_BIT(7),
+
+    /** Enables @ref uct_ep_params::conn_request */
+    UCT_EP_PARAM_FIELD_CONN_REQUEST           = UCS_BIT(8),
+
+    /** Enables @ref uct_ep_params::sockaddr_connect_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    = UCS_BIT(9),
+
+    /** Enables @ref uct_ep_params::disconnect_cb */
+    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB = UCS_BIT(10)
 };
 
 
@@ -840,7 +973,8 @@ struct uct_ep_params {
     uint64_t                          field_mask;
 
     /**
-     * Interface to create the endpoint on. This is a mandatory field.
+     * Interface to create the endpoint on.
+     * Either @a iface or @a cm field must be initialized but not both.
      */
     uct_iface_h                       iface;
 
@@ -881,13 +1015,95 @@ struct uct_ep_params {
 
     /**
      * Callback that will be used for filling the user's private data to be
-     * delivered to the server by @ref uct_sockaddr_conn_request_callback_t.
+     * delivered to the remote peer by the callback on the server or client side.
      * This field is only valid if @ref uct_ep_params_t::sockaddr is set.
      * @note It is never guaranteed that the callaback will be called. If, for
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
      */
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+
+    /**
+     * The connection manager object as created by @ref uct_cm_open.
+     * Either @a cm or @a iface field must be initialized but not both.
+     */
+    uct_cm_h                          cm;
+
+    /**
+     * Connection request that was passed to
+     * @ref uct_listener_conn_request_callback_t .
+     */
+    uct_conn_request_h                conn_request;
+
+    union {
+        /**
+         * Callback that will be invoked when the endpoint on the client side
+         * is being connected to the server by a connection manager @ref uct_cm_h .
+         */
+        uct_ep_client_connect_cb_t      client;
+
+        /**
+         * Callback that will be invoked when the endpoint on the server side
+         * is being connected to a client by a connection manager @ref uct_cm_h .
+         */
+        uct_ep_server_connect_cb_t      server;
+    } sockaddr_connect_cb;
+
+    /**
+     * Callback that will be invoked when the endpoint is disconnected.
+     */
+    uct_ep_disconnect_cb_t              disconnect_cb;
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Connection manager attributes, capabilities and limitations.
+ */
+struct uct_cm_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_attr_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t    field_mask;
+
+    /**
+     * Max size of the connection manager's private data used for connection
+     * establishment with sockaddr.
+     */
+    size_t      max_conn_priv;
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Parameters for creating a listener object @ref uct_listener_h by
+ * @ref uct_listener_create
+ */
+struct uct_listener_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_listener_params_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                             field_mask;
+
+    /**
+     * Backlog of incoming connection requests.
+     * If not specified, SOMAXCONN, as defined in <sys/socket.h>, will be used.
+     */
+    int                                  backlog;
+
+    /**
+     * Callback function for handling incoming connection requests.
+     */
+    uct_listener_conn_request_callback_t conn_request_cb;
+
+    /**
+     * User data associated with the listener.
+     */
+    void                                 *user_data;
 };
 
 
@@ -1513,7 +1729,7 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Accept connection request.
  *
  * @param [in] iface        Transport interface which generated connection
@@ -1528,7 +1744,7 @@ ucs_status_t uct_iface_accept(uct_iface_h iface,
 
 
 /**
- * @ingroup UCT_RESOURCE
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Reject connection request. Will invoke an error handler @ref
  *        uct_error_handler_t on the remote transport interface, if set.
  *
@@ -1541,6 +1757,21 @@ ucs_status_t uct_iface_accept(uct_iface_h iface,
  */
 ucs_status_t uct_iface_reject(uct_iface_h iface,
                               uct_conn_request_h conn_request);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Reject connection request.
+ *
+ * @param [in] listener     Listener which will reject the connection request.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_listener_conn_request_callback_t.
+ *
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_listener_reject(uct_listener_h listener,
+                                 uct_conn_request_h conn_request);
 
 
 /**
@@ -1577,6 +1808,28 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  * @return              Error code as defined by @ref ucs_status_t
  */
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Initiate a disconnection of an endpoint connected to a
+ *        sockaddr by a connection manager @ref uct_cm_h.
+ *
+ * This non-blocking routine will send a disconnect notification on the endpoint,
+ * so that @ref uct_ep_disconnect_cb_t will be called on the remote peer.
+ * The remote side should also call this routine when handling the initiator's
+ * disconnect.
+ * After a call to this function, the given endpoint may not be used for
+ * communications anymore.
+ * The @ref uct_ep_flush / @ref uct_iface_flush routines will guarantee that the
+ * disconnect notification is delivered to the remote peer.
+ * @ref uct_ep_destroy should be called on this endpoint after invoking this
+ * routine and @ref uct_ep_params::disconnect_cb was called.
+ *
+ * @param [in] ep       Endpoint to disconnect.
+ * @param [in] flags    Reserved for future use.
+ */
+ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags);
 
 
 /**
@@ -2025,14 +2278,14 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  *
  * @param [in] ep          Destination endpoint handle.
  * @param [in] iov         Points to an array of @ref ::uct_iov_t structures.
- *                         The @a iov pointer must be valid address of an array
+ *                         The @a iov pointer must be a valid address of an array
  *                         of @ref ::uct_iov_t structures. A particular structure
- *                         pointer must be valid address. NULL terminated pointer
- *                         is not required.
+ *                         pointer must be a valid address. A NULL terminated
+ *                         array is not required.
  * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
  *                         array. If @a iovcnt is zero, the data is considered empty.
  *                         @a iovcnt is limited by @ref uct_iface_attr_cap_put_max_iov
- *                         "uct_iface_attr::cap::put::max_iov"
+ *                         "uct_iface_attr::cap::put::max_iov".
  * @param [in] remote_addr Remote address to place the @a iov data.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
  * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
@@ -2088,14 +2341,14 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t 
  *
  * @param [in] ep          Destination endpoint handle.
  * @param [in] iov         Points to an array of @ref ::uct_iov_t structures.
- *                         The @a iov pointer must be valid address of an array
+ *                         The @a iov pointer must be a valid address of an array
  *                         of @ref ::uct_iov_t structures. A particular structure
- *                         pointer must be valid address. NULL terminated pointer
- *                         is not required.
+ *                         pointer must be a valid address. A NULL terminated
+ *                         array is not required.
  * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
  *                         array. If @a iovcnt is zero, the data is considered empty.
  *                         @a iovcnt is limited by @ref uct_iface_attr_cap_get_max_iov
- *                         "uct_iface_attr::cap::get::max_iov"
+ *                         "uct_iface_attr::cap::get::max_iov".
  * @param [in] remote_addr Remote address of the data placed to the @a iov.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
  * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
@@ -2147,26 +2400,32 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * iov[1], and so on.
  *
  *
- * @param [in] ep            Destination endpoint handle.
- * @param [in] id            Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
- * @param [in] header        Active message header.
- * @param [in] header_length Active message header length in bytes.
- * @param [in] iov           Points to an array of @ref ::uct_iov_t structures.
- *                           The @a iov pointer must be valid address of an array
- *                           of @ref ::uct_iov_t structures. A particular structure
- *                           pointer must be valid address. NULL terminated pointer
- *                           is not required.
- * @param [in] iovcnt        Size of the @a iov data @ref ::uct_iov_t structures
- *                           array. If @a iovcnt is zero, the data is considered empty.
- *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
- *                           "uct_iface_attr::cap::am::max_iov"
- * @param [in] flags         Active message flags, see @ref uct_msg_flags.
- * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
+ * @param [in] ep              Destination endpoint handle.
+ * @param [in] id              Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
+ * @param [in] header          Active message header.
+ * @param [in] header_length   Active message header length in bytes.
+ * @param [in] iov             Points to an array of @ref ::uct_iov_t structures.
+ *                             The @a iov pointer must be a valid address of an array
+ *                             of @ref ::uct_iov_t structures. A particular structure
+ *                             pointer must be a valid address. A NULL terminated
+ *                             array is not required.
+ * @param [in] iovcnt          Size of the @a iov data @ref ::uct_iov_t structures
+ *                             array. If @a iovcnt is zero, the data is considered empty.
+ *                             @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                             "uct_iface_attr::cap::am::max_iov".
+ * @param [in] flags           Active message flags, see @ref uct_msg_flags.
+ * @param [in] comp            Completion handle as defined by @ref ::uct_completion_t.
  *
- * @return UCS_INPROGRESS    Some communication operations are still in progress.
- *                           If non-NULL @a comp is provided, it will be updated
- *                           upon completion of these operations.
+ * @return UCS_OK              Operation completed successfully.
+ * @return UCS_INPROGRESS      Some communication operations are still in progress.
+ *                             If non-NULL @a comp is provided, it will be updated
+ *                             upon completion of these operations.
+ * @return UCS_ERR_NO_RESOURCE Could not start the operation due to lack of send
+ *                             resources.
  *
+ * @note If the operation returns @a UCS_INPROGRESS, the memory buffers
+ *       pointed to by @a iov array must not be modified until the operation
+ *       is completed by @a comp. @a header can be released or changed.
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
                                             const void *header,
@@ -2374,8 +2633,8 @@ UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
  * @param [in]  length    Data length.
  *
  * @return UCS_OK              - operation completed successfully.
- * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
- *                               of send resources.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation due to lack of
+ *                               send resources.
  */
 UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
                                                    const void *data, size_t length)
@@ -2436,8 +2695,8 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  * @param [in]  imm       Immediate value which will be available to the
  *                        receiver.
  * @param [in]  iov       Points to an array of @ref uct_iov_t structures.
- *                        A particular structure pointer must be valid address.
- *                        NULL terminated pointer is not required.
+ *                        A particular structure pointer must be a valid address.
+ *                        A NULL terminated array is not required.
  * @param [in]  iovcnt    Size of the @a iov array. If @a iovcnt is zero, the
  *                        data is considered empty. Note that @a iovcnt is
  *                        limited by the corresponding @a max_iov value in
@@ -2448,8 +2707,8 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  *                        can be reused or invalidated.
  *
  * @return UCS_OK              - operation completed successfully.
- * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
- *                               of send resources.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation due to lack of
+ *                               send resources.
  * @return UCS_INPROGRESS      - operation started, and @a comp will be used to
  *                               notify when it's completed.
  */
@@ -2486,7 +2745,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
  *                            value in @ref uct_iface_attr.
  * @param [in]  iov           Points to an array of @ref uct_iov_t structures.
  *                            A particular structure pointer must be valid
- *                            address. NULL terminated pointer is not required.
+ *                            address. A NULL terminated array is not required.
  * @param [in]  iovcnt        Size of the @a iov array. If @a iovcnt is zero,
  *                            the data is considered empty. Note that @a iovcnt
  *                            is limited by the corresponding @a max_iov value
@@ -2554,7 +2813,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_cancel(uct_ep_h ep, void *op)
  * @param [in]  flags         Tag message flags, see @ref uct_msg_flags.
  *
  * @return UCS_OK              - operation completed successfully.
- * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack of
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation due to lack of
  *                               send resources.
  */
 UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
@@ -2581,14 +2840,14 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
  * @param [in]    tag_mask  Mask which specifies what bits of the tag to
  *                          compare.
  * @param [in]    iov       Points to an array of @ref ::uct_iov_t structures.
- *                          The @a iov pointer must be valid address of an array
+ *                          The @a iov pointer must be a valid address of an array
  *                          of @ref ::uct_iov_t structures. A particular structure
- *                          pointer must be valid address. NULL terminated pointer
- *                          is not required.
+ *                          pointer must be a valid address. A NULL terminated
+ *                          array is not required.
  * @param [in]    iovcnt    Size of the @a iov data @ref ::uct_iov_t structures
  *                          array. If @a iovcnt is zero, the data is considered empty.
  *                          @a iovcnt is limited by @ref uct_iface_attr_cap_tag_recv_iov
- *                          "uct_iface_attr::cap::tag::max_iov"
+ *                          "uct_iface_attr::cap::tag::max_iov".
  * @param [inout] ctx       Context associated with this particular tag, "priv" field
  *                          in this structure is used to track the state internally.
  *
@@ -2695,6 +2954,76 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {
     return iface->ops.iface_progress(iface);
 }
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Open a connection manager.
+ *
+ * Open a connection manager. All client server connection
+ * establishment operations are performed in the context of a specific
+ * connection manager.
+ * @note This is an alternative API for
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER and
+ *       @ref uct_iface_open_mode::UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT .
+ *
+ * @param [in]  component   Component on which to open the connection manager,
+ *                          as returned from @ref uct_query_components.
+ * @param [in]  worker      Worker on which to open the connection manager.
+ * @param [out] cm_p        Filled with a handle to the connection manager.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker, uct_cm_h *cm_p);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Close a connection manager.
+ *
+ * @param [in]  cm    Connection manager to close.
+ */
+void uct_cm_close(uct_cm_h cm);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Get connection manager attributes.
+ *
+ * @param [in]  cm      Connection manager to query.
+ * @param [out] cm_attr Filled with connection manager attributes.
+ */
+ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Create a new transport listener object.
+ *
+ * @param [in]  cm          Connection manager on which to open the listener.
+ *                          This cm should not be closed as long as there are
+ *                          open listeners on it.
+ * @param [in]  saddr       The socket address to listen on.
+ * @param [in]  socklen     The saddr length.
+ * @param [in]  params      User defined @ref uct_listener_params_t
+ *                          configurations for the @a listener_p.
+ * @param [out] listener_p  Filled with handle to the new listener.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
+                                 socklen_t socklen,
+                                 const uct_listener_params_t *params,
+                                 uct_listener_h *listener_p);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Destroy a transport listener.
+ *
+ * @param [in]  listener    Listener to destroy.
+ */
+void uct_listener_destroy(uct_listener_h listener);
 
 
 /**

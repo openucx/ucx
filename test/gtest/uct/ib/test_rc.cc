@@ -20,6 +20,8 @@ void test_rc::init()
     m_e1 = uct_test::create_entity(0);
     m_entities.push_back(m_e1);
 
+    check_skip_test();
+
     m_e2 = uct_test::create_entity(0);
     m_entities.push_back(m_e2);
 
@@ -39,8 +41,6 @@ void test_rc::connect()
 // properly when we have communication ops + lots of flushes
 void test_rc::test_iface_ops(int cq_len)
 {
-    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
-
     entity *e = uct_test::create_entity(0);
     m_entities.push_back(e);
     e->connect(0, *m_e2, 0);
@@ -72,7 +72,8 @@ void test_rc::test_iface_ops(int cq_len)
     flush();
 }
 
-UCS_TEST_P(test_rc, stress_iface_ops) {
+UCS_TEST_SKIP_COND_P(test_rc, stress_iface_ops,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
     int cq_len = 16;
 
     if (UCS_OK != uct_config_modify(m_iface_config, "RC_TX_CQ_LEN",
@@ -233,7 +234,7 @@ void test_rc_flow_control::test_flush_fc_disabled()
 
     /* send active message should be OK */
     get_fc_ptr(m_e1)->fc_wnd = 1;
-    send_am_message(m_e1, 1, UCS_OK);
+    send_am_messages(m_e1, 1, UCS_OK);
     EXPECT_EQ(0, get_fc_ptr(m_e1)->fc_wnd);
 
     /* flush must have resources */

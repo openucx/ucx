@@ -38,8 +38,7 @@ typedef struct ucm_auxv {
 typedef struct ucm_reloc_dl_iter_context {
     ucm_reloc_patch_t  *patch;
     ucs_status_t       status;
-    ElfW(Addr)         libucm_base_addr;
-    ElfW(Addr)         dlopened_base_addr;
+    ElfW(Addr)         libucm_base_addr;  /* Base address to store previous value */
 } ucm_reloc_dl_iter_context_t;
 
 
@@ -257,12 +256,6 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size,
     int phsize;
     int i;
 
-    /* check if need to update only the one shared object which is being loaded */
-    if (ctx->dlopened_base_addr && (ctx->dlopened_base_addr != info->dlpi_addr)) {
-        ucm_trace("not updating symbols in '%s'", info->dlpi_name);
-        return 0;
-    }
-
     /* check if shared object is black-listed for this patch */
     if (ctx->patch->blacklist) {
         for (i = 0; ctx->patch->blacklist[i]; i++) {
@@ -287,22 +280,19 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size,
         return -1; /* stop iteration if got a real error */
     }
 
-    /* If we patch only one shared object, stop iteration.
-     * Otherwise, continue iteration and patch all remaining objects. */
-    return ctx->dlopened_base_addr ? -1 : 0;
+    /* Continue iteration and patch all remaining objects. */
+    return 0;
 }
 
 /* called with lock held */
 static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch,
-                                          ElfW(Addr) libucm_base_addr,
-                                          ElfW(Addr) dlopened_base_addr)
+                                          ElfW(Addr) libucm_base_addr)
 {
     ucm_reloc_dl_iter_context_t ctx;
 
     ctx.patch              = patch;
     ctx.status             = UCS_OK;
     ctx.libucm_base_addr   = libucm_base_addr;
-    ctx.dlopened_base_addr = dlopened_base_addr;
 
     /* Avoid locks here because we don't modify ELF data structures.
      * Worst case the same symbol will be written more than once.
@@ -313,11 +303,8 @@ static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch,
 
 static void *ucm_dlopen(const char *filename, int flag)
 {
-    struct link_map *lm_entry;
     ucm_reloc_patch_t *patch;
-    ElfW(Addr) base_addr;
     void *handle;
-    int ret;
 
     if (ucm_reloc_orig_dlopen == NULL) {
         ucm_fatal("ucm_reloc_orig_dlopen is NULL");
@@ -331,18 +318,16 @@ static void *ucm_dlopen(const char *filename, int flag)
 
     /*
      * Every time a new shared object is loaded, we must update its relocations
-     * with our list of patches (including dlopen itself). We obtain the object
-     * base address to avoid updating any other shared objects except this one.
+     * with our list of patches (including dlopen itself). We have to go over
+     * the entire list of shared objects, since there more objects could be
+     * loaded due to dependencies.
      */
-
-    ret = dlinfo(handle, RTLD_DI_LINKMAP, &lm_entry);
-    base_addr = (ret == 0) ? lm_entry->l_addr : 0;
 
     pthread_mutex_lock(&ucm_reloc_patch_list_lock);
     ucs_list_for_each(patch, &ucm_reloc_patch_list, list) {
         ucm_debug("in dlopen(%s), re-applying '%s' to %p", filename,
                   patch->symbol, patch->value);
-        ucm_reloc_apply_patch(patch, 0, base_addr);
+        ucm_reloc_apply_patch(patch, 0);
     }
     pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
 
@@ -367,7 +352,7 @@ static ucs_status_t ucm_reloc_install_dlopen()
     ucm_reloc_orig_dlopen = ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
                                                ucm_reloc_dlopen_patch.value);
 
-    status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch, 0, 0);
+    status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch, 0);
     if (status != UCS_OK) {
         return status;
     }
@@ -401,7 +386,7 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
         goto out_unlock;
     }
 
-    status = ucm_reloc_apply_patch(patch, (uintptr_t)dlinfo.dli_fbase, 0);
+    status = ucm_reloc_apply_patch(patch, (uintptr_t)dlinfo.dli_fbase);
     if (status != UCS_OK) {
         goto out_unlock;
     }

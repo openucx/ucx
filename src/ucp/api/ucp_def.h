@@ -473,6 +473,41 @@ typedef enum ucp_wakeup_event_types {
 
 /**
  * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming Active Message.
+ *
+ * When the callback is called, @a flags indicates how @a data should be handled.
+ *
+ * @param [in]  arg      User-defined argument.
+ * @param [in]  data     Points to the received data. This data may
+ *                       persist after the callback returns and needs
+ *                       to be freed with @ref ucp_am_data_release.
+ * @param [in]  length   Length of data.
+ * @param [in]  reply_ep If the Active Message is sent with the
+ *                       UCP_AM_SEND_REPLY flag, the sending ep
+ *                       will be passed in. If not, NULL will be passed.
+ * @param [in]  flags    If this flag is set to UCP_CB_PARAM_FLAG_DATA,
+ *                       the callback can return UCS_INPROGRESS and
+ *                       data will persist after the callback returns.
+ *
+ * @return UCS_OK        @a data will not persist after the callback returns.
+ *
+ * @return UCS_INPROGRESS Can only be returned if flags is set to
+ *                        UCP_CB_PARAM_FLAG_DATA. If UCP_INPROGRESS
+ *                        is returned, data will persist after the
+ *                        callback has returned. To free the memory,
+ *                        a pointer to the data must be passed into
+ *                        @ref ucp_am_data_release.
+ *
+ * @note This callback should be set and released
+ *       by @ref ucp_worker_set_am_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
+                                          ucp_ep_h reply_ep, unsigned flags);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
  * @brief Tuning parameters for the UCP endpoint.
  *
  * The structure defines the parameters that are used for the

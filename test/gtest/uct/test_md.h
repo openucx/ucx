@@ -35,7 +35,7 @@ protected:
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional);
-    void check_caps(uint64_t flags, const std::string& name);
+    bool check_caps(uint64_t flags);
     void alloc_memory(void **address, size_t size, char *fill, int mem_type);
     void check_memory(void *address, void *expect, size_t size, int mem_type);
     void free_memory(void *address, int mem_type);

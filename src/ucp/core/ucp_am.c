@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_am.h"
 #include "ucp_am.inl"
 
@@ -20,7 +24,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
 {
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
     
-    if (ep->worker->context->config.features & UCP_FEATURE_EXPERIMENTAL) {
+    if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         ucs_list_head_init(&ep_ext->am.started_ams);
     }
 }
@@ -29,7 +33,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
 {
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
 
-    if (ep->worker->context->config.features & UCP_FEATURE_EXPERIMENTAL) {
+    if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         if (ucs_unlikely(!ucs_list_is_empty(&ep_ext->am.started_ams))) {
             ucs_warn("worker : %p not all UCP active messages have been" 
                      "run to completion", ep->worker);
@@ -670,13 +674,13 @@ ucp_am_long_handler(void *am_arg, void *am_data, size_t am_length,
                                       NULL); 
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_SINGLE,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE,
               ucp_am_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_MULTI,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI,
               ucp_am_long_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_SINGLE_REPLY,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE_REPLY,
               ucp_am_handler_reply, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_MULTI_REPLY,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI_REPLY,
               ucp_am_long_handler_reply, NULL, 0);
 
 const ucp_proto_t ucp_am_proto = {

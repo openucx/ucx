@@ -12,6 +12,7 @@
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/arch/global_opts.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -117,6 +118,8 @@ typedef struct {
     /* log level for module loader code */
     ucs_log_level_t          module_log_level;
 
+    /* arch-specific global options */
+    ucs_arch_global_opts_t arch;
 } ucs_global_opts_t;
 
 

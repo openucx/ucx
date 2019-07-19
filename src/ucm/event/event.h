@@ -17,7 +17,8 @@
 
 #define UCM_NATIVE_EVENT_VM_UNMAPPED (UCM_EVENT_MMAP   | UCM_EVENT_MUNMAP | \
                                       UCM_EVENT_MREMAP | UCM_EVENT_SHMDT  | \
-                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK)
+                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK   | \
+                                      UCM_EVENT_MADVISE)
 
 
 typedef struct ucm_event_handler {

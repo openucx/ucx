@@ -180,6 +180,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CMA], [false])
      AM_CONDITIONAL([HAVE_KNEM], [false])
      AM_CONDITIONAL([HAVE_RDMACM], [false])
+     AM_CONDITIONAL([HAVE_RDMACM_QP_LESS], [false])
      AM_CONDITIONAL([HAVE_MPI], [false])
      AM_CONDITIONAL([HAVE_MPIRUN], [false])
      AM_CONDITIONAL([HAVE_MPICC], [false])

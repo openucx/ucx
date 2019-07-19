@@ -4,7 +4,10 @@
  * See file LICENSE for terms.
  */
 
-#define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <sys/mman.h>
 #include <dlfcn.h>
 #include <stdio.h>

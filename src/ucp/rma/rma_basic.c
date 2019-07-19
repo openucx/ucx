@@ -6,6 +6,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rma.h"
 
 #include <ucp/proto/proto_am.inl>

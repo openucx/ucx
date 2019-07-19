@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/wireup/ep_match.h>
@@ -13,11 +17,9 @@
 __KHASH_IMPL(ucp_ep_match, static UCS_F_MAYBE_UNUSED inline, uint64_t,
              ucp_ep_match_entry_t, 1, kh_int64_hash_func, kh_int64_hash_equal);
 
-
-#define ucp_ep_match_list_for_each(_elem, _head, _member) \
-    for (_elem = ucs_container_of((_head)->next, typeof(*_elem), _member); \
-         (_elem) != ucs_container_of(NULL, typeof(*_elem), _member); \
-         _elem = ucs_container_of((_elem)->_member.next, typeof(*_elem), _member))
+/* `_elem` and `_next` are `ucs_list_link_t*` objects */
+#define ucp_ep_match_list_for_each(_elem, _head) \
+    for (_elem = (_head)->next; (_elem) != NULL; _elem = (_elem)->next)
 
 static inline void ucp_ep_match_list_add_tail(ucs_list_link_t *head,
                                               ucs_list_link_t *elem)
@@ -137,7 +139,7 @@ ucp_ep_match_retrieve_common(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
                              ucp_ep_flags_t exp_ep_flags, const char *title)
 {
     ucp_ep_match_entry_t *entry;
-    ucs_list_link_t *list;
+    ucs_list_link_t *list, *list_entry;
     ucp_ep_ext_gen_t *ep_ext;
     khiter_t iter;
     ucp_ep_h ep;
@@ -149,7 +151,8 @@ ucp_ep_match_retrieve_common(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
 
     entry = &kh_value(&match_ctx->hash, iter);
     list  = is_exp ? &entry->exp_ep_q : &entry->unexp_ep_q;
-    ucp_ep_match_list_for_each(ep_ext, list, ep_match.list) {
+    ucp_ep_match_list_for_each(list_entry, list) {
+        ep_ext = ucs_container_of(list_entry, ucp_ep_ext_gen_t, ep_match.list);
         ep = ucp_ep_from_ext_gen(ep_ext);
         if (ep->conn_sn == conn_sn) {
             ucp_ep_match_list_del(list, &ep_ext->ep_match.list);

@@ -180,10 +180,9 @@ int test_ud::tx_count  = 0;
 
 uct_ud_psn_t test_ud::tx_ack_psn = 0;
 
-UCS_TEST_P(test_ud, basic_tx) {
-    unsigned i, N=13;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(test_ud, basic_tx,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+    unsigned i, N = 13;
 
     disable_async(m_e1);
     disable_async(m_e2);
@@ -207,10 +206,9 @@ UCS_TEST_P(test_ud, basic_tx) {
     EXPECT_EQ(0, ep(m_e2)->rx.acked_psn);
 }
 
-UCS_TEST_P(test_ud, duplex_tx) {
-    unsigned i, N=5;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(test_ud, duplex_tx,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+    unsigned i, N = 5;
 
     disable_async(m_e1);
     disable_async(m_e2);
@@ -241,10 +239,9 @@ UCS_TEST_P(test_ud, duplex_tx) {
 }
 
 /* send full window, rcv ack after progreess, send some more */
-UCS_TEST_P(test_ud, tx_window1) {
-    unsigned i, N=13;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(test_ud, tx_window1,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+    unsigned i, N = 13;
 
     disable_async(m_e1);
     disable_async(m_e2);
@@ -269,10 +266,8 @@ UCS_TEST_P(test_ud, tx_window1) {
 /* basic flush */
 /* send packet, flush, wait till flush ended */
 
-UCS_TEST_P(test_ud, flush_ep) {
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, flush_ep,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
@@ -280,10 +275,8 @@ UCS_TEST_P(test_ud, flush_ep) {
     validate_flush();
 }
 
-UCS_TEST_P(test_ud, flush_iface) {
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, flush_iface,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(iface_flush_b(m_e1));
@@ -297,10 +290,9 @@ UCS_TEST_P(test_ud, flush_iface) {
  * send full window,
  * should not be able to send some more
  */
-UCS_TEST_P(test_ud, tx_window2) {
-    unsigned i, N=13;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(test_ud, tx_window2,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+    unsigned i, N = 13;
 
     disable_async(m_e1);
     disable_async(m_e2);
@@ -323,10 +315,8 @@ UCS_TEST_P(test_ud, tx_window2) {
 /* last packet in window must have ack_req
  * answered with ack control message
  */
-UCS_TEST_P(test_ud, ack_req_single) {
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, ack_req_single,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     disable_async(m_e1);
     disable_async(m_e2);
@@ -349,10 +339,9 @@ UCS_TEST_P(test_ud, ack_req_single) {
 }
 
 /* test that ack request is sent on 1/4 of window */
-UCS_TEST_P(test_ud, ack_req_window) {
-    unsigned i, N=16;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(test_ud, ack_req_window,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+    unsigned i, N = 16;
 
     disable_async(m_e1);
     disable_async(m_e2);
@@ -378,9 +367,8 @@ UCS_TEST_P(test_ud, ack_req_window) {
 }
 
 /* simulate retransmission of the CREQ packet */
-UCS_TEST_P(test_ud, crep_drop1) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, crep_drop1,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
     ep(m_e1, 0)->rx.rx_hook = drop_ctl;
@@ -401,9 +389,8 @@ UCS_TEST_P(test_ud, crep_drop1) {
 /* check that creq is not left on tx window if
  * both sides connect simultaniously.
  */
-UCS_TEST_P(test_ud, crep_drop2) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, crep_drop2,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect_to_iface();
 
     ep(m_e1)->rx.rx_hook = drop_ctl;
@@ -461,7 +448,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     set_tx_win(m_e1, 10);
 
     do {
-        status = send_am_message(m_e1, 1, 0);
+        status = send_am_message(m_e1);
         progress();
     } while (status == UCS_ERR_NO_RESOURCE);
     ASSERT_UCS_OK(status);
@@ -477,7 +464,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     twait(500);
     short_progress_loop();
 
-    status = send_am_message(m_e1, 1, 0);
+    status = send_am_message(m_e1);
     ASSERT_UCS_OK(status);
 
     short_progress_loop();
@@ -499,12 +486,11 @@ UCS_TEST_P(test_ud, creq_flush) {
     EXPECT_EQ(UCS_INPROGRESS, status);
 }
 
-UCS_TEST_P(test_ud, ca_ai) {
+UCS_TEST_SKIP_COND_P(test_ud, ca_ai,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     ucs_status_t status;
     int prev_cwnd;
     int max_window;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     /* check initial window */
     disable_async(m_e1);
@@ -549,14 +535,14 @@ UCS_TEST_P(test_ud, ca_ai) {
 }
 
 /* skip valgrind for now */
-UCS_TEST_SKIP_COND_P(test_ud, ca_md, RUNNING_ON_VALGRIND,
+UCS_TEST_SKIP_COND_P(test_ud, ca_md,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)),
                      "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
     ucs_status_t status;
     int prev_cwnd, new_cwnd;
     int i;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     connect();
 
@@ -601,13 +587,13 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_md, RUNNING_ON_VALGRIND,
     } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
 }
 
-UCS_TEST_SKIP_COND_P(test_ud, ca_resend, RUNNING_ON_VALGRIND) {
+UCS_TEST_SKIP_COND_P(test_ud, ca_resend,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT))) {
 
     int max_window = 10;
     int i;
     ucs_status_t status;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     connect();
     set_tx_win(m_e1, max_window);
@@ -652,9 +638,8 @@ UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
 }
 #endif
 
-UCS_TEST_P(test_ud, connect_iface_single) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, connect_iface_single,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
@@ -681,9 +666,8 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
 }
 
-UCS_TEST_P(test_ud, connect_iface_seq) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, connect_iface_seq,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     validate_connect(ep(m_e1), 0U);
@@ -776,13 +760,12 @@ UCS_TEST_P(test_ud, ep_destroy_simple) {
     EXPECT_EQ(1U, ud_ep2->ep_id);
 }
 
-UCS_TEST_P(test_ud, ep_destroy_flush) {
+UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     uct_ep_h ep;
     ucs_status_t status;
     uct_ud_ep_t *ud_ep1;
     uct_ep_params_t ep_params;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     connect();
     EXPECT_UCS_OK(tx(m_e1));
@@ -802,9 +785,8 @@ UCS_TEST_P(test_ud, ep_destroy_flush) {
     uct_ep_destroy(ep);
 }
 
-UCS_TEST_P(test_ud, ep_destroy_passive) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     uct_ep_destroy(m_e2->ep(0));
     /* destroyed ep must still accept data */
@@ -872,14 +854,12 @@ UCS_TEST_P(test_ud, res_skb_basic) {
 
 /* test that reserved skb is not being reused while it is still in flight
  */
-UCS_TEST_P(test_ud, res_skb_tx) {
-
+UCS_TEST_SKIP_COND_P(test_ud, res_skb_tx,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     uct_ud_iface_t *ud_if;
     int poll_sn;
     uct_ud_send_skb_t *skb;
     int n, tx_count;
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     disable_async(m_e1);
     disable_async(m_e2);
@@ -927,10 +907,8 @@ UCS_TEST_P(test_ud, res_skb_tx) {
 /* Simulate loss of ctl packets during simultaneous CREQs.
  * Use-case: CREQ and CREP packets from m_e2 to m_e1 are lost.
  * Check: that both eps (m_e1 and m_e2) are connected finally */
-UCS_TEST_P(test_ud, ctls_loss) {
-
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
+UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     iface(m_e2)->tx.available = 0;
 
     connect_to_iface();

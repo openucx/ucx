@@ -1,7 +1,11 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "tcp.h"
 
@@ -51,4 +55,5 @@ UCT_MD_COMPONENT_DEFINE(uct_tcp_md, UCT_TCP_NAME,
                         uct_tcp_query_md_resources, uct_tcp_md_open, NULL,
                         ucs_empty_function_return_unsupported,
                         ucs_empty_function_return_success, "TCP_",
-                        uct_md_config_table, uct_md_config_t);
+                        uct_md_config_table, uct_md_config_t,
+                        ucs_empty_function_return_unsupported);
