@@ -211,7 +211,6 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 {
     uct_sockcm_iface_t *iface = NULL;
-    uct_sockcm_ctx_t *sock_id_ctx;
 
     iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
 
