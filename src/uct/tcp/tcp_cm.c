@@ -32,11 +32,16 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                        (old_conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING));
         }
         break;
+    case UCT_TCP_EP_CONN_STATE_WAITING_REQ:
+        ucs_assert(old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK);
+        break;
     case UCT_TCP_EP_CONN_STATE_CONNECTED:
         ucs_assert((old_conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
                    (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
-                   (old_conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING));
+                   (old_conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING) ||
+                   (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ));
         if ((old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
+            (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ) ||
             /* it may happen when a peer is going to use this EP with socket
              * from accepted connection in case of handling simultaneous
              * connection establishment */
@@ -51,7 +56,8 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
     case UCT_TCP_EP_CONN_STATE_CLOSED:
         ucs_assert(old_conn_state != UCT_TCP_EP_CONN_STATE_CLOSED);
         if ((old_conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
-            (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK)) {
+            (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
+            (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) {
             uct_tcp_iface_outstanding_dec(iface);
         } else if (old_conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING) {
             /* Since ep::peer_addr is 0'ed, we have to print w/o peer's address */
@@ -88,7 +94,8 @@ static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg, int io_errno)
 
     /* check whether this is possible somaxconn exceeded reason or not */
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK)) &&
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
         ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED))) {
         ucs_error("try to increase \"net.core.somaxconn\" on the remote node");
     }
@@ -110,6 +117,13 @@ static void uct_tcp_cm_trace_conn_pkt(const uct_tcp_ep_t *ep,
     if (event & UCT_TCP_CM_CONN_REQ) {
         ucs_snprintf_zero(event_str, sizeof(event_str), "%s",
                           UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_REQ));
+        p += strlen(event_str);
+    }
+
+    if (event & UCT_TCP_CM_CONN_WAIT_REQ) {
+        ucs_assert(p == event_str);
+        ucs_snprintf_zero(event_str, sizeof(event_str), "%s",
+                          UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_WAIT_REQ));
         p += strlen(event_str);
     }
 
@@ -146,7 +160,9 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t eve
     uct_tcp_am_hdr_t *pkt_hdr;
     ucs_status_t status;
 
-    ucs_assertv(!(event & ~(UCT_TCP_CM_CONN_REQ | UCT_TCP_CM_CONN_ACK)),
+    ucs_assertv(!(event & ~(UCT_TCP_CM_CONN_REQ |
+                            UCT_TCP_CM_CONN_ACK |
+                            UCT_TCP_CM_CONN_WAIT_REQ)),
                 "ep=%p", ep);
 
     pkt_length        = sizeof(*pkt_hdr);
@@ -307,11 +323,17 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     /* 4. Send ACK to the peer */
     event = UCT_TCP_CM_CONN_ACK;
 
-    /* 5. If found EP is still connecting, tie REQ with ACK and send
-     *    it to the peer using new socket fd to ensure that the peer
-     *    will be able to receive the data from us */
+    /* 5. - If found EP is still connecting, tie REQ with ACK and send
+     *      it to the peer using new socket fd to ensure that the peer
+     *      will be able to receive the data from us
+     *    - If found EP is waiting ACK, tie WAIT_REQ with ACK and send
+     *      it to the peer using new socket fd to ensure that the peer
+     *      will wait for REQ and after receiving the REQ, peer will
+     *      be able to receive the data from us */
     if (connect_ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) {
         event |= UCT_TCP_CM_CONN_REQ;
+    } else if (connect_ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) {
+        event |= UCT_TCP_CM_CONN_WAIT_REQ;
     }
 
     status = uct_tcp_cm_send_event(connect_ep, event);
@@ -322,8 +344,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     (*progress_count)++;
 
     /* 6. Now fully connected to the peer */
-    uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD |
-                                      UCS_EVENT_SET_EVWRITE, 0);
+    uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD, 0);
     uct_tcp_cm_change_conn_state(connect_ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
 
     return UCS_OK;
@@ -338,29 +359,34 @@ static ucs_status_t uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
     ucs_status_t status;
     int cmp;
 
-    if (connect_ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) {
+    if ((connect_ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) &&
+        (connect_ep->conn_state != UCT_TCP_EP_CONN_STATE_WAITING_REQ)) {
         cmp = ucs_sockaddr_cmp((const struct sockaddr*)&connect_ep->peer_addr,
                                (const struct sockaddr*)&iface->config.ifaddr,
                                &status);
         if (status != UCS_OK) {
             return status;
         }
+
+        /* Accept connection from a peer if our iface
+         * address is greater than peer's one */
         accept_conn = (cmp < 0);
     }
 
     if (!accept_conn) {
         /* Migrate RX from the EP allocated during accepting connection to
-         * the found EP. Don't set anything if != CONNECTED, because we need
-         * to handle a connection data */
+         * the found EP. */
         status = uct_tcp_ep_move_ctx_cap(accept_ep, connect_ep,
                                          UCT_TCP_EP_CTX_TYPE_RX);
         if (status != UCS_OK) {
             return status;
         }
 
-        if (connect_ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
-            uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD, 0);
+        if (connect_ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ) {
+            uct_tcp_cm_change_conn_state(connect_ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
         }
+
+        uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD, 0);
         /* Destroy the EP allocated during accepting connection */
         uct_tcp_ep_destroy_internal(&accept_ep->super.super);
     } else /* our iface address less than remote && we are not connected */ {
@@ -438,10 +464,13 @@ err:
     return progress_count;
 }
 
-static void uct_tcp_cm_handle_conn_ack(uct_tcp_ep_t *ep)
+void uct_tcp_cm_handle_conn_ack(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t cm_event,
+                                uct_tcp_ep_conn_state_t new_conn_state)
 {
-    if (ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) {
-        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
+    uct_tcp_cm_trace_conn_pkt(ep, UCS_LOG_LEVEL_TRACE,
+                              "%s received from", cm_event);
+    if (ep->conn_state != new_conn_state) {
+        uct_tcp_cm_change_conn_state(ep, new_conn_state);
     }
 }
 
@@ -450,6 +479,7 @@ unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep, void *pkt, uint32_t lengt
     ucs_status_t status;
     uct_tcp_cm_conn_event_t cm_event;
     uct_tcp_cm_conn_req_pkt_t *cm_req_pkt;
+    uct_tcp_ep_conn_state_t new_conn_state;
 
     ucs_assertv(length >= sizeof(cm_event), "ep=%p", *ep);
 
@@ -462,6 +492,14 @@ unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep, void *pkt, uint32_t lengt
         ucs_assertv(length == sizeof(*cm_req_pkt), "ep=%p", *ep);
         cm_req_pkt = (uct_tcp_cm_conn_req_pkt_t*)pkt;
         return uct_tcp_cm_handle_conn_req(ep, cm_req_pkt);
+    case UCT_TCP_CM_CONN_ACK_WITH_WAIT_REQ:
+        if (!((*ep)->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))) {
+            new_conn_state = UCT_TCP_EP_CONN_STATE_WAITING_REQ;
+        } else {
+            new_conn_state = UCT_TCP_EP_CONN_STATE_CONNECTED;
+        }
+        uct_tcp_cm_handle_conn_ack(*ep, cm_event, new_conn_state);
+        return 0;
     case UCT_TCP_CM_CONN_ACK_WITH_REQ:
         status = uct_tcp_ep_add_ctx_cap(*ep, UCT_TCP_EP_CTX_TYPE_RX);
         if (status != UCS_OK) {
@@ -469,10 +507,12 @@ unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep, void *pkt, uint32_t lengt
         }
         /* fall through */
     case UCT_TCP_CM_CONN_ACK:
-        uct_tcp_cm_trace_conn_pkt(*ep, UCS_LOG_LEVEL_TRACE,
-                                  "%s received from", cm_event);
-        ucs_assertv(length == sizeof(cm_event), "ep=%p", *ep);
-        uct_tcp_cm_handle_conn_ack(*ep);
+        uct_tcp_cm_handle_conn_ack(*ep, cm_event,
+                                   UCT_TCP_EP_CONN_STATE_CONNECTED);
+        return 0;
+    case UCT_TCP_CM_CONN_WAIT_REQ:
+        ucs_error("tcp_ep %p: CM event for waiting REQ (%d) "
+                  "must be sent along with ACK", *ep, cm_event);
         return 0;
     }
 
