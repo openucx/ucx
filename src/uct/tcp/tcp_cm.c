@@ -344,8 +344,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     (*progress_count)++;
 
     /* 6. Now fully connected to the peer */
-    uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD |
-                                      UCS_EVENT_SET_EVWRITE, 0);
+    uct_tcp_ep_mod_events(connect_ep, UCS_EVENT_SET_EVREAD, 0);
     uct_tcp_cm_change_conn_state(connect_ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
 
     return UCS_OK;
@@ -368,6 +367,9 @@ static ucs_status_t uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
         if (status != UCS_OK) {
             return status;
         }
+
+        /* Accept connection from a peer if our iface
+         * address is greater than peer's one */
         accept_conn = (cmp < 0);
     }
 

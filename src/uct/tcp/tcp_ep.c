@@ -453,10 +453,10 @@ void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep)
 
     uct_pending_queue_dispatch(priv, &ep->pending_q,
                                uct_tcp_ep_ctx_buf_empty(&ep->tx));
-
-    ucs_assertv(ucs_queue_is_empty(&ep->pending_q) ||
-                !uct_tcp_ep_ctx_buf_empty(&ep->tx),
-                "ep=%p", ep);
+    if (uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
+        ucs_assert(ucs_queue_is_empty(&ep->pending_q));
+        uct_tcp_ep_mod_events(ep, 0, UCS_EVENT_SET_EVWRITE);
+    }
 }
 
 static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
@@ -571,6 +571,7 @@ static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
 
     if (!ucs_queue_is_empty(&ep->pending_q)) {
         uct_tcp_ep_pending_queue_dispatch(ep);
+        return count;
     }
 
     if (uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
