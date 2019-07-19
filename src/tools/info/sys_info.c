@@ -12,6 +12,8 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
+#include <ucs/config/parser.h>
+#include <ucs/config/global_opts.h>
 #include <sys/mman.h>
 #include <string.h>
 
@@ -52,7 +54,7 @@ static double measure_memcpy_bandwidth(size_t size)
     iter = 0;
     start_time = ucs_get_time();
     do {
-        memcpy(dst, src, size);
+        ucs_memcpy_relaxed(dst, src, size);
         end_time = ucs_get_time();
         ++iter;
     } while (end_time < start_time + ucs_time_from_sec(0.5));
@@ -72,7 +74,7 @@ void print_sys_info()
 
     printf("# Timer frequency: %.3f MHz\n", ucs_get_cpu_clocks_per_sec() / 1e6);
     printf("# CPU model: %s\n", cpu_model_names[ucs_arch_get_cpu_model()]);
-
+    ucs_arch_print_memcpy_limits(&ucs_global_opts.arch);
     printf("# Memcpy bandwidth:\n");
     for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
         printf("#     %10zu bytes: %.3f MB/s\n", size,

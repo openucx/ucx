@@ -15,6 +15,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/string.h>
 #include <sys/signal.h>
 
 
@@ -45,7 +46,8 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_format          = UCS_STATS_FULL,
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
-    .module_log_level      = UCS_LOG_LEVEL_TRACE
+    .module_log_level      = UCS_LOG_LEVEL_TRACE,
+    .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -218,6 +220,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"MODULE_LOG_LEVEL", "trace",
    "Logging level for module loader\n",
    ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+  {"", "", NULL,
+   ucs_offsetof(ucs_global_opts_t, arch),
+   UCS_CONFIG_TYPE_TABLE(ucs_arch_global_opts_table)},
 
   {NULL}
 };

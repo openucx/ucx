@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include <time.h>
+#include <string.h>
 #include <sys/times.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/arch/generic/cpu.h>
@@ -111,6 +112,10 @@ static inline int ucs_arch_get_cpu_flag()
     return UCS_CPU_FLAG_UNKNOWN;
 }
 
+static inline void ucs_cpu_init()
+{
+}
+
 static inline void ucs_arch_wait_mem(void *address)
 {
     unsigned long tmp;
@@ -182,6 +187,11 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 #endif
 }
 #endif
+
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+{
+    return memcpy(dst, src, len);
+}
 
 END_C_DECLS
 
