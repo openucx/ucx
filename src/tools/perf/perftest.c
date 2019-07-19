@@ -529,8 +529,8 @@ static ucs_status_t init_test_params(ucx_perf_params_t *params)
     strcpy(params->uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->uct.tl_name,  TL_RESOURCE_NAME_NONE);
 
-    params->msg_size_list     = malloc(sizeof(*params->msg_size_list) *
-                                     params->msg_size_cnt);
+    params->msg_size_list     = calloc(params->msg_size_cnt,
+                                       sizeof(*params->msg_size_list));
     if (params->msg_size_list == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
