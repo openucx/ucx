@@ -387,7 +387,11 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 
     /* MD component name + data */
     memcpy(md_attr->component_name, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
+
+#if ENABLE_DEBUG_DATA
+    /* MD name is packed into rkey in DEBUG mode only */
     md_attr->rkey_packed_size += UCT_MD_COMPONENT_NAME_MAX;
+#endif
 
     return UCS_OK;
 }
