@@ -220,8 +220,10 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
 
     sock_id_ctx = ucs_malloc(sizeof(uct_sockcm_ctx_t), "accepted sock_id_ctx");
     if (sock_id_ctx == NULL) {
-        ucs_debug("sockcm_listener: unable to create mem for accepted fd");
+        ucs_error("sockcm_listener: unable to create mem for accepted fd");
+        return;
     }
+
     sock_id_ctx->sock_id = accept_fd;
     ucs_list_add_tail(&iface->used_sock_ids_list, &sock_id_ctx->list);
 
