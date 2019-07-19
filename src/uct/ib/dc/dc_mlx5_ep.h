@@ -473,7 +473,7 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
     /* Do not alloc dci if no TX desc resources,
      * otherwise this dci may never be released. */
     if (uct_dc_mlx5_iface_dci_can_alloc(iface) &&
-        !ucs_mpool_is_empty(&iface->super.super.tx.mp)) {
+        uct_dc_mlx5_iface_has_iface_resources(iface)) {
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }
