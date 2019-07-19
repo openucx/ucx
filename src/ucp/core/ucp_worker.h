@@ -31,7 +31,7 @@
 
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
     do {                                                                \
-        if (1 || (_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
+        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
             UCS_ASYNC_BLOCK(&(_worker)->async);                         \
         }                                                               \
     } while (0)
@@ -39,7 +39,7 @@
 
 #define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)                  \
     do {                                                                \
-        if (1 || (_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
+        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
             UCS_ASYNC_UNBLOCK(&(_worker)->async);                       \
         }                                                               \
     } while (0)

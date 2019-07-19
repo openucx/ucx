@@ -258,17 +258,31 @@ static void ucp_ep_sockaddr_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-static unsigned ucp_ep_do_disconnect(void *arg);
+static unsigned ucp_ep_do_disconnect(void *arg)
+{
+    ucp_request_t *req = arg;
 
-void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg)
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
+
+    ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
+                                      UCT_FLUSH_FLAG_CANCEL);
+
+    /* Complete send request from here, to avoid releasing the request while
+     * slow-path element is still pending */
+    ucp_request_complete_send(req, req->status);
+
+    return 0;
+}
+
+unsigned ucp_ep_sockaddr_disconnect_progress(void *arg)
 {
     ucp_ep_h ucp_ep = (ucp_ep_h)arg;
+    ucp_worker_h worker = ucp_ep->worker;
     void *req;
 
-    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-    ucs_trace_func("uct_ep = %p, ucp_ep = %p, ucp_ep->flags = %xu", ep, ucp_ep,
-                   ucp_ep->flags);
-    ucs_assert(ucp_ep_get_connected_ep(ucp_ep) == ep);
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_trace_func("ucp_ep = %p, ucp_ep->flags = %xu", ucp_ep, ucp_ep->flags);
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
@@ -285,16 +299,27 @@ void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg)
                       ucs_status_string(UCS_PTR_STATUS(req)));
         }
     } else {
-        ucs_trace("adding slow-path callback to destroy ep %p", ep);
-        ucp_request_t *request = ucp_ep_ext_gen(ucp_ep)->flush_state.close.req;
-        request->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
-        uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_ep_do_disconnect,
-                                          request, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &request->send.disconnect.prog_id);
+        ucp_ep_do_disconnect(ucp_ep_ext_gen(ucp_ep)->flush_state.close.req);
     }
 
-    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+
+    return 1;
+}
+
+void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg)
+{
+    ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    ucs_assert(ucp_ep_get_connected_ep(ucp_ep) == ep);
+
+    /* invoke the disconnect flow from the main thread */
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_ep_sockaddr_disconnect_progress,
+                                      ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+
 }
 
 ucs_status_t
@@ -349,9 +374,26 @@ ucp_ep_create_sockaddr_connected(ucp_worker_h worker,
     ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
 
     ucs_assert(remote_address->address_count == 1);
-    status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
-                                         remote_address->address_list[0].dev_addr,
-                                         remote_address->address_list[0].ep_addr);
+    if (wireup_ep->sockaddr_wiface->attr.cap.flags &
+        UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        ucs_assert(wireup_ep->super.uct_ep != NULL);
+        status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
+                                             remote_address->address_list[0].dev_addr,
+                                             remote_address->address_list[0].ep_addr);
+    } else {
+        uct_ep_params_t params;
+        params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+                            UCT_EP_PARAM_FIELD_DEV_ADDR |
+                            UCT_EP_PARAM_FIELD_IFACE_ADDR;
+        params.iface      = wireup_ep->sockaddr_wiface->iface;
+        params.dev_addr   = remote_address->address_list[0].dev_addr;
+        params.iface_addr = remote_address->address_list[0].iface_addr;
+        status            = uct_ep_create(&params, &wireup_ep->super.uct_ep);
+        if (status == UCS_OK) {
+            wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+        }
+    }
+
     ucs_assert_always(status == UCS_OK);
 
     ucp_listener_schedule_accept_cb(ep);
@@ -931,22 +973,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_ep_match_remove_ep(&ep->worker->ep_match_ctx, ep);
     ucp_ep_destroy_internal(ep);
-}
-
-static unsigned ucp_ep_do_disconnect(void *arg)
-{
-    ucp_request_t *req = arg;
-
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
-
-    ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
-                                      UCT_FLUSH_FLAG_CANCEL);
-
-    /* Complete send request from here, to avoid releasing the request while
-     * slow-path element is still pending */
-    ucp_request_complete_send(req, req->status);
-
-    return 0;
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
