@@ -233,10 +233,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
         ucs_warn("destroying endpoint %p with not completed operations", self);
     }
 
-    if (self->sock_id_ctx != NULL) {
-        sock_id_ctx     = self->sock_id_ctx;
-        ucs_debug("ep destroy: sock_id %d", sock_id_ctx->sock_id);
-    }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
