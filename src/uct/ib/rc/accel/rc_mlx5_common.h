@@ -501,7 +501,6 @@ ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr);
+                                         const struct ibv_ah_attr *ah_attr);
+
 #endif
-
-

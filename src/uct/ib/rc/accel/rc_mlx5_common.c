@@ -846,14 +846,15 @@ ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr)
+                                         const struct ibv_ah_attr *ah_attr)
 {
 #if HAVE_DEVX
     uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
     uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
     uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
     uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
-    uint8_t mac[6], *gid = ah_attr->grh.dgid.raw;
+    const uint8_t *gid = ah_attr->grh.dgid.raw;
+    uint8_t mac[6];
     void *qpc;
     int ret;
 
