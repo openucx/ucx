@@ -122,7 +122,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_REQUEST_CLEANUP   = UCS_BIT(3), /**< request_cleanup */
     UCP_PARAM_FIELD_TAG_SENDER_MASK   = UCS_BIT(4), /**< tag_sender_mask */
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
-    UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6)  /**< estimated_num_eps */
+    UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
+    UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7)  /**< estimated_num_ppn */
 };
 
 
@@ -146,9 +147,8 @@ enum ucp_feature {
     UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt
                                                  notification support */
     UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_EXPERIMENTAL = UCS_BIT(6)   /**< Request all
-                                                 experimental
-                                                 features support */
+    UCP_FEATURE_AM           = UCS_BIT(6)   /**< Request Active Message
+                                                 support */
 };
 
 
@@ -394,6 +394,49 @@ enum {
                                             place the mapping at exactly that
                                             address. The address must be a multiple
                                             of the page size. */
+};
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Flags for a UCP Active Message callback.
+ *
+ * Flags that indicate how to handle UCP Active Messages
+ * Currently only UCP_AM_FLAG_WHOLE_MSG is supported,
+ * which indicates the entire message is handled in one
+ * callback.
+ */
+enum ucp_am_cb_flags {
+    UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Flags for sending a UCP Active Message.
+ *
+ * Flags dictate the behavior of ucp_am_send_nb
+ * currently the only flag tells UCP to pass in
+ * the sending endpoint to the call
+ * back so a reply can be defined.
+ */
+enum ucp_send_am_flags {
+    UCP_AM_SEND_REPLY = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Descriptor flags for Active Message callback.
+ *
+ * In a callback, if flags is set to UCP_CB_PARAM_FLAG_DATA in
+ * a callback then data was allocated, so if UCS_INPROGRESS is 
+ * returned from the callback, the data parameter will persist 
+ * and the user has to call @ref ucp_am_data_release when data is
+ * no longer needed.
+ */
+enum ucp_cb_param_flags {
+    UCP_CB_PARAM_FLAG_DATA = UCS_BIT(0)
 };
 
 
@@ -700,7 +743,7 @@ typedef struct ucp_params {
 
     /**
      * An optimization hint of how many endpoints will be created on this context.
-     * For example, when used from MPI or SHMEM libraries, this number would specify
+     * For example, when used from MPI or SHMEM libraries, this number will specify
      * the number of ranks (or processing elements) in the job.
      * Does not affect semantics, but only transport selection criteria and the
      * resulting performance.
@@ -709,6 +752,15 @@ typedef struct ucp_params {
      */
     size_t                             estimated_num_eps;
 
+    /**
+     * An optimization hint for a single node. For example, when used from MPI or
+     * OpenSHMEM libraries, this number will specify the number of Processes Per
+     * Node (PPN) in the job. Does not affect semantics, only transport selection
+     * criteria and the resulting performance.
+     * The value can be also set by the UCX_NUM_PPN environment variable, which
+     * will override the number of endpoints set by @e estimated_num_ppn
+     */
+    size_t                             estimated_num_ppn;
 } ucp_params_t;
 
 
@@ -2110,12 +2162,89 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
  * @li Once the RKEY object is released an access to the memory will cause an
  * undefined failure.
  * @li If the RKEY object was not created using
- * @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()" routine the behaviour of this
+ * @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()" routine the behavior of this
  * routine is undefined.
+ * @li The RKEY object must be destroyed after all outstanding operations which
+ * are using it are flushed, and before the endpoint on which it was unpacked
+ * is destroyed.
  *
  * @param [in]  rkey         Remote key to destroy.
  */
 void ucp_rkey_destroy(ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Add user defined callback for Active Message.
+ *
+ * This routine installs a user defined callback to handle incoming Active
+ * Messages with a specific id. This callback is called whenever an Active 
+ * Message that was sent from the remote peer by @ref ucp_am_send_nb is 
+ * received on this worker.
+ *
+ * @param [in]  worker      UCP worker on which to set the Active Message 
+ *                          handler.
+ * @param [in]  id          Active Message id.
+ * @param [in]  cb          Active Message callback. NULL to clear.
+ * @param [in]  arg         Active Message argument, which will be passed
+ *                          in to every invocation of the callback as the
+ *                          arg argument.
+ * @param [in]  flags       Dictates how an Active Message is handled on the
+ *                          remote endpoint. Currently only
+ *                          UCP_AM_FLAG_WHOLE_MSG is supported, which
+ *                          indicates the callback will not be invoked
+ *                          until all data has arrived.
+ *
+ * @return error code if the worker does not support Active Messages or
+ *         requested callback flags.
+ */
+ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
+                                       ucp_am_callback_t cb, void *arg,
+                                       uint32_t flags);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Send Active Message.
+ *
+ * This routine sends an Active Message to an ep. It does not support
+ * CUDA memory.
+ *
+ * @param [in]  ep          UCP endpoint where the Active Message will be run.
+ * @param [in]  id          Active Message id. Specifies which registered
+ *                          callback to run.
+ * @param [in]  buffer      Pointer to the data to be sent to the target node
+ *                          of the Active Message.
+ * @param [in]  count       Number of elements to send.
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  cb          Callback that is invoked upon completion of the 
+ *                          data transfer if it is not completed immediately.
+ * @param [in]  flags       For Future use.
+ *
+ * @return UCS_OK           Active Message was sent immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) Error sending Active Message.
+ * @return otherwise        Pointer to request, and Active Message is known
+ *                          to be completed after cb is run.
+ */
+ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
+                                const void *buffer, size_t count,
+                                ucp_datatype_t datatype,
+                                ucp_send_callback_t cb, unsigned flags);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Releases Active Message data.
+ *
+ * This routine releases data that persisted through an Active Message
+ * callback because that callback returned UCS_INPROGRESS.
+ *
+ * @param [in] worker       Worker which received the Active Message.
+ * @param [in] data         Pointer to data that was passed into
+ *                          the Active Message callback as the data
+ *                          parameter.
+ */
+void ucp_am_data_release(ucp_worker_h worker, void *data);
 
 
 /**

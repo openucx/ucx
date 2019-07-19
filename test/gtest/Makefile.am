@@ -33,6 +33,8 @@ VALGRIND_ARGS = \
 	--track-origins=yes \
 	--fair-sched=try \
 	--num-callers=25 \
+	--error-exitcode=1 \
+	--child-silent-after-fork=yes \
 	--suppressions=$(top_srcdir)/contrib/valgrind.supp \
 	$(VALGRIND_EXTRA_ARGS)
 

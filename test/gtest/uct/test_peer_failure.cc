@@ -91,11 +91,6 @@ public:
         m_entities.push_back(m_receivers.back());
         m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
 
-        m_entities.back()->check_caps(UCT_IFACE_FLAG_AM_SHORT   |
-                                      UCT_IFACE_FLAG_PENDING    |
-                                      UCT_IFACE_FLAG_CB_SYNC    |
-                                      UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
-
         am_handler_setter(this)(m_receivers.back());
         /* Make sure that TL is up and has resources */
         send_recv_am(m_receivers.size() - 1);
@@ -103,7 +98,7 @@ public:
 
     void set_am_handlers()
     {
-        check_caps(UCT_IFACE_FLAG_CB_SYNC);
+        check_caps_skip(UCT_IFACE_FLAG_CB_SYNC);
         std::for_each(m_receivers.begin(), m_receivers.end(),
                       am_handler_setter(this));
     }
@@ -176,9 +171,14 @@ protected:
     size_t                m_err_count;
     size_t                m_am_count;
     static size_t         m_req_count;
+    static const uint64_t m_required_caps;
 };
 
-size_t test_uct_peer_failure::m_req_count = 0ul;
+size_t test_uct_peer_failure::m_req_count             = 0ul;
+const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
+                                                        UCT_IFACE_FLAG_PENDING   |
+                                                        UCT_IFACE_FLAG_CB_SYNC   |
+                                                        UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
 void test_uct_peer_failure::init()
 {
@@ -199,6 +199,7 @@ void test_uct_peer_failure::init()
     m_sender = uct_test::create_entity(p);
     m_entities.push_back(m_sender);
 
+    check_skip_test();
     for (size_t i = 0; i < 2; ++i) {
         new_receiver();
     }
@@ -208,10 +209,10 @@ void test_uct_peer_failure::init()
     m_am_count  = 0;
 }
 
-UCS_TEST_P(test_uct_peer_failure, peer_failure)
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
+                                 m_required_caps))
 {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
     {
         scoped_log_handler slh(wrap_errors_logger);
 
@@ -254,10 +255,9 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
     EXPECT_GT(m_err_count, 0ul);
 }
 
-UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
+                     !check_caps(m_required_caps))
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
-
     set_am_handlers();
 
     send_recv_am(0);
@@ -290,10 +290,9 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     EXPECT_GE(m_err_count, 0ul);
 }
 
-UCS_TEST_P(test_uct_peer_failure, two_pairs_send)
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
+                     !check_caps(m_required_caps))
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
-
     set_am_handlers();
 
     /* queue sends on 1st pair */
@@ -324,10 +323,9 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send)
 }
 
 
-UCS_TEST_P(test_uct_peer_failure, two_pairs_send_after)
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send_after,
+                     !check_caps(m_required_caps))
 {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
-
     set_am_handlers();
 
     {
@@ -366,10 +364,10 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_peer_failure_cb, desproy_ep_cb)
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_cb, desproy_ep_cb,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
+                                 m_required_caps))
 {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-
     scoped_log_handler slh(wrap_errors_logger);
     kill_receiver();
     EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
@@ -389,11 +387,6 @@ protected:
 
 void test_uct_peer_failure_multiple::init()
 {
-    if (RUNNING_ON_VALGRIND) {
-        /* See https://bugs.kde.org/show_bug.cgi?id=352742 */
-        UCS_TEST_SKIP_R("skipping on valgrind because \"brk segment overflow\"");
-    }
-
     size_t tx_queue_len = get_tx_queue_len();
 
     if (ucs_get_page_size() > 4096) {
@@ -446,7 +439,12 @@ size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
     return tx_queue_len;
 }
 
-UCS_TEST_P(test_uct_peer_failure_multiple, test, "RC_TM_ENABLE?=n")
+/* Skip under valgrind due to brk segment overflow.
+ * See https://bugs.kde.org/show_bug.cgi?id=352742 */
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(m_required_caps)),
+                     "RC_TM_ENABLE?=n")
 {
     ucs_time_t timeout  = ucs_get_time() +
                           ucs_time_from_sec(200 * ucs::test_time_multiplier());

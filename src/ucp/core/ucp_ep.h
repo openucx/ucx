@@ -15,7 +15,8 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/stats/stats.h>
 #include <ucs/datastruct/strided_alloc.h>
-#include <ucp/api/ucpx.h>
+#include <ucs/debug/assert.h>
+
 
 #define UCP_MAX_IOV                16UL
 
@@ -25,7 +26,7 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
-#if ENABLE_DEBUG_DATA || ENABLE_ASSERT
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;
 #else
 typedef uint16_t                   ucp_ep_flags_t;

@@ -10,15 +10,17 @@
 
 class uct_p2p_rma_test_inlresp : public uct_p2p_rma_test {};
 
-UCS_TEST_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp0, "IB_TX_INLINE_RESP=0") {
-    check_caps(UCT_IFACE_FLAG_GET_BCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp0,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY),
+                     "IB_TX_INLINE_RESP=0") {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_bcopy),
                     1ul, sender().iface_attr().cap.get.max_bcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
-UCS_TEST_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp64, "IB_TX_INLINE_RESP=64") {
-    check_caps(UCT_IFACE_FLAG_GET_BCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp64,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY),
+                     "IB_TX_INLINE_RESP=64") {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_bcopy),
                     1ul, sender().iface_attr().cap.get.max_bcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
@@ -30,14 +32,12 @@ UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_inlresp)
 class uct_p2p_rma_test_alloc_methods : public uct_p2p_rma_test {
 protected:
     void test_put_zcopy() {
-        check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
         test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
                         0, sender().iface_attr().cap.put.max_zcopy,
                         TEST_UCT_FLAG_SEND_ZCOPY);
     }
 
     void test_get_zcopy() {
-        check_caps(UCT_IFACE_FLAG_GET_ZCOPY);
         test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                         sender().iface_attr().cap.get.min_zcopy,
                         sender().iface_attr().cap.get.max_zcopy,
@@ -45,22 +45,28 @@ protected:
     }
 };
 
-UCS_TEST_P(uct_p2p_rma_test_alloc_methods, xfer_reg_odp,
-           "REG_METHODS=odp,direct")
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_odp,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_ZCOPY),
+                     "REG_METHODS=odp,direct")
 {
     test_put_zcopy();
     test_get_zcopy();
 }
 
-UCS_TEST_P(uct_p2p_rma_test_alloc_methods, xfer_reg_rcache,
-           "REG_METHODS=rcache,direct")
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_rcache,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_ZCOPY),
+                     "REG_METHODS=rcache,direct")
 {
     test_put_zcopy();
     test_get_zcopy();
 }
 
-UCS_TEST_P(uct_p2p_rma_test_alloc_methods, xfer_reg_direct,
-           "REG_METHODS=direct")
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_direct,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_ZCOPY),
+                     "REG_METHODS=direct")
 {
     test_put_zcopy();
     test_get_zcopy();
@@ -89,7 +95,7 @@ UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_alloc_methods)
 class uct_p2p_mix_test_indirect_atomic : public uct_p2p_mix_test {};
 
 UCS_TEST_P(uct_p2p_mix_test_indirect_atomic, mix1000_indirect_atomic,
-        "INDIRECT_ATOMIC=n")
+           "INDIRECT_ATOMIC=n")
 {
     run(1000);
 }

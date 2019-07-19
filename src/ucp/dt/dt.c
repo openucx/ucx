@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "dt.h"
 
 #include <ucp/core/ucp_ep.inl>
@@ -105,7 +109,7 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
         if ((ucs_likely(UCP_MEM_IS_HOST(mem_type))) ||
             (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(mem_type))) ||
             (ucs_likely(UCP_MEM_IS_ROCM_MANAGED(mem_type)))) {
-            UCS_PROFILE_CALL(memcpy, dest, src + state->offset, length);
+            UCS_PROFILE_CALL(ucs_memcpy_relaxed, dest, src + state->offset, length);
         } else {
             ucp_mem_type_pack(worker, dest, src + state->offset, length, mem_type);
         }

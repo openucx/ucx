@@ -3,6 +3,11 @@
  *
  * See file LICENSE for terms.
  */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "dt_iov.h"
 
 #include <ucs/debug/assert.h>

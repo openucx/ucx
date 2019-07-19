@@ -6,6 +6,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct_worker.h"
 
 #include <ucs/arch/atomic.h>
@@ -90,6 +94,9 @@ void uct_worker_progress_remove_all(uct_priv_worker_t *worker,
         if (ucs_atomic_cswap32(&prog->refcount, ref, 0) == ref) {
             ucs_callbackq_remove(&worker->super.progress_q, prog->id);
             prog->id = UCS_CALLBACKQ_ID_NULL;
+            break; /* coverity thinks that `UCS_CALLBACKQ_ID_NULL`
+                    * can be passed to `ucs_callbackq_remove()`
+                    * make coverity happy - return from the loop */
         }
         ref = prog->refcount;
     }

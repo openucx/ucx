@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -25,6 +25,18 @@ libuct_rdmacm_la_SOURCES = \
 	rdmacm_iface.c \
 	rdmacm_ep.c
 
+if HAVE_RDMACM_QP_LESS
+noinst_HEADERS += \
+	rdmacm_cm.h \
+	rdmacm_listener.h \
+	rdmacm_cm_ep.h
+
+libuct_rdmacm_la_SOURCES += \
+	rdmacm_cm.c \
+	rdmacm_listener.c \
+	rdmacm_cm_ep.c
+endif # HAVE_RDMACM_QP_LESS
+
 include $(top_srcdir)/config/module.am
 
-endif
+endif # HAVE_RDMACM

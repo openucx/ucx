@@ -5,8 +5,6 @@
 
 package org.ucx.jucx;
 
-import java.nio.ByteBuffer;
-
 /**
  * Request object, that returns by ucp operations (GET, PUT, SEND, etc.).
  * Call {@link UcxRequest#isCompleted()} to monitor completion of request.

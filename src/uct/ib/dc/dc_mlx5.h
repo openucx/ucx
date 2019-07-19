@@ -13,6 +13,7 @@
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
 #include <uct/ib/ud/base/ud_iface_common.h>
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
+#include <ucs/debug/assert.h>
 
 
 #define UCT_DC_MLX5_IFACE_MAX_DCIS   16
@@ -105,7 +106,7 @@ typedef struct uct_dc_dci {
                                                 processed. Better have dci num
                                                 groups scheduled than ep num. */
     };
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
 } uct_dc_dci_t;

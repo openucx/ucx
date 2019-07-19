@@ -7,6 +7,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/debug/log.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/module.h>

@@ -29,7 +29,12 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 # UCX currently supports only the following architectures
 ExclusiveArch: aarch64 ppc64le x86_64
 
-BuildRequires: automake autoconf libtool gcc-c++ numactl-devel
+BuildRequires: automake autoconf libtool gcc-c++
+%if "%{_vendor}" == "suse"
+BuildRequires: libnuma-devel
+%else
+BuildRequires: numactl-devel
+%endif
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
 %endif
@@ -64,6 +69,10 @@ available, TCP is used instead. UCX supports efficient transfer of data in
 either main memory (RAM) or GPU memory (through CUDA and ROCm libraries).
 In addition, UCX provides efficient intra-node communication, by leveraging the
 following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
+
+%if "%{_vendor}" == "suse"
+%debug_package
+%endif
 
 %package devel
 Requires: %{name}%{?_isa} = %{version}-%{release}

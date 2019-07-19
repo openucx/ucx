@@ -15,6 +15,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/stubs.h>
+#include <ucs/sys/event_set.h>
 
 
 #define UCS_ASYNC_EPOLL_MAX_EVENTS      16
@@ -22,12 +23,12 @@
 
 
 typedef struct ucs_async_thread {
-    ucs_async_pipe_t   wakeup;
-    int                epfd;
-    ucs_timer_queue_t  timerq;
-    pthread_t          thread_id;
-    int                stop;
-    uint32_t           refcnt;
+    ucs_async_pipe_t    wakeup;
+    ucs_sys_event_set_t *event_set;
+    ucs_timer_queue_t   timerq;
+    pthread_t           thread_id;
+    int                 stop;
+    uint32_t            refcnt;
 } ucs_async_thread_t;
 
 
@@ -36,6 +37,12 @@ typedef struct ucs_async_thread_global_context {
     unsigned           use_count;
     pthread_mutex_t    lock;
 } ucs_async_thread_global_context_t;
+
+
+typedef struct ucs_async_thread_callback_arg {
+    ucs_async_thread_t *thread;
+    int                *is_missed;
+} ucs_async_thread_callback_arg_t;
 
 
 static ucs_async_thread_global_context_t ucs_async_thread_global_context = {
@@ -53,27 +60,53 @@ static void ucs_async_thread_hold(ucs_async_thread_t *thread)
 static void ucs_async_thread_put(ucs_async_thread_t *thread)
 {
     if (ucs_atomic_fadd32(&thread->refcnt, -1) == 1) {
-        close(thread->epfd);
+        ucs_event_set_cleanup(thread->event_set);
         ucs_async_pipe_destroy(&thread->wakeup);
         ucs_timerq_cleanup(&thread->timerq);
         ucs_free(thread);
     }
 }
 
+static void ucs_async_thread_ev_handler(void *callback_data, int event,
+                                        void *arg)
+{
+    ucs_async_thread_callback_arg_t *cb_arg = (void*)arg;
+    int fd                                  = (int)(uintptr_t)callback_data;
+    ucs_status_t status;
+
+    ucs_trace_async("ucs_async_thread_ev_handler(fd=%d, event=%d)",
+                    fd, event);
+
+    if (fd == ucs_async_pipe_rfd(&cb_arg->thread->wakeup)) {
+        ucs_trace_async("progress thread woken up");
+        ucs_async_pipe_drain(&cb_arg->thread->wakeup);
+        return;
+    }
+
+    status = ucs_async_dispatch_handlers(&fd, 1);
+    if (status == UCS_ERR_NO_PROGRESS) {
+         *cb_arg->is_missed = 1;
+    }
+}
+
 static void *ucs_async_thread_func(void *arg)
 {
     ucs_async_thread_t *thread = arg;
-    struct epoll_event events[UCS_ASYNC_EPOLL_MAX_EVENTS];
     ucs_time_t last_time, curr_time, timer_interval, time_spent;
-    int i, nready, is_missed, timeout_ms;
+    int is_missed, timeout_ms;
     ucs_status_t status;
-    int fd;
+    unsigned num_events;
+    ucs_async_thread_callback_arg_t cb_arg;
 
-    is_missed  = 0;
-    curr_time  = ucs_get_time();
-    last_time  = ucs_get_time();
+    is_missed        = 0;
+    curr_time        = ucs_get_time();
+    last_time        = ucs_get_time();
+    cb_arg.thread    = thread;
+    cb_arg.is_missed = &is_missed;
 
     while (!thread->stop) {
+        num_events = ucs_min(UCS_ASYNC_EPOLL_MAX_EVENTS,
+                             ucs_sys_event_set_max_wait_events);
 
         /* If we didn't get the lock, give other threads priority */
         if (is_missed) {
@@ -90,31 +123,13 @@ static void *ucs_async_thread_func(void *arg)
             timeout_ms = ucs_time_to_msec(timer_interval -
                                           ucs_min(time_spent, timer_interval));
         }
-        nready = epoll_wait(thread->epfd, events, UCS_ASYNC_EPOLL_MAX_EVENTS,
-                            timeout_ms);
-        if ((nready < 0) && (errno != EINTR)) {
-            ucs_fatal("epoll_wait() failed: %m");
-        }
-        ucs_trace_async("epoll_wait(epfd=%d, timeout=%d) returned %d",
-                        thread->epfd, timeout_ms, nready);
 
-        /* Check ready files */
-        if (nready > 0) {
-            for (i = 0; i < nready; ++i) {
-                fd = events[i].data.fd;
-
-                /* Check wakeup pipe */
-                if (fd == ucs_async_pipe_rfd(&thread->wakeup)) {
-                    ucs_trace_async("progress thread woken up");
-                    ucs_async_pipe_drain(&thread->wakeup);
-                    continue;
-                }
-
-                status = ucs_async_dispatch_handlers(&fd, 1);
-                if (status == UCS_ERR_NO_PROGRESS) {
-                    is_missed = 1;
-                }
-            }
+        status = ucs_event_set_wait(thread->event_set,
+                                    &num_events, timeout_ms,
+                                    ucs_async_thread_ev_handler,
+                                    (void*)&cb_arg);
+        if (UCS_STATUS_IS_ERR(status)) {
+            ucs_fatal("ucs_event_set_wait() failed: %d", status);
         }
 
         /* Check timers */
@@ -136,7 +151,6 @@ static void *ucs_async_thread_func(void *arg)
 static ucs_status_t ucs_async_thread_start(ucs_async_thread_t **thread_p)
 {
     ucs_async_thread_t *thread;
-    struct epoll_event event;
     ucs_status_t status;
     int wakeup_rfd;
     int ret;
@@ -171,40 +185,34 @@ static ucs_status_t ucs_async_thread_start(ucs_async_thread_t **thread_p)
         goto err_timerq_cleanup;
     }
 
-    /* Create epoll set the thread will wait on */
-    thread->epfd = epoll_create(1);
-    if (thread->epfd < 0) {
-        ucs_error("epoll_create() failed: %m");
-        status = UCS_ERR_IO_ERROR;
+    status = ucs_event_set_create(&thread->event_set);
+    if (status != UCS_OK) {
         goto err_close_pipe;
     }
 
-    /* Add wakeup pipe to epoll set */
+    /* Store file descriptor into void * storage without memory allocation. */
     wakeup_rfd    = ucs_async_pipe_rfd(&thread->wakeup);
-    memset(&event, 0, sizeof(event));
-    event.events  = EPOLLIN;
-    event.data.fd = wakeup_rfd;
-    ret = epoll_ctl(thread->epfd, EPOLL_CTL_ADD, wakeup_rfd, &event);
-    if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, ADD, fd=%d) failed: %m",thread->epfd,
-                  wakeup_rfd);
+    status = ucs_event_set_add(thread->event_set, wakeup_rfd,
+                               UCS_EVENT_SET_EVREAD,
+                               (void *)(uintptr_t)wakeup_rfd);
+    if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
-        goto err_close_epfd;
+        goto err_free_event_set;
     }
 
     ret = pthread_create(&thread->thread_id, NULL, ucs_async_thread_func, thread);
     if (ret != 0) {
         ucs_error("pthread_create() returned %d: %m", ret);
         status = UCS_ERR_IO_ERROR;
-        goto err_close_epfd;
+        goto err_free_event_set;
     }
 
     ucs_async_thread_global_context.thread = thread;
     status = UCS_OK;
     goto out_unlock;
 
-err_close_epfd:
-    close(thread->epfd);
+err_free_event_set:
+    ucs_event_set_cleanup(thread->event_set);
 err_close_pipe:
     ucs_async_pipe_destroy(&thread->wakeup);
 err_timerq_cleanup:
@@ -295,22 +303,17 @@ static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
                                                   int event_fd, int events)
 {
     ucs_async_thread_t *thread;
-    struct epoll_event event;
     ucs_status_t status;
-    int ret;
 
     status = ucs_async_thread_start(&thread);
     if (status != UCS_OK) {
         goto err;
     }
 
-    memset(&event, 0, sizeof(event));
-    event.events  = events;
-    event.data.fd = event_fd;
-    ret = epoll_ctl(thread->epfd, EPOLL_CTL_ADD, event_fd, &event);
-    if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, ADD, fd=%d) failed: %m", thread->epfd,
-                  event_fd);
+    /* Store file descriptor into void * storage without memory allocation. */
+    status = ucs_event_set_add(thread->event_set, event_fd,
+                               events, (void *)(uintptr_t)event_fd);
+    if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
         goto err_removed;
     }
@@ -328,13 +331,11 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
                                                      int event_fd)
 {
     ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
-    int ret;
+    ucs_status_t status;
 
-    ret = epoll_ctl(thread->epfd, EPOLL_CTL_DEL, event_fd, NULL);
-    if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, DEL, fd=%d) failed: %m", thread->epfd,
-                  event_fd);
-        return UCS_ERR_INVALID_PARAM;
+    status = ucs_event_set_del(thread->event_set, event_fd);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ucs_async_thread_stop();
@@ -344,21 +345,9 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
 static ucs_status_t ucs_async_thread_modify_event_fd(ucs_async_context_t *async,
                                                      int event_fd, int events)
 {
-    ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
-    struct epoll_event event;
-    int ret;
-
-    memset(&event, 0, sizeof(event));
-    event.events  = events;
-    event.data.fd = event_fd;
-    ret = epoll_ctl(thread->epfd, EPOLL_CTL_MOD, event_fd, &event);
-    if (ret < 0) {
-        ucs_error("epoll_ctl(epfd=%d, ADD, fd=%d) failed: %m", thread->epfd,
-                  event_fd);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
+    /* Store file descriptor into void * storage without memory allocation. */
+    return ucs_event_set_mod(ucs_async_thread_global_context.thread->event_set,
+                             event_fd, events, (void *)(uintptr_t)event_fd);
 }
 
 static int ucs_async_thread_mutex_try_block(ucs_async_context_t *async)

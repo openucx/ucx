@@ -49,7 +49,11 @@ nobase_dist_libucs_la_HEADERS = \
 	type/spinlock.h \
 	type/status.h \
 	type/thread_mode.h \
-	type/cpu_set.h
+	type/cpu_set.h \
+	arch/x86_64/global_opts.h \
+	arch/aarch64/global_opts.h \
+	arch/ppc64/global_opts.h \
+	arch/global_opts.h
 
 noinst_HEADERS = \
 	arch/aarch64/bitops.h \
@@ -98,8 +102,11 @@ libucs_la_SOURCES = \
 	algorithm/crc.c \
 	algorithm/qsort_r.c \
 	arch/aarch64/cpu.c \
+	arch/aarch64/global_opts.c \
 	arch/ppc64/timebase.c \
+	arch/ppc64/global_opts.c \
 	arch/x86_64/cpu.c \
+	arch/x86_64/global_opts.c \
 	async/async.c \
 	async/signal.c \
 	async/pipe.c \
@@ -137,7 +144,8 @@ libucs_la_SOURCES = \
 	time/timerq.c \
 	type/class.c \
 	type/spinlock.c \
-	type/status.c
+	type/status.c \
+	type/init_once.c
 
 if HAVE_STATS
 libucs_la_SOURCES += \

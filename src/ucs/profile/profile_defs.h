@@ -16,7 +16,8 @@ BEGIN_C_DECLS
 
 /** @file profile_defs.h */
 
-#define UCS_PROFILE_STACK_MAX 64
+#define UCS_PROFILE_STACK_MAX     64
+#define UCS_PROFILE_FILE_VERSION  2u
 
 
 /**
@@ -43,18 +44,66 @@ typedef enum {
 } ucs_profile_type_t;
 
 
+/*
+ * Profile file structure:
+ *
+ * < ucs_profile_header_t >
+ * < ucs_profile_location_t > * ucs_profile_header_t::num_locaitons
+ * [
+ *    < ucs_profile_thread_header_t >
+ *    < ucs_profile_thread_location_t > * ucs_profile_header_t::num_locaitons
+ *    < ucs_profile_record_t > * ucs_profile_thread_header_t::num_records
+ *
+ * ] * ucs_profile_thread_header_t::num_threads
+ */
+
+
 /**
  * Profile output file header
  */
 typedef struct ucs_profile_header {
-    char                     cmdline[1024];            /**< Command line */
-    char                     hostname[HOST_NAME_MAX];  /**< Host name */
-    uint32_t                 pid;                      /**< Process ID */
-    uint32_t                 mode;                     /**< Profiling mode */
-    uint32_t                 num_locations;            /**< Number of locations in the file */
-    uint64_t                 num_records;              /**< Number of records in the file */
-    uint64_t                 one_second;               /**< How much time is one second on the sampled machine */
+    uint32_t                 version;       /**< File format version */
+    char                     ucs_path[1024];/**< UCX library path*/
+    char                     cmdline[1024]; /**< Command line */
+    char                     hostname[64];  /**< Host name */
+    uint32_t                 pid;           /**< Process ID */
+    uint32_t                 mode;          /**< Bitmask of profiling modes */
+    uint32_t                 num_locations; /**< Number of locations in the file */
+    uint32_t                 num_threads;   /**< Number of threads in the file */
+    uint64_t                 one_second;    /**< How much time is one second on the sampled machine */
 } UCS_S_PACKED ucs_profile_header_t;
+
+
+/**
+ * Profile location record
+ */
+typedef struct ucs_profile_location {
+    char                     file[64];      /**< Source file name */
+    char                     function[64];  /**< Function name */
+    char                     name[32];      /**< User-provided name */
+    int                      line;          /**< Source line number */
+    uint8_t                  type;          /**< From ucs_profile_type_t */
+} UCS_S_PACKED ucs_profile_location_t;
+
+
+/**
+ * Profile output file thread header
+ */
+typedef struct ucs_profile_thread_header {
+    uint32_t                 tid;            /**< System thread id */
+    uint64_t                 start_time;     /**< Time of thread start */
+    uint64_t                 end_time;       /**< Time of thread exit */
+    uint64_t                 num_records;    /**< Number of records for the thread */
+} UCS_S_PACKED ucs_profile_thread_header_t;
+
+
+/**
+ * Profile thread location with samples
+ */
+typedef struct ucs_profile_thread_location {
+    uint64_t                 total_time;    /**< Total interval from previous location */
+    size_t                   count;         /**< Number of times we've hit this location */
+} UCS_S_PACKED ucs_profile_thread_location_t;
 
 
 /**
@@ -66,21 +115,6 @@ typedef struct ucs_profile_record {
     uint32_t                 param32;       /**< Custom 32-bit parameter */
     uint32_t                 location;      /**< Location identifier */
 } UCS_S_PACKED ucs_profile_record_t;
-
-
-/**
- * Profile location record
- */
-typedef struct ucs_profile_location {
-    char                     file[64];      /**< Source file name */
-    char                     function[64];  /**< Function name */
-    char                     name[32];      /**< User-provided name */
-    volatile int             *loc_id_p;     /**< Back-pointer for location ID */
-    int                      line;          /**< Source line number */
-    uint8_t                  type;          /**< From ucs_profile_type_t */
-    uint64_t                 total_time;    /**< Total interval from previous location */
-    size_t                   count;         /**< Number of times we've hit this location */
-} UCS_S_PACKED ucs_profile_location_t;
 
 
 extern const char *ucs_profile_mode_names[];

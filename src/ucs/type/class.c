@@ -63,3 +63,8 @@ void ucs_class_free(void *obj)
 {
     ucs_free(obj);
 }
+
+void ucs_class_check_new_func_result(ucs_status_t status, void *obj)
+{
+    ucs_assert((status == UCS_OK) || (obj == NULL));
+}

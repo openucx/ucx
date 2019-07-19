@@ -714,8 +714,7 @@ run_ucp_client_server() {
         return
     fi
 
-    ret=`which ibdev2netdev`
-    if [ -z "$ret" ]
+    if ! which ibdev2netdev >&/dev/null
     then
         return
     fi
@@ -1177,7 +1176,6 @@ run_gtest() {
 			module load tools/valgrind-latest
 		fi
 
-		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes --gen-suppressions=all"
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
@@ -1195,7 +1193,6 @@ run_gtest() {
 	unset GTEST_TAP
 	unset GTEST_REPORT_DIR
 	unset GTEST_EXTRA_ARGS
-	unset VALGRIND_EXTRA_ARGS
 	unset CUDA_VISIBLE_DEVICES
 }
 

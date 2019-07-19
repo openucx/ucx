@@ -10,6 +10,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/string.h>
 
 #define X86_CPUID_GET_MODEL       0x00000001u
 #define X86_CPUID_GET_BASE_VALUE  0x00000000u
@@ -264,6 +265,31 @@ int ucs_arch_get_cpu_flag()
     }
 
     return cpu_flag;
+}
+
+#if ENABLE_BUILTIN_MEMCPY
+static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
+{
+    if (user_val != UCS_MEMUNITS_AUTO) {
+        return user_val;
+    }
+
+    if (ucs_arch_get_cpu_model() >= UCS_CPU_MODEL_INTEL_HASWELL) {
+        return auto_val;
+    } else {
+        return UCS_MEMUNITS_INF;
+    }
+}
+#endif
+
+void ucs_cpu_init()
+{
+#if ENABLE_BUILTIN_MEMCPY
+    ucs_global_opts.arch.builtin_memcpy_min =
+        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_min, 1 * UCS_KBYTE);
+    ucs_global_opts.arch.builtin_memcpy_max =
+        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max, 8 * UCS_MBYTE);
+#endif
 }
 
 #endif

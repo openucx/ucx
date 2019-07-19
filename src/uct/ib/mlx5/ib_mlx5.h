@@ -219,9 +219,9 @@ typedef struct uct_ib_mlx5_devx_uar {
 
 
 typedef enum {
-    UCT_IB_MLX5_QP_TYPE_UNDEF,
     UCT_IB_MLX5_QP_TYPE_VERBS,
     UCT_IB_MLX5_QP_TYPE_DEVX,
+    UCT_IB_MLX5_QP_TYPE_LAST
 } uct_ib_mlx5_qp_type_t;
 
 
@@ -246,6 +246,14 @@ typedef struct uct_ib_mlx5_qp {
             struct ibv_qp              *qp;
             uct_ib_mlx5_res_domain_t   *rd;
         } verbs;
+#if HAVE_DEVX
+        struct {
+            void                       *wq_buf;
+            uct_ib_mlx5_dbrec_t        *dbrec;
+            struct mlx5dv_devx_umem    *mem;
+            struct mlx5dv_devx_obj     *obj;
+        } devx;
+#endif
     };
 } uct_ib_mlx5_qp_t;
 
@@ -456,5 +464,76 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
                                   size_t sg_byte_count);
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
+
+/**
+ * DEVX UAR API
+ */
+int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
+                             uct_ib_mlx5_md_t *md,
+                             uct_ib_mlx5_mmio_mode_t mmio_mode);
+
+ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
+                                       uct_ib_mlx5_md_t *md,
+                                       uct_ib_mlx5_mmio_mode_t mmio_mode);
+
+void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
+
+/**
+ * DEVX QP API
+ */
+
+#if HAVE_DEVX
+
+ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                                        uct_ib_mlx5_qp_t *qp,
+                                        uct_ib_mlx5_txwq_t *tx,
+                                        uct_ib_qp_attr_t *attr);
+
+ucs_status_t uct_ib_mlx5_devx_create_qp_impl(uct_ib_mlx5_md_t *md,
+                                             uct_ib_mlx5_devx_uar_t *uar,
+                                             uct_ib_mlx5_qp_t *qp,
+                                             uct_ib_mlx5_txwq_t *tx,
+                                             uct_ib_qp_attr_t *attr);
+
+ucs_status_t uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uint32_t dest_qp_num,
+                                         struct ibv_ah_attr *ah_attr);
+
+ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
+                                        enum ibv_qp_state state);
+
+void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp);
+
+#else
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                           uct_ib_mlx5_qp_t *qp,
+                           uct_ib_mlx5_txwq_t *tx,
+                           uct_ib_qp_attr_t *attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
+                            uct_ib_mlx5_qp_t *qp,
+                            uint32_t dest_qp_num,
+                            struct ibv_ah_attr *ah_attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
+                           enum ibv_qp_state state)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp) { }
+
+#endif
 
 #endif

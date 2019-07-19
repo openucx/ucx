@@ -505,3 +505,33 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
 
     return UCS_OK;
 }
+
+static void UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_destroy_qp(uct_ib_mlx5_qp_t *qp)
+{
+    switch (qp->type) {
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
+        uct_ib_destroy_qp(qp->verbs.qp);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
+        uct_ib_mlx5_devx_destroy_qp(qp);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        break;
+    }
+}
+
+static ucs_status_t UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_modify_qp(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+{
+    switch (qp->type) {
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
+        return uct_ib_modify_qp(qp->verbs.qp, state);
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
+        return uct_ib_mlx5_devx_modify_qp(qp, state);
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        break;
+    }
+
+    return UCS_OK;
+}

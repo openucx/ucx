@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "tcp.h"
 
 #include <ucs/async/async.h>
@@ -348,7 +352,9 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 
     /* Register event handler for incoming connections */
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
-                                         iface->listen_fd, POLLIN|POLLERR,
+                                         iface->listen_fd,
+                                         UCS_EVENT_SET_EVREAD |
+                                         UCS_EVENT_SET_EVERR,
                                          uct_tcp_iface_connect_handler, iface,
                                          iface->super.worker->async);
     if (status != UCS_OK) {

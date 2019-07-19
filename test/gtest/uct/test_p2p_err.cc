@@ -149,8 +149,9 @@ private:
 ucs_status_t uct_p2p_err_test::last_error = UCS_OK;
 
 
-UCS_TEST_P(uct_p2p_err_test, local_access_error) {
-    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, local_access_error,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF)) {
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 
@@ -162,8 +163,9 @@ UCS_TEST_P(uct_p2p_err_test, local_access_error) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
-    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, remote_access_error,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM)) {
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 
@@ -176,8 +178,8 @@ UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
 }
 
 #if ENABLE_PARAMS_CHECK
-UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_put_short_length,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     size_t max_short = sender().iface_attr().cap.put.max_short;
     if (max_short > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_short too large");
@@ -193,8 +195,9 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
-    check_caps(UCT_IFACE_FLAG_PUT_BCOPY | UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_put_bcopy_length,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN)) {
     size_t max_bcopy = sender().iface_attr().cap.put.max_bcopy;
     if (max_bcopy > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_bcopy too large");
@@ -210,8 +213,8 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_am_short_length,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     size_t max_short = sender().iface_attr().cap.am.max_short;
     if (max_short > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_short too large");
@@ -227,8 +230,9 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_am_bcopy_length,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN)) {
     size_t max_bcopy = sender().iface_attr().cap.am.max_bcopy;
     if (max_bcopy > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_bcopy too large");
@@ -244,8 +248,8 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, invalid_am_zcopy_hdr_length) {
-    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_am_zcopy_hdr_length,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     size_t max_hdr = sender().iface_attr().cap.am.max_hdr;
     if (max_hdr > (2 * UCS_MBYTE)) {
         UCS_TEST_SKIP_R("max_hdr too large");
@@ -265,9 +269,8 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_zcopy_hdr_length) {
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, short_invalid_am_id) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, short_invalid_am_id,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
@@ -275,9 +278,8 @@ UCS_TEST_P(uct_p2p_err_test, short_invalid_am_id) {
                    "active message id");
 }
 
-UCS_TEST_P(uct_p2p_err_test, bcopy_invalid_am_id) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
-
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, bcopy_invalid_am_id,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
     mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_BCOPY, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
@@ -285,9 +287,8 @@ UCS_TEST_P(uct_p2p_err_test, bcopy_invalid_am_id) {
                    "active message id");
 }
 
-UCS_TEST_P(uct_p2p_err_test, zcopy_invalid_am_id) {
-    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
-
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, zcopy_invalid_am_id,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_ZCOPY, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
