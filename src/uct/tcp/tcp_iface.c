@@ -320,9 +320,13 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
-    /* Bind socket to random available port */
-    bind_addr.sin_port = 0;
-    ret = bind(iface->listen_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+    /* Loop until unused port found */
+    do {
+        /* Bind socket to random available port */
+        bind_addr.sin_port = 0;
+        ret = bind(iface->listen_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+    } while ((ret < 0) && (errno == EADDRINUSE));
+
     if (ret < 0) {
         ucs_error("bind(fd=%d) failed: %m", iface->listen_fd);
         status = UCS_ERR_IO_ERROR;
