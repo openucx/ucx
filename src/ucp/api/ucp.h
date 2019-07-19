@@ -2162,8 +2162,11 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
  * @li Once the RKEY object is released an access to the memory will cause an
  * undefined failure.
  * @li If the RKEY object was not created using
- * @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()" routine the behaviour of this
+ * @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()" routine the behavior of this
  * routine is undefined.
+ * @li The RKEY object must be destroyed after all outstanding operations which
+ * are using it are flushed, and before the endpoint on which it was unpacked
+ * is destroyed.
  *
  * @param [in]  rkey         Remote key to destroy.
  */
