@@ -77,6 +77,8 @@ typedef struct ucp_context_config {
     unsigned                               max_rndv_lanes;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
+    /** Estimated number of processes per node */
+    size_t                                 estimated_num_ppn;
     /** Memtype cache */
     int                                    enable_memtype_cache;
     /** Enable flushing endpoints while flushing a worker */
@@ -181,6 +183,9 @@ typedef struct ucp_context {
 
         /* How many endpoints are expected to be created */
         int                       est_num_eps;
+
+        /* How many endpoints are expected to be created on single node */
+        int                       est_num_ppn;
 
         struct {
             size_t                         size;    /* Request size for user */

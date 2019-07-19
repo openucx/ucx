@@ -44,6 +44,7 @@ static void usage() {
     printf("\nOther settings:\n");
     printf("  -t <name>       Filter devices information using specified transport (requires -d)\n");
     printf("  -n <count>      Estimated UCP endpoint count (for ucp_init)\n");
+    printf("  -N <count>      Estimated UCP endpoint count per node (for ucp_init)\n");
     printf("  -D <type>       Set which device types to use when creating UCP context:\n");
     printf("                    'all'  : all possible devices (default)\n");
     printf("                    'shm'  : shared memory devices only\n");
@@ -60,6 +61,7 @@ int main(int argc, char **argv)
     unsigned dev_type_bitmap;
     uint64_t ucp_features;
     size_t ucp_num_eps;
+    size_t ucp_num_ppn;
     unsigned print_opts;
     char *tl_name, *mem_size;
     const char *f;
@@ -70,10 +72,11 @@ int main(int argc, char **argv)
     tl_name                  = NULL;
     ucp_features             = 0;
     ucp_num_eps              = 1;
+    ucp_num_ppn              = 1;
     mem_size                 = NULL;
     dev_type_bitmap          = -1;
     ucp_ep_params.field_mask = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:N:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -117,6 +120,9 @@ int main(int argc, char **argv)
             break;
         case 'n':
             ucp_num_eps = atol(optarg);
+            break;
+        case 'N':
+            ucp_num_ppn = atol(optarg);
             break;
         case 'u':
             for (f = optarg; *f; ++f) {
@@ -205,7 +211,7 @@ int main(int argc, char **argv)
             return -1;
         }
         print_ucp_info(print_opts, print_flags, ucp_features, &ucp_ep_params,
-                       ucp_num_eps, dev_type_bitmap, mem_size);
+                       ucp_num_eps, ucp_num_ppn, dev_type_bitmap, mem_size);
     }
 
     return 0;

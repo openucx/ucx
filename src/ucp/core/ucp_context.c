@@ -231,6 +231,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "to ucp_init()",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"NUM_PPN", "auto",
+   "An optimization hint for the number of processes expected to be launched\n"
+   "on a single node. Does not affect semantics, only transport selection criteria\n"
+   "and the resulting performance.\n",
+   ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
+
   {"RNDV_FRAG_SIZE", "256k",
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -1186,6 +1192,14 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         context->config.est_num_eps = 1;
     }
 
+    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_PPN) {
+        context->config.est_num_ppn = params->estimated_num_ppn;
+    } else {
+        context->config.est_num_ppn = 1;
+    }
+
+    context->config.est_num_ppn = 1;
+
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
         context->mt_lock.mt_type = mt_type;
@@ -1214,6 +1228,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
+
+    if (context->config.ext.estimated_num_ppn != UCS_ULUNITS_AUTO) {
+        /* num_eps were set via the env variable. Override current value */
+        context->config.est_num_ppn = context->config.ext.estimated_num_ppn;
+    }
+    ucs_debug("Estimated number of endpoints per node is %d",
+              context->config.est_num_ppn);
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
