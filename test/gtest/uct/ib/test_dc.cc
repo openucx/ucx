@@ -319,12 +319,19 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending, "DC_NUM_DCI=1") {
     status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req, 0);
     EXPECT_UCS_OK(status);
 
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+
     /* progress till ep is flushed */
     do {
         progress();
     } while (!preq.is_done);
 
     /* flush the other active ep */
+    flush();
+
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    EXPECT_EQ(UCS_OK, status);
     flush();
 
     /* check that ep does not hold dci */
