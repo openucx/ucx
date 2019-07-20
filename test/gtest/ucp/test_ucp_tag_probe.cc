@@ -12,6 +12,17 @@
 
 class test_ucp_tag_probe : public test_ucp_tag {
 public:
+    void init() {
+        if (has_transport("tcp")) {
+            /* Decrease `TX_SEG_SIZE` and `RX_SEG_SIZE` parameters
+             * for TCP transport to be able fully consume receive
+             * buffer by 100-byte messages */
+            m_env.push_back(new ucs::scoped_setenv("UCX_TCP_TX_SEG_SIZE", "4k"));
+            m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "4k"));
+        }
+        test_ucp_tag::init();
+    }
+
     /* The parameters mean the following:
      *  - s_size and r_size: send and recv buffer sizes.
      *    Can be different for checking message transaction error
@@ -108,6 +119,7 @@ public:
         }
     }
 
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 

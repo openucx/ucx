@@ -22,9 +22,13 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-  {"SEG_SIZE", "8k",
-   "Size of copy-out buffer",
-   ucs_offsetof(uct_tcp_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+  {"TX_SEG_SIZE", "8k",
+   "Size of send copy-out buffer",
+   ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+  
+  {"RX_SEG_SIZE", "128k",
+   "Size of receive copy-out buffer",
+   ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PREFER_DEFAULT", "y",
    "Give higher priority to the default network interface on the host",
@@ -91,6 +95,7 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    size_t am_buf_size     = iface->tx_seg_size - sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
 
@@ -105,11 +110,11 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                              UCT_IFACE_FLAG_EVENT_RECV;
 
-    attr->cap.am.max_short = attr->cap.am.max_bcopy =
-        iface->seg_size - sizeof(uct_tcp_am_hdr_t);
+    attr->cap.am.max_short = am_buf_size;
+    attr->cap.am.max_bcopy = am_buf_size;
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
-                                &attr->bandwidth);
+                                &attr->bandwidth, &attr->cap.am.align_mtu);
     if (status != UCS_OK) {
         return status;
     }
@@ -408,9 +413,15 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
-    self->seg_size = config->seg_size + sizeof(uct_tcp_am_hdr_t);
+    self->tx_seg_size = config->tx_seg_size + sizeof(uct_tcp_am_hdr_t);
+    self->rx_seg_size = config->rx_seg_size + sizeof(uct_tcp_am_hdr_t);
+    if (self->tx_seg_size > self->rx_seg_size) {
+        ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
+                  self->rx_seg_size, self->tx_seg_size);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
-    status = ucs_mpool_init(&self->tx_mpool, 0, self->seg_size,
+    status = ucs_mpool_init(&self->tx_mpool, 0, self->tx_seg_size,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->tx_mpool.bufs_grow == 0) ?
                             32 : config->tx_mpool.bufs_grow,
@@ -420,7 +431,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
-    status = ucs_mpool_init(&self->rx_mpool, 0, self->seg_size * 2,
+    status = ucs_mpool_init(&self->rx_mpool, 0, self->rx_seg_size * 2,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->rx_mpool.bufs_grow == 0) ?
                             32 : config->rx_mpool.bufs_grow,

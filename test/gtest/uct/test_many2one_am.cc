@@ -26,18 +26,24 @@ public:
 
     void init() {
         std::string val = "16k";
-        std::string name;
+        std::string tx_name, rx_name;
 
         if (has_ib()) {
-            name = "IB_SEG_SIZE";
-        } else if (has_transport("tcp") ||
-                   has_transport("mm")  ||
+            tx_name = "IB_SEG_SIZE";
+        } else if (has_transport("tcp")) {
+            tx_name = "TX_SEG_SIZE";
+            rx_name = "RX_SEG_SIZE";
+        } else if (has_transport("mm")  ||
                    has_transport("self")) {
-            name = "SEG_SIZE";
+            tx_name = "SEG_SIZE";
         }
 
-        if (!name.empty()) {
-            modify_config(name, val);
+        if (!tx_name.empty()) {
+            modify_config(tx_name, val);
+        }
+
+        if (!rx_name.empty()) {
+            modify_config(rx_name, val);
         }
 
         uct_test::init();

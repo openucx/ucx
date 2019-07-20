@@ -195,7 +195,8 @@ typedef struct uct_tcp_iface {
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */
     ucs_mpool_t                   tx_mpool;          /* TX memory pool */
     ucs_mpool_t                   rx_mpool;          /* RX memory pool */
-    size_t                        seg_size;          /* AM buffer size */
+    size_t                        tx_seg_size;       /* TX AM buffer size */
+    size_t                        rx_seg_size;       /* RX AM buffer size */
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
                                                       * are in progress */
@@ -220,7 +221,8 @@ typedef struct uct_tcp_iface {
  */
 typedef struct uct_tcp_iface_config {
     uct_iface_config_t            super;
-    size_t                        seg_size;
+    size_t                        tx_seg_size;
+    size_t                        rx_seg_size;
     int                           prefer_default;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
@@ -236,7 +238,7 @@ extern const char *uct_tcp_address_type_names[];
 extern const uct_tcp_cm_state_t uct_tcp_ep_cm_state[];
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
-                                double *bandwidth_p);
+                                double *bandwidth_p, size_t *mtu_p);
 
 ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
                                   struct sockaddr_in *netmask);
