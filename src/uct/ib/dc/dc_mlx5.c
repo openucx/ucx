@@ -470,9 +470,10 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     attr.qp_state                  = IBV_QPS_RTR;
     attr.path_mtu                  = iface->super.super.config.path_mtu;
     attr.min_rnr_timer             = iface->super.super.config.min_rnr_timer;
+    attr.ah_attr.is_global         = iface->super.super.super.is_global_addr;
     attr.ah_attr.grh.hop_limit     = iface->super.super.super.config.hop_limit;
     attr.ah_attr.grh.traffic_class = iface->super.super.super.config.traffic_class;
-    attr.ah_attr.grh.sgid_index    = uct_ib_iface_md(&iface->super.super.super)->config.gid_index;
+    attr.ah_attr.grh.sgid_index    = iface->super.super.super.config.gid_index;
     attr.ah_attr.port_num          = iface->super.super.super.config.port_num;
 
     ret = ibv_modify_qp(iface->rx_dct, &attr, IBV_QP_STATE |
