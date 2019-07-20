@@ -17,7 +17,7 @@
 
 #define UCT_TCP_NAME                "tcp"
 
-/* Maximum number of events to wait from event set */
+/* Maximum number of events to wait on event set */
 #define UCT_TCP_MAX_EVENTS          16
 
 /* How long should be string to keep [%s:%s] string

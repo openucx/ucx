@@ -106,7 +106,8 @@ ucs_status_t ucs_async_modify_handler(int fd, int events);
  * Allocate and initialize an asynchronous execution context.
  * This can be used to ensure safe event delivery.
  *
- * @param mode            Either to use signals or polling threads to wait.
+ * @param mode            Indicates whether to use signals or polling threads 
+ *                        for waiting.
  * @param async_p         Event context pointer to initialize.
  *
  * @return Error code as defined by @ref ucs_status_t.
