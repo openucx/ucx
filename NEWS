@@ -23,7 +23,7 @@ Features:
 
 Bugfixes:
 - Multiple stability and performance improvements in TCP transport
-- Multiple stability fixed in Verbs and MLX5 transports
+- Multiple stability fixes in Verbs and MLX5 transports
 - Multiple stability fixes in UCM memory hooks
 - Multiple stability fixes in UGNI transport
 - RPM Spec file cleanup
