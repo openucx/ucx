@@ -19,7 +19,7 @@
 UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
                  (worker, buffer, recv_data, recv_length, mem_type),
                  ucp_worker_h worker, void *buffer, const void *recv_data,
-                 size_t recv_length, uct_memory_type_t mem_type)
+                 size_t recv_length, ucs_memory_type_t mem_type)
 {
     ucp_ep_h ep         = worker->mem_type_ep[mem_type];
     ucp_md_map_t md_map = 0;
@@ -58,7 +58,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
 UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
                  (worker, dest, src, length, mem_type),
                  ucp_worker_h worker, void *dest, const void *src, size_t length,
-                 uct_memory_type_t mem_type)
+                 ucs_memory_type_t mem_type)
 {
     ucp_ep_h ep         = worker->mem_type_ep[mem_type];
     ucp_md_map_t md_map = 0;
@@ -94,7 +94,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
 }
 
 size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
-                   uct_memory_type_t mem_type, void *dest, const void *src,
+                   ucs_memory_type_t mem_type, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length)
 {
     size_t result_len = 0;

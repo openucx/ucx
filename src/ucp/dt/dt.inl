@@ -41,7 +41,7 @@ size_t ucp_dt_length(ucp_datatype_t datatype, size_t count,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
-                   ucp_datatype_t datatype, uct_memory_type_t mem_type,
+                   ucp_datatype_t datatype, ucs_memory_type_t mem_type,
                    const void *data, size_t length, int truncation)
 {
     size_t iov_offset, iovcnt_offset;

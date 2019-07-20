@@ -93,7 +93,7 @@ void uct_p2p_test::cleanup() {
 }
 
 void uct_p2p_test::test_xfer(send_func_t send, size_t length, unsigned flags,
-                             uct_memory_type_t mem_type) {
+                             ucs_memory_type_t mem_type) {
     UCS_TEST_SKIP;
 }
 
@@ -112,7 +112,7 @@ uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
 
 template <typename O>
 void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
-                                   unsigned flags, uct_memory_type_t mem_type)
+                                   unsigned flags, ucs_memory_type_t mem_type)
 {
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
         os << ucs::size_value(length) << " " << std::flush;
@@ -145,32 +145,32 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
                                    size_t max_length, unsigned flags)
 {
 
-    for (int mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (int mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         /* test mem type if md supports mem type
          * (or) if HOST MD can register mem type
          */
         if (!((sender().md_attr().cap.access_mem_type == mem_type) ||
-            (sender().md_attr().cap.access_mem_type == UCT_MD_MEM_TYPE_HOST &&
+            (sender().md_attr().cap.access_mem_type == UCS_MEMORY_TYPE_HOST &&
 		sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
         }
-        if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+        if (mem_type == UCS_MEMORY_TYPE_CUDA) {
             if (!(flags & (TEST_UCT_FLAG_RECV_ZCOPY | TEST_UCT_FLAG_SEND_ZCOPY))) {
                 continue;
             }
         }
         test_xfer_multi_mem_type(send, min_length, max_length, flags,
-                                 (uct_memory_type_t) mem_type);
+                                 (ucs_memory_type_t) mem_type);
     }
 }
 
 void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
                                             size_t max_length, unsigned flags,
-                                            uct_memory_type_t mem_type) {
+                                            ucs_memory_type_t mem_type) {
 
     ucs::detail::message_stream ms("INFO");
 
-    ms << "memory_type:" << mem_type_names[mem_type] << " " << std::flush;
+    ms << "memory_type:" << ucs_memory_type_names[mem_type] << " " << std::flush;
 
     /* Trim at 4.1 GB */
     max_length = ucs_min(max_length, (size_t)(4.1 * (double)UCS_GBYTE));

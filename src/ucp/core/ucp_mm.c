@@ -32,7 +32,7 @@ static ucp_mem_t ucp_mem_dummy_handle = {
 
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,
-                               uct_md_h alloc_md, uct_memory_type_t mem_type,
+                               uct_md_h alloc_md, ucs_memory_type_t mem_type,
                                uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
                                ucp_md_map_t *md_map_p)
 {
@@ -322,7 +322,7 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
     } else {
         ucs_debug("registering user memory at %p length %zu", address, length);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
-        memh->mem_type     = UCT_MD_MEM_TYPE_HOST;
+        memh->mem_type     = UCS_MEMORY_TYPE_HOST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
@@ -432,7 +432,7 @@ out:
 }
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
-                                      size_t length, uct_memory_type_t mem_type,
+                                      size_t length, ucs_memory_type_t mem_type,
                                       ucp_md_index_t md_index, uct_mem_h *memh,
                                       ucp_md_map_t *md_map,
                                       uct_rkey_bundle_t *rkey_bundle)
@@ -485,7 +485,7 @@ err:
     return status;
 }
 
-void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
                                 ucp_md_index_t md_index, uct_mem_h *memh,
                                 ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle)

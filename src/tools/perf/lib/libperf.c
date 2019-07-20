@@ -58,7 +58,7 @@ typedef struct {
 } ucx_perf_ep_info_t;
 
 
-const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_LAST];
+const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_LAST];
 
 static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_SHORT)]         = "am short",
@@ -1671,7 +1671,7 @@ void ucx_perf_global_init()
     };
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
-    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_HOST] = &host_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_HOST] = &host_allocator;
 
     /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
      * alloc hooks, which are using dlsym() to get pointer to original function,

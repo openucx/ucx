@@ -11,7 +11,7 @@
 
 
 ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t length,
-                                              uct_memory_type_t *mem_type_p)
+                                              ucs_memory_type_t *mem_type_p)
 {
     CUmemorytype memType = 0;
     uint32_t isManaged = 0;
@@ -21,16 +21,16 @@ ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t le
     CUresult cu_err;
 
     if (addr == NULL) {
-        *mem_type_p = UCT_MD_MEM_TYPE_HOST;
+        *mem_type_p = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
     cu_err = cuPointerGetAttributes(2, attributes, attrdata, (CUdeviceptr)addr);
     if ((cu_err == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_DEVICE)) {
         if (isManaged) {
-            *mem_type_p = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+            *mem_type_p = UCS_MEMORY_TYPE_CUDA_MANAGED;
         } else {
-            *mem_type_p = UCT_MD_MEM_TYPE_CUDA;
+            *mem_type_p = UCS_MEMORY_TYPE_CUDA;
         }
         return UCS_OK;
     }

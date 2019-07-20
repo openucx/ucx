@@ -216,7 +216,7 @@ public:
     }
 
     void test_xfer_do(send_func_t send, size_t length, unsigned flags,
-                      uint32_t am_mode, uct_memory_type_t mem_type)
+                      uint32_t am_mode, ucs_memory_type_t mem_type)
     {
         ucs_status_t status;
 
@@ -262,7 +262,7 @@ public:
     }
 
     virtual void test_xfer(send_func_t send, size_t length, unsigned flags,
-                           uct_memory_type_t mem_type) {
+                           ucs_memory_type_t mem_type) {
 
         if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_SYNC) {
             test_xfer_do(send, length, flags, 0, mem_type);

@@ -30,6 +30,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
 	memory/rcache.h \
+	memory/memory_type.h \
 	memory/memtype_cache.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
@@ -126,9 +127,10 @@ libucs_la_SOURCES = \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \
+	memory/memory_type.c \
+	memory/memtype_cache.c \
 	memory/numa.c \
 	memory/rcache.c \
-	memory/memtype_cache.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/event_set.c \

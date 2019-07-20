@@ -15,6 +15,7 @@
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
 #include <ucs/datastruct/callbackq.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
@@ -616,20 +617,6 @@ enum {
                                                sockaddr */
 };
 
-/*
- * @ingroup UCT_MD
- * @brief  Memory types
- */
-typedef enum {
-    UCT_MD_MEM_TYPE_HOST = 0,      /**< Default system memory */
-    UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
-    UCT_MD_MEM_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed (or unified) memory*/
-    UCT_MD_MEM_TYPE_ROCM,          /**< AMD ROCM memory */
-    UCT_MD_MEM_TYPE_ROCM_MANAGED,  /**< AMD ROCM managed system memory */
-    UCT_MD_MEM_TYPE_LAST
-} uct_memory_type_t;
-
-
 /**
  * @ingroup UCT_MD
  * @brief  Memory allocation/registration flags.
@@ -1122,7 +1109,7 @@ struct uct_md_attr {
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
-        uct_memory_type_t    access_mem_type; /**< Memory type MD can access */
+        ucs_memory_type_t    access_mem_type; /**< Memory type MD can access */
     } cap;
 
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
@@ -1147,7 +1134,7 @@ typedef struct uct_allocated_memory {
     void                     *address; /**< Address of allocated memory */
     size_t                   length;   /**< Real size of allocated memory */
     uct_alloc_method_t       method;   /**< Method used to allocate the memory */
-    uct_memory_type_t        mem_type; /**< type of allocated memory */
+    ucs_memory_type_t        mem_type; /**< type of allocated memory */
     uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
     uct_mem_h                memh;     /**< if method==MD: MD memory handle */
 } uct_allocated_memory_t;
@@ -1969,7 +1956,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
-                                       uct_memory_type_t *mem_type_p);
+                                       ucs_memory_type_t *mem_type_p);
 
 
 /**

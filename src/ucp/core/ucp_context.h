@@ -162,7 +162,7 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
 
     /* List of MDs which detect non host memory type */
-    ucp_rsc_index_t               mem_type_detect_mds[UCT_MD_MEM_TYPE_LAST];
+    ucp_rsc_index_t               mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache*/
 
@@ -173,7 +173,7 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
-    uint64_t                      mem_type_access_tls[UCT_MD_MEM_TYPE_LAST];
+    uint64_t                      mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
 
     struct {
 
@@ -339,7 +339,6 @@ ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
     return iface_attr->latency.overhead +
            (iface_attr->latency.growth * context->config.est_num_eps);
 }
-extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
 {
@@ -349,35 +348,35 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
-                           uct_memory_type_t *mem_type_p)
+                           ucs_memory_type_t *mem_type_p)
 {
     unsigned i, md_index;
-    ucm_mem_type_t ucm_mem_type;
     ucs_status_t status;
 
-    *mem_type_p = UCT_MD_MEM_TYPE_HOST;
-
     if (ucs_likely(!context->num_mem_type_detect_mds)) {
+        *mem_type_p = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
     if (context->memtype_cache != NULL) {
-        if (!ucp_memory_type_cache_is_empty(context) &&
-            ucs_memtype_cache_lookup(context->memtype_cache, addr,
-                                     length, &ucm_mem_type) == UCS_OK) {
-            *mem_type_p = ucm_to_uct_mem_type_map[ucm_mem_type];
+        if (ucp_memory_type_cache_is_empty(context) ||
+            (ucs_memtype_cache_lookup(context->memtype_cache, addr,
+                                      length, mem_type_p) != UCS_OK)) {
+            *mem_type_p = UCS_MEMORY_TYPE_HOST;
         }
         return UCS_OK;
     }
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         md_index = context->mem_type_detect_mds[i];
-        status = uct_md_detect_memory_type(context->tl_mds[md_index].md, addr, length, mem_type_p);
+        status = uct_md_detect_memory_type(context->tl_mds[md_index].md, addr,
+                                           length, mem_type_p);
         if (status == UCS_OK) {
             return UCS_OK;
         }
     }
 
+    *mem_type_p = UCS_MEMORY_TYPE_HOST;
     return UCS_OK;
 }
 #endif
