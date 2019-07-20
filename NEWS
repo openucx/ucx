@@ -11,7 +11,7 @@
 Features:
 - TBD
 
-## 1.6.0-rc1 (May 24, 2019)
+## 1.6.0 (July 17, 2019)
 Features:
 - Modular architecture for UCT transports
 - ROCm transport re-design: support for managed memory, direct copy, ROCm GDR
@@ -28,10 +28,27 @@ Bugfixes:
 - Multiple stability fixes in UGNI transport
 - RPM Spec file cleanup
 - Fixing compilation issues with most recent clang and gcc compilers
+- Fixing the wrong name of aliases
+- Fix data race in UCP wireup
+- Fix segfault when libuct.so is reloaded - issue #3558
+- Include Java sources in distribution
+- Handle EADDRNOTAVAIL in rdma_cm connection manager
+- Disable ibcm on RHEL7+ by default
+- Fix data race in UCP proxy endpoint
+- Static checker fixes
+- Fallback to ibv_create_cq() if ibv_create_cq_ex() returns ENOSYS
+- Fix malloc hooks test
+- Fix checking return status in ucp_client_server example
+- Fix gdrcopy libdir config value
+- Fix printing atomic capabilities in ucx_info
+- Fix perftest warmup iterations to be non-zero
+- Fixing default values for configure logic
+- Fix race condition updating fired_events from multiple threads
+- Fix madvise() hook
 
 Tested configurations:
 - RDMA: MLNX_OFED 4.5, distribution inbox drivers, rdma-core 22.1
-- CUDA: gdrcopy 1.3.2, cuda 9.2, ROCM 2.2
+- CUDA: gdrcopy 1.3.2, cuda 9.2, ROCm 2.2
 - XPMEM: 2.6.2
 - KNEM: 1.1.3
 
