@@ -467,8 +467,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
-    self->super.config.fence = uct_ib_device_has_pci_atomics(dev);
-    self->super.rx.srq.quota = self->rx.srq.mask + 1;
+    self->super.config.fence       = uct_ib_device_has_pci_atomics(dev);
+    self->super.rx.srq.quota       = self->rx.srq.mask + 1;
+    self->super.config.exp_backoff = mlx5_config->exp_backoff;
 
     /* By default set to something that is always in cache */
     self->rx.pref_ptr = self;

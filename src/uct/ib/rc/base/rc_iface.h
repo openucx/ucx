@@ -243,6 +243,7 @@ struct uct_rc_iface {
         int                  tx_cq_len;
 #endif
         int                  fence;
+        unsigned             exp_backoff;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
