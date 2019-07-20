@@ -57,7 +57,7 @@ ucs_ptr_array_freelist_set_next(ucs_ptr_array_elem_t *elem, unsigned next)
 
 static void UCS_F_MAYBE_UNUSED ucs_ptr_array_dump(ucs_ptr_array_t *ptr_array)
 {
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     ucs_ptr_array_elem_t elem;
     unsigned i;
 

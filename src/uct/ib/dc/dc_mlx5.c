@@ -341,7 +341,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     }
 
     dci->ep    = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     dci->flags = 0;
 #endif
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,

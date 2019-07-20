@@ -361,7 +361,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     }
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     iface->tx.dcis[dci].flags = 0;
 #endif
 
@@ -416,7 +416,7 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
     iface->tx.dcis[dci].ep                    = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     iface->tx.dcis[ep->dci].flags             = 0;
 #endif
 
