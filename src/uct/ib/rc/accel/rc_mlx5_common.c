@@ -161,15 +161,53 @@ static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
 };
 #  endif
 
-static struct ibv_qp *
-uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+
+static ucs_status_t UCS_F_MAYBE_UNUSED
+uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
-#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
-    iface->tm.cmd_wq.super.super.verbs.qp = NULL;
-    iface->tm.cmd_wq.super.super.verbs.rd = NULL;
-    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_VERBS;
-    return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
-#else
+    uct_ib_mlx5_md_t *md  = ucs_derived_of(iface->super.super.super.md,
+                                           uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev  = &md->super.dev;
+    uct_ib_qp_attr_t attr = {};
+    struct ibv_ah_attr ah = {};
+    ucs_status_t status;
+
+    attr.cap.max_send_wr  = iface->tm.cmd_qp_len;
+    attr.cap.max_send_sge = 1;
+    attr.ibv.pd           = md->super.pd;
+    attr.ibv.send_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
+    attr.ibv.recv_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
+    attr.srq              = iface->super.rx.srq.srq;
+    attr.port             = dev->first_port;
+    status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
+                                        &iface->tm.cmd_wq.super.super,
+                                        &iface->tm.cmd_wq.super,
+                                        &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ah.is_global          = 1;
+    ah.grh.dgid           = iface->super.super.gid;
+    ah.dlid               = uct_ib_device_port_attr(dev, attr.port)->lid;
+    ah.port_num           = dev->first_port;
+    status = uct_rc_mlx5_iface_common_devx_connect_qp(
+            iface, &iface->tm.cmd_wq.super.super,
+            iface->tm.cmd_wq.super.super.qp_num, &ah);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    return UCS_OK;
+
+err:
+    uct_ib_mlx5_devx_destroy_qp(&iface->tm.cmd_wq.super.super);
+    return status;
+}
+
+static struct ibv_qp * UCS_F_MAYBE_UNUSED
+uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+{
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     struct ibv_qp_init_attr qp_init_attr = {};
     struct ibv_qp_attr qp_attr = {};
@@ -196,7 +234,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->super.rx.srq.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = ibv_create_qp(iface->tm.cmd_wq.super.super.verbs.rd->pd, &qp_init_attr);
+    qp = ibv_create_qp(md->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
         goto err_rd;
@@ -249,7 +287,31 @@ err_rd:
     uct_ib_mlx5_iface_put_res_domain(&iface->tm.cmd_wq.super.super);
 err:
     return NULL;
+}
+
+static ucs_status_t
+uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+{
+    struct ibv_qp *qp;
+#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
+    iface->tm.cmd_wq.super.super.verbs.qp = NULL;
+    iface->tm.cmd_wq.super.super.verbs.rd = NULL;
+    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_LAST;
+    qp = uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
+#else
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(iface->super.super.super.md,
+                                                uct_ib_mlx5_md_t);
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_rc_mlx5_devx_create_cmd_qp(iface);
+    } else {
+        qp = uct_rc_mlx5_verbs_create_cmd_qp(iface);
+    }
 #endif
+    iface->tm.cmd_wq.super.super.qp_num = qp->qp_num;
+    return uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+                                 iface->tx.mmio_mode,
+                                 &iface->tm.cmd_wq.super, qp);
 }
 #endif
 
@@ -257,27 +319,17 @@ ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface
 {
     ucs_status_t status = UCS_OK;
 #if IBV_HW_TM
-    struct ibv_qp *cmd_qp;
     int i;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return UCS_OK;
     }
 
-    cmd_qp = uct_rc_mlx5_get_cmd_qp(iface);
-    if (!cmd_qp) {
-        status = UCS_ERR_NO_DEVICE;
-        goto err_tag_cleanup;
-    }
-
-    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode,
-                                   &iface->tm.cmd_wq.super, cmd_qp);
+    status = uct_rc_mlx5_get_cmd_qp(iface);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
     }
 
-    iface->tm.cmd_wq.super.super.qp_num = cmd_qp->qp_num;
     iface->tm.cmd_wq.ops_mask = iface->tm.cmd_qp_len - 1;
     iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
     iface->tm.cmd_wq.ops      = ucs_calloc(iface->tm.cmd_qp_len,
@@ -325,9 +377,7 @@ err_tag_cleanup:
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        if (iface->tm.cmd_wq.super.super.verbs.qp) {
-            uct_ib_destroy_qp(iface->tm.cmd_wq.super.super.verbs.qp);
-        }
+        uct_ib_mlx5_destroy_qp(&iface->tm.cmd_wq.super.super);
         uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);

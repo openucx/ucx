@@ -528,8 +528,12 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
     }
 
     if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
-        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
         uct_ib_mlx5_iface_put_res_domain(&txwq->super);
+        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+    }
+
+    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_LAST && txwq->reg != NULL) {
+        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
     }
 }
 
