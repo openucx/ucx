@@ -25,15 +25,10 @@
 #define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
 
 /* Maximum length of the 'struct iovec' array in a single call to
- * readv/writev/sendmsg/recvmsg/etc. */
-#if defined(IOV_MAX)
-#define UCS_SOCKET_MAX_IOV       IOV_MAX
-#elif defined(UIO_MAXIOV)
-#define UCS_SOCKET_MAX_IOV       UIO_MAXIOV
-#else
-/* The latest kernels define maximum IOVs as 1024 */
+ * readv/writev/sendmsg/recvmsg/etc.
+ * The value used as a fallback when system value is not available.
+ * The latest kernels define it as 1024 */
 #define UCS_SOCKET_MAX_IOV       1024
-#endif
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
                                         size_t size, int flags);
@@ -202,14 +197,22 @@ int ucs_socket_max_iov()
     static int max_iov = -1;
 
 #ifdef _SC_IOV_MAX
-    if (max_iov == -1) {
+    if (max_iov != -1) {
+        return max_iov;
+    } else {
         max_iov = sysconf(_SC_IOV_MAX);
         if (max_iov != -1) {
-            /* if unable to get value from sysconf(),
-             * use a predefined value */
-            max_iov = UCS_SOCKET_MAX_IOV;
+            return max_iov;
         }
+        /* if unable to get value from sysconf(),
+         * use a predefined value */
     }
+#endif
+
+#if defined(IOV_MAX)
+    max_iov = IOV_MAX;
+#elif defined(UIO_MAXIOV)
+    max_iov = UIO_MAXIOV;
 #else
     max_iov = UCS_SOCKET_MAX_IOV;
 #endif
@@ -287,7 +290,7 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
 {
     struct msghdr msg = {
         .msg_iov    = iov,
-                .msg_iovlen = iov_cnt
+        .msg_iovlen = iov_cnt
     };
     ssize_t ret;
 
