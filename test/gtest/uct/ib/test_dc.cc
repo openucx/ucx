@@ -522,7 +522,9 @@ UCS_TEST_P(test_dc, rand_dci_pending_purge) {
     flush();
 }
 
-UCS_TEST_P(test_dc, stress_iface_ops) {
+UCS_TEST_SKIP_COND_P(test_dc, stress_iface_ops,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
     test_iface_ops();
 }
 
