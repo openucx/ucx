@@ -251,13 +251,6 @@ static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
     *cm_id_ctx_p = NULL;
 }
 
-static void uct_rdmacm_iface_cm_id_to_dev_name(struct rdma_cm_id *cm_id,
-                                               char *dev_name)
-{
-    ucs_snprintf_zero(dev_name, UCT_DEVICE_NAME_MAX, "%s:%d",
-                      ibv_get_device_name(cm_id->verbs->device), cm_id->port_num);
-}
-
 static unsigned
 uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                                struct rdma_cm_event *event)
@@ -316,7 +309,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             conn_param.private_data = ucs_alloca(UCT_RDMACM_MAX_CONN_PRIV +
                                                  sizeof(uct_rdmacm_priv_data_hdr_t));
 
-            uct_rdmacm_iface_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
+            uct_rdmacm_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
             priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name,

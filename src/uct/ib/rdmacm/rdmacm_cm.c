@@ -9,6 +9,7 @@
 #endif
 
 #include "rdmacm_cm_ep.h"
+#include <uct/ib/base/ib_iface.h>
 #include <ucs/async/async.h>
 
 #include <poll.h>
@@ -28,14 +29,149 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
     return UCS_OK;
 }
 
-static void uct_rdmacm_cm_event_handler(int fd, void *arg){}
 
+static void
+uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
+{
+    struct sockaddr            *remote_addr = rdma_get_peer_addr(event->id);
+    uint8_t                    ack_event = 1;
+    struct rdma_conn_param     conn_param;
+    uct_rdmacm_priv_data_hdr_t hdr;
+    uct_rdmacm_cm_ep_t         *cep;
+    char                       dev_name[UCT_DEVICE_NAME_MAX];
+    char                       ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t               status;
+    ssize_t                    priv_data_ret;
+
+    ucs_trace("rdmacm event (fd=%d cm_id %p): %s. Peer: %s.",
+              cm->ev_ch->fd, event->id, rdma_event_str(event->event),
+              ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+
+    /* The following applies for rdma_cm_id of type RDMA_PS_TCP only */
+    switch (event->event) {
+    case RDMA_CM_EVENT_ADDR_RESOLVED:
+        /* Client side event */
+        cep = (uct_rdmacm_cm_ep_t *)event->id->context;
+        ucs_assert(event->id == cep->id);
+
+        if (rdma_resolve_route(event->id, 1000 /* TODO */)){
+            ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
+                      ucs_sockaddr_str(remote_addr, ip_port_str,
+                                       UCS_SOCKADDR_STRING_LEN));
+        }
+        break;
+    case RDMA_CM_EVENT_ROUTE_RESOLVED:
+        /* Client side event */
+        cep = (uct_rdmacm_cm_ep_t *)event->id->context;
+        ucs_assert(event->id == cep->id);
+
+        uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
+
+        memset(&conn_param, 0, sizeof(conn_param));
+        conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
+                                             sizeof(uct_rdmacm_priv_data_hdr_t));
+        /* Pack data to send inside the connection request to the server */
+        priv_data_ret = cep->wireup.priv_pack_cb(cep->user_data, dev_name,
+                                                 (void*)(conn_param.private_data +
+                                                  sizeof(uct_rdmacm_priv_data_hdr_t)));
+
+        if ((priv_data_ret < 0) || (priv_data_ret > uct_rdmacm_cm_get_max_conn_priv())) {
+            ucs_error("failed to pack data on the client (ep=%p). packed data size: %zu.",
+                      cep, priv_data_ret);
+            break;
+        }
+
+        hdr.length = (uint8_t)priv_data_ret;
+        hdr.status = UCS_OK;
+
+        memcpy((void*)conn_param.private_data, &hdr, sizeof(uct_rdmacm_priv_data_hdr_t));
+        status = uct_rdamcm_cm_ep_set_remaining_conn_param(&conn_param, &hdr, cep);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        if (rdma_connect(cep->id, &conn_param)) {
+            ucs_error("rdma_connect(to addr=%s) failed: %m",
+                      ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+
+        }
+        break;
+    case RDMA_CM_EVENT_CONNECT_REQUEST:
+        /* Server side event */
+        break;
+    case RDMA_CM_EVENT_CONNECT_RESPONSE:
+        /* Client side event */
+        ucs_fatal("UCS_ERR_NOT_IMPLEMENTED");
+        break;
+    case RDMA_CM_EVENT_REJECTED:
+        /* Client side event */
+        ucs_fatal("UCS_ERR_NOT_IMPLEMENTED");
+        break;
+    case RDMA_CM_EVENT_ESTABLISHED:
+        /* Server side event */
+        ucs_fatal("UCS_ERR_NOT_IMPLEMENTED");
+        break;
+    case RDMA_CM_EVENT_DISCONNECTED:
+        /* Client and Server side event */
+        ucs_fatal("UCS_ERR_NOT_IMPLEMENTED");
+        break;
+    case RDMA_CM_EVENT_TIMEWAIT_EXIT:
+        /* This event is generated when the QP associated with the connection
+         * has exited its timewait state and is now ready to be re-used.
+         * After a QP has been disconnected, it is maintained in a timewait
+         * state to allow any in flight packets to exit the network.
+         * After the timewait state has completed, the rdma_cm will report this event.*/
+        break;
+        /* client error events */
+    case RDMA_CM_EVENT_UNREACHABLE:
+    case RDMA_CM_EVENT_ADDR_ERROR:
+    case RDMA_CM_EVENT_ROUTE_ERROR:
+        /* client and server error events */
+    case RDMA_CM_EVENT_CONNECT_ERROR:
+    case RDMA_CM_EVENT_DEVICE_REMOVAL:
+    case RDMA_CM_EVENT_ADDR_CHANGE:
+        ucs_error("received an error event %s. status = %d. Peer: %s.",
+                  rdma_event_str(event->event), event->status,
+                  ucs_sockaddr_str(remote_addr, ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN));
+        break;
+    default:
+        ucs_warn("unexpected RDMACM event: %s", rdma_event_str(event->event));
+        break;
+    }
+
+    if (ack_event && rdma_ack_cm_event(event)) {
+        ucs_warn("rdma_ack_cm_event() failed on event %s: %m",
+                 rdma_event_str(event->event));
+    }
+}
+
+static void uct_rdmacm_cm_event_handler(int fd, void *arg)
+{
+    uct_rdmacm_cm_t      *cm = (uct_rdmacm_cm_t *)arg;
+    struct rdma_cm_event *event;
+    int                  ret;
+
+    for (;;) {
+        /* Fetch an event */
+        ret = rdma_get_cm_event(cm->ev_ch, &event);
+        if (ret) {
+            /* EAGAIN (in a non-blocking rdma_get_cm_event) means that
+             * there are no more events */
+            if (errno != EAGAIN) {
+                ucs_warn("rdma_get_cm_event() failed: %m");
+            }
+            return;
+        }
+        uct_rdmacm_cm_process_event(cm, event);
+    }
+}
 
 static uct_cm_ops_t uct_rdmacm_cm_ops = {
     .close            = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cm_t),
     .cm_query         = uct_rdmacm_cm_query,
     .listener_create  = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_listener_t),
-    .listener_reject  = (void*)ucs_empty_function,
+    .listener_reject  = uct_rdmacm_listener_reject,
     .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_listener_t),
     .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_ep_t)
 };

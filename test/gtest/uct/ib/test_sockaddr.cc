@@ -140,7 +140,8 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
-    client->connect(0, *server, 0, m_connect_addr);
+    client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
+                    &client->client_cb_arg);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -162,7 +163,8 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
-    client->connect(0, *server, 0, m_connect_addr);
+    client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
+                    &client->client_cb_arg);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -192,7 +194,8 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
-    client->connect(0, *server, 0, m_connect_addr);
+    client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
+                    &client->client_cb_arg);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -236,7 +239,8 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         m_entities.push_back(client_test);
 
         client_test->client_cb_arg = server->iface_attr().max_conn_priv;
-        client_test->connect(i, *server, 0, m_connect_addr);
+        client_test->connect(i, *server, 0, m_connect_addr, NULL, NULL,
+                             &client_test->client_cb_arg);
     }
 
     while (server_recv_req < num_clients){
@@ -255,7 +259,8 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 
     /* multiple clients, on the same iface, connecting to the same server */
     for (i = 0; i < num_conns_on_client; ++i) {
-        client->connect(i, *server, 0, m_connect_addr);
+        client->connect(i, *server, 0, m_connect_addr, NULL, NULL,
+                        &client->client_cb_arg);
     }
 
     while (server_recv_req < num_conns_on_client) {
@@ -271,7 +276,8 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
-    client->connect(0, *server, 0, m_connect_addr);
+    client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
+                    &client->client_cb_arg);
 
     scoped_log_handler slh(wrap_errors_logger);
     /* kill the server */
@@ -300,7 +306,8 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
     {
         scoped_log_handler slh(wrap_errors_logger);
         /* client - try to connect to a non-existing port on the server side */
-        client->connect(0, *server, 0, m_connect_addr);
+        client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
+                        &client->client_cb_arg);
         completion comp;
         ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
         if (status == UCS_INPROGRESS) {
@@ -355,6 +362,12 @@ protected:
         m_server->listen(m_listen_addr, params);
     }
 
+    void cm_listen_and_connect() {
+        cm_start_listen();
+        m_client->connect(0, *m_server, 0, m_connect_addr,
+                          NULL, NULL, this);
+    }
+
     static void
     cm_conn_request_cb(uct_listener_h listener, void *arg,
                        const char *local_dev_name,
@@ -384,12 +397,12 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
     }
 }
 
-UCS_TEST_P(test_uct_cm_sockaddr, listen)
+UCS_TEST_P(test_uct_cm_sockaddr, listen_and_init_connect)
 {
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
-    cm_start_listen();
+    cm_listen_and_connect();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)

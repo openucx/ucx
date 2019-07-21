@@ -14,6 +14,7 @@
 #include <ucs/time/time.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/string.h>
 #include <rdma/rdma_cma.h>
 #include <sys/poll.h>
 
@@ -44,5 +45,11 @@ ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,
 ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep);
 
 ucs_status_t uct_rdmacm_ep_set_cm_id(uct_rdmacm_iface_t *iface, uct_rdmacm_ep_t *ep);
+
+static inline void uct_rdmacm_cm_id_to_dev_name(struct rdma_cm_id *cm_id, char *dev_name)
+{
+    ucs_snprintf_zero(dev_name, UCT_DEVICE_NAME_MAX, "%s:%d",
+                      ibv_get_device_name(cm_id->verbs->device), cm_id->port_num);
+}
 
 #endif /* UCT_RDMACM_H */

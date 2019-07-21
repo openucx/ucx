@@ -61,6 +61,31 @@ err:
     return status;
 }
 
+ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
+                                        uct_conn_request_h conn_request)
+{
+    struct rdma_cm_event *event = (struct rdma_cm_event *)conn_request;
+    uct_rdmacm_listener_t *rdmacm_listener;
+
+    rdmacm_listener = ucs_derived_of(listener, uct_rdmacm_listener_t);
+    ucs_assert_always(rdmacm_listener->id == event->listen_id);
+
+    if (rdma_reject(event->id, NULL, 0)) {
+        ucs_error("rdmacm_listener %p: rdma_reject (id=%p) failed with error: %m",
+                  rdmacm_listener, event->id);
+    }
+
+    rdma_destroy_id(event->id);
+
+    if (rdma_ack_cm_event(event)) {
+        ucs_error("rdmacm_listener %p: rdma_ack_cm_event failed with error: %m",
+                  rdmacm_listener);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
 {
     rdma_destroy_id(self->id);
