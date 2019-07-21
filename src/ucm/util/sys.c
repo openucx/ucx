@@ -136,10 +136,12 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
     ssize_t read_size, offset;
     unsigned long start, end;
     char prot_c[4];
+    int line_num;
     int prot;
     char *ptr, *newline;
     int maps_fd;
     int ret;
+    int n;
 
     maps_fd = open(UCM_PROC_SELF_MAPS, O_RDONLY);
     if (maps_fd < 0) {
@@ -195,31 +197,39 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
 
     pthread_rwlock_rdlock(&lock);
 
-    ptr    = buffer;
+    ptr      = buffer;
+    line_num = 1;
     while ( (newline = strchr(ptr, '\n')) != NULL ) {
-        /* 00400000-0040b000 r-xp ... \n */
-        ret = sscanf(ptr, "%lx-%lx %4c", &start, &end, prot_c);
-        if (ret != 3) {
-            ucm_fatal("failed to parse %s error at offset %zd",
-                      UCM_PROC_SELF_MAPS, ptr - buffer);
-        }
+        /* address           perms offset   dev   inode   pathname
+         * 00400000-0040b000 r-xp  00001a00 0a:0b 12345   /dev/mydev
+         */
+        *newline = '\0';
+        ret = sscanf(ptr, "%lx-%lx %4c %*x %*x:%*x %*d %n",
+                     &start, &end, prot_c,
+                     /* ignore offset, dev, inode */
+                     &n /* save number of chars before path begins */);
+        if (ret < 3) {
+            ucm_warn("failed to parse %s line %d: '%s'",
+                     UCM_PROC_SELF_MAPS, line_num, ptr);
+        } else {
+            prot = 0;
+            if (prot_c[0] == 'r') {
+                prot |= PROT_READ;
+            }
+            if (prot_c[1] == 'w') {
+                prot |= PROT_WRITE;
+            }
+            if (prot_c[2] == 'x') {
+                prot |= PROT_EXEC;
+            }
 
-        prot = 0;
-        if (prot_c[0] == 'r') {
-            prot |= PROT_READ;
-        }
-        if (prot_c[1] == 'w') {
-            prot |= PROT_WRITE;
-        }
-        if (prot_c[2] == 'x') {
-            prot |= PROT_EXEC;
-        }
-
-        if (cb(arg, (void*)start, end - start, prot)) {
-            goto out;
+            if (cb(arg, (void*)start, end - start, prot, ptr + n)) {
+                goto out;
+            }
         }
 
         ptr = newline + 1;
+        ++line_num;
     }
 
 out:
@@ -231,7 +241,8 @@ typedef struct {
     size_t       seg_size;
 } ucm_get_shm_seg_size_ctx_t;
 
-static int ucm_get_shm_seg_size_cb(void *arg, void *addr, size_t length, int prot)
+static int ucm_get_shm_seg_size_cb(void *arg, void *addr, size_t length,
+                                   int prot, const char *path)
 {
     ucm_get_shm_seg_size_ctx_t *ctx = arg;
     if (addr == ctx->shmaddr) {

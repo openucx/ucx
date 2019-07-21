@@ -29,10 +29,12 @@ void *ucm_sys_realloc(void *oldptr, size_t newsize);
  * @param [in] addr     Mapping start address.
  * @param [in] length   Mapping length.
  * @param [in] prot     Mapping memory protection flags (PROT_xx).
+ * @param [in] path     Backing file path, or NULL for anonymous mapping.
  *
  * @return 0 to continue iteration, nonzero - stop iteration.
  */
-typedef int (*ucm_proc_maps_cb_t)(void *arg, void *addr, size_t length, int prot);
+typedef int (*ucm_proc_maps_cb_t)(void *arg, void *addr, size_t length,
+                                  int prot, const char *path);
 
 
 /**

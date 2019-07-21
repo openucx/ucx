@@ -788,7 +788,8 @@ typedef struct {
     int           found;
 } ucs_get_mem_prot_ctx_t;
 
-static int ucs_get_mem_prot_cb(void *arg, void *addr, size_t length, int prot)
+static int ucs_get_mem_prot_cb(void *arg, void *addr, size_t length, int prot,
+                               const char *path)
 {
     ucs_get_mem_prot_ctx_t *ctx = arg;
     unsigned long seg_start = (uintptr_t)addr;
