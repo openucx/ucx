@@ -694,7 +694,7 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
     } else {
         for (md_index = 0; md_index < context->num_mds; ++md_index) {
             if (memh->alloc_md == context->tl_mds[md_index].md) {
-                fprintf(stream, "%s",context->tl_mds[md_index].rsc.md_name);
+                fprintf(stream, "%s", context->tl_mds[md_index].rsc.md_name);
                 break;
             }
         }

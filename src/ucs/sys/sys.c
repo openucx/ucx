@@ -421,17 +421,16 @@ size_t ucs_get_page_size()
 void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
                            size_t *max_page_size_p)
 {
+    int found = 0;
     unsigned long start, end;
     unsigned long page_size_kb;
     size_t page_size;
     char buf[1024];
     FILE *file;
-    int found = 0;
     int n;
 
     file = fopen(UCS_PROCESS_SMAPS_FILE, "r");
     if (!file) {
-        *min_page_size_p = *max_page_size_p = ucs_get_page_size();
         goto out;
     }
 
