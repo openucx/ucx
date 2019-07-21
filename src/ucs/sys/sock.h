@@ -146,7 +146,8 @@ int ucs_socket_max_iov();
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or
+ *         would block, UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
@@ -167,7 +168,8 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or
+ *         would block, UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
@@ -208,7 +210,8 @@ ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or
+ *         would block, UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
                                  size_t *length_p, ucs_socket_io_err_cb_t err_cb,
