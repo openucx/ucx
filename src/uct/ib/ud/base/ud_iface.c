@@ -30,6 +30,7 @@ static ucs_stats_class_t uct_ud_iface_stats_class = {
 };
 #endif
 
+/* cppcheck-suppress ctunullpointer */
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,

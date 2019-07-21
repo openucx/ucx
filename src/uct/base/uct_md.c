@@ -321,6 +321,7 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
     }
 
     *config_p = (uct_iface_config_t*) bundle->data;
+    /* coverity[leaked_storage] */
     return UCS_OK;
 }
 
@@ -397,6 +398,7 @@ ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
     }
 
     *config_p = (uct_md_config_t*) bundle->data;
+    /* coverity[leaked_storage] */
     return UCS_OK;
 }
 

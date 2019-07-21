@@ -43,7 +43,7 @@ UCS_TEST_F(test_obj_size, size) {
     UCS_TEST_SKIP_R("Debug data");
 #elif ENABLE_STATS
     UCS_TEST_SKIP_R("Statistic enabled");
-#elif ENABLE_ASSERT
+#elif UCS_ENABLE_ASSERT
     UCS_TEST_SKIP_R("Assert enabled");
 #else
     EXPECTED_SIZE(ucp_ep_t, 64);

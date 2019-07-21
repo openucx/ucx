@@ -47,7 +47,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 {
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     wq->hw_ci = hw_ci;
 #endif
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
@@ -59,7 +59,7 @@ static inline void
 uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
 {
 
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     uint16_t wqe_s, wqe_e;
     uint16_t hw_ci, sw_pi;
     uint16_t wqe_cnt;

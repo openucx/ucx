@@ -98,7 +98,7 @@ struct ucs_class {
         \
         status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
                                              ## __VA_ARGS__); \
-        if ((status != UCS_OK) && (status != UCS_INPROGRESS)) { \
+        if (status != UCS_OK) { \
             ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
                                          (_obj), init_count); \
         } \
@@ -221,9 +221,15 @@ struct ucs_class {
                                       _argtype **obj_p)
 #define UCS_CLASS_DEFINE_NAMED_NEW_FUNC(_name, _type, _argtype, ...) \
     UCS_CLASS_DECLARE_NAMED_NEW_FUNC(_name, _argtype, ## __VA_ARGS__) { \
-        return UCS_CLASS_NEW(_type, obj_p \
-                             UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_PASS, _, \
-                                            UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__)))); \
+        ucs_status_t status; \
+        \
+        *obj_p = NULL; \
+        \
+        status = UCS_CLASS_NEW(_type, obj_p \
+                               UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_PASS, _, \
+                                              UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__)))); \
+        ucs_class_check_new_func_result(status, *obj_p); \
+        return status; \
     }
 #define UCS_CLASS_DECLARE_NEW_FUNC(_type, _argtype, ...) \
     UCS_CLASS_DECLARE_NAMED_NEW_FUNC(UCS_CLASS_NEW_FUNC_NAME(_type), _argtype, ## __VA_ARGS__)
@@ -293,10 +299,14 @@ void ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit);
 
 
 /*
- * Helpers: Allocate/release objects.
+ * Helpers:
  */
+/* Allocate objects */
 void *ucs_class_malloc(ucs_class_t *cls);
+/* Release objects */
 void ucs_class_free(void *obj);
+/* Check new function result */
+void ucs_class_check_new_func_result(ucs_status_t status, void *obj);
 
 
 /**

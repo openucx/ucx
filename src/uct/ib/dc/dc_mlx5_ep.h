@@ -351,7 +351,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     }
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     iface->tx.dcis[dci].flags = 0;
 #endif
 
@@ -413,7 +413,7 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
     iface->tx.dcis[dci].ep                    = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     iface->tx.dcis[ep->dci].flags             = 0;
 #endif
 
@@ -430,8 +430,8 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
         if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
             return UCS_OK;
         } else {
-            txqp = &iface->tx.dcis[ep->dci].txqp;
-            UCS_STATS_UPDATE_COUNTER(txqp->stats, UCT_RC_TXQP_STAT_QP_FULL, 1);
+            UCS_STATS_UPDATE_COUNTER(iface->tx.dcis[ep->dci].txqp.stats,
+                                     UCT_RC_TXQP_STAT_QP_FULL, 1);
             UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
             return UCS_ERR_NO_RESOURCE;
         }

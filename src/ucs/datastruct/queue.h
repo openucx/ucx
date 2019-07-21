@@ -20,6 +20,9 @@
  */
 static inline void ucs_queue_head_init(ucs_queue_head_t *queue)
 {
+#ifdef __clang_analyzer__
+    queue->head  = (ucs_queue_elem_t*)(void*)queue;
+#endif
     queue->ptail = &queue->head;
 }
 
@@ -56,7 +59,7 @@ static inline void ucs_queue_push(ucs_queue_head_t *queue, ucs_queue_elem_t *ele
 {
     *queue->ptail = elem;
     queue->ptail = &elem->next;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     elem->next = NULL; /* For sanity check below */
 #endif
 }
@@ -102,6 +105,8 @@ static inline ucs_queue_elem_t *ucs_queue_pull_non_empty(ucs_queue_head_t *queue
  */
 static inline void ucs_queue_del_iter(ucs_queue_head_t *queue, ucs_queue_iter_t iter)
 {
+    ucs_assert((iter != NULL) && (*iter != NULL));
+
     if (queue->ptail == &(*iter)->next) {
         queue->ptail = iter; /* deleting the last element */
         *iter = NULL;        /* make *ptail point to NULL */
@@ -194,9 +199,11 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * @param member  Member inside 'elem' which is the queue link.
  */
 #define ucs_queue_for_each(elem, queue, member) \
-    for (*(queue)->ptail = NULL, \
+    /* we set `ptail` field to queue address to not substract NULL pointer */ \
+    for (*(queue)->ptail = (ucs_queue_elem_t*)(void*)(queue), \
              elem = ucs_container_of((queue)->head, typeof(*elem), member); \
-         (elem) != ucs_container_of(NULL, typeof(*elem), member); \
+         (elem) != ucs_container_of((ucs_queue_elem_t*)(void*)(queue), \
+                                    typeof(*elem), member); \
          elem = ucs_container_of(elem->member.next, typeof(*elem), member))
 
 /**

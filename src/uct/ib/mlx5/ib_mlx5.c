@@ -362,7 +362,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->curr       = txwq->qstart;
     txwq->sw_pi      = 0;
     txwq->prev_sw_pi = -1;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
 #endif
     memset(txwq->qstart, 0, txwq->qend - txwq->qstart);

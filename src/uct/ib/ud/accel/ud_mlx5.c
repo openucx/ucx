@@ -560,6 +560,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     }
 
     ep = ucs_derived_of(new_ud_ep, uct_ud_mlx5_ep_t);
+    /* cppcheck-suppress autoVariables */
     *new_ep_p = &ep->super.super.super;
     if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);

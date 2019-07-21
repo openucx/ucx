@@ -694,7 +694,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
         iface->tx.dcis_stack[i] = i;
         iface->tx.dcis[i].ep    = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
         iface->tx.dcis[i].flags = 0;
 #endif
     }
@@ -1003,7 +1003,6 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
          */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(status));
-        ep_status = UCS_OK;
     } else {
         ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
                                                                 &ep->super.super,

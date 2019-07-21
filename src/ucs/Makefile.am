@@ -133,7 +133,8 @@ libucs_la_SOURCES = \
 	time/timerq.c \
 	type/class.c \
 	type/spinlock.c \
-	type/status.c
+	type/status.c \
+	type/init_once.c
 
 if HAVE_STATS
 libucs_la_SOURCES += \

@@ -200,7 +200,7 @@ enum {
                                                       is driven by remote side. */
 
     /* Endpoint is currently executing the pending queue */
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(8)
 #else
     UCT_UD_EP_FLAG_IN_PENDING        = 0

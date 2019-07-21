@@ -959,10 +959,11 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
                                     (req->send.uct.func == ucp_wireup_msg_progress) ||
                                     (req->send.uct.func == ucp_wireup_ep_progress_pending) ?
                                     UCT_CB_FLAG_ASYNC : 0);
-        ucs_assert(status == UCS_OK); /* because it's a wireup proxy */
+        if (status != UCS_OK) {
+            ucs_fatal("wireup proxy function must always return UCS_OK");
+        }
     }
 
-    status = UCS_OK;
     goto out_unlock;
 
 err_destroy_wireup_ep:
