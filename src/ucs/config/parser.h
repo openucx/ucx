@@ -75,36 +75,38 @@ typedef struct ucs_range_spec {
 
 
 typedef struct ucs_config_global_list_entry {
-    ucs_list_link_t          list;
-    const char               *name;
-    const char               *prefix;
-    ucs_config_field_t       *fields;
-    size_t                   size;
+    const char               *name;    /* configuration table name */
+    const char               *prefix;  /* configuration prefix */
+    ucs_config_field_t       *table;  /* array of configuration fields */
+    size_t                   size;     /* size of config structure */
+    ucs_list_link_t          list;     /* entry in global list */
 } ucs_config_global_list_entry_t;
 
 
 typedef struct ucs_config_bw_spec {
-    char  *name;
-    double bw;
+    char                     *name;
+    double                   bw;
 } ucs_config_bw_spec_t;
 
 
-#define UCS_CONFIG_REGISTER_TABLE(_fields, _name, _prefix, _type) \
-    static ucs_config_global_list_entry_t _fields##_config_entry; \
+#define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry) \
     UCS_STATIC_INIT { \
-        ucs_config_global_list_entry_t *entry = &_fields##_config_entry; \
         extern ucs_list_link_t ucs_config_global_list; \
-        entry->fields = _fields; \
-        entry->name   = _name; \
-        entry->prefix = _prefix; \
-        entry->size   = sizeof(_type); \
-        ucs_list_add_tail(&ucs_config_global_list, &entry->list); \
+        ucs_list_add_tail(&ucs_config_global_list, &(_entry)->list); \
     } \
     \
     UCS_STATIC_CLEANUP { \
-        ucs_list_del(&_fields##_config_entry.list); \
+        ucs_list_del(&(_entry)->list); \
     }
 
+#define UCS_CONFIG_REGISTER_TABLE(_table, _name, _prefix, _type) \
+    static ucs_config_global_list_entry_t _table##_config_entry = { \
+        .table  = _table, \
+        .name   = _name, \
+        .prefix = _prefix, \
+        .size   = sizeof(_type) \
+    }; \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry);
 
 /*
  * Parsing and printing different data types

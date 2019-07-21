@@ -1397,7 +1397,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
             continue;
         }
 
-        status = ucs_config_parser_fill_opts(opts, entry->fields, NULL,
+        status = ucs_config_parser_fill_opts(opts, entry->table, NULL,
                                              entry->prefix, 0);
         if (status != UCS_OK) {
             ucs_free(opts);
@@ -1405,10 +1405,10 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
         }
 
         snprintf(title, sizeof(title), "%s configuration", entry->name);
-        ucs_config_parser_print_opts(stream, title, opts, entry->fields,
+        ucs_config_parser_print_opts(stream, title, opts, entry->table,
                                      entry->prefix, flags);
 
-        ucs_config_parser_release_opts(opts, entry->fields);
+        ucs_config_parser_release_opts(opts, entry->table);
         ucs_free(opts);
     }
 }
