@@ -171,6 +171,18 @@ size_t ucs_get_page_size();
 
 
 /**
+ * Get page size of a memory region.
+ *
+ * @param [in]  address          Memory region start address,
+ * @param [in]  size             Memory region size.
+ * @param [out] min_page_size_p  Set to the minimal page size in the memory region.
+ * @param [out] max_page_size_p  Set to the maximal page size in the memory region.
+ */
+void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
+                           size_t *max_page_size_p);
+
+
+/**
  * @return Huge page size on the system, or -1 if unsupported.
  */
 ssize_t ucs_get_huge_page_size();

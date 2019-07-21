@@ -34,7 +34,7 @@
 
 /* Default huge page size is 2 MBytes */
 #define UCS_DEFAULT_MEM_FREE       640000
-#define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
+#define UCS_PROCESS_SMAPS_FILE     "/proc/self/smaps"
 
 
 const char *ucs_get_tmpdir()
@@ -416,6 +416,65 @@ size_t ucs_get_page_size()
         }
     }
     return page_size;
+}
+
+void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
+                           size_t *max_page_size_p)
+{
+    unsigned long start, end;
+    unsigned long page_size_kb;
+    size_t page_size;
+    char buf[1024];
+    FILE *file;
+    int found = 0;
+    int n;
+
+    file = fopen(UCS_PROCESS_SMAPS_FILE, "r");
+    if (!file) {
+        *min_page_size_p = *max_page_size_p = ucs_get_page_size();
+        goto out;
+    }
+
+    while (fgets(buf, sizeof(buf), file) != NULL) {
+        n = sscanf(buf, "%lx-%lx", &start, &end);
+        if (n != 2) {
+            continue;
+        }
+
+        if (((uintptr_t)address + size < start)) {
+            /* memory range of interest is before the scanned range */
+            continue;
+        }
+        if ((uintptr_t)address >= end) {
+            /* memory range of interest is after the scanned range - stop */
+            break;
+        }
+
+        while (fgets(buf, sizeof(buf), file) != NULL) {
+            n = sscanf(buf, "KernelPageSize: %lu kB", &page_size_kb);
+            if (n < 1) {
+                continue;
+            }
+
+            page_size = page_size_kb * UCS_KBYTE;
+            if (found) {
+                *min_page_size_p = ucs_min(*min_page_size_p, page_size);
+                *max_page_size_p = ucs_max(*max_page_size_p, page_size);
+            } else {
+                found            = 1;
+                *min_page_size_p = page_size;
+                *max_page_size_p = page_size;
+            }
+            break;
+        }
+    }
+
+    fclose(file);
+
+out:
+    if (!found) {
+        *min_page_size_p = *max_page_size_p = ucs_get_page_size();
+    }
 }
 
 static ssize_t ucs_get_meminfo_entry(const char* pattern)
