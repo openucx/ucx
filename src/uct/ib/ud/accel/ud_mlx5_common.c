@@ -31,7 +31,6 @@ ucs_status_t uct_ud_mlx5_iface_common_init(uct_ib_iface_t *ib_iface,
 ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
                                       uct_ud_mlx5_iface_common_t *ud_common_iface,
                                       const uct_ib_address_t *ib_addr,
-                                      uint8_t path_bits,
                                       uct_ib_mlx5_base_av_t *base_av,
                                       struct mlx5_grh_av *grh_av,
                                       int *is_global)
@@ -41,7 +40,7 @@ ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     struct mlx5_wqe_av  mlx5_av;
     struct ibv_ah_attr  ah_attr;
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, &ah_attr);
     status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
     if (status != UCS_OK) {
         return status;

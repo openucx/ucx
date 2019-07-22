@@ -204,11 +204,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
-    self->path_bits = iface->super.path_bits[0]; /* TODO multi-rail */
-
     UCT_UD_EP_HOOK_INIT(self);
-    ucs_debug("created ep ep=%p iface=%p id=%d src_path_bits=%d",
-              self, iface, self->ep_id, self->path_bits);
+    ucs_debug("created ep ep=%p iface=%p id=%d", self, iface, self->ep_id);
     return UCS_OK;
 }
 

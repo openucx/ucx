@@ -106,8 +106,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     if_addr = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
-                                      ib_addr, iface->super.super.super.path_bits[0],
-                                      &av, &grh_av, &is_global);
+                                      ib_addr, &av, &grh_av, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }

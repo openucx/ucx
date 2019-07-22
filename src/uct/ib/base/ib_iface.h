@@ -509,14 +509,13 @@ void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
 static UCS_F_ALWAYS_INLINE
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
-                                            uint8_t path_bits,
                                             struct ibv_ah_attr *ah_attr)
 {
     memset(ah_attr, 0, sizeof(*ah_attr));
 
     ah_attr->sl                = iface->config.sl;
-    ah_attr->src_path_bits     = path_bits;
-    ah_attr->dlid              = lid | path_bits;
+    ah_attr->src_path_bits     = iface->path_bits[0];
+    ah_attr->dlid              = lid | iface->path_bits[0];
     ah_attr->port_num          = iface->config.port_num;
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
@@ -535,7 +534,6 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
 static UCS_F_ALWAYS_INLINE
 void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
-                                         uint8_t path_bits,
                                          struct ibv_ah_attr *ah_attr)
 {
     union ibv_gid  gid;
@@ -543,7 +541,7 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 
     uct_ib_address_unpack(ib_addr, &lid, &gid);
 
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_bits, ah_attr);
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, ah_attr);
 }
 
 static UCS_F_ALWAYS_INLINE
