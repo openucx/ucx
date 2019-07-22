@@ -368,7 +368,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_pack(sender().worker(), NULL, -1, order, &size, &buffer);
+    status = ucp_address_pack(sender().worker(), NULL, -1, -1, order, &size,
+                              &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -383,7 +384,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
 
     ucp_unpacked_address unpacked_address;
 
-    status = ucp_address_unpack(sender().worker(), buffer, &unpacked_address);
+    status = ucp_address_unpack(sender().worker(), buffer, -1,
+                                &unpacked_address);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
@@ -415,14 +417,16 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
 
-    status = ucp_address_pack(sender().worker(), NULL, 0, order, &size, &buffer);
+    status = ucp_address_pack(sender().worker(), NULL, 0, -1, order, &size,
+                              &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
 
     ucp_unpacked_address unpacked_address;
 
-    status = ucp_address_unpack(sender().worker(), buffer, &unpacked_address);
+    status = ucp_address_unpack(sender().worker(), buffer, -1,
+                                &unpacked_address);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
