@@ -12,7 +12,6 @@
 extern "C" {
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/sys.h>
 }
 #include <pthread.h>
 #include <string>

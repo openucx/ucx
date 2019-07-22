@@ -33,6 +33,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_iface_t, uct_iface_t);
 static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
+    uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
@@ -44,15 +46,11 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
      * the private_data header (to hold the length of the data) */
     iface_attr->max_conn_priv   = UCT_RDMACM_MAX_CONN_PRIV;
 
-    return UCS_OK;
-}
+    if (rdmacm_iface->is_server) {
+        iface_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_iface->cm_id));
+    }
 
-static int uct_rdmacm_iface_is_reachable(const uct_iface_h tl_iface,
-                                         const uct_device_addr_t *dev_addr,
-                                         const uct_iface_addr_t *iface_addr)
-{
-    /* Reachability can be checked with the uct_md_is_sockaddr_accessible API call */
-    return 1;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
@@ -152,7 +150,7 @@ static uct_iface_ops_t uct_rdmacm_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_iface_t),
     .iface_query              = uct_rdmacm_iface_query,
-    .iface_is_reachable       = uct_rdmacm_iface_is_reachable,
+    .iface_is_reachable       = (void*)ucs_empty_function_return_zero,
     .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_get_address        = uct_rdmacm_iface_get_address
 };
@@ -238,8 +236,10 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
  * is locked.
  */
 static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
-                                          uct_rdmacm_ctx_t *cm_id_ctx)
+                                           uct_rdmacm_ctx_t **cm_id_ctx_p)
 {
+    uct_rdmacm_ctx_t *cm_id_ctx = *cm_id_ctx_p;
+
     ucs_trace("destroying cm_id %p", cm_id_ctx->cm_id);
 
     ucs_list_del(&cm_id_ctx->list);
@@ -249,6 +249,8 @@ static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
     rdma_destroy_id(cm_id_ctx->cm_id);
     ucs_free(cm_id_ctx);
     iface->cm_id_quota++;
+
+    *cm_id_ctx_p = NULL;
 }
 
 void uct_rdmacm_cm_id_to_dev_name(struct rdma_cm_id *cm_id, char *dev_name)
@@ -384,11 +386,11 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
 
     /* client error events */
     case RDMA_CM_EVENT_UNREACHABLE:
-        hdr = *(uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
-        if ((event->param.conn.private_data_len > 0) &&
+        hdr = *(uct_rdmacm_priv_data_hdr_t *)event->param.ud.private_data;
+        if ((event->param.ud.private_data_len > 0) &&
             (hdr.status == UCS_ERR_REJECTED)) {
             ucs_assert(hdr.length == 0);
-            ucs_assert(event->param.conn.private_data_len >= sizeof(hdr));
+            ucs_assert(event->param.ud.private_data_len >= sizeof(hdr));
             ucs_assert(!iface->is_server);
             status = UCS_ERR_REJECTED;
         }
@@ -454,7 +456,7 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
 
         if ((proc_event_flags & UCT_RDMACM_PROCESS_EVENT_DESTROY_CM_ID_FLAG) &&
             (cm_id_ctx != NULL)) {
-            uct_rdmacm_iface_release_cm_id(iface, cm_id_ctx);
+            uct_rdmacm_iface_release_cm_id(iface, &cm_id_ctx);
             uct_rdmacm_iface_client_start_next_ep(iface);
         }
     }
@@ -590,7 +592,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
 {
-    uct_rdmacm_ctx_t *cm_id_ctx;
+    uct_rdmacm_ctx_t *cm_id_ctx, *tmp_cm_id_ctx;
 
     ucs_async_remove_handler(self->event_ch->fd, 1);
     if (self->is_server) {
@@ -599,12 +601,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
 
     UCS_ASYNC_BLOCK(self->super.worker->async);
 
-    while (!ucs_list_is_empty(&self->used_cm_ids_list)) {
-        cm_id_ctx = ucs_list_extract_head(&self->used_cm_ids_list,
-                                          uct_rdmacm_ctx_t, list);
-        rdma_destroy_id(cm_id_ctx->cm_id);
-        ucs_free(cm_id_ctx);
-        self->cm_id_quota++;
+    ucs_list_for_each_safe(cm_id_ctx, tmp_cm_id_ctx,
+                           &self->used_cm_ids_list, list) {
+        uct_rdmacm_iface_release_cm_id(self, &cm_id_ctx);
     }
 
     UCS_ASYNC_UNBLOCK(self->super.worker->async);

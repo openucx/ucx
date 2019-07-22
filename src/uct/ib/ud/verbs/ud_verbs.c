@@ -440,6 +440,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     }
 
     ep = ucs_derived_of(new_ud_ep, uct_ud_verbs_ep_t);
+    /* cppcheck-suppress autoVariables */
     *new_ep_p = &ep->super.super.super;
     if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
@@ -539,13 +540,11 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed,
-    .create_qp                = uct_ib_iface_create_qp,
-    .init_res_domain          = (void*)ucs_empty_function_return_success,
-    .cleanup_res_domain       = (void*)ucs_empty_function,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t)
+    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
+    .create_qp                = uct_ib_iface_create_qp,
 };
 
 static UCS_F_NOINLINE void

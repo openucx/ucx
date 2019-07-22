@@ -21,7 +21,7 @@
 /* Since this file intended to emulate DV using legacy mlx5_hw.h definitions
  * we include DV declarations. */
 #define UCT_IB_MLX5_H_
-#include "ib_mlx5_dv.h"
+#include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 
 static void UCS_F_MAYBE_UNUSED uct_ib_mlx5_obj_error(const char *obj_name)
 {

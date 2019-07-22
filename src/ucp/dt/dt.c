@@ -46,7 +46,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
         ucs_error("uct_ep_put_short() failed %s", ucs_status_string(status));
     }
 
-    ucp_mem_type_unreg_buffers(worker, mem_type, memh,
+    ucp_mem_type_unreg_buffers(worker, mem_type, md_index, memh,
                                &md_map, &rkey_bundle);
     return status;
 }
@@ -59,7 +59,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
     ucp_ep_h ep         = worker->mem_type_ep[mem_type];
     ucp_md_map_t md_map = 0;
     ucp_lane_index_t lane;
-    unsigned md_index;
+    ucp_md_index_t md_index;
     ucs_status_t status;
     uct_mem_h memh[1];
     uct_rkey_bundle_t rkey_bundle;
@@ -71,8 +71,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
     lane     = ucp_ep_config(ep)->key.rma_lanes[0];
     md_index = ucp_ep_md_index(ep, lane);
 
-    status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type, md_index,
-                                      memh, &md_map, &rkey_bundle);
+    status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
+                                      md_index, memh, &md_map, &rkey_bundle);
     if (status != UCS_OK) {
         ucs_error("failed to register buffer with mem type domian");
         return status;
@@ -84,7 +84,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
         ucs_error("uct_ep_put_short() failed %s", ucs_status_string(status));
     }
 
-    ucp_mem_type_unreg_buffers(worker, mem_type, memh,
+    ucp_mem_type_unreg_buffers(worker, mem_type, md_index, memh,
                                &md_map, &rkey_bundle);
     return status;
 }

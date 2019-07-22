@@ -13,6 +13,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/stubs.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
 
@@ -615,9 +616,12 @@ ucp_wireup_sockaddr_set_tl_lane(ucp_ep_h ucp_ep, uct_ep_h tl_ep,
     ucp_ep_config_key_t key     = ucp_ep_config(ucp_ep)->key;
     ucp_lane_index_t wireup_idx = key.wireup_lane;
     ucp_wireup_ep_t *wireup_ep  = (ucp_wireup_ep_t *)ucp_ep->uct_eps[wireup_idx];
+    ucs_status_t status;
 
     key.lanes[wireup_idx].rsc_index = tl_rsc_idx;
-    ucp_ep->cfg_index = ucp_worker_get_ep_config(ucp_ep->worker, &key);
+    status = ucp_worker_get_ep_config(ucp_ep->worker, &key, 0,
+                                      &ucp_ep->cfg_index);
+    ucs_assert(status == UCS_OK);
     ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, tl_ep);
 }
 
@@ -696,16 +700,14 @@ out:
 
 static void
 ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
-                                        const uct_device_addr_t *remote_dev_addr,
-                                        size_t remote_dev_addr_length,
-                                        const void *conn_priv_data,
-                                        size_t length, ucs_status_t status)
+                                           const uct_cm_remote_data_t *remote_data,
+                                           ucs_status_t status)
 {
     ucp_ep_h         ucp_ep      = (ucp_ep_h)arg;
     ucp_lane_index_t wireup_idx  = ucp_ep_config(ucp_ep)->key.wireup_lane;
     ucp_wireup_ep_t *wireup_ep   = (ucp_wireup_ep_t *)ucp_ep->uct_eps[wireup_idx];
     ucp_wireup_client_data_t *client_data =
-            (ucp_wireup_client_data_t *)conn_priv_data;
+            (ucp_wireup_client_data_t *)remote_data->conn_priv_data;
     ucp_unpacked_address_t unpacked_address;
 
     ucs_assert_always(status == UCS_OK);
@@ -718,7 +720,7 @@ ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
     if (wireup_ep->sockaddr_wiface->attr.cap.flags &
         UCT_IFACE_FLAG_CONNECT_TO_EP) {
         status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
-                                             remote_dev_addr,
+                                             remote_data->dev_addr,
                                              unpacked_address.address_list[0].ep_addr);
     } else {
         uct_ep_params_t params;
@@ -731,7 +733,7 @@ ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
                             UCT_EP_PARAM_FIELD_IFACE_ADDR;
 
         params.iface      = wireup_ep->sockaddr_wiface->iface;
-        params.dev_addr   = remote_dev_addr;
+        params.dev_addr   = remote_data->dev_addr;
         params.iface_addr = unpacked_address.address_list[0].iface_addr;
         status = uct_ep_create(&params, &wireup_ep->super.uct_ep);
         wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
@@ -759,15 +761,15 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
                                 UCT_EP_PARAM_FIELD_SOCKADDR              |
                                 UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
                                 UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
-                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB |
-                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB;
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
 
-    cm_lane_params.user_data                    = ucp_ep;
-    cm_lane_params.sockaddr                     = &params->sockaddr;
-    cm_lane_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
-    cm_lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_priv_pack_cb;
-    cm_lane_params.sockaddr_connected_cb.client = ucp_wireup_sockaddr_client_connected_cb;
-    cm_lane_params.disconnected_cb              = ucp_ep_sockaddr_disconnected_cb;
+    cm_lane_params.user_data                  = ucp_ep;
+    cm_lane_params.sockaddr                   = &params->sockaddr;
+    cm_lane_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
+    cm_lane_params.sockaddr_pack_cb           = ucp_wireup_sockaddr_priv_pack_cb;
+    cm_lane_params.sockaddr_connect_cb.client = ucp_wireup_sockaddr_client_connected_cb;
+    cm_lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnected_cb;
 
     ucs_assert_always(worker->num_cms == 1);
     for (i = 0; i < worker->num_cms; ++i) {

@@ -132,7 +132,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        save_LDFLAGS="$LDFLAGS"
        save_CFLAGS="$CFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
-       LDFLAGS="$IBVERBS_LDFAGS $LDFLAGS"
+       LDFLAGS="$IBVERBS_LDFLAGS $LDFLAGS"
        CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
        CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
        AC_CHECK_HEADER([infiniband/verbs_exp.h],
@@ -225,7 +225,10 @@ AS_IF([test "x$with_ib" = "xyes"],
             AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
                  AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
                  have_devx=yes
-            ], [], [[#include <infiniband/mlx5dv.h>]])])
+            ], [
+                 AS_IF([test "x$with_devx" != xcheck],
+                       [AC_MSG_ERROR([devx requested but not found])])
+            ], [[#include <infiniband/mlx5dv.h>]])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_hw=no])
@@ -318,6 +321,33 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [], [],
                       [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_DECLS(IBV_EXP_ACCESS_ON_DEMAND, [with_odp=yes], [],
+                      [[#include <infiniband/verbs_exp.h>]])
+
+       AC_CHECK_DECLS(IBV_ACCESS_ON_DEMAND, [with_odp=yes], [],
+                      [[#include <infiniband/verbs.h>]])
+
+       AS_IF([test "x$with_odp" = "xyes" ], [
+           AC_DEFINE([HAVE_ODP], 1, [ODP support])
+
+           AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
+                          [[#include <infiniband/verbs_exp.h>]])
+
+           AC_CHECK_DECLS(IBV_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
+                          [[#include <infiniband/verbs.h>]])
+
+           AS_IF([test "x$with_odp_i" = "xyes" ], [
+               AC_DEFINE([HAVE_ODP_IMPLICIT], 1, [Implicit ODP support])])])
+
+       AC_CHECK_DECLS(ibv_exp_prefetch_mr, [with_prefetch=yes], [],
+                      [[#include <infiniband/verbs_exp.h>]])
+
+       AC_CHECK_DECLS(ibv_advise_mr, [with_prefetch=yes], [],
+                      [[#include <infiniband/verbs.h>]])
+
+       AS_IF([test "x$with_prefetch" = "xyes" ], [
+           AC_DEFINE([HAVE_PREFETCH], 1, [Prefetch support])])
+
        AC_CHECK_MEMBERS([struct mlx5_wqe_av.base,
                          struct mlx5_grh_av.rmac],
                         [], [], [[#include <infiniband/$mlx5_include>]])
@@ -406,6 +436,7 @@ AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
+AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])
 

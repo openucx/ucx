@@ -17,10 +17,12 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 
 #define INDENT             4
 #define LESS_COMMAND       "less"
+#define FUNC_NAME_MAX_LEN  35
 
 #define TERM_COLOR_CLEAR   "\x1B[0m"
 #define TERM_COLOR_RED     "\x1B[31m"
@@ -152,12 +154,13 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
     qsort(sorted_locations, num_locations, sizeof(*sorted_locations), compare_locations);
 
     /* Print locations */
-    printf("%30s %13s %13s %10s                FILE     FUNCTION\n",
-           "NAME", "AVG", "TOTAL", "COUNT");
+    printf("%*s %13s %13s %10s                FILE     FUNCTION\n",
+           FUNC_NAME_MAX_LEN, "NAME", "AVG", "TOTAL", "COUNT");
     for (loc = sorted_locations; loc < sorted_locations + num_locations; ++loc) {
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SAMPLE:
-            printf("%30s %13s %13s %10ld %18s:%-4d %s()\n",
+            printf("%*.*s %13s %13s %10ld %18s:%-4d %s()\n",
+                   FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
                    "-",
                    "-",
@@ -165,7 +168,8 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
                    loc->file, loc->line, loc->function);
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
-            printf("%30s %13.3f %13.0f %10ld %18s:%-4d %s()\n",
+            printf("%*.*s %13.3f %13.0f %10ld %18s:%-4d %s()\n",
+                   FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
                    time_to_usec(data, opts, loc->total_time) / loc->count,
                    time_to_usec(data, opts, loc->total_time),
@@ -173,7 +177,8 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
                    loc->file, loc->line, loc->function);
             break;
         case UCS_PROFILE_TYPE_REQUEST_EVENT:
-            printf("%30s %13s %13s %10ld %18s:%-4d %s()\n",
+            printf("%*.*s %13s %13s %10ld %18s:%-4d %s()\n",
+                   FUNC_NAME_MAX_LEN, FUNC_NAME_MAX_LEN,
                    loc->name,
                    "n/a",
                    "n/a",
@@ -315,6 +320,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
                 }
                 action = "NEW ";
             } else {
+                assert(reqid_ctr > 1);
                 hash_it = kh_get(request_ids, &reqids, rec->param64);
                 if (hash_it == kh_end(&reqids)) {
                     reqid = 0; /* could not find request */

@@ -138,7 +138,7 @@ static void uct_ib_dump_wr_opcode(struct ibv_qp *qp, uint64_t wr_id,
     char *s    = buf;
     char *ends = buf + max;
 
-    snprintf(s, ends - s, "QP 0x%x wrid 0x%"PRIx64, qp->qp_num, wr_id);
+    snprintf(s, ends - s, "QP 0x%x wrid 0x%"PRIx64" ", qp->qp_num, wr_id);
     s += strlen(s);
 
     uct_ib_log_dump_opcode(op,

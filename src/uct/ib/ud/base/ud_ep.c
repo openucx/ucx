@@ -159,7 +159,9 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     now = ucs_twheel_get_time(&iface->async.slow_timer);
     diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
-        ucs_debug("ep %p: timeout of %.2f sec", ep, ucs_time_to_sec(diff));
+        ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
+                  ep, ucs_time_to_sec(diff),
+                  ucs_time_to_sec(iface->config.peer_timeout));
         iface->super.ops->handle_failure(&iface->super, ep,
                                          UCS_ERR_ENDPOINT_TIMEOUT);
         return;
@@ -281,7 +283,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
                                                const uct_ud_iface_addr_t *if_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
     char buf[128];
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
@@ -374,7 +376,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
                                      const uct_ud_ep_addr_t *ep_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
     char buf[128];
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);

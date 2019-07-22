@@ -15,7 +15,7 @@ static UCS_CLASS_INIT_FUNC(uct_knem_ep_t, const uct_ep_params_t *params)
 {
     uct_knem_iface_t *iface = ucs_derived_of(params->iface, uct_knem_iface_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
     return UCS_OK;
 }
 

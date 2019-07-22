@@ -13,6 +13,7 @@
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
 #include <uct/ib/ud/base/ud_iface_common.h>
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
+#include <ucs/debug/assert.h>
 
 
 #define UCT_DC_MLX5_IFACE_MAX_DCIS   16
@@ -81,7 +82,8 @@ typedef enum {
 
 
 typedef struct uct_dc_mlx5_iface_config {
-    uct_rc_mlx5_iface_common_config_t   super;
+    uct_rc_iface_common_config_t        super;
+    uct_rc_mlx5_iface_common_config_t   rc_mlx5_common;
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
@@ -93,6 +95,7 @@ typedef struct uct_dc_mlx5_iface_config {
 
 typedef struct uct_dc_dci {
     uct_rc_txqp_t                 txqp; /* DCI qp */
+    uct_ib_mlx5_txwq_t            txwq; /* DCI mlx5 wq */
     union {
         uct_dc_mlx5_ep_t          *ep;  /* points to an endpoint that currently
                                            owns the dci. Relevant only for dcs
@@ -103,7 +106,7 @@ typedef struct uct_dc_dci {
                                                 processed. Better have dci num
                                                 groups scheduled than ep num. */
     };
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
 } uct_dc_dci_t;
@@ -133,7 +136,6 @@ struct uct_dc_mlx5_iface {
     struct {
         /* Array of dcis */
         uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
-        uct_ib_mlx5_txwq_t        dci_wqs[UCT_DC_MLX5_IFACE_MAX_DCIS];
 
         uint8_t                   ndci;                        /* Number of DCIs */
         uct_dc_tx_policy_t        policy;                      /* dci selection algorithm */
@@ -151,6 +153,9 @@ struct uct_dc_mlx5_iface {
 
         /* List of destroyed endpoints waiting for credit grant */
         ucs_list_link_t           gc_list;
+
+        /* Number of expected FC grants */
+        unsigned                  fc_grants;
 
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
@@ -191,8 +196,6 @@ void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_c
 
 ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_rc_txqp_t *dci);
-
 void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
@@ -211,10 +214,11 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
-ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *dc_mlx5_iface, int dci);
+ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                         uct_dc_dci_t *dci);
 
-ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
-                                           uct_dc_mlx5_iface_config_t *config);
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                           uct_dc_dci_t *dci);
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 
@@ -244,7 +248,7 @@ static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uin
     int i, ndci = iface->tx.ndci;
 
     for (i = 0; i < ndci; i++) {
-        if (dcis[i].txqp.qp->qp_num == qp_num) {
+        if (dcis[i].txwq.super.qp_num == qp_num) {
             return i;
         }
     }

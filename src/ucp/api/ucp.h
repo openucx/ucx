@@ -113,7 +113,7 @@ BEGIN_C_DECLS
  * @brief UCP context parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_params_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_params_field {
     UCP_PARAM_FIELD_FEATURES          = UCS_BIT(0), /**< features */
@@ -157,7 +157,7 @@ enum ucp_feature {
  * @brief UCP worker parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_worker_params_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
@@ -174,7 +174,7 @@ enum ucp_worker_params_field {
  * @brief UCP listener parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_listener_params_t
- * are present. It is used for the enablement of backward compatibility support.
+ * are present. It is used to enable backward compatibility support.
  */
 enum ucp_listener_params_field {
     /**
@@ -215,7 +215,7 @@ typedef enum {
  * @brief UCP endpoint parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_ep_params_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_REMOTE_ADDRESS    = UCS_BIT(0), /**< Address of remote
@@ -290,7 +290,7 @@ enum ucp_ep_close_mode {
  * @brief UCP memory mapping parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_mem_map_params_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory that
@@ -308,7 +308,7 @@ enum ucp_mem_map_params_field {
  * @brief UCP memory advice parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_mem_advise_params_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_advise_params_field {
     UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory */
@@ -322,7 +322,7 @@ enum ucp_mem_advise_params_field {
  * @brief UCP context attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_context_attr_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_context_attr_field {
     UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
@@ -334,13 +334,25 @@ enum ucp_context_attr_field {
  * @brief UCP worker attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_worker_attr_t are
- * present. It is used for the enablement of backward compatibility support.
+ * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_THREAD_MODE   = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
     UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2)  /**< UCP address flags */
 };
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP listener attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_listener_attr_t are
+ * present. It is used to enable backward compatibility support.
+ */
+enum ucp_listener_attr_field {
+    UCP_LISTENER_ATTR_FIELD_PORT   = UCS_BIT(0) /**< Port used for listening */
+};
+
 
 /**
  * @ingroup UCP_DATATYPE
@@ -848,6 +860,30 @@ typedef struct ucp_worker_params {
     int                     event_fd;
 
 } ucp_worker_params_t;
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP listener attributes.
+ *
+ * The structure defines the attributes which characterize
+ * the particular listener.
+ */
+typedef struct ucp_listener_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_listener_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t              field_mask;
+
+    /**
+     * The port on which the listener is listening for incoming connection
+     * requests. The port is returned in host byte order.
+     */
+    int                   port;
+} ucp_listener_attr_t;
 
 
 /**
@@ -1532,7 +1568,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker);
  * waiting on a file descriptor from @ref ucp_worker_get_efd to return, even
  * if no event from the underlying interfaces has taken place.
  *
- * @note It’s safe to use this routine from any thread, even if UCX is compiled
+ * @note It's safe to use this routine from any thread, even if UCX is compiled
  *       without multi-threading support and/or initialized with any value of
  *       @ref ucp_params_t::mt_workers_shared and
  *       @ref ucp_worker_params_t::thread_mode parameters
@@ -1578,6 +1614,20 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
  * @param [in] listener        A handle to the listener to stop listening on.
  */
 void ucp_listener_destroy(ucp_listener_h listener);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Get attributes specific to a particular listener.
+ *
+ * This routine fetches information about the listener.
+ *
+ * @param [in]  listener   listener object to query.
+ * @param [out] attr       Filled with attributes of the listener.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *attr);
 
 
 /**
@@ -2010,8 +2060,10 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * buffer.
  *
  * @note The application is responsible for releasing the RKEY object when
- *       it is no longer needed by calling the @ref ucp_rkey_destroy
+ *       it is no longer needed, by calling the @ref ucp_rkey_destroy
  *       "ucp_rkey_destroy()" routine.
+ * @note The remote key object can be used for communications only on the
+ *       endpoint on which it was unpacked.
  *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.

@@ -213,6 +213,7 @@
             <javahClassName>org.ucx.jucx.ucp.UcpEndpoint</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpListener</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpMemory</javahClassName>
+            <javahClassName>org.ucx.jucx.ucp.UcpRemoteKey</javahClassName>
             <javahClassName>org.ucx.jucx.ucp.UcpWorker</javahClassName>
             <javahClassName>org.ucx.jucx.ucs.UcsConstants</javahClassName>
           </javahClassNames>
@@ -227,6 +228,11 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
         <version>3.0.1</version>
+        <configuration>
+          <additionalparam>-Xdoclint:none</additionalparam>
+          <additionalOptions>-Xdoclint:none</additionalOptions>
+          <additionalJOption>-Xdoclint:none</additionalJOption>
+        </configuration>
       </plugin>
     </plugins>
   </build>

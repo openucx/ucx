@@ -6,9 +6,7 @@ package org.ucx.jucx;
 
 import org.junit.Test;
 
-import org.ucx.jucx.ucp.UcpContext;
-import org.ucx.jucx.ucp.UcpMemory;
-import org.ucx.jucx.ucp.UcpParams;
+import org.ucx.jucx.ucp.*;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -22,8 +20,8 @@ import static java.nio.file.StandardOpenOption.*;
 import static org.junit.Assert.*;
 
 public class UcpMemoryTest {
-    private static int MEM_SIZE = 4096;
-    private static String RANDOM_TEXT = UUID.randomUUID().toString();
+    public static int MEM_SIZE = 4096;
+    public static String RANDOM_TEXT = UUID.randomUUID().toString();
 
     @Test
     public void testMmapFile() throws IOException {
@@ -60,6 +58,25 @@ public class UcpMemoryTest {
         assertTrue(rkeyBuffer.capacity() > 0);
         assertTrue(mem.getAddress() > 0);
         mem.deregister();
+        context.close();
+    }
+
+    @Test
+    public void testRemoteKeyUnpack() {
+        UcpContext context = new UcpContext(new UcpParams().requestRmaFeature());
+        UcpWorker worker1 = new UcpWorker(context, new UcpWorkerParams());
+        UcpWorker worker2 = new UcpWorker(context, new UcpWorkerParams());
+        UcpEndpoint endpoint = new UcpEndpoint(worker1,
+            new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
+        ByteBuffer buf = ByteBuffer.allocateDirect(MEM_SIZE);
+        UcpMemory mem = context.registerMemory(buf);
+        UcpRemoteKey rkey = endpoint.unpackRemoteKey(mem.getRemoteKeyBuffer());
+        assertNotNull(rkey.getNativeId());
+        rkey.close();
+        mem.deregister();
+        endpoint.close();
+        worker1.close();
+        worker2.close();
         context.close();
     }
 }

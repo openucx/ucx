@@ -19,16 +19,20 @@ UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
 typedef struct uct_cm_ops {
     void         (*close)(uct_cm_h cm);
     ucs_status_t (*cm_query)(uct_cm_h cm, uct_cm_attr_t *cm_attr);
-    ucs_status_t (*listener_create)(const uct_listener_params_t *params,
+    ucs_status_t (*listener_create)(uct_cm_h cm, const struct sockaddr *saddr,
+                                    socklen_t socklen,
+                                    const uct_listener_params_t *params,
                                     uct_listener_h *listener_p);
+    ucs_status_t (*listener_reject)(uct_listener_h listener,
+                                    uct_conn_request_h conn_request);
     void         (*listener_destroy)(uct_listener_h listener);
     ucs_status_t (*ep_create)(const uct_ep_params_t *params, uct_ep_h *ep_p);
 } uct_cm_ops_t;
 
 
 struct uct_cm {
-    uct_cm_ops_t       *ops;
-    uct_md_component_t *component;
+    uct_cm_ops_t    *ops;
+    uct_component_h component;
 };
 
 #endif /* UCT_CM_H_ */

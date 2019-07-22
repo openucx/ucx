@@ -61,6 +61,8 @@ enum {
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
+    size_t                  seg_size;      /* Maximal size of copy-out sends */
+
     struct {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many fragments can be batched to one post send */
@@ -68,7 +70,6 @@ struct uct_ib_iface_config {
         size_t              min_inline;      /* Inline space to reserve for sends */
         size_t              inl_resp;        /* Inline space to reserve for responses */
         unsigned            min_sge;         /* How many SG entries to support */
-        unsigned            cq_moderation;   /* How many TX messages are batched to one CQE */
         uct_iface_mpool_config_t mp;
 
         /* Event moderation parameters */
@@ -145,10 +146,6 @@ struct uct_ib_iface_ops {
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
                                              ucs_status_t status);
-    ucs_status_t            (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
-                                         struct ibv_qp **qp_p);
-    ucs_status_t            (*init_res_domain)(uct_ib_iface_t *iface);
-    void                    (*cleanup_res_domain)(uct_ib_iface_t *iface);
 };
 
 
@@ -303,7 +300,14 @@ int uct_ib_iface_is_roce(uct_ib_iface_t *iface);
 /**
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(uct_ib_iface_t *iface);
+size_t uct_ib_addr_size(const union ibv_gid *gid, uint8_t is_global_addr,
+                        int is_link_layer_eth);
+
+
+/**
+ * @return IB address size of the iface.
+ */
+size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 
 
 /**
@@ -317,7 +321,14 @@ size_t uct_ib_address_size(uct_ib_iface_t *iface);
  *                         must be initialized by a caller.
  */
 void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
+                         int is_link_layer_eth, uint8_t is_global_addr,
                           uct_ib_address_t *ib_addr);
+
+/**
+ *
+ */
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
+                               uint16_t lid, uct_ib_address_t *ib_addr);
 
 /**
  * Unpack IB address.
@@ -329,8 +340,6 @@ void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
                            union ibv_gid *gid);
 
-void uct_ib_iface_set_device_address_flags(uct_iface_h tl_iface,
-                                           uct_ib_address_t *ib_addr);
 
 /**
  * Convert IB address to a human-readable string.
@@ -360,7 +369,7 @@ static inline uct_ib_device_t* uct_ib_iface_device(uct_ib_iface_t *iface)
     return &uct_ib_iface_md(iface)->dev;
 }
 
-static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)
+static inline struct ibv_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)
 {
     return uct_ib_device_port_attr(uct_ib_iface_device(iface), iface->config.port_num);
 }
@@ -396,11 +405,6 @@ ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  uct_ib_dir_t dir,
                                  int solicited_only);
-
-static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
-{
-    return uct_ib_md_get_atomic_mr_id(ucs_derived_of(iface->super.md, uct_ib_md_t));
-}
 
 ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
                                     struct ibv_comp_channel *channel,

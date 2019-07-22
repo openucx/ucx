@@ -11,8 +11,8 @@
 java_happy="no"
 AC_ARG_WITH([java],
             [AC_HELP_STRING([--with-java=(PATH)],
-                            [Compile Java UCX (default is no).])
-            ], [], [with_java=no])
+                            [Compile Java UCX (default is guess).])
+            ], [], [with_java=guess])
 
 AS_IF([test "x$with_java" != xno],
       [
@@ -77,6 +77,5 @@ AC_SUBST([JDK], [${java_dir}])
 AM_CONDITIONAL([HAVE_JAVA], [test "x$java_happy" != "xno"])
 #Set MVN according to whether user has Java and Maven or not
 AM_COND_IF([HAVE_JAVA],
-           [AC_SUBST([MVN], ["mvn"])],
-           [AC_SUBST([MVN], ["true"])]
+           [AC_SUBST([MVN], ["mvn"])]
           )

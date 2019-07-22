@@ -11,6 +11,8 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/stubs.h>
+
 #include <stdio.h>
 
 
@@ -88,14 +90,19 @@ typedef struct ucs_config_bw_spec {
 
 
 #define UCS_CONFIG_REGISTER_TABLE(_fields, _name, _prefix, _type) \
+    static ucs_config_global_list_entry_t _fields##_config_entry; \
     UCS_STATIC_INIT { \
+        ucs_config_global_list_entry_t *entry = &_fields##_config_entry; \
         extern ucs_list_link_t ucs_config_global_list; \
-        static ucs_config_global_list_entry_t entry; \
-        entry.fields = _fields; \
-        entry.name   = _name; \
-        entry.prefix = _prefix; \
-        entry.size   = sizeof(_type); \
-        ucs_list_add_tail(&ucs_config_global_list, &entry.list); \
+        entry->fields = _fields; \
+        entry->name   = _name; \
+        entry->prefix = _prefix; \
+        entry->size   = sizeof(_type); \
+        ucs_list_add_tail(&ucs_config_global_list, &entry->list); \
+    } \
+    \
+    UCS_STATIC_CLEANUP { \
+        ucs_list_del(&_fields##_config_entry.list); \
     }
 
 
@@ -182,6 +189,7 @@ void ucs_config_help_table(char *buf, size_t max, const void *arg);
 void ucs_config_release_nop(void *ptr, const void *arg);
 void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
+#define UCS_CONFIG_DEPRECATED_FIELD_OFFSET SIZE_MAX
 
 /* Forward declaration of array. Should be in header file. */
 #define UCS_CONFIG_DECLARE_ARRAY(_name) \
@@ -247,12 +255,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     \
-                                    "bandwidth value: <number>[T|G|K]B|b[[p|/]s]"}
+                                    "bandwidth value: <number>[T|G|M|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_BW_SPEC    {ucs_config_sscanf_bw_spec,   ucs_config_sprintf_bw_spec, \
                                     ucs_config_clone_bw_spec,    ucs_config_release_bw_spec, \
                                     ucs_config_help_generic,     \
-                                    "device_name:<number>[T|G|K]B|b[[p|/]s]"}
+                                    "device_name:<number>[T|G|M|K]B|b[[p|/]s]"}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
@@ -274,6 +282,13 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_RANGE_SPEC {ucs_config_sscanf_range_spec,ucs_config_sprintf_range_spec, \
                                     ucs_config_clone_range_spec, ucs_config_release_nop, \
                                     ucs_config_help_generic,     "numbers range: <number>-<number>"}
+
+#define UCS_CONFIG_TYPE_DEPRECATED {(ucs_field_type(ucs_config_parser_t, read))   ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, write))  ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, clone))  ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, release))ucs_empty_function_do_assert, \
+                                    (ucs_field_type(ucs_config_parser_t, help))   ucs_empty_function_do_assert, \
+                                    ""}
 
 /*
  * Helpers for using an array of strings.
@@ -377,6 +392,11 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
  */
 void ucs_config_parser_warn_unused_env_vars();
 
+/**
+ * Wrapper for `ucs_config_parser_warn_unused_env_vars`
+ * that ensures that this is called once
+ */
+void ucs_config_parser_warn_unused_env_vars_once();
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.

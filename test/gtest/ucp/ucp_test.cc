@@ -4,12 +4,18 @@
 */
 
 #include "ucp_test.h"
-
 #include <common/test_helpers.h>
+
+extern "C" {
+#include <ucp/core/ucp_worker.h>
+#if HAVE_IB
+#include <uct/ib/ud/base/ud_iface.h>
+#endif
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
-#include <queue>
+}
 
+#include <queue>
 
 namespace ucp {
 const uint32_t MAGIC = 0xd7d7d7d7U;
@@ -607,6 +613,10 @@ ucp_context_h ucp_test_base::entity::ucph() const {
     return m_ucph;
 }
 
+ucp_listener_h ucp_test_base::entity::listenerh() const {
+    return m_listener;
+}
+
 unsigned ucp_test_base::entity::progress(int worker_index)
 {
     ucp_worker_h ucp_worker = worker(worker_index);
@@ -653,6 +663,31 @@ void ucp_test_base::entity::warn_existing_eps() const {
                              " was not destroyed during test cleanup()";
         }
     }
+}
+
+double ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
+{
+    double prev_timeout_sec = 0.;
+#if HAVE_IB
+    for (ucp_rsc_index_t rsc_index = 0;
+         rsc_index < ucph()->num_tls; ++rsc_index) {
+        ucp_worker_iface_t *wiface = ucp_worker_iface(worker(), rsc_index);
+        // check if the iface is ud transport
+        if (wiface->iface->ops.iface_flush == uct_ud_iface_flush) {
+            uct_ud_iface_t *iface =
+                ucs_derived_of(wiface->iface, uct_ud_iface_t);
+
+            uct_ud_enter(iface);
+            if (!prev_timeout_sec) {
+                prev_timeout_sec = ucs_time_to_sec(iface->config.peer_timeout);
+            }
+
+            iface->config.peer_timeout = ucs_time_from_sec(timeout_sec);
+            uct_ud_leave(iface);
+        }
+    }
+#endif
+    return prev_timeout_sec;
 }
 
 void ucp_test_base::entity::cleanup() {

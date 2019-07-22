@@ -167,9 +167,12 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
 ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
                                 ucp_rkey_h *rkey_p)
 {
-    ucp_context_t *context = ep->worker->context;
+    ucp_context_t         *context   = ep->worker->context;
+    const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     unsigned remote_md_index;
     ucp_md_map_t md_map, remote_md_map;
+    ucp_rsc_index_t cmpt_index;
+    ucp_tl_rkey_t *tl_rkey;
     unsigned rkey_index;
     unsigned md_count;
     ucs_status_t status;
@@ -199,7 +202,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
         rkey = ucs_mpool_get_inline(&context->rkey_mp);
         UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     } else {
-        rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->uct[0]) * md_count),
+        rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->tl_rkey[0]) * md_count),
                           "ucp_rkey");
     }
     if (rkey == NULL) {
@@ -234,17 +237,21 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
         if (UCS_BIT(remote_md_index) & rkey->md_map) {
             ucs_assert(rkey_index < md_count);
 
-            status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
+            tl_rkey       = &rkey->tl_rkey[rkey_index];
+            cmpt_index    = ucp_ep_config_get_dst_md_cmpt(&ep_config->key,
+                                                          remote_md_index);
+            tl_rkey->cmpt = context->tl_cmpts[cmpt_index].cmpt;
 
+            status = uct_rkey_unpack(tl_rkey->cmpt, p, &tl_rkey->rkey);
             if (status == UCS_OK) {
                 ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
-                          remote_md_index, rkey->uct[rkey_index].rkey);
-                rkey->md_map |= UCS_BIT(remote_md_index);
+                          remote_md_index, tl_rkey->rkey.rkey);
                 ++rkey_index;
             } else if (status == UCS_ERR_UNREACHABLE) {
                 rkey->md_map &= ~UCS_BIT(remote_md_index);
-                ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable", rkey_index,
-                          remote_md_index, rkey->uct[rkey_index].rkey);
+                ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
+                          rkey_index, remote_md_index, tl_rkey->rkey.rkey);
+                /* FIXME this can make malloc allocated key be released to mpool */
             } else {
                 ucs_error("Failed to unpack remote key from remote md[%d]: %s",
                           remote_md_index, ucs_status_string(status));
@@ -308,18 +315,19 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
 
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
 {
-    unsigned num_rkeys;
-    unsigned i;
+    unsigned remote_md_index, rkey_index;
     ucs_status_t status;
 
-    num_rkeys = ucs_popcount(rkey->md_map);
-
-    for (i = 0; i < num_rkeys; ++i) {
-        status = uct_rkey_ptr(&rkey->uct[i], raddr, addr_p);
+    rkey_index = 0;
+    ucs_for_each_bit(remote_md_index, rkey->md_map) {
+        status = uct_rkey_ptr(rkey->tl_rkey[rkey_index].cmpt,
+                              &rkey->tl_rkey[rkey_index].rkey, raddr, addr_p);
         if ((status == UCS_OK) ||
             (status == UCS_ERR_INVALID_ADDR)) {
             return status;
         }
+
+        ++rkey_index;
     }
 
     return UCS_ERR_UNREACHABLE;
@@ -327,14 +335,14 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
 
 void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
+    unsigned remote_md_index, rkey_index;
     ucp_context_h UCS_V_UNUSED context;
-    unsigned num_rkeys;
-    unsigned i;
 
-    num_rkeys = ucs_popcount(rkey->md_map);
-
-    for (i = 0; i < num_rkeys; ++i) {
-        uct_rkey_release(&rkey->uct[i]);
+    rkey_index = 0;
+    ucs_for_each_bit(remote_md_index, rkey->md_map) {
+        uct_rkey_release(rkey->tl_rkey[rkey_index].cmpt,
+                         &rkey->tl_rkey[rkey_index].rkey);
+        ++rkey_index;
     }
 
     if (ucs_popcount(rkey->md_map) <= UCP_RKEY_MPOOL_MAX_MD) {
@@ -378,7 +386,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
             (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)))
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
-            if (!rkey || ((mem_type == md_attr->cap.mem_type) &&
+            if (!rkey || ((mem_type == md_attr->cap.access_mem_type) &&
                           (mem_type == rkey->mem_type))) {
                 *uct_rkey_p = UCT_INVALID_RKEY;
                 return lane;
@@ -394,7 +402,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         if (rkey->md_map & UCS_BIT(dst_md_index)) {
             /* Return first matching lane */
             rkey_index  = ucs_bitmap2idx(rkey->md_map, dst_md_index);
-            *uct_rkey_p = rkey->uct[rkey_index].rkey;
+            *uct_rkey_p = rkey->tl_rkey[rkey_index].rkey.rkey;
             return lane;
         }
     }

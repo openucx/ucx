@@ -113,11 +113,12 @@ const char *ucs_signal_names[] = {
 static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
 static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
-khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
-khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
+static khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
+static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
 static pthread_spinlock_t ucs_kh_lock;
 
+static int ucs_debug_initialized = 0;
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
@@ -1018,7 +1019,7 @@ sighandler_t signal(int signum, sighandler_t handler)
 {
     static sighandler_t (*orig)(int, sighandler_t) = NULL;
 
-    if (ucs_debug_is_error_signal(signum)) {
+    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
         return SIG_DFL;
     }
 
@@ -1043,7 +1044,7 @@ static int orig_sigaction(int signum, const struct sigaction *act,
 
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
 {
-    if (ucs_debug_is_error_signal(signum)) {
+    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
         return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
     }
 
@@ -1198,12 +1199,18 @@ void ucs_debug_init()
     if (ret != 0) {
          ucs_error("failed to initialize spin lock: %s", strerror(ret));
     }
+
+    kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
+    kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
+
     if (ucs_global_opts.handle_errors) {
         ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
     }
     if (ucs_global_opts.debug_signo > 0) {
         struct sigaction sigact, old_action;
+        memset(&sigact, 0, sizeof(sigact));
+        memset(&old_action, 0, sizeof(old_action));
         sigact.sa_handler = ucs_debug_signal_handler;
         orig_sigaction(ucs_global_opts.debug_signo, &sigact, &old_action);
         ucs_debug_save_original_sighandler(ucs_global_opts.debug_signo, &old_action);
@@ -1212,6 +1219,8 @@ void ucs_debug_init()
 #ifdef HAVE_DETAILED_BACKTRACE
     bfd_init();
 #endif
+
+    ucs_debug_initialized = 1;
 }
 
 void ucs_debug_cleanup(int on_error)
@@ -1219,6 +1228,8 @@ void ucs_debug_cleanup(int on_error)
     char *sym;
     int signum;
     struct sigaction *hndl;
+
+    ucs_debug_initialized = 0;
 
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal(signum));

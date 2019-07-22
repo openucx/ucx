@@ -647,7 +647,7 @@ UCS_TEST_P(test_tag, tag_cancel_noforce)
     EXPECT_EQ(r_ctx.status, UCS_ERR_CANCELED);
 }
 
-UCS_TEST_P(test_tag, tag_limit, "TM_SYNC_RATIO?=0.0")
+UCS_TEST_P(test_tag, tag_limit)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
 

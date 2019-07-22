@@ -3,7 +3,11 @@
 %bcond_with    cuda
 %bcond_with    gdrcopy
 %bcond_without ib
+%if 0%{?fedora} >= 30 || 0%{?rhel} >= 7
+%bcond_with ib_cm
+%else
 %bcond_without ib_cm
+%endif
 %bcond_with    knem
 %bcond_without rdmacm
 %bcond_with    rocm
@@ -66,16 +70,8 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 Summary: Header files required for developing with UCX
 Group: Development/Libraries
 
-%package static
-Requires: %{name}-devel = %{version}-%{release}
-Summary: Static libraries required for developing with UCX
-Group: Development/Libraries
-
 %description devel
 Provides header files and examples for developing with UCX.
-
-%description static
-Provides static libraries required for developing with UCX.
 
 %prep
 %setup -q
@@ -104,6 +100,7 @@ make %{?_smp_mflags} V=1
 %install
 make DESTDIR=%{buildroot} install
 rm -f %{buildroot}%{_libdir}/*.la
+rm -f %{buildroot}%{_libdir}/*.a
 rm -f %{buildroot}%{_libdir}/ucx/*.la
 rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 rm -f %{buildroot}%{_libdir}/ucx/lib*.a
@@ -123,13 +120,9 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %{_libdir}/pkgconfig/ucx.pc
 %{_datadir}/ucx/examples
 
-%files static
-%{_libdir}/lib*.a
-
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
-# ucx-cma
 %if %{with cma}
 %package cma
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -145,7 +138,6 @@ process.
 %{_libdir}/ucx/libuct_cma.so.*
 %endif
 
-# ucx-cuda
 %if %{with cuda}
 %package cuda
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -163,7 +155,6 @@ technology for direct data transfer between GPU and RDMA devices.
 %{_libdir}/ucx/libuct_cuda.so.*
 %endif
 
-# ucx-gdrcopy
 %if %{with gdrcopy}
 %package gdrcopy
 Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
@@ -178,7 +169,6 @@ library, built on top of the NVIDIA GPUDirect RDMA technology.
 %{_libdir}/ucx/libuct_cuda_gdrcopy.so.*
 %endif
 
-# ucx-ib
 %if %{with ib}
 %package ib
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -195,7 +185,6 @@ hardware-offloaded data transfer.
 %{_libdir}/ucx/libuct_ib.so.*
 %endif
 
-# ucx-ib-cm
 %if %{with ib_cm}
 %package ib-cm
 Requires: %{name}-ib%{?_isa} = %{version}-%{release}
@@ -209,7 +198,6 @@ Provides Infiniband Connection Manager (also known as ibcm) support for UCX.
 %{_libdir}/ucx/libuct_ib_cm.so.*
 %endif
 
-# ucx-knem
 %if %{with knem}
 %package knem
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -225,7 +213,6 @@ for large messages.
 %{_libdir}/ucx/libuct_knem.so.*
 %endif
 
-# ucx-rdmacm
 %if %{with rdmacm}
 %package rdmacm
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -240,7 +227,6 @@ based connection establishment for RDMA-capable transports.
 %{_libdir}/ucx/libuct_rdmacm.so.*
 %endif
 
-# ucx-rocm
 %if %{with rocm}
 %package rocm
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -254,7 +240,6 @@ Provides Radeon Open Compute (ROCm) Runtime support for UCX.
 %{_libdir}/ucx/libuct_rocm.so.*
 %{_libdir}/ucx/libucm_rocm.so.*
 
-# ucx-rocmgdr
 %if %{with gdrcopy}
 %package rocmgdr
 Requires: %{name}-rocm%{?_isa} = %{version}-%{release}
@@ -270,7 +255,6 @@ library, built on top of the NVIDIA GPUDirect RDMA technology.
 %endif
 %endif
 
-# ucx-ugni
 %if %{with ugni}
 %package ugni
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -284,7 +268,6 @@ Provides Gemini/Aries transport for UCX.
 %{_libdir}/ucx/libuct_ugni.so.*
 %endif
 
-# ucx-xpmem
 %if %{with xpmem}
 %package xpmem
 Requires: %{name}%{?_isa} = %{version}-%{release}

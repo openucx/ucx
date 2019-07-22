@@ -115,8 +115,6 @@ void test_ucp_rma::test_message_sizes(blocking_send_func_t func, size_t *msizes,
    }
 }
 
-static const size_t MEG = 1024 * 1024ULL;
-
 UCS_TEST_P(test_ucp_rma, nbi_small) {
     size_t sizes[] = { 8, 24, 96, 120, 250, 0};
 
@@ -136,7 +134,8 @@ UCS_TEST_P(test_ucp_rma, nbi_med) {
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma, nbi_large, RUNNING_ON_VALGRIND) {
-    size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
+    size_t sizes[] = { 1 * UCS_MBYTE, 3 * UCS_MBYTE, 9 * UCS_MBYTE,
+                       17 * UCS_MBYTE, 32 * UCS_MBYTE, 0};
 
     test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        sizes, 3, 1);
@@ -163,7 +162,8 @@ UCS_TEST_P(test_ucp_rma, nb_med) {
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma, nb_large, RUNNING_ON_VALGRIND) {
-    size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
+    size_t sizes[] = { 1 * UCS_MBYTE, 3 * UCS_MBYTE, 9 * UCS_MBYTE,
+                       17 * UCS_MBYTE, 32 * UCS_MBYTE, 0};
 
     test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nb),
                        sizes, 3, 1);

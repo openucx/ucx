@@ -28,14 +28,6 @@
 #include <errno.h>
 
 
-#define UCM_NATIVE_EVENT_VM_MAPPED (UCM_EVENT_MMAP  | UCM_EVENT_MREMAP | \
-                                    UCM_EVENT_SHMAT | UCM_EVENT_SBRK)
-
-#define UCM_NATIVE_EVENT_VM_UNMAPPED (UCM_EVENT_MMAP   | UCM_EVENT_MUNMAP | \
-                                      UCM_EVENT_MREMAP | UCM_EVENT_SHMDT  | \
-                                      UCM_EVENT_SHMAT  | UCM_EVENT_SBRK   | \
-                                      UCM_EVENT_MADVISE)
-
 UCS_LIST_HEAD(ucm_event_installer_list);
 
 static pthread_spinlock_t ucm_kh_lock;
@@ -467,20 +459,10 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler)
     ucm_event_leave();
 }
 
-static ucs_status_t ucm_event_install(int events)
+static int ucm_events_to_native_events(int events)
 {
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INIITIALIZER;
-    UCS_MODULE_FRAMEWORK_DECLARE(ucm);
-    ucm_event_installer_t *event_installer;
-    int native_events, malloc_events;
-    ucs_status_t status;
+    int native_events;
 
-    /* coverity[double_unlock] */
-    UCS_INIT_ONCE(&init_once) {
-        ucm_prevent_dl_unload();
-    }
-
-    /* Replace aggregate events with the native events which make them */
     native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |
                                UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
     if (events & UCM_EVENT_VM_MAPPED) {
@@ -489,6 +471,24 @@ static ucs_status_t ucm_event_install(int events)
     if (events & UCM_EVENT_VM_UNMAPPED) {
         native_events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
     }
+
+    return native_events;
+}
+
+static ucs_status_t ucm_event_install(int events)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INIITIALIZER;
+    UCS_MODULE_FRAMEWORK_DECLARE(ucm);
+    ucm_event_installer_t *event_installer;
+    int native_events, malloc_events;
+    ucs_status_t status;
+
+    UCS_INIT_ONCE(&init_once) {
+        ucm_prevent_dl_unload();
+    }
+
+    /* Replace aggregate events with the native events which make them */
+    native_events = ucm_events_to_native_events(events);
 
     /* TODO lock */
     status = ucm_mmap_install(native_events);
@@ -591,25 +591,14 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
     ucm_event_leave();
 
     /* Do not release memory while we hold event lock - may deadlock */
-    while (!ucs_list_is_empty(&gc_list)) {
-        elem = ucs_list_extract_head(&gc_list, ucm_event_handler_t, list);
+    ucs_list_for_each_safe(elem, tmp, &gc_list, list) {
         free(elem);
     }
 }
 
 ucs_status_t ucm_test_events(int events)
 {
-    int out_events;
-
-    if (events & UCM_EVENT_VM_MAPPED) {
-        events |= UCM_NATIVE_EVENT_VM_MAPPED;
-    }
-
-    if (events & UCM_EVENT_VM_UNMAPPED) {
-        events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
-    }
-
-    return ucm_mmap_test_events(events, &out_events);
+    return ucm_mmap_test_installed_events(ucm_events_to_native_events(events));
 }
 
 UCS_STATIC_INIT {

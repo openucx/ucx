@@ -12,6 +12,7 @@
 #include "mm_md.h"
 
 #include <uct/base/uct_iface.h>
+#include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/arbiter.h>
@@ -31,11 +32,14 @@
 
 
 typedef struct uct_mm_iface_config {
-    uct_iface_config_t       super;
-    unsigned                 fifo_size;            /* Size of the receive FIFO */
+    uct_sm_iface_config_t    super;
+    size_t                   seg_size;            /* Size of the receive
+                                                   * descriptor (for payload) */
+    unsigned                 fifo_size;           /* Size of the receive FIFO */
     double                   release_fifo_factor;
-    ucs_ternary_value_t      hugetlb_mode;         /* Enable using huge pages for */
-                                                   /* shared memory buffers */
+    ucs_ternary_value_t      hugetlb_mode;        /* Enable using huge pages for
+                                                   * shared memory buffers */
+    unsigned                 fifo_elem_size;      /* Size of the FIFO element size */
     uct_iface_mpool_config_t mp;
 } uct_mm_iface_config_t;
 
@@ -53,7 +57,7 @@ struct uct_mm_fifo_ctl {
 
 
 struct uct_mm_iface {
-    uct_base_iface_t        super;
+    uct_sm_iface_t          super;
 
     /* Receive FIFO */
     uct_mm_id_t             fifo_mm_id;       /* memory id which will be received */
@@ -124,7 +128,8 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
     ucs_status_t status;
     void         *desc;
 
-    status = uct_iface_invoke_am(&iface->super, am_id, data, length, flags);
+    status = uct_iface_invoke_am(&iface->super.super, am_id, data,
+                                 length, flags);
 
     if (status == UCS_INPROGRESS) {
         desc = (void *)((uintptr_t)data - iface->rx_headroom);

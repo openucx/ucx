@@ -142,6 +142,13 @@ AC_DEFUN([DETECT_UARCH],
           ax_cpu="thunderxt88" ;;
         esac
         ;;
+      0x48) case $cpupart in
+        0xd01 | 0x0d01)
+          AC_DEFINE([HAVE_AARCH64_HI1620], 1, [Huawei Kunpeng 920])
+          ax_cpu="tsv110"
+          ax_arch="armv8.2-a" ;;
+        esac
+        ;;
       *) ax_cpu="native"
          ;;
     esac 
@@ -316,7 +323,12 @@ AC_LANG_PUSH([C++])
 SAVE_CXXFLAGS="$CXXFLAGS"
 CXX11FLAGS="-std=c++11"
 CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[int main() { return 0; } ]])],
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
+					#include <string>
+					int main() {
+						std::to_string(1);
+						return 0;
+					} ]])],
                   [AC_MSG_RESULT([yes])
                    AC_SUBST([CXX11FLAGS])
                    cxx11_happy=yes],

@@ -89,6 +89,8 @@ public:
 
         ucp_context_h ucph() const;
 
+        ucp_listener_h listenerh() const;
+
         unsigned progress(int worker_index = 0);
 
         int get_num_workers() const;
@@ -100,6 +102,8 @@ public:
         size_t get_rejected_cntr() const;
 
         void warn_existing_eps() const;
+
+        double set_ib_ud_timeout(double timeout_sec);
 
         void cleanup();
 

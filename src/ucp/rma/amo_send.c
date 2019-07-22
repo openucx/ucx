@@ -12,6 +12,8 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/stubs.h>
+
 #include <inttypes.h>
 
 

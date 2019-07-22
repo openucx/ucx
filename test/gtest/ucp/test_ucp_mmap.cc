@@ -153,7 +153,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
     sender().connect(&sender(), get_ep_params());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = ucs::rand() % (1024 * 1024);
+        size_t size = ucs::rand() % (UCS_MBYTE);
 
         ucp_mem_h memh;
         ucp_mem_map_params_t params;
@@ -184,7 +184,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
     sender().connect(&sender(), get_ep_params());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = ucs::rand() % (1024 * 1024);
+        size_t size = ucs::rand() % (UCS_MBYTE);
 
         void *ptr = malloc(size);
         ucs::fill_random(ptr, size);
@@ -261,7 +261,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
 
     sender().connect(&sender(), get_ep_params());
 
-    size_t size = 128 * (1024 * 1024);
+    size_t size = 128 * UCS_MBYTE;
 
     ucp_mem_h memh;
     ucp_mem_map_params_t params;
@@ -306,7 +306,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
 
     sender().connect(&sender(), get_ep_params());
 
-    size_t size = 128 * 1024 * 1024;
+    size_t size = 128 * UCS_MBYTE;
 
     void *ptr = malloc(size);
     ucs::fill_random(ptr, size);

@@ -415,18 +415,18 @@ void test_uct_peer_failure_multiple::init()
 
 size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
 {
+    bool        set = true;
     std::string name, val;
     size_t      tx_queue_len;
 
-    if (has_transport("rc")) {
+    if (has_rc()) {
         name = "RC_IB_TX_QUEUE_LEN";
-    } else if (has_transport("rc_mlx5")) {
-        name = "RC_RC_IB_TX_QUEUE_LEN";
     } else if (has_transport("dc_mlx5")) {
-        name = "DC_RC_RC_IB_TX_QUEUE_LEN";
-    } else if (has_transport("ud")) {
+        name = "DC_RC_IB_TX_QUEUE_LEN";
+    } else if (has_ud()) {
         name = "UD_IB_TX_QUEUE_LEN";
     } else {
+        set  = false;
         name = "TX_QUEUE_LEN";
     }
 
@@ -437,6 +437,10 @@ size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
         tx_queue_len = 256;
         UCS_TEST_MESSAGE << name << " setting not found, "
                          << "taken test default value: " << tx_queue_len;
+        if (set) {
+            UCS_TEST_ABORT(name + " config name must be found for %s transport" +
+                           GetParam()->tl_name);
+        }
     }
 
     return tx_queue_len;

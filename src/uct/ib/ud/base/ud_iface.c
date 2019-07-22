@@ -30,6 +30,7 @@ static ucs_stats_class_t uct_ud_iface_stats_class = {
 };
 #endif
 
+/* cppcheck-suppress ctunullpointer */
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
@@ -248,7 +249,8 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 static ucs_status_t
 uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
 {
-    uct_ib_qp_attr_t qp_init_attr      = {};
+    uct_ud_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_ud_iface_ops_t);
+    uct_ib_qp_attr_t qp_init_attr = {};
     struct ibv_qp_attr qp_attr;
     static ucs_status_t status;
     int ret;
@@ -262,7 +264,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_inline_data = ucs_max(config->super.tx.min_inline,
                                                UCT_UD_MIN_INLINE);
 
-    status = self->super.ops->create_qp(&self->super, &qp_init_attr, &self->qp);
+    status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -302,7 +304,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
 
     return UCS_OK;
 err_destroy_qp:
-    ibv_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -314,8 +316,6 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 
     iface->tx.resend_skbs_quota = iface->tx.available;
 
-    /* TODO: make tick configurable */
-    iface->async.slow_tick = ucs_time_from_msec(100);
     status = ucs_twheel_init(&iface->async.slow_timer,
                              iface->async.slow_tick / 4,
                              uct_ud_iface_get_async_time(iface));
@@ -416,7 +416,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     init_attr->rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
     init_attr->tx_cq_len   = config->super.tx.queue_len;
     init_attr->rx_cq_len   = config->super.rx.queue_len;
-    init_attr->seg_size    = ucs_min(mtu, config->super.super.max_bcopy);
+    init_attr->seg_size    = ucs_min(mtu, config->super.seg_size);
     init_attr->qp_type     = IBV_QPT_UD;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker,
@@ -436,6 +436,14 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.check_grh_dgid  = config->dgid_check &&
                                    uct_ib_iface_is_roce(&self->super);
+
+    if (config->slow_timer_tick <= 0.) {
+        ucs_error("The slow timer tick should be > 0 (%lf)",
+                  config->slow_timer_tick);
+        return UCS_ERR_INVALID_PARAM;
+    } else {
+        self->async.slow_tick = ucs_time_from_sec(config->slow_timer_tick);
+    }
 
     if (config->slow_timer_backoff <= 0.) {
         ucs_error("The slow timer back off should be > 0 (%lf)",
@@ -470,7 +478,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;
     data_size = ucs_max(data_size, self->super.config.seg_size);
-    data_size = ucs_max(data_size, sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline);
+    data_size = ucs_max(data_size,
+                        sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline);
 
     status = uct_iface_mpool_init(&self->super.super, &self->tx.mp,
                                   sizeof(uct_ud_send_skb_t) + data_size,
@@ -513,7 +522,7 @@ err_tx_mpool:
 err_rx_mpool:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err_qp:
-    ibv_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
     ucs_ptr_array_cleanup(&self->eps);
     return status;
 }
@@ -532,7 +541,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
     ucs_mpool_cleanup(&self->rx.mp, 0);
-    ibv_destroy_qp(self->qp);
+    uct_ib_destroy_qp(self->qp);
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
@@ -552,6 +561,8 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
     {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
+    {"SLOW_TIMER_TICK", "100ms", "Initial timeout for retransmissions",
+     ucs_offsetof(uct_ud_iface_config_t, slow_timer_tick), UCS_CONFIG_TYPE_TIME},
     {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
                   UCS_CONFIG_TYPE_DOUBLE},

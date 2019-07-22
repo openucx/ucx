@@ -13,6 +13,7 @@
 #include <cuda.h>
 
 #include "cuda_ipc_md.h"
+#include "cuda_ipc_ep.h"
 
 
 #define UCT_CUDA_IPC_TL_NAME    "cuda_ipc"
@@ -25,6 +26,7 @@ typedef struct uct_cuda_ipc_iface {
     ucs_mpool_t      event_desc;              /* cuda event desc */
     ucs_queue_head_t outstanding_d2d_event_q; /* stream for outstanding d2d */
     int              device_count;
+    int              eventfd;              /* get event notifications */
     int              streams_initialized;     /* indicates if stream created */
     CUstream         stream_d2d[UCT_CUDA_IPC_MAX_PEERS];
                                               /* per-peer stream */
@@ -50,6 +52,7 @@ typedef struct uct_cuda_ipc_event_desc {
     void              *mapped_addr;
     uct_completion_t  *comp;
     ucs_queue_elem_t  queue;
+    uct_cuda_ipc_ep_t *ep;
 } uct_cuda_ipc_event_desc_t;
 
 

@@ -185,7 +185,7 @@ int main(int argc, char **argv)
 
     if ((print_opts & PRINT_DEVICES) || (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
         /* if UCS_CONFIG_PRINT_CONFIG is ON, trigger loading UCT modules by
-         * calling print_uct_info()->uct_query_md_resources()
+         * calling print_uct_info()->uct_component_query()
          */
         print_uct_info(print_opts, print_flags, tl_name);
     }

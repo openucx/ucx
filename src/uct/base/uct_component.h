@@ -24,8 +24,8 @@ struct uct_md_component {
     ucs_status_t           (*md_open)(const char *md_name, const uct_md_config_t *config,
                                       uct_md_h *md_p);
 
-    ucs_status_t           (*cm_open)(const uct_cm_params_t *params,
-                                      uct_cm_h *cm_p);
+    ucs_status_t           (*cm_open)(uct_component_h component,
+                                      uct_worker_h worker, uct_cm_h *cm_p);
 
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
@@ -41,7 +41,7 @@ struct uct_md_component {
     const char             *cfg_prefix;        /**< Prefix for configuration environment vars */
     ucs_config_field_t     *md_config_table;   /**< Defines MD configuration options */
     size_t                 md_config_size;     /**< MD configuration structure size */
-    ucs_list_link_t        tl_list;            /* List of uct_md_registered_tl_t */
+    ucs_list_link_t        tl_list;            /**< List of uct_md_registered_tl_t */
     ucs_list_link_t        list;
 };
 

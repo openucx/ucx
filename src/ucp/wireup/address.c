@@ -582,6 +582,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                 &context->tl_rscs[dev->rsc_index].tl_rsc);
             ptr += iface_addr_len;
 
+            /* cppcheck-suppress internalAstError */
             if (i == ucs_ilog2(dev->tl_bitmap)) {
                  *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_LAST;
             }

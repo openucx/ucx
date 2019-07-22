@@ -8,7 +8,10 @@ package org.ucx.jucx.ucp;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 
+import org.ucx.jucx.UcxCallback;
+import org.ucx.jucx.UcxException;
 import org.ucx.jucx.UcxNativeStruct;
+import org.ucx.jucx.UcxRequest;
 
 /**
  * UCP worker is an opaque object representing the communication context.  The
@@ -35,6 +38,20 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         setNativeId(createWorkerNative(params, context.getNativeId()));
     }
 
+    /**
+     * Creates new UcpEndpoint on current worker.
+     */
+    public UcpEndpoint newEndpoint(UcpEndpointParams params) {
+        return new UcpEndpoint(this, params);
+    }
+
+    /**
+     * Creates new UcpListener on current worker.
+     */
+    public UcpListener newListener(UcpListenerParams params) {
+        return new UcpListener(this, params);
+    }
+
     @Override
     public void close() {
         releaseWorkerNative(getNativeId());
@@ -48,6 +65,64 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     public int progress() {
         return progressWorkerNative(getNativeId());
     }
+
+    /**
+     * This routine waits (blocking) until an event has happened, as part of the
+     * wake-up mechanism.
+     *
+     * This function is guaranteed to return only if new communication events occur
+     * on the worker. Therefore one must drain all existing events before waiting
+     * on the file descriptor. This can be achieved by calling
+     * {@link UcpWorker#progress()} repeatedly until it returns 0.
+     */
+    public void waitForEvents() {
+        waitWorkerNative(getNativeId());
+    }
+
+    /**
+     * This routine signals that the event has happened, as part of the wake-up
+     * mechanism. This function causes a blocking call to {@link UcpWorker#waitForEvents()}
+     * to return, even if no event from the underlying interfaces has taken place.
+     *
+     * It’s safe to use this routine from any thread, even if UCX is compiled
+     * without multi-threading support and/or initialized without
+     * {@link UcpWorkerParams#requestThreadSafety()}. However {@link UcpContext} has to be
+     * created with {@link UcpParams#requestWakeupFeature()}.
+     */
+    public void signal() {
+        signalWorkerNative(getNativeId());
+    }
+
+    /**
+     * Non-blocking tagged-receive operation.
+     * This routine receives a messages that is described by the local {@code recvBuffer}
+     * buffer on the current worker. The tag value of the receive message has to match
+     * the {@code tag} of sent message. The routine is a non-blocking and therefore returns
+     * immediately. The receive operation is considered completed when the message is delivered
+     * to the {@code recvBuffer}. In order to notify the application about completion of the receive
+     * operation the UCP library will invoke the call-back {@code callback} when the received
+     * message is in the receive buffer and ready for application access.
+     *
+     * @param tagMask - bit mask that indicates the bits that are used for the matching of the
+     * incoming tag against the expected tag.
+     */
+    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, long tag, long tagMask,
+                                            UcxCallback callback) {
+        if (!recvBuffer.isDirect()) {
+            throw new UcxException("Recv buffer must be direct.");
+        }
+        return recvTaggedNonBlockingNative(getNativeId(), recvBuffer, tag, tagMask, callback);
+    }
+
+    /**
+     * Non-blocking receive operation. Invokes
+     * {@link UcpWorker#recvTaggedNonBlocking(ByteBuffer, long, long, UcxCallback)}
+     * with default tag=0 and tagMask=0.
+     */
+    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, UcxCallback callback) {
+        return recvTaggedNonBlocking(recvBuffer, 0, 0, callback);
+    }
+
 
     /**
      * This routine returns the address of the worker object. This address can be
@@ -76,4 +151,12 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
 
     private static native int progressWorkerNative(long workerId);
+
+    private static native void waitWorkerNative(long workerId);
+
+    private static native void signalWorkerNative(long workerId);
+
+    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, ByteBuffer recvBuf,
+                                                                 long tag, long tagMask,
+                                                                 UcxCallback callback);
 }

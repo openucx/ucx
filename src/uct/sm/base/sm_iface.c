@@ -7,12 +7,22 @@
 
 #include "sm_iface.h"
 
-#include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/arch/cpu.h>
 
+ucs_config_field_t uct_sm_iface_config_table[] = {
+    {"", "", NULL,
+     ucs_offsetof(uct_sm_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"BW", "12179MBs",
+     "Effective memory bandwidth",
+     ucs_offsetof(uct_sm_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+
+    {NULL}
+};
 
 static uint64_t uct_sm_iface_node_guid(uct_base_iface_t *iface)
 {
@@ -51,3 +61,37 @@ ucs_status_t uct_sm_ep_fence(uct_ep_t *tl_ep, unsigned flags)
     UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
+
+UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_md_h md,
+                    uct_worker_h worker, const uct_iface_params_t *params,
+                    const uct_iface_config_t *tl_config)
+{
+    uct_sm_iface_config_t *sm_config = ucs_derived_of(tl_config,
+                                                      uct_sm_iface_config_t);
+
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
+    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
+        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, md, worker, params,
+                              tl_config
+                              UCS_STATS_ARG((params->field_mask &
+                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                                            params->stats_root : NULL)
+                              UCS_STATS_ARG(params->mode.device.dev_name));
+
+    self->config.bandwidth = sm_config->bandwidth;
+
+    return UCS_OK;
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_sm_iface_t)
+{
+}
+
+UCS_CLASS_DEFINE(uct_sm_iface_t, uct_base_iface_t);
+
+

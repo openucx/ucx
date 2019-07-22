@@ -49,6 +49,7 @@ if HAVE_JAVA
 SUBDIRS += bindings/java/src/main/native
 endif
 
+EXTRA_DIST += bindings/java
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof

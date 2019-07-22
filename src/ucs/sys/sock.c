@@ -9,10 +9,19 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <limits.h>
+
+
+#define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
+
+
+typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
+                                        size_t size, int flags);
 
 
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
@@ -145,15 +154,35 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd)
     }
 
     if (conn_status != 0) {
-        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s", fd, strerror(conn_status));
+        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s",
+                  fd, strerror(conn_status));
         return UCS_ERR_UNREACHABLE;
     }
 
     return UCS_OK;
 }
 
-static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
-                                               ucs_socket_io_func_t io_func, const char *name)
+int ucs_socket_max_conn()
+{
+    static long somaxconn_val = 0;
+
+    if (somaxconn_val ||
+        (ucs_read_file_number(&somaxconn_val, 1,
+                              UCS_SOCKET_MAX_CONN_PATH) == UCS_OK)) {
+        ucs_assert(somaxconn_val <= INT_MAX);
+        return somaxconn_val;
+    } else {
+        ucs_warn("unable to read somaxconn value from %s file",
+                 UCS_SOCKET_MAX_CONN_PATH);
+        somaxconn_val = SOMAXCONN;
+        return somaxconn_val;
+    }
+}
+
+static inline ucs_status_t
+ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
+                    ucs_socket_io_func_t io_func, const char *name,
+                    ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
     ssize_t ret;
 
@@ -174,19 +203,24 @@ static inline ucs_status_t ucs_socket_do_io_nb(int fd, void *data, size_t *lengt
         return UCS_ERR_NO_PROGRESS;
     }
 
-    ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
-              name, fd, data, *length_p);
+    if ((err_cb != NULL) && (err_cb(err_cb_arg, errno) != UCS_OK)) {
+        ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
+                  name, fd, data, *length_p);
+    }
     return UCS_ERR_IO_ERROR;
 }
 
-static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
-                                              ucs_socket_io_func_t io_func, const char *name)
+static inline ucs_status_t
+ucs_socket_do_io_b(int fd, void *data, size_t length,
+                   ucs_socket_io_func_t io_func, const char *name,
+                   ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
     size_t done_cnt = 0, cur_cnt = length;
     ucs_status_t status;
 
     do {
-        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
+        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func,
+                                     name, err_cb, err_cb);
         if (ucs_likely(status == UCS_OK)) {
             done_cnt += cur_cnt;
             ucs_assert(done_cnt <= length);
@@ -199,26 +233,38 @@ static inline ucs_status_t ucs_socket_do_io_b(int fd, void *data, size_t length,
     return UCS_OK;
 }
 
-ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
+ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
+                                ucs_socket_io_err_cb_t err_cb,
+                                void *err_cb_arg)
 {
     return ucs_socket_do_io_nb(fd, (void*)data, length_p,
-                               (ucs_socket_io_func_t)send, "send");
+                               (ucs_socket_io_func_t)send,
+                               "send", err_cb, err_cb_arg);
 }
 
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
+                                ucs_socket_io_err_cb_t err_cb,
+                                void *err_cb_arg)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, recv, "recv");
+    return ucs_socket_do_io_nb(fd, data, length_p, recv,
+                               "recv", err_cb, err_cb_arg);
 }
 
-ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
+ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
+                             ucs_socket_io_err_cb_t err_cb,
+                             void *err_cb_arg)
 {
     return ucs_socket_do_io_b(fd, (void*)data, length,
-                              (ucs_socket_io_func_t)send, "send");
+                              (ucs_socket_io_func_t)send,
+                              "send", err_cb, err_cb_arg);
 }
 
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t length)
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
+                             ucs_socket_io_err_cb_t err_cb,
+                             void *err_cb_arg)
 {
-    return ucs_socket_do_io_b(fd, data, length, recv, "recv");
+    return ucs_socket_do_io_b(fd, data, length, recv,
+                              "recv", err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
@@ -236,7 +282,7 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
     }
 }
 
-ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p)
+ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, uint16_t *port_p)
 {
     switch (addr->sa_family) {
     case AF_INET:
@@ -251,7 +297,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, unsigned *port_p
     }
 }
 
-ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, unsigned port)
+ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port)
 {
     switch (addr->sa_family) {
     case AF_INET:
@@ -279,13 +325,19 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
     }
 }
 
+static unsigned ucs_sockaddr_is_known_af(const struct sockaddr *sa)
+{
+    return ((sa->sa_family == AF_INET) ||
+            (sa->sa_family == AF_INET6));
+}
+
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size)
 {
-    unsigned port;
+    uint16_t port;
     size_t str_len;
 
-    if ((sock_addr->sa_family != AF_INET) && (sock_addr->sa_family != AF_INET6)) {
+    if (!ucs_sockaddr_is_known_af(sock_addr)) {
         ucs_strncpy_zero(str, "<invalid address family>", max_size);
         return str;
     }
@@ -308,32 +360,47 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     return str;
 }
 
-int ucs_sockaddr_is_equal(const struct sockaddr *sa1,
-                          const struct sockaddr *sa2,
-                          ucs_status_t *status_p)
+int ucs_sockaddr_cmp(const struct sockaddr *sa1,
+                     const struct sockaddr *sa2,
+                     ucs_status_t *status_p)
 {
+    int result          = 1;
     ucs_status_t status = UCS_OK;
-    int result          = 0;
+    uint16_t port1, port2;
+
+    if (!ucs_sockaddr_is_known_af(sa1) ||
+        !ucs_sockaddr_is_known_af(sa2)) {
+        ucs_error("unknown address family: %d",
+                  !ucs_sockaddr_is_known_af(sa1) ?
+                  sa1->sa_family : sa2->sa_family);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
 
     if (sa1->sa_family != sa2->sa_family) {
+        result = (int)sa1->sa_family - (int)sa2->sa_family;
         goto out;
     }
 
     switch (sa1->sa_family) {
     case AF_INET:
-        result = ((UCS_SOCKET_INET_PORT(sa1) == UCS_SOCKET_INET_PORT(sa2)) &&
-                  (memcmp(&UCS_SOCKET_INET_ADDR(sa1), &UCS_SOCKET_INET_ADDR(sa2),
-                          sizeof(UCS_SOCKET_INET_ADDR(sa1))) == 0));
+        result = memcmp(&UCS_SOCKET_INET_ADDR(sa1),
+                        &UCS_SOCKET_INET_ADDR(sa2),
+                        sizeof(UCS_SOCKET_INET_ADDR(sa1)));
+        port1 = ntohs(UCS_SOCKET_INET_PORT(sa1));
+        port2 = ntohs(UCS_SOCKET_INET_PORT(sa2));
         break;
     case AF_INET6:
-        result = ((UCS_SOCKET_INET6_PORT(sa1) == UCS_SOCKET_INET6_PORT(sa2)) &&
-                  (memcmp(&UCS_SOCKET_INET6_ADDR(sa1), &UCS_SOCKET_INET6_ADDR(sa2),
-                          sizeof(UCS_SOCKET_INET6_ADDR(sa1))) == 0));
+        result = memcmp(&UCS_SOCKET_INET6_ADDR(sa1),
+                        &UCS_SOCKET_INET6_ADDR(sa2),
+                        sizeof(UCS_SOCKET_INET6_ADDR(sa1)));
+        port1 = ntohs(UCS_SOCKET_INET6_PORT(sa1));
+        port2 = ntohs(UCS_SOCKET_INET6_PORT(sa2));
         break;
-    default:
-        ucs_error("unknown address family: %d", sa1->sa_family);
-        status = UCS_ERR_INVALID_PARAM;
-        break;
+    }
+
+    if (!result && (port1 != port2)) {
+        result = (int)port1 - (int)port2;
     }
 
 out:

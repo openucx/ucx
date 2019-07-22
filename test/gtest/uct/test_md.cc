@@ -11,6 +11,9 @@ extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/arch/bitops.h>
+#include <ucs/arch/atomic.h>
+#include <ucs/sys/math.h>
 }
 #include <linux/sockios.h>
 #include <net/if_arp.h>
@@ -24,7 +27,6 @@ extern "C" {
 #include <cuda_runtime.h>
 #endif
 
-std::string const test_md::mem_types[] = {"host", "cuda", "cuda-managed", "rocm", "rocm-managed"};
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -34,39 +36,27 @@ void* test_md::alloc_thread(void *arg)
         int count = ucs::rand() % 100;
         std::vector<void*> buffers;
         for (int i = 0; i < count; ++i) {
-            buffers.push_back(malloc(ucs::rand() % (256*1024)));
+            buffers.push_back(malloc(ucs::rand() % (256 * UCS_KBYTE)));
         }
         std::for_each(buffers.begin(), buffers.end(), free);
     }
     return NULL;
 }
 
-std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
-    static std::vector<std::string> all_pds;
-    std::vector<std::string> result;
+std::vector<test_md_param> test_md::enum_mds(const std::string& mdc_name) {
 
-    if (all_pds.empty()) {
-        uct_md_resource_desc_t *md_resources;
-        unsigned num_md_resources;
-        ucs_status_t status;
+    std::vector<md_resource> md_resources = enum_md_resources();
 
-        status = uct_query_md_resources(&md_resources, &num_md_resources);
-        ASSERT_UCS_OK(status);
-
-        for (unsigned i = 0; i < num_md_resources; ++i) {
-            all_pds.push_back(md_resources[i].md_name);
-        }
-
-        uct_release_md_resource_list(md_resources);
-    }
-
-    for (std::vector<std::string>::iterator iter = all_pds.begin();
-                    iter != all_pds.end(); ++iter)
-    {
-        if (iter->substr(0, mdc_name.length()) == mdc_name) {
-            result.push_back(*iter);
+    std::vector<test_md_param> result;
+    for (std::vector<md_resource>::iterator iter = md_resources.begin();
+         iter != md_resources.end(); ++iter) {
+        if (iter->cmpt_attr.name == mdc_name) {
+            result.push_back(test_md_param());
+            result.back().component = iter->cmpt;
+            result.back().md_name   = iter->rsc_desc.md_name;
         }
     }
+
     return result;
 }
 
@@ -74,7 +64,7 @@ test_md::test_md()
 {
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
-                           uct_md_config_read, GetParam().c_str(), NULL, NULL);
+                           uct_md_config_read, GetParam().component, NULL, NULL);
     memset(&m_md_attr, 0, sizeof(m_md_attr));
 }
 
@@ -82,7 +72,8 @@ void test_md::init()
 {
     ucs::test_base::init();
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           GetParam().c_str(), m_md_config);
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
 
     ucs_status_t status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
@@ -112,7 +103,7 @@ void test_md::check_caps(uint64_t flags, const std::string& name)
     ASSERT_UCS_OK(status);
     if (!ucs_test_all_flags(md_attr.cap.flags, flags)) {
         std::stringstream ss;
-        ss << name << " is not supported by " << GetParam();
+        ss << name << " is not supported by " << GetParam().md_name;
         UCS_TEST_SKIP_R(ss.str());
     }
 }
@@ -136,11 +127,20 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
             cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
             ASSERT_TRUE(cerr == cudaSuccess);
         }
+    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
+        cudaError_t cerr;
+
+        cerr = cudaMallocManaged(address, size);
+        ASSERT_TRUE(cerr == cudaSuccess);
+
+        if (fill_buffer) {
+            memcpy(*address, fill_buffer, size);
+        }
 #endif
     } else {
         std::stringstream ss;
-        ss << "can't allocate " << mem_types[mem_type]
-           << " memory for " << GetParam();
+        ss << "can't allocate " << mem_type_names[mem_type]
+           << " memory for " << GetParam().md_name;
         UCS_TEST_SKIP_R(ss.str());
     }
 }
@@ -191,12 +191,12 @@ UCS_TEST_P(test_md, rkey_ptr) {
 
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
-    size = 1024 * 1024 * sizeof(unsigned);
+    size = sizeof(unsigned) * UCS_MBYTE;
     status = uct_md_mem_alloc(md(), &size, (void **)&rva,
                               UCT_MD_MEM_ACCESS_ALL,
                               "test", &memh);
     ASSERT_UCS_OK(status);
-    EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
+    EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, size);
 
     // pack
     status = uct_md_query(md(), &md_attr);
@@ -211,11 +211,12 @@ UCS_TEST_P(test_md, rkey_ptr) {
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
 
     // unpack
-    status = uct_rkey_unpack(rkey_buffer, &rkey_bundle);
+    status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
     ASSERT_UCS_OK(status);
 
     // get direct ptr
-    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva, (void **)&lva);
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva,
+                          (void **)&lva);
     ASSERT_UCS_OK(status);
     // check direct access
     // read
@@ -232,15 +233,17 @@ UCS_TEST_P(test_md, rkey_ptr) {
 
     // check bounds
     //
-    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)(rva-1), (void **)&lva);
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)(rva-1),
+                          (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
-    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva+size, (void **)&lva);
+    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva+size,
+                          (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
     free(rkey_buffer);
     uct_md_mem_free(md(), memh);
-    uct_rkey_release(&rkey_bundle);
+    uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
 UCS_TEST_P(test_md, alloc) {
@@ -271,24 +274,27 @@ UCS_TEST_P(test_md, alloc) {
     }
 }
 
-UCS_TEST_P(test_md, mem_type_owned) {
+UCS_TEST_P(test_md, mem_type_detect_mds) {
 
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    int ret;
+    uct_memory_type_t mem_type;
+    int mem_type_id;
     void *address;
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
 
-    if (md_attr.cap.mem_type == UCT_MD_MEM_TYPE_HOST) {
-        UCS_TEST_SKIP_R("MD owns only host memory");
+    if (!md_attr.cap.detect_mem_types) {
+        UCS_TEST_SKIP_R("MD can't detect any memory types");
     }
 
-    alloc_memory(&address, 1024, NULL, md_attr.cap.mem_type);
-
-    ret = uct_md_is_mem_type_owned(md(), address, 1024);
-    EXPECT_TRUE(ret > 0);
+    ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
+        alloc_memory(&address, UCS_KBYTE, NULL, mem_type_id);
+        status = uct_md_detect_memory_type(md(), address, 1024, &mem_type);
+        ASSERT_UCS_OK(status);
+        EXPECT_TRUE(mem_type == mem_type_id);
+    }
 }
 
 UCS_TEST_P(test_md, reg) {
@@ -304,8 +310,8 @@ UCS_TEST_P(test_md, reg) {
     ASSERT_UCS_OK(status);
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
-                             << "registration is not supported by " << GetParam();
+            UCS_TEST_MESSAGE << mem_type_names[mem_type] << " memory "
+                             << "registration is not supported by " << GetParam().md_name;
             continue;
         }
         for (unsigned i = 0; i < 300; ++i) {
@@ -347,11 +353,11 @@ UCS_TEST_P(test_md, reg_perf) {
     ASSERT_UCS_OK(status);
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
-                             << " registration is not supported by " << GetParam();
+            UCS_TEST_MESSAGE << mem_type_names[mem_type] << " memory "
+                             << " registration is not supported by " << GetParam().md_name;
             continue;
         }
-        for (size_t size = 4096; size <= 4 * 1024 * 1024; size *= 2) {
+        for (size_t size = 4 * UCS_KBYTE; size <= 4 * UCS_MBYTE; size *= 2) {
             alloc_memory(&ptr, size, NULL, mem_type);
 
             ucs_time_t start_time = ucs_get_time();
@@ -376,8 +382,8 @@ UCS_TEST_P(test_md, reg_perf) {
                 }
             }
 
-            UCS_TEST_MESSAGE << GetParam() << ": Registration time for " <<
-                mem_types[mem_type] << " memory " << size << " bytes: " <<
+            UCS_TEST_MESSAGE << GetParam().md_name << ": Registration time for " <<
+                mem_type_names[mem_type] << " memory " << size << " bytes: " <<
                 long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
 
             free_memory(ptr, mem_type);
@@ -393,7 +399,7 @@ UCS_TEST_P(test_md, reg_advise) {
 
     check_caps(UCT_MD_FLAG_REG|UCT_MD_FLAG_ADVISE, "registration&advise");
 
-    size = 128 * 1024 * 1024;
+    size = 128 * UCS_MBYTE;
     address = malloc(size);
     ASSERT_TRUE(address != NULL);
 
@@ -403,7 +409,8 @@ UCS_TEST_P(test_md, reg_advise) {
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), memh, (char *)address + 7,
+                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mem_dereg(md(), memh);
@@ -419,7 +426,7 @@ UCS_TEST_P(test_md, alloc_advise) {
 
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_ADVISE, "allocation&advise");
 
-    orig_size = size = 128 * 1024 * 1024;
+    orig_size = size = 128 * UCS_MBYTE;
 
     status = uct_md_mem_alloc(md(), &size, &address,
                               UCT_MD_MEM_FLAG_NONBLOCK|
@@ -430,7 +437,8 @@ UCS_TEST_P(test_md, alloc_advise) {
     EXPECT_TRUE(address != NULL);
     EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), memh, (char *)address + 7,
+                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     memset(address, 0xBB, size);
@@ -498,7 +506,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
             sock_addr.addr = ifa->ifa_addr;
 
-            if (!strcmp(GetParam().c_str(), "rdmacm")) {
+            if (GetParam().md_name == "rdmacm") {
                 if (ucs::is_rdmacm_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                         ucs::sockaddr_to_str(ifa->ifa_addr);
@@ -519,7 +527,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         }
     }
 
-    if ((!strcmp(GetParam().c_str(), "rdmacm")) && (!found_ipoib)) {
+    if ((GetParam().md_name == "rdmacm") && !found_ipoib) {
         UCS_TEST_MESSAGE << "Cannot find an IPoIB interface with an IPv4 address on the host";
     }
 

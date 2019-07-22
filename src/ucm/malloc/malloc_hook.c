@@ -117,8 +117,8 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .trim_thresh_set  = 0,
     .hook_called      = 0,
     .max_freed_size   = 0,
-    .usable_size      = malloc_usable_size,
-    .free             = free,
+    .usable_size      = NULL,
+    .free             = NULL,
     .heap_start       = (void*)-1,
     .heap_end         = (void*)-1,
     .ptrs             = {0},
@@ -298,6 +298,12 @@ static void *ucm_malloc(size_t size, const void *caller)
     return ucm_malloc_impl(size, "malloc");
 }
 
+static size_t ucm_malloc_usable_size_common(void *mem, int foreign)
+{
+    return foreign ? ucm_malloc_hook_state.usable_size(mem) :
+                     dlmalloc_usable_size(mem);
+}
+
 static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
 {
     void *newptr;
@@ -316,7 +322,7 @@ static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
             newptr = ucm_dlmalloc(size);
             ucm_malloc_allocated(newptr, size, "realloc");
 
-            oldsz = ucm_malloc_hook_state.usable_size(oldptr);
+            oldsz = ucm_malloc_usable_size_common(oldptr, foreign);
             memcpy(newptr, oldptr, ucs_min(size, oldsz));
 
             if (foreign) {
@@ -627,7 +633,7 @@ static void ucm_malloc_test(int events)
 
 static void ucm_malloc_populate_glibc_cache()
 {
-    char hostname[NAME_MAX];
+    char hostname[HOST_NAME_MAX];
 
     /* Trigger NSS initialization before we install malloc hooks.
      * This is needed because NSS could allocate strings with our malloc(), but
@@ -641,9 +647,31 @@ static void ucm_malloc_populate_glibc_cache()
 static void ucm_malloc_install_symbols(ucm_reloc_patch_t *patches)
 {
     ucm_reloc_patch_t *patch;
+
     for (patch = patches; patch->symbol != NULL; ++patch) {
         ucm_reloc_modify(patch);
     }
+}
+
+static void* ucm_malloc_patchlist_prev_value(const ucm_reloc_patch_t *patches,
+                                             const char *symbol)
+{
+    const ucm_reloc_patch_t *patch;
+    for (patch = patches; patch->symbol != NULL; ++patch) {
+        if (!strcmp(patch->symbol, symbol)) {
+            ucm_debug("previous function pointer for '%s' is %p", symbol,
+                      patch->prev_value);
+            if (patch->prev_value == NULL) {
+                goto not_found;
+            }
+
+            return patch->prev_value;
+        }
+    }
+
+not_found:
+    ucm_fatal("could not find the previous value of '%s'", symbol);
+    return NULL;
 }
 
 static int ucm_malloc_mallopt(int param_number, int value)
@@ -662,6 +690,12 @@ static int ucm_malloc_mallopt(int param_number, int value)
         }
     }
     return success;
+}
+
+static size_t ucm_malloc_usable_size(void *mem)
+{
+    return ucm_malloc_usable_size_common(mem,
+                                         !ucm_malloc_is_address_in_heap(mem));
 }
 
 static char *ucm_malloc_blacklist[] = {
@@ -693,7 +727,7 @@ static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {
     { "mallinfo", ucm_dlmallinfo },
     { "malloc_stats", ucm_dlmalloc_stats },
     { "malloc_trim", ucm_dlmalloc_trim },
-    { "malloc_usable_size", ucm_dlmalloc_usable_size },
+    { "malloc_usable_size", ucm_malloc_usable_size },
     { NULL, NULL }
 };
 
@@ -701,6 +735,9 @@ static void ucm_malloc_install_optional_symbols()
 {
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS)) {
         ucm_malloc_install_symbols(ucm_malloc_optional_symbol_patches);
+        ucm_malloc_hook_state.usable_size    =
+            ucm_malloc_patchlist_prev_value(ucm_malloc_optional_symbol_patches,
+                                            "malloc_usable_size");
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_OPT_SYMS;
     }
 }
@@ -725,6 +762,23 @@ static void ucm_malloc_set_env_mallopt()
     }
 }
 
+static void ucm_malloc_init_orig_funcs()
+{
+    /* We cannot use global initializer for these variables; if we do it,
+     * GCC makes them part of .got, and patching .got actually changes the
+     * values of these global variables. As a workaround, we initialize
+     * them here.
+     * NOTE This also makes sure that libucm.so has a reference to these symbols,
+     * so patching the relocation tables would find their previous value by libucm
+     */
+    if (ucm_malloc_hook_state.usable_size == NULL) {
+        ucm_malloc_hook_state.usable_size = malloc_usable_size;
+    }
+    if ( ucm_malloc_hook_state.free == NULL) {
+        ucm_malloc_hook_state.free = free;
+    }
+}
+
 ucs_status_t ucm_malloc_install(int events)
 {
     static ucm_event_handler_t sbrk_handler = {
@@ -735,6 +789,8 @@ ucs_status_t ucm_malloc_install(int events)
     ucs_status_t status;
 
     pthread_mutex_lock(&ucm_malloc_hook_state.install_mutex);
+
+    ucm_malloc_init_orig_funcs();
 
     if (ucs_malloc_is_ready(events)) {
         goto out_succ;
@@ -792,8 +848,8 @@ ucs_status_t ucm_malloc_install(int events)
             ucm_debug("installing malloc relocations");
             ucm_malloc_populate_glibc_cache();
             ucm_malloc_install_symbols(ucm_malloc_symbol_patches);
-            ucs_assert(ucm_malloc_symbol_patches[0].value == ucm_free);
-            ucm_malloc_hook_state.free           = ucm_malloc_symbol_patches[0].prev_value;
+            ucm_malloc_hook_state.free           =
+                ucm_malloc_patchlist_prev_value(ucm_malloc_symbol_patches, "free");
             ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
         }
     } else {

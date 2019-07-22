@@ -30,6 +30,19 @@ static uct_iface_ops_t uct_self_iface_ops;
 static uct_md_component_t uct_self_md;
 
 
+static ucs_config_field_t uct_self_iface_config_table[] = {
+    {"", "", NULL,
+     ucs_offsetof(uct_self_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"SEG_SIZE", "8k",
+     "Size of copy-out buffer",
+     ucs_offsetof(uct_self_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {NULL}
+};
+
+
 static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
@@ -146,6 +159,8 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_self_iface_config_t *config = ucs_derived_of(tl_config,
+                                                     uct_self_iface_config_t);
     ucs_status_t status;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
@@ -173,7 +188,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                               UCS_STATS_ARG(UCT_SELF_NAME));
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
-    self->send_size   = tl_config->max_bcopy;
+    self->send_size   = config->seg_size;
 
     status = ucs_mpool_init(&self->msg_mp, 0, self->send_size, 0,
                             UCS_SYS_CACHE_LINE_SIZE,
@@ -316,21 +331,23 @@ static uct_iface_ops_t uct_self_iface_ops = {
 };
 
 UCT_TL_COMPONENT_DEFINE(uct_self_tl, uct_self_query_tl_resources, uct_self_iface_t,
-                        UCT_SELF_NAME, "SELF_", uct_iface_config_table, uct_iface_config_t);
+                        UCT_SELF_NAME, "SELF_", uct_self_iface_config_table,
+                        uct_self_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_self_md, &uct_self_tl);
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->cap.flags         = UCT_MD_FLAG_REG |
-                              UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
-    attr->cap.max_alloc     = 0;
-    attr->cap.max_reg       = ULONG_MAX;
-    attr->rkey_packed_size  = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
-    attr->reg_cost.overhead = 0;
-    attr->reg_cost.growth   = 0;
+    attr->cap.flags            = UCT_MD_FLAG_REG |
+                                 UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
+    attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    attr->cap.detect_mem_types = 0;
+    attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    attr->cap.max_alloc        = 0;
+    attr->cap.max_reg          = ULONG_MAX;
+    attr->rkey_packed_size     = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
+    attr->reg_cost.overhead    = 0;
+    attr->reg_cost.growth      = 0;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
@@ -353,12 +370,12 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
                                      uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close        = (void*)ucs_empty_function,
-        .query        = uct_self_md_query,
-        .mkey_pack    = ucs_empty_function_return_success,
-        .mem_reg      = uct_self_mem_reg,
-        .mem_dereg    = ucs_empty_function_return_success,
-        .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
+        .close              = (void*)ucs_empty_function,
+        .query              = uct_self_md_query,
+        .mkey_pack          = ucs_empty_function_return_success,
+        .mem_reg            = uct_self_mem_reg,
+        .mem_dereg          = ucs_empty_function_return_success,
+        .detect_memory_type = (void *)ucs_empty_function_return_zero,
     };
     static uct_md_t md = {
         .ops          = &md_ops,

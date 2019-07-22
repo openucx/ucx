@@ -46,7 +46,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     if (size == DEFAULT_SIZE) {
-        size = ucs_max((size_t)ucs::rand() % (12*1024), alignment);
+        size = ucs_max((size_t)ucs::rand() % (12 * UCS_KBYTE), alignment);
     }
     memheap_size = max_iter * size + alignment;
 
@@ -153,7 +153,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
     }
 
     if (memheap_size == DEFAULT_SIZE) {
-        memheap_size = 3 * 1024;
+        memheap_size = 3 * UCS_KBYTE;
         zero_offset = 1;
     }
 

@@ -60,6 +60,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
+    key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
@@ -84,8 +85,13 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     }
 
     ucp_ep_config_key_reset(&key);
+
+    status = ucp_worker_get_ep_config(worker, &key, 0, &ep->cfg_index);
+    if (status != UCS_OK) {
+        goto err_free_ep;
+    }
+
     ep->worker                      = worker;
-    ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
     ep->conn_sn                     = -1;
@@ -123,13 +129,15 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     return UCS_OK;
 
 err_free_ep:
-    ucs_free(ep);
+    ucs_strided_alloc_put(&worker->ep_alloc, ep);
 err:
     return status;
 }
 
 void ucp_ep_delete(ucp_ep_h ep)
 {
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_wireup_msg_ack_cb_pred, ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
@@ -214,10 +222,10 @@ ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
-    new_key.connected_lane = new_key.num_lanes++;
+    new_key.connected_lane                  = new_key.num_lanes++;
     ucp_ep->uct_eps[new_key.connected_lane] = uct_ep;
-    ucp_ep->cfg_index = ucp_worker_get_ep_config(ucp_ep->worker, &new_key);
-    return UCS_OK;
+    return ucp_worker_get_ep_config(ucp_ep->worker, &new_key, 0,
+                                    &ucp_ep->cfg_index);
 }
 
 static void
@@ -355,15 +363,15 @@ ucp_ep_create_sockaddr_connected(ucp_worker_h worker,
                              UCT_EP_PARAM_FIELD_USER_DATA             |
                              UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
                              UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
-                             UCT_EP_PARAM_FIELD_SOCKADDR_CONNECTED_CB |
-                             UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECTED_CB;
+                             UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
+                             UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
 
-    lane_params.user_data                    = ep;
-    lane_params.conn_request                 = params->conn_request->uct_req;
-    lane_params.sockaddr_cb_flags            = UCT_CB_FLAG_ASYNC;
-    lane_params.sockaddr_pack_cb             = ucp_wireup_sockaddr_priv_pack_cb;
-    lane_params.sockaddr_connected_cb.server = ucp_wireup_sockaddr_server_connected_cb;
-    lane_params.disconnected_cb              = ucp_ep_sockaddr_disconnected_cb;
+    lane_params.user_data                  = ep;
+    lane_params.conn_request               = params->conn_request->uct_req;
+    lane_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
+    lane_params.sockaddr_pack_cb           = ucp_wireup_sockaddr_priv_pack_cb;
+    lane_params.sockaddr_connect_cb.server = ucp_wireup_sockaddr_server_connected_cb;
+    lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnected_cb;
 
     ucs_assert(worker->num_cms == 1);
     for (i = 0; i < worker->num_cms; ++i) {
@@ -424,28 +432,26 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_unpacked_address_t local_address;
-    unsigned i, mem_type, md_index;
+    unsigned i, mem_type;
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
     ucp_ep_params_t params;
 
-    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
-        worker->mem_type_ep[i] = NULL;
-    }
-
-    if (!context->num_mem_type_mds) {
-        return UCS_OK;
-    }
-
     params.field_mask = 0;
 
-    for (i = 0; i < context->num_mem_type_mds; ++i) {
-        md_index = context->mem_type_tl_mds[i];
-        mem_type = context->tl_mds[md_index].attr.cap.mem_type;
+    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+            continue;
+        }
 
-        status = ucp_address_pack(worker, NULL, context->mem_type_tls[mem_type],
-                                  -1, NULL, &address_length, &address_buffer);
+        if (!context->mem_type_access_tls[mem_type]) {
+            continue;
+        }
+
+        status = ucp_address_pack(worker, NULL,
+                                  context->mem_type_access_tls[mem_type], -1,
+                                  NULL, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
@@ -505,7 +511,11 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     key.rma_bw_lanes[0]       = 0;
     key.amo_lanes[0]          = 0;
 
-    ep->cfg_index             = ucp_worker_get_ep_config(ep->worker, &key);
+    status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ep->am_lane               = 0;
     ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
@@ -698,6 +708,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucp_conn_request_h conn_request = params->conn_request;
     ucp_ep_h           ep;
     ucs_status_t       status;
+    uct_iface_h        iface;
 
     /* coverity[overrun-buffer-val] */
     status = ucp_ep_create_accept(worker, conn_request, &ep);
@@ -729,18 +740,16 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
-    if (!params->conn_request->ucp_listener->is_wcm) {
-        if (status == UCS_OK) {
-            status = uct_iface_accept(conn_request->ucp_listener->wiface.iface,
-                                      conn_request->uct_req);
-        } else {
-            uct_iface_reject(conn_request->ucp_listener->wiface.iface,
-                             conn_request->uct_req);
-        }
-    } else {
+    if (params->conn_request->ucp_listener->is_wcm) {
         /* TODO: add err handling with reject */
+    } else {
+        iface = conn_request->ucp_listener->wiface.wifaces[conn_request->wiface_idx].iface;
+        if (status == UCS_OK) {
+            status = uct_iface_accept(iface, conn_request->uct_req);
+        } else {
+            uct_iface_reject(iface, conn_request->uct_req);
+        }
     }
-
 ucs_free(params->conn_request);
 
     return status;
@@ -1084,7 +1093,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane;
-
+    int i;
 
     if ((key1->num_lanes        != key2->num_lanes)                                ||
         memcmp(key1->rma_lanes,    key2->rma_lanes,    sizeof(key1->rma_lanes))    ||
@@ -1107,6 +1116,12 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
             (key1->lanes[lane].proxy_lane != key2->lanes[lane].proxy_lane) ||
             (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index))
         {
+            return 0;
+        }
+    }
+
+    for (i = 0; i < ucs_popcount(key1->reachable_md_map); ++i) {
+        if (key1->dst_md_cmpts[i] != key2->dst_md_cmpts[i]) {
             return 0;
         }
     }
@@ -1299,6 +1314,16 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
               config->tag.rndv.rma_thresh, config->tag.rndv_send_nbr.rma_thresh);
 }
 
+static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_short,
+                                             ssize_t max_short, int num_mem_type_mds)
+{
+    if (!num_mem_type_mds) {
+        max_eager_short->memtype_off = max_short;
+    }
+
+    max_eager_short->memtype_on = max_short;
+}
+
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
@@ -1315,8 +1340,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if ((iface_attr->cap.flags & short_flag) &&
-        (context->config.ext.enable_memtype_cache)) {
+    if ((iface_attr->cap.flags & short_flag)) {
         config->max_short = max_short - hdr_len;
     } else {
         config->max_short = -1;
@@ -1324,11 +1348,14 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     if (iface_attr->cap.flags & bcopy_flag) {
         config->max_bcopy = max_bcopy;
+    } else {
+        config->max_bcopy = -1;
     }
 
     md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
-    if (!((iface_attr->cap.flags & zcopy_flag) &&
-          (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
+    if (!(iface_attr->cap.flags & zcopy_flag) ||
+        ((md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) &&
+         !(md_attr->cap.flags & UCT_MD_FLAG_REG))) {
         return;
     }
 
@@ -1364,7 +1391,25 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 }
 
-void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
+static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
+                                           const ucp_ep_config_key_t *src)
+{
+    *dst = *src;
+    dst->dst_md_cmpts = ucs_calloc(ucs_popcount(src->reachable_md_map),
+                                   sizeof(*dst->dst_md_cmpts),
+                                   "ucp_dst_md_cmpts");
+    if (dst->dst_md_cmpts == NULL) {
+        ucs_error("failed to allocate ucp_ep dest component list");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memcpy(dst->dst_md_cmpts, src->dst_md_cmpts,
+           ucs_popcount(src->reachable_md_map) * sizeof(*dst->dst_md_cmpts));
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
+                                const ucp_ep_config_key_t *key)
 {
     ucp_context_h context         = worker->context;
     ucp_lane_index_t tag_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
@@ -1377,8 +1422,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     size_t it;
     size_t max_rndv_thresh;
     size_t max_am_rndv_thresh;
+    ucs_status_t status;
     double rndv_max_bw;
     int i;
+
+    memset(config, 0, sizeof(*config));
+
+    status = ucp_ep_config_key_copy(&config->key, key);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* Default settings */
     for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -1411,10 +1464,13 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->stream.proto                = &ucp_stream_am_proto;
     config->am_u.proto                  = &ucp_am_proto;
     config->am_u.reply_proto            = &ucp_am_reply_proto;
-    config->tag.offload.max_eager_short = -1;
-    config->tag.max_eager_short         = -1;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
+
+    config->tag.offload.max_eager_short.memtype_on   = -1;
+    config->tag.offload.max_eager_short.memtype_off  = -1;
+    config->tag.max_eager_short.memtype_on           = -1;
+    config->tag.max_eager_short.memtype_off          = -1;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
         rsc_index = config->key.lanes[lane].rsc_index;
@@ -1479,16 +1535,18 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
             config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
-            config->tag.offload.max_eager_short = config->tag.eager.max_short;
             config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
             config->tag.proto                   = &ucp_tag_offload_proto;
             config->tag.lane                    = lane;
             max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
+            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
+                                             config->tag.eager.max_short,
+                                             context->num_mem_type_detect_mds);
+
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
-            ucs_assert_always(config->tag.offload.max_eager_short >= 0);
 
             if (config->key.am_lane != UCP_NULL_LANE) {
                 /* Must have active messages for using rendezvous */
@@ -1534,9 +1592,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                               config->key.rma_bw_lanes,
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
-                config->tag.eager           = config->am;
-                config->tag.lane            = lane;
-                config->tag.max_eager_short = config->tag.eager.max_short;
+                config->tag.eager                      = config->am;
+                config->tag.lane                       = lane;
+
+                ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
+                                                 config->tag.eager.max_short,
+                                                 context->num_mem_type_detect_mds);
             }
         } else {
             /* Stub endpoint */
@@ -1609,6 +1670,13 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
     }
+
+    return UCS_OK;
+}
+
+void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
+{
+    ucs_free(config->key.dst_md_cmpts);
 }
 
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
@@ -1691,6 +1759,8 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t proxy_lane;
+    ucp_md_index_t dst_md_index;
+    ucp_rsc_index_t cmpt_index;
     char *p, *endp;
     char *desc_str;
     int prio;
@@ -1725,7 +1795,10 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         p += strlen(p);
     }
 
-    snprintf(p, endp - p, "md[%d]", key->lanes[lane].dst_md_index);
+    dst_md_index = key->lanes[lane].dst_md_index;
+    cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
+    snprintf(p, endp - p, "md[%d]/%-8s", dst_md_index,
+             context->tl_cmpts[cmpt_index].attr.name);
     p += strlen(p);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane);

@@ -114,6 +114,26 @@ protected:
 class malloc_hook : public ucs::test {
     friend class mmap_event<malloc_hook>;
 protected:
+    /* use template argument to call/not call vm_unmap handler */
+    /* GCC 4.4.7 doesn't allow to define template static function
+     * with integer template argument. using template inner class
+     * to define static function */
+    template <int C> class bistro_hook {
+    public:
+        static int munmap(void *addr, size_t length)
+        {
+            UCM_BISTRO_PROLOGUE;
+            malloc_hook::bistro_call_counter++;
+            if (C) {
+                /* notify aggregate vm_munmap event only */
+                ucm_vm_munmap(addr, length);
+            }
+            int res = (intptr_t)syscall(SYS_munmap, addr, length);
+            UCM_BISTRO_EPILOGUE;
+            return res;
+        }
+    };
+
     void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     {
         m_got_event = 1;
@@ -140,15 +160,6 @@ protected:
             }
         }
         event.unset();
-    }
-
-    static int bistro_munmap_hook(void *addr, size_t length)
-    {
-        UCM_BISTRO_PROLOGUE;
-        bistro_call_counter++;
-        int res = (intptr_t)syscall(SYS_munmap, addr, length);
-        UCM_BISTRO_EPILOGUE;
-        return res;
     }
 
 public:
@@ -299,6 +310,7 @@ void test_thread::test() {
     void *ptr = malloc(large_alloc_size);
     EXPECT_GE(m_map_size, large_alloc_size + small_map_size) << m_name;
     EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_map_ranges)) << m_name;
+    EXPECT_GE(malloc_usable_size(ptr), large_alloc_size);
 
     free(ptr);
     EXPECT_GE(m_unmap_size, large_alloc_size) << m_name;
@@ -322,6 +334,9 @@ void test_thread::test() {
 
     /* Test username */
     ucs_get_user_name();
+
+    /* Test usable size */
+    EXPECT_GE(malloc_usable_size(ptr_r), small_alloc_size);
 
     /* Test realloc */
     ptr_r = realloc(ptr_r, small_alloc_size / 2);
@@ -708,7 +723,6 @@ protected:
 
 
 UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
-
     const size_t size = 8 * 1000 * 1000;
 
     set();
@@ -727,7 +741,7 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
 
     malloc_trim(0);
 
-    EXPECT_GE(m_unmapped_size, size * 3);
+    EXPECT_GE(m_unmapped_size, size);
 
     unset();
 }
@@ -915,12 +929,12 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     uint64_t UCS_V_UNUSED origin;
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
     ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, NULL);
+    EXPECT_NE((intptr_t)rp, 0);
 
     munmap_f = (munmap_f_t*)ucm_bistro_restore_addr(rp);
-    EXPECT_NE((intptr_t)munmap_f, NULL);
+    EXPECT_NE((intptr_t)munmap_f, 0);
 
     /* save partial body of patched function */
     patched = *(uint64_t*)munmap_f;
@@ -973,13 +987,13 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     const char *symbol = "munmap";
     ucm_bistro_restore_point_t *rp = NULL;
 
-    status = event.set(UCM_EVENT_MUNMAP);
+    status = event.set(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(status);
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
     ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, NULL);
+    EXPECT_NE((intptr_t)rp, 0);
 
     status = ucm_test_events(UCM_EVENT_MUNMAP);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
@@ -987,28 +1001,72 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
     status = ucm_test_events(UCM_EVENT_VM_UNMAPPED);
     EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
 
-    /* restore original mmap body */
+    /* restore original munmap body */
     status = ucm_bistro_restore(rp);
     ASSERT_UCS_OK(status);
 }
 
-/* test for mmap events are fired from non-direct load modules
- * we are trying to load lib1, from lib1 load lib2, and
- * fire mmap event from lib2 */
-UCS_TEST_F(malloc_hook, dlopen) {
+UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
+                     RUNNING_ON_VALGRIND || !skip_on_bistro()) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+    const char *symbol = "munmap";
+    ucm_bistro_restore_point_t *rp = NULL;
+
+    status = event.set(UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED);
+    ASSERT_UCS_OK(status);
+
+    /* set hook to mmap call */
+    status = ucm_bistro_patch(symbol, (void*)bistro_hook<1>::munmap, &rp);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE((intptr_t)rp, 0);
+
+    /* munmap should be broken */
+    status = ucm_test_events(UCM_EVENT_MUNMAP);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    /* vm_unmap should be broken as well, because munmap is broken */
+    status = ucm_test_events(UCM_EVENT_MUNMAP);
+    EXPECT_TRUE(status == UCS_ERR_UNSUPPORTED);
+
+    /* mmap should still work */
+    status = ucm_test_events(UCM_EVENT_MMAP);
+    EXPECT_TRUE(status == UCS_OK);
+
+    /* restore original munmap body */
+    status = ucm_bistro_restore(rp);
+    ASSERT_UCS_OK(status);
+}
+
+class malloc_hook_dlopen : public malloc_hook {
+public:
+    static std::string get_lib_dir() {
 #ifndef GTEST_UCM_HOOK_LIB_DIR
 #  error "Missing build configuration"
 #else
+        return GTEST_UCM_HOOK_LIB_DIR;
+#endif
+    }
+
+    static std::string get_lib_path_do_load() {
+        return get_lib_dir() + "/libdlopen_test_do_load.so";
+    }
+
+    static std::string get_lib_path_do_mmap() {
+        return get_lib_dir() + "/libdlopen_test_do_mmap.so";
+    }
+};
+
+/* test for mmap events are fired from non-direct load modules
+ * we are trying to load lib1, from lib1 load lib2, and
+ * fire mmap event from lib2 */
+UCS_TEST_F(malloc_hook_dlopen, indirect_dlopen) {
     typedef void (fire_mmap_f)(void);
     typedef void* (load_lib_f)(const char *path);
 
-    const char *libdlopen_load = "/libdlopen_test_do_load.so";
-    const char *libdlopen_mmap = "/libdlopen_test_do_mmap.so";
     const char *load_lib       = "load_lib";
     const char *fire_mmap      = "fire_mmap";
 
-    std::string lib_load;
-    std::string lib_mmap;
     void *lib;
     void *lib2;
     load_lib_f *load;
@@ -1019,13 +1077,7 @@ UCS_TEST_F(malloc_hook, dlopen) {
     status = event.set(UCM_EVENT_VM_MAPPED);
     ASSERT_UCS_OK(status);
 
-    lib_load = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_load;
-    lib_mmap = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_mmap;
-
-    UCS_TEST_MESSAGE << "Loading " << lib_load;
-    UCS_TEST_MESSAGE << "Loading " << lib_mmap;
-
-    lib = dlopen(lib_load.c_str(), RTLD_NOW);
+    lib = dlopen(get_lib_path_do_load().c_str(), RTLD_NOW);
     EXPECT_NE((uintptr_t)lib, (uintptr_t)NULL);
     if (!lib) {
         goto no_lib;
@@ -1037,7 +1089,7 @@ UCS_TEST_F(malloc_hook, dlopen) {
         goto no_load;
     }
 
-    lib2 = load(lib_mmap.c_str());
+    lib2 = load(get_lib_path_do_mmap().c_str());
     EXPECT_NE((uintptr_t)lib2, (uintptr_t)NULL);
     if (!lib2) {
         goto no_load;
@@ -1059,5 +1111,39 @@ no_load:
     dlclose(lib);
 no_lib:
     event.unset();
-#endif /* GTEST_UCM_HOOK_LIB_DIR */
+}
+
+UCS_MT_TEST_F(malloc_hook_dlopen, dlopen_mt_with_memtype, 2) {
+#ifndef GTEST_UCM_HOOK_LIB_DIR
+#  error "Missing build configuration"
+#endif
+    mmap_event<malloc_hook> event(this);
+
+    ucs_status_t status = event.set(UCM_EVENT_VM_MAPPED |
+                                    UCM_EVENT_MEM_TYPE_ALLOC |
+                                    UCM_EVENT_MEM_TYPE_FREE);
+    ASSERT_UCS_OK(status);
+
+    const std::string path = get_lib_path_do_mmap();
+    static uint32_t count = 0;
+
+    for (int i = 0; i < 100 / ucs::test_time_multiplier(); ++i) {
+        /* Tests that calling dlopen() from 2 threads does not deadlock, if for
+         * example we install memtype relocation patches and call dladdr() while
+         * iterating over loaded libraries.
+         */
+        if (ucs_atomic_fadd32(&count, 1) % 2) {
+            void *lib1 = dlopen(get_lib_path_do_mmap().c_str(), RTLD_LAZY);
+            ASSERT_TRUE(lib1 != NULL);
+            dlclose(lib1);
+        } else {
+            void *lib2 = dlopen(get_lib_path_do_load().c_str(), RTLD_LAZY);
+            ASSERT_TRUE(lib2 != NULL);
+            dlclose(lib2);
+        }
+
+        barrier();
+    }
+
+    event.unset();
 }

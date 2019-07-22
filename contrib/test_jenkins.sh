@@ -52,10 +52,16 @@ else
 fi
 
 #
-# Build command runs with 10 tasks
+# Parallel build command runs with 4 tasks, or number of cores on the system,
+# whichever is lowest
 #
+num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
+[ -z $num_cpus ] && num_cpus=1
+parallel_jobs=4
+[ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+
 MAKE="make"
-MAKEP="make -j10"
+MAKEP="make -j${parallel_jobs}"
 
 
 #
@@ -166,10 +172,11 @@ get_my_tasks() {
 # Get list of active IB devices
 #
 get_active_ib_devices() {
-	for ibdev in $(ibstat -l)
+	device_list=$(ibv_devinfo -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1)
+	for ibdev in $device_list
 	do
 		port=1
-		(ibstat $ibdev $port | grep -q Active) && echo "$ibdev:$port" || true
+		(ibv_devinfo -d $ibdev -i $port | grep -q PORT_ACTIVE) && echo "$ibdev:$port" || true
 	done
 }
 
@@ -337,6 +344,17 @@ build_debug() {
 }
 
 #
+# Build prof
+#
+build_prof() {
+	echo "==== Build configure-prof ===="
+	../contrib/configure-prof --prefix=$ucx_inst
+	$MAKEP clean
+	$MAKEP
+	$MAKEP distclean
+}
+
+#
 # Build UGNI
 #
 build_ugni() {
@@ -430,19 +448,32 @@ build_clang() {
 #
 build_gcc_latest() {
 	echo 1..1 > build_gcc_latest.tap
-	if module_load dev/gcc-latest
+	#If the glibc version on the host is older than 2.14, don't run
+	#check the glibc version with the ldd version since it comes with glibc
+	#see https://www.linuxquestions.org/questions/linux-software-2/how-to-check-glibc-version-263103/
+	#see https://benohead.com/linux-check-glibc-version/
+	#see https://stackoverflow.com/questions/9705660/check-glibc-version-for-a-particular-gcc-compiler
+	ldd_ver="$(ldd --version | awk '/ldd/{print $NF}')"
+	if (echo "2.14"; echo $ldd_ver) | sort -CV
 	then
-		echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
-		../contrib/configure-devel --prefix=$ucx_inst
-		$MAKEP clean
-		$MAKEP
-		$MAKEP install
-		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		$MAKEP distclean
-		echo "ok 1 - build successful " >> build_gcc_latest.tap
+		if module_load dev/gcc-latest
+		then
+			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
+			../contrib/configure-devel --prefix=$ucx_inst
+			$MAKEP clean
+			$MAKEP
+			$MAKEP install
+			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
+			$MAKEP distclean
+			echo "ok 1 - build successful " >> build_gcc_latest.tap
+		else
+			echo "==== Not building with latest gcc compiler ===="
+			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
+		fi
 	else
-		echo "==== Not building with latest gcc compiler ===="
-		echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
+		echo "==== Not building with gcc compiler ===="
+		echo "Required glibc version is too old ($ldd_ver)"
+		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc_latest.tap
 	fi
 }
 
@@ -522,6 +553,23 @@ check_inst_headers() {
 	echo "ok 1 - build successful " >> inst_headers.tap
 }
 
+check_make_distcheck() {
+	echo 1..1 > make_distcheck.tap
+
+	# If the gcc version on the host is older than 4.8.5, don't run
+	# due to a compiler bug that reproduces when building with gtest
+	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61886
+	if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
+	then
+		echo "==== Testing make distcheck ===="
+		$MAKEP clean && $MAKEP distclean
+		../contrib/configure-release --prefix=$PWD/install
+		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
+	else
+		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
+	fi
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -538,7 +586,7 @@ run_hello() {
 	# set smaller timeouts so the test will complete faster
 	if [[ ${test_args} == *"-e"* ]]
 	then
-		export UCX_UD_TIMEOUT=1s
+		export UCX_UD_TIMEOUT=15s
 		export UCX_RC_TIMEOUT=1ms
 		export UCX_RC_RETRY_COUNT=4
 	fi
@@ -758,7 +806,7 @@ test_malloc_hooks_mpi() {
 #
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
-	if module_load hpcx-gcc
+	if module_load hpcx-gcc && mpirun --version
 	then
 		# Prevent our tests from using UCX libraries from hpcx module by prepending
 		# our local library path first
@@ -833,6 +881,10 @@ test_ucs_dlopen() {
 	# Make sure UCM is not unloaded
 	echo "==== Running UCS dlopen test with memhooks ===="
 	./test/apps/test_ucs_dlopen
+
+	# Test global config list integrity after loading/unloading of UCT
+	echo "==== Running test_dlopen_cfg_print ===="
+	./test/apps/test_dlopen_cfg_print
 }
 
 test_ucp_dlopen() {
@@ -841,7 +893,8 @@ test_ucp_dlopen() {
 	$MAKEP
 
 	# Make sure UCP library, when opened with dlopen(), loads CMA module
-	if find -name libuct_cma.so.0
+	LIB_CMA=`find ${ucx_inst} -name libuct_cma.so.0`
+	if [ -n "$LIB_CMA" ]
 	then
 		echo "==== Running UCP library loading test ===="
 		./test/apps/test_ucp_dlopen # just to save output to log
@@ -868,34 +921,39 @@ test_unused_env_var() {
 
 test_env_var_aliases() {
 	echo "==== Running MLX5 env var aliases test ===="
-	vars=( "TM_ENABLE" "TM_MAX_BCOPY" "TM_LIST_SIZE" "TX_MAX_BB" )
-	for var in "${vars[@]}"
-	do
-		for tl in "RC_MLX5" "DC_MLX5"
+	if [[ `./src/tools/info/ucx_info -b | grep -P 'HW_TM *1$'` ]]
+	then
+		vars=( "TM_ENABLE" "TM_LIST_SIZE" "TX_MAX_BB" )
+		for var in "${vars[@]}"
 		do
-			val=$(./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
-			if [ -z $val ]
-			then
-				echo "UCX_${tl}_${var} does not exist in UCX config"
-				exit 1
-			fi
-			# To check that changing env var takes an effect,
-			# create some value, which is different from the default.
-			magic_val=`echo $val | sed -e ' s/inf\|auto/15/; s/n/swap/; s/y/n/; s/swap/y/; s/\([0-9]\)/\11/'`
-
-			# Check that both (tl name and common RC) aliases work
-			for var_alias in "RC" $tl
+			for tl in "RC_MLX5" "DC_MLX5"
 			do
-				var_name=UCX_${var_alias}_${var}
-				val_set=$(export $var_name=$magic_val; ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
-				if [ "$val_set" != "$magic_val" ]
+				val=$(./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+				if [ -z $val ]
 				then
-					echo "Can't set $var_name"
+					echo "UCX_${tl}_${var} does not exist in UCX config"
 					exit 1
 				fi
+				# To check that changing env var takes an effect,
+				# create some value, which is different from the default.
+				magic_val=`echo $val | sed -e ' s/inf\|auto/15/; s/n/swap/; s/y/n/; s/swap/y/; s/\([0-9]\)/\11/'`
+
+				# Check that both (tl name and common RC) aliases work
+				for var_alias in "RC" $tl
+				do
+					var_name=UCX_${var_alias}_${var}
+					val_set=$(export $var_name=$magic_val; ./src/tools/info/ucx_info -c | grep "${tl}_${var}" | cut -d'=' -f2)
+					if [ "$val_set" != "$magic_val" ]
+					then
+						echo "Can't set $var_name"
+						exit 1
+					fi
+				done
 			done
 		done
-	done
+	else
+		echo "HW TM is not compiled in UCX"
+	fi
 }
 
 test_malloc_hook() {
@@ -909,13 +967,48 @@ test_malloc_hook() {
 test_jucx() {
 	echo "==== Running jucx test ===="
 	echo "1..2" > jucx_tests.tap
-	if module_load dev/jdk && module_load dev/mvn
+	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+	if [ -z "$iface" ]
+        then
+		echo "Failed to find active ib devices." >> jucx_tests.tap
+		return
+	elif module_load dev/jdk && module_load dev/mvn
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
-		export JUCX_TEST_PORT=jucx_port
-		export UCX_ERROR_SIGNALS=""
+		export JUCX_TEST_PORT=$jucx_port
 		$MAKE -C bindings/java/src/main/native test
-		unset UCX_ERROR_SIGNALS
+	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		if [ -n "$ifaces" ]
+		then
+                        $MAKE -C bindings/java/src/main/native package
+		fi
+		for iface in $ifaces 
+		do
+			if [ -n "$iface" ]
+                	then
+                   		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+                	fi
+
+                	if [ -z "$server_ip" ]
+                	then
+		   	   	echo "Interface $iface has no IPv4"	
+                   	   	continue
+                        fi
+                        echo "Running standalone benchamrk on $iface"
+
+                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+				 s=$server_ip p=$JUCX_TEST_PORT &
+                        java_pid=$!
+			 sleep 10
+                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+			         -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
+				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
+				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			 wait $java_pid
+		done
+
 		unset JUCX_TEST_PORT
 		module unload dev/jdk
 		module unload dev/mvn
@@ -999,7 +1092,7 @@ run_gtest_watchdog_test() {
 
 	runtime=$(($end_time-$start_time))
 
-	if [ $run_time -gt $expected_runtime ]
+	if [ $runtime -gt $expected_runtime ]
 	then
 		echo "Watchdog timeout test takes $runtime seconds that" \
 			"is greater than expected $expected_runtime seconds"
@@ -1027,8 +1120,10 @@ run_gtest() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
-	# Run UCT tests for TCP over RDMA devices only
+	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
+	# Report TOP-20 longest test at the end of testing
+	export GTEST_REPORT_LONGEST_TESTS=20
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1071,7 +1166,8 @@ run_gtest() {
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
+	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
+	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
 	then
 		echo "==== Running valgrind tests, $compiler_name compiler ===="
 
@@ -1174,6 +1270,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
@@ -1225,6 +1322,7 @@ do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
+do_distributed_task 1 4 check_make_distcheck
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then

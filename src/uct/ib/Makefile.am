@@ -36,18 +36,29 @@ noinst_HEADERS += \
 	mlx5/ib_mlx5_log.h \
 	mlx5/ib_mlx5.h \
 	mlx5/ib_mlx5.inl \
-	mlx5/ib_mlx5_dv.h \
-	mlx5/ib_mlx5_hw.h \
-	mlx5/ib_mlx5_ifc.h
+	mlx5/dv/ib_mlx5_dv.h \
+	mlx5/dv/ib_mlx5_ifc.h \
+	mlx5/exp/ib_mlx5_hw.h
 
 libuct_ib_la_SOURCES += \
 	mlx5/ib_mlx5_log.c \
-	mlx5/ib_mlx5.c \
-	mlx5/ib_mlx5_dv.c \
-	mlx5/ib_mlx5_hw.c
+	mlx5/ib_mlx5.c
+
+if HAVE_EXP
+noinst_HEADERS += \
+	mlx5/exp/ib_exp.h
+
+libuct_ib_la_SOURCES += \
+	mlx5/exp/ib_mlx5_hw.c \
+	mlx5/exp/ib_exp.c \
+	mlx5/exp/ib_exp_md.c
+endif # HAVE_EXP
 
 if HAVE_MLX5_DV
 libuct_ib_la_LDFLAGS +=  $(LIB_MLX5)
+libuct_ib_la_SOURCES += \
+	mlx5/dv/ib_mlx5_dv.c \
+	mlx5/dv/ib_mlx5dv_md.c
 endif # HAVE_MLX5_DV
 
 endif # HAVE_MLX5_HW
