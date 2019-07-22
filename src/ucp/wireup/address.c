@@ -694,9 +694,12 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ++address_count;
             ucs_assert(address_count <= UCP_MAX_RESOURCES);
         }
-
     } while (!last_dev);
 
+    if (!address_count) {
+        address_list = NULL;
+        goto out;
+    }
 
     /* Allocate address list */
     address_list = ucs_calloc(address_count, sizeof(*address_list),
@@ -770,6 +773,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         ++dev_index;
     } while (!last_dev);
 
+out:
     unpacked_address->address_count = address_count;
     unpacked_address->address_list  = address_list;
     return UCS_OK;
