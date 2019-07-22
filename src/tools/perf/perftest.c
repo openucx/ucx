@@ -1394,8 +1394,8 @@ static ucs_status_t clone_params(ucx_perf_params_t *dest,
     *dest               = *src;
     msg_size_list_size  = dest->msg_size_cnt * sizeof(*dest->msg_size_list);
     dest->msg_size_list = malloc(msg_size_list_size);
-    if ((dest->msg_size_list == NULL) && (msg_size_list_size != 0)) {
-        return UCS_ERR_NO_MEMORY;
+    if (dest->msg_size_list == NULL) {
+        return ((msg_size_list_size != 0) ? UCS_ERR_NO_MEMORY : UCS_OK);
     }
 
     memcpy(dest->msg_size_list, src->msg_size_list, msg_size_list_size);
