@@ -123,6 +123,16 @@ int ucs_socket_max_conn();
 
 
 /**
+ * Returns the maximum possible value for the number of IOVs.
+ * It maybe either value from the system configuration or IOV_MAX
+ * value or UIO_MAXIOV value or 1024 if nothing is defined.
+ *
+ * @return The maximum number of IOVs.
+ */
+int ucs_socket_max_iov();
+
+
+/**
  * Non-blocking send operation sends data on the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
  *
@@ -136,7 +146,8 @@ int ucs_socket_max_conn();
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or
+ *         would block, UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
@@ -157,7 +168,8 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
  * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or
+ *         would block, UCS_ERR_IO_ERROR on failure.
  */
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
@@ -182,6 +194,28 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
                              ucs_socket_io_err_cb_t err_cb,
                              void *err_cb_arg);
+
+
+/**
+ * Non-blocking send operation sends I/O vector on the connected (or bound
+ * connectionless) socket referred to by the file descriptor `fd`.
+ *
+ * @param [in]      fd              Socket fd.
+ * @param [in]      iov             A pointer to an array of iovec buffers.
+ * @param [in]      iov_cnt         The number of buffers pointed to by
+ *                                  the iov parameter.
+ * @param [out]     length_p        The amount of data transmitted is written to
+ *                                  this argument.
+ * @param [in]      err_cb          Error callback.
+ * @param [in]      err_cb_arg      User's argument for the error callback.
+ *
+ * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or
+ *         would block, UCS_ERR_IO_ERROR on failure.
+ */
+ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
+                                 size_t *length_p, ucs_socket_io_err_cb_t err_cb,
+                                 void *err_cb_arg);
 
 
 /**

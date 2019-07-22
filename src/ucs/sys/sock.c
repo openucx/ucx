@@ -14,6 +14,11 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/uio.h>
+/* need this to get IOV_MAX on some platforms. */
+#ifndef __need_IOV_MAX
+#define __need_IOV_MAX
+#endif
 #include <limits.h>
 
 
@@ -22,6 +27,9 @@
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
                                         size_t size, int flags);
+
+typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
+                                         int flags);
 
 
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
@@ -179,6 +187,56 @@ int ucs_socket_max_conn()
     }
 }
 
+int ucs_socket_max_iov()
+{
+    static int max_iov = -1;
+
+#ifdef _SC_IOV_MAX
+    if (max_iov != -1) {
+        return max_iov;
+    }
+
+    max_iov = sysconf(_SC_IOV_MAX);
+    if (max_iov != -1) {
+        return max_iov;
+    }
+    /* if unable to get value from sysconf(),
+     * use a predefined value */
+#endif
+
+#if defined(IOV_MAX)
+    max_iov = IOV_MAX;
+#elif defined(UIO_MAXIOV)
+    max_iov = UIO_MAXIOV;
+#else
+    /* The value is used as a fallback when system value is not available.
+     * The latest kernels define it as 1024 */
+    max_iov = 1024;
+#endif
+
+    return max_iov;
+}
+
+static ucs_status_t
+ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno,
+                           ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+{
+    if (io_retval == 0) {
+        ucs_trace("fd %d is closed", fd);
+        return UCS_ERR_CANCELED; /* Connection closed */
+    }
+
+    if ((io_errno == EINTR) || (io_errno == EAGAIN) || (io_errno == EWOULDBLOCK)) {
+        return UCS_ERR_NO_PROGRESS;
+    }
+
+    if ((err_cb != NULL) && (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
+        ucs_error("%s(fd=%d) failed: %m", name, fd);
+    }
+
+    return UCS_ERR_IO_ERROR;
+}
+
 static inline ucs_status_t
 ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
                     ucs_socket_io_func_t io_func, const char *name,
@@ -194,20 +252,9 @@ ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
         return UCS_OK;
     }
 
-    if (ret == 0) {
-        ucs_trace("fd %d is closed", fd);
-        return UCS_ERR_CANCELED; /* Connection closed */
-    }
-
-    if ((errno == EINTR) || (errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-        return UCS_ERR_NO_PROGRESS;
-    }
-
-    if ((err_cb != NULL) && (err_cb(err_cb_arg, errno) != UCS_OK)) {
-        ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
-                  name, fd, data, *length_p);
-    }
-    return UCS_ERR_IO_ERROR;
+    *length_p = 0;
+    return ucs_socket_handle_io_error(fd, name, ret, errno,
+                                      err_cb, err_cb_arg);
 }
 
 static inline ucs_status_t
@@ -231,6 +278,30 @@ ucs_socket_do_io_b(int fd, void *data, size_t length,
     } while (done_cnt < length);
 
     return UCS_OK;
+}
+
+static inline ucs_status_t
+ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p,
+                     ucs_socket_iov_func_t iov_func, const char *name,
+                     ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+{
+    struct msghdr msg = {
+        .msg_iov    = iov,
+        .msg_iovlen = iov_cnt
+    };
+    ssize_t ret;
+
+    ucs_assert(iov_cnt > 0);
+
+    ret = iov_func(fd, &msg, MSG_NOSIGNAL);
+    if (ucs_likely(ret > 0)) {
+        *length_p = ret;
+        return UCS_OK;
+    }
+
+    *length_p = 0;
+    return ucs_socket_handle_io_error(fd, name, ret, errno,
+                                      err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
@@ -265,6 +336,14 @@ ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
 {
     return ucs_socket_do_io_b(fd, data, length, recv,
                               "recv", err_cb, err_cb_arg);
+}
+
+ucs_status_t
+ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p,
+                    ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+{
+    return ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, sendmsg,
+                                "sendv", err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
