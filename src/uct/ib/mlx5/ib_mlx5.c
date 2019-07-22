@@ -522,18 +522,18 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 {
     uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
                                                  uct_ib_mlx5_devx_uar_t);
-
-    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_DEVX) {
+    switch (txwq->super.type) {
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
-    }
-
-    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
+        break;
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
         uct_ib_mlx5_iface_put_res_domain(&txwq->super);
         uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
-    }
-
-    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_LAST && txwq->reg != NULL) {
-        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        if (txwq->reg != NULL) {
+            uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        }
     }
 }
 

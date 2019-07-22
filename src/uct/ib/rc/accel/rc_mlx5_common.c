@@ -168,9 +168,11 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     uct_ib_mlx5_md_t *md  = ucs_derived_of(iface->super.super.super.md,
                                            uct_ib_mlx5_md_t);
     uct_ib_device_t *dev  = &md->super.dev;
+    struct ibv_ah_attr ah_attr = {};
     uct_ib_qp_attr_t attr = {};
-    struct ibv_ah_attr ah = {};
     ucs_status_t status;
+
+    ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_QP_TYPE_LAST);
 
     attr.cap.max_send_wr  = iface->tm.cmd_qp_len;
     attr.cap.max_send_sge = 1;
@@ -187,20 +189,20 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
         return status;
     }
 
-    ah.is_global          = 1;
-    ah.grh.dgid           = iface->super.super.gid;
-    ah.dlid               = uct_ib_device_port_attr(dev, attr.port)->lid;
-    ah.port_num           = dev->first_port;
+    ah_attr.is_global     = 1;
+    ah_attr.grh.dgid      = iface->super.super.gid;
+    ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.port)->lid;
+    ah_attr.port_num      = dev->first_port;
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &iface->tm.cmd_wq.super.super,
-            iface->tm.cmd_wq.super.super.qp_num, &ah);
+            iface->tm.cmd_wq.super.super.qp_num, &ah_attr);
     if (status != UCS_OK) {
-        goto err;
+        goto err_destroy_qp;
     }
 
     return UCS_OK;
 
-err:
+err_destroy_qp:
     uct_ib_mlx5_devx_destroy_qp(&iface->tm.cmd_wq.super.super);
     return status;
 }
