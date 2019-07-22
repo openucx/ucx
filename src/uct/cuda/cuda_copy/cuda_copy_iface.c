@@ -95,7 +95,8 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
 
     iface_attr->latency.overhead        = 10e-6; /* 10 us */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.dedicated     = 6911 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 
