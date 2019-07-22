@@ -463,6 +463,64 @@ void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep)
     }
 }
 
+/* Fill iovec data structure by data provided in uct_iov_t.
+ * The function avoids copying IOVs with zero length.
+ * @return Number of elements in io_vec[].
+ */
+static inline size_t
+uct_tcp_ep_iovec_fill_iov(struct iovec *io_vec, const uct_iov_t *iov,
+                          size_t iovcnt, size_t *total_length)
+{
+    size_t iov_it, io_vec_it = 0;
+
+    *total_length = 0;
+
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        io_vec[io_vec_it].iov_len = uct_iov_get_length(&iov[iov_it]);
+
+        /* Avoid zero length elements in resulted iov_vec */
+        if (io_vec[io_vec_it].iov_len != 0) {
+            io_vec[io_vec_it].iov_base = iov[iov_it].buffer;
+            *total_length += io_vec[io_vec_it].iov_len;
+            ++io_vec_it;
+        }
+    }
+
+    return io_vec_it;
+}
+
+/* Updates `EP Zcopy context attributes to not
+ * consider already consumed buffers */
+static inline void
+uct_tcp_ep_zcopy_ctx_consume_iov(uct_tcp_ep_zcopy_ctx_t *zcopy_ctx,
+                                 size_t consumed)
+{
+    struct iovec *iov = (struct iovec*)zcopy_ctx->iov;
+    size_t i;
+
+    ucs_assert(zcopy_ctx->iov_index  <= zcopy_ctx->iov_cnt);
+    ucs_assert(zcopy_ctx->iov_offset <= iov[zcopy_ctx->iov_index].iov_len);
+
+    for (i = zcopy_ctx->iov_index; i < zcopy_ctx->iov_cnt; i++) {
+        if ((zcopy_ctx->iov_offset + consumed) < iov[i].iov_len) {
+            zcopy_ctx->iov_offset += consumed;
+            zcopy_ctx->iov_index   = i;
+            return;
+        }
+
+        /* Only the 1st iteration of the loop can be
+         * done with non-zero IOV offset */
+        ucs_assert(!zcopy_ctx->iov_offset ||
+                   ((zcopy_ctx->iov_offset) &&
+                    (i == zcopy_ctx->iov_index)));
+        zcopy_ctx->iov_offset = 0;
+        consumed -= iov[i].iov_len;
+    }
+
+    zcopy_ctx->iov_offset = consumed;
+    zcopy_ctx->iov_index  = i;
+}
+
 static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
                                            uct_tcp_ep_ctx_t *ctx)
 {
@@ -501,6 +559,52 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
     iface->outstanding -= send_length;
     ep->tx.offset      += send_length;
     ucs_trace_data("tcp_ep %p: sent %zu bytes", ep, send_length);
+
+    return send_length > 0;
+}
+
+static inline unsigned uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface      = ucs_derived_of(ep->super.super.iface,
+                                                 uct_tcp_iface_t);
+    uct_tcp_ep_zcopy_ctx_t *ctx = (uct_tcp_ep_zcopy_ctx_t*)ep->tx.buf;
+    struct iovec *ctx_iov       = (struct iovec*)ctx->iov;
+    size_t send_length;
+    ucs_status_t status;
+
+    ucs_assertv(ep->tx.offset < ep->tx.length, "ep=%p", ep);
+
+    /* Adjust the current IOV buffer to send from right point */
+    ctx_iov[ctx->iov_index].iov_len  -= ctx->iov_offset;
+    ctx_iov[ctx->iov_index].iov_base  = (uint8_t*)ctx_iov[ctx->iov_index].iov_base +
+                                        ctx->iov_offset;
+    status = ucs_socket_sendv_nb(ep->fd, &ctx_iov[ctx->iov_index],
+                                 ctx->iov_cnt - ctx->iov_index,
+                                 &send_length, NULL, NULL);
+    /* Return a pointer to the beginning of the current IOV buffer */
+    ctx_iov[ctx->iov_index].iov_len  += ctx->iov_offset;
+    ctx_iov[ctx->iov_index].iov_base  = (uint8_t*)ctx_iov[ctx->iov_index].iov_base -
+                                        ctx->iov_offset;
+
+    ucs_trace_data("tcp_ep %p: sendv %zu bytes", ep, send_length);
+
+    ep->tx.offset      += send_length;
+    iface->outstanding -= send_length;
+
+    if ((ep->tx.offset != ep->tx.length) &&
+        ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS)))
+    {
+        uct_tcp_ep_zcopy_ctx_consume_iov(ctx, send_length);
+    } else {
+        ep->ctx_caps  &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
+        ep->tx.length  = ep->tx.offset;
+        if ((ctx->comp != NULL) &&
+            ((!--ctx->comp->count) || (status != UCS_OK)))
+        {
+            ctx->comp->count = 0;
+            ctx->comp->func(ctx->comp, status);
+        }
+    }
 
     return send_length > 0;
 }
@@ -566,7 +670,11 @@ static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
     ucs_trace_func("ep=%p", ep);
 
     if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-        count += uct_tcp_ep_send(ep);
+        if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX))) {
+            count += uct_tcp_ep_send(ep);
+        } else {
+            count += uct_tcp_ep_sendv(ep);
+        }
 
         if (!uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
             uct_tcp_ep_ctx_reset(&ep->tx);
@@ -786,6 +894,93 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, payload_length);
 
     return payload_length;
+}
+
+ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *header,
+                                 unsigned header_length, const uct_iov_t *iov,
+                                 size_t iovcnt, unsigned flags,
+                                 uct_completion_t *comp)
+{
+    uct_tcp_ep_t *ep       = ucs_derived_of(uct_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr  = NULL;
+    uct_tcp_ep_zcopy_ctx_t *ctx;
+    struct iovec *ctx_iov;
+    ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->max_iov, "uct_tcp_ep_am_zcopy");
+    UCT_CHECK_LENGTH(header_length, 0, iface->max_zcopy_hdr,
+                     "am_zcopy header");
+    UCT_CHECK_LENGTH(header_length + uct_iov_total_length(iov, iovcnt), 0,
+                     iface->rx_seg_size - sizeof(uct_tcp_am_hdr_t),
+                     "am_zcopy");
+
+    status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assertv(hdr != NULL, "ep=%p", ep);
+
+    ctx          = ucs_derived_of(hdr, uct_tcp_ep_zcopy_ctx_t);
+    ctx->iov_cnt = 0;
+    ctx_iov      = (struct iovec*)ctx->iov;
+
+    ctx_iov[ctx->iov_cnt].iov_base = hdr;
+    ctx_iov[ctx->iov_cnt].iov_len  = sizeof(*hdr);
+    ctx->iov_cnt++;
+
+    if (header_length != 0) {
+        ucs_assert(header != NULL);
+        ctx_iov[ctx->iov_cnt].iov_base = (void*)header;
+        ctx_iov[ctx->iov_cnt].iov_len  = header_length;
+        ctx->iov_cnt++;
+    }
+
+    ctx->iov_cnt  += uct_tcp_ep_iovec_fill_iov(&ctx_iov[ctx->iov_cnt], iov,
+                                              iovcnt, &ep->tx.length);
+    hdr->length    = ep->tx.length + header_length;
+    ep->tx.length  = hdr->length   + sizeof(*hdr);
+
+    ucs_assertv(ep->tx.length <= iface->rx_seg_size, "ep=%p", ep);
+
+    uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
+                       header, hdr->length, "SEND %p fd %d", ep, ep->fd);
+
+    iface->outstanding += ep->tx.length;
+
+    status = ucs_socket_sendv_nb(ep->fd, ctx_iov, ctx->iov_cnt,
+                                 &ep->tx.offset, NULL, NULL);
+
+    ucs_trace_data("tcp_ep %p: sendv %zu bytes", ep, ep->tx.offset);
+    UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
+
+    iface->outstanding -= ep->tx.offset;
+    if ((ep->tx.offset != ep->tx.length) &&
+        ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS))) {
+        ctx->comp     = comp;
+        ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
+
+        if ((header_length != 0) &&
+            /* check whether a user's header was sent or not */
+            (ep->tx.offset < (sizeof(*hdr) + header_length))) {
+            ucs_assert(header_length <= iface->max_zcopy_hdr);
+            /* if the user's header wasn't sent completely, copy it to the EP
+             * TX buffer (after Zcopy context and IOVs) for retransmission */
+            ctx_iov[1].iov_base = ep->tx.buf + iface->zcopy_hdr_offset;
+            memcpy(ctx_iov[1].iov_base, header, header_length);
+        }
+
+        ctx->iov_index  = 0;
+        ctx->iov_offset = 0;
+
+        uct_tcp_ep_zcopy_ctx_consume_iov(ctx, ep->tx.offset);
+        uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
+        return UCS_INPROGRESS;
+    }
+
+    uct_tcp_ep_ctx_reset(&ep->tx);
+    return status;
 }
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,

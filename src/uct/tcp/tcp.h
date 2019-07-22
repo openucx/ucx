@@ -15,21 +15,36 @@
 
 #include <net/if.h>
 
-#define UCT_TCP_NAME                "tcp"
+#define UCT_TCP_NAME                          "tcp"
 
 /* Maximum number of events to wait on event set */
-#define UCT_TCP_MAX_EVENTS          16
+#define UCT_TCP_MAX_EVENTS                    16
 
 /* How long should be string to keep [%s:%s] string
  * where %s value can be -/Tx/Rx */
-#define UCT_TCP_EP_CTX_CAPS_STR_MAX 8
+#define UCT_TCP_EP_CTX_CAPS_STR_MAX           8
+
+/* How many IOVs are needed to keep AM Zcopy service data
+ * (TCP protocol and user's AM headers )*/
+#define UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT 2
 
 /**
  * TCP context type
  */
 typedef enum uct_tcp_ep_ctx_type {
+    /* EP is connected to a peer to send data. This EP is managed
+     * by a user and TCP mustn't free this EP even if connection
+     * is broken. */
     UCT_TCP_EP_CTX_TYPE_TX,
-    UCT_TCP_EP_CTX_TYPE_RX
+    /* EP is connected to a peer to receive data. If only RX is set
+     * on a given EP, it is hidden from a user (i.e. the user is unable
+     * to do any operation on that EP) and TCP is responsible to
+     * free memory allocating for this EP. */
+    UCT_TCP_EP_CTX_TYPE_RX,
+
+    /* Additional flags that controls EP behavior. */
+    /* AM Zcopy operation is in progress on a given EP. */
+    UCT_TCP_EP_CTX_TYPE_ZCOPY_TX,
 } uct_tcp_ep_ctx_type_t;
 
 
@@ -166,6 +181,20 @@ typedef struct uct_tcp_ep_ctx {
 
 
 /**
+ * TCP AM Zcopy communication context mapped to
+ * buffer from TCP EP context
+ */
+typedef struct uct_tcp_ep_zcopy_ctx {
+    uct_tcp_am_hdr_t              super;
+    uct_completion_t              *comp;
+    size_t                        iov_index;
+    size_t                        iov_offset;
+    size_t                        iov_cnt;
+    uint8_t                       iov[0];
+} uct_tcp_ep_zcopy_ctx_t;
+
+
+/**
  * TCP endpoint
  */
 struct uct_tcp_ep {
@@ -200,6 +229,12 @@ typedef struct uct_tcp_iface {
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
                                                       * are in progress */
+    size_t                        max_iov;           /* Maximum supported IOVs limited by
+                                                      * user configuration and service buffers
+                                                      * (TCP protocol and user's AM headers) */
+    size_t                        max_zcopy_hdr;     /* Maximum supported AM Zcopy header */
+    size_t                        zcopy_hdr_offset;  /* Offset in TX bufer to empty space that
+                                                      * can be used for AM Zcopy header */
 
     struct {
         struct sockaddr_in        ifaddr;            /* Network address */
@@ -223,6 +258,7 @@ typedef struct uct_tcp_iface_config {
     uct_iface_config_t            super;
     size_t                        tx_seg_size;
     size_t                        rx_seg_size;
+    size_t                        max_iov;
     int                           prefer_default;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
@@ -249,6 +285,10 @@ int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
+
+size_t uct_tcp_iface_get_max_iov(const uct_tcp_iface_t *iface);
+
+size_t uct_tcp_iface_get_max_zcopy_header(const uct_tcp_iface_t *iface);
 
 void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface);
 
@@ -303,6 +343,11 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
                             uct_pack_callback_t pack_cb, void *arg,
                             unsigned flags);
 
+ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *header,
+                                 unsigned header_length, const uct_iov_t *iov,
+                                 size_t iovcnt, unsigned flags,
+                                 uct_completion_t *comp);
+
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
                                     unsigned flags);
 
@@ -340,6 +385,13 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
+
+static inline size_t
+uct_tcp_iface_zcopy_header_tx_offset(const uct_tcp_iface_t *iface)
+{
+    return (sizeof(uct_tcp_ep_zcopy_ctx_t) +
+            sizeof(struct iovec) * iface->max_iov);
+}
 
 static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 {
