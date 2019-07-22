@@ -622,7 +622,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     case UCT_IB_MLX5_QP_TYPE_VERBS:
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
     case UCT_IB_MLX5_QP_TYPE_DEVX:
-        return uct_ib_mlx5_devx_connect_qp(&iface->super.super, qp, qp_num, ah_attr);
+        return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num, ah_attr);
     case UCT_IB_MLX5_QP_TYPE_LAST:
         break;
     }

@@ -1232,7 +1232,12 @@ run_gtest_release() {
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 
 	echo "==== Running unit tests (release configuration) ===="
-	env GTEST_FILTER=\*test_obj_size\* $AFFINITY $TIMEOUT make -C test/gtest test
+	# Check:
+	# - Important object sizes
+	# - Unexpected RNDV test, to cover rkey handling in tag offload flow
+	#   (see GH #3827 for details)
+	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
+		$AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
 
 	unset GTEST_SHARD_INDEX

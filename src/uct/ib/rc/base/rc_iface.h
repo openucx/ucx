@@ -107,7 +107,7 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = UCS_BIT(13), /* zcopy */
     UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
     UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)  /* queued on a txqp */
@@ -243,6 +243,7 @@ struct uct_rc_iface {
         int                  tx_cq_len;
 #endif
         int                  fence;
+        unsigned             exp_backoff;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */

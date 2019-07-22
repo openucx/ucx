@@ -270,7 +270,7 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci;
 #endif
     uct_ib_fence_info_t         fi;
@@ -495,11 +495,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_impl(uct_ib_mlx5_md_t *md,
                                              uct_ib_mlx5_txwq_t *tx,
                                              uct_ib_qp_attr_t *attr);
 
-ucs_status_t uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
-                                         uct_ib_mlx5_qp_t *qp,
-                                         uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr);
-
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         enum ibv_qp_state state);
 
@@ -512,15 +507,6 @@ uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                            uct_ib_mlx5_qp_t *qp,
                            uct_ib_mlx5_txwq_t *tx,
                            uct_ib_qp_attr_t *attr)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-static inline ucs_status_t
-uct_ib_mlx5_devx_connect_qp(uct_ib_iface_t *iface,
-                            uct_ib_mlx5_qp_t *qp,
-                            uint32_t dest_qp_num,
-                            struct ibv_ah_attr *ah_attr)
 {
     return UCS_ERR_UNSUPPORTED;
 }
