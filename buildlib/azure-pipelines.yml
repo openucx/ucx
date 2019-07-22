@@ -10,6 +10,10 @@ resources:
     - container: centos7
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
+    - container: csmock
+      image: ucfconsort.azurecr.io/ucx/csmock:latest
+      endpoint: ucfconsort_registry
+      options: --cap-add=SYS_ADMIN --security-opt apparmor:unconfine
 
 stages:
   - stage: Build
@@ -38,3 +42,33 @@ stages:
                gcc -v
                make -s -j `nproc`
             displayName: Build for $(CONTAINER)
+  - stage: Checks
+    jobs:
+      - job: csmock
+        displayName: csmock
+        container: csmock
+        steps:
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: ./contrib/configure-release
+            displayName: Configure
+
+          - bash: ./contrib/buildrpm.sh -t -s
+            displayName: Build srcrpm
+
+          - bash: |
+              csmock -t cppcheck,gcc,shellcheck,clang -o csmock.tar.xz \
+                -r fedora-rawhide-x86_64 --use-host-cppcheck --print-defects \
+                `ls rpm-dist/*.src.rpm`
+            displayName: Run csmock
+
+          - bash: |
+              tar xJf csmock.tar.xz
+              if [ -s csmock/scan-results.err ]; then
+                cat csmock/scan-results.err
+                false
+              else
+                echo "csmock is clean"
+              fi
+            displayName: Check if there are any errors
