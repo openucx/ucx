@@ -1107,7 +1107,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     ucp_worker_release_address(perf->ucp.worker, address);
     rte_call(perf, exchange_vec, req);
 
-    perf->ucp.peers = calloc(group_size, sizeof(*perf->uct.peers));
+    perf->ucp.peers = calloc(group_size, sizeof(*perf->ucp.peers));
     if (perf->ucp.peers == NULL) {
         goto err;
     }
