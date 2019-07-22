@@ -355,6 +355,7 @@ void ucs_log_cleanup()
     if (ucs_log_file_close) {
         fclose(ucs_log_file);
     }
+    pthread_spin_destroy(&threads_lock);
     ucs_log_file           = NULL;
     ucs_log_initialized    = 0;
     ucs_log_handlers_count = 0;
