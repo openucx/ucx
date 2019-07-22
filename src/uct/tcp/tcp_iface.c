@@ -114,7 +114,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.am.max_bcopy = am_buf_size;
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
-                                &attr->bandwidth, &attr->cap.am.align_mtu);
+                                &attr->bandwidth.shared, &attr->cap.am.align_mtu);
+    attr->bandwidth.dedicated = 0;
     if (status != UCS_OK) {
         return status;
     }

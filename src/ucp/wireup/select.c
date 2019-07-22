@@ -660,10 +660,16 @@ static double ucp_wireup_rma_score_func(ucp_context_h context,
                                         const uct_iface_attr_t *iface_attr,
                                         const ucp_address_iface_attr_t *remote_iface_attr)
 {
+    uct_ppn_bandwidth_t remote_attr = {
+        .dedicated = remote_iface_attr->bandwidth.dedicated,
+        .shared    = remote_iface_attr->bandwidth.shared
+    };
+
     /* best for 4k messages */
     return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                    iface_attr->overhead +
-                   (4096.0 / ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)));
+                   (4096.0 / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
+                                     ucp_tl_iface_bandwidth(context, &remote_attr))));
 }
 
 static int ucp_wireup_ep_params_is_err_mode_peer(const ucp_ep_params_t *params)
@@ -843,11 +849,17 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
                                            const uct_iface_attr_t *iface_attr,
                                            const ucp_address_iface_attr_t *remote_iface_attr)
 {
+    uct_ppn_bandwidth_t remote_attr = {
+        .dedicated = remote_iface_attr->bandwidth.dedicated,
+        .shared    = remote_iface_attr->bandwidth.shared
+    };
+
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)) +
+                ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
+                        ucp_tl_iface_bandwidth(context, &remote_attr))) +
                 ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                 iface_attr->overhead + md_attr->reg_cost.overhead +
                 (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
@@ -952,10 +964,15 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
                                           const uct_iface_attr_t *iface_attr,
                                           const ucp_address_iface_attr_t *remote_iface_attr)
 {
+    uct_ppn_bandwidth_t remote_attr = {
+        .dedicated = remote_iface_attr->bandwidth.dedicated,
+        .shared    = remote_iface_attr->bandwidth.shared
+    };
+
     /* best single MTU bandwidth */
     double size = iface_attr->cap.am.max_bcopy;
-    double time = (size / ucs_min(iface_attr->bandwidth,
-                                  remote_iface_attr->bandwidth)) +
+    double time = (size / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
+                                  ucp_tl_iface_bandwidth(context, &remote_attr))) +
                   iface_attr->overhead + remote_iface_attr->overhead +
                   ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
 

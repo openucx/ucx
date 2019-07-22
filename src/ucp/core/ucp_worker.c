@@ -837,7 +837,8 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
          * 2. Has the same or better performance charasteristics */
         if (ucs_test_all_flags(if_iter->attr.cap.flags, test_flags) &&
             (if_iter->attr.overhead  <= wiface->attr.overhead)      &&
-            (if_iter->attr.bandwidth >= wiface->attr.bandwidth)     &&
+            (ucp_tl_iface_bandwidth(ctx, &if_iter->attr.bandwidth) >=
+             ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth))  &&
             (if_iter->attr.priority  >= wiface->attr.priority)) {
 
             latency_iter = ucp_worker_iface_latency(worker, if_iter);
@@ -1215,16 +1216,17 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     iface_cap_flags             = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth  = 1e12;
-    dummy_iface_attr.cap_flags  = -1;
-    dummy_iface_attr.overhead   = 0;
-    dummy_iface_attr.priority   = 0;
-    dummy_iface_attr.lat_ovh    = 0;
+    dummy_iface_attr.bandwidth.dedicated = 1e12;
+    dummy_iface_attr.bandwidth.shared    = 0;
+    dummy_iface_attr.cap_flags           = -1;
+    dummy_iface_attr.overhead            = 0;
+    dummy_iface_attr.priority            = 0;
+    dummy_iface_attr.lat_ovh             = 0;
 
-    supp_tls                    = 0;
-    best_score                  = -1;
-    best_rsc                    = NULL;
-    best_priority               = 0;
+    supp_tls                             = 0;
+    best_score                           = -1;
+    best_rsc                             = NULL;
+    best_priority                        = 0;
 
     /* Select best interface for atomics device */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {

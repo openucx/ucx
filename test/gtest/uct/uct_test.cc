@@ -80,7 +80,7 @@ resource_speed::resource_speed(uct_component_h component, const uct_worker_h& wo
     status = uct_iface_query(iface, &iface_attr);
     ASSERT_UCS_OK(status);
 
-    bw = iface_attr.bandwidth;
+    bw = ucs_max(iface_attr.bandwidth.dedicated, iface_attr.bandwidth.shared);
 
     uct_iface_close(iface);
     uct_config_release(iface_config);

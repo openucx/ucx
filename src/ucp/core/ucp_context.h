@@ -341,6 +341,12 @@ ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
 }
 extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
+static UCS_F_ALWAYS_INLINE double
+ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
+{
+    return bandwidth->dedicated + bandwidth->shared / context->config.est_num_ppn;
+}
+
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
 {
     return (context->memtype_cache &&
