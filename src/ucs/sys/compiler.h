@@ -17,7 +17,9 @@
 #include <ucs/debug/assert.h>
 #include <stddef.h>
 #include <stdarg.h>
+#ifdef HAVE_ALLOCA_H
 #include <alloca.h>
+#endif
 
 #ifndef ULLONG_MAX
 #define ULLONG_MAX (__LONG_LONG_MAX__ * 2ULL + 1)

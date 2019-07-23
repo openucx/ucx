@@ -254,7 +254,7 @@ static ucs_status_t
 ucs_pgtable_insert_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
                         unsigned order, ucs_pgt_region_t *region)
 {
-    ucs_pgt_dir_t dummy_pgd;
+    ucs_pgt_dir_t dummy_pgd = {};
     ucs_pgt_entry_t *pte;
     ucs_pgt_dir_t *pgd;
     unsigned shift;
@@ -366,7 +366,7 @@ static ucs_status_t
 ucs_pgtable_remove_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
                         unsigned order, ucs_pgt_region_t *region)
 {
-    ucs_pgt_dir_t dummy_dir;
+    ucs_pgt_dir_t dummy_pgd = {};
     ucs_status_t status;
 
     ucs_pgtable_check_page(address, order);
@@ -375,7 +375,7 @@ ucs_pgtable_remove_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
         return UCS_ERR_NO_ELEM;
     }
 
-    status = ucs_pgtable_remove_page_recurs(pgtable, address, order, &dummy_dir,
+    status = ucs_pgtable_remove_page_recurs(pgtable, address, order, &dummy_pgd,
                                             &pgtable->root, pgtable->shift,
                                             region);
     if (status != UCS_OK) {
