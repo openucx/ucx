@@ -440,13 +440,13 @@ void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
             continue;
         }
 
-        if (((uintptr_t)address + size < start)) {
-            /* memory range of interest is before the scanned range */
-            continue;
-        }
-        if ((uintptr_t)address >= end) {
-            /* memory range of interest is after the scanned range - stop */
+        if (start > (uintptr_t)address + size) {
+            /* the scanned range is after memory range of interest - stop */
             break;
+        }
+        if (end <= (uintptr_t)address) {
+            /* the scanned range is still before the memory range of interest */
+            continue;
         }
 
         while (fgets(buf, sizeof(buf), file) != NULL) {
