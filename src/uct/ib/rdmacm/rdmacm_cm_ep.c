@@ -150,6 +150,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
+        ucs_warn("No UCT_EP_PARAM_FIELD_CM set: %zu", params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -160,6 +161,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
     if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
                                 UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
+        ucs_warn("Neithter UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST set: %zu",
+                 params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
 

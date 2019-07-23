@@ -494,6 +494,7 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
         return params->cm->ops->ep_create(params, ep_p);
     }
 
+    ucs_warn("params->field_mask %zu", params->field_mask);
     return UCS_ERR_INVALID_PARAM;
 }
 
