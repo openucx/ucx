@@ -247,7 +247,6 @@ struct uct_ud_ep {
     ucs_list_link_t  cep_list;
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
     uint16_t         flags;
-    uint8_t          path_bits;
     uint8_t          rx_creq_count; /* TODO: remove when reason for DUP/OOO CREQ is found */
     ucs_wtimer_t     slow_timer;
     ucs_time_t       close_time;   /* timestamp of closure */

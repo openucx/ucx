@@ -177,8 +177,6 @@ typedef struct uct_rc_fc {
 struct uct_rc_ep {
     uct_base_ep_t       super;
     uct_rc_txqp_t       txqp;
-    uint8_t             sl;
-    uint8_t             path_bits;
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
