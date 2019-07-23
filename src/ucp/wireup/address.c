@@ -110,8 +110,8 @@ static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest,
         length = strlen(s);
         ucs_assert(length <= UINT8_MAX);
         *(uint8_t*)dest = length;
-        memcpy(dest + 1, s, length);
-        return dest + 1 + length;
+        memcpy(UCS_PTR_TYPE_OFFSET(dest, uint8_t), s, length);
+        return UCS_PTR_BYTE_OFFSET(UCS_PTR_TYPE_OFFSET(dest, uint8_t), length);
     }
 #endif
     return dest;
@@ -128,9 +128,10 @@ static const void* ucp_address_unpack_worker_name(const void *src, char *s,
         ucs_assert(max >= 1);
         length   = *(const uint8_t*)src;
         avail    = ucs_min(length, max - 1);
-        memcpy(s, src + 1, avail);
+        memcpy(s, UCS_PTR_TYPE_OFFSET(src, const uint8_t), avail);
         s[avail] = '\0';
-        return src + length + 1;
+        return UCS_PTR_TYPE_OFFSET(UCS_PTR_BYTE_OFFSET(src,length),
+                                   const uint8_t);
     }
 #endif
 
@@ -426,7 +427,7 @@ ucp_address_pack_length(ucp_worker_h worker, void *ptr, size_t addr_length)
     ucs_assert(addr_length < UINT8_MAX);
     *(uint8_t*)ptr = addr_length;
 
-    return UCS_PTR_TYPE_OFFSET(ptr, uint8_t, 1);
+    return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 }
 
 static const void*
@@ -461,7 +462,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
 
     *addr_length = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
 
-    return UCS_PTR_TYPE_OFFSET(ptr, uint8_t, 1);
+    return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 }
 
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
@@ -491,14 +492,14 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     if (flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
         *(uint64_t*)ptr = worker->uuid;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, worker->uuid, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, worker->uuid);
     }
 
     ptr = ucp_address_pack_worker_name(worker, ptr, flags);
 
     if (num_devices == 0) {
         *((uint8_t*)ptr) = UCP_NULL_RESOURCE;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, UCP_NULL_RESOURCE, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, UCP_NULL_RESOURCE);
         goto out;
     }
 
@@ -513,7 +514,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                          ((dev->tl_bitmap == 0)          ? UCP_ADDRESS_FLAG_EMPTY    : 0) |
                          ((md_flags & UCT_MD_FLAG_ALLOC) ? UCP_ADDRESS_FLAG_MD_ALLOC : 0) |
                          ((md_flags & UCT_MD_FLAG_REG)   ? UCP_ADDRESS_FLAG_MD_REG   : 0);
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, md_index, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, md_index);
 
         /* Device address length */
         *(uint8_t*)ptr = (dev == (devices + num_devices - 1)) ?
@@ -522,7 +523,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             ucs_assert(dev->dev_addr_len < UCP_ADDRESS_FLAG_LAST);
             *(uint8_t*)ptr |= dev->dev_addr_len;
         }
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
         /* Device address */
         if (flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
@@ -553,7 +554,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             /* Transport name checksum */
             *(uint16_t*)ptr = context->tl_rscs[i].tl_name_csum;
-            ptr = UCS_PTR_TYPE_OFFSET(ptr, context->tl_rscs[i].tl_name_csum, 1);
+            ptr = UCS_PTR_TYPE_OFFSET(ptr, context->tl_rscs[i].tl_name_csum);
 
             /* Transport information */
             attr_len = ucp_address_pack_iface_attr(worker, ptr, i, iface_attr,
@@ -712,7 +713,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     ptr = buffer;
     if (flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
         unpacked_address->uuid = *(uint64_t*)ptr;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, unpacked_address->uuid, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, unpacked_address->uuid);
     } else {
         unpacked_address->uuid = 0;
     }
@@ -732,17 +733,17 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
         /* md_index */
         empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
         /* device address length */
         dev_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;
         last_dev     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t, 1);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
         ptr = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
 
         last_tl = empty_dev;
         while (!last_tl) {
-            ptr       = UCS_PTR_TYPE_OFFSET(ptr, uint16_t, 1); /* tl_name_csum */
+            ptr       = UCS_PTR_TYPE_OFFSET(ptr, uint16_t); /* tl_name_csum */
             attr_len  = ucp_address_iface_attr_size(worker);
             flags_ptr = ucp_address_iface_flags_ptr(worker, ptr, attr_len);
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
@@ -784,12 +785,12 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         md_flags     = (md_byte & UCP_ADDRESS_FLAG_MD_ALLOC) ? UCT_MD_FLAG_ALLOC : 0;
         md_flags    |= (md_byte & UCP_ADDRESS_FLAG_MD_REG)   ? UCT_MD_FLAG_REG   : 0;
         empty_dev    = md_byte & UCP_ADDRESS_FLAG_EMPTY;
-        ptr          = UCS_PTR_TYPE_OFFSET(ptr, md_byte, 1);
+        ptr          = UCS_PTR_TYPE_OFFSET(ptr, md_byte);
 
         /* device address length */
         dev_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;
         last_dev     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
-        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t, 1);
+        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
         dev_addr = ptr;
         ptr      = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
@@ -798,7 +799,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         while (!last_tl) {
             /* tl_name_csum */
             address->tl_name_csum = *(uint16_t*)ptr;
-            ptr = UCS_PTR_TYPE_OFFSET(ptr, address->tl_name_csum, 1);
+            ptr = UCS_PTR_TYPE_OFFSET(ptr, address->tl_name_csum);
 
             address->dev_addr   = (dev_addr_len > 0) ? dev_addr : NULL;
             address->md_index   = md_index;
