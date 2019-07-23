@@ -327,12 +327,14 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg)
 {
-    uct_rc_fc_request_t *freq;
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
-    uct_pending_req_t *req    = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_ep_t       *ep     = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                 uct_rc_ep_t, arb_group);
+    uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
+                                                       priv);
+    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(
+                                          ucs_arbiter_elem_group(elem),
+                                          uct_rc_ep_t, arb_group);
+    uct_rc_fc_request_t *freq;
 
     /* Invoke user's callback only if it is not internal FC message */
     if (ucs_likely(req->func != uct_rc_ep_fc_grant)){

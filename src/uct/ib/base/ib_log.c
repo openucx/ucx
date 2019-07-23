@@ -177,7 +177,9 @@ static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
             uct_ib_log_dump_atomic_cswap(wr->wr.atomic.compare_add,
                                      wr->wr.atomic.swap, s, ends - s);
         }
-        s += strlen(s);
+
+        /* do not forget `s += strlen(s);` here if you are
+         * processing more information for dumping below */
     }
 }
 
@@ -193,7 +195,7 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
         [IBV_WR_SEND_WITH_IMM]        = { "SEND_IMM",   0 },
         [IBV_WR_ATOMIC_CMP_AND_SWP]   = { "CSWAP",      UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
         [IBV_WR_ATOMIC_FETCH_AND_ADD] = { "FETCH_ADD",  UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
-   };
+    };
 
     char *s             = buf;
     char *ends          = buf + max;
