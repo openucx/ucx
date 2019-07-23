@@ -72,12 +72,12 @@ public:
         server_params.mode.sockaddr.conn_request_cb  = conn_request_cb;
         server_params.mode.sockaddr.conn_request_arg = reinterpret_cast<void*>(this);
 
+        /* if origin port is busy, create_entity will retry with another one */
         server = uct_test::create_entity(server_params);
         m_entities.push_back(server);
 
         check_skip_test();
 
-        /* if origin port is busy create_entity will retry with other one */
         port = ucs::sock_addr_storage(server->iface_params().mode.sockaddr
                                                             .listen_sockaddr)
                                       .get_port();
@@ -359,6 +359,7 @@ protected:
                                  UCT_LISTENER_PARAM_FIELD_USER_DATA;
         params.conn_request_cb = cm_conn_request_cb;
         params.user_data       = static_cast<test_uct_cm_sockaddr *>(this);
+        /* if origin port set in init() is busy, listen() will retry with another one */
         m_server->listen(m_listen_addr, params);
     }
 

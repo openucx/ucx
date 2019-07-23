@@ -1067,9 +1067,35 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
                               const uct_listener_params_t &params)
 {
-    UCS_TEST_CREATE_HANDLE(uct_listener_h, m_listener, uct_listener_destroy,
-                           uct_listener_create, m_cm, &listen_addr.get_sock_addr(),
-                           listen_addr.get_addr_size(), &params);
+    ucs_status_t status;
+
+    for (;;) {
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+            status = UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
+                                                uct_listener_destroy,
+                                                uct_listener_create, m_cm,
+                                                &listen_addr.get_sock_addr(),
+                                                listen_addr.get_addr_size(),
+                                                &params);
+            if (status == UCS_OK) {
+                break;
+            }
+        }
+        EXPECT_EQ(UCS_ERR_BUSY, status);
+
+        const struct sockaddr* c_ifa_addr = &listen_addr.get_sock_addr();
+        struct sockaddr* ifa_addr = const_cast<struct sockaddr*>(c_ifa_addr);
+        if (ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in *addr =
+                            reinterpret_cast<struct sockaddr_in *>(ifa_addr);
+            addr->sin_port = ucs::get_port();
+        } else {
+            struct sockaddr_in6 *addr =
+                            reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
+            addr->sin6_port = ucs::get_port();
+        }
+    }
 }
 
 void uct_test::entity::flush() const {

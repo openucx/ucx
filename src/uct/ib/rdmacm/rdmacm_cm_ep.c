@@ -78,8 +78,8 @@ uct_rdamcm_cm_ep_set_remaining_conn_param(struct rdma_conn_param *conn_param,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rdamcm_cm_ep_init_client_ep(uct_rdmacm_cm_ep_t *cep,
-                                                    const uct_ep_params_t *params)
+static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
+                                                 const uct_ep_params_t *params)
 {
     ucs_status_t status;
 
@@ -91,6 +91,10 @@ static ucs_status_t uct_rdamcm_cm_ep_init_client_ep(uct_rdmacm_cm_ep_t *cep,
         goto err;
     }
 
+    /* rdma_resolve_addr needs to be called last in the ep_create flow to
+     * prevent a race where there are unitilialized fields used when the
+     * RDMA_CM_EVENT_ROUTE_RESOLVED event is already received in the the async
+     * thread. */
     if (rdma_resolve_addr(cep->id, NULL, (struct sockaddr *)params->sockaddr->addr,
                           1000/* TODO */)) {
         ucs_error("rdma_resolve_addr() failed: %m");
@@ -106,8 +110,8 @@ err:
     return status;
 }
 
-static ucs_status_t uct_rdamcm_cm_ep_init_server_ep(uct_rdmacm_cm_ep_t *cep,
-                                                    const uct_ep_params_t *params)
+static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
+                                                 const uct_ep_params_t *params)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -115,18 +119,19 @@ static ucs_status_t uct_rdamcm_cm_ep_init_server_ep(uct_rdmacm_cm_ep_t *cep,
 ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
 {
     uct_rdmacm_cm_ep_t *cep = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
-    struct sockaddr *remote_addr = rdma_get_peer_addr(cep->id);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     if (rdma_disconnect(cep->id)) {
         ucs_error("rdmacm_cm ep %p (id=%p) failed to disconnect from peer %p",
                   cep, cep->id,
-                  ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+                  ucs_sockaddr_str(rdma_get_peer_addr(cep->id), ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN));
         return UCS_ERR_IO_ERROR;
     }
 
     ucs_debug("rdmacm_cm ep %p (id=%p) disconnecting from peer :%s", cep, cep->id,
-              ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+              ucs_sockaddr_str(rdma_get_peer_addr(cep->id), ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN));
     return UCS_OK;
 }
 
@@ -142,7 +147,7 @@ uct_base_iface_t dummy_iface = {
 
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 {
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status;
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
         return UCS_ERR_INVALID_PARAM;
@@ -174,10 +179,10 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     self->qp                  = NULL;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
-        status = uct_rdamcm_cm_ep_init_client_ep(self, params);
+        status = uct_rdamcm_cm_ep_client_init(self, params);
     } else {
         ucs_assert(params->field_mask & UCT_EP_PARAM_FIELD_CONN_REQUEST);
-        status = uct_rdamcm_cm_ep_init_server_ep(self, params);
+        status = uct_rdamcm_cm_ep_server_init(self, params);
     }
 
     if (status == UCS_OK) {

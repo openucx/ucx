@@ -36,7 +36,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     struct sockaddr            *remote_addr = rdma_get_peer_addr(event->id);
     uint8_t                    ack_event = 1;
     struct rdma_conn_param     conn_param;
-    uct_rdmacm_priv_data_hdr_t hdr;
+    uct_rdmacm_priv_data_hdr_t *hdr;
     uct_rdmacm_cm_ep_t         *cep;
     char                       dev_name[UCT_DEVICE_NAME_MAX];
     char                       ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -70,22 +70,20 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         memset(&conn_param, 0, sizeof(conn_param));
         conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
                                              sizeof(uct_rdmacm_priv_data_hdr_t));
-        /* Pack data to send inside the connection request to the server */
-        priv_data_ret = cep->wireup.priv_pack_cb(cep->user_data, dev_name,
-                                                 (void*)(conn_param.private_data +
-                                                  sizeof(uct_rdmacm_priv_data_hdr_t)));
 
+        /* Pack data to send inside the connection request to the server */
+        hdr = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
+        priv_data_ret = cep->wireup.priv_pack_cb(cep->user_data, dev_name, hdr + 1);
         if ((priv_data_ret < 0) || (priv_data_ret > uct_rdmacm_cm_get_max_conn_priv())) {
             ucs_error("failed to pack data on the client (ep=%p). packed data size: %zu.",
                       cep, priv_data_ret);
             break;
         }
 
-        hdr.length = (uint8_t)priv_data_ret;
-        hdr.status = UCS_OK;
+        hdr->length = (uint8_t)priv_data_ret;
+        hdr->status = UCS_OK;
 
-        memcpy((void*)conn_param.private_data, &hdr, sizeof(uct_rdmacm_priv_data_hdr_t));
-        status = uct_rdamcm_cm_ep_set_remaining_conn_param(&conn_param, &hdr, cep);
+        status = uct_rdamcm_cm_ep_set_remaining_conn_param(&conn_param, hdr, cep);
         if (status != UCS_OK) {
             break;
         }
