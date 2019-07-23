@@ -77,7 +77,7 @@ typedef struct ucs_range_spec {
 typedef struct ucs_config_global_list_entry {
     const char               *name;    /* configuration table name */
     const char               *prefix;  /* configuration prefix */
-    ucs_config_field_t       *table;  /* array of configuration fields */
+    ucs_config_field_t       *table;   /* array of configuration fields */
     size_t                   size;     /* size of config structure */
     ucs_list_link_t          list;     /* entry in global list */
 } ucs_config_global_list_entry_t;
