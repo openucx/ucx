@@ -39,15 +39,8 @@ void test_rc::connect()
 
 // Check that iface tx ops buffer and flush comp memory pool are moderated
 // properly when we have communication ops + lots of flushes
-void test_rc::test_iface_ops()
+void test_rc::test_iface_ops(int cq_len)
 {
-    int cq_len = 16;
-
-    if (UCS_OK != uct_config_modify(m_iface_config, "RC_TX_CQ_LEN",
-                                    ucs::to_string(cq_len).c_str())) {
-        UCS_TEST_ABORT("Error: cannot enable random DCI policy");
-    }
-
     entity *e = uct_test::create_entity(0);
     m_entities.push_back(e);
     e->connect(0, *m_e2, 0);
@@ -81,7 +74,14 @@ void test_rc::test_iface_ops()
 
 UCS_TEST_SKIP_COND_P(test_rc, stress_iface_ops,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
-    test_iface_ops();
+    int cq_len = 16;
+
+    if (UCS_OK != uct_config_modify(m_iface_config, "RC_TX_CQ_LEN",
+                                    ucs::to_string(cq_len).c_str())) {
+        UCS_TEST_ABORT("Error: cannot modify RC_TX_CQ_LEN");
+    }
+
+    test_iface_ops(cq_len);
 }
 
 UCS_TEST_P(test_rc, tx_cq_moderation) {
