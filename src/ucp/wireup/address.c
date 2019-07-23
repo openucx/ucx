@@ -595,6 +595,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             /* Pack ep address if present */
             if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
                 (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR)) {
+                ucs_assert(ep != NULL);
                 ep_addr_len           = iface_attr->ep_addr_len;
                 *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_EP_ADDR;
 
