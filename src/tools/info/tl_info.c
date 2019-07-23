@@ -149,7 +149,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     if (status != UCS_OK) {
         printf("#   < failed to query interface >\n");
     } else {
-        printf("#      bandwidth (d:s): %-.2f:%-.2f MB/sec\n", 
+        printf("#            bandwidth: %-.2f + %-.2f MB/sec\n", 
                iface_attr.bandwidth.dedicated / UCS_MBYTE,
                iface_attr.bandwidth.shared / UCS_MBYTE);
         printf("#              latency: %-.0f nsec", iface_attr.latency.overhead * 1e9);

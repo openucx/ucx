@@ -55,8 +55,8 @@ typedef struct {
 typedef struct {
     float            overhead;
     struct {
-        float dedicated;
-        float shared;
+        float        dedicated;
+        float        shared;
     }                bandwidth;
     float            lat_ovh;
     uint32_t         prio_cap_flags; /* 8 lsb: prio, 22 msb: cap flags, 2 hsb: amo */
@@ -337,8 +337,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->cap_flags           = wiface->attr.cap.flags;
         iface_attr->priority            = wiface->attr.priority;
         iface_attr->overhead            = wiface->attr.overhead;
-        iface_attr->bandwidth.dedicated = wiface->attr.bandwidth.dedicated;
-        iface_attr->bandwidth.shared    = wiface->attr.bandwidth.shared;
+        iface_attr->bandwidth.bandwidth = wiface->attr.bandwidth.dedicated - wiface->attr.bandwidth.shared;
         iface_attr->lat_ovh             = wiface->attr.latency.overhead;
         if (worker->atomic_tls & UCS_BIT(rsc_idx)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
@@ -346,6 +345,10 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
             iface_attr->atomic.atomic64.op_flags  = wiface->attr.cap.atomic64.op_flags;
             iface_attr->atomic.atomic64.fop_flags = wiface->attr.cap.atomic64.fop_flags;
         }
+
+        /* check if at least one of bandwidth values is 0 */
+        ucs_assert((wiface->attr.bandwidth.dedicated * wiface->attr.bandwidth.shared) == 0);
+
         return sizeof(rsc_idx);
     }
 
@@ -353,9 +356,11 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     iface_attr->cap_flags           = 0;
     iface_attr->priority            = packed->prio_cap_flags & UCS_MASK(8);
     iface_attr->overhead            = packed->overhead;
-    iface_attr->bandwidth.dedicated = packed->bandwidth.dedicated;
-    iface_attr->bandwidth.shared    = packed->bandwidth.shared;
+    iface_attr->bandwidth.bandwidth = packed->bandwidth.dedicated - packed->bandwidth.shared;
     iface_attr->lat_ovh             = packed->lat_ovh;
+
+    /* check if at least one of bandwidth values is 0 */
+    ucs_assert((packed->bandwidth.dedicated * packed->bandwidth.shared) == 0);
 
     packed_flag = UCS_BIT(8);
     bit         = 1;
@@ -573,12 +578,13 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             }
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
-                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
+                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e ovh %e "
                       "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
                       index,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
                       md_flags, iface_attr->cap.flags,
-                      ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
+                      iface_attr->bandwidth.dedicated,
+                      iface_attr->bandwidth.shared,
                       iface_attr->overhead,
                       iface_attr->latency.overhead,
                       iface_attr->priority,
@@ -771,12 +777,11 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr      += ep_addr_len;
             last_tl   = (*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_LAST;
 
-            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw (d:s) %e:%e ovh %e "
+            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
                       "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
                       (int)(address - address_list),
                       address->md_flags, address->iface_attr.cap_flags,
-                      address->iface_attr.bandwidth.dedicated,
-                      address->iface_attr.bandwidth.shared,
+                      address->iface_attr.bandwidth.bandwidth,
                       address->iface_attr.overhead,
                       address->iface_attr.lat_ovh,
                       address->iface_attr.priority,

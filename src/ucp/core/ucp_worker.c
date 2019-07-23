@@ -1216,8 +1216,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     iface_cap_flags             = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth.dedicated = 1e12;
-    dummy_iface_attr.bandwidth.shared    = 0;
+    dummy_iface_attr.bandwidth.bandwidth = 1e12;
     dummy_iface_attr.cap_flags           = -1;
     dummy_iface_attr.overhead            = 0;
     dummy_iface_attr.priority            = 0;
