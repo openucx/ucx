@@ -30,8 +30,9 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"MAX_IOV", "8",
-   "Maximum IOV count in a single call to non-blocking vector socket send",
+  {"MAX_IOV", "6",
+   "Maximum IOV count that can contain user-defined payload in a single\n"
+   "call to non-blocking vector socket send",
    ucs_offsetof(uct_tcp_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
 
   {"PREFER_DEFAULT", "y",
@@ -118,8 +119,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.am.max_bcopy = am_buf_size;
     attr->cap.am.max_iov   = iface->config.zcopy.max_iov;
 
-    if ((attr->cap.am.max_iov > 0) &&
-        (iface->config.tx_seg_size >= sizeof(uct_tcp_ep_zcopy_ctx_t))) {
+    if (attr->cap.am.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) {
         attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
                                         sizeof(uct_tcp_am_hdr_t);
         attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;
@@ -406,7 +406,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     uct_tcp_iface_config_t *config = ucs_derived_of(tl_config,
                                                     uct_tcp_iface_config_t);
     ucs_status_t status;
-    size_t max_iov;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -422,9 +421,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                                             params->stats_root : NULL)
                               UCS_STATS_ARG(params->mode.device.dev_name));
 
-    /* Maximum IOV count allowed by user's configuration and system constraints */
-    max_iov = ucs_min(config->max_iov, ucs_socket_max_iov());
-
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
     self->config.tx_seg_size      = config->tx_seg_size +
@@ -432,17 +428,19 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.rx_seg_size      = config->rx_seg_size +
                                     sizeof(uct_tcp_am_hdr_t);
     self->outstanding             = 0;
-    /* Consider TCP protocol and user's AM headers that use 1st and 2nd IOVs */
-    self->config.zcopy.max_iov    = ((max_iov >
-                                      UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) ?
-                                     (max_iov -
-                                      UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) : 0);
+
+    /* Maximum IOV count allowed by user's configuration (considering TCP
+     * protocol and user's AM headers that use 1st and 2nd IOVs
+     * correspondingly) and system constraints */
+    self->config.zcopy.max_iov    = ucs_min(config->max_iov +
+                                            UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT,
+                                            ucs_socket_max_iov());
     /* Use a remaining part of TX segment for AM Zcopy header */
     self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
                                      sizeof(struct iovec) *
-                                     (self->config.zcopy.max_iov +
-                                      UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT));
-    if (self->config.zcopy.hdr_offset > self->config.tx_seg_size) {
+                                     self->config.zcopy.max_iov);
+    if ((self->config.zcopy.hdr_offset > self->config.tx_seg_size) &&
+        (self->config.zcopy.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT)) {
         ucs_error("AM Zcopy context (%zu) must be <= TX segment size (%zu). "
                   "It can be adjusted by decreasing maximum IOV count (%zu)",
                   self->config.zcopy.hdr_offset, self->config.tx_seg_size,

@@ -188,9 +188,8 @@ typedef struct uct_tcp_ep_zcopy_ctx {
     uct_tcp_am_hdr_t              super;
     uct_completion_t              *comp;
     size_t                        iov_index;
-    size_t                        iov_offset;
     size_t                        iov_cnt;
-    uint8_t                       iov[0];
+    struct iovec                  iov[0];
 } uct_tcp_ep_zcopy_ctx_t;
 
 
@@ -235,7 +234,7 @@ typedef struct uct_tcp_iface {
                                                       * user configuration and service buffers
                                                       * (TCP protocol and user's AM headers) */
             size_t                max_hdr;           /* Maximum supported AM Zcopy header */
-            size_t                hdr_offset;        /* Offset in TX bufer to empty space that
+            size_t                hdr_offset;        /* Offset in TX buffer to empty space that
                                                       * can be used for AM Zcopy header */
         } zcopy;
         struct sockaddr_in        ifaddr;            /* Network address */
