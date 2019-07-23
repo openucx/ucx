@@ -504,6 +504,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         return UCS_PTR_STATUS(txwq->reg);
     }
 
+    /* cppcheck-suppress autoVariables */
     txwq->dbrec      = &qp_info.dv.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not
@@ -562,6 +563,7 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     rxwq->rq_wqe_counter  = 0;
     rxwq->cq_wqe_counter  = 0;
     rxwq->mask            = qp_info.dv.rq.wqe_cnt - 1;
+    /* cppcheck-suppress autoVariables */
     rxwq->dbrec           = &qp_info.dv.dbrec[MLX5_RCV_DBR];
     memset(rxwq->wqes, 0, qp_info.dv.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg));
 

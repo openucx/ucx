@@ -331,6 +331,7 @@ void application::pton(const dest_t& dst, struct sockaddr_storage& saddr,
     case AF_INET:
         reinterpret_cast<struct sockaddr_in*>(&saddr)->sin_port =
                         htons(dst.port);
+        /* cppcheck-suppress internalAstError */
         addr         = &reinterpret_cast<struct sockaddr_in*>(&saddr)->sin_addr;
         addrlen      = sizeof(struct sockaddr_in);
         addr_datalen = sizeof(struct in_addr);
