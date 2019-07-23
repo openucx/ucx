@@ -99,7 +99,7 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
-    size_t am_buf_size     = iface->tx_seg_size - sizeof(uct_tcp_am_hdr_t);
+    size_t am_buf_size     = iface->config.tx_seg_size - sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
 
@@ -116,13 +116,13 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     attr->cap.am.max_short = am_buf_size;
     attr->cap.am.max_bcopy = am_buf_size;
-    attr->cap.am.max_iov   = iface->max_iov;
+    attr->cap.am.max_iov   = iface->config.zcopy.max_iov;
 
     if ((attr->cap.am.max_iov > 0) &&
-        (iface->tx_seg_size >= sizeof(uct_tcp_ep_zcopy_ctx_t))) {
-        attr->cap.am.max_zcopy        = iface->rx_seg_size -
+        (iface->config.tx_seg_size >= sizeof(uct_tcp_ep_zcopy_ctx_t))) {
+        attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
                                         sizeof(uct_tcp_am_hdr_t);
-        attr->cap.am.max_hdr          = iface->max_zcopy_hdr;
+        attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;
         attr->cap.am.opt_zcopy_align  = 512;
         attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
     }
@@ -427,38 +427,46 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
-    self->tx_seg_size           = config->tx_seg_size +
-                                  sizeof(uct_tcp_am_hdr_t);
-    self->rx_seg_size           = config->rx_seg_size +
-                                  sizeof(uct_tcp_am_hdr_t);
-    self->outstanding           = 0;
+    self->config.tx_seg_size      = config->tx_seg_size +
+                                    sizeof(uct_tcp_am_hdr_t);
+    self->config.rx_seg_size      = config->rx_seg_size +
+                                    sizeof(uct_tcp_am_hdr_t);
+    self->outstanding             = 0;
     /* Consider TCP protocol and user's AM headers that use 1st and 2nd IOVs */
-    self->max_iov               = ((max_iov >
-                                    UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) ?
-                                   (max_iov -
-                                    UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) : 0);
+    self->config.zcopy.max_iov    = ((max_iov >
+                                      UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) ?
+                                     (max_iov -
+                                      UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) : 0);
     /* Use a remaining part of TX segment for AM Zcopy header */
-    self->zcopy_hdr_offset      = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
-                                   sizeof(struct iovec) *
-                                   (self->max_iov +
-                                    UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT));
-    self->max_zcopy_hdr         = self->tx_seg_size -
-                                  self->zcopy_hdr_offset;
-    self->config.prefer_default = config->prefer_default;
-    self->config.max_poll       = config->max_poll;
-    self->sockopt.nodelay       = config->sockopt_nodelay;
-    self->sockopt.sndbuf        = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
-    ucs_list_head_init(&self->ep_list);
-    kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
-
-    if (self->tx_seg_size > self->rx_seg_size) {
-        ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
-                  self->rx_seg_size, self->tx_seg_size);
+    self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
+                                     sizeof(struct iovec) *
+                                     (self->config.zcopy.max_iov +
+                                      UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT));
+    if (self->config.zcopy.hdr_offset > self->config.tx_seg_size) {
+        ucs_error("AM Zcopy context (%zu) must be <= TX segment size (%zu). "
+                  "It can be adjusted by decreasing maximum IOV count (%zu)",
+                  self->config.zcopy.hdr_offset, self->config.tx_seg_size,
+                  self->config.zcopy.max_iov);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = ucs_mpool_init(&self->tx_mpool, 0, self->tx_seg_size,
+    self->config.zcopy.max_hdr    = self->config.tx_seg_size -
+                                    self->config.zcopy.hdr_offset;
+    self->config.prefer_default   = config->prefer_default;
+    self->config.max_poll         = config->max_poll;
+    self->sockopt.nodelay         = config->sockopt_nodelay;
+    self->sockopt.sndbuf          = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf          = config->sockopt_rcvbuf;
+    ucs_list_head_init(&self->ep_list);
+    kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
+
+    if (self->config.tx_seg_size > self->config.rx_seg_size) {
+        ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
+                  self->config.rx_seg_size, self->config.tx_seg_size);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_mpool_init(&self->tx_mpool, 0, self->config.tx_seg_size,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->tx_mpool.bufs_grow == 0) ?
                             32 : config->tx_mpool.bufs_grow,
@@ -468,7 +476,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
-    status = ucs_mpool_init(&self->rx_mpool, 0, self->rx_seg_size * 2,
+    status = ucs_mpool_init(&self->rx_mpool, 0, self->config.rx_seg_size * 2,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->rx_mpool.bufs_grow == 0) ?
                             32 : config->rx_mpool.bufs_grow,

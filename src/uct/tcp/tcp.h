@@ -224,19 +224,20 @@ typedef struct uct_tcp_iface {
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */
     ucs_mpool_t                   tx_mpool;          /* TX memory pool */
     ucs_mpool_t                   rx_mpool;          /* RX memory pool */
-    size_t                        tx_seg_size;       /* TX AM buffer size */
-    size_t                        rx_seg_size;       /* RX AM buffer size */
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
                                                       * are in progress */
-    size_t                        max_iov;           /* Maximum supported IOVs limited by
+    struct {
+        size_t                    tx_seg_size;       /* TX AM buffer size */
+        size_t                    rx_seg_size;       /* RX AM buffer size */
+        struct {
+            size_t                max_iov;           /* Maximum supported IOVs limited by
                                                       * user configuration and service buffers
                                                       * (TCP protocol and user's AM headers) */
-    size_t                        max_zcopy_hdr;     /* Maximum supported AM Zcopy header */
-    size_t                        zcopy_hdr_offset;  /* Offset in TX bufer to empty space that
+            size_t                max_hdr;           /* Maximum supported AM Zcopy header */
+            size_t                hdr_offset;        /* Offset in TX bufer to empty space that
                                                       * can be used for AM Zcopy header */
-
-    struct {
+        } zcopy;
         struct sockaddr_in        ifaddr;            /* Network address */
         struct sockaddr_in        netmask;           /* Network address mask */
         int                       prefer_default;    /* Prefer default gateway */
@@ -385,13 +386,6 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
-
-static inline size_t
-uct_tcp_iface_zcopy_header_tx_offset(const uct_tcp_iface_t *iface)
-{
-    return (sizeof(uct_tcp_ep_zcopy_ctx_t) +
-            sizeof(struct iovec) * iface->max_iov);
-}
 
 static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 {

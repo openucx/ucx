@@ -576,15 +576,15 @@ static inline unsigned uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
 
     /* Adjust the current IOV buffer to send from right point */
     ctx_iov[ctx->iov_index].iov_len  -= ctx->iov_offset;
-    ctx_iov[ctx->iov_index].iov_base  = (uint8_t*)ctx_iov[ctx->iov_index].iov_base +
-                                        ctx->iov_offset;
+    ctx_iov[ctx->iov_index].iov_base  =
+        UCS_PTR_BYTE_OFFSET(ctx_iov[ctx->iov_index].iov_base, ctx->iov_offset);
     status = ucs_socket_sendv_nb(ep->fd, &ctx_iov[ctx->iov_index],
                                  ctx->iov_cnt - ctx->iov_index,
                                  &send_length, NULL, NULL);
     /* Return a pointer to the beginning of the current IOV buffer */
     ctx_iov[ctx->iov_index].iov_len  += ctx->iov_offset;
-    ctx_iov[ctx->iov_index].iov_base  = (uint8_t*)ctx_iov[ctx->iov_index].iov_base -
-                                        ctx->iov_offset;
+    ctx_iov[ctx->iov_index].iov_base  =
+        UCS_PTR_BYTE_OFFSET(ctx_iov[ctx->iov_index].iov_base, -ctx->iov_offset);
 
     ucs_trace_data("tcp_ep %p: sendv %zu bytes", ep, send_length);
 
@@ -592,17 +592,13 @@ static inline unsigned uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
     iface->outstanding -= send_length;
 
     if ((ep->tx.offset != ep->tx.length) &&
-        ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS)))
-    {
+        ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS))) {
         uct_tcp_ep_zcopy_ctx_consume_iov(ctx, send_length);
     } else {
         ep->ctx_caps  &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
         ep->tx.length  = ep->tx.offset;
-        if ((ctx->comp != NULL) &&
-            ((!--ctx->comp->count) || (status != UCS_OK)))
-        {
-            ctx->comp->count = 0;
-            ctx->comp->func(ctx->comp, status);
+        if (ctx->comp != NULL) {
+            uct_invoke_completion(ctx->comp, status);
         }
     }
 
@@ -724,13 +720,13 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         }
 
         /* post the entire AM buffer */
-        recv_length = iface->rx_seg_size;
+        recv_length = iface->config.rx_seg_size;
     } else if (ep->rx.length - ep->rx.offset < sizeof(*hdr)) {
         ucs_assert(ep->rx.buf != NULL);
 
         /* do partial receive of the remaining part of the hdr
          * and post the entire AM buffer */
-        recv_length = iface->rx_seg_size - ep->rx.length;
+        recv_length = iface->config.rx_seg_size - ep->rx.length;
     } else {
         ucs_assert(ep->rx.buf != NULL);
 
@@ -756,7 +752,8 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         }
 
         hdr = ep->rx.buf + ep->rx.offset;
-        ucs_assert(hdr->length <= (iface->rx_seg_size - sizeof(uct_tcp_am_hdr_t)));
+        ucs_assert(hdr->length <= (iface->config.rx_seg_size -
+                                   sizeof(uct_tcp_am_hdr_t)));
 
         if (remainder < sizeof(*hdr) + hdr->length) {
             handled++;
@@ -845,7 +842,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(length + sizeof(header), 0,
-                     iface->tx_seg_size - sizeof(uct_tcp_am_hdr_t),
+                     iface->config.tx_seg_size - sizeof(uct_tcp_am_hdr_t),
                      "am_short");
 
     status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);
@@ -908,11 +905,12 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
     struct iovec *ctx_iov;
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->max_iov, "uct_tcp_ep_am_zcopy");
-    UCT_CHECK_LENGTH(header_length, 0, iface->max_zcopy_hdr,
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.zcopy.max_iov,
+                       "uct_tcp_ep_am_zcopy");
+    UCT_CHECK_LENGTH(header_length, 0, iface->config.zcopy.max_hdr,
                      "am_zcopy header");
     UCT_CHECK_LENGTH(header_length + uct_iov_total_length(iov, iovcnt), 0,
-                     iface->rx_seg_size - sizeof(uct_tcp_am_hdr_t),
+                     iface->config.rx_seg_size - sizeof(uct_tcp_am_hdr_t),
                      "am_zcopy");
 
     status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);
@@ -937,12 +935,12 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
         ctx->iov_cnt++;
     }
 
-    ctx->iov_cnt  += uct_tcp_ep_iovec_fill_iov(&ctx_iov[ctx->iov_cnt], iov,
+    ctx->iov_cnt += uct_tcp_ep_iovec_fill_iov(&ctx_iov[ctx->iov_cnt], iov,
                                               iovcnt, &ep->tx.length);
-    hdr->length    = ep->tx.length + header_length;
-    ep->tx.length  = hdr->length   + sizeof(*hdr);
+    hdr->length   = ep->tx.length + header_length;
+    ep->tx.length = hdr->length   + sizeof(*hdr);
 
-    ucs_assertv(ep->tx.length <= iface->rx_seg_size, "ep=%p", ep);
+    ucs_assertv(ep->tx.length <= iface->config.rx_seg_size, "ep=%p", ep);
 
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
                        header, hdr->length, "SEND %p fd %d", ep, ep->fd);
@@ -953,7 +951,6 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
                                  &ep->tx.offset, NULL, NULL);
 
     ucs_trace_data("tcp_ep %p: sendv %zu bytes", ep, ep->tx.offset);
-    UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
 
     iface->outstanding -= ep->tx.offset;
     if ((ep->tx.offset != ep->tx.length) &&
@@ -964,10 +961,10 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
         if ((header_length != 0) &&
             /* check whether a user's header was sent or not */
             (ep->tx.offset < (sizeof(*hdr) + header_length))) {
-            ucs_assert(header_length <= iface->max_zcopy_hdr);
+            ucs_assert(header_length <= iface->config.zcopy.max_hdr);
             /* if the user's header wasn't sent completely, copy it to the EP
              * TX buffer (after Zcopy context and IOVs) for retransmission */
-            ctx_iov[1].iov_base = ep->tx.buf + iface->zcopy_hdr_offset;
+            ctx_iov[1].iov_base = ep->tx.buf + iface->config.zcopy.hdr_offset;
             memcpy(ctx_iov[1].iov_base, header, header_length);
         }
 
@@ -978,6 +975,8 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
         uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
         return UCS_INPROGRESS;
     }
+
+    UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
 
     uct_tcp_ep_ctx_reset(&ep->tx);
     return status;
