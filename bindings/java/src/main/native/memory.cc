@@ -3,13 +3,13 @@
  * See file LICENSE for terms.
  */
 #include "jucx_common_def.h"
-#include "org_ucx_jucx_ucp_UcpMemory.h"
-#include "org_ucx_jucx_ucp_UcpRemoteKey.h"
+#include "org_openucx_jucx_ucp_UcpMemory.h"
+#include "org_openucx_jucx_ucp_UcpRemoteKey.h"
 
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpMemory_unmapMemoryNative(JNIEnv *env, jclass cls,
-                                                  jlong context_ptr, jlong mem_ptr)
+Java_org_openucx_jucx_ucp_UcpMemory_unmapMemoryNative(JNIEnv *env, jclass cls,
+                                                      jlong context_ptr, jlong mem_ptr)
 {
     ucs_status_t status = ucp_mem_unmap((ucp_context_h)context_ptr, (ucp_mem_h)mem_ptr);
     if (status != UCS_OK) {
@@ -18,8 +18,8 @@ Java_org_ucx_jucx_ucp_UcpMemory_unmapMemoryNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpMemory_getRkeyBufferNative(JNIEnv *env, jclass cls,
-                                                    jlong context_ptr, jlong mem_ptr)
+Java_org_openucx_jucx_ucp_UcpMemory_getRkeyBufferNative(JNIEnv *env, jclass cls,
+                                                        jlong context_ptr, jlong mem_ptr)
 {
     void *rkey_buffer;
     size_t rkey_size;
@@ -33,13 +33,13 @@ Java_org_ucx_jucx_ucp_UcpMemory_getRkeyBufferNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpMemory_releaseRkeyBufferNative(JNIEnv *env, jclass cls, jobject rkey_buf)
+Java_org_openucx_jucx_ucp_UcpMemory_releaseRkeyBufferNative(JNIEnv *env, jclass cls, jobject rkey_buf)
 {
     ucp_rkey_buffer_release(env->GetDirectBufferAddress(rkey_buf));
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpRemoteKey_rkeyDestroy(JNIEnv *env, jclass cls, jlong rkey_ptr)
+Java_org_openucx_jucx_ucp_UcpRemoteKey_rkeyDestroy(JNIEnv *env, jclass cls, jlong rkey_ptr)
 {
     ucp_rkey_destroy((ucp_rkey_h) rkey_ptr);
 }

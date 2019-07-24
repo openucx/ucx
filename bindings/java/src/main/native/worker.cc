@@ -4,15 +4,15 @@
  */
 
 #include "jucx_common_def.h"
-#include "org_ucx_jucx_ucp_UcpWorker.h"
+#include "org_openucx_jucx_ucp_UcpWorker.h"
 
 /**
  * Bridge method for creating ucp_worker from java
  */
 JNIEXPORT jlong JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_createWorkerNative(JNIEnv *env, jclass cls,
-                                                   jobject jucx_worker_params,
-                                                   jlong context_ptr)
+Java_org_openucx_jucx_ucp_UcpWorker_createWorkerNative(JNIEnv *env, jclass cls,
+                                                       jobject jucx_worker_params,
+                                                       jlong context_ptr)
 {
     ucp_worker_params_t worker_params = { 0 };
     ucp_worker_h ucp_worker;
@@ -68,16 +68,16 @@ Java_org_ucx_jucx_ucp_UcpWorker_createWorkerNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_releaseWorkerNative(JNIEnv *env, jclass cls,
-                                                    jlong ucp_worker_ptr)
+Java_org_openucx_jucx_ucp_UcpWorker_releaseWorkerNative(JNIEnv *env, jclass cls,
+                                                        jlong ucp_worker_ptr)
 {
     ucp_worker_destroy((ucp_worker_h)ucp_worker_ptr);
 }
 
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_workerGetAddressNative(JNIEnv *env, jclass cls,
-                                                       jlong ucp_worker_ptr)
+Java_org_openucx_jucx_ucp_UcpWorker_workerGetAddressNative(JNIEnv *env, jclass cls,
+                                                           jlong ucp_worker_ptr)
 {
     ucp_address_t *addr;
     size_t len;
@@ -94,9 +94,9 @@ Java_org_ucx_jucx_ucp_UcpWorker_workerGetAddressNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_releaseAddressNative(JNIEnv *env, jclass cls,
-                                                     jlong ucp_worker_ptr,
-                                                     jobject ucp_address)
+Java_org_openucx_jucx_ucp_UcpWorker_releaseAddressNative(JNIEnv *env, jclass cls,
+                                                         jlong ucp_worker_ptr,
+                                                         jobject ucp_address)
 {
 
     ucp_worker_release_address((ucp_worker_h)ucp_worker_ptr,
@@ -104,13 +104,13 @@ Java_org_ucx_jucx_ucp_UcpWorker_releaseAddressNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT jint JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_progressWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+Java_org_openucx_jucx_ucp_UcpWorker_progressWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
 {
     return ucp_worker_progress((ucp_worker_h)ucp_worker_ptr);
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_waitWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+Java_org_openucx_jucx_ucp_UcpWorker_waitWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
 {
     ucs_status_t status = ucp_worker_wait((ucp_worker_h)ucp_worker_ptr);
 
@@ -120,7 +120,7 @@ Java_org_ucx_jucx_ucp_UcpWorker_waitWorkerNative(JNIEnv *env, jclass cls, jlong 
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+Java_org_openucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
 {
     ucs_status_t status = ucp_worker_signal((ucp_worker_h)ucp_worker_ptr);
 
@@ -130,11 +130,11 @@ Java_org_ucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, jlon
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jclass cls,
-                                                            jlong ucp_worker_ptr,
-                                                            jlong laddr, jlong size,
-                                                            jlong tag, jlong tagMask,
-                                                            jobject callback)
+Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                jlong ucp_worker_ptr,
+                                                                jlong laddr, jlong size,
+                                                                jlong tag, jlong tagMask,
+                                                                jobject callback)
 {
     ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
                                                 (void *)laddr, size,
