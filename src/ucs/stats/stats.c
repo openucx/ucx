@@ -515,23 +515,29 @@ static void ucs_stats_open_dest()
     const char *next_token;
     int need_close;
 
+    copy_str = NULL;
     if (!strncmp(ucs_global_opts.stats_dest, "udp:", 4)) {
 
-        copy_str = strdupa(&ucs_global_opts.stats_dest[4]);
+        copy_str = ucs_strdup(&ucs_global_opts.stats_dest[4],
+                              "statistics dest");
+        if (copy_str == NULL) {
+            return;
+        }
+
         saveptr  = NULL;
         hostname = strtok_r(copy_str, ":", &saveptr);
         port_str = strtok_r(NULL,     ":", &saveptr);
 
         if (hostname == NULL) {
            ucs_error("Invalid statistics destination format (%s)", ucs_global_opts.stats_dest);
-           return;
+           goto out_free;
         }
 
         status = ucs_stats_client_init(hostname,
                                       port_str ? atoi(port_str) : UCS_STATS_DEFAULT_UDP_PORT,
                                       &ucs_stats_context.client);
         if (status != UCS_OK) {
-            return;
+            goto out_free;
         }
 
         ucs_stats_context.flags |= UCS_STATS_FLAG_SOCKET;
@@ -541,7 +547,7 @@ static void ucs_stats_open_dest()
                                         &ucs_stats_context.stream,
                                         &need_close, &next_token);
         if (status != UCS_OK) {
-            return;
+            goto out_free;
         }
 
         /* File flags */
@@ -555,6 +561,9 @@ static void ucs_stats_open_dest()
             ucs_stats_context.flags |= UCS_STATS_FLAG_STREAM_BINARY;
         }
     }
+
+out_free:
+    ucs_free(copy_str);
 }
 
 static void ucs_stats_close_dest()

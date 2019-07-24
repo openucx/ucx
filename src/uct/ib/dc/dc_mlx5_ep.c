@@ -536,7 +536,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_OK;
     }
 
-    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -812,7 +812,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         if (dc_req->sender.global.is_global) {
             uct_ib_iface_fill_ah_attr_from_gid_lid(ib_iface, dc_req->lid,
                                                    ucs_unaligned_ptr(&dc_req->sender.global.gid),
-                                                   ib_iface->path_bits[0], &ah_attr);
+                                                   &ah_attr);
 
             status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
             if (status != UCS_OK) {
@@ -986,7 +986,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
      * - dci is either assigned or can be assigned
      * - dci has resources
      */
-    if (uct_rc_iface_has_tx_resources(&iface->super.super)) {
+    if (uct_dc_mlx5_iface_has_tx_resources(iface)) {
         if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
             if (uct_dc_mlx5_iface_dci_can_alloc(iface) && (ep->fc.fc_wnd > 0)) {
                 return UCS_ERR_BUSY;
@@ -1061,7 +1061,7 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
                                                 uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
-    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
@@ -1080,7 +1080,7 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
-    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
+    ucs_assertv(!uct_dc_mlx5_iface_has_tx_resources(iface),
                 "pending callback returned error but send resources are available");
     return UCS_ARBITER_CB_RESULT_STOP;
 }

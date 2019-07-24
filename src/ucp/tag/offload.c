@@ -304,6 +304,8 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                                       req->recv.tag.tag_mask, &iov, 1,
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
+        ucs_assert((status == UCS_ERR_NO_RESOURCE) ||
+                   (status == UCS_ERR_EXCEEDS_LIMIT));
         /* No more matching entries in the transport.
          * TODO keep registration in case SW RNDV protocol will be used */
         ucp_tag_offload_release_buf(req, 1);

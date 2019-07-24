@@ -264,6 +264,14 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->prev_sw_pi;
     }
+
+#if HAVE_TL_DC
+    if (qp_type == UCT_IB_QPT_DCI) {
+        txqp->available -= res_count;
+        return;
+    }
+#endif
+
     uct_rc_txqp_posted(txqp, &iface->super, res_count, fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 

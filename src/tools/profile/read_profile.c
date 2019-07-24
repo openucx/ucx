@@ -779,7 +779,10 @@ static int parse_args(int argc, char **argv, options_t *opts)
 
     opts->raw         = !isatty(fileno(stdout));
     opts->time_units  = TIME_UNITS_USEC;
-    parse_thread_list(opts->thread_list, "all");
+    ret = parse_thread_list(opts->thread_list, "all");
+    if (ret < 0) {
+        return ret;
+    }
 
     while ( (c = getopt(argc, argv, "rT:t:h")) != -1 ) {
         switch (c) {

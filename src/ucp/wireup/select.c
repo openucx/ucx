@@ -987,7 +987,6 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
     double score;
     int is_proxy;
 
-    status             = UCS_ERR_UNREACHABLE;
     num_lanes          = 0;
     md_map             = bw_info->md_map;
     local_dev_bitmap   = bw_info->local_dev_bitmap;

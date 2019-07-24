@@ -255,6 +255,12 @@ static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uin
     ucs_fatal("DCI (qpnum=%d) does not exist", qp_num);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
+{
+    return !ucs_mpool_is_empty(&iface->super.super.tx.mp);
+}
+
 static inline int uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
     return uct_rc_txqp_available(&iface->tx.dcis[dci].txqp) > 0;
