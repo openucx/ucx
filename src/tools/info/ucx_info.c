@@ -33,7 +33,7 @@ static void usage() {
     printf("  -p              Show UCP context information\n");
     printf("  -w              Show UCP worker information\n");
     printf("  -e              Show UCP endpoint configuration\n");
-    printf("  -m              Show UCP memory map configuration (requires memory size as an argument)\n");
+    printf("  -m <size>       Show UCP memory allocation method for a given size\n");
     printf("  -u <features>   UCP context features to use. String of one or more of:\n");
     printf("                    'a' : atomic operations\n");
     printf("                    'r' : remote memory access\n");
