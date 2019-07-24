@@ -229,12 +229,12 @@ ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 }
 
 static void
-ucp_wireup_sockaddr_server_connected_cb(uct_ep_h ep, void *arg,
-                                        ucs_status_t status)
+ucp_wireup_sockaddr_server_connect_cb(uct_ep_h ep, void *arg,
+                                      ucs_status_t status)
 {
-    ucp_ep_h         ucp_ep      = (ucp_ep_h)arg;
-    ucp_lane_index_t wireup_idx  = ucp_ep_config(ucp_ep)->key.wireup_lane;
-    ucp_wireup_ep_t *wireup_ep   = (ucp_wireup_ep_t *)ucp_ep->uct_eps[wireup_idx];
+    ucp_ep_h         ucp_ep     = (ucp_ep_h)arg;
+    ucp_lane_index_t wireup_idx = ucp_ep_config(ucp_ep)->key.wireup_lane;
+    ucp_wireup_ep_t  *wireup_ep = (ucp_wireup_ep_t*)ucp_ep->uct_eps[wireup_idx];
 
     /* TODO: invoke err handling */
     ucs_assert_always(status == UCS_OK);
@@ -242,7 +242,6 @@ ucp_wireup_sockaddr_server_connected_cb(uct_ep_h ep, void *arg,
     ucp_wireup_ep_disown(&wireup_ep->super.super, ep);
     ucp_wireup_remote_connected(ucp_ep);
     ucp_ep_add_connected_lane(ucp_ep, ep);
-//    ucp_ep_flush_state_reset(ucp_ep);
 }
 
 static void ucp_ep_sockaddr_disconnect(ucp_ep_h ucp_ep)
@@ -279,12 +278,12 @@ static unsigned ucp_ep_do_disconnect(void *arg)
      * slow-path element is still pending */
     ucp_request_complete_send(req, req->status);
 
-    return 0;
+    return 1;
 }
 
 unsigned ucp_ep_sockaddr_disconnect_progress(void *arg)
 {
-    ucp_ep_h ucp_ep = (ucp_ep_h)arg;
+    ucp_ep_h ucp_ep     = (ucp_ep_h)arg;
     ucp_worker_h worker = ucp_ep->worker;
     void *req;
 
@@ -315,7 +314,7 @@ unsigned ucp_ep_sockaddr_disconnect_progress(void *arg)
     return 1;
 }
 
-void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg)
+void ucp_ep_sockaddr_disconnect_cb(uct_ep_h ep, void *arg)
 {
     ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
@@ -370,8 +369,8 @@ ucp_ep_create_sockaddr_connected(ucp_worker_h worker,
     lane_params.conn_request               = params->conn_request->uct_req;
     lane_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     lane_params.sockaddr_pack_cb           = ucp_wireup_sockaddr_priv_pack_cb;
-    lane_params.sockaddr_connect_cb.server = ucp_wireup_sockaddr_server_connected_cb;
-    lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnected_cb;
+    lane_params.sockaddr_connect_cb.server = ucp_wireup_sockaddr_server_connect_cb;
+    lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnect_cb;
 
     ucs_assert(worker->num_cms == 1);
     for (i = 0; i < worker->num_cms; ++i) {
@@ -639,7 +638,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    if (client_data->addr_mode == UCP_WIREUP_CD_LOCAL_ADDR) {
+    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR;
     } else {
@@ -653,7 +652,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         goto out;
     }
 
-    if (client_data->addr_mode == UCP_WIREUP_CD_FULL_ADDR) {
+    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_FULL_ADDR) {
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
                                               UCP_EP_CREATE_AM_LANE, "listener",
@@ -663,7 +662,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         } else {
             goto out_free_address;
         }
-    } else if (client_data->addr_mode == UCP_WIREUP_CD_PARTIAL_ADDR) {
+    } else if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR) {
         status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
                                             ep_p);
         if (status == UCS_OK) {
@@ -677,7 +676,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         }
     } else {
         ucs_assert(ucp_worker_close_proto(worker));
-        ucs_assert(client_data->addr_mode       == UCP_WIREUP_CD_LOCAL_ADDR);
+        ucs_assert(client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR);
         ucs_assert(remote_address.address_count == 1);
         remote_address.address_list[0].dev_addr = conn_request->remote_dev_addr;
         params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST;
@@ -686,9 +685,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
                                                   &remote_address, ep_p);
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
         ucp_ep_ext_gen(*ep_p)->listener = conn_request->ucp_listener;
-        if (status == UCS_OK) {
-//            ucp_ep_flush_state_reset(*ep_p);
-        } else {
+        if (status != UCS_OK) {
             goto out_free_address;
         }
     }

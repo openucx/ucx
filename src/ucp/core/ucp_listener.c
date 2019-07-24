@@ -430,13 +430,14 @@ static void ucp_listener_conn_request_cb(uct_listener_h listener, void *arg,
     memcpy(&ucp_conn_request->client_data, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
 
-    /* TODO: temporary to check addr !!! */
+#if ENABLE_DEBUG_DATA
     ucp_unpacked_address_t remote_address;
     ucp_address_unpack(ucp_listener->wcm.worker,
                        (ucp_wireup_client_data_t*)remote_data->conn_priv_data + 1,
                        UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                        UCP_ADDRESS_PACK_FLAG_EP_ADDR,
                        &remote_address);
+#endif /* ENABLE_DEBUG_DATA */
 
     uct_worker_progress_register_safe(ucp_listener->wcm.worker->uct,
                                       ucp_listener_conn_request_progress,

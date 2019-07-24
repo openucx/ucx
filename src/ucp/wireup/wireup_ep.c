@@ -545,7 +545,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        client_data->addr_mode = UCP_WIREUP_CD_PARTIAL_ADDR;
+        client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR;
         memcpy(client_data + 1, rsc_address, address_length);
         ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
 
@@ -560,7 +560,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                   address_length, conn_priv_len);
 
     } else {
-        client_data->addr_mode = UCP_WIREUP_CD_FULL_ADDR;
+        client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_FULL_ADDR;
         memcpy(client_data + 1, worker_address, address_length);
     }
 
@@ -686,7 +686,7 @@ ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
     ucs_assert((sizeof(client_data) + ucp_addr_size) <= max_conn_priv);
     client_data->ep_ptr    = (uintptr_t)ep;
     client_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    client_data->addr_mode = UCP_WIREUP_CD_LOCAL_ADDR;
+    client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR;
     memcpy(client_data + 1, ucp_addr, ucp_addr_size);
     ucs_free(ucp_addr);
 
@@ -699,9 +699,9 @@ out:
 }
 
 static void
-ucp_wireup_sockaddr_client_connected_cb(uct_ep_h ep, void *arg,
-                                           const uct_cm_remote_data_t *remote_data,
-                                           ucs_status_t status)
+ucp_wireup_sockaddr_client_connect_cb(uct_ep_h ep, void *arg,
+                                      const uct_cm_remote_data_t *remote_data,
+                                      ucs_status_t status)
 {
     ucp_ep_h         ucp_ep      = (ucp_ep_h)arg;
     ucp_lane_index_t wireup_idx  = ucp_ep_config(ucp_ep)->key.wireup_lane;
@@ -772,8 +772,8 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
     cm_lane_params.sockaddr                   = &params->sockaddr;
     cm_lane_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     cm_lane_params.sockaddr_pack_cb           = ucp_wireup_sockaddr_priv_pack_cb;
-    cm_lane_params.sockaddr_connect_cb.client = ucp_wireup_sockaddr_client_connected_cb;
-    cm_lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnected_cb;
+    cm_lane_params.sockaddr_connect_cb.client = ucp_wireup_sockaddr_client_connect_cb;
+    cm_lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnect_cb;
 
     ucs_assert_always(worker->num_cms == 1);
     for (i = 0; i < worker->num_cms; ++i) {

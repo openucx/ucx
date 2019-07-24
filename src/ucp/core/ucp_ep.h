@@ -359,16 +359,18 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_CD_FULL_ADDR = 0,
-    UCP_WIREUP_CD_PARTIAL_ADDR,
-    UCP_WIREUP_CD_LOCAL_ADDR
+    UCP_WIREUP_SOCKADDR_CD_FULL_ADDR = 0, /* Client data contains full address */
+    UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR,  /* Client data contains partial address,
+                                             wireup protocol requires extra MSGs */
+    UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR     /* Client data contains locally built address */
 };
 
 typedef struct ucp_wireup_client_data {
     uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
-    uint8_t                   addr_mode;     /**< TODO: fixup, Whether the attached address is
-                                                  full or partial */
+    uint8_t                   addr_mode;     /**< The attached address format
+                                                  defined by
+                                                  UCP_WIREUP_SOCKADDR_CD_xx */
     /* packed worker address follows */
 } UCS_S_PACKED ucp_wireup_client_data_t;
 
@@ -458,7 +460,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
-void ucp_ep_sockaddr_disconnected_cb(uct_ep_h ep, void *arg);
+void ucp_ep_sockaddr_disconnect_cb(uct_ep_h ep, void *arg);
 
 ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
 
