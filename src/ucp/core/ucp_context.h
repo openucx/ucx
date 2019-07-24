@@ -356,7 +356,9 @@ ucp_tl_bandwidth(ucp_context_h context, const uct_tl_bandwidth_t *bandwidth)
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
-    uct_tl_bandwidth_t bw = {.bandwidth = (float)(bandwidth->dedicated - bandwidth->shared)};
+    uct_tl_bandwidth_t bw;
+    
+    bw.bandwidth = (float)(bandwidth->dedicated - bandwidth->shared);
 
     /* check if at least one of bandwidth values is 0 */
     ucs_assert((bandwidth->dedicated * bandwidth->shared) == 0);
