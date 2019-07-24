@@ -4,7 +4,7 @@
  */
 
 #include "jucx_common_def.h"
-#include "org_ucx_jucx_ucp_UcpEndpoint.h"
+#include "org_openucx_jucx_ucp_UcpEndpoint.h"
 
 #include <string.h>    /* memset */
 
@@ -19,9 +19,9 @@ static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 }
 
 JNIEXPORT jlong JNICALL
-Java_org_ucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
-                                                       jobject ucp_ep_params,
-                                                       jlong worker_ptr)
+Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
+                                                           jobject ucp_ep_params,
+                                                           jlong worker_ptr)
 {
     ucp_ep_params_t ep_params;
     jfieldID field;
@@ -82,15 +82,15 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpEndpoint_destroyEndpointNative(JNIEnv *env, jclass cls,
-                                                        jlong ep_ptr)
+Java_org_openucx_jucx_ucp_UcpEndpoint_destroyEndpointNative(JNIEnv *env, jclass cls,
+                                                            jlong ep_ptr)
 {
     ucp_ep_destroy((ucp_ep_h) ep_ptr);
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
-                                                  jlong ep_ptr, jlong addr)
+Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
+                                                      jlong ep_ptr, jlong addr)
 {
     ucp_rkey_h rkey;
 
@@ -99,7 +99,7 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
-    jclass ucp_rkey_cls = env->FindClass("org/ucx/jucx/ucp/UcpRemoteKey");
+    jclass ucp_rkey_cls = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
     jmethodID constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
     jobject result = env->NewObject(ucp_rkey_cls, constructor, (native_ptr)rkey);
 
@@ -107,10 +107,10 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass cls,
-                                                       jlong ep_ptr, jlong laddr,
-                                                       jlong size, jlong raddr,
-                                                       jlong rkey_ptr, jobject callback)
+Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass cls,
+                                                           jlong ep_ptr, jlong laddr,
+                                                           jlong size, jlong raddr,
+                                                           jlong rkey_ptr, jobject callback)
 {
     ucs_status_ptr_t request = ucp_put_nb((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
                                           (ucp_rkey_h)rkey_ptr, jucx_request_callback);
@@ -121,10 +121,10 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
-                                                       jlong ep_ptr, jlong raddr,
-                                                       jlong rkey_ptr, jlong laddr,
-                                                       jlong size, jobject callback)
+Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
+                                                           jlong ep_ptr, jlong raddr,
+                                                           jlong rkey_ptr, jlong laddr,
+                                                           jlong size, jobject callback)
 {
     ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, (void *)laddr, size,
                                           raddr, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
@@ -135,10 +135,10 @@ Java_org_ucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, jclass cls,
-                                                              jlong ep_ptr, jlong addr,
-                                                              jlong size, jlong tag,
-                                                              jobject callback)
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                  jlong ep_ptr, jlong addr,
+                                                                  jlong size, jlong tag,
+                                                                  jobject callback)
 {
     ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                ucp_dt_make_contig(1), tag, jucx_request_callback);

@@ -29,12 +29,12 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
        return JNI_ERR;
     }
 
-    jclass jucx_request_cls_local = env->FindClass("org/ucx/jucx/UcxRequest");
+    jclass jucx_request_cls_local = env->FindClass("org/openucx/jucx/UcxRequest");
     jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
-    jclass jucx_callback_cls = env->FindClass("org/ucx/jucx/UcxCallback");
+    jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
     completed_field = env->GetFieldID(jucx_request_cls, "completed", "Z");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
-                                  "(Lorg/ucx/jucx/UcxRequest;)V");
+                                  "(Lorg/openucx/jucx/UcxRequest;)V");
     jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
     return JNI_VERSION_1_1;
 }
@@ -55,7 +55,7 @@ extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved) {
  */
 JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *env, const char *msg)
 {
-    jclass cls = env->FindClass("org/ucx/jucx/UcxException");
+    jclass cls = env->FindClass("org/openucx/jucx/UcxException");
     ucs_error("JUCX: %s", msg);
     if (cls != 0) { /* Otherwise an exception has already been thrown */
         env->ThrowNew(cls, msg);

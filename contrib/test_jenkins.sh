@@ -997,13 +997,13 @@ test_jucx() {
 
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
 			         -cp bindings/java/src/main/native/build-java/jucx-*.jar \
-				 org.ucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
 			         -cp bindings/java/src/main/native/build-java/jucx-*.jar  \
-				 org.ucx.jucx.examples.UcxReadBWBenchmarkSender \
+				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
 			 wait $java_pid
 		done

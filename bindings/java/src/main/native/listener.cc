@@ -4,15 +4,15 @@
  */
 
 #include "jucx_common_def.h"
-#include "org_ucx_jucx_ucp_UcpListener.h"
+#include "org_openucx_jucx_ucp_UcpListener.h"
 
 #include <string.h>    /* memset */
 
 
 JNIEXPORT jlong JNICALL
-Java_org_ucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
-                                                    jobject ucp_listener_params,
-                                                    jlong worker_ptr)
+Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
+                                                        jobject ucp_listener_params,
+                                                        jlong worker_ptr)
 {
     ucp_listener_params_t params;
     ucp_listener_h listener;
@@ -49,9 +49,9 @@ Java_org_ucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpListener_destroyUcpListenerNative(JNIEnv *env,
-                                                           jclass cls,
-                                                           jlong listener_ptr)
+Java_org_openucx_jucx_ucp_UcpListener_destroyUcpListenerNative(JNIEnv *env,
+                                                               jclass cls,
+                                                               jlong listener_ptr)
 {
     ucp_listener_destroy((ucp_listener_h)listener_ptr);
 }
