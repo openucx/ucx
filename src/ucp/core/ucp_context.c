@@ -247,7 +247,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
 
-  {NULL}
+  {"SOCKADDR_CLOSE_PROTO", "n",
+   "Enable synchronized close protocol for sockaddr connected endpoints.\n"
+   "Enabling this mode change underlying UCT mechanism for connection\n"
+   "establishment and enables synchronized close protocol which does not\n"
+   "require out of band synchronization before destroying UCP reqources.",
+   ucs_offsetof(ucp_config_t, ctx.sockaddr_proto), UCS_CONFIG_TYPE_BOOL},
+
+   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 

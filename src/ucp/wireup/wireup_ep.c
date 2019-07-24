@@ -756,6 +756,10 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr_cm(uct_ep_h uct_ep,
     ucs_status_t status;
     ucp_md_index_t i;
 
+    if (!ucp_worker_close_proto(worker)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
                                 UCT_EP_PARAM_FIELD_USER_DATA             |
                                 UCT_EP_PARAM_FIELD_SOCKADDR              |

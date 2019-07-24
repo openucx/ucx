@@ -320,4 +320,10 @@ ucp_worker_unified_mode(ucp_worker_h worker)
     return worker->context->config.ext.unified_mode;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_close_proto(ucp_worker_h worker)
+{
+    return worker->context->config.ext.sockaddr_proto;
+}
+
 #endif

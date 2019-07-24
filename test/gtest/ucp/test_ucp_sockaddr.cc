@@ -465,6 +465,9 @@ UCS_TEST_P(test_ucp_sockaddr, onesided_c2s_disconnect) {
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_s2c_disconnect) {
+    if (!ucp_worker_close_proto(sender().worker())) {
+        UCS_TEST_SKIP_R("close proto is disabled");
+    }
     listen_and_communicate(cb_type(), false, SEND_DIRECTION_S2C);
     client_one_sided_disconnect();
 }

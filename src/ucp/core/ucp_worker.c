@@ -1149,6 +1149,10 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     uct_cm_h        *cms_tmp;
     ucp_md_index_t  i;
 
+    if (!ucp_worker_close_proto(worker)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     cms_tmp = ucs_alloca(context->num_cmpts);
     ucs_assert_always(cms_tmp != NULL);
 

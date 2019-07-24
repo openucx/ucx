@@ -676,6 +676,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
             goto out_free_address;
         }
     } else {
+        ucs_assert(ucp_worker_close_proto(worker));
         ucs_assert(client_data->addr_mode       == UCP_WIREUP_CD_LOCAL_ADDR);
         ucs_assert(remote_address.address_count == 1);
         remote_address.address_list[0].dev_addr = conn_request->remote_dev_addr;

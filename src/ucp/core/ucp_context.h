@@ -83,6 +83,8 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
+    /** Enable close protocol for client-server connections */
+    int                                    sockaddr_proto;
 } ucp_context_config_t;
 
 

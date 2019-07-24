@@ -390,6 +390,7 @@ err_close_listener_wifaces:
 err_free_listener:
     ucs_free(listener);
 out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }
 
@@ -453,11 +454,16 @@ ucp_listener_create_on_cm(ucp_worker_h worker,
                           const ucp_listener_params_t *params,
                           ucp_listener_h *listener_p)
 {
-    ucp_listener_h listener = ucs_calloc(1, sizeof(*listener), "ucp listener");
+    ucp_listener_h listener;
     uct_listener_params_t uct_params;
     ucs_status_t   status;
     ucp_md_index_t i;
 
+    if (!ucp_worker_close_proto(worker)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    listener = ucs_calloc(1, sizeof(*listener), "ucp listener");
     if (listener == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
