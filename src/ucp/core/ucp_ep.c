@@ -507,7 +507,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
                                                   HW TM is supported */
     key.am_bw_lanes[0]        = 0;
     key.rma_lanes[0]          = 0;
-    key.rma_bw_lanes[0]       = 0;
+    key.rma_bw_lanes[0]       = UCP_NULL_LANE;
     key.amo_lanes[0]          = 0;
 
     status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
