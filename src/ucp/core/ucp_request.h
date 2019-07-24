@@ -113,6 +113,7 @@ struct ucp_request {
             size_t                length;   /* Total length, in bytes */
             uct_memory_type_t     mem_type; /* Memory type */
             ucp_send_callback_t   cb;       /* Completion callback */
+            void                  *application_cookie; /* Value to carry context to the cb */
 
             union {
 

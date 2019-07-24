@@ -398,3 +398,15 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         ucp_request_complete_send(req, status);
     }
 }
+
+void ucp_request_set_cookie(void *request, void *application_cookie)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+    req->send.application_cookie = application_cookie ;
+}
+
+void * ucp_request_get_cookie(void *request)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+    return req->send.application_cookie ;
+}

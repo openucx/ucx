@@ -3130,6 +3130,29 @@ ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
 
 
 /**
+ * @ingroup UCP_COMM
+ *
+ * @brief set an application cookie in the request, for passthrough to the
+ * completion callback
+ *
+ * @param [in] request result of an ucp_am_send_nb call
+ * @param [in] application_cookie cookie to set, which can be retrieved later
+ *                                with a ucp_get_cookie call
+ */
+void ucp_request_set_cookie(void *request, void *application_cookie) ;
+
+/**
+ * @ingroup UCP_COMM
+ *
+ * @brief fetch the application cookie which was set with ucp_set_cookie
+ *
+ * @param [in] request result on an ucp_am_send_nb call
+ *
+ * @return the value passed to a previous ucp_set_cookie call
+ */
+void *ucp_request_get_cookie(void *request) ;
+
+/**
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.
  */
