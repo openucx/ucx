@@ -117,7 +117,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  * @param [in]  buffer           Buffer with data to unpack.
  * @param [in]  flags            UCP_ADDRESS_PACK_FLAG_xx flags to specify
  *                               address format, must be the same as the address
- *                               was packed by @ref ucp_address_pack.
+ *                               which was packed by @ref ucp_address_pack.
  * @param [out] unpacked_address Filled with remote address data.
  *
  * @note Entries in the address list could point into the data buffer, so it
