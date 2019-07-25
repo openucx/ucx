@@ -333,7 +333,7 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     }
 
     knem_md->super.ops         = &md_ops;
-    knem_md->super.component   = &uct_knem_md_component;
+    knem_md->super.component   = &uct_knem_component;
     knem_md->reg_cost.overhead = 1200.0e-9;
     knem_md->reg_cost.growth   = 0.007e-9;
     knem_md->rcache            = NULL;
@@ -377,9 +377,20 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_knem_md_component, "knem",
-                        uct_knem_query_md_resources, uct_knem_md_open, 0,
-                        uct_knem_rkey_unpack,
-                        uct_knem_rkey_release, "KNEM_",
-                        uct_knem_md_config_table, uct_knem_md_config_t,
-                        ucs_empty_function_return_unsupported)
+uct_component_t uct_knem_component = {
+    .query_md_resources = uct_knem_query_md_resources,
+    .md_open            = uct_knem_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_knem_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_knem_rkey_release,
+    .name               = "knem",
+    .md_config          = {
+        .name           = "KNEM memory domain",
+        .prefix         = "KNEM_",
+        .table          = uct_knem_md_config_table,
+        .size           = sizeof(uct_knem_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component)
+};
+UCT_COMPONENT_REGISTER(&uct_knem_component);

@@ -23,8 +23,6 @@
 #include <malloc.h>
 
 
-UCS_LIST_HEAD(uct_md_components_list);
-
 ucs_config_field_t uct_md_config_table[] = {
 
   {NULL}
@@ -310,9 +308,9 @@ ucs_status_t uct_md_config_read(uct_component_h component,
     uct_config_bundle_t *bundle = NULL;
     ucs_status_t status;
 
-    status = uct_config_read(&bundle, component->md_config_table,
-                             component->md_config_size, env_prefix,
-                             component->cfg_prefix);
+    status = uct_config_read(&bundle, component->md_config.table,
+                             component->md_config.size, env_prefix,
+                             component->md_config.prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read MD config");
         return status;
@@ -476,12 +474,4 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
                                        ucs_memory_type_t *mem_type_p)
 {
     return md->ops->detect_memory_type(md, addr, length, mem_type_p);
-}
-
-int uct_md_is_hugetlb(uct_md_h md, uct_mem_h memh)
-{
-    if (md->ops->is_hugetlb != NULL) {
-        return md->ops->is_hugetlb(md, memh);
-    }
-    return 0;
 }

@@ -117,7 +117,7 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
     };
     static uct_md_t md = {
         .ops       = &md_ops,
-        .component = &uct_rocm_ipc_md_component,
+        .component = &uct_rocm_ipc_component,
     };
 
     *md_p = &md;
@@ -152,13 +152,21 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_md_component_t *mdc,
     return UCS_OK;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_rocm_ipc_md_component,
-                        UCT_ROCM_IPC_MD_NAME,
-                        uct_rocm_base_query_md_resources,
-                        uct_rocm_ipc_md_open, 0,
-                        uct_rocm_ipc_rkey_unpack,
-                        uct_rocm_ipc_rkey_release,
-                        "ROCM_IPC_MD_",
-                        uct_rocm_ipc_md_config_table,
-                        uct_rocm_ipc_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_rocm_ipc_component = {
+    .query_md_resources = uct_rocm_base_query_md_resources,
+    .md_open            = uct_rocm_ipc_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_rocm_ipc_rkey_release,
+    .name               = "rocm_ipc",
+    .md_config          = {
+        .name           = "ROCm-IPC memory domain",
+        .prefix         = "ROCM_IPC_MD_",
+        .table          = uct_rocm_ipc_md_config_table,
+        .size           = sizeof(uct_rocm_ipc_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component)
+};
+UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component);
+

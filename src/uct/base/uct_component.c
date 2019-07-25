@@ -14,6 +14,8 @@
 #include <string.h>
 
 
+UCS_LIST_HEAD(uct_md_components_list);
+
 ucs_status_t uct_query_components(uct_component_h **components_p,
                                   unsigned *num_components_p)
 {

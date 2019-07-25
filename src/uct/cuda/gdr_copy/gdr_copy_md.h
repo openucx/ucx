@@ -11,10 +11,8 @@
 #include <ucs/memory/rcache.h>
 #include "gdrapi.h"
 
-#define UCT_GDR_COPY_MD_NAME "gdr_copy"
 
-
-extern uct_md_component_t uct_gdr_copy_md_component;
+extern uct_md_component_t uct_gdr_copy_component;
 
 
 /**
