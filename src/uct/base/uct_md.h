@@ -94,7 +94,7 @@ struct uct_md_ops {
  */
 struct uct_md {
     uct_md_ops_t           *ops;
-    uct_md_component_t     *component;
+    uct_component_t        *component;
 };
 
 
@@ -137,11 +137,11 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
  * Dummy function to emulate unpacking a remote key buffer to handle.
  *
  */
-ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
+ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
 
-uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
+uct_tl_component_t *uct_find_tl_on_md(uct_component_t *component,
                                       uint64_t md_flags,
                                       const char *tl_name);
 

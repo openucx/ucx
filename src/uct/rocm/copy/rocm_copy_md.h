@@ -9,7 +9,7 @@
 #include <uct/base/uct_md.h>
 
 
-extern uct_md_component_t uct_rocm_copy_component;
+extern uct_component_t uct_rocm_copy_component;
 
 typedef struct uct_rocm_copy_md {
     struct uct_md super;

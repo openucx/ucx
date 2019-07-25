@@ -167,13 +167,15 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
 
-ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
-                                uct_rkey_t *rkey_p, void **handle_p);
+ucs_status_t uct_mm_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p);
 
-ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
+ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p);
 
-ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle);
+ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
+                                 void *handle);
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p);

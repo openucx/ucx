@@ -13,8 +13,8 @@
 #include <ucs/datastruct/list.h>
 
 
-typedef struct uct_md_component uct_component_t;
-typedef uct_component_t uct_md_component_t;
+/* Forward declaration */
+typedef struct uct_component uct_component_t;
 
 
 /**
@@ -124,7 +124,7 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 /**
  * Defines a UCT component
  */
-struct uct_md_component {
+struct uct_component {
     const char                              name[UCT_MD_COMPONENT_NAME_MAX]; /**< Component name */
     uct_component_query_md_resources_func_t query_md_resources; /**< Query memory domain resources method */
     uct_component_md_open_func_t            md_open;            /**< Memory domain open method */
