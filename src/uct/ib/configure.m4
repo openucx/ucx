@@ -413,7 +413,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        CFLAGS="$save_CFLAGS"
        CPPFLAGS="$save_CPPFLAGS"
 
-       uct_modules+=":ib"
+       uct_modules="${uct_modules}:ib"
     ],
     [
         with_dc=no

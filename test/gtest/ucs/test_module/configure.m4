@@ -4,5 +4,5 @@
 # See file LICENSE for terms.
 #
 
-test_modules+=":module"
+test_modules="${test_modules}:module"
 AC_CONFIG_FILES([test/gtest/ucs/test_module/Makefile])
