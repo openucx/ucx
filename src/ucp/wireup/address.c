@@ -761,6 +761,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
             ptr       = ucp_address_unpack_length(worker, flags_ptr, ptr,
                                                   &ep_addr_len, 1);
+            ucs_assert((flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) ||
+                       (ep_addr_len == 0));
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
             last_tl   = (*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_LAST;
 
