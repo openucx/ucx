@@ -237,13 +237,6 @@ typedef struct ucp_tl_iface_atomic_flags {
     } atomic32, atomic64;
 } ucp_tl_iface_atomic_flags_t;
 
-/* datatype used to store address bandwidth value.
-   optimization hint: if bandwidth > 0 - it is dedicated value,
-   else - shared value. Assuming that both values can't be not-null */
-typedef struct ucp_tl_bandwidth {
-    float bandwidth;
-} uct_tl_bandwidth_t; /* Interface performance - bandwidth */
-
 #define UCP_ATOMIC_OP_MASK  (UCS_BIT(UCT_ATOMIC_OP_ADD)  | \
                              UCS_BIT(UCT_ATOMIC_OP_AND)  | \
                              UCS_BIT(UCT_ATOMIC_OP_OR)   | \
@@ -348,21 +341,16 @@ ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
 extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
 static UCS_F_ALWAYS_INLINE double
-ucp_tl_bandwidth(ucp_context_h context, const uct_tl_bandwidth_t *bandwidth)
+ucp_tl_bandwidth(ucp_context_h context, double bandwidth)
 {
-    return ucs_max(bandwidth->bandwidth, 0) + (ucs_max(-bandwidth->bandwidth, 0) / context->config.est_num_ppn);
+    return ucs_max(bandwidth, 0) + (ucs_max(-bandwidth, 0) / context->config.est_num_ppn);
 }
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
-    uct_tl_bandwidth_t bw;
-    
-    bw.bandwidth = (float)(bandwidth->dedicated - bandwidth->shared);
-
-    /* check if at least one of bandwidth values is 0 */
-    ucs_assert((bandwidth->dedicated * bandwidth->shared) == 0);
-    return ucp_tl_bandwidth(context, &bw);
+    ucs_assert(bandwidth->dedicated * bandwidth->shared == 0);
+    return ucp_tl_bandwidth(context, bandwidth->dedicated - bandwidth->shared);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)

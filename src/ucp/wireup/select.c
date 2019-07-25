@@ -664,7 +664,7 @@ static double ucp_wireup_rma_score_func(ucp_context_h context,
     return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                    iface_attr->overhead +
                    (4096.0 / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                                     ucp_tl_bandwidth(context, &remote_iface_attr->bandwidth))));
+                                     ucp_tl_bandwidth(context, remote_iface_attr->bandwidth))));
 }
 
 static int ucp_wireup_ep_params_is_err_mode_peer(const ucp_ep_params_t *params)
@@ -849,7 +849,7 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
      * how long it would take to transfer it with a certain transport. */
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
                 ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                        ucp_tl_bandwidth(context, &remote_iface_attr->bandwidth))) +
+                        ucp_tl_bandwidth(context, remote_iface_attr->bandwidth))) +
                 ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                 iface_attr->overhead + md_attr->reg_cost.overhead +
                 (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
@@ -957,7 +957,7 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
     /* best single MTU bandwidth */
     double size = iface_attr->cap.am.max_bcopy;
     double time = (size / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                                  ucp_tl_bandwidth(context, &remote_iface_attr->bandwidth))) +
+                                  ucp_tl_bandwidth(context, remote_iface_attr->bandwidth))) +
                   iface_attr->overhead + remote_iface_attr->overhead +
                   ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
 

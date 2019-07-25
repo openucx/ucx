@@ -40,7 +40,7 @@ enum {
 struct ucp_address_iface_attr {
     uint64_t                    cap_flags;    /* Interface capability flags */
     double                      overhead;     /* Interface performance - overhead */
-    uct_tl_bandwidth_t          bandwidth;    /* Interface performance - bandwidth */
+    double                      bandwidth;    /* Interface performance - bandwidth */
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Latency overhead */
     ucp_tl_iface_atomic_flags_t atomic;       /* Atomic operations */

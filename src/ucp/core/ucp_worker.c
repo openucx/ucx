@@ -1216,16 +1216,16 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     iface_cap_flags             = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth.bandwidth = 1e12;
-    dummy_iface_attr.cap_flags           = -1;
-    dummy_iface_attr.overhead            = 0;
-    dummy_iface_attr.priority            = 0;
-    dummy_iface_attr.lat_ovh             = 0;
+    dummy_iface_attr.bandwidth = 1e12;
+    dummy_iface_attr.cap_flags = -1;
+    dummy_iface_attr.overhead  = 0;
+    dummy_iface_attr.priority  = 0;
+    dummy_iface_attr.lat_ovh   = 0;
 
-    supp_tls                             = 0;
-    best_score                           = -1;
-    best_rsc                             = NULL;
-    best_priority                        = 0;
+    supp_tls                   = 0;
+    best_score                 = -1;
+    best_rsc                   = NULL;
+    best_priority              = 0;
 
     /* Select best interface for atomics device */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
