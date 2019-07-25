@@ -15,20 +15,6 @@ static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_rocm_ipc_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                    unsigned *num_resources_p)
-{
-    if (uct_rocm_base_init() != HSA_STATUS_SUCCESS) {
-        ucs_debug("Could not initialize ROCm support");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
-
-    return uct_single_md_resource(&uct_rocm_ipc_md_component, resources_p,
-				  num_resources_p);
-}
-
 static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->rkey_packed_size     = sizeof(uct_rocm_ipc_key_t);
@@ -117,9 +103,9 @@ static ucs_status_t uct_rocm_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_ipc_md_open(const char *md_name,
-                                         const uct_md_config_t *uct_md_config,
-                                         uct_md_h *md_p)
+static ucs_status_t
+uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
+                     const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
         .close              = (void*)ucs_empty_function,
@@ -168,7 +154,7 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_md_component_t *mdc,
 
 UCT_MD_COMPONENT_DEFINE(uct_rocm_ipc_md_component,
                         UCT_ROCM_IPC_MD_NAME,
-                        uct_rocm_ipc_query_md_resources,
+                        uct_rocm_base_query_md_resources,
                         uct_rocm_ipc_md_open, 0,
                         uct_rocm_ipc_rkey_unpack,
                         uct_rocm_ipc_rkey_release,

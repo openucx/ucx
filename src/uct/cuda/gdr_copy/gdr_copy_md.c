@@ -217,32 +217,22 @@ static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
     return status;
 }
 
-static ucs_status_t uct_gdr_copy_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                    unsigned *num_resources_p)
+static ucs_status_t
+uct_gdr_copy_query_md_resources(uct_component_t *component,
+                                uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p)
 {
-    int num_gpus;
     gdr_t ctx;
-    cudaError_t cudaErr;
-
-    cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
-        ucs_debug("not found cuda devices");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
 
     ctx = gdr_open();
     if (ctx == NULL) {
         ucs_debug("could not open gdr copy. disabling gdr copy resource");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
     gdr_close(ctx);
 
-    return uct_single_md_resource(&uct_gdr_copy_md_component, resources_p,
-                                  num_resources_p);
+    return uct_cuda_base_query_md_resources(component, resources_p,
+                                            num_resources_p);
 }
 
 static void uct_gdr_copy_md_close(uct_md_h uct_md)
@@ -359,12 +349,12 @@ static ucs_rcache_ops_t uct_gdr_copy_rcache_ops = {
     .dump_region = uct_gdr_copy_rcache_dump_region_cb
 };
 
-static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
-                                         const uct_md_config_t *uct_md_config,
-                                         uct_md_h *md_p)
+static ucs_status_t
+uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
+                     const uct_md_config_t *config, uct_md_h *md_p)
 {
-    const uct_gdr_copy_md_config_t *md_config = ucs_derived_of(uct_md_config,
-                                                               uct_gdr_copy_md_config_t);
+    const uct_gdr_copy_md_config_t *md_config =
+                    ucs_derived_of(config, uct_gdr_copy_md_config_t);
     ucs_status_t status;
     uct_gdr_copy_md_t *md;
     ucs_rcache_params_t rcache_params;

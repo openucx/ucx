@@ -87,6 +87,20 @@ end:
     return status;
 }
 
+ucs_status_t
+uct_rocm_base_query_md_resources(uct_component_h component,
+                                 uct_md_resource_desc_t **resources_p,
+                                 unsigned *num_resources_p)
+{
+    if (uct_rocm_base_init() != HSA_STATUS_SUCCESS) {
+        ucs_debug("could not initialize ROCm support");
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    return uct_md_query_single_md_resource(component, resources_p,
+                                           num_resources_p);
+}
+
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
 {
     assert(dev_num < uct_rocm_base_agents.num);

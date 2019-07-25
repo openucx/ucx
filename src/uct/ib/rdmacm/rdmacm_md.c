@@ -196,8 +196,10 @@ out:
     return is_accessible;
 }
 
-static ucs_status_t uct_rdmacm_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                  unsigned *num_resources_p)
+static ucs_status_t
+uct_rdmacm_query_md_resources(uct_component_t *component,
+                              uct_md_resource_desc_t **resources_p,
+                              unsigned *num_resources_p)
 {
     struct rdma_event_channel *event_ch = NULL;
 
@@ -206,21 +208,22 @@ static ucs_status_t uct_rdmacm_query_md_resources(uct_md_resource_desc_t **resou
     if (event_ch == NULL) {
         ucs_debug("could not create an RDMACM event channel. %m. "
                   "Disabling the RDMACM resource");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+
     }
 
     rdma_destroy_event_channel(event_ch);
 
-    return uct_single_md_resource(&uct_rdmacm_mdc, resources_p, num_resources_p);
+    return uct_md_query_single_md_resource(component, resources_p,
+                                           num_resources_p);
 }
 
 static ucs_status_t
-uct_rdmacm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
-                   uct_md_h *md_p)
+uct_rdmacm_md_open(uct_component_t *component, const char *md_name,
+                   const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
-    uct_rdmacm_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_rdmacm_md_config_t);
+    uct_rdmacm_md_config_t *md_config = ucs_derived_of(uct_md_config,
+                                                       uct_rdmacm_md_config_t);
     uct_rdmacm_md_t *md;
     ucs_status_t status;
 
