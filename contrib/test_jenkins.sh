@@ -647,8 +647,8 @@ run_client_server_app() {
 	else
 		if [ $kill_server -eq 1 ]
 		then
-			kill ${server_pid}
 			wait ${client_pid}
+			kill ${server_pid}
 		else
 			wait ${client_pid} ${server_pid}
 		fi
@@ -836,7 +836,7 @@ run_ucx_perftest() {
 			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
 								"$(hostname)" 0 0
 			# Run UCP performance test
-			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname})" 0 0
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
 			unset UCX_NET_DEVICES
 			unset UCX_TLS
