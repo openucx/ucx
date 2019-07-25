@@ -259,7 +259,7 @@ static const char* thread_list_str(const int *thread_list, char *buf, size_t max
         p += strlen(p);
     }
 
-    if (p >= buf - 1) {
+    if (p >= buf + 1) {
         *(p - 1) = '\0';
     } else {
         *buf = '\0';
