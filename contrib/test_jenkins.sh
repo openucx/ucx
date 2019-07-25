@@ -184,11 +184,16 @@ get_active_ib_devices() {
 # Get list of active IP interfaces
 #
 get_active_ip_ifaces() {
-	ip_ifaces_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
-	for ip_iface in $ip_ifaces_list
-	do
-		echo "$ip_iface"
-	done
+	echo $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+}
+
+#
+# Get IP addr for a given IP iface
+# Argument is the IP iface
+#
+get_ifaddr() {
+	iface=$1
+	echo $(ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}')
 }
 
 #
@@ -584,10 +589,12 @@ check_make_distcheck() {
 run_client_server_app() {
 	test_name=$1
 	test_args=$2
-	server_port_arg=$3
-	server_addr_arg=$4
-	kill_server=$5
-	error_emulation=$6
+	server_addr_arg=$3
+	kill_server=$4
+	error_emulation=$5
+
+	server_port=$((10000 + EXECUTOR_NUMBER))
+	server_port_arg="-p $server_port"
 
 	$AFFINITY ${test_name} ${test_args} ${server_port_arg} &
 	server_pid=$!
@@ -605,7 +612,7 @@ run_client_server_app() {
 	if [ $error_emulation -eq 1 ]
 	then
 		wait ${client_pid}
-		set +Ee
+		set -Ee
 		if [ $kill_server -eq 1 ]
 		then
 			kill -9 ${server_pid}
@@ -644,8 +651,6 @@ run_hello() {
 		export UCX_RC_RETRY_COUNT=4
 	fi
 
-	tcp_port=$((10000 + EXECUTOR_NUMBER))
-
 	if [[ ${test_args} == *"-e"* ]]
 	then
 		error_emulation=1
@@ -653,7 +658,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./${test_name}" "${test_args}" "-p ${tcp_port}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -713,12 +718,12 @@ run_client_server() {
 	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
 	if [ -n "$iface" ]
 	then
-		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+		server_ip=get_ifaddr ${iface}
 	fi
 
 	if [ -z "$server_ip" ]
 	then
-		# if there is no inet (IPv4) address, bail
+		# if there is no inet (IPv4) address, escape
 		return
 	fi
 
@@ -729,9 +734,7 @@ run_client_server() {
 		return
 	fi
 
-	server_port=$((10000 + EXECUTOR_NUMBER))
-
-	run_client_server_app "./${test_name}" "" "-p ${server_port}" "-a ${server_ip}" 1 0
+	run_client_server_app "./${test_name}" "" "-a ${server_ip}" 1 0
 }
 
 run_ucp_client_server() {
@@ -754,6 +757,7 @@ run_ucp_client_server() {
 #
 # Run UCX performance test
 # Note: If requested running with MPI, MPI has to be initialized before
+# The function accepts 0 (default value) or 1 that means launching w/ or w/o MPI
 #
 run_ucx_perftest() {
 	if [ $# -eq 0 ]
@@ -770,15 +774,12 @@ run_ucx_perftest() {
 	cat $ucx_inst_ptest/test_types_uct |                sort -R > $ucx_inst_ptest/test_types_short_uct
 	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
-	UCT_PERFTEST="$ucx_inst/bin/ucx_perftest \
-					-b $ucx_inst_ptest/test_types_short_uct \
-					-b $ucx_inst_ptest/msg_pow2_short -w 1"
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	uct_test_args="-b $ucx_inst_ptest/test_types_short_uct \
+				-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
-	UCP_PERFTEST="$ucx_inst/bin/ucx_perftest \
-					-b $ucx_inst_ptest/test_types_short_ucp \
-					-b $ucx_inst_ptest/msg_pow2_short -w 1"
-
-	tcp_port=$((10000 + EXECUTOR_NUMBER))
+	ucp_test_args="-b $ucx_inst_ptest/test_types_short_ucp \
+				-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
 	# IP ifaces
 	ip_ifaces=$(get_active_ip_ifaces)
@@ -811,15 +812,19 @@ run_ucx_perftest() {
 		echo "==== Running ucx_perf kit on $ucx_dev ===="
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 $AFFINITY $UCT_PERFTEST -d $ucx_dev $opt_transports
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $UCP_PERFTEST
+			# Run UCT performance test
+			$MPIRUN -np 2 $AFFINITY $ucx_perftest $uct_test_args -d $ucx_dev $opt_transports
+			# Run UCP performance test
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
 
-			run_client_server_app "$UCT_PERFTEST" "-P 0 -d ${ucx_dev} ${opt_transports}" \
-								"-p ${tcp_port}" "$(hostname)" 0 0
-			run_client_server_app "$UCP_PERFTEST" "-P 0" "-p ${tcp_port}" "$(hostname})" 0 0
+			# Run UCT performance test
+			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
+								"$(hostname)" 0 0
+			# Run UCP performance test
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname})" 0 0
 
 			unset UCX_NET_DEVICES
 			unset UCX_TLS
@@ -831,38 +836,36 @@ run_ucx_perftest() {
 	then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
+
 		echo "==== Running ucx_perf with cuda memory===="
+
+		for UCX_TLS in rc,cuda_copy,gdr_copy rc,cuda_copy
+		do
+			for UCX_MEMTYPE_CACHE in y n
+			do
+				if [ $with_mpi -eq 1 ]
+				then
+					$MPIRUN -np 2 -x UCX_TLS -x UCX_MEMTYPE_CACHE $AFFINITY "$ucx_perftest" "$ucp_test_args"
+				else
+					export UCX_TLS
+					export UCX_MEMTYPE_CACHE
+					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+					unset UCX_TLS
+					unset UCX_MEMTYPE_CACHE
+				fi
+			done
+		done
+
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy \
-				-x UCX_MEMTYPE_CACHE=y $AFFINITY $UCP_PERFTEST
-			$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy \
-				-x UCX_MEMTYPE_CACHE=n $AFFINITY $UCP_PERFTEST
-			$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCP_PERFTEST
-			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $UCP_PERFTEST
-			$MPIRUN -np 2 $AFFINITY $UCP_PERFTEST
+			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY "$ucx_perftest" "$ucp_test_args"
+			$MPIRUN -np 2 $AFFINITY "$ucx_perftest" "$ucp_test_args"
 		else
-			export UCX_TLS=rc,cuda_copy,gdr_copy
-			export UCX_MEMTYPE_CACHE=y
-			run_client_server_app "$UCP_PERFTEST" "-P 0" "-p ${tcp_port}" "$(hostname)" 0 0
-			unset UCX_TLS
-			unset UCX_MEMTYPE_CACHE
-
-			export UCX_TLS=rc,cuda_copy,gdr_copy
-			export UCX_MEMTYPE_CACHE=n
-			run_client_server_app "$UCP_PERFTEST" "-P 0" "-p ${tcp_port}" "$(hostname)" 0 0
-			unset UCX_TLS
-			unset UCX_MEMTYPE_CACHE
-
-			export UCX_TLS=rc,cuda_copy
-			run_client_server_app "$UCP_PERFTEST" "-P 0" "-p ${tcp_port}" "$(hostname)" 0 0
-			unset UCX_TLS
-
 			export UCX_TLS=self,mm,cma,cuda_copy
-			run_client_server_app "$UCP_PERFTEST" "-P 0" "-p ${tcp_port}" "$(hostname)" 0 0
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 			unset UCX_TLS
 
-			run_client_server_app "$UCP_PERFTEST" "-P 0" "-p ${tcp_port}" "$(hostname)" 0 0
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 		fi
 
 		unset CUDA_VISIBLE_DEVICES
@@ -1070,7 +1073,7 @@ test_jucx() {
 		do
 			if [ -n "$iface" ]
                 	then
-                   		server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+                   		server_ip=get_ifaddr ${iface}
                 	fi
 
                 	if [ -z "$server_ip" ]
