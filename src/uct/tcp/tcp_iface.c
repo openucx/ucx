@@ -117,9 +117,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     attr->cap.am.max_short = am_buf_size;
     attr->cap.am.max_bcopy = am_buf_size;
-    attr->cap.am.max_iov   = iface->config.zcopy.max_iov;
 
-    if (attr->cap.am.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) {
+    if (iface->config.zcopy.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) {
+        attr->cap.am.max_iov          = iface->config.zcopy.max_iov -
+                                        UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT;
         attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
                                         sizeof(uct_tcp_am_hdr_t);
         attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;

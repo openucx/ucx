@@ -495,7 +495,7 @@ static inline void
 uct_tcp_ep_zcopy_ctx_consume_iov(uct_tcp_ep_zcopy_ctx_t *zcopy_ctx,
                                  size_t consumed)
 {
-    struct iovec *iov = (struct iovec*)zcopy_ctx->iov;
+    struct iovec *iov = zcopy_ctx->iov;
     size_t i;
 
     ucs_assert(zcopy_ctx->iov_index  <= zcopy_ctx->iov_cnt);
@@ -798,6 +798,31 @@ err_no_res:
     return UCS_ERR_NO_RESOURCE;
 }
 
+static inline void
+uct_tcp_ep_set_outstanding_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
+                                 uct_tcp_ep_zcopy_ctx_t *ctx, const void *header,
+                                 unsigned header_length, uct_completion_t *comp)
+{
+    ctx->comp     = comp;
+    ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
+
+    if ((header_length != 0) &&
+        /* check whether a user's header was sent or not */
+        (ep->tx.offset < (sizeof(uct_tcp_am_hdr_t) + header_length))) {
+        ucs_assert(header_length <= iface->config.zcopy.max_hdr);
+        /* if the user's header wasn't sent completely, copy it to
+         * the EP TX buffer (after Zcopy context and IOVs) for
+         * retransmission. iov_len is already set to the proper value */
+        ctx->iov[1].iov_base = ep->tx.buf +
+                               iface->config.zcopy.hdr_offset;
+        memcpy(ctx->iov[1].iov_base, header, header_length);
+    }
+
+    ctx->iov_index  = 0;
+    uct_tcp_ep_zcopy_ctx_consume_iov(ctx, ep->tx.offset);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
+}
+
 static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                                       const uct_tcp_am_hdr_t *hdr)
 {
@@ -942,24 +967,8 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
         UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
 
         if (ep->tx.offset != ep->tx.length) {
-            ctx->comp     = comp;
-            ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
-
-            if ((header_length != 0) &&
-                /* check whether a user's header was sent or not */
-                (ep->tx.offset < (sizeof(*hdr) + header_length))) {
-                ucs_assert(header_length <= iface->config.zcopy.max_hdr);
-                /* if the user's header wasn't sent completely, copy it to
-                 * the EP TX buffer (after Zcopy context and IOVs) for
-                 * retransmission */
-                ctx->iov[1].iov_base = ep->tx.buf +
-                                       iface->config.zcopy.hdr_offset;
-                memcpy(ctx->iov[1].iov_base, header, header_length);
-            }
-
-            ctx->iov_index  = 0;
-            uct_tcp_ep_zcopy_ctx_consume_iov(ctx, ep->tx.offset);
-            uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
+            uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, header,
+                                             header_length, comp);
             return UCS_INPROGRESS;
         }
     }
