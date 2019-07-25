@@ -104,16 +104,19 @@ static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest,
     const char *s;
     size_t length;
 
-    if (flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME) {
-        s      = ucp_worker_get_name(worker);
-        length = strlen(s);
-        ucs_assert(length <= UINT8_MAX);
-        *(uint8_t*)dest = length;
-        memcpy(UCS_PTR_TYPE_OFFSET(dest, uint8_t), s, length);
-        return UCS_PTR_BYTE_OFFSET(UCS_PTR_TYPE_OFFSET(dest, uint8_t), length);
+    if (!(flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME)) {
+        return dest;
     }
-#endif
+
+    s      = ucp_worker_get_name(worker);
+    length = strlen(s);
+    ucs_assert(length <= UINT8_MAX);
+    *(uint8_t*)dest = length;
+    memcpy(UCS_PTR_TYPE_OFFSET(dest, uint8_t), s, length);
+    return UCS_PTR_BYTE_OFFSET(UCS_PTR_TYPE_OFFSET(dest, uint8_t), length);
+#else
     return dest;
+#endif
 }
 
 /* Unpack a string and return pointer to next storage byte */
@@ -123,19 +126,22 @@ static const void* ucp_address_unpack_worker_name(const void *src, char *s,
 #if ENABLE_DEBUG_DATA
     size_t length, avail;
 
-    if (flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME) {
-        ucs_assert(max >= 1);
-        length   = *(const uint8_t*)src;
-        avail    = ucs_min(length, max - 1);
-        memcpy(s, UCS_PTR_TYPE_OFFSET(src, const uint8_t), avail);
-        s[avail] = '\0';
-        return UCS_PTR_TYPE_OFFSET(UCS_PTR_BYTE_OFFSET(src,length),
-                                   const uint8_t);
+    if (!(flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME)) {
+        s[0] = '\0';
+        return src;
     }
-#endif
 
+    ucs_assert(max >= 1);
+    length   = *(const uint8_t*)src;
+    avail    = ucs_min(length, max - 1);
+    memcpy(s, UCS_PTR_TYPE_OFFSET(src, const uint8_t), avail);
+    s[avail] = '\0';
+    return UCS_PTR_TYPE_OFFSET(UCS_PTR_BYTE_OFFSET(src,length),
+                               const uint8_t);
+#else
     s[0] = '\0';
     return src;
+#endif
 }
 
 static ucp_address_packed_device_t*
@@ -568,6 +574,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             } else {
                 iface_addr_len = 0;
             }
+
             flags_ptr = ucp_address_iface_flags_ptr(worker, ptr, attr_len);
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
             ucs_assertv(iface_addr_len < UCP_ADDRESS_FLAG_EP_ADDR,
@@ -735,13 +742,13 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
         /* md_index */
         empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
         /* device address length */
         dev_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;
         last_dev     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-        ptr = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
+        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        ptr          = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
 
         last_tl = empty_dev;
         while (!last_tl) {
