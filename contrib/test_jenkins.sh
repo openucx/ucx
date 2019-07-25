@@ -196,6 +196,31 @@ get_ifaddr() {
 	echo $(ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}')
 }
 
+get_ipoib_address() {
+	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+	if [ -n "$iface" ]
+	then
+		ipaddr=$(get_ifaddr ${iface})
+	fi
+
+	if [ -z "$ipaddr" ]
+	then
+		# if there is no inet (IPv4) address, escape
+		echo ""
+		return
+	fi
+
+	ibdev=`ibdev2netdev | grep $iface | awk '{print $1}'`
+	node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
+	if [ $node_guid == "0000:0000:0000:0000" ]
+	then
+		echo ""
+		return
+	fi
+
+	echo $ipaddr
+}
+
 #
 # Prepare build environment
 #
@@ -715,21 +740,8 @@ run_client_server() {
 			-Wl,-rpath=${ucx_inst}/lib
 	fi
 
-	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
-	if [ -n "$iface" ]
-	then
-		server_ip=get_ifaddr ${iface}
-	fi
-
-	if [ -z "$server_ip" ]
-	then
-		# if there is no inet (IPv4) address, escape
-		return
-	fi
-
-	ibdev=`ibdev2netdev | grep $iface | awk '{print $1}'`
-	node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
-	if [ $node_guid == "0000:0000:0000:0000" ]
+	server_ip=$(get_ipoib_address)
+	if [ $server_ip == "" ]
 	then
 		return
 	fi
@@ -1073,7 +1085,7 @@ test_jucx() {
 		do
 			if [ -n "$iface" ]
                 	then
-                   		server_ip=get_ifaddr ${iface}
+                   		server_ip=$(get_ifaddr ${iface})
                 	fi
 
                 	if [ -z "$server_ip" ]
