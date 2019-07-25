@@ -1278,8 +1278,9 @@ run_csmock() {
 		srcrpm=$(ls rpm-dist/*.src.rpm)
 	fi
 
+	mkdir csmock_temp
 	csmock -t cppcheck,gcc,shellcheck,clang --print-defects -r epel-7-x86_64 \
-		-o $output $srcrpm
+		--tmp-root $PWD/csmock_temp -o $output $srcrpm
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_csmock_check.tap
