@@ -31,8 +31,8 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                [ucx_check_cuda_libdir="$with_cuda_libdir"
                 CUDA_LDFLAGS="-L$ucx_check_cuda_libdir"])
 
-         CPPFLAGS+=" $CUDA_CPPFLAGS"
-         LDFLAGS+=" $CUDA_LDFLAGS"
+         CPPFLAGS="$CPPFLAGS $CUDA_CPPFLAGS"
+         LDFLAGS="$LDFLAGS $CUDA_LDFLAGS"
 
          # Check cuda header files
          AC_CHECK_HEADERS([cuda.h cuda_runtime.h],
@@ -41,10 +41,10 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          # Check cuda libraries
          AS_IF([test "x$cuda_happy" = "xyes"],
                 [AC_CHECK_LIB([cuda], [cuPointerGetAttribute],
-                              [CUDA_LDFLAGS+=" -lcuda"], [cuda_happy="no"])])
+                              [CUDA_LDFLAGS="$CUDA_LDFLAGS -lcuda"], [cuda_happy="no"])])
          AS_IF([test "x$cuda_happy" = "xyes"],
                 [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
-                              [CUDA_LDFLAGS+=" -lcudart"], [cuda_happy="no"])])
+                              [CUDA_LDFLAGS="$CUDA_LDFLAGS -lcudart"], [cuda_happy="no"])])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
