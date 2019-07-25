@@ -326,11 +326,11 @@ AS_IF([test "x$with_docs_only" = xyes],
 # Print which transports are built
 #
 build_modules="${uct_modules}"
-build_modules+="${uct_ib_modules}"
-build_modules+="${uct_cuda_modules}"
-build_modules+="${ucm_modules}"
-build_modules+="${ucx_perftest_modules}"
-build_modules+="${uct_rocm_modules}"
+build_modules="${build_modules}${uct_ib_modules}"
+build_modules="${build_modules}${uct_cuda_modules}"
+build_modules="${build_modules}${ucm_modules}"
+build_modules="${build_modules}${ucx_perftest_modules}"
+build_modules="${build_modules}${uct_rocm_modules}"
 AC_SUBST([build_modules], [${build_modules}])
 
 #
