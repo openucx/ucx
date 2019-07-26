@@ -459,6 +459,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     }
 
     self->config.failure_level = config->failure;
+    self->config.max_num_eps   = config->max_num_eps;
 
     return UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
                                 stats_parent, "-%s-%p", iface_name, self);
@@ -563,6 +564,10 @@ ucs_config_field_t uct_iface_config_table[] = {
   {"FAILURE", "error",
    "Level of network failure reporting",
    ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+  {"MAX_NUM_EPS", "inf",
+   "Maximum number of enpoints that UCT is able to create",
+   ucs_offsetof(uct_iface_config_t, max_num_eps), UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };

@@ -27,6 +27,7 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          uct_iface_attr_t *iface_attr)
 {
     uct_knem_iface_t *iface = ucs_derived_of(tl_iface, uct_knem_iface_t);
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
@@ -58,6 +59,8 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
     iface_attr->latency.growth         = 0;
     iface_attr->bandwidth              = iface->super.config.bandwidth;
     iface_attr->overhead               = 0.25e-6; /* 0.25 us */
+    iface_attr->max_num_eps            = iface->super.super.config.max_num_eps;
+
     return UCS_OK;
 }
 

@@ -148,6 +148,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->priority    = 0;
     }
 
+    attr->max_num_eps = iface->super.config.max_num_eps;
+
     return UCS_OK;
 }
 

@@ -111,6 +111,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     attr->bandwidth               = 6911 * 1024.0 * 1024.0;
     attr->overhead                = 10e-9;
     attr->priority                = 0;
+    attr->max_num_eps             = iface->super.config.max_num_eps;
 
     return UCS_OK;
 }

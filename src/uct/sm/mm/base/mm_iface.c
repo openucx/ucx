@@ -157,6 +157,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->bandwidth               = iface->super.config.bandwidth;
     iface_attr->overhead                = 10e-9; /* 10 ns */
     iface_attr->priority                = uct_mm_md_mapper_ops(md)->get_priority();
+    iface_attr->max_num_eps             = iface->super.super.config.max_num_eps;
+
     return UCS_OK;
 }
 

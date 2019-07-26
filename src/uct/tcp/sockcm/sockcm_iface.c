@@ -28,6 +28,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
+    uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
@@ -35,6 +37,7 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.flags       = UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR    |
                                   UCT_IFACE_FLAG_CB_ASYNC               |
                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+    iface_attr->max_num_eps     = iface->super.config.max_num_eps;
 
     return UCS_OK;
 }
