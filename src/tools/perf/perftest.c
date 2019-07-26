@@ -433,12 +433,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("\n");
 }
 
-static const char *__basename(const char *path)
-{
-    const char *p = strrchr(path, '/');
-    return (p == NULL) ? path : (p + 1);
-}
-
 static ucs_status_t parse_ucp_datatype_params(const char *optarg,
                                               ucp_perf_datatype_t *datatype)
 {
@@ -777,12 +771,12 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
             break;
 #endif
         case 'h':
-            usage(ctx, __basename(argv[0]));
+            usage(ctx, ucs_basename(argv[0]));
             return UCS_ERR_CANCELED;
         default:
             status = parse_test_params(&ctx->params, c, optarg);
             if (status != UCS_OK) {
-                usage(ctx, __basename(argv[0]));
+                usage(ctx, ucs_basename(argv[0]));
                 return status;
             }
             break;
