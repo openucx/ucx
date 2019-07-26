@@ -694,7 +694,7 @@ ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
 
 out:
     if (status != UCS_OK) {
-        ucp_worker_set_ep_failed(ep->worker, ep, wireup_ep->super.uct_ep,
+        ucp_worker_set_ep_failed(ep->worker, ep, &wireup_ep->super.super,
                                  key.wireup_lane, status);
     }
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
@@ -714,7 +714,12 @@ ucp_wireup_sockaddr_client_connect_cb(uct_ep_h ep, void *arg,
             (ucp_wireup_client_data_t *)remote_data->conn_priv_data;
     ucp_unpacked_address_t unpacked_address;
 
-    ucs_assert_always(status == UCS_OK);
+    if (status != UCS_OK) {
+        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep, &wireup_ep->super.super, wireup_idx,
+        status);
+        return;
+    }
+
     ucp_ep_update_dest_ep_ptr(ucp_ep, client_data->ep_ptr);
     ucp_address_unpack(ucp_ep->worker, client_data + 1,
                        UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
