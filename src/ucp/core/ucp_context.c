@@ -88,12 +88,12 @@ static ucs_config_field_t ucp_config_table[] = {
    " - ib      : all infiniband transports.\n"
    " - rc_v    : rc verbs (uses ud for bootstrap).\n"
    " - rc_x    : rc with accelerated verbs (uses ud_x for bootstrap).\n"
-   " - rc      : rc_v and rc_x (preferably if available) together"
+   " - rc      : rc_v and rc_x (preferably if available).\n"
    " - ud_v    : ud verbs.\n"
    " - ud_x    : ud with accelerated verbs.\n"
-   " - ud      : ud_v and ud_x (preferably if available) together"
+   " - ud      : ud_v and ud_x (preferably if available).\n"
    " - dc/dc_x : dc with accelerated verbs.\n"
-   " - tcp     : sockets over TCP/IP"
+   " - tcp     : sockets over TCP/IP.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -1226,14 +1226,14 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.ext = config->ctx;
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
-        /* `num_eps` was set via the env variable. Override current value */
+        /* num_eps was set via the env variable. Override current value */
         context->config.est_num_eps = context->config.ext.estimated_num_eps;
     }
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
 
     if (context->config.ext.estimated_num_ppn != UCS_ULUNITS_AUTO) {
-        /* `num_ppn` was set via the env variable. Override current value */
+        /* num_ppn was set via the env variable. Override current value */
         context->config.est_num_ppn = context->config.ext.estimated_num_ppn;
     }
     ucs_debug("Estimated number of endpoints per node is %d",
