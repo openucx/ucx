@@ -24,9 +24,10 @@ BEGIN_C_DECLS
 
 /* the numeric value of "infinity" */
 #define UCS_MEMUNITS_INF    SIZE_MAX
+#define UCS_ULUNITS_INF     SIZE_MAX
+
 /* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
-
 #define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
 
 /**
