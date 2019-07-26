@@ -74,7 +74,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
 /* Config relevant for rc_mlx5 and rc_verbs only (not for dc) */
 ucs_config_field_t uct_rc_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 

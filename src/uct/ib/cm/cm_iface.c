@@ -421,6 +421,7 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
                                         UCT_IFACE_FLAG_PENDING  |
                                         UCT_IFACE_FLAG_CB_ASYNC |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+
     return UCS_OK;
 }
 

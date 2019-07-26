@@ -886,6 +886,7 @@ struct uct_iface_attr {
     double                   bandwidth;    /**< Maximal bandwidth, bytes/second */
     uct_linear_growth_t      latency;      /**< Latency model */
     uint8_t                  priority;     /**< Priority of device */
+    size_t                   max_num_eps;  /**< Maximum number of endpoints */
 };
 
 

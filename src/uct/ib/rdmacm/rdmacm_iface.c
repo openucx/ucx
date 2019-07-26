@@ -48,6 +48,8 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
         iface_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_iface->cm_id));
     }
 
+    iface_attr->max_num_eps     = rdmacm_iface->super.config.max_num_eps;
+
     return UCS_OK;
 }
 
