@@ -1179,6 +1179,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         goto out;
     }
     memcpy(worker->cms, cms_tmp, worker->num_cms * sizeof(*worker->cms));
+    status = UCS_OK;
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1668,8 +1669,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Open all resources as connection managers on this worker */
     status = ucp_worker_add_resource_cms(worker);
+    if ((status == UCS_ERR_UNSUPPORTED) && (ucp_worker_close_proto(worker))) {
+        ucs_error("there is no available CM to support close protocol");
+        goto err_close_cms;
+    }
     if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
-        goto err_close_ifaces;
+        goto err_close_cms;
     }
 
     /* create mem type endponts */

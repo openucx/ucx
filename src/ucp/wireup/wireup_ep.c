@@ -693,6 +693,10 @@ ssize_t ucp_wireup_sockaddr_priv_pack_cb(void *arg, const char *dev_name,
     ucp_worker_iface_progress_ep(wiface);
 
 out:
+    if (status != UCS_OK) {
+        ucp_worker_set_ep_failed(ep->worker, ep, wireup_ep->super.uct_ep,
+                                 key.wireup_lane, status);
+    }
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return (status == UCS_OK) ?
            (sizeof(*client_data) + ucp_addr_size) : status;

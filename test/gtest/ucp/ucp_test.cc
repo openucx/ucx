@@ -396,6 +396,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
+        scoped_log_handler slh(hide_errors_logger);
         UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers[i].first,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);

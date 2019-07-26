@@ -365,6 +365,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cep_t, const uct_ep_params_t *params)
                                  UCT_EP_PARAM_FIELD_USER_DATA) ?
                                 params->user_data : NULL;
 
+    self->cq = NULL;
+    self->qp = NULL;
+
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_init_client_ep(self, params);
     } else {
@@ -389,14 +392,18 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cep_t)
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 
-    ret = ibv_destroy_qp(self->qp);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+    if (self->qp) {
+        ret = ibv_destroy_qp(self->qp);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+        }
     }
 
-    ret = ibv_destroy_cq(self->cq);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+    if (self->cq) {
+        ret = ibv_destroy_cq(self->cq);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+        }
     }
 
     rdma_destroy_id(self->id);
@@ -508,7 +515,12 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
                                                  (void*)(conn_param.private_data +
                                                   sizeof(uct_rdmacm_priv_data_hdr_t)));
 
-        if ((priv_data_ret < 0) || (priv_data_ret > UCT_RDMACM_CM_MAX_CONN_PRIV)) {
+        if (priv_data_ret < 0) {
+            /* The error goes from upper level and should be handled where */
+            break;
+        }
+
+        if (priv_data_ret > UCT_RDMACM_CM_MAX_CONN_PRIV) {
             ucs_error("failed to pack data on the client (ep=%p). packed data size: %zu.",
                       cep, priv_data_ret);
             break;

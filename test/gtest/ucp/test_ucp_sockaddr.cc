@@ -143,7 +143,8 @@ public:
     {
         if ((status == UCS_OK)              ||
             (status == UCS_ERR_UNREACHABLE) ||
-            (status == UCS_ERR_REJECTED)) {
+            (status == UCS_ERR_REJECTED)    ||
+            (status == UCS_ERR_NO_DEVICE)) {
             return;
         }
         UCS_TEST_ABORT("Error: " << ucs_status_string(status));
@@ -243,7 +244,8 @@ public:
             ucp_request_free(send_req);
         }
 
-        if (send_status == UCS_ERR_UNREACHABLE) {
+        if ((send_status == UCS_ERR_UNREACHABLE) ||
+            (send_status == UCS_ERR_NO_DEVICE)) {
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - cases of failure to handle long worker
@@ -440,7 +442,7 @@ public:
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
          * long as well */
-        if (status != UCS_ERR_UNREACHABLE) {
+        if ((status != UCS_ERR_UNREACHABLE) && (status != UCS_ERR_NO_DEVICE)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
