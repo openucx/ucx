@@ -92,6 +92,11 @@
 #define UCS_PTR_BYTE_OFFSET(_ptr, _offset) \
     ((void *)((uintptr_t)(_ptr) + (_offset)))
 
+/* Helper macro to calculate an address with offset equal to size of _type */
+#define UCS_PTR_TYPE_OFFSET(_ptr, _type) \
+    ((void *)((typeof(_type) *)(_ptr) + 1))
+
+
 /**
  * Size of statically-declared array
  */
