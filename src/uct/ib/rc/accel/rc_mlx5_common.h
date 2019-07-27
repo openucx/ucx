@@ -471,14 +471,13 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn);
 
 #if IBV_HW_TM
+void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
+                                   unsigned rndv_hdr_len);
+
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     const uct_rc_iface_common_config_t *config,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
                                     unsigned rndv_hdr_len);
-
-ucs_status_t uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
-                                         const uct_rc_iface_common_config_t *config,
-                                         struct ibv_exp_create_srq_attr *attr);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
@@ -488,7 +487,13 @@ uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 {
     return UCS_ERR_UNSUPPORTED;
 }
+#endif
 
+#if IBV_HW_TM && HAVE_DEVX
+ucs_status_t uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                                         const uct_rc_iface_common_config_t *config,
+                                         struct ibv_exp_create_srq_attr *attr);
+#else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
@@ -519,11 +524,23 @@ uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
     rch->rc_hdr.am_id = id;
 }
 
+#if HAVE_DEVX
 ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
                                          const struct ibv_ah_attr *ah_attr);
+
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uint32_t dest_qp_num,
+                                         const struct ibv_ah_attr *ah_attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+#endif
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq);
 

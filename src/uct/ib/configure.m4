@@ -53,10 +53,7 @@ AC_ARG_WITH([mlx5-dv],
             [AC_HELP_STRING([--with-mlx5-dv], [Compile with mlx5 Direct Verbs
                 support. Direct Verbs (DV) support provides additional
                 acceleration capabilities that are not available in a
-                regular mode.])],
-            [],
-            [with_mlx5_dv=yes])
-
+                regular mode.])])
 
 #
 # TM (IB Tag Matching) Support
@@ -434,7 +431,7 @@ AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
 AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
-AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
+AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
