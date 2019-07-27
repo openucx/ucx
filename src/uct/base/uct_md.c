@@ -154,7 +154,7 @@ uct_md_query_single_md_resource(uct_component_t *component,
     ucs_snprintf_zero(resource->md_name, UCT_MD_NAME_MAX, "%s",
                       component->name);
 
-    *resources_p = resource;
+    *resources_p     = resource;
     *num_resources_p = 1;
     return UCS_OK;
 }
