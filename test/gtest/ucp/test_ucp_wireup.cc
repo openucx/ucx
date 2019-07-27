@@ -809,3 +809,74 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, msg_before_ep_create) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
+
+class test_ucp_wireup_fallback : public test_ucp_wireup {
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_wireup::get_ctx_params();
+
+        params.features |= UCP_FEATURE_TAG   | UCP_FEATURE_RMA  |
+                           UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64;
+        return params;
+    }
+
+    void init() {
+        /* do nothing */
+    }
+
+    void cleanup() {
+        /* do nothing */
+    }
+
+    size_t test_est_num_eps_fallback(size_t est_num_eps) {
+        size_t min_max_num_eps = UCS_ULUNITS_INF;
+
+        UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
+        modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
+        test_ucp_wireup::init();
+
+        sender().connect(&receiver(), get_ep_params());
+        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+        flush_worker(sender());
+
+        for (ucp_lane_index_t lane = 0;
+             lane < ucp_ep_num_lanes(sender().ep()); lane++) {
+            uct_ep_h uct_ep = sender().ep()->uct_eps[lane];
+            if (uct_ep == NULL) {
+                continue;
+            }
+
+            uct_iface_attr_t iface_attr;
+            ucs_status_t status = uct_iface_query(uct_ep->iface, &iface_attr);
+            ASSERT_UCS_OK(status);
+
+            std::cout << iface_attr.max_num_eps << std::endl;
+            EXPECT_GE(iface_attr.max_num_eps, est_num_eps);
+
+            if (iface_attr.max_num_eps < min_max_num_eps) {
+                min_max_num_eps = iface_attr.max_num_eps;
+            }
+        }
+
+        test_ucp_wireup::cleanup();
+
+        return min_max_num_eps;
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
+    size_t min_max_eps = test_est_num_eps_fallback(1);
+
+    while (min_max_eps != UCS_ULUNITS_INF) {
+        if (min_max_eps > 1) {
+            test_est_num_eps_fallback(min_max_eps - 1);
+        }
+        test_est_num_eps_fallback(min_max_eps);
+        min_max_eps = test_est_num_eps_fallback(min_max_eps + 1);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              rc_ud, "rc_x,rc_v,ud_x,ud_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              dc_ud, "dc_x,ud_x,ud_v")
