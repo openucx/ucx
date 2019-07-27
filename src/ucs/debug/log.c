@@ -9,6 +9,7 @@
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/config/parser.h>
@@ -124,7 +125,6 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 {
     size_t buffer_size = ucs_log_get_buffer_size();
     char *log_line, *saveptr;
-    const char *short_file;
     struct timeval tv;
     char *buf;
 
@@ -139,13 +139,11 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     if (level <= ucs_global_opts.log_level_trigger) {
         ucs_fatal_error_message(file, line, function, buf);
     } else {
-        short_file = strrchr(file, '/');
-        short_file = (short_file == NULL) ? file : short_file + 1;
         gettimeofday(&tv, NULL);
 
         log_line = strtok_r(buf, "\n", &saveptr);
         while (log_line != NULL) {
-            ucs_log_print(buffer_size, short_file, line, level, &tv, log_line);
+            ucs_log_print(buffer_size, ucs_basename(file), line, level, &tv, log_line);
             log_line = strtok_r(NULL, "\n", &saveptr);
         }
     }
