@@ -27,6 +27,9 @@
 #include <dirent.h>
 #include <sched.h>
 #include <ctype.h>
+#ifdef HAVE_SYS_THR_H
+#include <sys/thr.h>
+#endif
 
 #if HAVE_SYS_CAPABILITY_H
 #  include <sys/capability.h>
@@ -965,12 +968,27 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
 
 pid_t ucs_get_tid(void)
 {
+#ifdef SYS_gettid
     return syscall(SYS_gettid);
+#elif defined(HAVE_SYS_THR_H)
+    long id;
+
+    thr_self(&id);
+    return (id);
+#else
+#error "Port me"
+#endif
 }
 
 int ucs_tgkill(int tgid, int tid, int sig)
 {
+#ifdef SYS_tgkill
     return syscall(SYS_tgkill, tgid, tid, sig);
+#elif defined(HAVE_SYS_THR_H)
+    return (thr_kill2(tgid, tid, sig));
+#else
+#error "Port me"
+#endif
 }
 
 double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
