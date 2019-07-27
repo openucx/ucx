@@ -183,6 +183,7 @@ typedef enum {
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
     uct_ib_mlx5_obj_type_t             type;
+    uint32_t                           srq_num;
     void                               *buf;
     volatile uint32_t                  *db;
     uint16_t                           free_idx;   /* what is completed contiguously */
@@ -194,6 +195,13 @@ typedef struct uct_ib_mlx5_srq {
         struct {
             struct ibv_srq             *srq;
         } verbs;
+#if HAVE_DEVX
+        struct {
+            uct_ib_mlx5_dbrec_t        *dbrec;
+            struct mlx5dv_devx_umem    *mem;
+            struct mlx5dv_devx_obj     *obj;
+        } devx;
+#endif
     };
 } uct_ib_mlx5_srq_t;
 

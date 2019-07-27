@@ -547,6 +547,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    ucs_status_t status;
 
 #if IBV_EXP_HW_TM_DC
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
@@ -569,13 +570,19 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
          return uct_rc_mlx5_init_rx_tm(&iface->super, rc_config, &srq_attr,
                                        sizeof(struct ibv_rvh) +
-                                       sizeof(struct ibv_ravh), 0);
+                                       sizeof(struct ibv_ravh));
      }
 #endif
 
+    status = uct_rc_iface_init_rx(rc_iface, rc_config,
+                                  &iface->super.rx.srq.verbs.srq);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->super.rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     iface->super.super.progress = uct_dc_mlx5_iface_progress;
-    return uct_rc_iface_init_rx(rc_iface, rc_config,
-                                &iface->super.rx.srq.verbs.srq);
+    return UCS_OK;
 }
 
 void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)

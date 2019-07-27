@@ -470,11 +470,33 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn);
 
+#if IBV_HW_TM
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     const uct_rc_iface_common_config_t *config,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
-                                    unsigned rndv_hdr_len,
-                                    unsigned max_cancel_sync_ops);
+                                    unsigned rndv_hdr_len);
+
+ucs_status_t uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                                         const uct_rc_iface_common_config_t *config,
+                                         struct ibv_exp_create_srq_attr *attr);
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                       const uct_rc_iface_common_config_t *config,
+                       struct ibv_exp_create_srq_attr *srq_init_attr,
+                       unsigned rndv_hdr_len)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                            const uct_rc_iface_common_config_t *config,
+                            struct ibv_exp_create_srq_attr *attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+#endif
 
 void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
@@ -502,5 +524,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
                                          const struct ibv_ah_attr *ah_attr);
+
+void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq);
 
 #endif

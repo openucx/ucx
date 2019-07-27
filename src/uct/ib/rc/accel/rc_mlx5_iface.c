@@ -287,8 +287,7 @@ err:
     return status;
 }
 
-#if IBV_HW_TM
-static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
+static UCS_F_MAYBE_UNUSED unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 {
     uct_rc_mlx5_iface_common_t *iface = arg;
     unsigned count;
@@ -300,6 +299,7 @@ static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
     return uct_rc_mlx5_iface_poll_tx(iface);
 }
 
+#if IBV_HW_TM
 static ucs_status_t uct_rc_mlx5_iface_tag_recv_zcopy(uct_iface_h tl_iface,
                                                      uct_tag_t tag,
                                                      uct_tag_t tag_mask,
@@ -391,28 +391,41 @@ uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-#if IBV_HW_TM
+    uct_ib_mlx5_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
+    struct ibv_exp_create_srq_attr srq_attr = {};
+    ucs_status_t status;
+
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        struct ibv_exp_create_srq_attr srq_init_attr = {};
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, &srq_attr);
+        } else {
+            status = uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_attr,
+                                            UCT_RC_RNDV_HDR_LEN);
+        }
+
+        if (status != UCS_OK) {
+            return status;
+        }
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
-        return uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_init_attr,
-                                      sizeof(struct ibv_rvh), 0);
+        return UCS_OK;
     }
-#endif
+
+    status = uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     iface->super.progress = uct_rc_mlx5_iface_progress;
-    return uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
+    return UCS_OK;
 }
 
 void uct_rc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-    int ret;
 
-    ret = ibv_destroy_srq(iface->rx.srq.verbs.srq);
-    if (ret) {
-        ucs_warn("ibv_destroy_srq() failed: %m");
-    }
+    uct_rc_mlx5_destroy_srq(&iface->rx.srq);
 }
 
 static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
@@ -435,6 +448,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     ucs_status_t status;
 
     uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
+
+    self->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rc_config, init_attr);
@@ -466,10 +481,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_stats;
     }
 
-    status = uct_ib_mlx5_srq_init(&self->rx.srq, self->rx.srq.verbs.srq,
-                                  self->super.super.config.seg_size);
-    if (status != UCS_OK) {
-        goto cleanup_tm;
+    if (self->rx.srq.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        status = uct_ib_mlx5_srq_init(&self->rx.srq, self->rx.srq.verbs.srq,
+                                      self->super.super.config.seg_size);
+        if (status != UCS_OK) {
+            goto cleanup_tm;
+        }
     }
 
     status = uct_rc_mlx5_iface_common_dm_init(self, &self->super,

@@ -281,6 +281,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
 #    define IBV_TM_CAP_DC                   IBV_EXP_TM_CAP_DC
 #  endif
+#  define UCT_RC_RNDV_HDR_LEN               sizeof(struct ibv_rvh)
 #  if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
 #    define IBV_DEVICE_TM_FLAGS(_dev)       ((_dev)->dev_attr.tm_caps.flags)
 #  else
@@ -291,6 +292,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #  define IBV_TM_CAP_RC                     0
 #  define IBV_TM_CAP_DC                     0
+#  define UCT_RC_RNDV_HDR_LEN               0
 #endif
 
 #ifndef IBV_EXP_HW_TM_DC
