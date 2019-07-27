@@ -172,14 +172,14 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     uct_ib_qp_attr_t attr = {};
     ucs_status_t status;
 
-    ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_QP_TYPE_LAST);
+    ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_OBJ_TYPE_LAST);
 
     attr.cap.max_send_wr  = iface->tm.cmd_qp_len;
     attr.cap.max_send_sge = 1;
     attr.ibv.pd           = md->super.pd;
     attr.ibv.send_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
     attr.ibv.recv_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
-    attr.srq              = iface->super.rx.srq.srq;
+    attr.srq              = iface->rx.srq.verbs.srq;
     attr.port             = dev->first_port;
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->tm.cmd_wq.super.super,
@@ -233,7 +233,7 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.send_cq             = iface->super.super.cq[UCT_IB_DIR_RX];
     qp_init_attr.recv_cq             = iface->super.super.cq[UCT_IB_DIR_RX];
     qp_init_attr.cap.max_send_sge    = 1;
-    qp_init_attr.srq                 = iface->super.rx.srq.srq;
+    qp_init_attr.srq                 = iface->rx.srq.verbs.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
     qp = ibv_create_qp(md->pd, &qp_init_attr);
@@ -298,8 +298,8 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 #if HAVE_STRUCT_MLX5_SRQ_CMD_QP
     iface->tm.cmd_wq.super.super.verbs.qp = NULL;
     iface->tm.cmd_wq.super.super.verbs.rd = NULL;
-    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_LAST;
-    qp = uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
+    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    qp = uct_dv_get_cmd_qp(iface->rx.srq.verbs.srq);
 #else
     uct_ib_mlx5_md_t *md       = ucs_derived_of(iface->super.super.super.md,
                                                 uct_ib_mlx5_md_t);
@@ -613,8 +613,8 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
                                     IBV_EXP_CREATE_SRQ_TM;
 
-    iface->super.rx.srq.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
-    if (iface->super.rx.srq.srq == NULL) {
+    iface->rx.srq.verbs.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
+    if (iface->rx.srq.verbs.srq == NULL) {
         ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
                   uct_ib_device_name(&md->dev));
         return UCS_ERR_IO_ERROR;
@@ -643,8 +643,8 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     IBV_SRQ_INIT_ATTR_CQ |
                                     IBV_SRQ_INIT_ATTR_TM;
 
-    iface->super.rx.srq.srq = ibv_create_srq_ex(md->dev.ibv_context, srq_init_attr);
-    if (iface->super.rx.srq.srq == NULL) {
+    iface->rx.srq.verbs.srq = ibv_create_srq_ex(md->dev.ibv_context, srq_init_attr);
+    if (iface->rx.srq.verbs.srq == NULL) {
         ucs_error("ibv_create_srq_ex(device=%s) failed: %m",
                   uct_ib_device_name(&md->dev));
         return UCS_ERR_IO_ERROR;
@@ -910,7 +910,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     void *qpc;
     int ret;
 
-    ucs_assert_always(qp->type == UCT_IB_MLX5_QP_TYPE_DEVX);
+    ucs_assert_always(qp->type == UCT_IB_MLX5_OBJ_TYPE_DEVX);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 14);

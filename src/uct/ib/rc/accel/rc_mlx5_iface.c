@@ -401,7 +401,18 @@ uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
     }
 #endif
     iface->super.progress = uct_rc_mlx5_iface_progress;
-    return uct_rc_iface_init_rx(rc_iface, rc_config);
+    return uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
+}
+
+void uct_rc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
+    int ret;
+
+    ret = ibv_destroy_srq(iface->rx.srq.verbs.srq);
+    if (ret) {
+        ucs_warn("ibv_destroy_srq() failed: %m");
+    }
 }
 
 static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
@@ -455,7 +466,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_stats;
     }
 
-    status = uct_ib_mlx5_srq_init(&self->rx.srq, self->super.rx.srq.srq,
+    status = uct_ib_mlx5_srq_init(&self->rx.srq, self->rx.srq.verbs.srq,
                                   self->super.super.config.seg_size);
     if (status != UCS_OK) {
         goto cleanup_tm;
@@ -633,6 +644,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
     },
     .init_rx                  = uct_rc_mlx5_init_rx,
+    .cleanup_rx               = uct_rc_mlx5_cleanup_rx,
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler,
 };

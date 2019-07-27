@@ -260,7 +260,7 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
 {
     ucs_status_t status;
 
-    ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_QP_TYPE_VERBS);
+    ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
     ucs_debug("iface %p reset dci[%p]", iface, dci);
 
     /* Synchronize CQ index with the driver, since it would remove pending
@@ -302,7 +302,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     struct ibv_qp *qp;
 
     uct_rc_iface_fill_attr(&iface->super.super, &attr,
-                           iface->super.super.config.tx_qp_len);
+                           iface->super.super.config.tx_qp_len,
+                           iface->super.rx.srq.verbs.srq);
 
     status = uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->txwq.super, &attr);
     if (status != UCS_OK) {
@@ -326,7 +327,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     dci->txwq.super.qp_num = dci->txwq.super.verbs.qp->qp_num;
 #else
     uct_rc_iface_fill_attr(&iface->super.super, &attr,
-                           iface->super.super.config.tx_qp_len);
+                           iface->super.super.config.tx_qp_len,
+                           iface->super.rx.srq.verbs.srq);
     status = uct_ib_mlx5_iface_create_qp(ib_iface, &dci->txwq.super, &attr);
     if (status != UCS_OK) {
         return status;
@@ -374,7 +376,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     struct ibv_qp_attr attr;
     long attr_mask;
 
-    ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_QP_TYPE_VERBS);
+    ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
     memset(&attr, 0, sizeof(attr));
     attr.qp_state        = IBV_QPS_INIT;
     attr.pkey_index      = iface->super.super.super.pkey_index;
@@ -440,7 +442,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     init_attr.recv_cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
     /* DCT can't send, but send_cq have to point to valid CQ */
     init_attr.send_cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    init_attr.srq                   = iface->super.super.rx.srq.srq;
+    init_attr.srq                   = iface->super.rx.srq.verbs.srq;
     init_attr.qp_type               = IBV_QPT_DRIVER;
     init_attr.cap.max_inline_data   = iface->super.super.config.rx_inline;
 
@@ -572,7 +574,19 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 #endif
 
     iface->super.super.progress = uct_dc_mlx5_iface_progress;
-    return uct_rc_iface_init_rx(rc_iface, rc_config);
+    return uct_rc_iface_init_rx(rc_iface, rc_config,
+                                &iface->super.rx.srq.verbs.srq);
+}
+
+void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    int ret;
+
+    ret = ibv_destroy_srq(iface->super.rx.srq.verbs.srq);
+    if (ret) {
+        ucs_warn("ibv_destroy_srq() failed: %m");
+    }
 }
 
 #if HAVE_DC_EXP
@@ -584,7 +598,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
 
     init_attr.pd               = uct_ib_iface_md(&iface->super.super.super)->pd;
     init_attr.cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    init_attr.srq              = iface->super.super.rx.srq.srq;
+    init_attr.srq              = iface->super.rx.srq.verbs.srq;
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.super.config.port_num;
     init_attr.mtu              = iface->super.super.config.path_mtu;
@@ -692,7 +706,7 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
     int i;
     for (i = 0; i < max; i++) {
         uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
-        ucs_assert(iface->tx.dcis[i].txwq.super.type == UCT_IB_MLX5_QP_TYPE_VERBS);
+        ucs_assert(iface->tx.dcis[i].txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
         uct_ib_destroy_qp(iface->tx.dcis[i].txwq.super.verbs.qp);
     }
 }
@@ -1062,6 +1076,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
     },
     .init_rx                  = uct_dc_mlx5_init_rx,
+    .cleanup_rx               = uct_dc_mlx5_cleanup_rx,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_mlx5_iface_fc_handler,
 };

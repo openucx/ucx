@@ -173,15 +173,28 @@ typedef struct uct_ib_mlx5_dbrec {
 } uct_ib_mlx5_dbrec_t;
 
 
+typedef enum {
+    UCT_IB_MLX5_OBJ_TYPE_VERBS,
+    UCT_IB_MLX5_OBJ_TYPE_DEVX,
+    UCT_IB_MLX5_OBJ_TYPE_LAST
+} uct_ib_mlx5_obj_type_t;
+
+
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
-    void               *buf;
-    volatile uint32_t  *db;
-    uint16_t           free_idx;   /* what is completed contiguously */
-    uint16_t           ready_idx;  /* what is ready to be posted to hw */
-    uint16_t           sw_pi;      /* what is posted to hw */
-    uint16_t           mask;
-    uint16_t           tail;       /* tail in the driver */
+    uct_ib_mlx5_obj_type_t             type;
+    void                               *buf;
+    volatile uint32_t                  *db;
+    uint16_t                           free_idx;   /* what is completed contiguously */
+    uint16_t                           ready_idx;  /* what is ready to be posted to hw */
+    uint16_t                           sw_pi;      /* what is posted to hw */
+    uint16_t                           mask;
+    uint16_t                           tail;       /* tail in the driver */
+    union {
+        struct {
+            struct ibv_srq             *srq;
+        } verbs;
+    };
 } uct_ib_mlx5_srq_t;
 
 
@@ -218,13 +231,6 @@ typedef struct uct_ib_mlx5_devx_uar {
 } uct_ib_mlx5_devx_uar_t;
 
 
-typedef enum {
-    UCT_IB_MLX5_QP_TYPE_VERBS,
-    UCT_IB_MLX5_QP_TYPE_DEVX,
-    UCT_IB_MLX5_QP_TYPE_LAST
-} uct_ib_mlx5_qp_type_t;
-
-
 /* resource domain */
 typedef struct uct_ib_mlx5_res_domain {
     uct_worker_tl_data_t        super;
@@ -239,7 +245,7 @@ typedef struct uct_ib_mlx5_res_domain {
 
 /* MLX5 QP wrapper */
 typedef struct uct_ib_mlx5_qp {
-    uct_ib_mlx5_qp_type_t              type;
+    uct_ib_mlx5_obj_type_t             type;
     uint32_t                           qp_num;
     union {
         struct {

@@ -258,7 +258,7 @@ ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
         return UCS_PTR_STATUS(qp->verbs.rd);
     }
 
-    qp->type = UCT_IB_MLX5_QP_TYPE_VERBS;
+    qp->type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
 
     return UCS_OK;
 }
@@ -426,7 +426,7 @@ ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
     }
 
     txwq->reg        = &uar->super;
-    txwq->super.type = UCT_IB_MLX5_QP_TYPE_DEVX;
+    txwq->super.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
 
     return UCS_OK;
 }
@@ -523,14 +523,14 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
     uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
                                                  uct_ib_mlx5_devx_uar_t);
     switch (txwq->super.type) {
-    case UCT_IB_MLX5_QP_TYPE_DEVX:
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
         break;
-    case UCT_IB_MLX5_QP_TYPE_VERBS:
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         uct_ib_mlx5_iface_put_res_domain(&txwq->super);
         uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
         break;
-    case UCT_IB_MLX5_QP_TYPE_LAST:
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
         if (txwq->reg != NULL) {
             uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
         }
