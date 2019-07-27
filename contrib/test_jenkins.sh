@@ -196,7 +196,7 @@ get_ifaddr() {
 	echo $(ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}')
 }
 
-get_ipoib_address() {
+get_rdma_device_ip_addr() {
 	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
 	if [ -n "$iface" ]
 	then
@@ -206,7 +206,6 @@ get_ipoib_address() {
 	if [ -z "$ipaddr" ]
 	then
 		# if there is no inet (IPv4) address, escape
-		echo ""
 		return
 	fi
 
@@ -214,7 +213,6 @@ get_ipoib_address() {
 	node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
 	if [ $node_guid == "0000:0000:0000:0000" ]
 	then
-		echo ""
 		return
 	fi
 
@@ -634,24 +632,18 @@ run_client_server_app() {
 	$AFFINITY ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
+	wait ${client_pid}
+
 	if [ $error_emulation -eq 1 ]
 	then
-		wait ${client_pid}
-		set -Ee
-		if [ $kill_server -eq 1 ]
-		then
-			kill -9 ${server_pid}
-		else
-			wait ${server_pid}
-		fi
+		set -eE
+	fi
+
+	if [ $kill_server -eq 1 ]
+	then
+		kill -9 ${server_pid}
 	else
-		if [ $kill_server -eq 1 ]
-		then
-			wait ${client_pid}
-			kill ${server_pid}
-		else
-			wait ${client_pid} ${server_pid}
-		fi
+		wait ${server_pid}
 	fi
 }
 
@@ -740,8 +732,8 @@ run_client_server() {
 			-Wl,-rpath=${ucx_inst}/lib
 	fi
 
-	server_ip=$(get_ipoib_address)
-	if [ $server_ip == "" ]
+	server_ip=$(get_rdma_device_ip_addr)
+	if [ "$server_ip" == "" ]
 	then
 		return
 	fi
