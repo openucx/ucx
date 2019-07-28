@@ -54,10 +54,7 @@ typedef struct {
 
 typedef struct {
     float            overhead;
-    struct {
-        float        dedicated;
-        float        shared;
-    }                bandwidth;
+    float            bandwidth;
     float            lat_ovh;
     uint32_t         prio_cap_flags; /* 8 lsb: prio, 22 msb: cap flags, 2 hsb: amo */
 } ucp_address_packed_iface_attr_t;
@@ -285,11 +282,13 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed    = ptr;
     cap_flags = iface_attr->cap.flags;
 
-    packed->prio_cap_flags      = ((uint8_t)iface_attr->priority);
-    packed->overhead            = iface_attr->overhead;
-    packed->bandwidth.dedicated = iface_attr->bandwidth.dedicated;
-    packed->bandwidth.shared    = iface_attr->bandwidth.shared;
-    packed->lat_ovh             = iface_attr->latency.overhead;
+    packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
+    packed->overhead       = iface_attr->overhead;
+    packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
+    packed->lat_ovh        = iface_attr->latency.overhead;
+
+    /* check if at least one of bandwidth values is 0 */
+    ucs_assert((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) == 0);
 
     /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
     packed_flag = UCS_BIT(8);
@@ -337,7 +336,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->cap_flags = wiface->attr.cap.flags;
         iface_attr->priority  = wiface->attr.priority;
         iface_attr->overhead  = wiface->attr.overhead;
-        iface_attr->bandwidth = wiface->attr.bandwidth.dedicated - wiface->attr.bandwidth.shared;
+        iface_attr->bandwidth = wiface->attr.bandwidth;
         iface_attr->lat_ovh   = wiface->attr.latency.overhead;
         if (worker->atomic_tls & UCS_BIT(rsc_idx)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
@@ -352,15 +351,13 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         return sizeof(rsc_idx);
     }
 
-    packed                = ptr;
-    iface_attr->cap_flags = 0;
-    iface_attr->priority  = packed->prio_cap_flags & UCS_MASK(8);
-    iface_attr->overhead  = packed->overhead;
-    iface_attr->bandwidth = packed->bandwidth.dedicated - packed->bandwidth.shared;
-    iface_attr->lat_ovh   = packed->lat_ovh;
-
-    /* check if at least one of bandwidth values is 0 */
-    ucs_assert((packed->bandwidth.dedicated * packed->bandwidth.shared) == 0);
+    packed                          = ptr;
+    iface_attr->cap_flags           = 0;
+    iface_attr->priority            = packed->prio_cap_flags & UCS_MASK(8);
+    iface_attr->overhead            = packed->overhead;
+    iface_attr->bandwidth.dedicated = ucs_max(0.0, packed->bandwidth);
+    iface_attr->bandwidth.shared    = ucs_max(0.0, -packed->bandwidth);
+    iface_attr->lat_ovh             = packed->lat_ovh;
 
     packed_flag = UCS_BIT(8);
     bit         = 1;
@@ -777,11 +774,12 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr      += ep_addr_len;
             last_tl   = (*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_LAST;
 
-            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
+            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e ovh %e "
                       "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
                       (int)(address - address_list),
                       address->md_flags, address->iface_attr.cap_flags,
-                      address->iface_attr.bandwidth,
+                      address->iface_attr.bandwidth.dedicated,
+                      address->iface_attr.bandwidth.shared,
                       address->iface_attr.overhead,
                       address->iface_attr.lat_ovh,
                       address->iface_attr.priority,
