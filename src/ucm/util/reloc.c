@@ -17,6 +17,7 @@
 #include "reloc.h"
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/string.h>
 #include <ucm/util/sys.h>
 
 #include <sys/fcntl.h>
@@ -222,7 +223,7 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char UCS_V_U
 
     if (prev_value == ctx->patch->value) {
         ucm_trace("%s entry '%s' in %s at [%p] up-to-date",
-                  section_name, ctx->patch->symbol, basename(phname), entry);
+                  section_name, ctx->patch->symbol, ucs_basename(phname), entry);
         return UCS_OK;
     }
 

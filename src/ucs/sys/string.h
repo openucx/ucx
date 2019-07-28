@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/socket.h>
 
 BEGIN_C_DECLS
@@ -126,6 +127,22 @@ char* ucs_strncpy_safe(char *dst, const char *src, size_t len);
  * @return Pointer to the new string, with leading/trailing whitespaces removed.
  */
 char *ucs_strtrim(char *str);
+
+
+/**
+ * Get pointer to file name in path, same as basename but do not
+ * modify source string.
+ *
+ * @param path Path to parse.
+ * 
+ * @return file name
+ */
+static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
+{
+    const char *name = strrchr(path, '/');
+
+    return (name == NULL) ? path : name + 1;
+}
 
 
 END_C_DECLS

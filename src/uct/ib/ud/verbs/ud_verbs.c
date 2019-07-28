@@ -453,7 +453,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
 
     ucs_assert_always(ep->ah == NULL);
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->super.path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, &ah_attr);
     status_ah = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ep->ah);
     if (status_ah != UCS_OK) {
         uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
@@ -493,7 +493,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_assert_always(ep->ah == NULL);
     ep->dest_qpn = uct_ib_unpack_uint24(ud_ep_addr->iface_addr.qp_num);
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, ep->super.path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, &ah_attr);
     return uct_ib_iface_create_ah(iface, &ah_attr, &ep->ah);
 }
 

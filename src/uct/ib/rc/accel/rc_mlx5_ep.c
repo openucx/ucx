@@ -641,8 +641,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     struct ibv_ah_attr ah_attr;
     ucs_status_t status;
 
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
-                                        ep->super.path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr, &ah_attr);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for

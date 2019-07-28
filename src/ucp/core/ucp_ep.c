@@ -244,13 +244,14 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL, context->mem_type_access_tls[mem_type], NULL,
-                                  &address_length, &address_buffer);
+        status = ucp_address_pack(worker, NULL,
+                                  context->mem_type_access_tls[mem_type], -1,
+                                  NULL, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer, &local_address);
+        status = ucp_address_unpack(worker, address_buffer, -1, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -426,7 +427,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    status = ucp_address_unpack(worker, client_data + 1, &remote_address);
+    status = ucp_address_unpack(worker, client_data + 1, -1, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -529,7 +530,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(worker, params->address, &remote_address);
+    status = ucp_address_unpack(worker, params->address, -1, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }

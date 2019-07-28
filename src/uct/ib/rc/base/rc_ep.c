@@ -108,9 +108,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num)
         goto err_txqp_cleanup;
     }
 
-    self->sl                = iface->super.config.sl;    /* TODO multi-rail */
-    self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
-
     /* Check that FC protocol fits AM id
      * (just in case AM id space gets extended) */
     UCS_STATIC_ASSERT(UCT_RC_EP_FC_MASK < UINT8_MAX);

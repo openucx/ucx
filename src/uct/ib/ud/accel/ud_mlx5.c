@@ -522,8 +522,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     int is_global;
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->ud_mlx5_common,
-                                      ib_addr, ep->super.path_bits, &ep->av,
-                                      &ep->grh_av, &is_global);
+                                      ib_addr, &ep->av, &ep->grh_av, &is_global);
     if (status != UCS_OK) {
         return status;
     }

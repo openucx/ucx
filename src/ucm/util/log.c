@@ -8,6 +8,7 @@
 #include "sys.h"
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/string.h>
 #include <sys/time.h>
 #include <string.h>
 #include <stdlib.h>
@@ -258,7 +259,7 @@ void __ucm_log(const char *file, unsigned line, const char *function,
     gettimeofday(&tv, NULL);
     ucm_log_snprintf(buf, UCM_LOG_BUG_SIZE - 1, "[%lu.%06lu] [%s:%d] %18s:%-4d UCX  %s ",
                      tv.tv_sec, tv.tv_usec, ucm_log_hostname, getpid(),
-                     basename(file), line, ucm_log_level_names[level]);
+                     ucs_basename(file), line, ucm_log_level_names[level]);
     buf[UCM_LOG_BUG_SIZE - 1] = '\0';
 
     length = strlen(buf);
