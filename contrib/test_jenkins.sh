@@ -1361,6 +1361,7 @@ run_tests() {
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
+    export UCX_LOG_PRINT_ENABLE=y
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
