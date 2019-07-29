@@ -608,6 +608,12 @@ UCS_STATIC_INIT {
 }
 
 UCS_STATIC_CLEANUP {
+    ucs_status_t status;
+
     kh_destroy_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
-    ucs_spinlock_destroy(&ucm_kh_lock);
+
+    status = ucs_spinlock_destroy(&ucm_kh_lock);
+    if (status != UCS_OK) {
+        ucm_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 }

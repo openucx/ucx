@@ -345,10 +345,16 @@ void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
+    ucs_status_t status;
+
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_spinlock_destroy(&dev->ah_lock);
+
+    status = ucs_spinlock_destroy(&dev->ah_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 
     if (dev->async_events) {
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);

@@ -143,7 +143,6 @@ libucs_la_SOURCES = \
 	time/timer_wheel.c \
 	time/timerq.c \
 	type/class.c \
-	type/spinlock.c \
 	type/status.c \
 	type/init_once.c
 
