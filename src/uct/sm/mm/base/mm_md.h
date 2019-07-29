@@ -111,7 +111,7 @@ typedef struct uct_mm_component {
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super) \
        }, \
-       .ops                     = _md_ops \
+       .ops                     = (_md_ops) \
     }; \
     UCT_COMPONENT_REGISTER(&(_var).super); \
 
