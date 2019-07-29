@@ -10,6 +10,7 @@
 
 #include "mem_buffer.h"
 
+#include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA
@@ -121,7 +122,6 @@ void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed)
                             "Mask: 0x" << std::hex << mask << " " <<
                             "Got: 0x" << std::hex << value << std::dec);
          }
-
     }
 }
 
