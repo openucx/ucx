@@ -479,6 +479,13 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn);
 
+static UCS_F_MAYBE_UNUSED void
+uct_rc_mlx5_iface_tm_set_cmd_qp_len(uct_rc_mlx5_iface_common_t *iface)
+{
+    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. */
+    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + 2;
+}
+
 #if IBV_HW_TM
 void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
                                    unsigned rndv_hdr_len);

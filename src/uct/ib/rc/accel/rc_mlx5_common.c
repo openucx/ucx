@@ -387,20 +387,17 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
 {
-    int ret;
+    int UCS_V_UNUSED ret;
 
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        ret = ibv_destroy_srq(srq->verbs.srq);
-        if (ret) {
-            ucs_warn("ibv_destroy_srq() failed: %m");
-        }
+        uct_ib_destroy_srq(srq->verbs.srq);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
 #if HAVE_DEVX
         ret = mlx5dv_devx_obj_destroy(srq->devx.obj);
         if (ret) {
-            ucs_error("mlx5dv_devx_obj_destroy(SRQ) failed: %m");
+            ucs_warn("mlx5dv_devx_obj_destroy(SRQ) failed: %m");
         }
         ucs_mpool_put_inline(srq->devx.dbrec);
         mlx5dv_devx_umem_dereg(srq->devx.mem);
@@ -636,8 +633,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     srq_init_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
     srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
-    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. */
-    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + 2;
+    uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
     srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
     srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
                                     IBV_EXP_CREATE_SRQ_TM;

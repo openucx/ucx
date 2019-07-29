@@ -127,7 +127,7 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
     uct_rc_verbs_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_verbs_iface_poll_rx_common(&iface->super);
+    count = uct_rc_verbs_iface_poll_rx_common(iface);
     if (count > 0) {
         return count;
     }
@@ -185,13 +185,9 @@ uct_rc_iface_verbs_init_rx(uct_rc_iface_t *rc_iface,
 void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
-    int ret;
 
     /* TODO flush RX buffers */
-    ret = ibv_destroy_srq(iface->srq);
-    if (ret) {
-        ucs_warn("ibv_destroy_srq() failed: %m");
-    }
+    uct_ib_destroy_srq(iface->srq);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worker,
@@ -286,15 +282,15 @@ err:
     return status;
 }
 
-ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface,
                                                      unsigned max)
 {
     unsigned count;
 
-    count = ucs_min(max, iface->rx.srq.quota);
-    iface->rx.srq.available += count;
-    iface->rx.srq.quota     -= count;
-    while (iface->rx.srq.available > 0) {
+    count = ucs_min(max, iface->super.rx.srq.quota);
+    iface->super.rx.srq.available += count;
+    iface->super.rx.srq.quota     -= count;
+    while (iface->super.rx.srq.available > 0) {
         if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
             ucs_error("failed to post receives");
             return UCS_ERR_NO_MEMORY;
@@ -305,7 +301,7 @@ ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
     if (flags & UCT_PROGRESS_RECV) {
         /* ignore return value from prepost_recv, since it's not really possible
@@ -315,13 +311,13 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
         uct_rc_verbs_iface_common_prepost_recvs(iface, UINT_MAX);
     }
 
-    uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress,
+    uct_base_iface_progress_enable_cb(&iface->super.super.super,
+                                      iface->super.progress,
                                       flags);
 }
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *rc_iface, unsigned max)
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
     unsigned count;
@@ -329,7 +325,7 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *rc_iface, unsigned 
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
-    count = uct_ib_iface_prepare_rx_wrs(&rc_iface->super, &rc_iface->rx.mp,
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super, &iface->super.rx.mp,
                                         wrs, max);
     if (ucs_unlikely(count == 0)) {
         return 0;
@@ -339,7 +335,7 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *rc_iface, unsigned 
     if (ret != 0) {
         ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
     }
-    rc_iface->rx.srq.available -= count;
+    iface->super.rx.srq.available -= count;
 
     return count;
 }

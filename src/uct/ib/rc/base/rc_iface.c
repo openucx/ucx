@@ -490,7 +490,7 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
 
 ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
                                   const uct_rc_iface_common_config_t *config,
-                                  struct ibv_srq **p_srq)
+                                  struct ibv_srq **srq_p)
 {
     struct ibv_srq_init_attr srq_init_attr;
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
@@ -506,7 +506,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
-    *p_srq = srq;
+    *srq_p                       = srq;
 
     return UCS_OK;
 }

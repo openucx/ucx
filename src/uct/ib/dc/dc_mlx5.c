@@ -588,12 +588,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
-    int ret;
 
-    ret = ibv_destroy_srq(iface->super.rx.srq.verbs.srq);
-    if (ret) {
-        ucs_warn("ibv_destroy_srq() failed: %m");
-    }
+    uct_ib_destroy_srq(iface->super.rx.srq.verbs.srq);
 }
 
 #if HAVE_DC_EXP

@@ -12,6 +12,7 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
+
 ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
@@ -87,8 +88,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     iface->rx.srq.type    = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     iface->rx.srq.srq_num = UCT_IB_MLX5DV_GET(create_xrq_out, out, xrqn);
-    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. */
-    iface->tm.cmd_qp_len  = (2 * iface->tm.num_tags) + 2;
+    uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
 
     iface->rx.srq.free_idx      = max - 1;
     iface->rx.srq.ready_idx     = -1;
@@ -141,6 +141,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, 30);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {
+        /* TODO resolve L3->L2 address */
         mac[0] = gid[8] ^ 0x02;
         memcpy(mac + 1, gid + 9, 2);
         memcpy(mac + 3, gid + 13, 3);
