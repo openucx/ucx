@@ -295,7 +295,9 @@ ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
 {
     x86_cpu_registers reg;
 
-    ucs_x86_cpuid(X86_CPUID_GET_BASE_VALUE, &reg.eax, &reg.ebx, &reg.ecx, &reg.edx);
+    ucs_x86_cpuid(X86_CPUID_GET_BASE_VALUE,
+                  ucs_unaligned_ptr(&reg.eax), ucs_unaligned_ptr(&reg.ebx),
+                  ucs_unaligned_ptr(&reg.ecx), ucs_unaligned_ptr(&reg.edx));
     if (!memcmp(reg.id, X86_CPUID_GENUINEINTEL, sizeof(X86_CPUID_GENUINEINTEL) - 1)) {
         return UCS_CPU_VENDOR_INTEL;
     } else if (!memcmp(reg.id, X86_CPUID_AUTHENTICAMD, sizeof(X86_CPUID_AUTHENTICAMD) - 1)) {
