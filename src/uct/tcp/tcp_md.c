@@ -25,14 +25,9 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_tcp_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                unsigned *num_resources_p)
-{
-    return uct_single_md_resource(&uct_tcp_md, resources_p, num_resources_p);
-}
-
-static ucs_status_t uct_tcp_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                    uct_md_h *md_p)
+static ucs_status_t
+uct_tcp_md_open(uct_component_t *component, const char *md_name,
+                const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
         .close              = ucs_empty_function,
@@ -52,7 +47,7 @@ static ucs_status_t uct_tcp_md_open(const char *md_name, const uct_md_config_t *
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_tcp_md, UCT_TCP_NAME,
-                        uct_tcp_query_md_resources, uct_tcp_md_open, NULL,
+                        uct_md_query_single_md_resource, uct_tcp_md_open, NULL,
                         ucs_empty_function_return_unsupported,
                         ucs_empty_function_return_success, "TCP_",
                         uct_md_config_table, uct_md_config_t,

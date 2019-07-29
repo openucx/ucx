@@ -16,15 +16,18 @@
 extern ucs_list_link_t uct_md_components_list;
 
 
+typedef struct uct_md_component uct_component_t;
 typedef struct uct_md_component uct_md_component_t;
 struct uct_md_component {
-    ucs_status_t           (*query_resources)(uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p);
+    ucs_status_t           (*query_md_resources)(uct_component_t *component,
+                                                 uct_md_resource_desc_t **resources_p,
+                                                 unsigned *num_resources_p);
 
-    ucs_status_t           (*md_open)(const char *md_name, const uct_md_config_t *config,
+    ucs_status_t           (*md_open)(uct_component_t *component,
+                                      const char *md_name, const uct_md_config_t *config,
                                       uct_md_h *md_p);
 
-    ucs_status_t           (*cm_open)(uct_component_h component, uct_worker_h worker,
+    ucs_status_t           (*cm_open)(uct_component_t *component, uct_worker_h worker,
                                       uct_cm_h *cm_p);
 
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
@@ -66,7 +69,7 @@ struct uct_md_component {
                                 _cfg_prefix, _cfg_table, _cfg_struct, _cm_open) \
     \
     uct_md_component_t _mdc = { \
-        .query_resources = _query, \
+        .query_md_resources = _query, \
         .md_open         = _open, \
         .cm_open         = _cm_open, \
         .cfg_prefix      = _cfg_prefix, \

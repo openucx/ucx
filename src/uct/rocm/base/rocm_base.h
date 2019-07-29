@@ -10,7 +10,11 @@
 #include <uct/base/uct_md.h>
 #include <hsa.h>
 
+
 hsa_status_t uct_rocm_base_init(void);
+ucs_status_t uct_rocm_base_query_md_resources(uct_component_h component,
+                                              uct_md_resource_desc_t **resources_p,
+                                              unsigned *num_resources_p);
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num);
 int uct_rocm_base_is_gpu_agent(hsa_agent_t agent);
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents);

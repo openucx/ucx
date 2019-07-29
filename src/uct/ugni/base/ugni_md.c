@@ -16,16 +16,17 @@ UCS_CONFIG_DEFINE_ARRAY(ugni_alloc_methods, sizeof(uct_alloc_method_t),
 pthread_mutex_t uct_ugni_global_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* For Cray devices we have only one MD */
-static ucs_status_t uct_ugni_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                unsigned *num_resources_p)
+static ucs_status_t
+uct_ugni_query_md_resources(uct_component_h component,
+                            uct_md_resource_desc_t **resources_p,
+                            unsigned *num_resources_p)
 {
-    if (getenv("PMI_GNI_PTAG") != NULL) {
-        return uct_single_md_resource(&uct_ugni_md_component, resources_p, num_resources_p);
-    } else {
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
+    if (getenv("PMI_GNI_PTAG") == NULL) {
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
+
+    return uct_md_query_single_md_resource(component, resources_p,
+                                           num_resources_p);
 }
 
 static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
@@ -170,8 +171,9 @@ static void uct_ugni_md_close(uct_md_h md)
     pthread_mutex_unlock(&uct_ugni_global_lock);
 }
 
-static ucs_status_t uct_ugni_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                     uct_md_h *md_p)
+static ucs_status_t
+uct_ugni_md_open(uct_component_h component,const char *md_name,
+                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     ucs_status_t status = UCS_OK;
 
