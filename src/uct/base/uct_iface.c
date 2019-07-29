@@ -489,8 +489,10 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
     if (params->field_mask & UCT_EP_PARAM_FIELD_IFACE) {
+        ucs_print("iface mode params->field_mask %zu", params->field_mask);
         return params->iface->ops.ep_create(params, ep_p);
     } else if (params->field_mask & UCT_EP_PARAM_FIELD_CM) {
+        ucs_print("cm mode params->field_mask %zu", params->field_mask);
         return params->cm->ops->ep_create(params, ep_p);
     }
 

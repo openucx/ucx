@@ -940,12 +940,9 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     }
 
     /* Connect to the server */
-    if ((connect_cb != NULL) &&
-            (m_cm.get() == NULL)) {
-        ucs_print("m_cm is NULL");
-    }
+    ucs_print("m_cm is %p", m_cm.get());
 
-    if (m_cm.get()) {
+    if (m_cm) {
         params.field_mask = UCT_EP_PARAM_FIELD_CM                     |
                             UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    |
                             UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB |
