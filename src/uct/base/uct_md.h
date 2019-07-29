@@ -83,7 +83,7 @@ struct uct_md_ops {
                                            uct_sockaddr_accessibility_t mode);
 
     ucs_status_t (*detect_memory_type)(uct_md_h md, void *addr, size_t length,
-                                       uct_memory_type_t *mem_type_p);
+                                       ucs_memory_type_t *mem_type_p);
 
     int          (*is_hugetlb)(uct_md_h md, uct_mem_h memh);
 };

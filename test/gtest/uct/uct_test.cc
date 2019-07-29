@@ -86,14 +86,6 @@ resource_speed::resource_speed(uct_component_h component, const uct_worker_h& wo
     uct_config_release(iface_config);
 }
 
-std::string const uct_test_base::mem_type_names[] = {
-    "host",
-    "cuda",
-    "cuda-managed",
-    "rocm",
-    "rocm-managed"
-};
-
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
     static std::vector<uct_test::md_resource> all_md_resources;
@@ -658,13 +650,13 @@ void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem
 
     mem->length     = length;
     mem->md         = m_md;
-    mem->mem_type   = UCT_MD_MEM_TYPE_CUDA;
+    mem->mem_type   = UCS_MEMORY_TYPE_CUDA;
     mem->memh       = UCT_MEM_HANDLE_NULL;
 
     cerr = cudaMalloc(&mem->address, mem->length);
     EXPECT_TRUE(cerr == cudaSuccess);
 
-    if (md_attr().cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_CUDA)) {
+    if (md_attr().cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA)) {
         status = uct_md_mem_reg(m_md, mem->address, mem->length,
                                 UCT_MD_MEM_ACCESS_ALL, &mem->memh);
         ASSERT_UCS_OK(status);
@@ -681,14 +673,15 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
     void *rkey_buffer;
 
     if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
             status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
                                          alloc_name, mem);
             ASSERT_UCS_OK(status);
-        } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+        } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
             cuda_mem_alloc(length, mem);
         } else {
-            UCS_TEST_SKIP_R("cannot allocate " + mem_type_names[mem_type] +
+            UCS_TEST_SKIP_R("cannot allocate " +
+                            std::string(ucs_memory_type_names[mem_type]) +
                             " memory");
         }
 
@@ -741,7 +734,7 @@ void uct_test::entity::cuda_mem_free(const uct_allocated_memory_t *mem) const {
 
 void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
                                 const uct_rkey_bundle_t& rkey,
-                                const uct_memory_type_t mem_type) const {
+                                const ucs_memory_type_t mem_type) const {
     ucs_status_t status;
 
     if (rkey.rkey != UCT_INVALID_RKEY) {
@@ -749,11 +742,11 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
         ASSERT_UCS_OK(status);
     }
 
-    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
         if (mem->method != UCT_ALLOC_METHOD_LAST) {
             uct_iface_mem_free(mem);
         }
-    } else if(mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    } else if(mem_type == UCS_MEMORY_TYPE_CUDA) {
         cuda_mem_free(mem);
     }
 }
@@ -1065,7 +1058,7 @@ std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resourc
 
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
                                        const entity& entity, size_t offset,
-                                       uct_memory_type_t mem_type) :
+                                       ucs_memory_type_t mem_type) :
     m_entity(entity)
 {
     if (size > 0)  {
@@ -1079,7 +1072,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_mem.address = NULL;
         m_mem.md      = NULL;
         m_mem.memh    = UCT_MEM_HANDLE_NULL;
-        m_mem.mem_type= UCT_MD_MEM_TYPE_HOST;
+        m_mem.mem_type= UCS_MEMORY_TYPE_HOST;
         m_mem.length  = 0;
         m_buf         = NULL;
         m_end         = NULL;
@@ -1100,10 +1093,10 @@ uct_test::mapped_buffer::~mapped_buffer() {
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
     switch(m_mem.mem_type) {
-    case UCT_MD_MEM_TYPE_HOST:
+    case UCS_MEMORY_TYPE_HOST:
         pattern_fill(m_buf, (char*)m_end - (char*)m_buf, seed);
         break;
-    case UCT_MD_MEM_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA:
         pattern_fill_cuda(m_buf, (char*)m_end - (char*)m_buf, seed);
         break;
     default:
@@ -1146,10 +1139,10 @@ void uct_test::mapped_buffer::pattern_fill_cuda(void *start, size_t length, uint
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
     switch(m_mem.mem_type) {
-    case UCT_MD_MEM_TYPE_HOST:
+    case UCS_MEMORY_TYPE_HOST:
         pattern_check(ptr(), length(), seed);
         break;
-    case UCT_MD_MEM_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA:
         pattern_check_cuda(ptr(), length(), seed);
         break;
     default:

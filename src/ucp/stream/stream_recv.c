@@ -203,7 +203,7 @@ ucp_stream_process_rdesc_inplace(ucp_recv_desc_t *rdesc, ucp_datatype_t dt,
 {
     ucs_status_t status;
     ssize_t unpacked;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
 
 
     ucp_memory_type_detect_mds(ucp_ep_from_ext_proto(ep_ext)->worker->context, buffer,

@@ -67,9 +67,9 @@ ucs_status_t uct_p2p_rma_test::get_zcopy(uct_ep_h ep, const mapped_buffer &sendb
 }
 
 void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
-                                 unsigned flags, uct_memory_type_t mem_type)
+                                 unsigned flags, ucs_memory_type_t mem_type)
 {
-    uct_memory_type_t src_mem_type = UCT_MD_MEM_TYPE_HOST;
+    ucs_memory_type_t src_mem_type = UCS_MEMORY_TYPE_HOST;
 
     if (has_transport("cuda_ipc")) {
         src_mem_type = mem_type;
