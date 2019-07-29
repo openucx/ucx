@@ -1231,7 +1231,7 @@ run_gtest() {
 	mkdir -p $GTEST_REPORT_DIR
 
 	echo "==== Running unit tests, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT UCX_LOG_PRINT_ENABLE=y make -C test/gtest test
+	UCX_LOG_PRINT_ENABLE=y $AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
