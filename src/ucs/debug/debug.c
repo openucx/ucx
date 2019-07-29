@@ -1114,7 +1114,11 @@ static inline void ucs_debug_save_original_sighandler(int signum,
         goto out;
     }
 
-    oact_copy = (struct sigaction *)ucs_malloc(sizeof(*orig_handler), "orig_sighandler");
+    oact_copy = ucs_malloc(sizeof(*orig_handler), "orig_sighandler");
+    if (oact_copy == NULL) {
+        goto out;
+    }
+
     *oact_copy = *orig_handler;
     hash_it = kh_put(ucs_signal_orig_action,
                      &ucs_signal_orig_action_map,
