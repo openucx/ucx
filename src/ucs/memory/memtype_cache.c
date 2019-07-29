@@ -41,7 +41,7 @@ static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
 
 /*
  * - Lock must be held in write mode
- * - start,end must be aligned to page size
+ * - start, end must be aligned to page size
  */
 static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
                                      ucs_pgt_addr_t start, ucs_pgt_addr_t end,
@@ -128,7 +128,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
      */
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         if (start > region->super.start) {
-            /* create previos region */
+            /* create previous region */
             ucs_memtype_cache_insert(memtype_cache, region->super.start, start,
                                      region->mem_type);
         }
