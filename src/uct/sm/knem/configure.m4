@@ -21,7 +21,7 @@ AS_IF([test "x$with_knem" != xno],
      AC_CHECK_DECL([KNEM_CMD_GET_INFO],
                    [BASE_CFLAGS="$BASE_CFLAGS $ucx_check_knem_include_dir"
                     BASE_CPPFLAGS="$BASE_CPPFLAGS $ucx_check_knem_include_dir"
-                    uct_modules+=":knem"
+                    uct_modules="${uct_modules}:knem"
                     knem_happy="yes"],
                    [AS_IF([test "x$with_knem" != xguess],
                           [AC_MSG_ERROR([KNEM requested but required file (knem_io.h) could not be found])],

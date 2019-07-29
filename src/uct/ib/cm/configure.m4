@@ -20,7 +20,7 @@ AS_IF([test "x$with_cm" != xno],
       [save_LIBS="$LIBS"
        AC_CHECK_LIB([ibcm], [ib_cm_send_req],
                     [AC_SUBST(IBCM_LIBS, [-libcm])
-                     uct_ib_modules+=":cm"
+                     uct_ib_modules="${uct_ib_modules}:cm"
                      cm_happy="yes"],
                     [AS_IF([test "x$with_cm" = xyes],
                            [AC_MSG_ERROR([CM requested but lib ibcm not found])],
