@@ -15,7 +15,7 @@
 ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
-                            struct ibv_exp_create_srq_attr *attr)
+                            int dc)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_ib_iface_md(&iface->super.super), uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = &md->super.dev;
@@ -65,7 +65,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(xrqc, xrqc, offload,  UCT_IB_MLX5_XRQC_OFFLOAD_RNDV);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, tag_matching_topology_context.log_matching_list_sz,
                                   ucs_ilog2(iface->tm.num_tags));
-    UCT_IB_MLX5DV_SET(xrqc, xrqc, dc,       1);
+    UCT_IB_MLX5DV_SET(xrqc, xrqc, dc,       dc);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, cqn,      dvcq.cqn);
 
     wq = UCT_IB_MLX5DV_ADDR_OF(xrqc, xrqc, wq);
@@ -87,7 +87,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     iface->rx.srq.type    = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     iface->rx.srq.srq_num = UCT_IB_MLX5DV_GET(create_xrq_out, out, xrqn);
-    iface->tm.cmd_qp_len  = (2 * iface->tm.num_tags);
+    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. */
+    iface->tm.cmd_qp_len  = (2 * iface->tm.num_tags) + 2;
 
     iface->rx.srq.free_idx      = max - 1;
     iface->rx.srq.ready_idx     = -1;

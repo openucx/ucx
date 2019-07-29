@@ -620,7 +620,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
                                     unsigned rndv_hdr_len)
 {
-    uct_ib_md_t *md         = uct_ib_iface_md(&iface->super.super);
+    uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
 
     uct_rc_mlx5_init_rx_tm_common(iface, rndv_hdr_len);
 
@@ -636,6 +636,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     srq_init_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
     srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
+    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. */
     iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + 2;
     srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
     srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |

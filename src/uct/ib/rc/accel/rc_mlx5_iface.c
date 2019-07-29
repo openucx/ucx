@@ -397,7 +397,7 @@ uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
-            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, &srq_attr);
+            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0);
         } else {
             status = uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_attr,
                                             UCT_RC_RNDV_HDR_LEN);

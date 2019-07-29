@@ -13,6 +13,15 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 
 
+/*
+ * HW tag matching
+ */
+#if IBV_HW_TM
+#  define UCT_RC_RNDV_HDR_LEN         sizeof(struct ibv_rvh)
+#else
+#  define UCT_RC_RNDV_HDR_LEN         0
+#endif
+
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_FLAG_TM    0x200
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
@@ -492,12 +501,12 @@ uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 #if IBV_HW_TM && HAVE_DEVX
 ucs_status_t uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                          const uct_rc_iface_common_config_t *config,
-                                         struct ibv_exp_create_srq_attr *attr);
+                                         int dc);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
-                            struct ibv_exp_create_srq_attr *attr)
+                            int dc)
 {
     return UCS_ERR_UNSUPPORTED;
 }
