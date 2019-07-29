@@ -771,7 +771,7 @@ typedef struct uct_linear_growth {
 
 /*
  * @ingroup UCT_RESOURCE
- * @brief Process Per Node (PPN) bandwidth specification: f(x) = dedicated * shared / ppn
+ * @brief Process Per Node (PPN) bandwidth specification: f(x) = dedicated + shared / ppn
  *
  *  This structure specifies a function which is used as basis for bandwidth
  * estimation of various UCT operations. This information can be used to select
