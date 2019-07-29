@@ -659,7 +659,7 @@ public:
     auto_ptr() : m_ptr(NULL) {
     }
 
-    auto_ptr(T* ptr) {
+    auto_ptr(T* ptr) : m_ptr(NULL) {
         reset(ptr);
     }
 
