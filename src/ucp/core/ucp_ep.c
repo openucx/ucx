@@ -381,8 +381,7 @@ ucp_ep_create_sockaddr_connected(ucp_worker_h worker,
     ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
 
     ucs_assert(remote_address->address_count == 1);
-    if (wireup_ep->sockaddr_wiface->attr.cap.flags &
-        UCT_IFACE_FLAG_CONNECT_TO_EP) {
+    if (uct_iface_attr_is_tl_p2p(&wireup_ep->sockaddr_wiface->attr)) {
         ucs_assert(wireup_ep->super.uct_ep != NULL);
         status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
                                              remote_address->address_list[0].dev_addr,

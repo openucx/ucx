@@ -120,14 +120,15 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                      int is_owner, uct_ep_h *signaling_ep);
 
-static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
-{
-    uint64_t flags = ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags;
-
-    return (flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
-           !(flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
-}
-
 void ucp_wireup_remote_connected(ucp_ep_h ep);
+
+int uct_iface_attr_is_tl_p2p(const uct_iface_attr_t *iface_attr);
+
+static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker,
+                                       ucp_rsc_index_t rsc_index)
+{
+    return uct_iface_attr_is_tl_p2p(ucp_worker_iface_get_attr(worker,
+                                                              rsc_index));
+}
 
 #endif

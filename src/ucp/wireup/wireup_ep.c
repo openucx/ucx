@@ -726,8 +726,7 @@ ucp_wireup_sockaddr_client_connect_cb(uct_ep_h ep, void *arg,
                        UCP_ADDRESS_PACK_FLAG_EP_ADDR, &unpacked_address);
     ucs_assert(unpacked_address.address_count == 1);
 
-    if (wireup_ep->sockaddr_wiface->attr.cap.flags &
-        UCT_IFACE_FLAG_CONNECT_TO_EP) {
+    if (uct_iface_attr_is_tl_p2p(&wireup_ep->sockaddr_wiface->attr)) {
         status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
                                              remote_data->dev_addr,
                                              unpacked_address.address_list[0].ep_addr);

@@ -193,7 +193,7 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap,
         dev = ucp_address_get_device(context->tl_rscs[i].tl_rsc.dev_name,
                                      devices, &num_devices);
 
-        if ((iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
+        if (uct_iface_attr_is_tl_p2p(iface_attr) &&
             (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR)) {
             /* ep address (its length will be packed in non-unified mode only) */
             dev->tl_addrs_size += iface_attr->ep_addr_len;
@@ -588,7 +588,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             }
 
             /* Pack ep address if present */
-            if ((iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
+            if (uct_iface_attr_is_tl_p2p(iface_attr) &&
                 (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR)) {
                 ep_addr_len           = iface_attr->ep_addr_len;
                 *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_EP_ADDR;

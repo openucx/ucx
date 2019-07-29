@@ -1148,5 +1148,11 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     ucs_free(unpacked_address.address_list);
 }
 
+int uct_iface_attr_is_tl_p2p(const uct_iface_attr_t *iface_attr)
+{
+    return (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
+           !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+}
+
 UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
               ucp_wireup_msg_dump, UCT_CB_FLAG_ASYNC);
