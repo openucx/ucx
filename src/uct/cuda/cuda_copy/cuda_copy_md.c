@@ -94,23 +94,6 @@ static ucs_status_t uct_cuda_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                     unsigned *num_resources_p)
-{
-    int num_gpus;
-    cudaError_t cudaErr;
-
-    cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr!= cudaSuccess) || (num_gpus == 0)) {
-        ucs_debug("Not found cuda devices");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
-
-    return uct_single_md_resource(&uct_cuda_copy_md_component, resources_p, num_resources_p);
-}
-
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
@@ -126,14 +109,15 @@ static uct_md_ops_t md_ops = {
     .detect_memory_type  = uct_cuda_base_detect_memory_type,
 };
 
-static ucs_status_t uct_cuda_copy_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                          uct_md_h *md_p)
+static ucs_status_t
+uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
+                      const uct_md_config_t *config, uct_md_h *md_p)
 {
     uct_cuda_copy_md_t *md;
 
     md = ucs_malloc(sizeof(uct_cuda_copy_md_t), "uct_cuda_copy_md_t");
     if (NULL == md) {
-        ucs_error("Failed to allocate memory for uct_cuda_copy_md_t");
+        ucs_error("failed to allocate memory for uct_cuda_copy_md_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -145,7 +129,7 @@ static ucs_status_t uct_cuda_copy_md_open(const char *md_name, const uct_md_conf
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_cuda_copy_md_component, UCT_CUDA_COPY_MD_NAME,
-                        uct_cuda_copy_query_md_resources, uct_cuda_copy_md_open, NULL,
+                        uct_cuda_base_query_md_resources, uct_cuda_copy_md_open, NULL,
                         uct_cuda_copy_rkey_unpack, uct_cuda_copy_rkey_release, "CUDA_COPY_",
                         uct_cuda_copy_md_config_table, uct_cuda_copy_md_config_t,
                         ucs_empty_function_return_unsupported);

@@ -7,6 +7,8 @@
 #ifndef UCS_REG_CACHE_INT_H_
 #define UCS_REG_CACHE_INT_H_
 
+#include <ucs/type/spinlock.h>
+
 /* Names of rcache stats counters */
 enum {
     UCS_RCACHE_GETS,                /* number of get operations */
@@ -30,7 +32,7 @@ struct ucs_rcache {
                                           whose refcount is 0 */
     ucs_pgtable_t          pgtable;  /**< page table to hold the regions */
 
-    pthread_spinlock_t     inv_lock; /**< Lock for inv_q and inv_mp. This is a
+    ucs_spinlock_t         inv_lock; /**< Lock for inv_q and inv_mp. This is a
                                           separate lock because we may want to put
                                           regions on inv_q while the page table
                                           lock is held by the calling context */

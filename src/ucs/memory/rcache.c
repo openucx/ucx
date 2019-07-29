@@ -14,6 +14,7 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <ucs/type/spinlock.h>
 #include <ucm/api/ucm.h>
 
 #include "rcache.h"
@@ -280,7 +281,7 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache)
 
     ucs_trace_func("rcache=%s", rcache->name);
 
-    pthread_spin_lock(&rcache->inv_lock);
+    ucs_spin_lock(&rcache->inv_lock);
     while (!ucs_queue_is_empty(&rcache->inv_q)) {
         entry = ucs_queue_pull_elem_non_empty(&rcache->inv_q,
                                               ucs_rcache_inv_entry_t, queue);
@@ -289,15 +290,15 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache)
          * operations, which could trigger vm_unmapped event which also takes
          * this lock.
          */
-        pthread_spin_unlock(&rcache->inv_lock);
+        ucs_spin_unlock(&rcache->inv_lock);
 
         ucs_rcache_invalidate_range(rcache, entry->start, entry->end);
 
-        pthread_spin_lock(&rcache->inv_lock);
+        ucs_spin_lock(&rcache->inv_lock);
 
         ucs_mpool_put(entry); /* Must be done with the lock held */
     }
-    pthread_spin_unlock(&rcache->inv_lock);
+    ucs_spin_unlock(&rcache->inv_lock);
 }
 
 static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
@@ -323,7 +324,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
 
     ucs_trace_func("%s: event vm_unmapped 0x%lx..0x%lx", rcache->name, start, end);
 
-    pthread_spin_lock(&rcache->inv_lock);
+    ucs_spin_lock(&rcache->inv_lock);
     entry = ucs_mpool_get(&rcache->inv_mp);
     if (entry != NULL) {
         /* Add region to invalidation list */
@@ -335,7 +336,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
         ucs_error("Failed to allocate invalidation entry for 0x%lx..0x%lx, "
                   "data corruption may occur", start, end);
     }
-    pthread_spin_unlock(&rcache->inv_lock);
+    ucs_spin_unlock(&rcache->inv_lock);
 }
 
 /* Clear all regions
@@ -662,10 +663,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_free_name;
     }
 
-    ret = pthread_spin_init(&self->inv_lock, 0);
-    if (ret) {
-        ucs_error("pthread_spin_init() failed: %m");
-        status = UCS_ERR_INVALID_PARAM;
+    status = ucs_spinlock_init(&self->inv_lock);
+    if (status != UCS_OK) {
         goto err_destroy_rwlock;
     }
 
@@ -696,7 +695,7 @@ err_destroy_mp:
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_inv_q_lock:
-    pthread_spin_destroy(&self->inv_lock);
+    ucs_spinlock_destroy(&self->inv_lock);
 err_destroy_rwlock:
     pthread_rwlock_destroy(&self->lock);
 err_free_name:
@@ -716,7 +715,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 
     ucs_mpool_cleanup(&self->inv_mp, 1);
     ucs_pgtable_cleanup(&self->pgtable);
-    pthread_spin_destroy(&self->inv_lock);
+    ucs_spinlock_destroy(&self->inv_lock);
     pthread_rwlock_destroy(&self->lock);
     UCS_STATS_NODE_FREE(self->stats);
     free(self->name);

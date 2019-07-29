@@ -247,8 +247,8 @@ uct_md_ops_t uct_mm_md_ops = {
     .is_hugetlb         = uct_mm_is_hugetlb,
 };
 
-ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_config,
-                            uct_md_h *md_p, uct_md_component_t *mdc)
+ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
+                            const uct_md_config_t *config, uct_md_h *md_p)
 {
     uct_mm_md_t *mm_md;
     ucs_status_t status;
@@ -260,24 +260,23 @@ ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_confi
         goto err;
     }
 
-    mm_md->config = ucs_malloc(mdc->md_config_size, "mm_md config");
+    mm_md->config = ucs_malloc(component->md_config_size, "mm_md config");
     if (mm_md->config == NULL) {
         ucs_error("Failed to allocate memory for mm_md config");
         status = UCS_ERR_NO_MEMORY;
         goto err_free_mm_md;
     }
 
-    status = ucs_config_parser_clone_opts(md_config, mm_md->config,
-                                          mdc->md_config_table);
+    status = ucs_config_parser_clone_opts(config, mm_md->config,
+                                          component->md_config_table);
     if (status != UCS_OK) {
         ucs_error("Failed to clone opts");
         goto err_free_mm_md_config;
     }
 
-    mdc->rkey_ptr = uct_mm_rkey_ptr;
-
-    mm_md->super.ops = &uct_mm_md_ops;
-    mm_md->super.component = mdc;
+    component->rkey_ptr    = uct_mm_rkey_ptr;
+    mm_md->super.ops       = &uct_mm_md_ops;
+    mm_md->super.component = component;
 
     /* cppcheck-suppress autoVariables */
     *md_p = &mm_md->super;

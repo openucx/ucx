@@ -6,5 +6,5 @@
 UCX_CHECK_GDRCOPY
 
 AS_IF([test "x$gdrcopy_happy" = "xyes" && test "x$rocm_happy" = "xyes"],
-      [uct_rocm_modules+=":gdr"])
+      [uct_rocm_modules="${uct_rocm_modules}:gdr"])
 AC_CONFIG_FILES([src/uct/rocm/gdr/Makefile])

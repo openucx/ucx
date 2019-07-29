@@ -38,6 +38,6 @@ AS_IF([test "x$xpmem_happy" = "xno" -a -d "$with_xpmem"],
                        [AC_MSG_WARN([cray-xpmem header was not found in $with_xpmem])])
        ])
 
-AS_IF([test "x$xpmem_happy" = "xyes"], [uct_modules+=":xpmem"])
+AS_IF([test "x$xpmem_happy" = "xyes"], [uct_modules="${uct_modules}:xpmem"])
 AM_CONDITIONAL([HAVE_XPMEM], [test "x$xpmem_happy" != "xno"])
 AC_CONFIG_FILES([src/uct/sm/mm/xpmem/Makefile])

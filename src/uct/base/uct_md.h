@@ -110,9 +110,18 @@ uct_md_fill_md_name(uct_md_h md, void *buffer)
 }
 
 
-ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
-                                    uct_md_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
+/*
+ * Base implementation of query_md_resources(), which returns a single md
+ * resource whose name is identical to component name.
+ */
+ucs_status_t
+uct_md_query_single_md_resource(uct_component_t *component,
+                                uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p);
+
+ucs_status_t
+uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p);
 
 /**
  * @brief Dummy function

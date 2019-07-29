@@ -6,5 +6,5 @@
 #
 
 UCX_CHECK_ROCM
-AS_IF([test "x$rocm_happy" = "xyes"], [ucm_modules+=":rocm"])
+AS_IF([test "x$rocm_happy" = "xyes"], [ucm_modules="${ucm_modules}:rocm"])
 AC_CONFIG_FILES([src/ucm/rocm/Makefile])

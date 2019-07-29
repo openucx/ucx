@@ -142,25 +142,9 @@ static ucs_status_t uct_cuda_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_ipc_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                    unsigned *num_resources_p)
-{
-    int num_gpus;
-    cudaError_t cudaErr;
-
-    cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr!= cudaSuccess) || (num_gpus == 0)) {
-        ucs_debug("Not found cuda devices");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
-
-    return uct_single_md_resource(&uct_cuda_ipc_md_component, resources_p, num_resources_p);
-}
-
-static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                         uct_md_h *md_p)
+static ucs_status_t
+uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
+                     const uct_md_config_t *config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
         .close              = (void*)ucs_empty_function,
@@ -180,7 +164,7 @@ static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_confi
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_cuda_ipc_md_component, UCT_CUDA_IPC_MD_NAME,
-                        uct_cuda_ipc_query_md_resources, uct_cuda_ipc_md_open, NULL,
+                        uct_cuda_base_query_md_resources, uct_cuda_ipc_md_open, NULL,
                         uct_cuda_ipc_rkey_unpack, uct_cuda_ipc_rkey_release, "CUDA_IPC_",
                         uct_cuda_ipc_md_config_table, uct_cuda_ipc_md_config_t,
                         ucs_empty_function_return_unsupported);

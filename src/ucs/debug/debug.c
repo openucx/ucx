@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <ucs/type/spinlock.h>
 #include <sys/wait.h>
 #include <execinfo.h>
 #include <dlfcn.h>
@@ -118,7 +119,7 @@ static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 static khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
-static pthread_spinlock_t ucs_kh_lock;
+static ucs_spinlock_t ucs_kh_lock;
 
 static int ucs_debug_initialized = 0;
 
@@ -1003,10 +1004,10 @@ static int ucs_debug_is_error_signal(int signum)
     }
 
     /* If this signal is error, but was disabled. */
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     result = (hash_it != kh_end(&ucs_signal_orig_action_map));
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
     return result;
 }
 
@@ -1107,7 +1108,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     khiter_t hash_it;
     int hash_extra_status;
 
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     if (hash_it != kh_end(&ucs_signal_orig_action_map)) {
         goto out;
@@ -1121,7 +1122,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     kh_value(&ucs_signal_orig_action_map, hash_it) = oact_copy;
 
 out:
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
@@ -1213,12 +1214,7 @@ unsigned long ucs_debug_get_lib_base_addr()
 
 void ucs_debug_init()
 {
-    int ret;
-
-    ret = pthread_spin_init(&ucs_kh_lock, 0);
-    if (ret != 0) {
-         ucs_error("failed to initialize spin lock: %s", strerror(ret));
-    }
+    ucs_spinlock_init(&ucs_kh_lock);
 
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
@@ -1260,7 +1256,7 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
-    pthread_spin_destroy(&ucs_kh_lock);
+    ucs_spinlock_destroy(&ucs_kh_lock);
 }
 
 static inline void ucs_debug_disable_signal_nolock(int signum)
@@ -1289,17 +1285,17 @@ static inline void ucs_debug_disable_signal_nolock(int signum)
 
 void ucs_debug_disable_signal(int signum)
 {
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     ucs_debug_disable_signal_nolock(signum);
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signals()
 {
     int signum;
 
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal_nolock(signum));
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
 }
