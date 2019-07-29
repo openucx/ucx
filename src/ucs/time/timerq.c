@@ -16,7 +16,7 @@ ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq)
 {
     ucs_trace_func("timerq=%p", timerq);
 
-    pthread_spin_init(&timerq->lock, 0);
+    ucs_spinlock_init(&timerq->lock);
     timerq->timers       = NULL;
     timerq->num_timers   = 0;
     /* coverity[missing_lock] */
@@ -32,6 +32,7 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq)
         ucs_warn("timer queue with %d timers being destroyed", timerq->num_timers);
     }
     ucs_free(timerq->timers);
+    ucs_spinlock_destroy(&timerq->lock);
 }
 
 ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
@@ -43,7 +44,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
     ucs_trace_func("timerq=%p interval=%.2fus timer_id=%d", timerq,
                    ucs_time_to_usec(interval), timer_id);
 
-    pthread_spin_lock(&timerq->lock);
+    ucs_spin_lock(&timerq->lock);
 
     /* Make sure ID is unique */
     for (ptr = timerq->timers; ptr < timerq->timers + timerq->num_timers; ++ptr) {
@@ -74,7 +75,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
     status = UCS_OK;
 
 out_unlock:
-    pthread_spin_unlock(&timerq->lock);
+    ucs_spin_unlock(&timerq->lock);
     return status;
 }
 
@@ -87,7 +88,7 @@ ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id)
 
     status = UCS_ERR_NO_ELEM;
 
-    pthread_spin_lock(&timerq->lock);
+    ucs_spin_lock(&timerq->lock);
     timerq->min_interval = UCS_TIME_INFINITY;
     ptr = timerq->timers;
     while (ptr < timerq->timers + timerq->num_timers) {
@@ -109,6 +110,6 @@ ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id)
         ucs_assert(timerq->min_interval != UCS_TIME_INFINITY);
     }
 
-    pthread_spin_unlock(&timerq->lock);
+    ucs_spin_unlock(&timerq->lock);
     return status;
 }
