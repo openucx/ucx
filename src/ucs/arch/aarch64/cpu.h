@@ -107,6 +107,11 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
     return UCS_CPU_MODEL_ARM_AARCH64;
 }
 
+static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
+{
+    return UCS_CPU_VENDOR_GENERIC_ARM;
+}
+
 static inline int ucs_arch_get_cpu_flag()
 {
     return UCS_CPU_FLAG_UNKNOWN;
