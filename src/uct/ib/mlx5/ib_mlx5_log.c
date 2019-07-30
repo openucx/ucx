@@ -236,10 +236,11 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
             snprintf(p, endp - p,  " sgix %d dgid %s tc %d]", sgid_index,
                      inet_ntop(AF_INET6, grh_av->rgid, gid_buf, sizeof(gid_buf)),
                      grh_av->tclass);
+        } else {
+            snprintf(p, endp - p, "]");
         }
         return UCT_IB_MLX5_AV_FULL_SIZE;
     } else {
-        snprintf(p, endp - p, "]");
         return UCT_IB_MLX5_AV_BASE_SIZE;
     }
 }
