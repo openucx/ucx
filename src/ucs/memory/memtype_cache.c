@@ -23,8 +23,8 @@
 
 
 typedef enum {
-    UCS_MEMTYPE_CACHE_ATION_SET_MEMTYPE,
-    UCS_MEMTYPE_CACHE_ATION_REMOVE
+    UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE,
+    UCS_MEMTYPE_CACHE_ACTION_REMOVE
 } ucs_memtype_cache_action_t;
 
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
@@ -119,7 +119,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                   region->super.start, region->super.end, region->mem_type);
     }
 
-    if (action == UCS_MEMTYPE_CACHE_ATION_SET_MEMTYPE) {
+    if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
         ucs_memtype_cache_insert(memtype_cache, start, end, mem_type);
     }
 
@@ -142,14 +142,14 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     }
 
 out_unlock:
-    pthread_rwlock_wrlock(&memtype_cache->lock);
+    pthread_rwlock_unlock(&memtype_cache->lock);
 }
 
 void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache, void *address,
                               size_t size, ucs_memory_type_t mem_type)
 {
     ucs_memtype_cache_update_internal(memtype_cache, address, size, mem_type,
-                                      UCS_MEMTYPE_CACHE_ATION_SET_MEMTYPE);
+                                      UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
 }
 
 static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
@@ -159,9 +159,9 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
     ucs_memtype_cache_action_t action;
 
     if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
-        action = UCS_MEMTYPE_CACHE_ATION_SET_MEMTYPE;
+        action = UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE;
     } else if (event_type & UCM_EVENT_MEM_TYPE_FREE) {
-        action = UCS_MEMTYPE_CACHE_ATION_REMOVE;
+        action = UCS_MEMTYPE_CACHE_ACTION_REMOVE;
     } else {
         return;
     }
