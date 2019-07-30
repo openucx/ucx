@@ -1026,6 +1026,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, width, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
+
+    uct_base_iface_query(&iface->super, iface_attr);
     
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
@@ -1039,8 +1041,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                   UCT_IB_IFACE_ARG(iface), active_width);
         return UCS_ERR_IO_ERROR;
     }
-
-    memset(iface_attr, 0, sizeof(*iface_attr));
 
     iface_attr->device_addr_len = iface->addr_size;
 
@@ -1119,9 +1119,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         extra_pkt_len += UCT_IB_LRH_LEN;
     }
 
-    iface_attr->bandwidth   = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
-    iface_attr->priority    = uct_ib_device_spec(dev)->priority;
-    iface_attr->max_num_eps = iface->super.config.max_num_eps;
+    iface_attr->bandwidth = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
+    iface_attr->priority  = uct_ib_device_spec(dev)->priority;
 
     return UCS_OK;
 }

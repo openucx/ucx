@@ -57,7 +57,7 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->cap.put.min_zcopy       = 0;
     iface_attr->cap.put.max_zcopy       = SIZE_MAX;
@@ -85,7 +85,6 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->latency.growth          = 0;
     iface_attr->bandwidth               = 10240 * 1024.0 * 1024.0; /* 10240 MB*/
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
-    iface_attr->max_num_eps             = iface->super.config.max_num_eps;
 
     return UCS_OK;
 }

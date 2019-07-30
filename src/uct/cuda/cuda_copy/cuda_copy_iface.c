@@ -58,7 +58,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(uct_cuda_copy_iface_addr_t);
     iface_attr->device_addr_len         = 0;
@@ -100,7 +100,6 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
     iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
-    iface_attr->max_num_eps             = iface->super.config.max_num_eps;
 
     return UCS_OK;
 }

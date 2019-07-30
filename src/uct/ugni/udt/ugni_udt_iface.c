@@ -167,7 +167,8 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
 {
     uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_udt_iface_t);
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&iface->super.super, iface_attr);
+
     iface_attr->cap.am.max_short       = iface->config.udt_seg_size -
                                          sizeof(uct_ugni_udt_header_t);
     iface_attr->cap.am.max_bcopy       = iface->config.udt_seg_size -
@@ -189,7 +190,6 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.growth         = 0;
     iface_attr->bandwidth              = pow(1024, 2); /* bytes */
     iface_attr->priority               = 0;
-    iface_attr->max_num_eps            = iface->super.super.config.max_num_eps;
 
     return UCS_OK;
 }
