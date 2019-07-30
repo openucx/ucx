@@ -343,7 +343,6 @@ extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
-    ucs_assert(bandwidth->dedicated * bandwidth->shared == 0);
     return bandwidth->dedicated + (bandwidth->shared / context->config.est_num_ppn);
 }
 

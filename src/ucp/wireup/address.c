@@ -271,6 +271,13 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     uint64_t cap_flags;
     uint64_t bit;
 
+    /* check if at least one of bandwidth values is 0 */
+    if ((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) != 0) {
+        ucs_error("Incorrect bandwidth value: one of bandwidth dedicated/shared must be zero");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+
     if (ucp_worker_unified_mode(worker)) {
         /* In unified mode all workers have the same transports and tl bitmap.
          * Just send rsc index, so the remote peer could fetch iface attributes
@@ -286,9 +293,6 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed->overhead       = iface_attr->overhead;
     packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
     packed->lat_ovh        = iface_attr->latency.overhead;
-
-    /* check if at least one of bandwidth values is 0 */
-    ucs_assert((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) == 0);
 
     /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
     packed_flag = UCS_BIT(8);
@@ -344,9 +348,6 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
             iface_attr->atomic.atomic64.op_flags  = wiface->attr.cap.atomic64.op_flags;
             iface_attr->atomic.atomic64.fop_flags = wiface->attr.cap.atomic64.fop_flags;
         }
-
-        /* check if at least one of bandwidth values is 0 */
-        ucs_assert((wiface->attr.bandwidth.dedicated * wiface->attr.bandwidth.shared) == 0);
 
         return sizeof(rsc_idx);
     }
@@ -581,7 +582,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
                       md_flags, iface_attr->cap.flags,
                       iface_attr->bandwidth.dedicated,
-                      iface_attr->bandwidth.shared,
+                      iface_attr->bandwidth.shared / worker->context->config.est_num_ppn,
                       iface_attr->overhead,
                       iface_attr->latency.overhead,
                       iface_attr->priority,
@@ -779,7 +780,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                       (int)(address - address_list),
                       address->md_flags, address->iface_attr.cap_flags,
                       address->iface_attr.bandwidth.dedicated,
-                      address->iface_attr.bandwidth.shared,
+                      address->iface_attr.bandwidth.shared / worker->context->config.est_num_ppn,
                       address->iface_attr.overhead,
                       address->iface_attr.lat_ovh,
                       address->iface_attr.priority,
