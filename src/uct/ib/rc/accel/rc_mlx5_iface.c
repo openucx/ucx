@@ -229,8 +229,14 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_iface_t *ib_iface           = &iface->super.super;
     ucs_status_t status;
 #if HAVE_DECL_MLX5DV_CREATE_QP
-    uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
+    uct_ib_mlx5_md_t *md               = ucs_derived_of(ib_iface->super.md,
+                                                        uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev               = &md->super.dev;
     struct mlx5dv_qp_init_attr dv_attr = {};
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
+    }
 
     status = uct_ib_mlx5_iface_fill_attr(ib_iface, qp, attr);
     if (status != UCS_OK) {
@@ -461,8 +467,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
-    self->super.config.fence = uct_ib_device_has_pci_atomics(dev);
-    self->super.rx.srq.quota = self->rx.srq.mask + 1;
+    self->super.config.fence       = uct_ib_device_has_pci_atomics(dev);
+    self->super.rx.srq.quota       = self->rx.srq.mask + 1;
+    self->super.config.exp_backoff = mlx5_config->exp_backoff;
 
     /* By default set to something that is always in cache */
     self->rx.pref_ptr = self;
@@ -528,11 +535,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
-    init_attr.tm_cap_bit     = IBV_TM_CAP_RC;
-    init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
-    init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.rx_hdr_len     = sizeof(uct_rc_mlx5_hdr_t);
-    init_attr.qp_type        = IBV_QPT_RC;
+    init_attr.tm_cap_bit  = IBV_TM_CAP_RC;
+    init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
+    init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
+    init_attr.tx_cq_len   = config->super.tx_cq_len;
+    init_attr.qp_type     = IBV_QPT_RC;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
                               md, worker, params, &config->super.super,

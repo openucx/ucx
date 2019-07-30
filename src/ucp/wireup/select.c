@@ -5,6 +5,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "wireup.h"
 #include "address.h"
 
@@ -558,7 +562,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
                                ucp_lane_index_t *num_lanes_p,
                                const ucp_wireup_criteria_t *criteria,
                                uint64_t tl_bitmap, uint32_t usage,
-                               int select_best, int show_error)
+                               int show_error)
 {
     ucp_wireup_criteria_t mem_criteria = *criteria;
     ucp_address_entry_t *address_list_copy;
@@ -609,24 +613,16 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
      * be potentially allocated using one of them, and we might get better performance
      * than the transports which support only registered remote memory.
      */
-    if (select_best) {
-        snprintf(title, sizeof(title), criteria->title, "allocated");
-        mem_criteria.title           = title;
-        mem_criteria.remote_md_flags = UCT_MD_FLAG_ALLOC | criteria->remote_md_flags;
-    } else if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
-        /* special case for SHM: do not try to lookup additional lanes when
-         * SHM transport detected (another transport will be significantly
-         * slower) */
-        goto out_free_address_list;
-    }
+    snprintf(title, sizeof(title), criteria->title, "allocated");
+    mem_criteria.title           = title;
+    mem_criteria.remote_md_flags = UCT_MD_FLAG_ALLOC | criteria->remote_md_flags;
 
     while (address_count > 0) {
         status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                              &mem_criteria, tl_bitmap, remote_md_map,
                                              -1, -1, 0, &rsc_index,
                                              &addr_index, &score);
-        if ((status != UCS_OK) ||
-            (select_best && (score <= reg_score))) {
+        if ((status != UCS_OK) || (score <= reg_score)) {
             break;
         }
 
@@ -643,7 +639,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
 out_free_address_list:
     ucs_free(address_list_copy);
 out:
-    return select_best ? status : UCS_OK;
+    return status;
 }
 
 static uint64_t ucp_ep_get_context_features(ucp_ep_h ep)
@@ -746,7 +742,7 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t 
     allow_am = ucp_wireup_allow_am_emulation_layer(params, ep_init_flags);
     status = ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                             lane_descs, num_lanes_p, &criteria,
-                                            -1, UCP_WIREUP_LANE_USAGE_RMA, 1,
+                                            -1, UCP_WIREUP_LANE_USAGE_RMA,
                                             !allow_am);
     if (status == UCS_OK) {
         return status; /* using transport RMA operations */
@@ -813,7 +809,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
     status = ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                             lane_descs, num_lanes_p, &criteria,
                                             tl_bitmap, UCP_WIREUP_LANE_USAGE_AMO,
-                                            1, !allow_am);
+                                            !allow_am);
     if (status == UCS_OK) {
         return status; /* using transport AMO operations */
     } else if (allow_am) {
@@ -876,7 +872,7 @@ static inline int ucp_wireup_is_am_required(ucp_ep_h ep,
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
         (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | 
                                             UCP_FEATURE_STREAM | 
-                                            UCP_FEATURE_EXPERIMENTAL))) {
+                                            UCP_FEATURE_AM))) {
         return 1;
     }
 
@@ -983,7 +979,6 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
     double score;
     int is_proxy;
 
-    status             = UCS_ERR_UNREACHABLE;
     num_lanes          = 0;
     md_map             = bw_info->md_map;
     local_dev_bitmap   = bw_info->local_dev_bitmap;
@@ -1098,7 +1093,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
                                                 ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_select_bw_info_t bw_info;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         bw_info.criteria.remote_md_flags = 0;
@@ -1132,7 +1127,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     bw_info.max_lanes         = ep->worker->context->config.ext.max_rndv_lanes;
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (!ep->worker->context->mem_type_access_tls[mem_type]) {
             continue;
         }

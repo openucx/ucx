@@ -185,11 +185,6 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 
 ucs_status_t uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
-ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
-                                              const char *tl_name, unsigned flags,
-                                              uct_tl_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p);
-
 ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 
 void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_config_t *config);
@@ -253,6 +248,12 @@ static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uin
         }
     }
     ucs_fatal("DCI (qpnum=%d) does not exist", qp_num);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
+{
+    return !ucs_mpool_is_empty(&iface->super.super.tx.mp);
 }
 
 static inline int uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)

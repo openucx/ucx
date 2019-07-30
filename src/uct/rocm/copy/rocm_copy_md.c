@@ -27,10 +27,10 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
 static ucs_status_t uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_ROCM;
-    md_attr->cap.detect_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_ROCM) |
-                                    UCS_BIT(UCT_MD_MEM_TYPE_ROCM_MANAGED);
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_ROCM;
+    md_attr->cap.detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED);
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = 0;
@@ -98,20 +98,6 @@ static ucs_status_t uct_rocm_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                     unsigned *num_resources_p)
-{
-    if (uct_rocm_base_init() != HSA_STATUS_SUCCESS) {
-        ucs_debug("Could not initialize ROCm support");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
-
-    return uct_single_md_resource(&uct_rocm_copy_md_component, resources_p,
-                                  num_resources_p);
-}
-
 static void uct_rocm_copy_md_close(uct_md_h uct_md) {
     uct_rocm_copy_md_t *md = ucs_derived_of(uct_md, uct_rocm_copy_md_t);
 
@@ -127,8 +113,9 @@ static uct_md_ops_t md_ops = {
     .detect_memory_type  = uct_rocm_base_detect_memory_type,
 };
 
-static ucs_status_t uct_rocm_copy_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                          uct_md_h *md_p)
+static ucs_status_t
+uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
+                      const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     uct_rocm_copy_md_t *md;
 
@@ -146,6 +133,7 @@ static ucs_status_t uct_rocm_copy_md_open(const char *md_name, const uct_md_conf
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_rocm_copy_md_component, UCT_ROCM_COPY_MD_NAME,
-                        uct_rocm_copy_query_md_resources, uct_rocm_copy_md_open, NULL,
+                        uct_rocm_base_query_md_resources, uct_rocm_copy_md_open, NULL,
                         uct_rocm_copy_rkey_unpack, uct_rocm_copy_rkey_release, "ROCM_COPY_",
-                        uct_rocm_copy_md_config_table, uct_rocm_copy_md_config_t);
+                        uct_rocm_copy_md_config_table, uct_rocm_copy_md_config_t,
+                        ucs_empty_function_return_unsupported);

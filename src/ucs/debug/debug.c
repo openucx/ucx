@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <ucs/type/spinlock.h>
 #include <sys/wait.h>
 #include <execinfo.h>
 #include <dlfcn.h>
@@ -110,13 +111,15 @@ const char *ucs_signal_names[] = {
     [SIGSYS + 1] = NULL
 };
 
+#if HAVE_SIGACTION_SA_RESTORER
 static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+#endif
 static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
 static khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
-static pthread_spinlock_t ucs_kh_lock;
+static ucs_spinlock_t ucs_kh_lock;
 
 static int ucs_debug_initialized = 0;
 
@@ -135,6 +138,8 @@ static char *ucs_debug_strdup(const char *str)
     }
     return newstr;
 }
+
+#ifdef HAVE_DETAILED_BACKTRACE
 
 static int dl_match_address(struct dl_phdr_info *info, size_t size, void *data)
 {
@@ -171,8 +176,6 @@ static int dl_lookup_address(struct dl_address_search *dl)
     }
     return 1;
 }
-
-#ifdef HAVE_DETAILED_BACKTRACE
 
 /*
  * The dl member in file should be initialized
@@ -841,8 +844,12 @@ static const char *ucs_signal_cause_common(int si_code)
     case SI_TIMER     : return "POSIX timer expired";
     case SI_MESGQ     : return "POSIX message queue state changed";
     case SI_ASYNCIO   : return "AIO completed";
+#ifdef SI_SIGIO
     case SI_SIGIO     : return "queued SIGIO";
+#endif
+#ifdef SI_TKILL
     case SI_TKILL     : return "tkill(2) or tgkill(2)";
+#endif
     default           : return "<unknown si_code>";
     }
 }
@@ -997,10 +1004,10 @@ static int ucs_debug_is_error_signal(int signum)
     }
 
     /* If this signal is error, but was disabled. */
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     result = (hash_it != kh_end(&ucs_signal_orig_action_map));
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
     return result;
 }
 
@@ -1015,6 +1022,13 @@ static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
     return func_ptr;
 }
 
+#if !HAVE_SIGHANDLER_T
+#if HAVE___SIGHANDLER_T
+typedef __sighandler_t *sighandler_t;
+#else
+#error "Port me"
+#endif
+#endif
 sighandler_t signal(int signum, sighandler_t handler)
 {
     static sighandler_t (*orig)(int, sighandler_t) = NULL;
@@ -1094,7 +1108,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     khiter_t hash_it;
     int hash_extra_status;
 
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     if (hash_it != kh_end(&ucs_signal_orig_action_map)) {
         goto out;
@@ -1108,7 +1122,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     kh_value(&ucs_signal_orig_action_map, hash_it) = oact_copy;
 
 out:
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
@@ -1131,14 +1145,20 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
             ucs_warn("failed to set signal handler for sig %d : %m",
                      ucs_global_opts.error_signals.signals[i]);
         }
+#if HAVE_SIGACTION_SA_RESTORER
         ucs_debug_signal_restorer = old_action.sa_restorer;
+#endif
         ucs_debug_save_original_sighandler(ucs_global_opts.error_signals.signals[i], &old_action);
     }
 }
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
 {
-    return !strcmp(symbol, "ucs_handle_error") ||
+    return
+#if HAVE_SIGACTION_SA_RESTORER
+           address == ucs_debug_signal_restorer ||
+#endif
+           !strcmp(symbol, "ucs_handle_error") ||
            !strcmp(symbol, "ucs_fatal_error") ||
            !strcmp(symbol, "ucs_error_freeze") ||
            !strcmp(symbol, "ucs_error_signal_handler") ||
@@ -1150,55 +1170,51 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "ucs_log_dispatch") ||
            !strcmp(symbol, "__ucs_log") ||
            !strcmp(symbol, "ucs_debug_send_mail") ||
-           (strstr(symbol, "_L_unlock_") == symbol) ||
-           (address == ucs_debug_signal_restorer);
+           (strstr(symbol, "_L_unlock_") == symbol);
 }
 
-static struct dl_address_search *ucs_debug_get_lib_info()
+static ucs_status_t ucs_debug_get_lib_info(Dl_info *dlinfo)
 {
-    static struct dl_address_search dl = {0, NULL, 0};
+    int ret;
 
-    if (dl.address == 0) {
-        dl.address = (unsigned long)&ucs_debug_get_lib_info;
-        if (!dl_lookup_address(&dl)) {
-            dl.filename = NULL;
-            dl.base     = 0;
-        }
+    (void)dlerror();
+    ret = dladdr(ucs_debug_get_lib_info, dlinfo);
+    if (ret == 0) {
+        return UCS_ERR_NO_MEMORY;
     }
 
-    /* If we failed to look up the address, return NULL */
-    return (dl.filename == NULL || dl.base == 0) ? NULL : &dl;
+    return UCS_OK;
 }
 
 const char *ucs_debug_get_lib_path()
 {
-    static char ucs_lib_path[256] = {0};
-    struct dl_address_search *dl;
+    ucs_status_t status;
+    Dl_info dlinfo;
 
-    if (!strlen(ucs_lib_path)) {
-        dl = ucs_debug_get_lib_info();
-        if (dl != NULL) {
-            ucs_expand_path(dl->filename, ucs_lib_path, sizeof(ucs_lib_path));
-        }
+    status = ucs_debug_get_lib_info(&dlinfo);
+    if (status != UCS_OK) {
+        return "<failed to resolve libucs path>";
     }
 
-    return ucs_lib_path;
+    return dlinfo.dli_fname;
 }
 
 unsigned long ucs_debug_get_lib_base_addr()
 {
-    struct dl_address_search *dl = ucs_debug_get_lib_info();
-    return (dl == NULL) ? 0 : dl->base;
+    ucs_status_t status;
+    Dl_info dlinfo;
+
+    status = ucs_debug_get_lib_info(&dlinfo);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return (uintptr_t)dlinfo.dli_fbase;
 }
 
 void ucs_debug_init()
 {
-    int ret;
-
-    ret = pthread_spin_init(&ucs_kh_lock, 0);
-    if (ret != 0) {
-         ucs_error("failed to initialize spin lock: %s", strerror(ret));
-    }
+    ucs_spinlock_init(&ucs_kh_lock);
 
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
@@ -1240,7 +1256,7 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
-    pthread_spin_destroy(&ucs_kh_lock);
+    ucs_spinlock_destroy(&ucs_kh_lock);
 }
 
 static inline void ucs_debug_disable_signal_nolock(int signum)
@@ -1269,17 +1285,17 @@ static inline void ucs_debug_disable_signal_nolock(int signum)
 
 void ucs_debug_disable_signal(int signum)
 {
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     ucs_debug_disable_signal_nolock(signum);
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signals()
 {
     int signum;
 
-    pthread_spin_lock(&ucs_kh_lock);
+    ucs_spin_lock(&ucs_kh_lock);
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal_nolock(signum));
-    pthread_spin_unlock(&ucs_kh_lock);
+    ucs_spin_unlock(&ucs_kh_lock);
 }

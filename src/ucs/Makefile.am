@@ -30,6 +30,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
 	memory/rcache.h \
+	memory/memory_type.h \
 	memory/memtype_cache.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
@@ -49,7 +50,11 @@ nobase_dist_libucs_la_HEADERS = \
 	type/spinlock.h \
 	type/status.h \
 	type/thread_mode.h \
-	type/cpu_set.h
+	type/cpu_set.h \
+	arch/x86_64/global_opts.h \
+	arch/aarch64/global_opts.h \
+	arch/ppc64/global_opts.h \
+	arch/global_opts.h
 
 noinst_HEADERS = \
 	arch/aarch64/bitops.h \
@@ -98,8 +103,11 @@ libucs_la_SOURCES = \
 	algorithm/crc.c \
 	algorithm/qsort_r.c \
 	arch/aarch64/cpu.c \
+	arch/aarch64/global_opts.c \
 	arch/ppc64/timebase.c \
+	arch/ppc64/global_opts.c \
 	arch/x86_64/cpu.c \
+	arch/x86_64/global_opts.c \
 	async/async.c \
 	async/signal.c \
 	async/pipe.c \
@@ -119,9 +127,10 @@ libucs_la_SOURCES = \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \
+	memory/memory_type.c \
+	memory/memtype_cache.c \
 	memory/numa.c \
 	memory/rcache.c \
-	memory/memtype_cache.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/event_set.c \

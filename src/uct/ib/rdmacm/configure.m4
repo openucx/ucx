@@ -8,6 +8,7 @@
 # Check for RDMACM support
 #
 rdmacm_happy="no"
+rdmacm_qp_less_happy="no"
 AC_ARG_WITH([rdmacm],
            [AS_HELP_STRING([--with-rdmacm=(DIR)], [Enable the use of RDMACM (default is guess).])],
            [], [with_rdmacm=guess])
@@ -29,14 +30,19 @@ AS_IF([test "x$with_rdmacm" != xno],
        AC_CHECK_HEADER([$ucx_check_rdmacm_dir/include/rdma/rdma_cma.h],
                        [
                        AC_CHECK_LIB([rdmacm], [rdma_create_id],
-                                     [uct_modules+=":rdmacm"
+                                     [uct_modules="${uct_modules}:rdmacm"
                                       rdmacm_happy="yes"
                                       AS_IF([test "$ucx_check_rdmacm_dir" != /usr],
                                             [
                                             AC_SUBST(RDMACM_CPPFLAGS, ["-I$ucx_check_rdmacm_dir/include"])
                                             AC_SUBST(RDMACM_LDFLAGS,  ["-L$ucx_check_rdmacm_dir/lib$libsuff"])])
                                       AC_SUBST(RDMACM_LIBS,     [-lrdmacm])
-                                     ], 
+                                      # QP less support
+                                      AC_CHECK_DECLS([rdma_establish, rdma_init_qp_attr],
+                                                     [rdmacm_qp_less_happy="yes"
+                                                      AC_DEFINE([HAVE_RDMACM_QP_LESS], 1, [RDMACM QP less support])],
+                                                     [], [#include <$ucx_check_rdmacm_dir/include/rdma/rdma_cma.h>])
+                                     ],
                                      [AC_MSG_WARN([RDMACM requested but librdmacm is not found])
                                       AC_MSG_ERROR([Please install librdmacm and librdmacm-devel or disable rdmacm support])
                                      ])
@@ -53,4 +59,5 @@ AS_IF([test "x$with_rdmacm" != xno],
 )
 
 AM_CONDITIONAL([HAVE_RDMACM], [test "x$rdmacm_happy" != xno])
+AM_CONDITIONAL([HAVE_RDMACM_QP_LESS], [test "x$rdmacm_qp_less_happy" != xno])
 AC_CONFIG_FILES([src/uct/ib/rdmacm/Makefile])

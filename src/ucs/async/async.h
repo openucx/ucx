@@ -53,7 +53,8 @@ void ucs_async_global_cleanup();
  * This can be used to ensure safe event delivery.
  *
  * @param async           Event context to initialize.
- * @param mode            Either to use signals or epoll threads to wait.
+ * @param mode            Indicates whether to use signals or polling threads
+ *                        for waiting.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */

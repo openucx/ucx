@@ -61,13 +61,10 @@ UCS_TEST_F(test_debug, lookup_invalid) {
     EXPECT_EQ(UCS_ERR_NO_ELEM, status);
 }
 
-UCS_TEST_F(test_debug, lookup_address) {
+UCS_TEST_SKIP_COND_F(test_debug, lookup_address,
+                     BULLSEYE_ON) {
     unsigned lineno;
     void *address;
-
-    if (BULLSEYE_ON) {
-        UCS_TEST_SKIP;
-    }
 
     my_cool_function(&lineno, &address);
 

@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "tcp.h"
 
 #include <ucs/async/async.h>
@@ -18,9 +22,18 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-  {"SEG_SIZE", "8k",
-   "Size of copy-out buffer",
-   ucs_offsetof(uct_tcp_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+  {"TX_SEG_SIZE", "8k",
+   "Size of send copy-out buffer",
+   ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+  
+  {"RX_SEG_SIZE", "128k",
+   "Size of receive copy-out buffer",
+   ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"MAX_IOV", "6",
+   "Maximum IOV count that can contain user-defined payload in a single\n"
+   "call to non-blocking vector socket send",
+   ucs_offsetof(uct_tcp_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
 
   {"PREFER_DEFAULT", "y",
    "Give higher priority to the default network interface on the host",
@@ -87,6 +100,7 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    size_t am_buf_size     = iface->config.tx_seg_size - sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
 
@@ -100,17 +114,28 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_CB_SYNC          |
                              UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                              UCT_IFACE_FLAG_EVENT_RECV;
-    attr->cap.am.max_short = attr->cap.am.max_bcopy =
-        iface->seg_size - sizeof(uct_tcp_am_hdr_t);
+
+    attr->cap.am.max_short = am_buf_size;
+    attr->cap.am.max_bcopy = am_buf_size;
+
+    if (iface->config.zcopy.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) {
+        attr->cap.am.max_iov          = iface->config.zcopy.max_iov -
+                                        UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT;
+        attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
+                                        sizeof(uct_tcp_am_hdr_t);
+        attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;
+        attr->cap.am.opt_zcopy_align  = 512;
+        attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
+    }
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
-                                &attr->bandwidth);
+                                &attr->bandwidth, &attr->cap.am.align_mtu);
     if (status != UCS_OK) {
         return status;
     }
 
-    attr->latency.growth   = 0;
-    attr->overhead         = 50e-6;  /* 50 usec */
+    attr->latency.growth  = 0;
+    attr->overhead        = 50e-6;  /* 50 usec */
 
     if (iface->config.prefer_default) {
         status = uct_tcp_netif_is_default(iface->if_name, &is_default);
@@ -118,9 +143,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
              return status;
         }
 
-        attr->priority = is_default ? 0 : 1;
+        attr->priority    = is_default ? 0 : 1;
     } else {
-        attr->priority = 0;
+        attr->priority    = 0;
     }
 
     return UCS_OK;
@@ -275,6 +300,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_am_short              = uct_tcp_ep_am_short,
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
+    .ep_am_zcopy              = uct_tcp_ep_am_zcopy,
     .ep_pending_add           = uct_tcp_ep_pending_add,
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
@@ -315,9 +341,13 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
-    /* Bind socket to random available port */
-    bind_addr.sin_port = 0;
-    ret = bind(iface->listen_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+    /* Loop until unused port found */
+    do {
+        /* Bind socket to random available port */
+        bind_addr.sin_port = 0;
+        ret = bind(iface->listen_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+    } while ((ret < 0) && (errno == EADDRINUSE));
+
     if (ret < 0) {
         ucs_error("bind(fd=%d) failed: %m", iface->listen_fd);
         status = UCS_ERR_IO_ERROR;
@@ -347,7 +377,9 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 
     /* Register event handler for incoming connections */
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
-                                         iface->listen_fd, POLLIN|POLLERR,
+                                         iface->listen_fd,
+                                         UCS_EVENT_SET_EVREAD |
+                                         UCS_EVENT_SET_EVERR,
                                          uct_tcp_iface_connect_handler, iface,
                                          iface->super.worker->async);
     if (status != UCS_OK) {
@@ -392,18 +424,48 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
-    self->outstanding           = 0;
-    self->config.prefer_default = config->prefer_default;
-    self->config.max_poll       = config->max_poll;
-    self->sockopt.nodelay       = config->sockopt_nodelay;
-    self->sockopt.sndbuf        = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
+    self->config.tx_seg_size      = config->tx_seg_size +
+                                    sizeof(uct_tcp_am_hdr_t);
+    self->config.rx_seg_size      = config->rx_seg_size +
+                                    sizeof(uct_tcp_am_hdr_t);
+    self->outstanding             = 0;
+
+    /* Maximum IOV count allowed by user's configuration (considering TCP
+     * protocol and user's AM headers that use 1st and 2nd IOVs
+     * correspondingly) and system constraints */
+    self->config.zcopy.max_iov    = ucs_min(config->max_iov +
+                                            UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT,
+                                            ucs_socket_max_iov());
+    /* Use a remaining part of TX segment for AM Zcopy header */
+    self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
+                                     sizeof(struct iovec) *
+                                     self->config.zcopy.max_iov);
+    if ((self->config.zcopy.hdr_offset > self->config.tx_seg_size) &&
+        (self->config.zcopy.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT)) {
+        ucs_error("AM Zcopy context (%zu) must be <= TX segment size (%zu). "
+                  "It can be adjusted by decreasing maximum IOV count (%zu)",
+                  self->config.zcopy.hdr_offset, self->config.tx_seg_size,
+                  self->config.zcopy.max_iov);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    self->config.zcopy.max_hdr    = self->config.tx_seg_size -
+                                    self->config.zcopy.hdr_offset;
+    self->config.prefer_default   = config->prefer_default;
+    self->config.max_poll         = config->max_poll;
+    self->sockopt.nodelay         = config->sockopt_nodelay;
+    self->sockopt.sndbuf          = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf          = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
-    self->seg_size = config->seg_size + sizeof(uct_tcp_am_hdr_t);
+    if (self->config.tx_seg_size > self->config.rx_seg_size) {
+        ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
+                  self->config.rx_seg_size, self->config.tx_seg_size);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
-    status = ucs_mpool_init(&self->tx_mpool, 0, self->seg_size,
+    status = ucs_mpool_init(&self->tx_mpool, 0, self->config.tx_seg_size,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->tx_mpool.bufs_grow == 0) ?
                             32 : config->tx_mpool.bufs_grow,
@@ -413,7 +475,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
-    status = ucs_mpool_init(&self->rx_mpool, 0, self->seg_size * 2,
+    status = ucs_mpool_init(&self->rx_mpool, 0, self->config.rx_seg_size * 2,
                             0, UCS_SYS_CACHE_LINE_SIZE,
                             (config->rx_mpool.bufs_grow == 0) ?
                             32 : config->rx_mpool.bufs_grow,

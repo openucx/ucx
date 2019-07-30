@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_mm.h"
 #include "ucp_context.h"
 #include "ucp_worker.h"
@@ -28,7 +32,7 @@ static ucp_mem_t ucp_mem_dummy_handle = {
 
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,
-                               uct_md_h alloc_md, uct_memory_type_t mem_type,
+                               uct_md_h alloc_md, ucs_memory_type_t mem_type,
                                uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
                                ucp_md_map_t *md_map_p)
 {
@@ -318,7 +322,7 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
     } else {
         ucs_debug("registering user memory at %p length %zu", address, length);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
-        memh->mem_type     = UCT_MD_MEM_TYPE_HOST;
+        memh->mem_type     = UCS_MEMORY_TYPE_HOST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
@@ -428,7 +432,7 @@ out:
 }
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
-                                      size_t length, uct_memory_type_t mem_type,
+                                      size_t length, ucs_memory_type_t mem_type,
                                       ucp_md_index_t md_index, uct_mem_h *memh,
                                       ucp_md_map_t *md_map,
                                       uct_rkey_bundle_t *rkey_bundle)
@@ -481,7 +485,7 @@ err:
     return status;
 }
 
-void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
                                 ucp_md_index_t md_index, uct_mem_h *memh,
                                 ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle)
@@ -650,11 +654,11 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
 {
+    size_t min_page_size, max_page_size;
     ucp_mem_map_params_t mem_params;
     size_t mem_size_value;
     char memunits_str[32];
     ucs_status_t status;
-    uct_mem_h uct_memh;
     unsigned md_index;
     ucp_mem_h memh;
 
@@ -682,22 +686,27 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
     fprintf(stream, "#\n");
 
     ucs_memunits_to_str(memh->length, memunits_str, sizeof(memunits_str));
-    fprintf(stream, "#  allocated %s at address %p with: ", memunits_str, memh->address);
+    fprintf(stream, "#  allocated %s at address %p with ", memunits_str,
+            memh->address);
 
     if (memh->alloc_md == NULL) {
-        fprintf(stream, "%s ", uct_alloc_method_names[memh->alloc_method]);
+        fprintf(stream, "%s", uct_alloc_method_names[memh->alloc_method]);
     } else {
         for (md_index = 0; md_index < context->num_mds; ++md_index) {
             if (memh->alloc_md == context->tl_mds[md_index].md) {
-                fprintf(stream, "%s ",context->tl_mds[md_index].rsc.md_name);
-
-                uct_memh = ucp_memh2uct(memh, md_index);
-                if ((uct_memh != NULL) && (uct_md_is_hugetlb(context->tl_mds[md_index].md, uct_memh))) {
-                        fprintf(stream, "hugetlb on");
-                }
+                fprintf(stream, "%s", context->tl_mds[md_index].rsc.md_name);
                 break;
             }
         }
+    }
+
+    ucs_get_mem_page_size(memh->address, memh->length, &min_page_size,
+                          &max_page_size);
+    ucs_memunits_to_str(min_page_size, memunits_str, sizeof(memunits_str));
+    fprintf(stream, ", pagesize: %s", memunits_str);
+    if (min_page_size != max_page_size) {
+        ucs_memunits_to_str(max_page_size, memunits_str, sizeof(memunits_str));
+        fprintf(stream, "-%s", memunits_str);
     }
 
     fprintf(stream, "\n");

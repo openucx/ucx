@@ -4,7 +4,7 @@
  */
 
 #include "jucx_common_def.h"
-#include "org_ucx_jucx_ucp_UcpContext.h"
+#include "org_openucx_jucx_ucp_UcpContext.h"
 extern "C" {
 #include <ucp/core/ucp_mm.h>
 }
@@ -13,8 +13,8 @@ extern "C" {
  * Bridge method for creating ucp_context from java
  */
 JNIEXPORT jlong JNICALL
-Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
-                                                     jobject jucx_ctx_params)
+Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
+                                                         jobject jucx_ctx_params)
 {
     ucp_params_t ucp_params = { 0 };
     ucp_context_h ucp_context;
@@ -61,16 +61,16 @@ Java_org_ucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls,
 
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpContext_cleanupContextNative(JNIEnv *env, jclass cls,
-                                                      jlong ucp_context_ptr)
+Java_org_openucx_jucx_ucp_UcpContext_cleanupContextNative(JNIEnv *env, jclass cls,
+                                                          jlong ucp_context_ptr)
 {
     ucp_cleanup((ucp_context_h)ucp_context_ptr);
 }
 
 JNIEXPORT jobject JNICALL
-Java_org_ucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
-                                                      jlong ucp_context_ptr,
-                                                      jobject maped_buf)
+Java_org_openucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
+                                                          jlong ucp_context_ptr,
+                                                          jobject maped_buf)
 {
     ucp_mem_map_params_t params = {0};
     ucp_mem_h memh;
@@ -86,12 +86,12 @@ Java_org_ucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
     }
 
     // Construct UcpMemory class
-    jclass jucx_mem_cls = env->FindClass("org/ucx/jucx/ucp/UcpMemory");
+    jclass jucx_mem_cls = env->FindClass("org/openucx/jucx/ucp/UcpMemory");
     jmethodID constructor = env->GetMethodID(jucx_mem_cls, "<init>", "(J)V");
     jobject jucx_mem = env->NewObject(jucx_mem_cls, constructor, (native_ptr)memh);
 
     // Set UcpContext pointer
-    field = env->GetFieldID(jucx_mem_cls, "context", "Lorg/ucx/jucx/ucp/UcpContext;");
+    field = env->GetFieldID(jucx_mem_cls, "context", "Lorg/openucx/jucx/ucp/UcpContext;");
     env->SetObjectField(jucx_mem, field, ctx);
 
     // Set data buffer

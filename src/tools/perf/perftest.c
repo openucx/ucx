@@ -421,22 +421,16 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -m <mem type>  memory type of messages\n");
     printf("                        host - system memory(default)\n");
-    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL) {
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
         printf("                        cuda - NVIDIA GPU memory\n");
     }
-    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL) {
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
         printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
     }
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
     printf("\n");
-}
-
-static const char *__basename(const char *path)
-{
-    const char *p = strrchr(path, '/');
-    return (p == NULL) ? path : (p + 1);
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *optarg,
@@ -501,37 +495,43 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
     return UCS_OK;
 }
 
-static void init_test_params(ucx_perf_params_t *params)
+static ucs_status_t init_test_params(ucx_perf_params_t *params)
 {
     memset(params, 0, sizeof(*params));
-    params->api             = UCX_PERF_API_LAST;
-    params->command         = UCX_PERF_CMD_LAST;
-    params->test_type       = UCX_PERF_TEST_TYPE_LAST;
-    params->thread_mode     = UCS_THREAD_MODE_SINGLE;
-    params->thread_count    = 1;
-    params->async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
-    params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    params->max_outstanding = 1;
-    params->warmup_iter     = 10000;
-    params->am_hdr_size     = 8;
-    params->alignment       = ucs_get_page_size();
-    params->max_iter        = 1000000l;
-    params->max_time        = 0.0;
-    params->report_interval = 1.0;
-    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
-    params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
-    params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
-    params->mem_type        = UCT_MD_MEM_TYPE_HOST;
-    params->msg_size_cnt    = 1;
-    params->iov_stride      = 0;
+    params->api               = UCX_PERF_API_LAST;
+    params->command           = UCX_PERF_CMD_LAST;
+    params->test_type         = UCX_PERF_TEST_TYPE_LAST;
+    params->thread_mode       = UCS_THREAD_MODE_SINGLE;
+    params->thread_count      = 1;
+    params->async_mode        = UCS_ASYNC_THREAD_LOCK_TYPE;
+    params->wait_mode         = UCX_PERF_WAIT_MODE_LAST;
+    params->max_outstanding   = 1;
+    params->warmup_iter       = 10000;
+    params->am_hdr_size       = 8;
+    params->alignment         = ucs_get_page_size();
+    params->max_iter          = 1000000l;
+    params->max_time          = 0.0;
+    params->report_interval   = 1.0;
+    params->flags             = UCX_PERF_TEST_FLAG_VERBOSE;
+    params->uct.fc_window     = UCT_PERF_TEST_MAX_FC_WINDOW;
+    params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
+    params->mem_type          = UCS_MEMORY_TYPE_HOST;
+    params->msg_size_cnt      = 1;
+    params->iov_stride        = 0;
     params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     strcpy(params->uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->uct.tl_name,  TL_RESOURCE_NAME_NONE);
 
-    params->msg_size_list    = malloc(sizeof(*params->msg_size_list) *
-                                      params->msg_size_cnt);
+    params->msg_size_list     = calloc(params->msg_size_cnt,
+                                       sizeof(*params->msg_size_list));
+    if (params->msg_size_list == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
     params->msg_size_list[0] = 8;
+
+    return UCS_OK;
 }
 
 static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
@@ -661,15 +661,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         return UCS_ERR_INVALID_PARAM;
     case 'm':
         if (!strcmp(optarg, "host")) {
-            params->mem_type = UCT_MD_MEM_TYPE_HOST;
+            params->mem_type = UCS_MEMORY_TYPE_HOST;
             return UCS_OK;
         } else if (!strcmp(optarg, "cuda") &&
-                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL)) {
-            params->mem_type = UCT_MD_MEM_TYPE_CUDA;
+                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL)) {
+            params->mem_type = UCS_MEMORY_TYPE_CUDA;
             return UCS_OK;
         } else if (!strcmp(optarg, "cuda-managed") &&
-                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL)) {
-            params->mem_type = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL)) {
+            params->mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
             return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
@@ -730,7 +730,11 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
 
     ucx_perf_global_init(); /* initialize memory types */
 
-    init_test_params(&ctx->params);
+    status = init_test_params(&ctx->params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ctx->server_addr            = NULL;
     ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
@@ -767,12 +771,12 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
             break;
 #endif
         case 'h':
-            usage(ctx, __basename(argv[0]));
+            usage(ctx, ucs_basename(argv[0]));
             return UCS_ERR_CANCELED;
         default:
             status = parse_test_params(&ctx->params, c, optarg);
             if (status != UCS_OK) {
-                usage(ctx, __basename(argv[0]));
+                usage(ctx, ucs_basename(argv[0]));
                 return status;
             }
             break;
@@ -1376,14 +1380,20 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     return UCS_OK;
 }
 
-static void clone_params(ucx_perf_params_t *dest, const ucx_perf_params_t *src)
+static ucs_status_t clone_params(ucx_perf_params_t *dest,
+                                 const ucx_perf_params_t *src)
 {
     size_t msg_size_list_size;
 
     *dest               = *src;
     msg_size_list_size  = dest->msg_size_cnt * sizeof(*dest->msg_size_list);
     dest->msg_size_list = malloc(msg_size_list_size);
+    if (dest->msg_size_list == NULL) {
+        return ((msg_size_list_size != 0) ? UCS_ERR_NO_MEMORY : UCS_OK);
+    }
+
     memcpy(dest->msg_size_list, src->msg_size_list, msg_size_list_size);
+    return UCS_OK;
 }
 
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
@@ -1420,7 +1430,11 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    clone_params(&params, parent_params);
+    status = clone_params(&params, parent_params);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     line_num = 0;
     while ((status = read_batch_file(batch_file, ctx->batch_files[depth],
                                      &line_num, &params,
@@ -1430,12 +1444,20 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         free(ctx->test_names[depth]);
         ctx->test_names[depth] = NULL;
 
-        clone_params(&params, parent_params);
+        status = clone_params(&params, parent_params);
+        if (status != UCS_OK) {
+            goto out;
+        }
     }
-    free(params.msg_size_list);
 
+    if (status == UCS_ERR_NO_ELEM) {
+        status = UCS_OK;
+    }
+
+    free(params.msg_size_list);
+out:
     fclose(batch_file);
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t run_test(struct perftest_context *ctx)

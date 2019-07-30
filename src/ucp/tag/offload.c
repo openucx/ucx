@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "offload.h"
 #include "eager.h"
 #include "rndv.h"
@@ -187,7 +191,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         dummy_rts->size             = length;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
-                             UCT_MD_MEM_TYPE_HOST, dummy_rts + 1, uct_rkeys);
+                             UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
         ucp_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
@@ -300,6 +304,8 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                                       req->recv.tag.tag_mask, &iov, 1,
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
+        ucs_assert((status == UCS_ERR_NO_RESOURCE) ||
+                   (status == UCS_ERR_EXCEEDS_LIMIT));
         /* No more matching entries in the transport.
          * TODO keep registration in case SW RNDV protocol will be used */
         ucp_tag_offload_release_buf(req, 1);

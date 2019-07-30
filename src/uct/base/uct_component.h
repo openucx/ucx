@@ -16,13 +16,19 @@
 extern ucs_list_link_t uct_md_components_list;
 
 
+typedef struct uct_md_component uct_component_t;
 typedef struct uct_md_component uct_md_component_t;
 struct uct_md_component {
-    ucs_status_t           (*query_resources)(uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p);
+    ucs_status_t           (*query_md_resources)(uct_component_t *component,
+                                                 uct_md_resource_desc_t **resources_p,
+                                                 unsigned *num_resources_p);
 
-    ucs_status_t           (*md_open)(const char *md_name, const uct_md_config_t *config,
+    ucs_status_t           (*md_open)(uct_component_t *component,
+                                      const char *md_name, const uct_md_config_t *config,
                                       uct_md_h *md_p);
+
+    ucs_status_t           (*cm_open)(uct_component_t *component, uct_worker_h worker,
+                                      uct_cm_h *cm_p);
 
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
@@ -56,14 +62,16 @@ struct uct_md_component {
  * @param _cfg_prefix    Prefix for configuration environment vars.
  * @param _cfg_table     Defines the MDC's configuration values.
  * @param _cfg_struct    MDC configuration structure.
+ * @param _cm_open       Function to open a CM.
  */
 #define UCT_MD_COMPONENT_DEFINE(_mdc, _name, _query, _open, _priv, \
                                 _rkey_unpack, _rkey_release, \
-                                _cfg_prefix, _cfg_table, _cfg_struct) \
+                                _cfg_prefix, _cfg_table, _cfg_struct, _cm_open) \
     \
     uct_md_component_t _mdc = { \
-        .query_resources = _query, \
+        .query_md_resources = _query, \
         .md_open         = _open, \
+        .cm_open         = _cm_open, \
         .cfg_prefix      = _cfg_prefix, \
         .md_config_table = _cfg_table, \
         .md_config_size  = sizeof(_cfg_struct), \

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -107,17 +107,16 @@ static int uct_cma_test_writev()
     return 1;
 }
 
-static ucs_status_t uct_cma_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                               unsigned *num_resources_p)
+static ucs_status_t
+uct_cma_query_md_resources(uct_component_t *component,
+                           uct_md_resource_desc_t **resources_p,
+                           unsigned *num_resources_p)
 {
     if (uct_cma_test_writev() && uct_cma_test_ptrace_scope()) {
-        return uct_single_md_resource(&uct_cma_md_component,
-                                      resources_p,
-                                      num_resources_p);
+        return uct_md_query_single_md_resource(component, resources_p,
+                                               num_resources_p);
     } else {
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 }
 
@@ -132,8 +131,9 @@ static ucs_status_t uct_cma_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cma_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                    uct_md_h *md_p)
+static ucs_status_t
+uct_cma_md_open(uct_component_t *component, const char *md_name,
+                const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
         .close              = (void*)ucs_empty_function,
@@ -158,14 +158,15 @@ UCT_MD_COMPONENT_DEFINE(uct_cma_md_component, "cma",
                         uct_cma_query_md_resources, uct_cma_md_open, NULL,
                         uct_md_stub_rkey_unpack,
                         ucs_empty_function_return_success, "CMA_",
-                        uct_md_config_table, uct_md_config_t)
+                        uct_md_config_table, uct_md_config_t,
+                        ucs_empty_function_return_unsupported)
 
 ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->rkey_packed_size     = 0;
     md_attr->cap.flags            = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;

@@ -6,6 +6,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct_md.h"
 #include "uct_iface.h"
 
@@ -58,7 +62,7 @@ ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
     ucs_status_t status;
     uct_md_h md;
 
-    status = component->md_open(md_name, config, &md);
+    status = component->md_open(component, md_name, config, &md);
     if (status != UCS_OK) {
         return status;
     }
@@ -135,9 +139,10 @@ void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources)
     ucs_free(resources);
 }
 
-ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
-                                    uct_md_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p)
+ucs_status_t
+uct_md_query_single_md_resource(uct_component_t *component,
+                                uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p)
 {
     uct_md_resource_desc_t *resource;
 
@@ -146,10 +151,20 @@ ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucs_snprintf_zero(resource->md_name, UCT_MD_NAME_MAX, "%s", mdc->name);
+    ucs_snprintf_zero(resource->md_name, UCT_MD_NAME_MAX, "%s",
+                      component->name);
 
     *resources_p     = resource;
     *num_resources_p = 1;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p)
+{
+    *resources_p     = NULL;
+    *num_resources_p = 0;
     return UCS_OK;
 }
 
@@ -333,11 +348,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
-#if ENABLE_DEBUG_DATA
     void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
-#else
-    void *rbuf = rkey_buffer;
-#endif
     return md->ops->mkey_pack(md, memh, rbuf);
 }
 
@@ -346,8 +357,9 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
 {
     char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
-    if (ENABLE_PARAMS_CHECK && ENABLE_DEBUG_DATA) {
-        if (strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
+    if (ENABLE_DEBUG_DATA) {
+        if (ENABLE_PARAMS_CHECK &&
+            strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
             ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s",
                               (const char*)rkey_buffer);
             ucs_error("invalid component for rkey unpack; "
@@ -386,7 +398,11 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 
     /* MD component name + data */
     memcpy(md_attr->component_name, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
+
+#if ENABLE_DEBUG_DATA
+    /* MD name is packed into rkey in DEBUG mode only */
     md_attr->rkey_packed_size += UCT_MD_COMPONENT_NAME_MAX;
+#endif
 
     return UCS_OK;
 }
@@ -457,7 +473,7 @@ int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
 }
 
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
-                                       uct_memory_type_t *mem_type_p)
+                                       ucs_memory_type_t *mem_type_p)
 {
     return md->ops->detect_memory_type(md, addr, length, mem_type_p);
 }

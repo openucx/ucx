@@ -12,6 +12,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <string.h>
 #include <limits.h>
@@ -116,12 +117,6 @@ static void ucs_module_loader_init_paths()
     }
 }
 
-static const char *ucs_module_short_path(const char *path)
-{
-    const char *p = strrchr(path, '/');
-    return (p == NULL) ? path : p + 1;
-}
-
 /* Perform shallow search for a symbol */
 static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
                                       const char *symbol)
@@ -155,8 +150,8 @@ static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
      */
     if (lm_entry->l_addr != (uintptr_t)dl_info.dli_fbase) {
         ucs_module_debug("ignoring '%s' (%p) from %s (%p), expected in %s (%lx)",
-                         symbol, addr, ucs_module_short_path(dl_info.dli_fname),
-                         dl_info.dli_fbase, ucs_module_short_path(module_path),
+                         symbol, addr, ucs_basename(dl_info.dli_fname),
+                         dl_info.dli_fbase, ucs_basename(module_path),
                          lm_entry->l_addr);
         return NULL;
     }

@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -33,6 +34,8 @@ VALGRIND_ARGS = \
 	--track-origins=yes \
 	--fair-sched=try \
 	--num-callers=25 \
+	--error-exitcode=1 \
+	--child-silent-after-fork=yes \
 	--suppressions=$(top_srcdir)/contrib/valgrind.supp \
 	$(VALGRIND_EXTRA_ARGS)
 
@@ -66,6 +69,7 @@ gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -fno-tree-vectorize \
 gtest_SOURCES = \
 	common/gtest-all.cc \
 	common/main.cc \
+	common/mem_buffer.cc \
 	common/test_helpers.cc \
 	common/test_obj_size.cc \
 	common/test_watchdog.cc \
@@ -105,6 +109,7 @@ gtest_SOURCES = \
 	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
 	\
+	ucp/test_ucp_am.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_atomic.cc \
@@ -208,6 +213,7 @@ endif
 
 noinst_HEADERS = \
 	common/gtest.h \
+	common/mem_buffer.h \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \

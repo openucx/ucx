@@ -12,6 +12,7 @@
 #include <ucs/config/parser.h>
 
 #include <sys/resource.h>
+#include <set>
 
 namespace ucs {
 
@@ -22,6 +23,8 @@ const double test_timeout_in_sec = 60.;
 const double watchdog_timeout_default = 900.; // 15 minutes
 
 static test_watchdog_t watchdog;
+
+std::set< const ::testing::TestInfo*> skipped_tests;
 
 void *watchdog_func(void *arg)
 {
@@ -226,7 +229,10 @@ void analyze_test_results()
         return;
     }
 
-    size_t max_name_size = 0;
+    size_t total_skipped_cnt                   = skipped_tests.size();
+    ::testing::TimeInMillis total_skipped_time = 0;
+    size_t max_name_size                       = 0;
+    std::set< const ::testing::TestInfo*>::iterator skipped_it;
     int top_n;
 
     if (!strcmp(env_p, "*")) {
@@ -273,6 +279,12 @@ void analyze_test_results()
                                                       result->elapsed_time()));
 
                 max_name_size = std::max(test_name.size(), max_name_size);
+
+                skipped_it = skipped_tests.find(test);
+                if (skipped_it != skipped_tests.end()) {
+                    total_skipped_time += result->elapsed_time();
+                    skipped_tests.erase(skipped_it);
+                }
             }
         }
     }
@@ -284,6 +296,7 @@ void analyze_test_results()
         return;
     }
 
+    // Print TOP-<N> slowest tests
     int max_index_size = ucs::to_string(top_n).size();
     std::cout << std::endl << "TOP-" << top_n << " longest tests:" << std::endl;
 
@@ -293,6 +306,11 @@ void analyze_test_results()
                   << std::setw(max_name_size - test_results[i].first.size() + 3)
                   << " - " << test_results[i].second << " ms" << std::endl;
     }
+
+    // Print skipped tests statistics
+    std::cout << std::endl << "Skipped tests: count - "
+              << total_skipped_cnt << ", time - "
+              << total_skipped_time << " ms" << std::endl;
 }
 
 int test_time_multiplier()
@@ -584,6 +602,21 @@ std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
 {
     return os << ucs::sockaddr_to_str(&sa_storage.get_sock_addr());
 }
+
+auto_buffer::auto_buffer(size_t size) : m_ptr(malloc(size)) {
+    if (!m_ptr) {
+        UCS_TEST_ABORT("Failed to allocate memory");
+    }
+}
+
+auto_buffer::~auto_buffer()
+{
+    free(m_ptr);
+}
+
+void* auto_buffer::operator*() const {
+    return m_ptr;
+};
 
 namespace detail {
 

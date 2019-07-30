@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -41,8 +41,8 @@ static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
-    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_CUDA;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_CUDA;
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
@@ -217,32 +217,22 @@ static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
     return status;
 }
 
-static ucs_status_t uct_gdr_copy_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                    unsigned *num_resources_p)
+static ucs_status_t
+uct_gdr_copy_query_md_resources(uct_component_t *component,
+                                uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p)
 {
-    int num_gpus;
     gdr_t ctx;
-    cudaError_t cudaErr;
-
-    cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
-        ucs_debug("not found cuda devices");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
 
     ctx = gdr_open();
     if (ctx == NULL) {
         ucs_debug("could not open gdr copy. disabling gdr copy resource");
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
     gdr_close(ctx);
 
-    return uct_single_md_resource(&uct_gdr_copy_md_component, resources_p,
-                                  num_resources_p);
+    return uct_cuda_base_query_md_resources(component, resources_p,
+                                            num_resources_p);
 }
 
 static void uct_gdr_copy_md_close(uct_md_h uct_md)
@@ -359,12 +349,12 @@ static ucs_rcache_ops_t uct_gdr_copy_rcache_ops = {
     .dump_region = uct_gdr_copy_rcache_dump_region_cb
 };
 
-static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
-                                         const uct_md_config_t *uct_md_config,
-                                         uct_md_h *md_p)
+static ucs_status_t
+uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
+                     const uct_md_config_t *config, uct_md_h *md_p)
 {
-    const uct_gdr_copy_md_config_t *md_config = ucs_derived_of(uct_md_config,
-                                                               uct_gdr_copy_md_config_t);
+    const uct_gdr_copy_md_config_t *md_config =
+                    ucs_derived_of(config, uct_gdr_copy_md_config_t);
     ucs_status_t status;
     uct_gdr_copy_md_t *md;
     ucs_rcache_params_t rcache_params;
@@ -426,4 +416,5 @@ err_free_md:
 UCT_MD_COMPONENT_DEFINE(uct_gdr_copy_md_component, UCT_GDR_COPY_MD_NAME,
                         uct_gdr_copy_query_md_resources, uct_gdr_copy_md_open, NULL,
                         uct_gdr_copy_rkey_unpack, uct_gdr_copy_rkey_release, "GDR_COPY_",
-                        uct_gdr_copy_md_config_table, uct_gdr_copy_md_config_t);
+                        uct_gdr_copy_md_config_table, uct_gdr_copy_md_config_t,
+                        ucs_empty_function_return_unsupported);

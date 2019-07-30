@@ -6,6 +6,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_context.h"
 #include "ucp_request.h"
 #include <ucp/proto/proto.h>
@@ -47,13 +51,6 @@ static const char * ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
-uct_memory_type_t ucm_to_uct_mem_type_map[] = {
-    [UCM_MEM_TYPE_CUDA]         = UCT_MD_MEM_TYPE_CUDA,
-    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_CUDA_MANAGED,
-    [UCM_MEM_TYPE_ROCM]         = UCT_MD_MEM_TYPE_ROCM,
-    [UCM_MEM_TYPE_ROCM_MANAGED] = UCT_MD_MEM_TYPE_ROCM_MANAGED,
-};
-
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -77,16 +74,19 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
-   " - all    : use all the available transports.\n"
-   " - sm/shm : all shared memory transports.\n"
-   " - mm     : shared memory transports - only memory mappers.\n"
-   " - ugni   : ugni_rdma and ugni_udt.\n"
-   " - ib     : all infiniband transports.\n"
-   " - rc     : rc verbs (uses ud for bootstrap).\n"
-   " - rc_x   : rc with accelerated verbs (uses ud_x for bootstrap).\n"
-   " - ud     : ud verbs.\n"
-   " - ud_x   : ud with accelerated verbs.\n"
-   " - dc_x   : dc with accelerated verbs.\n"
+   " - all     : use all the available transports.\n"
+   " - sm/shm  : all shared memory transports (mm, cma, knem).\n"
+   " - mm      : shared memory transports - only memory mappers.\n"
+   " - ugni    : ugni_smsg and ugni_rdma (uses ugni_udt for bootstrap).\n"
+   " - ib      : all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5).\n"
+   " - rc_v    : rc verbs (uses ud for bootstrap).\n"
+   " - rc_x    : rc with accelerated verbs (uses ud_mlx5 for bootstrap).\n"
+   " - rc      : rc_v and rc_x (preferably if available).\n"
+   " - ud_v    : ud verbs.\n"
+   " - ud_x    : ud with accelerated verbs.\n"
+   " - ud      : ud_v and ud_x (preferably if available).\n"
+   " - dc/dc_x : dc with accelerated verbs.\n"
+   " - tcp     : sockets over TCP/IP.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -226,6 +226,12 @@ static ucs_config_field_t ucp_config_table[] = {
    " If set to a value different from \"auto\" it will override the value passed\n"
    "to ucp_init()",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"NUM_PPN", "auto",
+   "An optimization hint for the number of processes expected to be launched\n"
+   "on a single node. Does not affect semantics, only transport selection criteria\n"
+   "and the resulting performance.\n",
+   ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
   {"RNDV_FRAG_SIZE", "256k",
    "RNDV fragment size \n",
@@ -675,6 +681,8 @@ static const char* ucp_feature_flag_str(unsigned feature_flag)
         return "UCP_FEATURE_WAKEUP";
     case UCP_FEATURE_STREAM:
         return "UCP_FEATURE_STREAM";
+    case UCP_FEATURE_AM:
+        return "UCP_FEATURE_AM";
     default:
         ucs_fatal("Unknown feature flag value %u", feature_flag);
     }
@@ -970,7 +978,7 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
     }
 
     /* Open all memory domains */
-    mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    mem_type_mask = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
         md_index = context->num_mds;
         status = ucp_fill_tl_md(context, cmpt_index,
@@ -1031,7 +1039,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->memtype_cache    = NULL;
     context->num_mem_type_detect_mds = 0;
 
-    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; ++i) {
+    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
         context->mem_type_access_tls[i] = 0;
     }
 
@@ -1182,6 +1190,14 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         context->config.est_num_eps = 1;
     }
 
+    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_PPN) {
+        context->config.est_num_ppn = params->estimated_num_ppn;
+    } else {
+        context->config.est_num_ppn = 1;
+    }
+
+    context->config.est_num_ppn = 1;
+
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
         context->mt_lock.mt_type = mt_type;
@@ -1205,11 +1221,18 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.ext = config->ctx;
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
-        /* num_eps were set via the env variable. Override current value */
+        /* num_eps was set via the env variable. Override current value */
         context->config.est_num_eps = context->config.ext.estimated_num_eps;
     }
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
+
+    if (context->config.ext.estimated_num_ppn != UCS_ULUNITS_AUTO) {
+        /* num_ppn was set via the env variable. Override current value */
+        context->config.est_num_ppn = context->config.ext.estimated_num_ppn;
+    }
+    ucs_debug("Estimated number of endpoints per node is %d",
+              context->config.est_num_ppn);
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
@@ -1302,13 +1325,6 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
-    .chunk_alloc   = ucs_mpool_chunk_malloc,
-    .chunk_release = ucs_mpool_chunk_free,
-    .obj_init      = NULL,
-    .obj_cleanup   = NULL
-};
-
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -1356,16 +1372,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_config;
     }
 
-    /* create memory pool for small rkeys */
-    status = ucs_mpool_init(&context->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) +
-                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
-                            &ucp_rkey_mpool_ops, "ucp_rkeys");
-    if (status != UCS_OK) {
-        goto err_free_resources;
-    }
-
     if (dfl_config != NULL) {
         ucp_config_release(dfl_config);
     }
@@ -1377,8 +1383,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
-err_free_resources:
-    ucp_free_resources(context);
 err_free_config:
     ucp_free_config(context);
 err_free_ctx:
@@ -1393,7 +1397,6 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
-    ucs_mpool_cleanup(&context->rkey_mp, 1);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);

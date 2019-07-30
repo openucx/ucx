@@ -5,6 +5,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_ep.h"
 #include "ucp_worker.h"
 #include "ucp_am.h"
@@ -231,8 +235,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
     params.field_mask = 0;
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
-        if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
             continue;
         }
 
@@ -240,13 +244,14 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL, context->mem_type_access_tls[mem_type], NULL,
-                                  &address_length, &address_buffer);
+        status = ucp_address_pack(worker, NULL,
+                                  context->mem_type_access_tls[mem_type], -1,
+                                  NULL, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer, &local_address);
+        status = ucp_address_unpack(worker, address_buffer, -1, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -269,7 +274,7 @@ err_free_address_list:
 err_free_address_buffer:
     ucs_free(address_buffer);
 err_cleanup_eps:
-    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
+    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
         if (worker->mem_type_ep[i]) {
            ucp_ep_destroy_internal(worker->mem_type_ep[i]);
         }
@@ -422,7 +427,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    status = ucp_address_unpack(worker, client_data + 1, &remote_address);
+    status = ucp_address_unpack(worker, client_data + 1, -1, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -525,7 +530,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(worker, params->address, &remote_address);
+    status = ucp_address_unpack(worker, params->address, -1, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1118,7 +1123,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                     (ssize_t)config->zcopy_thresh[0]);
     }
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (UCP_MEM_IS_HOST(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
@@ -1152,7 +1157,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     size_t it;
@@ -1177,7 +1182,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }

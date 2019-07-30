@@ -858,6 +858,11 @@ static void ucs_config_parser_release_field(ucs_config_field_t *field, void *var
     field->parser.release(var, field->parser.arg);
 }
 
+static int ucs_config_field_is_last(const ucs_config_field_t *field)
+{
+    return field->name == NULL;
+}
+
 ucs_status_t
 ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
 {
@@ -865,7 +870,7 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
     ucs_status_t status;
     void *var;
 
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
         if (ucs_config_is_alias_field(field) ||
             ucs_config_is_deprecated_field(field)) {
             continue;
@@ -909,7 +914,7 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
     prefix_len = (table_prefix == NULL) ? 0 : strlen(table_prefix);
 
     count = 0;
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
 
         var = (char*)opts + field->offset;
 
@@ -1007,7 +1012,7 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
     prefix_len = strlen(buf);
 
     /* Parse environment variables */
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
 
         var = (char*)opts + field->offset;
 
@@ -1130,7 +1135,7 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
     }
 
     for (field = fields, status = UCS_ERR_NO_ELEM;
-         field->name && (status == UCS_ERR_NO_ELEM); ++field) {
+         !ucs_config_field_is_last(field) && (status == UCS_ERR_NO_ELEM); ++field) {
 
         name_len = strlen(field->name);
 
@@ -1164,7 +1169,7 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
     ucs_status_t status;
 
     ucs_config_field_t *field;
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
         if (ucs_config_is_alias_field(field) ||
             ucs_config_is_deprecated_field(field)) {
             continue;
@@ -1187,7 +1192,7 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields)
 {
     ucs_config_field_t *field;
 
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
         if (ucs_config_is_alias_field(field) ||
             ucs_config_is_deprecated_field(field)) {
             continue;
@@ -1210,7 +1215,7 @@ ucs_config_find_aliased_field(const ucs_config_field_t *fields,
     const ucs_config_field_t *field, *result;
     size_t offset;
 
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
         if (field == alias) {
             /* skip */
             continue;
@@ -1314,7 +1319,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
     ucs_config_parser_prefix_t inner_prefix;
     size_t alias_table_offset;
 
-    for (field = fields; field->name; ++field) {
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
         if (ucs_config_is_table_field(field)) {
             /* Parse with sub-table prefix.
              * We start the leaf prefix and continue up the hierarchy.
@@ -1391,13 +1396,18 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
     void *opts;
 
     ucs_list_for_each(entry, &ucs_config_global_list, list) {
+        if (ucs_config_field_is_last(&entry->table[0])) {
+            /* don't print title for an empty configuration table */
+            continue;
+        }
+
         opts = ucs_malloc(entry->size, "tmp_opts");
         if (opts == NULL) {
             ucs_error("could not allocate configuration of size %zu", entry->size);
             continue;
         }
 
-        status = ucs_config_parser_fill_opts(opts, entry->fields, NULL,
+        status = ucs_config_parser_fill_opts(opts, entry->table, NULL,
                                              entry->prefix, 0);
         if (status != UCS_OK) {
             ucs_free(opts);
@@ -1405,10 +1415,10 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
         }
 
         snprintf(title, sizeof(title), "%s configuration", entry->name);
-        ucs_config_parser_print_opts(stream, title, opts, entry->fields,
+        ucs_config_parser_print_opts(stream, title, opts, entry->table,
                                      entry->prefix, flags);
 
-        ucs_config_parser_release_opts(opts, entry->fields);
+        ucs_config_parser_release_opts(opts, entry->table);
         ucs_free(opts);
     }
 }

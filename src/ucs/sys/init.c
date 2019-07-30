@@ -77,6 +77,7 @@ static void UCS_F_CTOR ucs_init()
     ucs_check_cpu_flags();
     ucs_log_early_init(); /* Must be called before all others */
     ucs_global_opts_init();
+    ucs_cpu_init();
     ucs_log_init();
 #if ENABLE_STATS
     ucs_stats_init();

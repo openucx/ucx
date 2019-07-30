@@ -91,11 +91,11 @@ UCS_STATIC_INIT {
         .ucp_free  = ucp_perf_cuda_free,
         .memset    = ucp_perf_cuda_memset
     };
-    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA]         = &cuda_allocator;
-    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] = &cuda_managed_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA]         = &cuda_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] = &cuda_managed_allocator;
 }
 UCS_STATIC_CLEANUP {
-    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA]         = NULL;
-    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] = NULL;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA]         = NULL;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] = NULL;
 
 }

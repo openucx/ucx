@@ -11,7 +11,7 @@
 #include <ucs/time/time.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/preprocessor.h>
-#include <pthread.h>
+#include <ucs/type/spinlock.h>
 
 
 typedef struct ucs_timer {
@@ -22,7 +22,7 @@ typedef struct ucs_timer {
 
 
 typedef struct ucs_timer_queue {
-    pthread_spinlock_t         lock;
+    ucs_spinlock_t             lock;
     ucs_time_t                 min_interval; /* Expiration of next timer */
     ucs_timer_t                *timers;      /* Array of timers */
     unsigned                   num_timers;   /* Number of timers */
@@ -102,7 +102,7 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
 #define ucs_timerq_for_each_expired(_timer, _timerq, _current_time, _code) \
     { \
         ucs_time_t __current_time = _current_time; \
-        pthread_spin_lock(&(_timerq)->lock); /* Grab lock */ \
+        ucs_spin_lock(&(_timerq)->lock); /* Grab lock */ \
         for (_timer = (_timerq)->timers; \
              _timer != (_timerq)->timers + (_timerq)->num_timers; \
              ++_timer) \
@@ -113,7 +113,7 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
                 _code; \
             } \
         } \
-        pthread_spin_unlock(&(_timerq)->lock); /* Release lock  */ \
+        ucs_spin_unlock(&(_timerq)->lock); /* Release lock  */ \
     }
 
 #endif

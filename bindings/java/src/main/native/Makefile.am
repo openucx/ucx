@@ -9,26 +9,26 @@ javadir=$(top_srcdir)/bindings/java
 MVNCMD=$(MVN) -B -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(java_build_dir)/.deps \
               -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
-BUILT_SOURCES = org_ucx_jucx_ucp_UcpConstants.h \
-                org_ucx_jucx_ucp_UcpContext.h \
-                org_ucx_jucx_ucp_UcpEndpoint.h \
-                org_ucx_jucx_ucp_UcpWorker.h \
-                org_ucx_jucx_ucs_UcsConstants.h \
-                org_ucx_jucx_ucp_UcpListener.h
+BUILT_SOURCES = org_openucx_jucx_ucp_UcpConstants.h \
+                org_openucx_jucx_ucp_UcpContext.h \
+                org_openucx_jucx_ucp_UcpEndpoint.h \
+                org_openucx_jucx_ucp_UcpWorker.h \
+                org_openucx_jucx_ucs_UcsConstants.h \
+                org_openucx_jucx_ucp_UcpListener.h
 
-DISTCLEANFILES = org_ucx_jucx_ucp_UcpConstants.h \
-                 org_ucx_jucx_ucp_UcpContext.h \
-                 org_ucx_jucx_ucp_UcpEndpoint.h \
-                 org_ucx_jucx_ucp_UcpWorker.h \
-                 org_ucx_jucx_ucs_UcsConstants.h \
-                 org_ucx_jucx_ucp_UcpListener.h
+DISTCLEANFILES = org_openucx_jucx_ucp_UcpConstants.h \
+                 org_openucx_jucx_ucp_UcpContext.h \
+                 org_openucx_jucx_ucp_UcpEndpoint.h \
+                 org_openucx_jucx_ucp_UcpWorker.h \
+                 org_openucx_jucx_ucs_UcsConstants.h \
+                 org_openucx_jucx_ucp_UcpListener.h
 
-org_ucx_jucx_ucp_UcpListener.h:
-org_ucx_jucx_ucp_UcpConstants.h:
-org_ucx_jucx_ucp_UcpEndpoint.h:
-org_ucx_jucx_ucp_UcpWorker.h:
-org_ucx_jucx_ucs_UcsConstants.h:
-org_ucx_jucx_ucp_UcpContext.h:
+org_openucx_jucx_ucp_UcpListener.h:
+org_openucx_jucx_ucp_UcpConstants.h:
+org_openucx_jucx_ucp_UcpEndpoint.h:
+org_openucx_jucx_ucp_UcpWorker.h:
+org_openucx_jucx_ucs_UcsConstants.h:
+org_openucx_jucx_ucp_UcpContext.h:
 	$(MVNCMD) compile native:javah
 
 lib_LTLIBRARIES = libjucx.la

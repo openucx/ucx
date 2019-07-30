@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucp_listener.h"
 
 #include <ucp/stream/stream.h>
@@ -324,8 +328,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                            port);
             if (status != UCS_OK) {
                 ucs_error("failed to set port parameter (%d) for creating %s iface",
-                          listener->wifaces[sockaddr_tls].attr.listen_port,
-                          resource->tl_rsc.tl_name);
+                          port, resource->tl_rsc.tl_name);
                 goto err_close_listener_wifaces;
             }
         }

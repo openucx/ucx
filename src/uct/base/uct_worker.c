@@ -6,6 +6,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct_worker.h"
 
 #include <ucs/arch/atomic.h>

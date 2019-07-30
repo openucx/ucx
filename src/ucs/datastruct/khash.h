@@ -257,9 +257,9 @@ static const double __ac_HASH_UPPER = 0.77;
 		if (h->n_buckets) {												\
 			khint_t k, i, last, mask, step = 0; \
 			mask = h->n_buckets - 1;									\
-                        \
-                        kassert(h->flags != NULL); \
-                        \
+			\
+			kassert(h->flags != NULL); \
+			\
 			k = __hash_func(key); i = k & mask;							\
 			last = i; \
 			while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
@@ -346,9 +346,9 @@ static const double __ac_HASH_UPPER = 0.77;
 				*ret = -1; return h->n_buckets;							\
 			}															\
 		} /* TODO: to implement automatically shrinking; resize() already support shrinking */ \
-                \
-                kassert(h->flags != NULL); \
-                \
+		\
+		kassert(h->flags != NULL); \
+		\
 		{																\
 			khint_t k, i, site, last, mask = h->n_buckets - 1, step = 0; \
 			x = site = h->n_buckets; k = __hash_func(key); i = k & mask; \

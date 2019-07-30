@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rma.h"
 #include "rma.inl"
 
@@ -123,7 +127,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.ep              = ep;
     req->send.buffer          = (void*)buffer;
     req->send.datatype        = ucp_dt_make_contig(1);
-    req->send.mem_type        = UCT_MD_MEM_TYPE_HOST;
+    req->send.mem_type        = UCS_MEMORY_TYPE_HOST;
     req->send.length          = length;
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
@@ -135,7 +139,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                                  ucp_rma_request_bcopy_completion :
                                  ucp_rma_request_zcopy_completion,
                                  UCP_REQUEST_SEND_PROTO_RMA);
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
     if (length < zcopy_thresh) {

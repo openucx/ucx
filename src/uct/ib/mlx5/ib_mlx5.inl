@@ -47,7 +47,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 {
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     wq->hw_ci = hw_ci;
 #endif
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
@@ -59,7 +59,7 @@ static inline void
 uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
 {
 
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     uint16_t wqe_s, wqe_e;
     uint16_t hw_ci, sw_pi;
     uint16_t wqe_cnt;
@@ -502,6 +502,36 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
     attr->ibv.res_domain      = qp->verbs.rd->ibv_domain;
 #endif
+
+    return UCS_OK;
+}
+
+static void UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_destroy_qp(uct_ib_mlx5_qp_t *qp)
+{
+    switch (qp->type) {
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
+        uct_ib_destroy_qp(qp->verbs.qp);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
+        uct_ib_mlx5_devx_destroy_qp(qp);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        break;
+    }
+}
+
+static ucs_status_t UCS_F_MAYBE_UNUSED
+uct_ib_mlx5_modify_qp(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+{
+    switch (qp->type) {
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
+        return uct_ib_modify_qp(qp->verbs.qp, state);
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
+        return uct_ib_mlx5_devx_modify_qp(qp, state);
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        break;
+    }
 
     return UCS_OK;
 }

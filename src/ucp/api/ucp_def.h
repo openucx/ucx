@@ -296,7 +296,7 @@ typedef void (*ucp_request_cleanup_callback_t)(void *request);
  *
  * @param [in]  request   The completed send request.
  * @param [in]  status    Completion status. If the send operation was completed
- *                        successfully UCX_OK is returned. If send operation was
+ *                        successfully UCS_OK is returned. If send operation was
  *                        canceled UCS_ERR_CANCELED is returned.
  *                        Otherwise, an @ref ucs_status_t "error status" is
  *                        returned.
@@ -402,7 +402,7 @@ typedef struct ucp_listener_conn_handler {
  *
  * @param [in]  request   The completed receive request.
  * @param [in]  status    Completion status. If the send operation was completed
- *                        successfully UCX_OK is returned. Otherwise,
+ *                        successfully UCS_OK is returned. Otherwise,
  *                        an @ref ucs_status_t "error status" is returned.
  * @param [in]  length    The size of the received data in bytes, always
  *                        boundary of base datatype size. The value is valid
@@ -421,7 +421,7 @@ typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
  *
  * @param [in]  request   The completed receive request.
  * @param [in]  status    Completion status. If the send operation was completed
- *                        successfully UCX_OK is returned. If send operation was
+ *                        successfully UCS_OK is returned. If send operation was
  *                        canceled UCS_ERR_CANCELED is returned. If the data can
  *                        not fit into the receive buffer the
  *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
@@ -469,6 +469,41 @@ typedef enum ucp_wakeup_event_types {
                                               for new events, rather than existing
                                               ones. */
 } ucp_wakeup_event_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming Active Message.
+ *
+ * When the callback is called, @a flags indicates how @a data should be handled.
+ *
+ * @param [in]  arg      User-defined argument.
+ * @param [in]  data     Points to the received data. This data may
+ *                       persist after the callback returns and needs
+ *                       to be freed with @ref ucp_am_data_release.
+ * @param [in]  length   Length of data.
+ * @param [in]  reply_ep If the Active Message is sent with the
+ *                       UCP_AM_SEND_REPLY flag, the sending ep
+ *                       will be passed in. If not, NULL will be passed.
+ * @param [in]  flags    If this flag is set to UCP_CB_PARAM_FLAG_DATA,
+ *                       the callback can return UCS_INPROGRESS and
+ *                       data will persist after the callback returns.
+ *
+ * @return UCS_OK        @a data will not persist after the callback returns.
+ *
+ * @return UCS_INPROGRESS Can only be returned if flags is set to
+ *                        UCP_CB_PARAM_FLAG_DATA. If UCP_INPROGRESS
+ *                        is returned, data will persist after the
+ *                        callback has returned. To free the memory,
+ *                        a pointer to the data must be passed into
+ *                        @ref ucp_am_data_release.
+ *
+ * @note This callback should be set and released
+ *       by @ref ucp_worker_set_am_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
+                                          ucp_ep_h reply_ep, unsigned flags);
 
 
 /**

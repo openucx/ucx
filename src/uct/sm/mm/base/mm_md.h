@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -86,28 +86,23 @@ typedef struct uct_mm_mapper_ops {
     \
     uct_md_component_t _var; \
     \
-    static ucs_status_t _var##_query_md_resources(uct_md_resource_desc_t **resources_p, \
-                                                   unsigned *num_resources_p) { \
+    static ucs_status_t _var##_query_md_resources(uct_component_t *component, \
+                                                  uct_md_resource_desc_t **resources_p, \
+                                                  unsigned *num_resources_p) { \
         if ((_ops)->query() == UCS_OK) { \
-            return uct_single_md_resource(&_var, resources_p, num_resources_p); \
+            return uct_md_query_single_md_resource(component, resources_p, \
+                                                   num_resources_p); \
         } else { \
-            *resources_p = NULL; \
-            *num_resources_p = 0; \
-            return UCS_OK; \
+            return uct_md_query_empty_md_resource(resources_p, num_resources_p); \
         } \
     } \
     \
-    static ucs_status_t _var##_md_open(const char *md_name, const uct_md_config_t *md_config, \
-                                       uct_md_h *md_p) \
-    { \
-        return uct_mm_md_open(md_name, md_config, md_p, &_var); \
-    } \
-    \
     UCT_MD_COMPONENT_DEFINE(_var, _name, \
-                            _var##_query_md_resources, _var##_md_open, _ops, \
+                            _var##_query_md_resources, uct_mm_md_open, _ops, \
                             uct_mm_rkey_unpack, \
-                            uct_mm_rkey_release, _cfg_prefix, _prefix##_md_config_table, \
-                            _prefix##_md_config_t)
+                            uct_mm_rkey_release, _cfg_prefix, \
+                            _prefix##_md_config_table, _prefix##_md_config_t, \
+                            ucs_empty_function_return_unsupported)
 
 
 /**
@@ -142,6 +137,10 @@ typedef struct uct_mm_md {
 } uct_mm_md_t;
 
 
+ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p);
+
 ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               unsigned flags, const char *alloc_name,
                               uct_mem_h *memh_p);
@@ -162,8 +161,8 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
 
 ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle);
 
-ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_config,
-                            uct_md_h *md_p, uct_md_component_t *_var);
+ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
+                            const uct_md_config_t *config, uct_md_h *md_p);
 
 int uct_mm_is_hugetlb(uct_md_h md, uct_mem_h memh);
 

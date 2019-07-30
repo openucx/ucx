@@ -1,10 +1,14 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "ib_md.h"
 #include "ib_device.h"
@@ -196,14 +200,14 @@ static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
 UCS_LIST_HEAD(uct_ib_md_ops_list);
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
-                                          const char *file, int mem_type,
-                                          const char *name)
+                                          const char *file,
+                                          ucs_memory_type_t mem_type)
 {
     if (!access(file, F_OK))
         md_attr->cap.reg_mem_types |= UCS_BIT(mem_type);
 
     ucs_debug("%s: %s GPUDirect RDMA is %s",
-              uct_ib_device_name(&md->dev), name,
+              uct_ib_device_name(&md->dev), ucs_memory_type_names[mem_type],
               md_attr->cap.reg_mem_types & UCS_BIT(mem_type) ?
               "enabled" : "disabled");
 }
@@ -218,21 +222,21 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
-    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     md_attr->cap.detect_mem_types = 0;
 
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
         uct_ib_check_gpudirect_driver(md, md_attr,
                                       "/sys/kernel/mm/memory_peers/nv_mem/version",
-                                      UCT_MD_MEM_TYPE_CUDA, "CUDA");
+                                      UCS_MEMORY_TYPE_CUDA);
 
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, md_attr, "/dev/kfd",
-                                      UCT_MD_MEM_TYPE_ROCM, "ROCM");
+                                      UCS_MEMORY_TYPE_ROCM);
 
-        if (!(md_attr->cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) &&
+        if (!(md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
             md->config.enable_gpudirect_rdma == UCS_YES) {
                 ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure"
                           " nv_peer_mem or amdgpu plugin installed correctly.",
@@ -739,7 +743,7 @@ static ucs_status_t uct_ib_md_odp_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     }
 
     /* ODP supports only host memory */
-    md_attr->cap.reg_mem_types &= UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.reg_mem_types &= UCS_BIT(UCS_MEMORY_TYPE_HOST);
     return UCS_OK;
 }
 
@@ -784,7 +788,8 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
-static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
+static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
+                                              uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p)
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
@@ -870,7 +875,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             rcache_params.alignment          = md_config->rcache.alignment;
             rcache_params.max_alignment      = ucs_get_page_size();
             rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
-            if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
+            if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
                 rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
             }
             rcache_params.ucm_event_priority = md_config->rcache.event_prio;
@@ -1105,8 +1110,8 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
     return uct_ib_md_read_pci_bw(ib_device);
 }
 
-ucs_status_t
-uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
+                            const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
@@ -1248,7 +1253,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     }
 
     md->dev.max_zcopy_log_sge = INT_MAX;
-    if (md_attr.cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
+    if (md_attr.cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
         md->dev.max_zcopy_log_sge = 1;
     }
 
@@ -1359,4 +1364,5 @@ UCT_MD_COMPONENT_DEFINE(uct_ib_mdc, UCT_IB_MD_PREFIX,
                         uct_ib_query_md_resources, uct_ib_md_open, NULL,
                         uct_ib_rkey_unpack,
                         (void*)ucs_empty_function_return_success /* release */,
-                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t);
+                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t,
+                        ucs_empty_function_return_unsupported);

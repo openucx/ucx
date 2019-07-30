@@ -83,7 +83,7 @@ struct uct_md_ops {
                                            uct_sockaddr_accessibility_t mode);
 
     ucs_status_t (*detect_memory_type)(uct_md_h md, void *addr, size_t length,
-                                       uct_memory_type_t *mem_type_p);
+                                       ucs_memory_type_t *mem_type_p);
 
     int          (*is_hugetlb)(uct_md_h md, uct_mem_h memh);
 };
@@ -101,14 +101,27 @@ struct uct_md {
 static UCS_F_ALWAYS_INLINE void*
 uct_md_fill_md_name(uct_md_h md, void *buffer)
 {
+#if ENABLE_DEBUG_DATA
     memcpy(buffer, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
     return (char*)buffer + UCT_MD_COMPONENT_NAME_MAX;
+#else
+    return buffer;
+#endif
 }
 
 
-ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
-                                    uct_md_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
+/*
+ * Base implementation of query_md_resources(), which returns a single md
+ * resource whose name is identical to component name.
+ */
+ucs_status_t
+uct_md_query_single_md_resource(uct_component_t *component,
+                                uct_md_resource_desc_t **resources_p,
+                                unsigned *num_resources_p);
+
+ucs_status_t
+uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
+                               unsigned *num_resources_p);
 
 /**
  * @brief Dummy function

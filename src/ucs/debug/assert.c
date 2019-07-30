@@ -10,6 +10,7 @@
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/string.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,17 +20,13 @@ void ucs_fatal_error_message(const char *file, unsigned line,
                              const char *function, char *message_buf)
 {
     char *message_line, *save_ptr = NULL;
-    const char *short_file;
 
     ucs_log_flush();
-
-    short_file = strrchr(file, '/');
-    short_file = (short_file == NULL) ? file : short_file + 1;
 
     message_line = (message_buf == NULL) ? NULL :
                    strtok_r(message_buf, "\n", &save_ptr);
     while (message_line != NULL) {
-        ucs_log_fatal_error("%13s:%-4u %s", short_file, line, message_line);
+        ucs_log_fatal_error("%13s:%-4u %s", ucs_basename(file), line, message_line);
         message_line = strtok_r(NULL, "\n", &save_ptr);
     }
 

@@ -47,7 +47,7 @@ void test_uct_ib::send_recv_short() {
     recv_desc_t *recv_buffer;
     ucs_status_t status;
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    check_caps_skip(UCT_IFACE_FLAG_AM_SHORT);
 
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
     recv_buffer->length = 0; /* Initialize length to 0 */
@@ -81,11 +81,11 @@ public:
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
 
-        ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(iface));
+        ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
-        uct_ib_address_pack(iface, &gid_in, lid_in, ib_addr);
+        uct_ib_iface_address_pack(iface, &gid_in, lid_in, ib_addr);
 
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
@@ -240,6 +240,7 @@ public:
         uint8_t gid_index;
 
         UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_ib_md_close, uct_ib_md_open,
+                               &uct_ib_mdc,
                                ibv_get_device_name(m_ibctx->device), m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
@@ -388,9 +389,9 @@ public:
         test_uct_ib::init();
 
         try {
-            check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
-                       UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                       UCT_IFACE_FLAG_EVENT_RECV);
+            check_caps_skip(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
+                            UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                            UCT_IFACE_FLAG_EVENT_RECV);
         } catch (...) {
             test_uct_ib::cleanup();
             throw;

@@ -20,6 +20,9 @@
 #include <string.h>
 
 
+#define UCT_DC_MLX5_MAX_TX_CQ_LEN (16 * UCS_MBYTE)
+
+
 static const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
@@ -106,8 +109,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     if_addr = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
-                                      ib_addr, iface->super.super.super.path_bits[0],
-                                      &av, &grh_av, &is_global);
+                                      ib_addr, &av, &grh_av, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -214,7 +216,9 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_trace_poll("dc iface %p tx_cqe: dci[%d] qpn 0x%x txqp %p hw_ci %d",
                    iface, dci, qp_num, txqp, hw_ci);
 
-    uct_rc_mlx5_common_update_tx_res(&iface->super.super, txwq, txqp, hw_ci);
+    uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+
     uct_dc_mlx5_iface_dci_put(iface, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 
@@ -341,7 +345,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     }
 
     dci->ep    = NULL;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     dci->flags = 0;
 #endif
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
@@ -470,9 +474,10 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     attr.qp_state                  = IBV_QPS_RTR;
     attr.path_mtu                  = iface->super.super.config.path_mtu;
     attr.min_rnr_timer             = iface->super.super.config.min_rnr_timer;
+    attr.ah_attr.is_global         = iface->super.super.super.is_global_addr;
     attr.ah_attr.grh.hop_limit     = iface->super.super.super.config.hop_limit;
     attr.ah_attr.grh.traffic_class = iface->super.super.super.config.traffic_class;
-    attr.ah_attr.grh.sgid_index    = uct_ib_iface_md(&iface->super.super.super)->config.gid_index;
+    attr.ah_attr.grh.sgid_index    = iface->super.super.super.config.gid_index;
     attr.ah_attr.port_num          = iface->super.super.super.config.port_num;
 
     ret = ibv_modify_qp(iface->rx_dct, &attr, IBV_QP_STATE |
@@ -1070,16 +1075,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_status_t status;
     ucs_trace_func("");
 
-    init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_DC;
-    init_attr.qp_type        = UCT_IB_QPT_DCI;
-    init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.fc_req_size    = sizeof(uct_dc_fc_request_t);
-    init_attr.rx_hdr_len     = sizeof(uct_rc_mlx5_hdr_t);
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_dc_mlx5_iface_ops,
-                              md, worker, params, &config->super,
-                              &config->rc_mlx5_common, &init_attr);
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
@@ -1091,6 +1086,28 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                   UCT_DC_MLX5_IFACE_MAX_DCIS, config->ndci);
         return UCS_ERR_INVALID_PARAM;
     }
+
+    init_attr.tm_cap_bit  = IBV_EXP_TM_CAP_DC;
+    init_attr.qp_type     = UCT_IB_QPT_DCI;
+    init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.fc_req_size = sizeof(uct_dc_fc_request_t);
+    init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
+
+    /* driver will round up to pow of 2 if needed */
+    init_attr.tx_cq_len   = config->super.super.tx.queue_len *
+                            UCT_IB_MLX5_MAX_BB * config->ndci;
+    /* TODO check caps instead */
+    if (ucs_roundup_pow2(init_attr.tx_cq_len) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
+        ucs_error("Can't allocate TX resources, try to decrese dcis number (%d)"
+                  " or tx qp length (%d)",
+                  config->ndci, config->super.super.tx.queue_len);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_dc_mlx5_iface_ops,
+                              md, worker, params, &config->super,
+                              &config->rc_mlx5_common, &init_attr);
 
     uct_dc_mlx5_iface_init_version(self, md);
 
@@ -1117,9 +1134,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         goto err_destroy_dct;
     }
 
-    ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
-              uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              UCT_RC_MLX5_TM_ENABLED(&self->super) ?
+    ucs_debug("dc iface %p: using '%s' policy with %d dcis and %d cqes, dct 0x%x",
+              self, uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
+              init_attr.tx_cq_len, UCT_RC_MLX5_TM_ENABLED(&self->super) ?
               0 : uct_dc_mlx5_get_dct_num(self));
 
     /* Create fake endpoint which will be used for sending FC grants */

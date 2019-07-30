@@ -87,6 +87,20 @@ end:
     return status;
 }
 
+ucs_status_t
+uct_rocm_base_query_md_resources(uct_component_h component,
+                                 uct_md_resource_desc_t **resources_p,
+                                 unsigned *num_resources_p)
+{
+    if (uct_rocm_base_init() != HSA_STATUS_SUCCESS) {
+        ucs_debug("could not initialize ROCm support");
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    return uct_md_query_single_md_resource(component, resources_p,
+                                           num_resources_p);
+}
+
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
 {
     assert(dev_num < uct_rocm_base_agents.num);
@@ -144,13 +158,13 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
 }
 
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, void *addr, size_t length,
-                                              uct_memory_type_t *mem_type_p)
+                                              ucs_memory_type_t *mem_type_p)
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
 
     if (addr == NULL) {
-        *mem_type_p = UCT_MD_MEM_TYPE_HOST;
+        *mem_type_p = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
@@ -163,7 +177,7 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, void *addr, size_t le
         status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
         if ((status == HSA_STATUS_SUCCESS) &&
             (dev_type == HSA_DEVICE_TYPE_GPU)) {
-            *mem_type_p = UCT_MD_MEM_TYPE_ROCM;
+            *mem_type_p = UCS_MEMORY_TYPE_ROCM;
             return UCS_OK;
         }
     }

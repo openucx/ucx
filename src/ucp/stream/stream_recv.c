@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
@@ -199,7 +203,7 @@ ucp_stream_process_rdesc_inplace(ucp_recv_desc_t *rdesc, ucp_datatype_t dt,
 {
     ucs_status_t status;
     ssize_t unpacked;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
 
 
     ucp_memory_type_detect_mds(ucp_ep_from_ext_proto(ep_ext)->worker->context, buffer,
@@ -235,7 +239,7 @@ ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                              uint32_t request_flags)
 {
     req->flags              = UCP_REQUEST_FLAG_CALLBACK | request_flags;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     req->flags             |= UCP_REQUEST_FLAG_STREAM_RECV;
     req->status             = UCS_OK; /* for ucp_request_recv_data_unpack() */
 #endif

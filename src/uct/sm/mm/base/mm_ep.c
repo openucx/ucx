@@ -5,6 +5,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "mm_ep.h"
 
 #include <ucs/arch/atomic.h>

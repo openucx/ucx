@@ -568,7 +568,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     rc_addr->atomic_mr_id = uct_ib_mlx5_iface_get_atomic_mr_id(&iface->super.super);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.verbs.qp->qp_num);
+        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
     }
 
     return UCS_OK;
@@ -613,6 +613,23 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
                           valid_length, buffer, max);
 }
 
+static ucs_status_t UCS_F_ALWAYS_INLINE
+uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
+                          uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
+                          struct ibv_ah_attr *ah_attr)
+{
+    switch (qp->type) {
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
+        return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
+        return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num, ah_attr);
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        break;
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,
                                           const uct_ep_addr_t *ep_addr)
@@ -624,16 +641,15 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     struct ibv_ah_attr ah_attr;
     ucs_status_t status;
 
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
-                                        ep->super.path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr, &ah_attr);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
-        status = uct_rc_iface_qp_connect(&iface->super, ep->tm_qp.verbs.qp,
-                                         uct_ib_unpack_uint24(rc_addr->qp_num),
-                                         &ah_attr);
+        status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tm_qp,
+                                           uct_ib_unpack_uint24(rc_addr->qp_num),
+                                           &ah_attr);
         if (status != UCS_OK) {
             return status;
         }
@@ -645,8 +661,8 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
-    status = uct_rc_iface_qp_connect(&iface->super, ep->tx.wq.super.verbs.qp,
-                                     qp_num, &ah_attr);
+    status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tx.wq.super,
+                                       qp_num, &ah_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -841,9 +857,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->tx.wq.super.qp_num);
 
-    status = uct_rc_iface_qp_init(&iface->super, self->tx.wq.super.verbs.qp);
-    if (status != UCS_OK) {
-        goto err;
+    if (self->tx.wq.super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
+        status = uct_rc_iface_qp_init(&iface->super, self->tx.wq.super.verbs.qp);
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     uct_rc_iface_add_qp(&iface->super, &self->super, self->tx.wq.super.qp_num);
@@ -854,13 +872,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         memset(&attr, 0, sizeof(attr));
         uct_rc_iface_fill_attr(&iface->super, &attr, 0);
         uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
-        status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, &self->tx.wq, 
-                                             &attr);
+        status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
             goto err;
         }
 
-        uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.verbs.qp->qp_num);
+        uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
@@ -868,11 +885,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err:
-    uct_ib_destroy_qp(self->tx.wq.super.verbs.qp);
+    uct_ib_mlx5_destroy_qp(&self->tx.wq.super);
     return status;
 }
 
-static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
+static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, uct_ib_mlx5_qp_t *qp)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
@@ -880,7 +897,7 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
     /* Make the HW generate CQEs for all in-progress SRQ receives from the QP,
      * so we clean them all before ibv_modify_qp() can see them.
      */
-#if HAVE_DECL_IBV_CMD_MODIFY_QP
+#if HAVE_DECL_IBV_CMD_MODIFY_QP && !HAVE_DEVX
     struct ibv_qp_attr qp_attr;
     struct ibv_modify_qp cmd;
     int ret;
@@ -890,12 +907,12 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
      */
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = IBV_QPS_RESET;
-    ret = ibv_cmd_modify_qp(qp, &qp_attr, IBV_QP_STATE, &cmd, sizeof(cmd));
+    ret = ibv_cmd_modify_qp(qp->verbs.qp, &qp_attr, IBV_QP_STATE, &cmd, sizeof(cmd));
     if (ret) {
         ucs_warn("modify qp 0x%x to RESET failed: %m", qp->qp_num);
     }
 #else
-    (void)uct_ib_modify_qp(qp, IBV_QPS_ERR);
+    (void)uct_ib_mlx5_modify_qp(qp, IBV_QPS_ERR);
 #endif
 
     iface->super.rx.srq.available += uct_rc_mlx5_iface_commom_clean(
@@ -906,7 +923,7 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
      * completions for this QP (both send and receive) during ibv_destroy_qp().
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
-    (void)uct_ib_modify_qp(qp, IBV_QPS_RESET);
+    (void)uct_ib_mlx5_modify_qp(qp, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(iface, &iface->super.super);
 }
 
@@ -916,13 +933,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                                                        uct_rc_mlx5_iface_common_t);
 
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
-    uct_rc_mlx5_ep_clean_qp(self, self->tx.wq.super.verbs.qp);
+    uct_rc_mlx5_ep_clean_qp(self, &self->tx.wq.super);
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        uct_rc_mlx5_ep_clean_qp(self, self->tm_qp.verbs.qp);
+        uct_rc_mlx5_ep_clean_qp(self, &self->tm_qp);
         uct_ib_mlx5_iface_put_res_domain(&self->tm_qp);
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
-        uct_ib_destroy_qp(self->tm_qp.verbs.qp);
+        uct_ib_mlx5_destroy_qp(&self->tm_qp);
     }
 #endif
 
@@ -936,7 +953,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_srq_cleanup(&iface->rx.srq, iface->super.rx.srq.srq);
 
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
-    uct_ib_destroy_qp(self->tx.wq.super.verbs.qp);
+    uct_ib_mlx5_destroy_qp(&self->tx.wq.super);
 }
 
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,

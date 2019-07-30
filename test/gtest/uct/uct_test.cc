@@ -86,14 +86,6 @@ resource_speed::resource_speed(uct_component_h component, const uct_worker_h& wo
     uct_config_release(iface_config);
 }
 
-std::string const uct_test_base::mem_type_names[] = {
-    "host",
-    "cuda",
-    "cuda-managed",
-    "rocm",
-    "rocm-managed"
-};
-
 std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
     static std::vector<uct_test::md_resource> all_md_resources;
@@ -362,16 +354,28 @@ bool uct_test::is_caps_supported(uint64_t required_flags) {
     return ret;
 }
 
-void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
+bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
-        (*iter)->check_caps(required_flags, invalid_flags);
+        if (!(*iter)->check_caps(required_flags, invalid_flags)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void uct_test::check_caps_skip(uint64_t required_flags, uint64_t invalid_flags) {
+    if (!check_caps(required_flags, invalid_flags)) {
+        UCS_TEST_SKIP_R("unsupported");
     }
 }
 
-void uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
+bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
     FOR_EACH_ENTITY(iter) {
-        (*iter)->check_atomics(required_ops, mode);
+        if (!(*iter)->check_atomics(required_ops, mode)) {
+            return false;
+        }
     }
+    return true;
 }
 
 void uct_test::modify_config(const std::string& name, const std::string& value,
@@ -471,6 +475,10 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
     entity *new_ent = new entity(*GetParam(), m_iface_config, &params,
                                  m_md_config);
     return new_ent;
+}
+
+uct_test::entity* uct_test::create_entity() {
+    return new entity(*GetParam(), m_md_config);
 }
 
 const uct_test::entity& uct_test::ent(unsigned index) const {
@@ -610,8 +618,32 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     uct_iface_progress_enable(m_iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     m_iface_params = *params;
+
+    memset(&m_cm_attr, 0, sizeof(m_cm_attr));
 }
 
+uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+    memset(&m_iface_attr,   0, sizeof(m_iface_attr));
+    memset(&m_iface_params, 0, sizeof(m_iface_params));
+
+    UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
+                           uct_worker_create, &m_async.m_async,
+                           UCS_THREAD_MODE_SINGLE);
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
+                           uct_md_open, resource.component,
+                           resource.md_name.c_str(), md_config);
+
+    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    ASSERT_UCS_OK(status);
+
+    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_cm_h, m_cm, uct_cm_close,
+                                        uct_cm_open, resource.component, m_worker);
+
+    m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(m_cm, &m_cm_attr);
+    ASSERT_UCS_OK(status);
+}
 
 void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const {
 #if HAVE_CUDA
@@ -620,13 +652,13 @@ void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem
 
     mem->length     = length;
     mem->md         = m_md;
-    mem->mem_type   = UCT_MD_MEM_TYPE_CUDA;
+    mem->mem_type   = UCS_MEMORY_TYPE_CUDA;
     mem->memh       = UCT_MEM_HANDLE_NULL;
 
     cerr = cudaMalloc(&mem->address, mem->length);
     EXPECT_TRUE(cerr == cudaSuccess);
 
-    if (md_attr().cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_CUDA)) {
+    if (md_attr().cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA)) {
         status = uct_md_mem_reg(m_md, mem->address, mem->length,
                                 UCT_MD_MEM_ACCESS_ALL, &mem->memh);
         ASSERT_UCS_OK(status);
@@ -643,14 +675,15 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
     void *rkey_buffer;
 
     if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
             status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
                                          alloc_name, mem);
             ASSERT_UCS_OK(status);
-        } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+        } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
             cuda_mem_alloc(length, mem);
         } else {
-            UCS_TEST_SKIP_R("cannot allocate " + mem_type_names[mem_type] +
+            UCS_TEST_SKIP_R("cannot allocate " +
+                            std::string(ucs_memory_type_names[mem_type]) +
                             " memory");
         }
 
@@ -703,7 +736,7 @@ void uct_test::entity::cuda_mem_free(const uct_allocated_memory_t *mem) const {
 
 void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
                                 const uct_rkey_bundle_t& rkey,
-                                const uct_memory_type_t mem_type) const {
+                                const ucs_memory_type_t mem_type) const {
     ucs_status_t status;
 
     if (rkey.rkey != UCT_INVALID_RKEY) {
@@ -711,11 +744,11 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
         ASSERT_UCS_OK(status);
     }
 
-    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
         if (mem->method != UCT_ALLOC_METHOD_LAST) {
             uct_iface_mem_free(mem);
         }
-    } else if(mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    } else if(mem_type == UCS_MEMORY_TYPE_CUDA) {
         cuda_mem_free(mem);
     }
 }
@@ -731,19 +764,15 @@ bool uct_test::entity::is_caps_supported(uint64_t required_flags) {
     return ucs_test_all_flags(iface_flags, required_flags);
 }
 
-void uct_test::entity::check_caps(uint64_t required_flags,
+bool uct_test::entity::check_caps(uint64_t required_flags,
                                   uint64_t invalid_flags)
 {
     uint64_t iface_flags = iface_attr().cap.flags;
-    if (!ucs_test_all_flags(iface_flags, required_flags)) {
-        UCS_TEST_SKIP_R("unsupported");
-    }
-    if (iface_flags & invalid_flags) {
-        UCS_TEST_SKIP_R("unsupported");
-    }
+    return (ucs_test_all_flags(iface_flags, required_flags) &&
+            !(iface_flags & invalid_flags));
 }
 
-void uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
+bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
 {
     uint64_t amo;
 
@@ -765,9 +794,7 @@ void uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
         break;
     }
 
-    if (!ucs_test_all_flags(amo, required_ops)) {
-        UCS_TEST_SKIP_R("unsupported");
-    }
+    return ucs_test_all_flags(amo, required_ops);
 }
 
 uct_md_h uct_test::entity::md() const {
@@ -780,6 +807,14 @@ const uct_md_attr& uct_test::entity::md_attr() const {
 
 uct_worker_h uct_test::entity::worker() const {
     return m_worker;
+}
+
+uct_cm_h uct_test::entity::cm() const {
+    return m_cm;
+}
+
+const uct_cm_attr_t& uct_test::entity::cm_attr() const {
+    return m_cm_attr;
 }
 
 uct_iface_h uct_test::entity::iface() const {
@@ -1002,6 +1037,14 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     }
 }
 
+void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
+                              const uct_listener_params_t &params)
+{
+    UCS_TEST_CREATE_HANDLE(uct_listener_h, m_listener, uct_listener_destroy,
+                           uct_listener_create, m_cm, &listen_addr.get_sock_addr(),
+                           listen_addr.get_addr_size(), &params);
+}
+
 void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
@@ -1017,7 +1060,7 @@ std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resourc
 
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
                                        const entity& entity, size_t offset,
-                                       uct_memory_type_t mem_type) :
+                                       ucs_memory_type_t mem_type) :
     m_entity(entity)
 {
     if (size > 0)  {
@@ -1031,7 +1074,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_mem.address = NULL;
         m_mem.md      = NULL;
         m_mem.memh    = UCT_MEM_HANDLE_NULL;
-        m_mem.mem_type= UCT_MD_MEM_TYPE_HOST;
+        m_mem.mem_type= UCS_MEMORY_TYPE_HOST;
         m_mem.length  = 0;
         m_buf         = NULL;
         m_end         = NULL;
@@ -1052,10 +1095,10 @@ uct_test::mapped_buffer::~mapped_buffer() {
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
     switch(m_mem.mem_type) {
-    case UCT_MD_MEM_TYPE_HOST:
+    case UCS_MEMORY_TYPE_HOST:
         pattern_fill(m_buf, (char*)m_end - (char*)m_buf, seed);
         break;
-    case UCT_MD_MEM_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA:
         pattern_fill_cuda(m_buf, (char*)m_end - (char*)m_buf, seed);
         break;
     default:
@@ -1098,10 +1141,10 @@ void uct_test::mapped_buffer::pattern_fill_cuda(void *start, size_t length, uint
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
     switch(m_mem.mem_type) {
-    case UCT_MD_MEM_TYPE_HOST:
+    case UCS_MEMORY_TYPE_HOST:
         pattern_check(ptr(), length(), seed);
         break;
-    case UCT_MD_MEM_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA:
         pattern_check_cuda(ptr(), length(), seed);
         break;
     default:

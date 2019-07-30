@@ -7,7 +7,7 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>org.ucx</groupId>
+  <groupId>org.openucx</groupId>
   <artifactId>jucx</artifactId>
   <version>@VERSION@</version>
   <packaging>jar</packaging>
@@ -210,14 +210,14 @@
         <configuration>
           <javahOutputDirectory>${native.dir}</javahOutputDirectory>
           <javahClassNames>
-            <javahClassName>org.ucx.jucx.ucp.UcpConstants</javahClassName>
-            <javahClassName>org.ucx.jucx.ucp.UcpContext</javahClassName>
-            <javahClassName>org.ucx.jucx.ucp.UcpEndpoint</javahClassName>
-            <javahClassName>org.ucx.jucx.ucp.UcpListener</javahClassName>
-            <javahClassName>org.ucx.jucx.ucp.UcpMemory</javahClassName>
-            <javahClassName>org.ucx.jucx.ucp.UcpRemoteKey</javahClassName>
-            <javahClassName>org.ucx.jucx.ucp.UcpWorker</javahClassName>
-            <javahClassName>org.ucx.jucx.ucs.UcsConstants</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpConstants</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpContext</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpEndpoint</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpListener</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpMemory</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpRemoteKey</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpWorker</javahClassName>
+            <javahClassName>org.openucx.jucx.ucs.UcsConstants</javahClassName>
           </javahClassNames>
           <sources>
             <source>

@@ -566,7 +566,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
 
     /* Server and client register an event handler for incoming messages */
     status = ucs_async_set_event_handler(self->super.worker->async->mode,
-                                         self->event_ch->fd, POLLIN,
+                                         self->event_ch->fd, UCS_EVENT_SET_EVREAD,
                                          uct_rdmacm_iface_event_handler,
                                          self, self->super.worker->async);
     if (status != UCS_OK) {

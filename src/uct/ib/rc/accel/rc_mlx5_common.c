@@ -8,7 +8,9 @@
 #include "rc_mlx5.inl"
 
 #include <uct/api/uct.h>
+#include <ucs/arch/bitops.h>
 #include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"", "", NULL,
@@ -39,6 +41,12 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"TM_MAX_BCOPY", NULL, "",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
    UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"EXP_BACKOFF", "0",
+   "Exponential Backoff Timeout Multiplier. ACK timeout will be multiplied \n"
+   "by 2^EXP_BACKOFF every consecutive retry.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
+   UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -153,15 +161,55 @@ static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
 };
 #  endif
 
-static struct ibv_qp *
-uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+
+static ucs_status_t UCS_F_MAYBE_UNUSED
+uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
-#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
-    iface->tm.cmd_wq.super.super.verbs.qp = NULL;
-    iface->tm.cmd_wq.super.super.verbs.rd = NULL;
-    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_VERBS;
-    return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
-#else
+    uct_ib_mlx5_md_t *md  = ucs_derived_of(iface->super.super.super.md,
+                                           uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev  = &md->super.dev;
+    struct ibv_ah_attr ah_attr = {};
+    uct_ib_qp_attr_t attr = {};
+    ucs_status_t status;
+
+    ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_QP_TYPE_LAST);
+
+    attr.cap.max_send_wr  = iface->tm.cmd_qp_len;
+    attr.cap.max_send_sge = 1;
+    attr.ibv.pd           = md->super.pd;
+    attr.ibv.send_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
+    attr.ibv.recv_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
+    attr.srq              = iface->super.rx.srq.srq;
+    attr.port             = dev->first_port;
+    status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
+                                        &iface->tm.cmd_wq.super.super,
+                                        &iface->tm.cmd_wq.super,
+                                        &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ah_attr.is_global     = 1;
+    ah_attr.grh.dgid      = iface->super.super.gid;
+    ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.port)->lid;
+    ah_attr.port_num      = dev->first_port;
+    status = uct_rc_mlx5_iface_common_devx_connect_qp(
+            iface, &iface->tm.cmd_wq.super.super,
+            iface->tm.cmd_wq.super.super.qp_num, &ah_attr);
+    if (status != UCS_OK) {
+        goto err_destroy_qp;
+    }
+
+    return UCS_OK;
+
+err_destroy_qp:
+    uct_ib_mlx5_devx_destroy_qp(&iface->tm.cmd_wq.super.super);
+    return status;
+}
+
+static struct ibv_qp * UCS_F_MAYBE_UNUSED
+uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+{
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     struct ibv_qp_init_attr qp_init_attr = {};
     struct ibv_qp_attr qp_attr = {};
@@ -188,7 +236,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->super.rx.srq.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = ibv_create_qp(iface->tm.cmd_wq.super.super.verbs.rd->pd, &qp_init_attr);
+    qp = ibv_create_qp(md->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
         goto err_rd;
@@ -241,7 +289,31 @@ err_rd:
     uct_ib_mlx5_iface_put_res_domain(&iface->tm.cmd_wq.super.super);
 err:
     return NULL;
+}
+
+static ucs_status_t
+uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+{
+    struct ibv_qp *qp;
+#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
+    iface->tm.cmd_wq.super.super.verbs.qp = NULL;
+    iface->tm.cmd_wq.super.super.verbs.rd = NULL;
+    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_QP_TYPE_LAST;
+    qp = uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
+#else
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(iface->super.super.super.md,
+                                                uct_ib_mlx5_md_t);
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_rc_mlx5_devx_create_cmd_qp(iface);
+    } else {
+        qp = uct_rc_mlx5_verbs_create_cmd_qp(iface);
+    }
 #endif
+    iface->tm.cmd_wq.super.super.qp_num = qp->qp_num;
+    return uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+                                 iface->tx.mmio_mode,
+                                 &iface->tm.cmd_wq.super, qp);
 }
 #endif
 
@@ -249,27 +321,17 @@ ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface
 {
     ucs_status_t status = UCS_OK;
 #if IBV_HW_TM
-    struct ibv_qp *cmd_qp;
     int i;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return UCS_OK;
     }
 
-    cmd_qp = uct_rc_mlx5_get_cmd_qp(iface);
-    if (!cmd_qp) {
-        status = UCS_ERR_NO_DEVICE;
-        goto err_tag_cleanup;
-    }
-
-    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode,
-                                   &iface->tm.cmd_wq.super, cmd_qp);
+    status = uct_rc_mlx5_get_cmd_qp(iface);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
     }
 
-    iface->tm.cmd_wq.super.super.qp_num = cmd_qp->qp_num;
     iface->tm.cmd_wq.ops_mask = iface->tm.cmd_qp_len - 1;
     iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
     iface->tm.cmd_wq.ops      = ucs_calloc(iface->tm.cmd_qp_len,
@@ -317,9 +379,7 @@ err_tag_cleanup:
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        if (iface->tm.cmd_wq.super.super.verbs.qp) {
-            uct_ib_destroy_qp(iface->tm.cmd_wq.super.super.verbs.qp);
-        }
+        uct_ib_mlx5_destroy_qp(&iface->tm.cmd_wq.super.super);
         uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);
@@ -833,3 +893,87 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
     return nfreed;
 }
+
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uint32_t dest_qp_num,
+                                         const struct ibv_ah_attr *ah_attr)
+{
+#if HAVE_DEVX
+    uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
+    uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
+    uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
+    uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    const uint8_t *gid = ah_attr->grh.dgid.raw;
+    uint8_t mac[6];
+    void *qpc;
+    int ret;
+
+    ucs_assert_always(qp->type == UCT_IB_MLX5_QP_TYPE_DEVX);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 14);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, 5);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, 30);
+    UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
+    if (uct_ib_iface_is_roce(&iface->super.super)) {
+        mac[0] = gid[8] ^ 0x02;
+        memcpy(mac + 1, gid + 9, 2);
+        memcpy(mac + 3, gid + 13, 3);
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32), mac, 6);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, 1);
+    } else {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid, ah_attr->src_path_bits & 0x7f);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, ah_attr->grh.hop_limit);
+    }
+
+    memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+            &ah_attr->grh.dgid,
+            UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, 2);
+    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, 5);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rre, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rae, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, iface->super.config.min_rnr_timer);
+
+    ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2rtr, sizeof(in_2rtr),
+                                 out_2rtr, sizeof(out_2rtr));
+    if (ret) {
+        ucs_error("mlx5dv_devx_obj_modify(2RTR) failed, syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, syndrome));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2rts, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.config.rnr_retry);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, iface->super.config.timeout);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.config.exp_backoff);
+
+    ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2rts, sizeof(in_2rts),
+                                 out_2rts, sizeof(out_2rts));
+    if (ret) {
+        ucs_error("mlx5dv_devx_obj_modify(2RTS) failed, syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(rtr2rts_qp_out, out_2rts, syndrome));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+

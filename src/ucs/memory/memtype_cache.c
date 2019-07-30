@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "memtype_cache.h"
 
 #include <ucs/arch/atomic.h>
@@ -32,7 +36,7 @@ static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
 
 static UCS_F_ALWAYS_INLINE void
 ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache, void *address,
-                         size_t size, ucm_mem_type_t mem_type)
+                         size_t size, ucs_memory_type_t mem_type)
 {
     ucs_memtype_cache_region_t *region;
     ucs_pgt_addr_t start, end;
@@ -74,7 +78,7 @@ out_unlock:
 
 static UCS_F_ALWAYS_INLINE void
 ucs_memtype_cache_delete(ucs_memtype_cache_t *memtype_cache, void *address,
-                         size_t size, ucm_mem_type_t mem_type)
+                         size_t size, ucs_memory_type_t mem_type)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -140,9 +144,9 @@ static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
-                 (memtype_cache, address, length, ucm_mem_type),
+                 (memtype_cache, address, length, mem_type),
                  ucs_memtype_cache_t *memtype_cache, void *address,
-                 size_t length, ucm_mem_type_t *ucm_mem_type)
+                 size_t length, ucs_memory_type_t *mem_type)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -154,7 +158,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &memtype_cache->pgtable, start);
     if (pgt_region && pgt_region->end >= (start + length)) {
         region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
-        *ucm_mem_type = region->mem_type;
+        *mem_type = region->mem_type;
         status = UCS_OK;
         goto out_unlock;
     }

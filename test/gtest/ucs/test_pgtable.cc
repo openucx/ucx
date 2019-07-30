@@ -211,11 +211,8 @@ UCS_TEST_F(test_pgtable, multi_search) {
     }
 }
 
-UCS_TEST_F(test_pgtable, invalid_param) {
-    if (UCS_PGT_ADDR_ALIGN == 1) {
-        UCS_TEST_SKIP;
-    }
-
+UCS_TEST_SKIP_COND_F(test_pgtable, invalid_param,
+                     (UCS_PGT_ADDR_ALIGN == 1)) {
     ucs_pgt_region_t region1 = {0x4000, 0x4001};
     insert(&region1, UCS_ERR_INVALID_PARAM);
 
@@ -444,10 +441,8 @@ UCS_TEST_F(test_pgtable_perf, basic) {
     purge();
 }
 
-UCS_TEST_F(test_pgtable_perf, workloads) {
-    if (ucs::test_time_multiplier() != 1) {
-        UCS_TEST_SKIP;
-    }
+UCS_TEST_SKIP_COND_F(test_pgtable_perf, workloads,
+                     (ucs::test_time_multiplier() != 1)) {
 
     measure_workload(UCS_MASK(28),
                      1024,

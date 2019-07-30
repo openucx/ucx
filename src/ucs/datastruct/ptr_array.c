@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ptr_array.h"
 
 #include <ucs/sys/string.h>
@@ -53,18 +57,16 @@ ucs_ptr_array_freelist_set_next(ucs_ptr_array_elem_t *elem, unsigned next)
 
 static void UCS_F_MAYBE_UNUSED ucs_ptr_array_dump(ucs_ptr_array_t *ptr_array)
 {
-#if ENABLE_ASSERT
-    ucs_ptr_array_elem_t elem;
+#if UCS_ENABLE_ASSERT
     unsigned i;
 
     ucs_trace_data("ptr_array start %p size %u", ptr_array->start, ptr_array->size);
     for (i = 0; i < ptr_array->size; ++i) {
-        elem = ptr_array->start[i];
         if (ucs_ptr_array_is_free(ptr_array, i)) {
             ucs_trace_data("[%u]=<free> (%u)", i,
-                           ucs_ptr_array_placeholder_get(elem));
+                           ucs_ptr_array_placeholder_get(ptr_array->start[i]));
         } else {
-            ucs_trace_data("[%u]=%p", i, (void*)elem);
+            ucs_trace_data("[%u]=%p", i, (void*)ptr_array->start[i]);
         }
     }
 

@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct_iface.h"
 #include "uct_md.h"
 
@@ -240,7 +244,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
 allocated_without_md:
     mem->md       = NULL;
-    mem->mem_type = UCT_MD_MEM_TYPE_HOST;
+    mem->mem_type = UCS_MEMORY_TYPE_HOST;
     mem->memh     = UCT_MEM_HANDLE_NULL;
 allocated:
     ucs_trace("allocated %zu bytes at %p using %s", alloc_length, address,

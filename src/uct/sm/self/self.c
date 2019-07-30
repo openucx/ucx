@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "self.h"
 
 #include <uct/sm/base/sm_ep.h>
@@ -340,9 +344,9 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->cap.reg_mem_types    = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.detect_mem_types = 0;
-    attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     attr->cap.max_alloc        = 0;
     attr->cap.max_reg          = ULONG_MAX;
     attr->rkey_packed_size     = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
@@ -350,12 +354,6 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->reg_cost.growth      = 0;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
-}
-
-static ucs_status_t uct_self_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                unsigned *num_resources_p)
-{
-    return uct_single_md_resource(&uct_self_md, resources_p, num_resources_p);
 }
 
 static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
@@ -366,8 +364,8 @@ static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t *md_config,
-                                     uct_md_h *md_p)
+static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_name,
+                                     const uct_md_config_t *config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
         .close              = (void*)ucs_empty_function,
@@ -400,7 +398,8 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_md_component_t *mdc,
 }
 
 static UCT_MD_COMPONENT_DEFINE(uct_self_md, UCT_SELF_NAME,
-                               uct_self_query_md_resources, uct_self_md_open, NULL,
-                               uct_self_md_rkey_unpack,
+                               uct_md_query_single_md_resource, uct_self_md_open,
+                               NULL, uct_self_md_rkey_unpack,
                                ucs_empty_function_return_success, "SELF_",
-                               uct_md_config_table, uct_md_config_t);
+                               uct_md_config_table, uct_md_config_t,
+                               ucs_empty_function_return_unsupported);

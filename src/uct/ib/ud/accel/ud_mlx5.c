@@ -522,8 +522,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     int is_global;
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->ud_mlx5_common,
-                                      ib_addr, ep->super.path_bits, &ep->av,
-                                      &ep->grh_av, &is_global);
+                                      ib_addr, &ep->av, &ep->grh_av, &is_global);
     if (status != UCS_OK) {
         return status;
     }
@@ -658,15 +657,16 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *attr,
                                                 struct ibv_qp **qp_p)
 {
-    uct_ib_mlx5_qp_t qp;
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+    uct_ib_mlx5_qp_t *qp = &iface->tx.wq.super;
     ucs_status_t status;
 
-    status = uct_ib_mlx5_iface_create_qp(ib_iface, &qp, attr);
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, attr);
     if (status != UCS_OK) {
         return status;
     }
 
-    *qp_p = qp.verbs.qp;
+    *qp_p = qp->verbs.qp;
     return status;
 }
 
@@ -741,7 +741,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     init_attr.flags        = UCT_IB_CQ_IGNORE_OVERRUN;
 
-    self->tx.wq.super.type = UCT_IB_MLX5_QP_TYPE_UNDEF;
+    self->tx.wq.super.type = UCT_IB_MLX5_QP_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);

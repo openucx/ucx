@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rndv.h"
 #include "tag_match.inl"
 
@@ -848,7 +852,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
     /* check if lane supports host memory, to stage sends through host memory */
     md_index = ucp_ep_md_index(sreq->send.ep, sreq->send.lane);
     md_attr  = &context->tl_mds[md_index].attr;
-    if (!(md_attr->cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST))) {
+    if (!(md_attr->cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
         return UCS_ERR_UNSUPPORTED;
     }
 

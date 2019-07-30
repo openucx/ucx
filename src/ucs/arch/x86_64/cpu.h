@@ -12,7 +12,9 @@
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/config/types.h>
+#include <ucs/config/global_opts.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __SSE4_1__
 #  include <smmintrin.h>
@@ -47,6 +49,8 @@ double ucs_x86_init_tsc_freq();
 
 ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
 ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
+ucs_cpu_vendor_t ucs_arch_get_cpu_vendor();
+void ucs_cpu_init();
 
 static inline int ucs_arch_x86_rdtsc_enabled()
 {
@@ -84,6 +88,25 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
     }
 }
 #endif
+
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+{
+#if ENABLE_BUILTIN_MEMCPY
+    if (ucs_unlikely((len > ucs_global_opts.arch.builtin_memcpy_min) &&
+                     (len < ucs_global_opts.arch.builtin_memcpy_max))) {
+        asm volatile ("rep movsb"
+                      : "=D" (dst),
+                      "=S" (src),
+                      "=c" (len)
+                      : "0" (dst),
+                      "1" (src),
+                      "2" (len)
+                      : "memory");
+        return dst;
+    }
+#endif
+    return memcpy(dst, src, len);
+}
 
 END_C_DECLS
 

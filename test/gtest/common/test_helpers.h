@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -174,6 +174,8 @@ namespace ucs {
 
 extern const double test_timeout_in_sec;
 extern const double watchdog_timeout_default;
+
+extern std::set< const ::testing::TestInfo*> skipped_tests;
 
 typedef enum {
     WATCHDOG_STOP,
@@ -673,6 +675,18 @@ private:
         _handle.reset(h, _dtor); \
     }
 
+#define UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(_t, _handle, _dtor, _ctor, ...) \
+    { \
+        _t h; \
+        ucs_status_t status = _ctor(__VA_ARGS__, &h); \
+        if (status == UCS_ERR_UNSUPPORTED) { \
+            UCS_TEST_SKIP_R(std::string("Unsupported operation: ") + \
+                            UCS_PP_MAKE_STRING(_ctor)); \
+        } \
+        ASSERT_UCS_OK(status); \
+        _handle.reset(h, _dtor); \
+    }
+
 class size_value {
 public:
     explicit size_value(size_t value) : m_value(value) {}
@@ -707,6 +721,17 @@ static inline O& operator<<(O& os, const size_value& sz)
     os.flags(f);
     return os;
 }
+
+
+class auto_buffer {
+public:
+    auto_buffer(size_t size);
+    ~auto_buffer();
+    void* operator*() const;
+private:
+    void *m_ptr;
+};
+
 
 extern int    perf_retry_count;
 extern double perf_retry_interval;

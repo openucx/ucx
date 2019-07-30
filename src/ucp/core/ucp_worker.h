@@ -199,6 +199,7 @@ typedef struct ucp_worker {
     uint64_t                      uuid;          /* Unique ID for wireup */
     uct_worker_h                  uct;           /* UCT worker handle */
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
+    ucs_mpool_t                   rkey_mp;       /* Pool for small memory keys */
     uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
 
     int                           inprogress;
@@ -206,7 +207,8 @@ typedef struct ucp_worker {
 
     unsigned                      flush_ops_count;/* Number of pending operations */
 
-    int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
+    int                           event_fd;      /* Allocated (on-demand) event fd for wakeup */
+    ucs_sys_event_set_t           *event_set;    /* Allocated UCS event set for wakeup */
     int                           eventfd;       /* Event fd to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
     ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
@@ -224,7 +226,7 @@ typedef struct ucp_worker {
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
     uint64_t                      am_message_id; /* For matching long am's */
-    ucp_ep_h                      mem_type_ep[UCT_MD_MEM_TYPE_LAST];/* memory type eps */
+    ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);

@@ -17,7 +17,6 @@
 #include <ucs/sys/stubs.h>
 #include <ucs/sys/event_set.h>
 
-#include <poll.h>
 
 #define UCS_ASYNC_EPOLL_MAX_EVENTS      16
 #define UCS_ASYNC_EPOLL_MIN_TIMEOUT_MS  2.0
@@ -125,12 +124,13 @@ static void *ucs_async_thread_func(void *arg)
                                           ucs_min(time_spent, timer_interval));
         }
 
-        do {
-            status = ucs_event_set_wait(thread->event_set,
-                                        &num_events, timeout_ms,
-                                        ucs_async_thread_ev_handler,
-                                        (void*)&cb_arg);
-        } while (status == UCS_INPROGRESS);
+        status = ucs_event_set_wait(thread->event_set,
+                                    &num_events, timeout_ms,
+                                    ucs_async_thread_ev_handler,
+                                    (void*)&cb_arg);
+        if (UCS_STATUS_IS_ERR(status)) {
+            ucs_fatal("ucs_event_set_wait() failed: %d", status);
+        }
 
         /* Check timers */
         curr_time = ucs_get_time();
@@ -299,39 +299,20 @@ static void ucs_async_thread_mutex_cleanup(ucs_async_context_t *async)
     }
 }
 
-static inline int ucs_async_thread_poll_2_event_set(int poll_events)
-{
-    int es_events = 0;
-
-    if (poll_events & POLLIN) {
-        es_events |= UCS_EVENT_SET_EVREAD;
-    }
-    if (poll_events & POLLOUT) {
-        es_events |= UCS_EVENT_SET_EVWRITE;
-    }
-    if (poll_events & POLLERR) {
-        es_events |= UCS_EVENT_SET_EVERR;
-    }
-    return es_events;
-}
-
 static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
                                                   int event_fd, int events)
 {
     ucs_async_thread_t *thread;
     ucs_status_t status;
-    int es_events;
 
     status = ucs_async_thread_start(&thread);
     if (status != UCS_OK) {
         goto err;
     }
 
-    es_events = ucs_async_thread_poll_2_event_set(events);
-
     /* Store file descriptor into void * storage without memory allocation. */
     status = ucs_event_set_add(thread->event_set, event_fd,
-                               es_events, (void *)(uintptr_t)event_fd);
+                               events, (void *)(uintptr_t)event_fd);
     if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
         goto err_removed;
@@ -350,11 +331,11 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
                                                      int event_fd)
 {
     ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
-    int ret;
+    ucs_status_t status;
 
-    ret = ucs_event_set_del(thread->event_set, event_fd);
-    if (ret != UCS_OK) {
-        return UCS_ERR_INVALID_PARAM;
+    status = ucs_event_set_del(thread->event_set, event_fd);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ucs_async_thread_stop();
@@ -364,19 +345,9 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
 static ucs_status_t ucs_async_thread_modify_event_fd(ucs_async_context_t *async,
                                                      int event_fd, int events)
 {
-    ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
-    int ret, es_events;
-
-    es_events = ucs_async_thread_poll_2_event_set(events);
-
     /* Store file descriptor into void * storage without memory allocation. */
-    ret = ucs_event_set_mod(thread->event_set, event_fd, es_events,
-                            (void *)(uintptr_t)event_fd);
-    if (ret != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
+    return ucs_event_set_mod(ucs_async_thread_global_context.thread->event_set,
+                             event_fd, events, (void *)(uintptr_t)event_fd);
 }
 
 static int ucs_async_thread_mutex_try_block(ucs_async_context_t *async)

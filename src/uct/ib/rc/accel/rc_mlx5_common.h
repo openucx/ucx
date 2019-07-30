@@ -293,6 +293,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
         unsigned               list_size;
         size_t                 seg_size;
     } tm;
+    unsigned                   exp_backoff;
 } uct_rc_mlx5_iface_common_config_t;
 
 
@@ -495,4 +496,11 @@ uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
 #endif
     rch->rc_hdr.am_id = id;
 }
+
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uint32_t dest_qp_num,
+                                         const struct ibv_ah_attr *ah_attr);
+
 #endif

@@ -16,6 +16,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/arch/generic/cpu.h>
 #include <stdint.h>
+#include <string.h>
 
 BEGIN_C_DECLS
 
@@ -53,9 +54,18 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
     return UCS_CPU_MODEL_UNKNOWN;
 }
 
+static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
+{
+    return UCS_CPU_VENDOR_GENERIC_PPC;
+}
+
 static inline int ucs_arch_get_cpu_flag()
 {
     return UCS_CPU_FLAG_UNKNOWN;
+}
+
+static inline void ucs_cpu_init()
+{
 }
 
 double ucs_arch_get_clocks_per_sec();
@@ -69,6 +79,10 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+{
+    return memcpy(dst, src, len);
+}
 END_C_DECLS
 
 #endif

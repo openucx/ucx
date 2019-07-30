@@ -14,6 +14,7 @@
 BEGIN_C_DECLS
 
 #include <ucs/config/types.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 
 #include <sys/types.h>
@@ -50,19 +51,6 @@ typedef enum ucm_event_type {
 
 
 /**
- * @brief Memory types for alloc and free events
- */
-typedef enum ucm_mem_type {
-    /*cuda memory */
-    UCM_MEM_TYPE_CUDA         = UCS_BIT(0),
-    UCM_MEM_TYPE_CUDA_MANAGED = UCS_BIT(1),
-    /* rocm memory */
-    UCM_MEM_TYPE_ROCM         = UCS_BIT(2),
-    UCM_MEM_TYPE_ROCM_MANAGED = UCS_BIT(3),
-} ucm_mem_type_t;
-
-
-/**
  * @brief MMAP hook modes
  */
 typedef enum ucm_mmap_hook_mode {
@@ -82,13 +70,13 @@ typedef union ucm_event {
      * callbacks: pre, post
      */
     struct {
-        void           *result;
-        void           *address;
-        size_t         size;
-        int            prot;
-        int            flags;
-        int            fd;
-        off_t          offset;
+        void               *result;
+        void               *address;
+        size_t             size;
+        int                prot;
+        int                flags;
+        int                fd;
+        off_t              offset;
     } mmap;
 
     /*
@@ -96,9 +84,9 @@ typedef union ucm_event {
      * munmap() is called.
      */
     struct {
-        int            result;
-        void           *address;
-        size_t         size;
+        int                result;
+        void               *address;
+        size_t             size;
     } munmap;
 
     /*
@@ -106,11 +94,11 @@ typedef union ucm_event {
      * mremap() is called.
      */
     struct {
-        void           *result;
-        void           *address;
-        size_t         old_size;
-        size_t         new_size;
-        int            flags;
+        void               *result;
+        void               *address;
+        size_t             old_size;
+        size_t             new_size;
+        int                flags;
     } mremap;
 
     /*
@@ -118,10 +106,10 @@ typedef union ucm_event {
      * shmat() is called.
      */
     struct {
-        void           *result;
-        int            shmid;
-        const void     *shmaddr;
-        int            shmflg;
+        void               *result;
+        int                shmid;
+        const void         *shmaddr;
+        int                shmflg;
     } shmat;
 
     /*
@@ -129,8 +117,8 @@ typedef union ucm_event {
      * shmdt() is called.
      */
     struct {
-        int            result;
-        const void     *shmaddr;
+        int                result;
+        const void         *shmaddr;
     } shmdt;
 
     /*
@@ -138,8 +126,8 @@ typedef union ucm_event {
      * sbrk() is called.
      */
     struct {
-        void           *result;
-        intptr_t       increment;
+        void               *result;
+        intptr_t           increment;
     } sbrk;
 
     /*
@@ -147,10 +135,10 @@ typedef union ucm_event {
      * madvise() is called.
      */
     struct {
-        int            result;
-        void           *addr;
-        size_t         length;
-        int            advice;
+        int                result;
+        void               *addr;
+        size_t             length;
+        int                advice;
     } madvise;
 
     /*
@@ -164,17 +152,17 @@ typedef union ucm_event {
      * For UCM_EVENT_VM_UNMAPPED, callbacks are pre
      */
     struct {
-        void           *address;
-        size_t         size;
+        void               *address;
+        size_t             size;
     } vm_mapped, vm_unmapped;
 
     /*
      * memory type allocation and deallocation event
      */
     struct {
-        void           *address;
-        size_t         size;
-        ucm_mem_type_t mem_type;
+        void               *address;
+        size_t             size;
+        ucs_memory_type_t  mem_type;
     } mem_type;
 
 } ucm_event_t;

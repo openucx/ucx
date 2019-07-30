@@ -5,6 +5,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "sm_iface.h"
 
 #include <uct/base/uct_md.h>

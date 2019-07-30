@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
@@ -78,8 +78,6 @@ protected:
     };
 
     static std::vector<md_resource> enum_md_resources();
-
-    static std::string const mem_type_names[];
 };
 
 
@@ -112,24 +110,30 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
+        entity(const resource& resource, uct_md_config_t *md_config);
+
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle, int mem_type) const;
 
         void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey,
-                      const uct_memory_type_t mem_type) const;
+                      const ucs_memory_type_t mem_type) const;
 
         unsigned progress() const;
 
         bool is_caps_supported(uint64_t required_flags);
-        void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
-        void check_atomics(uint64_t required_ops, atomic_mode mode);
+        bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        bool check_atomics(uint64_t required_ops, atomic_mode mode);
 
         uct_md_h md() const;
 
         const uct_md_attr& md_attr() const;
 
         uct_worker_h worker() const;
+
+        uct_cm_h cm() const;
+
+        const uct_cm_attr_t& cm_attr() const;
 
         uct_iface_h iface() const;
 
@@ -151,6 +155,8 @@ protected:
         void connect_to_sockaddr(unsigned index, entity& other,
                                  const ucs::sock_addr_storage &remote_addr);
 
+        void listen(const ucs::sock_addr_storage &listen_addr,
+                    const uct_listener_params_t &params);
         void flush() const;
 
         static std::string client_priv_data;
@@ -183,6 +189,9 @@ protected:
         uct_md_attr_t              m_md_attr;
         mutable async_wrapper      m_async;
         ucs::handle<uct_worker_h>  m_worker;
+        ucs::handle<uct_cm_h>      m_cm;
+        uct_cm_attr_t              m_cm_attr;
+        ucs::handle<uct_listener_h> m_listener;
         ucs::handle<uct_iface_h>   m_iface;
         eps_vec_t                  m_eps;
         uct_iface_attr_t           m_iface_attr;
@@ -191,8 +200,9 @@ protected:
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, uint64_t seed, const entity& entity, size_t offset = 0,
-                      uct_memory_type_t mem_type = UCT_MD_MEM_TYPE_HOST);
+        mapped_buffer(size_t size, uint64_t seed, const entity& entity,
+                      size_t offset = 0,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -278,9 +288,9 @@ protected:
     virtual bool has_ib() const;
 
     bool is_caps_supported(uint64_t required_flags);
-    void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
-    void check_caps(const entity& e, uint64_t required_flags, uint64_t invalid_flags = 0);
-    void check_atomics(uint64_t required_ops, atomic_mode mode);
+    bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
     void flush(ucs_time_t deadline = ULONG_MAX) const;
@@ -297,6 +307,7 @@ protected:
     uct_test::entity* create_entity(size_t rx_headroom,
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
+    uct_test::entity* create_entity();
     int max_connections();
     int max_connect_batch();
 

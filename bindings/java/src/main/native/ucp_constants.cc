@@ -3,7 +3,7 @@
  * See file LICENSE for terms.
  */
 
-#include "org_ucx_jucx_ucp_UcpConstants.h"
+#include "org_openucx_jucx_ucp_UcpConstants.h"
 #include "jucx_common_def.h"
 
 #include <ucp/api/ucp.h>
@@ -14,7 +14,7 @@
  *
  */
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
+Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
 {
     // UCP context parameters
     JUCX_DEFINE_LONG_CONSTANT(UCP_PARAM_FIELD_FEATURES);

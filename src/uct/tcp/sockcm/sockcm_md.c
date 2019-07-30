@@ -33,7 +33,7 @@ ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_SOCKADDR;
     md_attr->cap.reg_mem_types    = 0;
-    md_attr->cap.access_mem_type  = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = 0;
@@ -128,15 +128,9 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     return is_accessible;
 }
 
-static ucs_status_t uct_sockcm_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                  unsigned *num_resources_p)
-{
-    return uct_single_md_resource(&uct_sockcm_mdc, resources_p, num_resources_p);
-}
-
 static ucs_status_t
-uct_sockcm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
-                   uct_md_h *md_p)
+uct_sockcm_md_open(uct_component_t *component, const char *md_name,
+                   const uct_md_config_t *config, uct_md_h *md_p)
 {
     uct_sockcm_md_t *md;
     ucs_status_t status;
@@ -159,7 +153,8 @@ out:
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_sockcm_mdc, UCT_SOCKCM_MD_PREFIX,
-                        uct_sockcm_query_md_resources, uct_sockcm_md_open, NULL,
+                        uct_md_query_single_md_resource, uct_sockcm_md_open, NULL,
                         ucs_empty_function_return_unsupported,
                         (void*)ucs_empty_function_return_success,
-                        "SOCKCM_", uct_sockcm_md_config_table, uct_sockcm_md_config_t);
+                        "SOCKCM_", uct_sockcm_md_config_table, uct_sockcm_md_config_t,
+                        ucs_empty_function_return_unsupported);

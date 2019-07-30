@@ -98,7 +98,7 @@ struct ucs_class {
         \
         status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
                                              ## __VA_ARGS__); \
-        if ((status != UCS_OK) && (status != UCS_INPROGRESS)) { \
+        if (status != UCS_OK) { \
             ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
                                          (_obj), init_count); \
         } \

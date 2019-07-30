@@ -309,7 +309,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
         return status;
     }
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, iface->path_bits[0], &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, &ah_attr);
     ah_attr.is_global = iface->is_global_addr;
     status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
     if (status != UCS_OK) {
@@ -373,16 +373,16 @@ static void uct_ib_mlx5_mmio_cleanup(uct_ib_mlx5_mmio_reg_t *reg)
 {
 }
 
-static int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
-                                    uct_ib_mlx5_md_t *md,
-                                    uct_ib_mlx5_mmio_mode_t mmio_mode)
+int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
+                             uct_ib_mlx5_md_t *md,
+                             uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
     return uar->ctx == md->super.dev.ibv_context;
 }
 
-static ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
-                                              uct_ib_mlx5_md_t *md,
-                                              uct_ib_mlx5_mmio_mode_t mmio_mode)
+ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
+                                       uct_ib_mlx5_md_t *md,
+                                       uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
 #if HAVE_DEVX
     uar->uar            = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, 0);
@@ -401,7 +401,7 @@ static ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 #endif
 }
 
-static void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
+void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 {
 #if HAVE_DEVX
     mlx5dv_devx_free_uar(uar->uar);
@@ -436,7 +436,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->curr       = txwq->qstart;
     txwq->sw_pi      = 0;
     txwq->prev_sw_pi = -1;
-#if ENABLE_ASSERT
+#if UCS_ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
@@ -504,6 +504,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         return UCS_PTR_STATUS(txwq->reg);
     }
 
+    /* cppcheck-suppress autoVariables */
     txwq->dbrec      = &qp_info.dv.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not
@@ -522,14 +523,18 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 {
     uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
                                                  uct_ib_mlx5_devx_uar_t);
-
-    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_DEVX) {
+    switch (txwq->super.type) {
+    case UCT_IB_MLX5_QP_TYPE_DEVX:
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
-    }
-
-    if (txwq->super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
-        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_VERBS:
         uct_ib_mlx5_iface_put_res_domain(&txwq->super);
+        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        break;
+    case UCT_IB_MLX5_QP_TYPE_LAST:
+        if (txwq->reg != NULL) {
+            uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        }
     }
 }
 
@@ -558,6 +563,7 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     rxwq->rq_wqe_counter  = 0;
     rxwq->cq_wqe_counter  = 0;
     rxwq->mask            = qp_info.dv.rq.wqe_cnt - 1;
+    /* cppcheck-suppress autoVariables */
     rxwq->dbrec           = &qp_info.dv.dbrec[MLX5_RCV_DBR];
     memset(rxwq->wqes, 0, qp_info.dv.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg));
 

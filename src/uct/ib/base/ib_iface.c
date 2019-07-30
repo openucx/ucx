@@ -221,18 +221,18 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
-size_t uct_ib_address_size(uct_ib_iface_t *iface)
+size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
+                           int is_link_layer_eth)
 {
-    if (uct_ib_iface_is_roce(iface)) {
+    if (is_link_layer_eth) {
         return sizeof(uct_ib_address_t) +
                sizeof(union ibv_gid);  /* raw gid */
-    } else if ((iface->gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) &&
-               !iface->is_global_addr) {
+    } else if ((gid->global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) &&
+               !is_global_addr) {
         return sizeof(uct_ib_address_t) +
                sizeof(uint16_t); /* lid */
-    } else if (((iface->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                                                  UCT_IB_SITE_LOCAL_PREFIX) &&
-               !iface->is_global_addr) {
+    } else if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                UCT_IB_SITE_LOCAL_PREFIX) && !is_global_addr) {
         return sizeof(uct_ib_address_t) +
                sizeof(uint16_t) + /* lid */
                sizeof(uint64_t) + /* if_id */
@@ -245,13 +245,18 @@ size_t uct_ib_address_size(uct_ib_iface_t *iface)
     }
 }
 
-void uct_ib_address_pack(uct_ib_iface_t *iface,
-                         const union ibv_gid *gid, uint16_t lid,
+size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
+{
+    return uct_ib_address_size(&iface->gid, iface->is_global_addr, uct_ib_iface_is_roce(iface));
+}
+
+void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
+                         int is_link_layer_eth, uint8_t is_global_addr,
                          uct_ib_address_t *ib_addr)
 {
     void *ptr = ib_addr + 1;
 
-    if (uct_ib_iface_is_roce(iface)) {
+    if (is_link_layer_eth) {
         /* RoCE, in this case we don't use the lid and set the GID flag */
         ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
                          UCT_IB_ADDRESS_FLAG_GID;
@@ -259,30 +264,37 @@ void uct_ib_address_pack(uct_ib_iface_t *iface,
         memcpy(ptr, gid->raw, sizeof(gid->raw) * sizeof(uint8_t));
     } else {
         /* IB, LID */
-        ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
-                         UCT_IB_ADDRESS_FLAG_LID;
+        ib_addr->flags   = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
+                           UCT_IB_ADDRESS_FLAG_LID;
         *(uint16_t*) ptr = lid;
-        ptr += sizeof(uint16_t);
+        ptr             += sizeof(uint16_t);
 
         if ((gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) ||
-            iface->is_global_addr) {
-            ib_addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
+            is_global_addr) {
+            ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_IF_ID;
             *(uint64_t*) ptr = gid->global.interface_id;
             ptr += sizeof(uint64_t);
 
             if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
                                               UCT_IB_SITE_LOCAL_PREFIX) &&
-                !iface->is_global_addr) {
+                !is_global_addr) {
                 /* Site-local */
-                ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
+                ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_SUBNET16;
                 *(uint16_t*) ptr = gid->global.subnet_prefix >> 48;
             } else {
                 /* Global */
-                ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
+                ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_SUBNET64;
                 *(uint64_t*) ptr = gid->global.subnet_prefix;
             }
         }
     }
+}
+
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
+                               uint16_t lid, uct_ib_address_t *ib_addr)
+{
+    uct_ib_address_pack(gid, lid, uct_ib_iface_is_roce(iface),
+                        iface->is_global_addr, ib_addr);
 }
 
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
@@ -290,13 +302,17 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 {
     const void *ptr = ib_addr + 1;
 
-    gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
-    gid->global.interface_id  = 0;
     *lid                      = 0;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) {
         memcpy(gid->raw, ptr, sizeof(gid->raw) * sizeof(uint8_t)); /* uint8_t raw[16]; */
+        ucs_assert(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
+        ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID));
+        return;
     }
+
+    gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
+    gid->global.interface_id  = 0;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
         *lid = *(uint16_t*)ptr;
@@ -342,9 +358,10 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr)
 {
-    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    uct_ib_address_pack(iface, &iface->gid, uct_ib_iface_port_attr(iface)->lid,
-                        (void*)dev_addr);
+    uct_ib_iface_t   *iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+
+    uct_ib_iface_address_pack(iface, &iface->gid, uct_ib_iface_port_attr(iface)->lid,
+                              (void*)dev_addr);
     return UCS_OK;
 }
 
@@ -520,6 +537,8 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
     }
 #endif
 
+    attr->port                    = iface->config.port_num;
+
     if (attr->qp_type == IBV_QPT_UD) {
         return;
     }
@@ -588,16 +607,19 @@ ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
     }
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
-#else
-    cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    if (!cq && (errno == ENOSYS))
 #endif
+    {
+        *inl = 0;
+        cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    }
+
     if (!cq) {
         ucs_error("ibv_create_cq(cqe=%d) failed: %m", cqe);
         return UCS_ERR_IO_ERROR;
     }
 
     *cq_p = cq;
-    *inl  = 0;
     return UCS_OK;
 }
 
@@ -861,7 +883,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         self->is_global_addr = 0;
     }
 
-    self->addr_size  = uct_ib_address_size(self);
+    self->addr_size  = uct_ib_iface_address_size(self);
 
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,

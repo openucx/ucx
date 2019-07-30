@@ -1,8 +1,13 @@
 /**
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
 * 
 * See file LICENSE for terms.
 */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "ucp_am.h"
 #include "ucp_am.inl"
@@ -20,7 +25,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
 {
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
     
-    if (ep->worker->context->config.features & UCP_FEATURE_EXPERIMENTAL) {
+    if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         ucs_list_head_init(&ep_ext->am.started_ams);
     }
 }
@@ -29,7 +34,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
 {
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
 
-    if (ep->worker->context->config.features & UCP_FEATURE_EXPERIMENTAL) {
+    if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         if (ucs_unlikely(!ucs_list_is_empty(&ep_ext->am.started_ams))) {
             ucs_warn("worker : %p not all UCP active messages have been" 
                      "run to completion", ep->worker);
@@ -67,6 +72,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
 {
     size_t num_entries;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
+                                    return UCS_ERR_INVALID_PARAM);
+
     if (id >= worker->am_cb_array_len) {
         num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
         worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries * 
@@ -100,7 +108,7 @@ ucp_am_bcopy_pack_args_single(void *dest, void *arg)
     hdr->am_hdr.flags  = req->send.am.flags;
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                         UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
+                         UCS_MEMORY_TYPE_HOST, hdr + 1, req->send.buffer,
                          &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
 
@@ -123,7 +131,7 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
     reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                         UCT_MD_MEM_TYPE_HOST, reply_hdr + 1, 
+                         UCS_MEMORY_TYPE_HOST, reply_hdr + 1,
                          req->send.buffer,
                          &req->send.state.dt, req->send.length);
     hdr_size = sizeof(*reply_hdr);
@@ -152,7 +160,7 @@ ucp_am_bcopy_pack_args_first(void *dest, void *arg)
 
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, 
                                       req->send.datatype, 
-                                      UCT_MD_MEM_TYPE_HOST,
+                                      UCS_MEMORY_TYPE_HOST,
                                       hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
 }
@@ -177,7 +185,7 @@ ucp_am_bcopy_pack_args_mid(void *dest, void *arg)
     
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker,
                                       req->send.datatype,
-                                      UCT_MD_MEM_TYPE_HOST,
+                                      UCS_MEMORY_TYPE_HOST,
                                       hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
 }
@@ -356,7 +364,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.am.flags  = flags;
     req->send.buffer    = (void *) buffer;
     req->send.datatype  = datatype;
-    req->send.mem_type  = UCT_MD_MEM_TYPE_HOST;
+    req->send.mem_type  = UCS_MEMORY_TYPE_HOST;
     req->send.lane      = ep->am_lane;
 
     ucp_request_send_state_init(req, datatype, count);
@@ -414,6 +422,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb,
     ucp_request_t *req;
     size_t length;
     
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+
     if (ucs_unlikely((flags != 0) && !(flags & UCP_AM_SEND_REPLY))) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
@@ -670,13 +681,13 @@ ucp_am_long_handler(void *am_arg, void *am_data, size_t am_length,
                                       NULL); 
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_SINGLE,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE,
               ucp_am_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_MULTI,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI,
               ucp_am_long_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_SINGLE_REPLY,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE_REPLY,
               ucp_am_handler_reply, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_EXPERIMENTAL, UCP_AM_ID_MULTI_REPLY,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI_REPLY,
               ucp_am_long_handler_reply, NULL, 0);
 
 const ucp_proto_t ucp_am_proto = {

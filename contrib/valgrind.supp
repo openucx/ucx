@@ -149,3 +149,22 @@
    ...
    fun:ib_cm_open_device
 }
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   obj:*/libhfi1verbs-rdmav22.so*
+   obj:*/libibverbs.so*
+   ...
+   fun:ibv_get_device_list
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   obj:*/libibverbs.so*
+   ...
+   fun:ibv_get_device_list
+}

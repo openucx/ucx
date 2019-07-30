@@ -7,6 +7,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/debug/log.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/module.h>
@@ -54,7 +58,7 @@ typedef struct {
 } ucx_perf_ep_info_t;
 
 
-const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_LAST];
+const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_LAST];
 
 static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_SHORT)]         = "am short",
@@ -1103,7 +1107,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     ucp_worker_release_address(perf->ucp.worker, address);
     rte_call(perf, exchange_vec, req);
 
-    perf->ucp.peers = calloc(group_size, sizeof(*perf->uct.peers));
+    perf->ucp.peers = calloc(group_size, sizeof(*perf->ucp.peers));
     if (perf->ucp.peers == NULL) {
         goto err;
     }
@@ -1667,7 +1671,7 @@ void ucx_perf_global_init()
     };
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
-    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_HOST] = &host_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_HOST] = &host_allocator;
 
     /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
      * alloc hooks, which are using dlsym() to get pointer to original function,
