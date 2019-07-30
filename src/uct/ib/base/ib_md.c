@@ -1189,6 +1189,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->super.component = &uct_ib_component;
     md->config          = md_config->ext;
 
+    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
+        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+    }
+
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
                                   ucs_stats_get_root(),
@@ -1298,10 +1302,9 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
-    dev              = &md->dev;
-    md->config       = md_config->ext;
 
     /* Open verbs context */
+    dev              = &md->dev;
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
         ucs_error("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
@@ -1314,9 +1317,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
-    }
 
     if (uct_ib_device_odp_has_global_mr(&md->dev)) {
         md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
