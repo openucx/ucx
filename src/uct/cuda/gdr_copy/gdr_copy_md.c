@@ -121,7 +121,7 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
 
     mem_hndl->reg_size = length;
 
-    ret = gdr_get_info(md->gdrcpy_ctx, mem_hndl->mh, &info);
+    ret = gdr_get_info(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->info);
     if (ret) {
         ucs_error("gdr_get_info failed. ret:%d", ret);
         goto unmap_buffer;
