@@ -72,6 +72,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
 {
     size_t num_entries;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
+                                    return UCS_ERR_INVALID_PARAM);
+
     if (id >= worker->am_cb_array_len) {
         num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
         worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries * 
@@ -419,6 +422,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb,
     ucp_request_t *req;
     size_t length;
     
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+
     if (ucs_unlikely((flags != 0) && !(flags & UCP_AM_SEND_REPLY))) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }

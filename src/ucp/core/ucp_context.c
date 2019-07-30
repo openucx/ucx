@@ -681,6 +681,8 @@ static const char* ucp_feature_flag_str(unsigned feature_flag)
         return "UCP_FEATURE_WAKEUP";
     case UCP_FEATURE_STREAM:
         return "UCP_FEATURE_STREAM";
+    case UCP_FEATURE_AM:
+        return "UCP_FEATURE_AM";
     default:
         ucs_fatal("Unknown feature flag value %u", feature_flag);
     }
