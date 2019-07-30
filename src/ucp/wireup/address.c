@@ -274,7 +274,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     /* check if at least one of bandwidth values is 0 */
     if ((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) != 0) {
         ucs_error("Incorrect bandwidth value: one of bandwidth dedicated/shared must be zero");
-        return UCS_ERR_INVALID_PARAM;
+        return -1;
     }
 
 
@@ -530,6 +530,10 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             /* Transport information */
             attr_len = ucp_address_pack_iface_attr(worker, ptr, i, iface_attr,
                                                    worker->atomic_tls & UCS_BIT(i));
+            if (attr_len < 0) {
+                return UCS_ERR_INVALID_ADDR;
+            }
+
             ucp_address_memchek(ptr, attr_len,
                                 &context->tl_rscs[dev->rsc_index].tl_rsc);
 
