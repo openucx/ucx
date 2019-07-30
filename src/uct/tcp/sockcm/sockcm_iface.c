@@ -75,7 +75,7 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
     sent_len = send(*fd, (char *) &accept, sizeof(accept), 0);
 
     if (sent_len < 0) {
-        ucs_debug("sockcm_listener: unable to send accept on %d %m", *fd);
+        ucs_error("sockcm_listener: unable to send accept on %d %m", *fd);
         status = UCS_ERR_IO_ERROR;
     } else {
         ucs_debug("sockcm_listener: sent accept");
@@ -98,7 +98,7 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
     sent_len = send(*fd, (char *) &reject, sizeof(reject), 0);
 
     if (sent_len < 0) {
-        ucs_debug("sockcm_listener: unable to send reject on %d %m", *fd);
+        ucs_error("sockcm_listener: unable to send reject on %d %m", *fd);
         status = UCS_ERR_IO_ERROR;
     } else {
         ucs_debug("sockcm_listener: sent reject");
