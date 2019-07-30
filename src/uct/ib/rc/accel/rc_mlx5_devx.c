@@ -23,12 +23,11 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_xrq_in)] = {};
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_xrq_out)] = {};
     ucs_status_t status = UCS_ERR_NO_MEMORY;
-    uct_ib_mlx5_srq_seg_t *seg;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_cq dvcq = {};
     struct mlx5dv_obj dv = {};
     void *xrqc, *wq;
-    int len, ret, max, i;
+    int len, ret, max;
 
     uct_rc_mlx5_init_rx_tm_common(iface, sizeof(struct ibv_rvh));
 
@@ -86,25 +85,12 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
         goto err_free;
     }
 
-    iface->rx.srq.type    = UCT_IB_MLX5_OBJ_TYPE_DEVX;
-    iface->rx.srq.srq_num = UCT_IB_MLX5DV_GET(create_xrq_out, out, xrqn);
+    iface->rx.srq.type        = UCT_IB_MLX5_OBJ_TYPE_DEVX;
+    iface->rx.srq.srq_num     = UCT_IB_MLX5DV_GET(create_xrq_out, out, xrqn);
     uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
-
-    iface->rx.srq.free_idx      = max - 1;
-    iface->rx.srq.ready_idx     = -1;
-    iface->rx.srq.sw_pi         = -1;
-    iface->rx.srq.mask          = max - 1;
-    iface->rx.srq.tail          = max - 1;
-
-    for (i = 0; i < max; ++i) {
-        seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, i);
-        seg->srq.next_wqe_index = htons((i + 1) & (max - 1));
-        seg->srq.free           = 0;
-        seg->srq.desc           = NULL;
-        seg->dptr.byte_count    = htonl(iface->super.super.config.seg_size);
-    }
-
-    iface->super.rx.srq.quota   = max - 1;
+    uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
+                              iface->super.super.config.seg_size);
+    iface->super.rx.srq.quota = max - 1;
     return UCS_OK;
 
 err_free:

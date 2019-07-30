@@ -572,10 +572,8 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
                                   size_t sg_byte_count)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
-    uct_ib_mlx5_srq_seg_t *seg;
     uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
-    unsigned i;
 
     obj.dv.srq.in = verbs_srq;
     obj.dv.srq.out = &srq_info.dv;
@@ -603,20 +601,30 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
 
     srq->buf             = srq_info.dv.buf;
     srq->db              = srq_info.dv.dbrec;
-    srq->free_idx        = srq_info.dv.tail;
+    uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
+                              sg_byte_count);
+    return UCS_OK;
+}
+
+void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
+                               uint32_t tail, size_t sg_byte_count)
+{
+    uct_ib_mlx5_srq_seg_t *seg;
+    unsigned i;
+
+    srq->free_idx        = tail;
     srq->ready_idx       = -1;
     srq->sw_pi           = -1;
-    srq->mask            = srq_info.dv.tail;
-    srq->tail            = srq_info.dv.tail;
+    srq->mask            = tail;
+    srq->tail            = tail;
 
-    for (i = srq_info.dv.head; i <= srq_info.dv.tail; ++i) {
+    for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);
-        seg->srq.free        = 0;
-        seg->srq.desc        = NULL;
-        seg->dptr.byte_count = htonl(sg_byte_count);
+        seg->srq.next_wqe_index = htons((i + 1) & tail);
+        seg->srq.free           = 0;
+        seg->srq.desc           = NULL;
+        seg->dptr.byte_count    = htonl(sg_byte_count);
     }
-
-    return UCS_OK;
 }
 
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)

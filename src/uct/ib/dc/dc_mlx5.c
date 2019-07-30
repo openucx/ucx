@@ -554,8 +554,6 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
          struct ibv_exp_create_srq_attr srq_attr      = {};
          struct ibv_exp_srq_dc_offload_params dc_op   = {};
 
-         iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
-
          dc_op.timeout    = rc_iface->config.timeout;
          dc_op.path_mtu   = rc_iface->config.path_mtu;
          dc_op.pkey_index = rc_iface->super.pkey_index;
@@ -568,9 +566,22 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
          srq_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
          srq_attr.dc_offload_params = &dc_op;
 
-         return uct_rc_mlx5_init_rx_tm(&iface->super, rc_config, &srq_attr,
-                                       sizeof(struct ibv_rvh) +
-                                       sizeof(struct ibv_ravh));
+         status = uct_rc_mlx5_init_rx_tm(&iface->super, rc_config, &srq_attr,
+                                         sizeof(struct ibv_rvh) +
+                                         sizeof(struct ibv_ravh));
+         if (status != UCS_OK) {
+             return status;
+         }
+
+         status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
+                                       iface->super.rx.srq.verbs.srq,
+                                       iface->super.super.super.config.seg_size);
+         if (status != UCS_OK) {
+             goto err_free_srq;
+         }
+
+         iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
+         return UCS_OK;
      }
 #endif
 
@@ -580,9 +591,20 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
         return status;
     }
 
+    status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
+                                  iface->super.rx.srq.verbs.srq,
+                                  iface->super.super.super.config.seg_size);
+    if (status != UCS_OK) {
+        goto err_free_srq;
+    }
+
     iface->super.rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     iface->super.super.progress = uct_dc_mlx5_iface_progress;
     return UCS_OK;
+
+err_free_srq:
+    uct_ib_destroy_srq(iface->super.rx.srq.verbs.srq);
+    return status;
 }
 
 void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
