@@ -940,8 +940,6 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     }
 
     /* Connect to the server */
-    ucs_print("m_cm is %p", m_cm.get());
-
     if (m_cm) {
         params.field_mask = UCT_EP_PARAM_FIELD_CM                     |
                             UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    |

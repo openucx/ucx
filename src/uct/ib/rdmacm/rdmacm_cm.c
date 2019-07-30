@@ -54,20 +54,17 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         cep = (uct_rdmacm_cm_ep_t *)event->id->context;
         ucs_assert(event->id == cep->id);
 
-        ucs_print("in ADDR_RESOLVED event");
         if (rdma_resolve_route(event->id, 1000 /* TODO */)){
             ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
                       ucs_sockaddr_str(remote_addr, ip_port_str,
                                        UCS_SOCKADDR_STRING_LEN));
         }
-        ucs_print("in ADDR_RESOLVED event end");
         break;
     case RDMA_CM_EVENT_ROUTE_RESOLVED:
         /* Client side event */
         cep = (uct_rdmacm_cm_ep_t *)event->id->context;
         ucs_assert(event->id == cep->id);
 
-        ucs_print("in ROUTE_RESOLVED event");
         uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
 
         memset(&conn_param, 0, sizeof(conn_param));
@@ -96,7 +93,6 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
                       ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
         }
-        ucs_print("in ROUTE_RESOLVED event end");
         break;
     case RDMA_CM_EVENT_CONNECT_REQUEST:
         /* Server side event */

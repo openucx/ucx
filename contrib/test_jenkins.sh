@@ -1231,7 +1231,7 @@ run_gtest() {
 	mkdir -p $GTEST_REPORT_DIR
 
 	echo "==== Running unit tests, $compiler_name compiler ===="
-	UCX_LOG_PRINT_ENABLE=y $AFFINITY $TIMEOUT make -C test/gtest test
+	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
@@ -1361,7 +1361,6 @@ run_tests() {
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
-    export UCX_LOG_PRINT_ENABLE=y
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug

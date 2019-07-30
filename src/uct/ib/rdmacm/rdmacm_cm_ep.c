@@ -107,7 +107,6 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
 err_destroy_id:
     rdma_destroy_id(cep->id);
 err:
-ucs_print("status: %d", status);
     return status;
 }
 
@@ -150,26 +149,20 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
 
-    ucs_print("in rdmacm_cm_ep create");
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_print("No UCT_EP_PARAM_FIELD_CM set: %zu", params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
         !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
-        ucs_print("returning UCS_ERR_UNSUPPORTED");
         return UCS_ERR_UNSUPPORTED;
     }
 
     if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
                                 UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
-        ucs_print("Neither UCT_EP_PARAM_FIELD_SOCKADDR nor UCT_EP_PARAM_FIELD_CONN_REQUEST set: %zu",
-                 params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_print("before init super");
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &dummy_iface);
 
     self->cm                  = ucs_derived_of(params->cm, uct_rdmacm_cm_t);
@@ -186,22 +179,17 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     self->qp                  = NULL;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
-        ucs_print("before client_init");
         status = uct_rdamcm_cm_ep_client_init(self, params);
-        ucs_print("status: %d", status);
     } else {
-        ucs_print("before server_init");
         ucs_assert(params->field_mask & UCT_EP_PARAM_FIELD_CONN_REQUEST);
         status = uct_rdamcm_cm_ep_server_init(self, params);
-        ucs_print("status: %d", status);
     }
 
-    ucs_print("status: %d", status);
     if (status == UCS_OK) {
         ucs_debug("created an RDMACM endpoint %p on CM %p. rdmacm_id: %p",
                   self, self->cm, self->id);
     }
-    ucs_print("status: %d", status);
+
     return status;
 }
 
