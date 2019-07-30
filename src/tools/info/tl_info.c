@@ -135,6 +135,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 
     if (status != UCS_OK) {
         printf("#   < failed to open interface >\n");
+        /* coverity[leaked_storage] */
         return;
     }
 

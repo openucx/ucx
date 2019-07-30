@@ -99,42 +99,37 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
                               unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    CUdeviceptr d_ptr = ((CUdeviceptr )(char *) address);
-    gdr_mh_t mh;
-    void *bar_ptr;
-    gdr_info_t info;
+    CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
     int ret;
 
     if (!length) {
-        mem_hndl->mh = 0;
+        memset(mem_hndl, 0, sizeof(*mem_hndl));
         return UCS_OK;
     }
 
-    ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mh);
+    ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mem_hndl->mh);
     if (ret) {
         ucs_error("gdr_pin_buffer failed. length :%lu ret:%d", length, ret);
         goto err;
     }
 
-    ret = gdr_map(md->gdrcpy_ctx, mh, &bar_ptr, length);
+    ret = gdr_map(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->bar_ptr, length);
     if (ret) {
         ucs_error("gdr_map failed. length :%lu ret:%d", length, ret);
         goto unpin_buffer;
     }
 
-    ret = gdr_get_info(md->gdrcpy_ctx, mh, &info);
+    mem_hndl->reg_size = length;
+
+    ret = gdr_get_info(md->gdrcpy_ctx, mem_hndl->mh, &info);
     if (ret) {
         ucs_error("gdr_get_info failed. ret:%d", ret);
         goto unmap_buffer;
     }
 
-    mem_hndl->mh        = mh;
-    mem_hndl->info      = info;
-    mem_hndl->bar_ptr   = bar_ptr;
-    mem_hndl->reg_size  = length;
-
     ucs_trace("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
-              address, address + length, length, info.va, bar_ptr);
+              address, address + length, length,
+              mem_hndl->info.va, mem_hndl->bar_ptr);
 
     return UCS_OK;
 
@@ -144,7 +139,7 @@ unmap_buffer:
         ucs_warn("gdr_unmap failed. unpin_size:%lu ret:%d", mem_hndl->reg_size, ret);
     }
 unpin_buffer:
-    ret = gdr_unpin_buffer(md->gdrcpy_ctx, mh);
+    ret = gdr_unpin_buffer(md->gdrcpy_ctx, mem_hndl->mh);
     if (ret) {
         ucs_warn("gdr_unpin_buffer failed. ret;%d", ret);
     }
