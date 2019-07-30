@@ -549,7 +549,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        client_data->is_full_addr = 0;
+        client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR;
         memcpy(client_data + 1, rsc_address, address_length);
         ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
 
@@ -564,7 +564,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                   address_length, conn_priv_len);
 
     } else {
-        client_data->is_full_addr = 1;
+        client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_FULL_ADDR;
         memcpy(client_data + 1, worker_address, address_length);
     }
 

@@ -422,17 +422,26 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
 {
     ucp_ep_params_t        params;
     ucp_unpacked_address_t remote_address;
+    uint64_t               addr_flags;
     ucs_status_t           status;
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    status = ucp_address_unpack(worker, client_data + 1, -1, &remote_address);
+    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR) {
+        addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+    } else {
+        addr_flags = -1;
+    }
+
+    status = ucp_address_unpack(worker, client_data + 1, addr_flags,
+                                &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
 
-    if (client_data->is_full_addr) {
+    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_FULL_ADDR) {
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
                                               UCP_EP_CREATE_AM_LANE, "listener",
@@ -442,7 +451,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         } else {
             goto out_free_address;
         }
-    } else {
+    } else if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR) {
         status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
                                             ep_p);
         if (status == UCS_OK) {
@@ -454,6 +463,9 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         } else {
             goto out_free_address;
         }
+    } else {
+        ucs_assert(client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR);
+        return UCS_ERR_NOT_IMPLEMENTED;
     }
 
     ucp_ep_update_dest_ep_ptr(*ep_p, client_data->ep_ptr);
