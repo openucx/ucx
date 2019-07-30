@@ -69,6 +69,7 @@ gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -fno-tree-vectorize \
 gtest_SOURCES = \
 	common/gtest-all.cc \
 	common/main.cc \
+	common/mem_buffer.cc \
 	common/test_helpers.cc \
 	common/test_obj_size.cc \
 	common/test_watchdog.cc \
@@ -212,6 +213,7 @@ endif
 
 noinst_HEADERS = \
 	common/gtest.h \
+	common/mem_buffer.h \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
