@@ -60,15 +60,46 @@ ucs_status_t uct_listener_reject(uct_listener_h listener,
     return listener->cm->ops->listener_reject(listener, conn_request);
 }
 
-UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_component_h component)
+
+#if ENABLE_STATS
+static ucs_stats_class_t uct_cm_stats_class = {
+    .name           = "",
+    .num_counters   = 0
+};
+#endif
+
+UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
+                    uct_component_h component)
 {
-    self->ops       = ops;
-    self->component = component;
-    return UCS_OK;
+    self->ops                     = ops;
+    self->component               = component;
+    self->iface.super.ops         = *iface_ops;
+
+    self->iface.worker            = NULL;
+    self->iface.md                = NULL;
+    self->iface.am->arg           = NULL;
+    self->iface.am->flags         = 0;
+    self->iface.am->cb            = (void *)ucs_empty_function_return_unsupported;
+    self->iface.am_tracer         = NULL;
+    self->iface.am_tracer_arg     = NULL;
+    self->iface.err_handler       = NULL;
+    self->iface.err_handler_arg   = NULL;
+    self->iface.err_handler_flags = 0;
+    self->iface.prog.id           = 0;
+    self->iface.prog.refcount     = 0;
+    self->iface.progress_flags    = 0;
+
+    return UCS_STATS_NODE_ALLOC(&self->iface.stats, &uct_cm_stats_class,
+                                ucs_stats_get_root(), "%s-%p", "cm_iface",
+                                self->iface);
 }
 
-UCS_CLASS_CLEANUP_FUNC(uct_cm_t){}
+UCS_CLASS_CLEANUP_FUNC(uct_cm_t)
+{
+    UCS_STATS_NODE_FREE(self->iface.stats);
+}
 
 UCS_CLASS_DEFINE(uct_cm_t, void);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_t, void, uct_cm_ops_t*, uct_component_h);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_t, void, uct_cm_ops_t*, uct_iface_ops_t*,
+                          uct_component_h);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_t, void);
