@@ -53,10 +53,8 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 {
     struct sockaddr    *remote_addr = rdma_get_peer_addr(event->id);
     char               ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    uct_rdmacm_cm_ep_t *cep;
 
-    cep = (uct_rdmacm_cm_ep_t *)event->id->context;
-    ucs_assert(event->id == cep->id);
+    ucs_assert(event->id == ((uct_rdmacm_cm_ep_t *)event->id->context)->id);
 
     if (rdma_resolve_route(event->id, 1000 /* TODO */)) {
         ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
