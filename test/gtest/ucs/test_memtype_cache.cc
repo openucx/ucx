@@ -17,6 +17,8 @@ extern "C" {
 
 class test_memtype_cache : public ucs::test {
 protected:
+    test_memtype_cache() : m_memtype_cache(NULL) {
+    }
 
     virtual void init() {
         ucs_status_t status;
