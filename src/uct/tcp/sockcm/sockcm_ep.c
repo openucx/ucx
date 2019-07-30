@@ -186,7 +186,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     }
 
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
-                                         self->sock_id_ctx->sock_id, POLLIN,
+                                         self->sock_id_ctx->sock_id,
+                                         UCS_EVENT_SET_EVREAD,
                                          uct_sockcm_ep_event_handler,
                                          self, iface->super.worker->async);
     if (status != UCS_OK) {
