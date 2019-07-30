@@ -10,6 +10,7 @@
 #define UCS_PPC64_CPU_H_
 
 #include <ucs/sys/compiler.h>
+#include <ucs/type/status.h>
 #ifdef HAVE_SYS_PLATFORM_PPC_H
 #  include <sys/platform/ppc.h>
 #endif
@@ -83,6 +84,12 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 {
     return memcpy(dst, src, len);
 }
+
+static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
 END_C_DECLS
 
 #endif
