@@ -192,6 +192,7 @@ static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
 {
     ssize_t recv_len          = 0;
+    ssize_t recv_base_len     = 0;
     uct_sockcm_iface_t *iface = arg;
     struct sockaddr peer_addr;
     socklen_t addrlen;
@@ -231,11 +232,14 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
                     sizeof(uct_sockcm_conn_param_t), 0);
     ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
 
-    if (recv_len == sizeof(uct_sockcm_conn_param_t)) {
+    recv_base_len = (sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN);
+    if (recv_len >= recv_base_len) {
         conn_param.fd = accept_fd;
+        ucs_assert(conn_param.hdr.length + recv_base_len == recv_len);
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     } else {
-        ucs_error("sockcm_iface %p:did not receive the full message on %d\n", iface, conn_param.fd);
+        ucs_error("sockcm_iface %p:did not receive up to header size on %d\n", 
+                  iface, conn_param.fd);
     }
 }
 
