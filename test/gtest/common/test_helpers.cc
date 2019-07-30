@@ -578,6 +578,21 @@ std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
     return os << ucs::sockaddr_to_str(&sa_storage.get_sock_addr());
 }
 
+auto_buffer::auto_buffer(size_t size) : m_ptr(malloc(size)) {
+    if (!m_ptr) {
+        UCS_TEST_ABORT("Failed to allocate memory");
+    }
+}
+
+auto_buffer::~auto_buffer()
+{
+    free(m_ptr);
+}
+
+void* auto_buffer::operator*() const {
+    return m_ptr;
+};
+
 namespace detail {
 
 message_stream::message_stream(const std::string& title) {
