@@ -235,8 +235,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
     params.field_mask = 0;
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
-        if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
             continue;
         }
 
@@ -274,7 +274,7 @@ err_free_address_list:
 err_free_address_buffer:
     ucs_free(address_buffer);
 err_cleanup_eps:
-    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
+    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
         if (worker->mem_type_ep[i]) {
            ucp_ep_destroy_internal(worker->mem_type_ep[i]);
         }
@@ -1123,7 +1123,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                     (ssize_t)config->zcopy_thresh[0]);
     }
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (UCP_MEM_IS_HOST(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
@@ -1157,7 +1157,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     size_t it;
@@ -1182,7 +1182,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }

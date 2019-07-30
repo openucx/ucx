@@ -193,7 +193,7 @@ static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
     for (i = 0; i < count; ++i) {
         ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%"PRIx64,
                       i, count, dt_reg[i].md_map);
-        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, UCT_MD_MEM_TYPE_HOST, NULL,
+        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, UCS_MEMORY_TYPE_HOST, NULL,
                           dt_reg[i].memh, &dt_reg[i].md_map);
         ucs_assert(dt_reg[i].md_map == 0);
     }
@@ -203,7 +203,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
                  (context, md_map, buffer, length, datatype, state, mem_type, req_dbg, uct_flags),
                  ucp_context_t *context, ucp_md_map_t md_map, void *buffer,
                  size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state,
-                 uct_memory_type_t mem_type, ucp_request_t *req_dbg, unsigned uct_flags)
+                 ucs_memory_type_t mem_type, ucp_request_t *req_dbg, unsigned uct_flags)
 {
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;

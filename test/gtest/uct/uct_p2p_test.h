@@ -49,11 +49,11 @@ protected:
     };
 
     virtual void test_xfer(send_func_t send, size_t length, unsigned flags,
-                           uct_memory_type_t mem_type);
+                           ucs_memory_type_t mem_type);
     void test_xfer_multi(send_func_t send, size_t min_length, size_t max_length,
                          unsigned flags);
     void test_xfer_multi_mem_type(send_func_t send, size_t min_length, size_t max_length,
-                                  unsigned flags, uct_memory_type_t mem_type);
+                                  unsigned flags, ucs_memory_type_t mem_type);
     void blocking_send(send_func_t send, uct_ep_h ep, const mapped_buffer &sendbuf,
                        const mapped_buffer &recvbuf, bool wait_for_completion);
     void wait_for_remote();
@@ -65,7 +65,7 @@ protected:
 private:
     template <typename O>
     void test_xfer_print(O& os, send_func_t send, size_t length,
-                         unsigned flags, uct_memory_type_t mem_type);
+                         unsigned flags, ucs_memory_type_t mem_type);
 
     static void completion_cb(uct_completion_t *self, ucs_status_t status);
 

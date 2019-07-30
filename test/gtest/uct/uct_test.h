@@ -78,8 +78,6 @@ protected:
     };
 
     static std::vector<md_resource> enum_md_resources();
-
-    static std::string const mem_type_names[];
 };
 
 
@@ -119,7 +117,7 @@ protected:
 
         void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey,
-                      const uct_memory_type_t mem_type) const;
+                      const ucs_memory_type_t mem_type) const;
 
         unsigned progress() const;
 
@@ -208,8 +206,9 @@ protected:
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, uint64_t seed, const entity& entity, size_t offset = 0,
-                      uct_memory_type_t mem_type = UCT_MD_MEM_TYPE_HOST);
+        mapped_buffer(size_t size, uint64_t seed, const entity& entity,
+                      size_t offset = 0,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
         virtual ~mapped_buffer();
 
         void *ptr() const;

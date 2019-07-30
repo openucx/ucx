@@ -34,7 +34,7 @@ UCM_OVERRIDE_FUNC(hsa_amd_memory_pool_free, hsa_status_t)
 #endif
 
 static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucm_mem_type_t mem_type)
+ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucs_memory_type_t mem_type)
 {
     ucm_event_t event;
 
@@ -45,7 +45,7 @@ ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucm_mem_type_t mem_type)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_free(void *addr, size_t length, ucm_mem_type_t mem_type)
+ucm_dispatch_mem_type_free(void *addr, size_t length, ucs_memory_type_t mem_type)
 {
     ucm_event_t event;
 
@@ -60,7 +60,7 @@ static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
     size_t size;
     hsa_status_t status;
     hsa_device_type_t dev_type;
-    int mem_type = UCM_MEM_TYPE_ROCM;
+    int mem_type = UCS_MEMORY_TYPE_ROCM;
     hsa_amd_pointer_info_t info = {
         .size = sizeof(hsa_amd_pointer_info_t),
     };
@@ -86,7 +86,7 @@ static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
         }
 
         if (dev_type != HSA_DEVICE_TYPE_GPU) {
-            mem_type= UCM_MEM_TYPE_ROCM_MANAGED;
+            mem_type = UCS_MEMORY_TYPE_ROCM_MANAGED;
         }
     }
 
@@ -115,14 +115,14 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
 {
     hsa_status_t status;
     uint32_t pool_flags = 0;
-    int type = UCM_MEM_TYPE_ROCM;
+    int type = UCS_MEMORY_TYPE_ROCM;
 
     status = hsa_amd_memory_pool_get_info(memory_pool,
                                           HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS,
                                           &pool_flags);
     if (status == HSA_STATUS_SUCCESS &&
         !(pool_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED)) {
-        type = UCM_MEM_TYPE_ROCM_MANAGED;
+        type = UCS_MEMORY_TYPE_ROCM_MANAGED;
     }
 
     ucm_event_enter();

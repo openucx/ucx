@@ -1093,7 +1093,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
                                                 ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_select_bw_info_t bw_info;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         bw_info.criteria.remote_md_flags = 0;
@@ -1127,7 +1127,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     bw_info.max_lanes         = ep->worker->context->config.ext.max_rndv_lanes;
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
-    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (!ep->worker->context->mem_type_access_tls[mem_type]) {
             continue;
         }

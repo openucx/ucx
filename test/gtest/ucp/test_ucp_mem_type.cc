@@ -23,7 +23,7 @@ public:
 
 UCS_TEST_P(test_ucp_mem_type, detect_host) {
     ucs_status_t status;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
     void *ptr;
     size_t size = 256;
 
@@ -34,7 +34,7 @@ UCS_TEST_P(test_ucp_mem_type, detect_host) {
 
     status = ucp_memory_type_detect_mds(sender().ucph(), ptr, size, &mem_type);
     ASSERT_UCS_OK(status);
-    EXPECT_EQ(UCT_MD_MEM_TYPE_HOST, mem_type);
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, mem_type);
 
     free(ptr);
 }

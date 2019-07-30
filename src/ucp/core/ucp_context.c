@@ -51,13 +51,6 @@ static const char * ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
-uct_memory_type_t ucm_to_uct_mem_type_map[] = {
-    [UCM_MEM_TYPE_CUDA]         = UCT_MD_MEM_TYPE_CUDA,
-    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_CUDA_MANAGED,
-    [UCM_MEM_TYPE_ROCM]         = UCT_MD_MEM_TYPE_ROCM,
-    [UCM_MEM_TYPE_ROCM_MANAGED] = UCT_MD_MEM_TYPE_ROCM_MANAGED,
-};
-
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -983,7 +976,7 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
     }
 
     /* Open all memory domains */
-    mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    mem_type_mask = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
         md_index = context->num_mds;
         status = ucp_fill_tl_md(context, cmpt_index,
@@ -1044,7 +1037,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->memtype_cache    = NULL;
     context->num_mem_type_detect_mds = 0;
 
-    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; ++i) {
+    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
         context->mem_type_access_tls[i] = 0;
     }
 

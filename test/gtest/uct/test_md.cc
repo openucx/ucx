@@ -105,14 +105,14 @@ bool test_md::check_caps(uint64_t flags)
 
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int mem_type)
 {
-    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
         *address = malloc(size);
         ASSERT_TRUE(*address != NULL);
         if (fill_buffer) {
             memcpy(*address, fill_buffer, size);
         }
 #if HAVE_CUDA
-    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
         cudaError_t cerr;
 
         cerr = cudaMalloc(address, size);
@@ -122,7 +122,7 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
             cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
             ASSERT_TRUE(cerr == cudaSuccess);
         }
-    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
+    } else if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
         cudaError_t cerr;
 
         cerr = cudaMallocManaged(address, size);
@@ -134,7 +134,7 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
 #endif
     } else {
         std::stringstream ss;
-        ss << "can't allocate " << mem_type_names[mem_type]
+        ss << "can't allocate " << ucs_memory_type_names[mem_type]
            << " memory for " << GetParam().md_name;
         UCS_TEST_SKIP_R(ss.str());
     }
@@ -143,10 +143,10 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int m
 void test_md::check_memory(void *address, void *expect, size_t size, int mem_type)
 {
     int ret;
-    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
         ret = memcmp(address, expect, size);
         EXPECT_EQ(0, ret);
-    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
 #if HAVE_CUDA
         void *temp;
         cudaError_t cerr;
@@ -164,9 +164,9 @@ void test_md::check_memory(void *address, void *expect, size_t size, int mem_typ
 
 void test_md::free_memory(void *address, int mem_type)
 {
-    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
         free(address);
-    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
 #if HAVE_CUDA
         cudaFree(address);
 #endif
@@ -272,7 +272,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
 
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
     int mem_type_id;
     void *address;
 
@@ -301,9 +301,9 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
-    for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (unsigned mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << mem_type_names[mem_type] << " memory "
+            UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << " memory "
                              << "registration is not supported by " << GetParam().md_name;
             continue;
         }
@@ -343,9 +343,9 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
-    for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (unsigned mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << mem_type_names[mem_type] << " memory "
+            UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << " memory "
                              << " registration is not supported by " << GetParam().md_name;
             continue;
         }
@@ -375,7 +375,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
             }
 
             UCS_TEST_MESSAGE << GetParam().md_name << ": Registration time for " <<
-                mem_type_names[mem_type] << " memory " << size << " bytes: " <<
+                ucs_memory_type_names[mem_type] << " memory " << size << " bytes: " <<
                 long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
 
             free_memory(ptr, mem_type);
@@ -449,7 +449,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_multi_thread,
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
 
-    if (!(md_attr.cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST))) {
+    if (!(md_attr.cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
         UCS_TEST_SKIP_R("not host memory type");
     }
 

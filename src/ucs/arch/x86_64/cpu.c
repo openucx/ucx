@@ -12,6 +12,8 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 
+#define X86_CPUID_GENUINEINTEL    "GenuntelineI" /* GenuineIntel in magic notation */
+#define X86_CPUID_AUTHENTICAMD    "AuthcAMDenti" /* AuthenticAMD in magic notation */
 #define X86_CPUID_GET_MODEL       0x00000001u
 #define X86_CPUID_GET_BASE_VALUE  0x00000000u
 #define X86_CPUID_GET_EXTD_VALUE  0x00000007u
@@ -19,15 +21,37 @@
 #define X86_CPUID_INVARIANT_TSC   0x80000007u
 
 
+typedef union x86_cpu_registers {
+    struct {
+        union {
+            uint32_t     eax;
+            uint8_t      max_iter; /* leaf 2 - max iterations */
+        };
+        union {
+            struct {
+                uint32_t ebx;
+                uint32_t ecx;
+                uint32_t edx;
+            };
+            char         id[sizeof(uint32_t) * 3]; /* leaf 0 - CPU ID */
+        };
+    };
+    union {
+        uint32_t         value;
+        uint8_t          tag[sizeof(uint32_t)];
+    }                    reg[4]; /* leaf 2 tags */
+} UCS_S_PACKED x86_cpu_registers;
+
+
 ucs_ternary_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
 
 static UCS_F_NOOPTIMIZE inline void ucs_x86_cpuid(uint32_t level,
-                                                uint32_t *a, uint32_t *b,
-                                                uint32_t *c, uint32_t *d)
+                                                  uint32_t *a, uint32_t *b,
+                                                  uint32_t *c, uint32_t *d)
 {
   asm volatile ("cpuid\n\t"
-                  : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
-                  : "0" (level));
+                : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
+                : "0" (level));
 }
 
 /* This allows the CPU detection to work with assemblers not supporting
@@ -267,6 +291,22 @@ int ucs_arch_get_cpu_flag()
     return cpu_flag;
 }
 
+ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
+{
+    x86_cpu_registers reg;
+
+    ucs_x86_cpuid(X86_CPUID_GET_BASE_VALUE,
+                  ucs_unaligned_ptr(&reg.eax), ucs_unaligned_ptr(&reg.ebx),
+                  ucs_unaligned_ptr(&reg.ecx), ucs_unaligned_ptr(&reg.edx));
+    if (!memcmp(reg.id, X86_CPUID_GENUINEINTEL, sizeof(X86_CPUID_GENUINEINTEL) - 1)) {
+        return UCS_CPU_VENDOR_INTEL;
+    } else if (!memcmp(reg.id, X86_CPUID_AUTHENTICAMD, sizeof(X86_CPUID_AUTHENTICAMD) - 1)) {
+        return UCS_CPU_VENDOR_AMD;
+    }
+
+    return UCS_CPU_VENDOR_UNKNOWN;
+}
+
 #if ENABLE_BUILTIN_MEMCPY
 static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 {
@@ -274,7 +314,8 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
         return user_val;
     }
 
-    if (ucs_arch_get_cpu_model() >= UCS_CPU_MODEL_INTEL_HASWELL) {
+    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_INTEL) &&
+        (ucs_arch_get_cpu_model() >= UCS_CPU_MODEL_INTEL_HASWELL)) {
         return auto_val;
     } else {
         return UCS_MEMUNITS_INF;

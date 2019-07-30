@@ -127,7 +127,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.ep              = ep;
     req->send.buffer          = (void*)buffer;
     req->send.datatype        = ucp_dt_make_contig(1);
-    req->send.mem_type        = UCT_MD_MEM_TYPE_HOST;
+    req->send.mem_type        = UCS_MEMORY_TYPE_HOST;
     req->send.length          = length;
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;

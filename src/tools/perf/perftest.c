@@ -421,10 +421,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -m <mem type>  memory type of messages\n");
     printf("                        host - system memory(default)\n");
-    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL) {
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
         printf("                        cuda - NVIDIA GPU memory\n");
     }
-    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL) {
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
         printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
     }
     printf("\n");
@@ -515,7 +515,7 @@ static ucs_status_t init_test_params(ucx_perf_params_t *params)
     params->flags             = UCX_PERF_TEST_FLAG_VERBOSE;
     params->uct.fc_window     = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
-    params->mem_type          = UCT_MD_MEM_TYPE_HOST;
+    params->mem_type          = UCS_MEMORY_TYPE_HOST;
     params->msg_size_cnt      = 1;
     params->iov_stride        = 0;
     params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
@@ -661,15 +661,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         return UCS_ERR_INVALID_PARAM;
     case 'm':
         if (!strcmp(optarg, "host")) {
-            params->mem_type = UCT_MD_MEM_TYPE_HOST;
+            params->mem_type = UCS_MEMORY_TYPE_HOST;
             return UCS_OK;
         } else if (!strcmp(optarg, "cuda") &&
-                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL)) {
-            params->mem_type = UCT_MD_MEM_TYPE_CUDA;
+                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL)) {
+            params->mem_type = UCS_MEMORY_TYPE_CUDA;
             return UCS_OK;
         } else if (!strcmp(optarg, "cuda-managed") &&
-                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL)) {
-            params->mem_type = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL)) {
+            params->mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
             return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;

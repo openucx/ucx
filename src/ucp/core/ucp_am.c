@@ -105,7 +105,7 @@ ucp_am_bcopy_pack_args_single(void *dest, void *arg)
     hdr->am_hdr.flags  = req->send.am.flags;
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                         UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
+                         UCS_MEMORY_TYPE_HOST, hdr + 1, req->send.buffer,
                          &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
 
@@ -128,7 +128,7 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
     reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                         UCT_MD_MEM_TYPE_HOST, reply_hdr + 1, 
+                         UCS_MEMORY_TYPE_HOST, reply_hdr + 1,
                          req->send.buffer,
                          &req->send.state.dt, req->send.length);
     hdr_size = sizeof(*reply_hdr);
@@ -157,7 +157,7 @@ ucp_am_bcopy_pack_args_first(void *dest, void *arg)
 
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, 
                                       req->send.datatype, 
-                                      UCT_MD_MEM_TYPE_HOST,
+                                      UCS_MEMORY_TYPE_HOST,
                                       hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
 }
@@ -182,7 +182,7 @@ ucp_am_bcopy_pack_args_mid(void *dest, void *arg)
     
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker,
                                       req->send.datatype,
-                                      UCT_MD_MEM_TYPE_HOST,
+                                      UCS_MEMORY_TYPE_HOST,
                                       hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
 }
@@ -361,7 +361,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.am.flags  = flags;
     req->send.buffer    = (void *) buffer;
     req->send.datatype  = datatype;
-    req->send.mem_type  = UCT_MD_MEM_TYPE_HOST;
+    req->send.mem_type  = UCS_MEMORY_TYPE_HOST;
     req->send.lane      = ep->am_lane;
 
     ucp_request_send_state_init(req, datatype, count);

@@ -7,10 +7,15 @@
 #ifndef UCS_MEMTYPE_CACHE_H_
 #define UCS_MEMTYPE_CACHE_H_
 
+#include "memory_type.h"
+
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats_fwd.h>
-#include <ucm/api/ucm.h>
+#include <ucs/sys/compiler_def.h>
+
+
+BEGIN_C_DECLS
 
 typedef struct ucs_memtype_cache         ucs_memtype_cache_t;
 typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
@@ -19,7 +24,7 @@ typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
 struct ucs_memtype_cache_region {
     ucs_pgt_region_t    super;    /**< Base class - page table region */
     ucs_list_link_t     list;     /**< List element */
-    ucm_mem_type_t      mem_type; /**< Memory type the address belongs to */
+    ucs_memory_type_t   mem_type; /**< Memory type the address belongs to */
 };
 
 
@@ -55,7 +60,8 @@ void ucs_memtype_cache_destroy(ucs_memtype_cache_t *memtype_cache);
  * @return Error code.
  */
 ucs_status_t ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache, void *address,
-                                      size_t length, ucm_mem_type_t *ucm_mem_type);
+                                      size_t length, ucs_memory_type_t *mem_type);
 
+END_C_DECLS
 
 #endif
