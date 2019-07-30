@@ -69,6 +69,7 @@ gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -fno-tree-vectorize \
 gtest_SOURCES = \
 	common/gtest-all.cc \
 	common/main.cc \
+	common/test_gtest_cmn.cc \
 	common/test_helpers.cc \
 	common/test_obj_size.cc \
 	common/test_watchdog.cc \

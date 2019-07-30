@@ -663,6 +663,10 @@ public:
         reset(ptr);
     }
 
+    ~auto_ptr() {
+        reset();
+    }
+
     void reset(T* ptr = NULL) {
         if (m_ptr) {
             delete m_ptr;
