@@ -195,7 +195,8 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
 {
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&iface->super.super, iface_attr);
+
     iface_attr->cap.am.max_short       = iface->config.smsg_seg_size-sizeof(uint64_t);
     iface_attr->cap.am.max_bcopy       = iface->config.smsg_seg_size;
     iface_attr->cap.am.opt_zcopy_align = 1;
@@ -215,6 +216,7 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
     iface_attr->latency.growth         = 0;
     iface_attr->bandwidth              = pow(1024, 2); /* bytes */
     iface_attr->priority               = 0;
+
     return UCS_OK;
 }
 

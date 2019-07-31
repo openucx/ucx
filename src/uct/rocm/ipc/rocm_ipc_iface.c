@@ -55,7 +55,9 @@ static int uct_rocm_ipc_iface_is_reachable(const uct_iface_h tl_iface,
 static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
+
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->cap.put.min_zcopy       = 0;
     iface_attr->cap.put.max_zcopy       = SIZE_MAX;

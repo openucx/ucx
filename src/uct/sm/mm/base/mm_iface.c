@@ -96,7 +96,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_md_t *md          = iface->super.super.md;
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+
+    uct_base_iface_query(&iface->super.super, iface_attr);
 
     /* default values for all shared memory transports */
     iface_attr->cap.put.max_short       = UINT_MAX;
@@ -157,6 +158,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->bandwidth               = iface->super.config.bandwidth;
     iface_attr->overhead                = 10e-9; /* 10 ns */
     iface_attr->priority                = uct_mm_md_mapper_ops(md)->get_priority();
+
     return UCS_OK;
 }
 

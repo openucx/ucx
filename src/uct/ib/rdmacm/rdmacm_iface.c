@@ -33,7 +33,7 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
 {
     uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&rdmacm_iface->super, iface_attr);
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
     iface_attr->device_addr_len = 0;

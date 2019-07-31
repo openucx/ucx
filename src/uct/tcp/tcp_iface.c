@@ -106,7 +106,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     ucs_status_t status;
     int is_default;
 
-    memset(attr, 0, sizeof(*attr));
+    uct_base_iface_query(&iface->super, attr);
+
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |

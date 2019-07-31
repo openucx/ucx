@@ -214,6 +214,7 @@ typedef struct uct_base_iface {
         unsigned            num_alloc_methods;
         uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
         ucs_log_level_t     failure_level;
+        size_t              max_num_eps;
     } config;
 
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
@@ -292,6 +293,7 @@ struct uct_iface_config {
     } alloc_methods;
 
     int               failure;   /* Level of failure reports */
+    size_t            max_num_eps;
 };
 
 
@@ -553,6 +555,8 @@ void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 
 ucs_status_t uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h
                                tl_iface, ucs_status_t status);
+
+void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
 
 ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);
