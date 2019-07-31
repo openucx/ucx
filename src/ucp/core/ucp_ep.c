@@ -428,7 +428,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR) {
+    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR;
     } else {
@@ -441,7 +441,8 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         goto out;
     }
 
-    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_FULL_ADDR) {
+    switch (client_data->addr_mode) {
+    case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
                                               UCP_EP_CREATE_AM_LANE, "listener",
@@ -451,7 +452,8 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         } else {
             goto out_free_address;
         }
-    } else if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR) {
+        break;
+    case UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR:
         status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
                                             ep_p);
         if (status == UCS_OK) {
@@ -463,9 +465,12 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         } else {
             goto out_free_address;
         }
-    } else {
-        ucs_assert(client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_LOCAL_ADDR);
+        break;
+    case UCP_WIREUP_SOCKADDR_CD_CM_ADDR:
         return UCS_ERR_NOT_IMPLEMENTED;
+    default:
+        ucs_fatal("client data contains invalid address mode %d",
+                  client_data->addr_mode);
     }
 
     ucp_ep_update_dest_ep_ptr(*ep_p, client_data->ep_ptr);

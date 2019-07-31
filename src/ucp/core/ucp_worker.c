@@ -1171,41 +1171,55 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
     ucp_context_h   context  = worker->context;
-    ucs_status_t    status   = UCS_OK;
-    uct_cm_h        *cms_tmp;
-    ucp_rsc_index_t i;
+    ucs_status_t    status;
+    ucp_rsc_index_t i, j;
 
     if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    cms_tmp = ucs_alloca(context->num_cmpts);
-    ucs_assert_always(cms_tmp != NULL);
-
     UCS_ASYNC_BLOCK(&worker->async);
     worker->num_cms = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
-        status = uct_cm_open(context->tl_cmpts[i].cmpt, worker->uct,
-                             &cms_tmp[worker->num_cms]);
-        if (status == UCS_OK) {
+        if (context->tl_cmpts[i].attr.cap_flags & UCT_COMPONENT_CAP_FLAG_CM) {
             ++worker->num_cms;
-        } else {
-            ucs_assert_always(status == UCS_ERR_UNSUPPORTED);
         }
     }
 
     if (worker->num_cms == 0) {
-        worker->cms = NULL;
+        status = UCS_ERR_UNSUPPORTED;
         goto out;
     }
 
     worker->cms = ucs_malloc(worker->num_cms * sizeof(*worker->cms), "ucp cms");
     if (worker->cms == NULL) {
+        ucs_error("can't allocate CMs array");
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
-    memcpy(worker->cms, cms_tmp, worker->num_cms * sizeof(*worker->cms));
+
+    for (i = 0, j = 0; i < context->num_cmpts; ++i) {
+        if (context->tl_cmpts[i].attr.cap_flags & UCT_COMPONENT_CAP_FLAG_CM) {
+            status = uct_cm_open(context->tl_cmpts[i].cmpt, worker->uct,
+                                 &worker->cms[j++]);
+            if (status != UCS_OK) {
+                ucs_error("failed to open CM on component %s",
+                          context->tl_cmpts[i].attr.name);
+                goto err_free_cms;
+            }
+        }
+    }
+
     status = UCS_OK;
+    goto out;
+
+err_free_cms:
+    for (i = 0; i < worker->num_cms; ++i) {
+        if (worker->cms[i] != NULL) {
+            uct_cm_close(worker->cms[i]);
+        }
+        ucs_free(worker->cms);
+    }
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1214,11 +1228,12 @@ out:
 
 static void ucp_worker_close_cms(ucp_worker_h worker)
 {
-    ucp_md_index_t i;
+    ucp_rsc_index_t i;
 
     for (i = 0; i < worker->num_cms; ++i) {
         uct_cm_close(worker->cms[i]);
     }
+
     ucs_free(worker->cms);
 }
 
@@ -1712,13 +1727,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Open all resources as connection managers on this worker */
     status = ucp_worker_add_resource_cms(worker);
-    if ((status == UCS_ERR_UNSUPPORTED) &&
-        ucp_worker_sockaddr_is_cm_proto(worker)) {
-        ucs_error("there is no available CM to support close protocol");
+    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
         goto err_close_cms;
     }
 
-    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+    if ((worker->num_cms == 0) &&
+        ucp_worker_sockaddr_is_cm_proto(worker)) {
+        ucs_error("there is no available CM to support close protocol");
         goto err_close_cms;
     }
 

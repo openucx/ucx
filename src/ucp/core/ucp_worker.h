@@ -321,7 +321,7 @@ ucp_worker_unified_mode(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_sockaddr_is_cm_proto(ucp_worker_h worker)
 {
-    return worker->context->config.ext.sockaddr_cm_proto;
+    return worker->context->config.ext.sockaddr_cm_enable;
 }
 
 #endif

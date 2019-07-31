@@ -253,12 +253,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
 
-  {"SOCKADDR_CM_WIREUP", "n",
+  {"SOCKADDR_CM_ENABLE", "n" /* TODO: set try by default */,
    "Enable alternative wireup protocol for sockaddr connected endpoints.\n"
-   "Enabling this mode change underlying UCT mechanism for connection\n"
+   "Enabling this mode changes underlying UCT mechanism for connection\n"
    "establishment and enables synchronized close protocol which does not\n"
-   "require out of band synchronization before destroying UCP reqources.",
-   ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_proto), UCS_CONFIG_TYPE_BOOL},
+   "require out of band synchronization before destroying UCP resources.",
+   ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
@@ -1081,7 +1081,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
                         UCT_COMPONENT_ATTR_FIELD_NAME |
-                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
+                        UCT_COMPONENT_ATTR_FIELD_CAP_FLAGS;
         status = uct_component_query(context->tl_cmpts[i].cmpt,
                                      &context->tl_cmpts[i].attr);
         if (status != UCS_OK) {
