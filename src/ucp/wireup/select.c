@@ -223,17 +223,17 @@ static double ucp_wireup_calc_score_epsilon(double score1, double score2)
 /**
  * Check if the one score is bettter than the another one
  */
-static int ucp_wireup_is_score_better(double score1, double score2)
+static int ucp_wireup_score_better(double score1, double score2)
 {
     return (score1 >= (score2 +
                        ucp_wireup_calc_score_epsilon(score1, score2)));
 }
 
 /**
- * Check if scores are comparable, i.e. the diffrence between
- * them >= epsilon. If not, they are equal
+ * Check if scores are equal, i.e. the diffrence between
+ * them < epsilon
  */
-static int ucp_wireup_are_scores_equal(double score1, double score2)
+static int ucp_wireup_scores_equal(double score1, double score2)
 {
     return (fabs(score1 - score2) <
             ucp_wireup_calc_score_epsilon(score1, score2));
@@ -404,10 +404,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             if (!found ||
                 /* Comparing score with the current best score */
-                ucp_wireup_is_score_better(score, best_score) ||
+                ucp_wireup_score_better(score, best_score) ||
                 /* Comparing priority with the priority of the current best
                  * transport (if the scores are equal) */
-                (ucp_wireup_are_scores_equal(score, best_score) &&
+                (ucp_wireup_scores_equal(score, best_score) &&
                  (priority > best_score_priority))) {
                 best_rsc_index      = rsc_index;
                 best_dst_addr_index = ae - address_list;
@@ -615,7 +615,6 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     ucs_status_t status;
     char title[64];
 
-    *need_am      = 0;
     remote_md_map = -1;
 
     /* Create a copy of the address list */
@@ -669,8 +668,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         if ((status != UCS_OK) ||
             /* - the selected transport is worse than
              *   the transport selected above */
-            (!ucp_wireup_is_score_better(select_info.score,
-                                         reg_score))) {
+            !ucp_wireup_score_better(select_info.score, reg_score)) {
             break;
         }
 
@@ -681,7 +679,6 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         remote_md_map &= ~UCS_BIT(dst_md_index);
         tl_bitmap = ucp_wireup_unset_tl_by_md(ep, tl_bitmap,
                                               select_info.rsc_index);
-        *need_am  = 0;
     }
 
     status = UCS_OK;
@@ -962,8 +959,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
      * make sure the remote interface will indeed wake up.
      */
     is_proxy = ucp_wireup_is_lane_proxy(ep, am_info->rsc_index,
-                                        address_list[am_info->addr_index].
-                                        iface_attr.cap_flags);
+                                        address_list[am_info->addr_index].iface_attr.cap_flags);
 
     ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, am_info,
                              address_list[am_info->addr_index].md_index,
@@ -999,7 +995,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep, unsigned address_count,
                                             int allow_proxy, uint64_t tl_bitmap,
                                             ucp_wireup_lane_desc_t *lane_descs,
                                             ucp_lane_index_t *num_lanes_p)
-{
+{ 
     ucp_context_h context                = ep->worker->context;
     ucp_wireup_select_info_t select_info = {0};
     ucs_status_t status;
@@ -1027,10 +1023,9 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep, unsigned address_count,
             break;
         }
 
-        is_proxy = allow_proxy &&
-                   ucp_wireup_is_lane_proxy(ep, select_info.rsc_index,
-                                            address_list[select_info.addr_index].
-                                            iface_attr.cap_flags);
+        is_proxy = (allow_proxy &&
+                    ucp_wireup_is_lane_proxy(ep, select_info.rsc_index,
+                                             address_list[select_info.addr_index].iface_attr.cap_flags));
 
         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, &select_info,
                                  address_list[select_info.addr_index].md_index,
@@ -1215,8 +1210,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     /* - transport selection wasn't OK */
     if ((status != UCS_OK) ||
         /* - the TAG transport is worse than the AM transport */
-        !ucp_wireup_is_score_better(select_info.score,
-                                    am_info->score)) {
+        !ucp_wireup_score_better(select_info.score, am_info->score)) {
         goto out;
     }
 
@@ -1226,8 +1220,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
      * make sure the remote interface will indeed wake up.
      */
     is_proxy = ucp_wireup_is_lane_proxy(ep, select_info.rsc_index,
-                                        address_list[select_info.addr_index].
-                                        iface_attr.cap_flags);
+                                        address_list[select_info.addr_index].iface_attr.cap_flags);
 
     ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, &select_info,
                              address_list[select_info.addr_index].md_index,
@@ -1303,10 +1296,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                       &need_am);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (need_am) {
-        ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     }
 
     status = ucp_wireup_add_amo_lanes(ep, params, ep_init_flags, address_count,
