@@ -301,10 +301,9 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
 
-    uct_rc_iface_fill_attr(&iface->super.super, &attr,
-                           iface->super.super.config.tx_qp_len,
-                           iface->super.rx.srq.verbs.srq);
-
+    uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
+                                iface->super.super.config.tx_qp_len,
+                                &iface->super.rx.srq);
     status = uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->txwq.super, &attr);
     if (status != UCS_OK) {
         return status;
@@ -326,9 +325,9 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     dci->txwq.super.verbs.qp = qp;
     dci->txwq.super.qp_num = dci->txwq.super.verbs.qp->qp_num;
 #else
-    uct_rc_iface_fill_attr(&iface->super.super, &attr,
-                           iface->super.super.config.tx_qp_len,
-                           iface->super.rx.srq.verbs.srq);
+    uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
+                                iface->super.super.config.tx_qp_len,
+                                &iface->super.rx.srq);
     status = uct_ib_mlx5_iface_create_qp(ib_iface, &dci->txwq.super, &attr);
     if (status != UCS_OK) {
         return status;
@@ -570,14 +569,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                                          sizeof(struct ibv_rvh) +
                                          sizeof(struct ibv_ravh));
          if (status != UCS_OK) {
-             return status;
-         }
-
-         status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
-                                       iface->super.rx.srq.verbs.srq,
-                                       iface->super.super.super.config.seg_size);
-         if (status != UCS_OK) {
-             goto err_free_srq;
+             goto err;
          }
 
          iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
@@ -588,7 +580,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
     status = uct_rc_iface_init_rx(rc_iface, rc_config,
                                   &iface->super.rx.srq.verbs.srq);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
@@ -604,6 +596,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
 err_free_srq:
     uct_ib_destroy_srq(iface->super.rx.srq.verbs.srq);
+err:
     return status;
 }
 

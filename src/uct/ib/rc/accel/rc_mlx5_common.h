@@ -558,6 +558,11 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
+void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_ib_qp_attr_t *qp_attr,
+                                 unsigned max_send_wr,
+                                 uct_ib_mlx5_srq_t *srq);
+
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq);
 
 #endif

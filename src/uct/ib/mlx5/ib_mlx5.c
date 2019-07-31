@@ -633,6 +633,11 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
     uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
 
+    if (srq->type != UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        return;
+    }
+
+    /* check if mlx5 driver didn't modified SRQ */
     obj.dv.srq.in = verbs_srq;
     obj.dv.srq.out = &srq_info.dv;
 

@@ -398,21 +398,13 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
             status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0);
-            if (status != UCS_OK) {
-                return status;
-            }
         } else {
             status = uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_attr,
                                             UCT_RC_RNDV_HDR_LEN);
-            if (status != UCS_OK) {
-                return status;
-            }
+        }
 
-            status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                          iface->super.super.config.seg_size);
-            if (status != UCS_OK) {
-                goto err_free_srq;
-            }
+        if (status != UCS_OK) {
+            goto err;
         }
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
@@ -421,7 +413,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 
     status = uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
@@ -436,6 +428,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 
 err_free_srq:
     uct_rc_mlx5_destroy_srq(&iface->rx.srq);
+err:
     return status;
 }
 
@@ -468,6 +461,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
 
     self->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rc_config, init_attr);

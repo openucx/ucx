@@ -849,8 +849,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
-    uct_rc_iface_fill_attr(&iface->super, &attr, iface->super.config.tx_qp_len,
-                           iface->rx.srq.verbs.srq);
+    uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
+                                &iface->rx.srq);
     uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
     status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.wq.super, &self->tx.wq, &attr);
     if (status != UCS_OK) {
@@ -872,7 +872,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
         memset(&attr, 0, sizeof(attr));
-        uct_rc_iface_fill_attr(&iface->super, &attr, 0, iface->rx.srq.verbs.srq);
+        uct_rc_mlx5_iface_fill_attr(iface, &attr, 0, &iface->rx.srq);
         uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {

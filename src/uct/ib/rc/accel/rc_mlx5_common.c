@@ -385,6 +385,25 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     }
 }
 
+void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_ib_qp_attr_t *qp_attr,
+                                 unsigned max_send_wr,
+                                 uct_ib_mlx5_srq_t *srq)
+{
+    switch (srq->type) {
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+        uct_rc_iface_fill_attr(&iface->super, qp_attr, max_send_wr,
+                               srq->verbs.srq);
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
+        uct_rc_iface_fill_attr(&iface->super, qp_attr, max_send_wr, NULL);
+        qp_attr->srq_num = srq->srq_num;
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
+        break;
+    }
+}
+
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
 {
     int UCS_V_UNUSED ret;
@@ -618,6 +637,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     unsigned rndv_hdr_len)
 {
     uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
+    ucs_status_t status;
 
     uct_rc_mlx5_init_rx_tm_common(iface, rndv_hdr_len);
 
@@ -674,9 +694,19 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->super.rx.srq.quota = srq_init_attr->attr.max_wr;
 #endif
 
+    status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
+                                  iface->super.super.config.seg_size);
+    if (status != UCS_OK) {
+        goto err_free_srq;
+    }
+
     iface->rx.srq.type        = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
     return UCS_OK;
+
+err_free_srq:
+    uct_ib_destroy_srq(iface->rx.srq.verbs.srq);
+    return status;
 }
 #endif
 
