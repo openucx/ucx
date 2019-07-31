@@ -995,7 +995,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep, unsigned address_count,
                                             int allow_proxy, uint64_t tl_bitmap,
                                             ucp_wireup_lane_desc_t *lane_descs,
                                             ucp_lane_index_t *num_lanes_p)
-{ 
+{
     ucp_context_h context                = ep->worker->context;
     ucp_wireup_select_info_t select_info = {0};
     ucs_status_t status;
