@@ -122,20 +122,15 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sockcm_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 
-static ucs_status_t uct_sockcm_query_tl_resources(uct_md_h md,
-                                                  uct_tl_resource_desc_t **resource_p,
-                                                  unsigned *num_resources_p)
+static ucs_status_t uct_sockcm_query_devices(uct_md_h md,
+                                             uct_tl_device_resource_t **devices_p,
+                                             unsigned *num_devices_p)
 {
-    *num_resources_p = 0;
-    *resource_p      = NULL;
+    *num_devices_p = 0;
+    *devices_p      = NULL;
     return UCS_OK;
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_sockcm_tl,
-                        uct_sockcm_query_tl_resources,
-                        uct_sockcm_iface_t,
-                        UCT_SOCKCM_TL_NAME,
-                        "SOCKCM_",
-                        uct_sockcm_iface_config_table,
-                        uct_sockcm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_sockcm_component, &uct_sockcm_tl);
+UCT_TL_DEFINE(&uct_sockcm_component, sockcm, uct_sockcm_query_devices,
+              uct_sockcm_iface_t, "SOCKCM_", uct_sockcm_iface_config_table,
+              uct_sockcm_iface_config_t);

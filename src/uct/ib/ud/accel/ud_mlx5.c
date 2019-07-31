@@ -817,22 +817,15 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_mlx5_iface_t, uct_iface_t, uct_md_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
-uct_ud_mlx5_query_resources(uct_md_h md,
-                            uct_tl_resource_desc_t **resources_p,
-                            unsigned *num_resources_p)
+uct_ud_mlx5_query_tl_devices(uct_md_h md,
+                              uct_tl_device_resource_t **tl_devices_p,
+                              unsigned *num_tl_devices_p)
 {
-    ucs_trace_func("");
-    /* TODO take transport overhead into account */
-    return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                            "ud_mlx5", UCT_IB_DEVICE_FLAG_MLX5_PRM,
-                                            resources_p, num_resources_p);
+    uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+    return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_MLX5_PRM,
+                                     tl_devices_p, num_tl_devices_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_ud_mlx5_tl,
-                        uct_ud_mlx5_query_resources,
-                        uct_ud_mlx5_iface_t,
-                        "ud_mlx5",
-                        "UD_MLX5_",
-                        uct_ud_mlx5_iface_config_table,
-                        uct_ud_mlx5_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_component, &uct_ud_mlx5_tl);
+UCT_TL_DEFINE(&uct_ib_component, ud_mlx5, uct_ud_mlx5_query_tl_devices,
+              uct_ud_mlx5_iface_t, "UD_MLX5_", uct_ud_mlx5_iface_config_table,
+              uct_ud_mlx5_iface_config_t);

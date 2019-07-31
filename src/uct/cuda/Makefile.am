@@ -26,6 +26,7 @@ noinst_HEADERS = \
 	cuda_ipc/cuda_ipc_cache.h
 
 libuct_cuda_la_SOURCES = \
+	base/cuda_iface.c \
 	base/cuda_md.c \
 	cuda_copy/cuda_copy_md.c \
 	cuda_copy/cuda_copy_iface.c \

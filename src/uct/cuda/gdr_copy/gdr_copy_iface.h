@@ -9,10 +9,6 @@
 #include <uct/base/uct_iface.h>
 
 
-#define UCT_GDR_COPY_TL_NAME    "gdr_copy"
-#define UCT_CUDA_DEV_NAME       "gdrcopy0"
-
-
 typedef uint64_t uct_gdr_copy_iface_addr_t;
 
 

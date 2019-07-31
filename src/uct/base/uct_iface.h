@@ -10,12 +10,14 @@
 #include "uct_worker.h"
 
 #include <uct/api/uct.h>
+#include <uct/base/uct_component.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
 
@@ -245,41 +247,61 @@ UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
 
 
 /**
- * Transport component.
+ * Internal resource descriptor of a transport device
  */
-typedef struct uct_tl_component {
-    ucs_status_t           (*query_resources)(uct_md_h md,
-                                              uct_tl_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p);
+typedef struct uct_tl_device_resource {
+    char                     name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
+    uct_device_type_t        type;     /**< Device type. To which UCT group it belongs to */
+} uct_tl_device_resource_t;
+
+
+/**
+ * UCT transport definition. This structure should not be sued directly; use
+ * @ref UCT_TL_DEFINE macro to define a transport.
+ */
+typedef struct uct_tl {
+    char                   name[UCT_TL_NAME_MAX];/**< Transport name */
+
+    ucs_status_t           (*query_devices)(uct_md_h md,
+                                            uct_tl_device_resource_t **tl_devices_p,
+                                            unsigned *num_tl_devices_p);
 
     ucs_status_t           (*iface_open)(uct_md_h md, uct_worker_h worker,
                                          const uct_iface_params_t *params,
                                          const uct_iface_config_t *config,
                                          uct_iface_h *iface_p);
 
-    char                   name[UCT_TL_NAME_MAX];/**< Transport name */
-    const char             *cfg_prefix;         /**< Prefix for configuration environment vars */
-    ucs_config_field_t     *iface_config_table; /**< Defines transport configuration options */
-    size_t                 iface_config_size;   /**< Transport configuration structure size */
-} uct_tl_component_t;
+    ucs_config_global_list_entry_t config; /**< Transport configuration entry */
+    ucs_list_link_t                list;   /**< Entry in component's transports list */
+} uct_tl_t;
 
 
 /**
- * Define a transport component.
+ * Define a transport
+ *
+ * @param _component      Component to add the transport to.
+ * @param _name           Name of the transport (should be a token, not a string)
+ * @param _query_devices  Function to query the list of available devices
+ * @param _iface_class    Struct type defining the uct_iface class
  */
-#define UCT_TL_COMPONENT_DEFINE(_tlc, _query, _iface_struct, _name, \
-                                _cfg_prefix, _cfg_table, _cfg_struct) \
+#define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_class, \
+                      _cfg_prefix, _cfg_table, _cfg_struct) \
     \
-    uct_tl_component_t _tlc = { \
-        .query_resources     = _query, \
-        .iface_open          = UCS_CLASS_NEW_FUNC_NAME(_iface_struct), \
-        .name                = _name, \
-        .cfg_prefix          = _cfg_prefix, \
-        .iface_config_table  = _cfg_table, \
-        .iface_config_size   = sizeof(_cfg_struct) \
+    uct_tl_t uct_##_name##_tl = { \
+        .name               = #_name, \
+        .query_devices      = _query_devices, \
+        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+        .config = { \
+            .name           = #_name" transport", \
+            .prefix         = _cfg_prefix, \
+            .table          = _cfg_table, \
+            .size           = sizeof(_cfg_struct), \
+         } \
     }; \
-    UCS_CONFIG_REGISTER_TABLE(_cfg_table, _name" transport", _cfg_prefix, \
-                              _cfg_struct)
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(uct_##_name##_tl).config); \
+    UCS_STATIC_INIT { \
+        ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
+    }
 
 
 /**
@@ -557,6 +579,11 @@ ucs_status_t uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h
                                tl_iface, ucs_status_t status);
 
 void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
+
+ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
+                                        uct_device_type_t dev_type,
+                                        uct_tl_device_resource_t **tl_devices_p,
+                                        unsigned *num_tl_devices_p);
 
 ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);

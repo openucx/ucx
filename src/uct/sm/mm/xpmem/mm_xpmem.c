@@ -13,6 +13,18 @@
 #include <ucs/debug/log.h>
 
 
+typedef struct uct_xpmem_md_config {
+    uct_mm_md_config_t      super;
+} uct_xpmem_md_config_t;
+
+static ucs_config_field_t uct_xpmem_md_config_table[] = {
+  {"MM_", "", NULL,
+   ucs_offsetof(uct_xpmem_md_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
+
+  {NULL}
+};
+
 static ucs_status_t uct_xpmem_query()
 {
     int version;
@@ -216,5 +228,4 @@ static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
     .free    = uct_xpmem_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_xpmem_md, "xpmem", &uct_xpmem_mapper_ops, uct, "XPMEM_")
-UCT_MD_REGISTER_TL(&uct_xpmem_md.super, &uct_mm_tl);
+UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_mapper_ops, "XPMEM_")

@@ -10,10 +10,6 @@
 #include <uct/cuda/base/cuda_iface.h>
 
 
-#define UCT_CUDA_COPY_TL_NAME    "cuda_copy"
-#define UCT_CUDA_DEV_NAME        "cudacopy0"
-
-
 typedef uint64_t uct_cuda_copy_iface_addr_t;
 
 

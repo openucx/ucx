@@ -607,20 +607,15 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_iface_t, uct_iface_t);
 
-static ucs_status_t uct_rdmacm_query_tl_resources(uct_md_h md,
-                                                  uct_tl_resource_desc_t **resource_p,
-                                                  unsigned *num_resources_p)
+static ucs_status_t
+uct_rdmacm_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                            unsigned *num_tl_devices_p)
 {
-    *num_resources_p = 0;
-    *resource_p      = NULL;
+    *num_tl_devices_p = 0;
+    *tl_devices_p      = NULL;
     return UCS_OK;
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_rdmacm_tl,
-                        uct_rdmacm_query_tl_resources,
-                        uct_rdmacm_iface_t,
-                        UCT_RDMACM_TL_NAME,
-                        "RDMACM_",
-                        uct_rdmacm_iface_config_table,
-                        uct_rdmacm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_rdmacm_component, &uct_rdmacm_tl);
+UCT_TL_DEFINE(&uct_rdmacm_component, rdmacm, uct_rdmacm_query_tl_devices,
+              uct_rdmacm_iface_t, "RDMACM_", uct_rdmacm_iface_config_table,
+              uct_rdmacm_iface_config_t);

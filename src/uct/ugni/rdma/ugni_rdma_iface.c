@@ -23,14 +23,6 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_ugni_rdma_query_tl_resources(uct_md_h md,
-                                                     uct_tl_resource_desc_t **resource_p,
-                                                     unsigned *num_resources_p)
-{
-    return uct_ugni_query_tl_resources(md, UCT_UGNI_RDMA_TL_NAME,
-                                       resource_p, num_resources_p);
-}
-
 static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_rdma_iface_t);
@@ -376,11 +368,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_rdma_iface_t, uct_iface_t, uct_md_h,
                           uct_worker_h, const uct_iface_params_t*,
                           const uct_iface_config_t*);
 
-UCT_TL_COMPONENT_DEFINE(uct_ugni_rdma_tl_component,
-                        uct_ugni_rdma_query_tl_resources,
-                        uct_ugni_rdma_iface_t,
-                        UCT_UGNI_RDMA_TL_NAME,
-                        "UGNI_RDMA",
-                        uct_ugni_rdma_iface_config_table,
-                        uct_ugni_rdma_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ugni_component, &uct_ugni_rdma_tl_component);
+UCT_TL_DEFINE(&uct_ugni_component, ugni_rdma, uct_ugni_query_devices,
+              uct_ugni_rdma_iface_t, "UGNI_RDMA_",
+              uct_ugni_rdma_iface_config_table, uct_ugni_rdma_iface_config_t);

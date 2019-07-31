@@ -10,6 +10,7 @@
 #include "ib_verbs.h"
 
 #include <uct/api/uct.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/stats/stats.h>
 #include <ucs/debug/assert.h>
 #include <ucs/datastruct/khash.h>
@@ -163,15 +164,13 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
  * Helper function to list IB transport resources.
  *
  * @param dev              IB device.
- * @param tl_name          Transport name.
  * @param flags            Transport requirements from IB device (see UCT_IB_RESOURCE_FLAG_xx)
- * @param resources_p      Filled with a pointer to an array of resources.
- * @param num_resources_p  Filled with the number of resources.
+ * @param devices_p        Filled with a pointer to an array of devices.
+ * @param num_devices_p    Filled with the number of devices.
  */
-ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
-                                              const char *tl_name, unsigned flags,
-                                              uct_tl_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p);
+ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
+                                       uct_tl_device_resource_t **devices_p,
+                                       unsigned *num_devices_p);
 
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,

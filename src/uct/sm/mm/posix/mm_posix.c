@@ -561,5 +561,4 @@ static uct_mm_mapper_ops_t uct_posix_mapper_ops = {
    .free    = uct_posix_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_posix_md, "posix", &uct_posix_mapper_ops, uct_posix, "POSIX_")
-UCT_MD_REGISTER_TL(&uct_posix_md.super, &uct_mm_tl);
+UCT_MM_TL_DEFINE(posix, &uct_posix_mapper_ops, "POSIX_")

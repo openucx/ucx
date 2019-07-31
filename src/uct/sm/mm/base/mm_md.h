@@ -89,10 +89,9 @@ typedef struct uct_mm_component {
  * @param _var          Variable for MM component.
  * @param _name         String which is the component name.
  * @param _ops          Mapper operations, of type uct_mm_mapper_ops_t.
- * @param _prefix       Prefix for defining the vars config table and config struct.
  * @param _cfg_prefix   Prefix for configuration environment vars.
  */
-#define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _prefix, _cfg_prefix) \
+#define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _cfg_prefix) \
     \
     static uct_mm_component_t _var = { \
         .super = { \
@@ -102,12 +101,12 @@ typedef struct uct_mm_component {
             .rkey_unpack        = uct_mm_rkey_unpack, \
             .rkey_ptr           = uct_mm_rkey_ptr, \
             .rkey_release       = uct_mm_rkey_release, \
-            .name               = _name, \
+            .name               = #_name, \
             .md_config          = { \
-                .name           = _name " memory domain", \
+                .name           = #_name " memory domain", \
                 .prefix         = _cfg_prefix, \
-                .table          = _prefix##_md_config_table, \
-                .size           = sizeof(_prefix##_md_config_t), \
+                .table          = uct_##_name##_md_config_table, \
+                .size           = sizeof(uct_##_name##_md_config_t), \
             }, \
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super), \

@@ -14,6 +14,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/string.h>
 #include <ucs/time/time.h>
 
 
@@ -385,6 +386,27 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
     memset(iface_attr, 0, sizeof(*iface_attr));
 
     iface_attr->max_num_eps = iface->config.max_num_eps;
+}
+
+ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
+                                        uct_device_type_t dev_type,
+                                        uct_tl_device_resource_t **tl_devices_p,
+                                        unsigned *num_tl_devices_p)
+{
+    uct_tl_device_resource_t *device;
+
+    device = ucs_calloc(1, sizeof(*device), "device resource");
+    if (NULL == device) {
+        ucs_error("failed to allocate device resource");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_snprintf_zero(device->name, sizeof(device->name), "%s", dev_name);
+    device->type = dev_type;
+
+    *num_tl_devices_p = 1;
+    *tl_devices_p     = device;
+    return UCS_OK;
 }
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)

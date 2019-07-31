@@ -11,7 +11,7 @@
 #include <uct/ugni/base/ugni_iface.h>
 #include <uct/base/uct_iface.h>
 
-#define UCT_UGNI_RDMA_TL_NAME  "ugni_rdma"
+
 #define UCT_UGNI_MAX_FMA       2048
 #define UCT_UGNI_MAX_RDMA      (512*1024*1024);
 

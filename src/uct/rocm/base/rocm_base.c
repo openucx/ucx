@@ -5,11 +5,15 @@
 
 #include "rocm_base.h"
 
+#include <ucs/debug/assert.h>
+#include <ucs/debug/log.h>
 #include <ucs/sys/module.h>
 
 #include <hsa_ext_amd.h>
 
 #include <pthread.h>
+#include <unistd.h>
+
 
 #define MAX_AGENTS 16
 static struct agents {
@@ -29,7 +33,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
 {
     hsa_device_type_t device_type;
 
-    assert(uct_rocm_base_agents.num < MAX_AGENTS);
+    ucs_assert(uct_rocm_base_agents.num < MAX_AGENTS);
 
     hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
     if (device_type == HSA_DEVICE_TYPE_CPU) {
@@ -101,9 +105,18 @@ uct_rocm_base_query_md_resources(uct_component_h component,
                                            num_resources_p);
 }
 
+ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
+                                         uct_tl_device_resource_t **tl_devices_p,
+                                         unsigned *num_tl_devices_p)
+{
+    return uct_single_device_resource(md, md->component->name,
+                                      UCT_DEVICE_TYPE_ACC, tl_devices_p,
+                                      num_tl_devices_p);
+}
+
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
 {
-    assert(dev_num < uct_rocm_base_agents.num);
+    ucs_assert(dev_num < uct_rocm_base_agents.num);
     return uct_rocm_base_agents.agents[dev_num];
 }
 
@@ -115,7 +128,7 @@ int uct_rocm_base_get_dev_num(hsa_agent_t agent)
         if (uct_rocm_base_agents.agents[i].handle == agent.handle)
             return i;
     }
-    assert(0);
+    ucs_assert(0);
     return -1;
 }
 

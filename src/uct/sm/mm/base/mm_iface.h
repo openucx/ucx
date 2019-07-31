@@ -22,7 +22,6 @@
 #include <sys/un.h>
 
 
-#define UCT_MM_TL_NAME "mm"
 #define UCT_MM_FIFO_CTL_SIZE_ALIGNED  ucs_align_up(sizeof(uct_mm_fifo_ctl_t),UCS_SYS_CACHE_LINE_SIZE)
 
 #define UCT_MM_GET_FIFO_SIZE(iface)  (UCS_SYS_CACHE_LINE_SIZE - 1 +  \
@@ -121,6 +120,27 @@ struct uct_mm_recv_desc {
 };
 
 
+/*
+ * Define a memory-mapper transport for MM.
+ *
+ * @param _var          Variable for MD component.
+ * @param _name         Component name token
+ * @param _ops          Memory domain operations, of type uct_mm_mapper_ops_t.
+ * @param _cfg_prefix   Prefix for configuration variables.
+ */
+#define UCT_MM_TL_DEFINE(_name, _ops, _cfg_prefix) \
+    \
+    UCT_MM_COMPONENT_DEFINE(uct_##_name##_component, _name, _ops, _cfg_prefix) \
+    UCT_TL_DEFINE(&(uct_##_name##_component).super, \
+                  _name, \
+                  uct_sm_base_query_tl_devices, \
+                  uct_mm_iface_t, \
+                  "MM_", \
+                  uct_mm_iface_config_table, \
+                  uct_mm_iface_config_t);
+
+extern ucs_config_field_t uct_mm_iface_config_table[];
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
                        unsigned length, unsigned flags)
@@ -165,11 +185,13 @@ static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems
    *fifo_elems = (void*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 }
 
+UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
+                           const uct_iface_params_t*, const uct_iface_config_t*);
+
 void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc);
+
 ucs_status_t uct_mm_flush();
 
 unsigned uct_mm_iface_progress(void *arg);
-
-extern uct_tl_component_t uct_mm_tl;
 
 #endif

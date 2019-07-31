@@ -182,11 +182,6 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (strcmp(params->mode.device.dev_name, UCT_SELF_NAME) != 0) {
-        ucs_error("No device was found: %s", params->mode.device.dev_name);
-        return UCS_ERR_NO_DEVICE;
-    }
-
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_self_iface_ops, md, worker,
                               params, tl_config
                               UCS_STATS_ARG((params->field_mask & 
@@ -221,29 +216,13 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_self_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
-static ucs_status_t uct_self_query_tl_resources(uct_md_h md,
-                                                uct_tl_resource_desc_t **resource_p,
-                                                unsigned *num_resources_p)
+static ucs_status_t
+uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                          unsigned *num_tl_devices_p)
 {
-    uct_tl_resource_desc_t *resource = 0;
-
-    ucs_trace_func("md=%p", md);
-
-    resource = ucs_calloc(1, sizeof(*resource), "resource desc");
-    if (NULL == resource) {
-        ucs_error("Failed to allocate memory");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
-                      UCT_SELF_NAME);
-    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                      UCT_SELF_NAME);
-    resource->dev_type = UCT_DEVICE_TYPE_SELF;
-
-    *num_resources_p = 1;
-    *resource_p      = resource;
-    return UCS_OK;
+    return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
+                                      UCT_DEVICE_TYPE_SELF,
+                                      tl_devices_p, num_tl_devices_p);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_self_ep_t, const uct_ep_params_t *params)
@@ -337,10 +316,8 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_is_reachable       = uct_self_iface_is_reachable
 };
 
-UCT_TL_COMPONENT_DEFINE(uct_self_tl, uct_self_query_tl_resources, uct_self_iface_t,
-                        UCT_SELF_NAME, "SELF_", uct_self_iface_config_table,
-                        uct_self_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_self_component, &uct_self_tl);
+UCT_TL_DEFINE(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
+              "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {

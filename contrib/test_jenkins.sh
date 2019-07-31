@@ -989,7 +989,7 @@ test_ucp_dlopen() {
 	then
 		echo "==== Running UCP library loading test ===="
 		./test/apps/test_ucp_dlopen # just to save output to log
-		./test/apps/test_ucp_dlopen | grep 'cma/cma'
+		./test/apps/test_ucp_dlopen | grep 'cma/memory'
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
