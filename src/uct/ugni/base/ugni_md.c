@@ -191,7 +191,7 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
 
     static uct_ugni_md_t md = {
         .super.ops          = &md_ops,
-        .super.component    = &uct_ugni_md_component,
+        .super.component    = &uct_ugni_component,
         .ref_count          = 0
     };
 
@@ -217,15 +217,20 @@ error:
     return status;
 }
 
-
-UCT_MD_COMPONENT_DEFINE(uct_ugni_md_component,
-                        UCT_UGNI_MD_NAME,
-                        uct_ugni_query_md_resources,
-                        uct_ugni_md_open,
-                        NULL,
-                        uct_ugni_rkey_unpack,
-                        uct_ugni_rkey_release,
-                        "UGNI_",
-                        uct_md_config_table,
-                        uct_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_ugni_component = {
+    .query_md_resources = uct_ugni_query_md_resources,
+    .md_open            = uct_ugni_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_ugni_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_ugni_rkey_release,
+    .name               = UCT_UGNI_MD_NAME,
+    .md_config          = {
+        .name           = "UGNI memory domain",
+        .prefix         = "UGNI_",
+        .table          = uct_md_config_table,
+        .size           = sizeof(uct_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ugni_component)
+};
+UCT_COMPONENT_REGISTER(&uct_ugni_component);

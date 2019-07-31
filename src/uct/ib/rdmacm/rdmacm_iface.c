@@ -623,4 +623,4 @@ UCT_TL_COMPONENT_DEFINE(uct_rdmacm_tl,
                         "RDMACM_",
                         uct_rdmacm_iface_config_table,
                         uct_rdmacm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_rdmacm_mdc, &uct_rdmacm_tl);
+UCT_MD_REGISTER_TL(&uct_rdmacm_component, &uct_rdmacm_tl);

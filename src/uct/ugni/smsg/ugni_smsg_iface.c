@@ -378,5 +378,4 @@ UCT_TL_COMPONENT_DEFINE(uct_ugni_smsg_tl_component,
                         "UGNI_SMSG",
                         uct_ugni_smsg_iface_config_table,
                         uct_ugni_iface_config_t);
-
-UCT_MD_REGISTER_TL(&uct_ugni_md_component, &uct_ugni_smsg_tl_component);
+UCT_MD_REGISTER_TL(&uct_ugni_component, &uct_ugni_smsg_tl_component);

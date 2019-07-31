@@ -312,4 +312,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cuda_copy_tl,
                         "CUDA_COPY_",
                         uct_cuda_copy_iface_config_table,
                         uct_cuda_copy_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_cuda_copy_md_component, &uct_cuda_copy_tl);
+UCT_MD_REGISTER_TL(&uct_cuda_copy_component, &uct_cuda_copy_tl);

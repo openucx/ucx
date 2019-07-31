@@ -169,4 +169,4 @@ UCT_TL_COMPONENT_DEFINE(uct_gdr_copy_tl,
                         "GDR_COPY_",
                         uct_gdr_copy_iface_config_table,
                         uct_gdr_copy_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_gdr_copy_md_component, &uct_gdr_copy_tl);
+UCT_MD_REGISTER_TL(&uct_gdr_copy_component, &uct_gdr_copy_tl);

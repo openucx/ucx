@@ -156,15 +156,28 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     };
     static uct_md_t md = {
         .ops          = &md_ops,
-        .component    = &uct_cuda_ipc_md_component
+        .component    = &uct_cuda_ipc_component
     };
 
     *md_p = &md;
     return UCS_OK;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_cuda_ipc_md_component, UCT_CUDA_IPC_MD_NAME,
-                        uct_cuda_base_query_md_resources, uct_cuda_ipc_md_open, NULL,
-                        uct_cuda_ipc_rkey_unpack, uct_cuda_ipc_rkey_release, "CUDA_IPC_",
-                        uct_cuda_ipc_md_config_table, uct_cuda_ipc_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_cuda_ipc_component = {
+    .query_md_resources = uct_cuda_base_query_md_resources,
+    .md_open            = uct_cuda_ipc_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_cuda_ipc_rkey_release,
+    .name               = "cuda_ipc",
+    .md_config          = {
+        .name           = "Cuda-IPC memory domain",
+        .prefix         = "CUDA_IPC_",
+        .table          = uct_cuda_ipc_md_config_table,
+        .size           = sizeof(uct_cuda_ipc_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_ipc_component)
+};
+UCT_COMPONENT_REGISTER(&uct_cuda_ipc_component);
+

@@ -12,8 +12,6 @@
 #include <ucs/sys/string.h>
 
 
-UCT_MD_REGISTER_TL(&uct_knem_md_component, &uct_knem_tl);
-
 static ucs_config_field_t uct_knem_iface_config_table[] = {
     {"", "BW=13862MBs", NULL,
     ucs_offsetof(uct_knem_iface_config_t, super),
@@ -21,7 +19,6 @@ static ucs_config_field_t uct_knem_iface_config_table[] = {
 
     {NULL}
 };
-
 
 static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          uct_iface_attr_t *iface_attr)
@@ -138,3 +135,4 @@ UCT_TL_COMPONENT_DEFINE(uct_knem_tl,
                         "KNEM_",
                         uct_knem_iface_config_table,
                         uct_knem_iface_config_t);
+UCT_MD_REGISTER_TL(&uct_knem_component, &uct_knem_tl);

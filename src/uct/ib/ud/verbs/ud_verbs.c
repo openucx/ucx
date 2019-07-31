@@ -670,4 +670,4 @@ UCT_TL_COMPONENT_DEFINE(uct_ud_verbs_tl,
                         "UD_VERBS_",
                         uct_ud_verbs_iface_config_table,
                         uct_ud_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_ud_verbs_tl);
+UCT_MD_REGISTER_TL(&uct_ib_component, &uct_ud_verbs_tl);

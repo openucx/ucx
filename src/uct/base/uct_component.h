@@ -13,9 +13,6 @@
 #include <ucs/datastruct/list.h>
 
 
-extern ucs_list_link_t uct_md_components_list;
-
-
 typedef struct uct_md_component uct_component_t;
 typedef struct uct_md_component uct_md_component_t;
 struct uct_md_component {
@@ -41,52 +38,31 @@ struct uct_md_component {
 
     const char             name[UCT_MD_COMPONENT_NAME_MAX];
     void                   *priv;
-    const char             *cfg_prefix;        /**< Prefix for configuration environment vars */
-    ucs_config_field_t     *md_config_table;   /**< Defines MD configuration options */
-    size_t                 md_config_size;     /**< MD configuration structure size */
+    ucs_config_global_list_entry_t md_config;  /**< MD configuration entry */
     ucs_list_link_t        tl_list;            /**< List of uct_md_registered_tl_t */
     ucs_list_link_t        list;
 };
 
 
 /**
- * Define a MD component.
+ * Register a component for usage, so it will be returned from
+ * @ref uct_query_components.
  *
- * @param _mdc           MD component structure to initialize.
- * @param _name          MD component name.
- * @param _query         Function to query MD resources.
- * @param _open          Function to open a MD.
- * @param _priv          Custom private data.
- * @param _rkey_unpack   Function to unpack a remote key buffer to handle.
- * @param _rkey_release  Function to release a remote key handle.
- * @param _cfg_prefix    Prefix for configuration environment vars.
- * @param _cfg_table     Defines the MDC's configuration values.
- * @param _cfg_struct    MDC configuration structure.
- * @param _cm_open       Function to open a CM.
+ * @param [in] _component  Pointer to a global component structure to register.
  */
-#define UCT_MD_COMPONENT_DEFINE(_mdc, _name, _query, _open, _priv, \
-                                _rkey_unpack, _rkey_release, \
-                                _cfg_prefix, _cfg_table, _cfg_struct, _cm_open) \
-    \
-    uct_md_component_t _mdc = { \
-        .query_md_resources = _query, \
-        .md_open         = _open, \
-        .cm_open         = _cm_open, \
-        .cfg_prefix      = _cfg_prefix, \
-        .md_config_table = _cfg_table, \
-        .md_config_size  = sizeof(_cfg_struct), \
-        .priv            = _priv, \
-        .rkey_unpack     = _rkey_unpack, \
-        .rkey_ptr        = ucs_empty_function_return_unsupported, \
-        .rkey_release    = _rkey_release, \
-        .name            = _name, \
-        .tl_list         = { &_mdc.tl_list, &_mdc.tl_list } \
-    }; \
+#define UCT_COMPONENT_REGISTER(_component) \
     UCS_STATIC_INIT { \
-        ucs_list_add_tail(&uct_md_components_list, &_mdc.list); \
+        extern ucs_list_link_t uct_md_components_list; \
+        ucs_list_add_tail(&uct_md_components_list, &(_component)->list); \
     } \
-    UCS_CONFIG_REGISTER_TABLE(_cfg_table, _name" memory domain", _cfg_prefix, \
-                              _cfg_struct)
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config);
+
+
+/**
+ * Helper macro to initialize component's transport list head.
+ */
+#define UCT_COMPONENT_TL_LIST_INITIALIZER(_component) \
+    UCS_LIST_INITIALIZER(&(_component)->tl_list, &(_component)->tl_list)
 
 
 #endif

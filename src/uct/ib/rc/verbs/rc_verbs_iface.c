@@ -404,4 +404,4 @@ UCT_TL_COMPONENT_DEFINE(uct_rc_verbs_tl,
                         "RC_VERBS_",
                         uct_rc_verbs_iface_config_table,
                         uct_rc_verbs_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_rc_verbs_tl);
+UCT_MD_REGISTER_TL(&uct_ib_component, &uct_rc_verbs_tl);

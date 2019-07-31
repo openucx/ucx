@@ -12,8 +12,6 @@
 #include <ucs/sys/string.h>
 
 
-UCT_MD_REGISTER_TL(&uct_cma_md_component, &uct_cma_tl);
-
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap;BW=11145MBs", NULL,
     ucs_offsetof(uct_cma_iface_config_t, super),
@@ -142,3 +140,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cma_tl,
                         "CMA_",
                         uct_cma_iface_config_table,
                         uct_cma_iface_config_t);
+UCT_MD_REGISTER_TL(&uct_cma_component, &uct_cma_tl);

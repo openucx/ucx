@@ -534,6 +534,9 @@ int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg)
     if (!strcasecmp(buf, "auto")) {
         *(size_t*)dest = UCS_ULUNITS_AUTO;
         return 1;
+    } else if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
+        *(size_t*)dest = UCS_ULUNITS_INF;
+        return 1;
     }
 
     return ucs_config_sscanf_ulong(buf, dest, arg);
@@ -545,6 +548,8 @@ int ucs_config_sprintf_ulunits(char *buf, size_t max, void *src, const void *arg
 
     if (val == UCS_ULUNITS_AUTO) {
         return snprintf(buf, max, "auto");
+    } else if (val == UCS_ULUNITS_INF) {
+        return snprintf(buf, max, UCS_NUMERIC_INF_STR);
     }
 
     return ucs_config_sprintf_ulong(buf, max, src, arg);

@@ -264,5 +264,4 @@ UCT_TL_COMPONENT_DEFINE(uct_rocm_ipc_tl,
                         "ROCM_IPC_",
                         uct_rocm_ipc_iface_config_table,
                         uct_rocm_ipc_iface_config_t);
-
-UCT_MD_REGISTER_TL(&uct_rocm_ipc_md_component, &uct_rocm_ipc_tl);
+UCT_MD_REGISTER_TL(&uct_rocm_ipc_component, &uct_rocm_ipc_tl);

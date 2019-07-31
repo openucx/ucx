@@ -24,7 +24,6 @@
 #include <float.h>
 
 
-#define UCT_IB_MD_PREFIX         "ib"
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 /* define string to use it in debug messages */
@@ -1187,7 +1186,12 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     int ret;
 
     md->super.ops       = &uct_ib_md_ops;
-    md->super.component = &uct_ib_mdc;
+    md->super.component = &uct_ib_component;
+    md->config          = md_config->ext;
+
+    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
+        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+    }
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1298,10 +1302,9 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
-    dev              = &md->dev;
-    md->config       = md_config->ext;
 
     /* Open verbs context */
+    dev              = &md->dev;
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
         ucs_error("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
@@ -1314,9 +1317,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
-    }
 
     if (uct_ib_device_odp_has_global_mr(&md->dev)) {
         md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
@@ -1360,9 +1360,20 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
 
 UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
 
-UCT_MD_COMPONENT_DEFINE(uct_ib_mdc, UCT_IB_MD_PREFIX,
-                        uct_ib_query_md_resources, uct_ib_md_open, NULL,
-                        uct_ib_rkey_unpack,
-                        (void*)ucs_empty_function_return_success /* release */,
-                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_ib_component = {
+    .query_md_resources = uct_ib_query_md_resources,
+    .md_open            = uct_ib_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_ib_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = ucs_empty_function_return_success,
+    .name               = "ib",
+    .md_config          = {
+        .name           = "IB memory domain",
+        .prefix         = "IB_",
+        .table          = uct_ib_md_config_table,
+        .size           = sizeof(uct_ib_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ib_component)
+};
+UCT_COMPONENT_REGISTER(&uct_ib_component);
