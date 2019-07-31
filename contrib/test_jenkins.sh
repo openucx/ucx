@@ -302,57 +302,6 @@ build_disable_numa() {
 }
 
 #
-# Run Coverity and report errors
-# The argument is a UCX build type: "devel" (default) or "release"
-#
-run_coverity() {
-	echo 1..1 > coverity.tap
-	if module_load tools/cov
-	then
-		if [ $# -eq 0 ]
-		then
-			ucx_build_type="devel"
-		else
-			ucx_build_type=$1
-		fi
-
-		echo "==== Running coverity ===="
-		$MAKEP clean
-		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
-		cov_build="$WORKSPACE/$cov_build_id"
-		rm -rf $cov_build
-		cov-build   --dir $cov_build $MAKEP all
-		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
-		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
-		rc=$(($rc+$nerrors))
-
-		index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
-		if [ -z "$BUILD_URL" ]; then
-			cov_url="${WS_URL}/${cov_build_id}/${index_html}"
-		else
-			cov_url="${BUILD_URL}/artifact/${cov_build_id}/${index_html}"
-		fi
-		rm -f jenkins_sidelinks.txt
-		if [ $nerrors -gt 0 ]; then
-			cov-format-errors --dir $cov_build --emacs-style
-			echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
-		else
-			echo "ok 1 Coverity found no issues" >> coverity.tap
-			rm -rf $cov_build
-		fi
-
-		echo Coverity report: $cov_url
-		printf "%s\t%s\n" Coverity $cov_url >> jenkins_sidelinks.txt
-		module unload tools/cov
-
-		return $rc
-	else
-		echo "==== Not running Coverity ===="
-		echo "ok 1 - # SKIP because Coverity not installed" >> coverity.tap
-	fi
-}
-
-#
 # Build a package in release mode
 #
 build_release_pkg() {
@@ -388,9 +337,6 @@ build_release_pkg() {
 		echo "==== Build RPM ===="
 		../contrib/buildrpm.sh -s -b --nodeps
 	fi
-
-	# run coverity analysis for UCX release build
-	run_coverity "release"
 
 	# check that UCX version is present in spec file
 	cd ${WORKSPACE}
@@ -1163,6 +1109,53 @@ test_jucx() {
 	fi
 }
 
+#
+# Run Coverity and report errors
+# The argument is a UCX build type: "devel" (default) or "release"
+#
+run_coverity() {
+	echo 1..1 > coverity.tap
+	if module_load tools/cov
+	then
+		ucx_build_type=$1
+
+		echo "==== Running coverity ===="
+		../contrib/configure-$ucx_build_type --prefix=$ucx_inst
+		$MAKEP clean
+		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
+		cov_build="$WORKSPACE/$cov_build_id"
+		rm -rf $cov_build
+		cov-build   --dir $cov_build $MAKEP all
+		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
+		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
+		rc=$(($rc+$nerrors))
+
+		index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
+		if [ -z "$BUILD_URL" ]; then
+			cov_url="${WS_URL}/${cov_build_id}/${index_html}"
+		else
+			cov_url="${BUILD_URL}/artifact/${cov_build_id}/${index_html}"
+		fi
+		rm -f jenkins_sidelinks.txt
+		if [ $nerrors -gt 0 ]; then
+			cov-format-errors --dir $cov_build --emacs-style
+			echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
+		else
+			echo "ok 1 Coverity found no issues" >> coverity.tap
+			rm -rf $cov_build
+		fi
+
+		echo Coverity report: $cov_url
+		printf "%s\t%s\n" Coverity $cov_url >> jenkins_sidelinks.txt
+		module unload tools/cov
+
+		return $rc
+	else
+		echo "==== Not running Coverity ===="
+		echo "ok 1 - # SKIP because Coverity not installed" >> coverity.tap
+	fi
+}
+
 run_gtest_watchdog_test() {
 	watchdog_timeout=$1
 	sleep_time=$2
@@ -1416,7 +1409,8 @@ run_tests() {
 	run_gtest_default
 	run_gtest_armclang
 
-	do_distributed_task 3 4 run_coverity
+	do_distributed_task 3 4 run_coverity release
+	do_distributed_task 3 4 run_coverity devel
 	do_distributed_task 0 4 run_gtest_release
 }
 
