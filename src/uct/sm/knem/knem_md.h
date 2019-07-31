@@ -14,7 +14,7 @@
 #include <ucs/memory/rcache.h>
 #include <uct/base/uct_md.h>
 
-extern uct_md_component_t uct_knem_md_component;
+extern uct_component_t uct_knem_component;
 ucs_status_t uct_knem_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 /**

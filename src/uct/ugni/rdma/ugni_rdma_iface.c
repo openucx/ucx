@@ -380,4 +380,4 @@ UCT_TL_COMPONENT_DEFINE(uct_ugni_rdma_tl_component,
                         "UGNI_RDMA",
                         uct_ugni_rdma_iface_config_table,
                         uct_ugni_rdma_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ugni_md_component, &uct_ugni_rdma_tl_component);
+UCT_MD_REGISTER_TL(&uct_ugni_component, &uct_ugni_rdma_tl_component);

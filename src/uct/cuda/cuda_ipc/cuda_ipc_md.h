@@ -12,11 +12,10 @@
 #include <uct/cuda/base/cuda_iface.h>
 
 
-#define UCT_CUDA_IPC_MD_NAME      "cuda_ipc"
 #define UCT_CUDA_IPC_MAX_ALLOC_SZ (1 << 30)
 
 
-extern uct_md_component_t uct_cuda_ipc_md_component;
+extern uct_md_component_t uct_cuda_ipc_component;
 
 
 /**

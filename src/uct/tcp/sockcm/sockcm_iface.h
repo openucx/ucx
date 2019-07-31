@@ -34,6 +34,4 @@ struct uct_sockcm_iface {
 
 void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface);
 
-extern uct_md_component_t uct_sockcm_mdc;
-
 #endif

@@ -136,4 +136,4 @@ UCT_TL_COMPONENT_DEFINE(uct_sockcm_tl,
                         "SOCKCM_",
                         uct_sockcm_iface_config_table,
                         uct_sockcm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_sockcm_mdc, &uct_sockcm_tl);
+UCT_MD_REGISTER_TL(&uct_sockcm_component, &uct_sockcm_tl);

@@ -141,4 +141,4 @@ static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
 };
 
 UCT_MM_COMPONENT_DEFINE(uct_sysv_md, "sysv", &uct_sysv_mapper_ops, uct_sysv, "SYSV_")
-UCT_MD_REGISTER_TL(&uct_sysv_md, &uct_mm_tl);
+UCT_MD_REGISTER_TL(&uct_sysv_md.super, &uct_mm_tl);

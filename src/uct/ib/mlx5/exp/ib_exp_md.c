@@ -362,7 +362,6 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
 
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
-    md->super.config = md_config->ext;
 
     status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
     if (status != UCS_OK) {
@@ -379,10 +378,6 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
         dev->flags |= UCT_IB_DEVICE_FLAG_DC;
     }
 #endif
-
-    if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        md->super.config.odp.max_size = uct_ib_device_odp_max_size(dev);
-    }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||

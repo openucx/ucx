@@ -9,9 +9,8 @@
 #include <uct/base/uct_md.h>
 #include <hsa_ext_amd.h>
 
-#define UCT_ROCM_IPC_MD_NAME    "rocm_ipc"
 
-extern uct_md_component_t uct_rocm_ipc_md_component;
+extern uct_md_component_t uct_rocm_ipc_component;
 
 typedef struct uct_rocm_ipc_md {
     struct uct_md super;

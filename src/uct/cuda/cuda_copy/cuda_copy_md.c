@@ -121,15 +121,27 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops = &md_ops;
-    md->super.component = &uct_cuda_copy_md_component;
-
-    *md_p = (uct_md_h) md;
+    md->super.ops       = &md_ops;
+    md->super.component = &uct_cuda_copy_component;
+    *md_p               = (uct_md_h)md;
     return UCS_OK;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_cuda_copy_md_component, UCT_CUDA_COPY_MD_NAME,
-                        uct_cuda_base_query_md_resources, uct_cuda_copy_md_open, NULL,
-                        uct_cuda_copy_rkey_unpack, uct_cuda_copy_rkey_release, "CUDA_COPY_",
-                        uct_cuda_copy_md_config_table, uct_cuda_copy_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_cuda_copy_component = {
+    .query_md_resources = uct_cuda_base_query_md_resources,
+    .md_open            = uct_cuda_copy_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_cuda_copy_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_cuda_copy_rkey_release,
+    .name               = "cuda_cpy",
+    .md_config          = {
+        .name           = "Cuda-copy memory domain",
+        .prefix         = "CUDA_COPY_",
+        .table          = uct_cuda_copy_md_config_table,
+        .size           = sizeof(uct_cuda_copy_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_copy_component)
+};
+UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);
+

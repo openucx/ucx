@@ -365,10 +365,10 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops = &md_ops;
-    md->super.component = &uct_gdr_copy_md_component;
-    md->rcache = NULL;
-    md->reg_cost = md_config->uc_reg_cost;
+    md->super.ops       = &md_ops;
+    md->super.component = &uct_gdr_copy_component;
+    md->rcache          = NULL;
+    md->reg_cost        = md_config->uc_reg_cost;
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
@@ -413,8 +413,21 @@ err_free_md:
     goto out;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_gdr_copy_md_component, UCT_GDR_COPY_MD_NAME,
-                        uct_gdr_copy_query_md_resources, uct_gdr_copy_md_open, NULL,
-                        uct_gdr_copy_rkey_unpack, uct_gdr_copy_rkey_release, "GDR_COPY_",
-                        uct_gdr_copy_md_config_table, uct_gdr_copy_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_gdr_copy_component = {
+    .query_md_resources = uct_gdr_copy_query_md_resources,
+    .md_open            = uct_gdr_copy_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_gdr_copy_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_gdr_copy_rkey_release,
+    .name               = "gdr_copy",
+    .md_config          = {
+        .name           = "GDR-copy memory domain",
+        .prefix         = "GDR_COPY_",
+        .table          = uct_gdr_copy_md_config_table,
+        .size           = sizeof(uct_gdr_copy_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gdr_copy_component)
+};
+UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
+

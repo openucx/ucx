@@ -164,5 +164,4 @@ UCT_TL_COMPONENT_DEFINE(uct_rocm_gdr_tl,
                         "ROCM_GDR_",
                         uct_rocm_gdr_iface_config_table,
                         uct_rocm_gdr_iface_config_t);
-
-UCT_MD_REGISTER_TL(&uct_rocm_gdr_md_component, &uct_rocm_gdr_tl);
+UCT_MD_REGISTER_TL(&uct_rocm_gdr_component, &uct_rocm_gdr_tl);

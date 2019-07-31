@@ -128,15 +128,28 @@ uct_rocm_gdr_md_open(uct_component_h component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops = &md_ops;
-    md->super.component = &uct_rocm_gdr_md_component;
+    md->super.ops       = &md_ops;
+    md->super.component = &uct_rocm_gdr_component;
 
     *md_p = (uct_md_h) md;
     return UCS_OK;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_rocm_gdr_md_component, UCT_ROCM_GDR_MD_NAME,
-                        uct_md_query_single_md_resource, uct_rocm_gdr_md_open, NULL,
-                        uct_rocm_gdr_rkey_unpack, uct_rocm_gdr_rkey_release, "ROCM_GDR_",
-                        uct_rocm_gdr_md_config_table, uct_rocm_gdr_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_rocm_gdr_component = {
+    .query_md_resources = uct_md_query_single_md_resource,
+    .md_open            = uct_rocm_gdr_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_rocm_gdr_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_rocm_gdr_rkey_release,
+    .name               = "rocm_gdr",
+    .md_config          = {
+        .name           = "ROCm-gdr memory domain",
+        .prefix         = "ROCM_GDR_",
+        .table          = uct_rocm_gdr_md_config_table,
+        .size           = sizeof(uct_rocm_gdr_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_gdr_component)
+};
+UCT_COMPONENT_REGISTER(&uct_rocm_gdr_component);
+

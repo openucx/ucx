@@ -467,4 +467,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cuda_ipc_tl,
                         "CUDA_IPC_",
                         uct_cuda_ipc_iface_config_table,
                         uct_cuda_ipc_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_cuda_ipc_md_component, &uct_cuda_ipc_tl);
+UCT_MD_REGISTER_TL(&uct_cuda_ipc_component, &uct_cuda_ipc_tl);

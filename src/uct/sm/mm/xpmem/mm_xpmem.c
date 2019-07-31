@@ -217,4 +217,4 @@ static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
 };
 
 UCT_MM_COMPONENT_DEFINE(uct_xpmem_md, "xpmem", &uct_xpmem_mapper_ops, uct, "XPMEM_")
-UCT_MD_REGISTER_TL(&uct_xpmem_md, &uct_mm_tl);
+UCT_MD_REGISTER_TL(&uct_xpmem_md.super, &uct_mm_tl);

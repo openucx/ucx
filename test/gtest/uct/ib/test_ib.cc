@@ -240,7 +240,7 @@ public:
         uint8_t gid_index;
 
         UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_ib_md_close, uct_ib_md_open,
-                               &uct_ib_mdc,
+                               &uct_ib_component,
                                ibv_get_device_name(m_ibctx->device), m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);

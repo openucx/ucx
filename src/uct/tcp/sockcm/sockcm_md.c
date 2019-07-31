@@ -6,7 +6,7 @@
 
 #include "sockcm_md.h"
 
-#define UCT_SOCKCM_MD_PREFIX              "sockcm"
+#define UCT_SOCKCM_NAME              "sockcm"
 
 static ucs_config_field_t uct_sockcm_md_config_table[] = {
   {"", "", NULL,
@@ -62,16 +62,27 @@ uct_sockcm_md_open(uct_component_t *component, const char *md_name,
     }
 
     md->super.ops            = &uct_sockcm_md_ops;
-    md->super.component      = &uct_sockcm_mdc;
+    md->super.component      = &uct_sockcm_component;
 
     /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
     return UCS_OK;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_sockcm_mdc, UCT_SOCKCM_MD_PREFIX,
-                        uct_md_query_single_md_resource, uct_sockcm_md_open, NULL,
-                        ucs_empty_function_return_unsupported,
-                        (void*)ucs_empty_function_return_success,
-                        "SOCKCM_", uct_sockcm_md_config_table, uct_sockcm_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_sockcm_component = {
+    .query_md_resources = uct_md_query_single_md_resource,
+    .md_open            = uct_sockcm_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = ucs_empty_function_return_unsupported,
+    .name               = UCT_SOCKCM_NAME,
+    .md_config          = {
+        .name           = "Sock-CM memory domain",
+        .prefix         =  "SOCKCM_",
+        .table          = uct_sockcm_md_config_table,
+        .size           = sizeof(uct_sockcm_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_sockcm_component)
+};
+UCT_COMPONENT_REGISTER(&uct_sockcm_component)
