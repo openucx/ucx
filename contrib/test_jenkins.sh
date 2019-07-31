@@ -1111,7 +1111,7 @@ test_jucx() {
 
 #
 # Run Coverity and report errors
-# The argument is a UCX build type: "devel" (default) or "release"
+# The argument is a UCX build type: devel or release
 #
 run_coverity() {
 	echo 1..1 > coverity.tap
