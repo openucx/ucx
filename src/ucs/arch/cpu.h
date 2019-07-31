@@ -47,6 +47,17 @@ typedef enum ucs_cpu_flag {
 } ucs_cpu_flag_t;
 
 
+/* CPU vendors */
+typedef enum ucs_cpu_vendor {
+    UCS_CPU_VENDOR_UNKNOWN,
+    UCS_CPU_VENDOR_INTEL,
+    UCS_CPU_VENDOR_AMD,
+    UCS_CPU_VENDOR_GENERIC_ARM,
+    UCS_CPU_VENDOR_GENERIC_PPC,
+    UCS_CPU_VENDOR_LAST
+} ucs_cpu_vendor_t;
+
+
 /* System constants */
 #define UCS_SYS_POINTER_SIZE       (sizeof(void*))
 #define UCS_SYS_PARAGRAPH_SIZE     16

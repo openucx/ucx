@@ -171,7 +171,7 @@ typedef struct ucp_ep_msg_config {
         size_t             zcopy_thresh[UCP_MAX_IOV];
 
         /* zero-copy threshold for mem type buffers */
-        size_t             mem_type_zcopy_thresh[UCT_MD_MEM_TYPE_LAST];
+        size_t             mem_type_zcopy_thresh[UCS_MEMORY_TYPE_LAST];
 
         /* zero-copy threshold for operations which anyways have to wait for remote side */
         size_t             sync_zcopy_thresh[UCP_MAX_IOV];

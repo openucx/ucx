@@ -15,7 +15,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.flags               = 0;
     attr->cap.max_alloc           = 0;
     attr->cap.reg_mem_types       = 0;
-    attr->cap.access_mem_type     = UCT_MD_MEM_TYPE_HOST;
+    attr->cap.access_mem_type     = UCS_MEMORY_TYPE_HOST;
     attr->cap.detect_mem_types    = 0;
     attr->cap.max_reg             = 0;
     attr->rkey_packed_size        = 0;

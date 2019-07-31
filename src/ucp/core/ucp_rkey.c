@@ -21,7 +21,7 @@
 static struct {
     ucp_md_map_t md_map;
     uint8_t      mem_type;
-} UCS_S_PACKED ucp_mem_dummy_buffer = {0, UCT_MD_MEM_TYPE_HOST};
+} UCS_S_PACKED ucp_mem_dummy_buffer = {0, UCS_MEMORY_TYPE_HOST};
 
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
@@ -40,7 +40,7 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
 }
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
-                          uct_memory_type_t mem_type, void *rkey_buffer,
+                          ucs_memory_type_t mem_type, void *rkey_buffer,
                           const void* uct_rkeys[])
 {
     void *p = rkey_buffer;
@@ -63,7 +63,7 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 }
 
 ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
-                          const uct_mem_h *memh, uct_memory_type_t mem_type,
+                          const uct_mem_h *memh, ucs_memory_type_t mem_type,
                           void *rkey_buffer)
 {
     void *p             = rkey_buffer;
@@ -80,7 +80,7 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
     p += sizeof(ucp_md_map_t);
 
     /* Write memory type */
-    UCS_STATIC_ASSERT(UCT_MD_MEM_TYPE_LAST <= 255);
+    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
     *((uint8_t*)p++) = mem_type;
 
     /* Write both size and rkey_buffer for each UCT rkey */
@@ -183,7 +183,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
     unsigned md_count;
     ucs_status_t status;
     ucp_rkey_h rkey;
-    uct_memory_type_t mem_type;
+    ucs_memory_type_t mem_type;
     uint8_t md_size;
     const void *p;
 
@@ -369,7 +369,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
 
 static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
                                                  const ucp_ep_config_t *config,
-                                                 uct_memory_type_t mem_type,
+                                                 ucs_memory_type_t mem_type,
                                                  const ucp_lane_index_t *lanes,
                                                  ucp_rkey_h rkey,
                                                  ucp_lane_map_t ignore,
@@ -430,7 +430,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     int rma_sw, amo_sw;
 
     rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
-                                                    UCT_MD_MEM_TYPE_HOST,
+                                                    UCS_MEMORY_TYPE_HOST,
                                                     config->key.rma_lanes, rkey,
                                                     0, &uct_rkey);
     rma_sw = (rkey->cache.rma_lane == UCP_NULL_LANE);
@@ -446,7 +446,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     }
 
     rkey->cache.amo_lane = ucp_config_find_rma_lane(context, config,
-                                                    UCT_MD_MEM_TYPE_HOST,
+                                                    UCS_MEMORY_TYPE_HOST,
                                                     config->key.amo_lanes, rkey,
                                                     0, &uct_rkey);
     amo_sw = (rkey->cache.amo_lane == UCP_NULL_LANE);
@@ -489,7 +489,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 }
 
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
-                                          uct_memory_type_t mem_type,
+                                          ucs_memory_type_t mem_type,
                                           uct_rkey_t *uct_rkey_p,
                                           ucp_lane_map_t ignore)
 {

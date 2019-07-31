@@ -717,6 +717,17 @@ static inline O& operator<<(O& os, const size_value& sz)
     return os;
 }
 
+
+class auto_buffer {
+public:
+    auto_buffer(size_t size);
+    ~auto_buffer();
+    void* operator*() const;
+private:
+    void *m_ptr;
+};
+
+
 extern int    perf_retry_count;
 extern double perf_retry_interval;
 

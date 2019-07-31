@@ -61,7 +61,7 @@ UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 
 
 static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucm_mem_type_t mem_type)
+ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucs_memory_type_t mem_type)
 {
     ucm_event_t event;
 
@@ -72,7 +72,7 @@ ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucm_mem_type_t mem_type)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_free(void *addr, size_t length, ucm_mem_type_t mem_type)
+ucm_dispatch_mem_type_free(void *addr, size_t length, ucs_memory_type_t mem_type)
 {
     ucm_event_t event;
 
@@ -99,7 +99,7 @@ static void ucm_cudafree_dispatch_events(void *dptr)
     }
     ucs_assert(dptr == (void *)pbase);
 
-    ucm_dispatch_mem_type_free((void *)dptr, psize, UCM_MEM_TYPE_CUDA);
+    ucm_dispatch_mem_type_free((void *)dptr, psize, UCS_MEMORY_TYPE_CUDA);
 }
 
 CUresult ucm_cuMemFree(CUdeviceptr dptr)
@@ -143,7 +143,7 @@ CUresult ucm_cuMemAlloc(CUdeviceptr *dptr, size_t size)
     ret = ucm_orig_cuMemAlloc(dptr, size);
     if (ret == CUDA_SUCCESS) {
         ucm_trace("ucm_cuMemAlloc(dptr=%p size:%lu)",(void *)*dptr, size);
-        ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCM_MEM_TYPE_CUDA);
+        ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCS_MEMORY_TYPE_CUDA);
     }
 
     ucm_event_leave();
@@ -160,7 +160,8 @@ CUresult ucm_cuMemAllocManaged(CUdeviceptr *dptr, size_t size, unsigned int flag
     if (ret == CUDA_SUCCESS) {
         ucm_trace("ucm_cuMemAllocManaged(dptr=%p size:%lu, flags:%d)",
                   (void *)*dptr, size, flags);
-        ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCM_MEM_TYPE_CUDA_MANAGED);
+        ucm_dispatch_mem_type_alloc((void *)*dptr, size,
+                                    UCS_MEMORY_TYPE_CUDA_MANAGED);
     }
 
     ucm_event_leave();
@@ -180,7 +181,7 @@ CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
         ucm_trace("ucm_cuMemAllocPitch(dptr=%p size:%lu)",(void *)*dptr,
                   (WidthInBytes * Height));
         ucm_dispatch_mem_type_alloc((void *)*dptr, WidthInBytes * Height,
-                                    UCM_MEM_TYPE_CUDA);
+                                    UCS_MEMORY_TYPE_CUDA);
     }
 
     ucm_event_leave();
@@ -258,7 +259,7 @@ cudaError_t ucm_cudaMalloc(void **devPtr, size_t size)
     ret = ucm_orig_cudaMalloc(devPtr, size);
     if (ret == cudaSuccess) {
         ucm_trace("ucm_cudaMalloc(devPtr=%p size:%lu)", *devPtr, size);
-        ucm_dispatch_mem_type_alloc(*devPtr, size, UCM_MEM_TYPE_CUDA);
+        ucm_dispatch_mem_type_alloc(*devPtr, size, UCS_MEMORY_TYPE_CUDA);
     }
 
     ucm_event_leave();
@@ -276,7 +277,7 @@ cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags
     if (ret == cudaSuccess) {
         ucm_trace("ucm_cudaMallocManaged(devPtr=%p size:%lu flags:%d)",
                   *devPtr, size, flags);
-        ucm_dispatch_mem_type_alloc(*devPtr, size, UCM_MEM_TYPE_CUDA_MANAGED);
+        ucm_dispatch_mem_type_alloc(*devPtr, size, UCS_MEMORY_TYPE_CUDA_MANAGED);
     }
 
     ucm_event_leave();
@@ -294,7 +295,7 @@ cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
     ret = ucm_orig_cudaMallocPitch(devPtr, pitch, width, height);
     if (ret == cudaSuccess) {
         ucm_trace("ucm_cudaMallocPitch(devPtr=%p size:%lu)",*devPtr, (width * height));
-        ucm_dispatch_mem_type_alloc(*devPtr, (width * height), UCM_MEM_TYPE_CUDA);
+        ucm_dispatch_mem_type_alloc(*devPtr, (width * height), UCS_MEMORY_TYPE_CUDA);
     }
 
     ucm_event_leave();

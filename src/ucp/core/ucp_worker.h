@@ -226,7 +226,7 @@ typedef struct ucp_worker {
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
     uint64_t                      am_message_id; /* For matching long am's */
-    ucp_ep_h                      mem_type_ep[UCT_MD_MEM_TYPE_LAST];/* memory type eps */
+    ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);

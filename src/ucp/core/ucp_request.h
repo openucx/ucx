@@ -111,7 +111,7 @@ struct ucp_request {
             void                  *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
-            uct_memory_type_t     mem_type; /* Memory type */
+            ucs_memory_type_t     mem_type; /* Memory type */
             ucp_send_callback_t   cb;       /* Completion callback */
 
             union {
@@ -237,7 +237,7 @@ struct ucp_request {
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
-            uct_memory_type_t     mem_type; /* Memory type */
+            ucs_memory_type_t     mem_type; /* Memory type */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
@@ -317,7 +317,7 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
-                                    ucp_dt_state_t *state, uct_memory_type_t mem_type,
+                                    ucp_dt_state_t *state, ucs_memory_type_t mem_type,
                                     ucp_request_t *req_dbg, unsigned uct_flags);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
