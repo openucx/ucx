@@ -177,6 +177,7 @@ uct_component_t uct_cma_component = {
     .rkey_release       = ucs_empty_function_return_success,
     .name               = "cma",
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cma_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cma_component),
+    .cap_flags          = 0
 };
 UCT_COMPONENT_REGISTER(&uct_cma_component);

@@ -177,7 +177,8 @@ uct_component_t uct_cuda_ipc_component = {
         .table          = uct_cuda_ipc_md_config_table,
         .size           = sizeof(uct_cuda_ipc_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_ipc_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_ipc_component),
+    .cap_flags          = 0
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_ipc_component);
 

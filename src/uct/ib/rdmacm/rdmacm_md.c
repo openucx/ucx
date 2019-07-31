@@ -262,6 +262,11 @@ uct_component_t uct_rdmacm_component = {
         .table          = uct_rdmacm_md_config_table,
         .size           = sizeof(uct_rdmacm_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component),
+#if HAVE_RDMACM_QP_LESS
+    .cap_flags          = UCT_COMPONENT_CAP_FLAG_CM
+#else
+    .cap_flags          = 0
+#endif
 };
 UCT_COMPONENT_REGISTER(&uct_rdmacm_component)

@@ -391,6 +391,7 @@ uct_component_t uct_knem_component = {
         .table          = uct_knem_md_config_table,
         .size           = sizeof(uct_knem_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component),
+    .cap_flags          = 0
 };
 UCT_COMPONENT_REGISTER(&uct_knem_component);

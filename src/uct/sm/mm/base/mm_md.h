@@ -109,7 +109,8 @@ typedef struct uct_mm_component {
                 .size           = sizeof(_prefix##_md_config_t), \
             }, \
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
-                                      &(_var).super) \
+                                      &(_var).super), \
+            .cap_flags          = 0, \
        }, \
        .ops                     = (_md_ops) \
     }; \
