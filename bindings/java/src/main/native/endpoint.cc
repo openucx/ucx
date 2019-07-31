@@ -94,7 +94,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
 {
     ucp_rkey_h rkey;
 
-    ucs_status_t status = ucp_ep_rkey_unpack((ucp_ep_h) ep_ptr, (void *)addr, &rkey);
+    ucs_status_t status = ucp_ep_rkey_unpack((ucp_ep_h)ep_ptr, (void *)addr, &rkey);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }
@@ -103,6 +103,9 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
     jmethodID constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
     jobject result = env->NewObject(ucp_rkey_cls, constructor, (native_ptr)rkey);
 
+    /* Coverity thinks that rkey is a leaked object here,
+     * but it's stored in a UcpRemoteKey object */
+    /* coverity[leaked_storage] */
     return result;
 }
 
