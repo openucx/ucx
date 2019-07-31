@@ -902,7 +902,7 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
                 params->latency      += ucp_tl_iface_latency(context, iface_attr);
             }
         }
-        params->bw += worker->ifaces[rsc_index].attr.bandwidth;
+        params->bw += ucp_tl_iface_bandwidth(context, &worker->ifaces[rsc_index].attr.bandwidth);
     }
 }
 
@@ -1109,7 +1109,8 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(it + 1,
                                                                &md_attr->reg_cost,
                                                                context,
-                                                               iface_attr->bandwidth);
+                                                               ucp_tl_iface_bandwidth(context,
+                                                                                      &iface_attr->bandwidth));
             zcopy_thresh = ucs_min(zcopy_thresh, adjust_min_val);
             config->sync_zcopy_thresh[it] = zcopy_thresh;
             config->zcopy_thresh[it]      = zcopy_thresh;
@@ -1241,7 +1242,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
                                                      iface_attr->cap.get.max_zcopy);
 
-            rndv_max_bw = ucs_max(rndv_max_bw, iface_attr->bandwidth);
+            rndv_max_bw = ucs_max(rndv_max_bw, ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth));
         }
     }
 
@@ -1253,7 +1254,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
             if (rsc_index != UCP_NULL_RESOURCE) {
                 iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-                config->tag.rndv.scale[lane] = iface_attr->bandwidth / rndv_max_bw;
+                config->tag.rndv.scale[lane] = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) / rndv_max_bw;
             }
         }
     }

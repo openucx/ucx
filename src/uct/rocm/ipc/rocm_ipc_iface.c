@@ -83,7 +83,8 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
     /* TODO: get accurate info */
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 10240 * 1024.0 * 1024.0; /* 10240 MB*/
+    iface_attr->bandwidth.dedicated     = 10240 * 1024.0 * 1024.0; /* 10240 MB*/
+    iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
 
     return UCS_OK;

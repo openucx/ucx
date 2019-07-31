@@ -110,7 +110,8 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
 
     attr->latency.overhead        = 0;
     attr->latency.growth          = 0;
-    attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    attr->bandwidth.dedicated     = 6911 * 1024.0 * 1024.0;
+    attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
     attr->priority                = 0;
 

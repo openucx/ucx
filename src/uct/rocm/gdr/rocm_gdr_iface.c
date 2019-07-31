@@ -83,7 +83,8 @@ static ucs_status_t uct_rocm_gdr_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency.overhead        = 1e-6; /* 1 us */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.dedicated     = 0;
+    iface_attr->bandwidth.shared        = 6911 * 1024.0 * 1024.0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 

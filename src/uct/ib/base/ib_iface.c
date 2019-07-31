@@ -1119,8 +1119,9 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         extra_pkt_len += UCT_IB_LRH_LEN;
     }
 
-    iface_attr->bandwidth = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
-    iface_attr->priority  = uct_ib_device_spec(dev)->priority;
+    iface_attr->bandwidth.shared    = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
+    iface_attr->bandwidth.dedicated = 0;
+    iface_attr->priority            = uct_ib_device_spec(dev)->priority;
 
     return UCS_OK;
 }
