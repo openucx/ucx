@@ -1410,8 +1410,8 @@ run_tests() {
 	run_gtest_armclang
 
 	do_distributed_task 3 4 run_coverity release
-	do_distributed_task 3 4 run_coverity devel
-	do_distributed_task 0 4 run_gtest_release
+	do_distributed_task 0 4 run_coverity devel
+	do_distributed_task 1 4 run_gtest_release
 }
 
 prepare
