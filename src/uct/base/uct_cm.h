@@ -35,6 +35,7 @@ struct uct_cm {
     uct_base_iface_t iface;
 };
 
-UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_component_h);
+UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
+                  uct_component_h);
 
 #endif /* UCT_CM_H_ */

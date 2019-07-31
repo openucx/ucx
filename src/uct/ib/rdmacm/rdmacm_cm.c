@@ -15,6 +15,7 @@
 #include <poll.h>
 #include <rdma/rdma_cma.h>
 
+
 ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id)
 {
     if (rdma_destroy_id(id)) {
@@ -66,15 +67,14 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *event)
 {
     struct sockaddr            *remote_addr = rdma_get_peer_addr(event->id);
+    uct_rdmacm_cm_ep_t         *cep         = (uct_rdmacm_cm_ep_t *)event->id->context;
     uct_rdmacm_priv_data_hdr_t *hdr;
-    uct_rdmacm_cm_ep_t         *cep;
     ucs_status_t               status;
     struct rdma_conn_param     conn_param;
     char                       dev_name[UCT_DEVICE_NAME_MAX];
     char                       ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ssize_t                    priv_data_ret;
 
-    cep = (uct_rdmacm_cm_ep_t *)event->id->context;
     ucs_assert(event->id == cep->id);
 
     uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
@@ -117,7 +117,7 @@ static void
 uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
 {
     struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
-    uint8_t         ack_event = 1;
+    uint8_t         ack_event    = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     ucs_trace("rdmacm event (fd=%d cm_id %p): %s. Peer: %s.",
@@ -221,14 +221,14 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
 };
 
 static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
-    .ep_pending_purge         = (void *)ucs_empty_function_return_success,
+    .ep_pending_purge         = ucs_empty_function,
     .ep_disconnect            = uct_rdmacm_cm_ep_disconnect,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cm_ep_t),
     .ep_put_short             = (void *)ucs_empty_function_return_unsupported,
-    .ep_put_bcopy             = (void *)ucs_empty_function_return_unsupported,
+    .ep_put_bcopy             = (void *)ucs_empty_function_return_zero_int64,
     .ep_get_bcopy             = (void *)ucs_empty_function_return_unsupported,
     .ep_am_short              = (void *)ucs_empty_function_return_unsupported,
-    .ep_am_bcopy              = (void *)ucs_empty_function_return_unsupported,
+    .ep_am_bcopy              = (void *)ucs_empty_function_return_zero_int64,
     .ep_atomic_cswap64        = (void *)ucs_empty_function_return_unsupported,
     .ep_atomic64_post         = (void *)ucs_empty_function_return_unsupported,
     .ep_atomic64_fetch        = (void *)ucs_empty_function_return_unsupported,
@@ -238,19 +238,20 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_pending_add           = (void *)ucs_empty_function_return_unsupported,
     .ep_flush                 = (void *)ucs_empty_function_return_unsupported,
     .ep_fence                 = (void *)ucs_empty_function_return_unsupported,
+    .ep_check                 = (void *)ucs_empty_function_return_unsupported,
     .ep_create                = (void *)ucs_empty_function_return_unsupported,
     .iface_flush              = (void *)ucs_empty_function_return_unsupported,
     .iface_fence              = (void *)ucs_empty_function_return_unsupported,
-    .iface_progress_enable    = (void *)ucs_empty_function_return_unsupported,
-    .iface_progress_disable   = (void *)ucs_empty_function_return_unsupported,
-    .iface_progress           = (void *)ucs_empty_function_return_unsupported,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = (void *)ucs_empty_function_return_zero,
     .iface_event_fd_get       = (void *)ucs_empty_function_return_unsupported,
     .iface_event_arm          = (void *)ucs_empty_function_return_unsupported,
-    .iface_close              = (void *)ucs_empty_function_return_unsupported,
+    .iface_close              = ucs_empty_function,
     .iface_query              = (void *)ucs_empty_function_return_unsupported,
     .iface_get_device_address = (void *)ucs_empty_function_return_unsupported,
     .iface_get_address        = (void *)ucs_empty_function_return_unsupported,
-    .iface_is_reachable       = (void *)ucs_empty_function_return_unsupported
+    .iface_is_reachable       = (void *)ucs_empty_function_return_zero
 };
 
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
@@ -260,9 +261,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops,
-                              &uct_rdmacm_cm_iface_ops, component);
+                              &uct_rdmacm_cm_iface_ops, worker, component);
 
-    self->worker = worker;
     self->ev_ch  = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
         ucs_error("rdma_create_event_channel failed: %m");

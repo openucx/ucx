@@ -14,7 +14,6 @@
 typedef struct uct_rdmacm_cm {
     uct_cm_t                  super;
     struct rdma_event_channel *ev_ch;
-    uct_worker_h              worker;
 } uct_rdmacm_cm_t;
 
 UCS_CLASS_DECLARE(uct_rdmacm_cm_t, uct_component_h, uct_worker_h);

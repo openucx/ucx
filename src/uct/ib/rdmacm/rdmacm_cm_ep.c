@@ -70,9 +70,8 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
         return status;
     }
 
-    cep->cq = cq;
-    cep->qp = qp;
-
+    cep->cq             = cq;
+    cep->qp             = qp;
     conn_param->qp_num  = qp->qp_num;
     return UCS_OK;
 }
@@ -141,9 +140,10 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
+    uct_rdmacm_cm_t *cm;
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. ep params: %zu",
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
                   params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -158,15 +158,15 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
                                 UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
         ucs_error("neither UCT_EP_PARAM_FIELD_SOCKADDR nor "
-                  "UCT_EP_PARAM_FIELD_CONN_REQUEST is set. ep params: %zu",
+                  "UCT_EP_PARAM_FIELD_CONN_REQUEST is set. field_mask 0x%lx",
                   params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->cm = ucs_derived_of(params->cm, uct_rdmacm_cm_t);
+    cm = ucs_derived_of(params->cm, uct_rdmacm_cm_t);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &cm->super.iface);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &self->cm->super.iface);
-
+    self->cm                  = cm;
     self->wireup.priv_pack_cb = (params->field_mask &
                                  UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
                                 params->sockaddr_pack_cb : NULL;
@@ -185,7 +185,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
         status = uct_rdamcm_cm_ep_server_init(self, params);
     } else {
         ucs_error("either UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST "
-                  "have to be provided in the ep params (uct_ep_params_t)");
+                  "has to be provided");
         status = UCS_ERR_INVALID_PARAM;
     }
 
@@ -199,7 +199,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 {
-    uct_priv_worker_t *worker_priv = ucs_derived_of(self->cm->worker, uct_priv_worker_t);
+    uct_priv_worker_t *worker_priv = ucs_derived_of(self->cm->super.iface.worker,
+                                                    uct_priv_worker_t);
     int ret;
 
     UCS_ASYNC_BLOCK(worker_priv->async);
