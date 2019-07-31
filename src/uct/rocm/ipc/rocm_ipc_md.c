@@ -166,7 +166,8 @@ uct_component_t uct_rocm_ipc_component = {
         .table          = uct_rocm_ipc_md_config_table,
         .size           = sizeof(uct_rocm_ipc_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component),
+    .cap_flags          = 0
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component);
 
