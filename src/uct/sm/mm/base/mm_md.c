@@ -56,7 +56,7 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
 
     status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, flags,
                                              alloc_name, address_p, &seg->mmid,
-                                             &seg->path, &seg->is_hugetlb);
+                                             &seg->path);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -242,13 +242,6 @@ static void uct_mm_md_close(uct_md_h md)
     ucs_free(mm_md);
 }
 
-int uct_mm_is_hugetlb(uct_md_h md, uct_mem_h memh)
-{
-    uct_mm_seg_t *seg = memh;
-
-    return seg->is_hugetlb;
-}
-
 uct_md_ops_t uct_mm_md_ops = {
     .close              = uct_mm_md_close,
     .query              = uct_mm_md_query,
@@ -258,7 +251,6 @@ uct_md_ops_t uct_mm_md_ops = {
     .mem_dereg          = uct_mm_mem_dereg,
     .mkey_pack          = uct_mm_mkey_pack,
     .detect_memory_type = ucs_empty_function_return_unsupported,
-    .is_hugetlb         = uct_mm_is_hugetlb,
 };
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
