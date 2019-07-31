@@ -63,9 +63,19 @@ static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t len
                                           unsigned flags, uct_mem_h *memh_p)
 {
     cudaError_t cuerr = cudaSuccess;
+    CUmemorytype memType;
+    CUresult result;
 
     if(address == NULL) {
         *memh_p = address;
+        return UCS_OK;
+    }
+
+    result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                   (CUdeviceptr)(address));
+    if ((result == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_HOST)) {
+        /* memory is allocated with cudaMallocHost which is already registered */
+        *memh_p = NULL;
         return UCS_OK;
     }
 
