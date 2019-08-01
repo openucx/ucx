@@ -132,6 +132,15 @@ public:
     UCS_TEST_BASE_IMPL;
 };
 
+/*
+ * Base class from generic tests with user-defined parameter
+ */
+template <typename T>
+class test_with_param : public testing::TestWithParam<T>, public test_base {
+public:
+    UCS_TEST_BASE_IMPL;
+};
+
 /**
  * UCT/UCP tests common storage for tests entities
  */

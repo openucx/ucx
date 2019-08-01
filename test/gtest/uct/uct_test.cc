@@ -643,111 +643,82 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     ASSERT_UCS_OK(status);
 }
 
-void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const {
-#if HAVE_CUDA
+void uct_test::entity::mem_alloc_host(size_t length,
+                                      uct_allocated_memory_t *mem) const {
+
     ucs_status_t status;
-    cudaError_t cerr;
-
-    mem->length     = length;
-    mem->md         = m_md;
-    mem->mem_type   = UCS_MEMORY_TYPE_CUDA;
-    mem->memh       = UCT_MEM_HANDLE_NULL;
-
-    cerr = cudaMalloc(&mem->address, mem->length);
-    EXPECT_TRUE(cerr == cudaSuccess);
-
-    if (md_attr().cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA)) {
-        status = uct_md_mem_reg(m_md, mem->address, mem->length,
-                                UCT_MD_MEM_ACCESS_ALL, &mem->memh);
-        ASSERT_UCS_OK(status);
-    }
-#else
-    UCS_TEST_SKIP_R("can't allocate cuda memory");
-#endif
-}
-
-void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
-                                 uct_rkey_bundle *rkey_bundle, int mem_type) const {
-    static const char *alloc_name = "uct_test";
-    ucs_status_t status;
-    void *rkey_buffer;
 
     if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
-                                         alloc_name, mem);
-            ASSERT_UCS_OK(status);
-        } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
-            cuda_mem_alloc(length, mem);
-        } else {
-            UCS_TEST_SKIP_R("cannot allocate " +
-                            std::string(ucs_memory_type_names[mem_type]) +
-                            " memory");
-        }
-
-        if ((md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-            (md_attr().cap.reg_mem_types & UCS_BIT(mem_type))) {
-            rkey_buffer = malloc(md_attr().rkey_packed_size);
-            if (rkey_buffer == NULL) {
-                UCS_TEST_ABORT("Failed to allocate rkey buffer");
-            }
-
-            status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
-            ASSERT_UCS_OK(status);
-
-            status = uct_rkey_unpack(m_resource.component, rkey_buffer,
-                                     rkey_bundle);
-            ASSERT_UCS_OK(status);
-
-            free(rkey_buffer);
-        } else {
-            rkey_bundle->handle = NULL;
-            rkey_bundle->rkey   = UCT_INVALID_RKEY;
-        }
+        status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
+                                     "uct_test", mem);
+        ASSERT_UCS_OK(status);
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
-        status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
-                               &method, 1, NULL, 0, alloc_name,
-                               mem);
+        status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL, &method, 1,
+                               NULL, 0, "uct_test", mem);
         ASSERT_UCS_OK(status);
-
         ucs_assert(mem->memh == UCT_MEM_HANDLE_NULL);
+    }
+    ucs_assert(mem->mem_type == UCS_MEMORY_TYPE_HOST);
+}
 
-        rkey_bundle->rkey   = UCT_INVALID_RKEY;
-        rkey_bundle->handle = NULL;
+void uct_test::entity::mem_free_host(const uct_allocated_memory_t *mem) const {
+    if (mem->method != UCT_ALLOC_METHOD_LAST) {
+        uct_iface_mem_free(mem);
     }
 }
 
-void uct_test::entity::cuda_mem_free(const uct_allocated_memory_t *mem) const {
-#if HAVE_CUDA
-    ucs_status_t status;
-    cudaError_t cerr;
-
-    if (mem->memh != UCT_MEM_HANDLE_NULL) {
-        status = uct_md_mem_dereg(m_md, mem->memh);
+void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem) const {
+    if (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type)) {
+        ucs_status_t status = uct_md_mem_reg(m_md, mem->address, mem->length,
+                                             UCT_MD_MEM_ACCESS_ALL, &mem->memh);
         ASSERT_UCS_OK(status);
+        mem->md = m_md;
     }
-    cerr = cudaFree(mem->address);
-    ASSERT_TRUE(cerr == cudaSuccess);
-#endif
 }
 
-void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
-                                const uct_rkey_bundle_t& rkey,
-                                const ucs_memory_type_t mem_type) const {
-    ucs_status_t status;
-
-    if (rkey.rkey != UCT_INVALID_RKEY) {
-        status = uct_rkey_release(m_resource.component, &rkey);
+void uct_test::entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
+    if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
+        (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
+        ucs_status_t status = uct_md_mem_dereg(m_md, mem->memh);
         ASSERT_UCS_OK(status);
+        mem->memh = UCT_MEM_HANDLE_NULL;
+        mem->md   = NULL;
     }
+}
 
-    if (mem_type == UCS_MEMORY_TYPE_HOST) {
-        if (mem->method != UCT_ALLOC_METHOD_LAST) {
-            uct_iface_mem_free(mem);
+void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
+                                   uct_rkey_bundle *rkey_bundle) const
+{
+    if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
+        (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) &&
+        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+        (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
+
+        void *rkey_buffer = malloc(md_attr().rkey_packed_size);
+        if (rkey_buffer == NULL) {
+            UCS_TEST_ABORT("Failed to allocate rkey buffer");
         }
-    } else if(mem_type == UCS_MEMORY_TYPE_CUDA) {
-        cuda_mem_free(mem);
+
+        ucs_status_t status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
+        ASSERT_UCS_OK(status);
+
+        status = uct_rkey_unpack(m_resource.component, rkey_buffer,
+                                 rkey_bundle);
+        ASSERT_UCS_OK(status);
+
+        free(rkey_buffer);
+    } else {
+        rkey_bundle->handle = NULL;
+        rkey_bundle->rkey   = UCT_INVALID_RKEY;
+    }
+}
+
+void uct_test::entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
+{
+    if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
+        ucs_status_t status = uct_rkey_release(m_resource.component, rkey_bundle);
+        ASSERT_UCS_OK(status);
     }
 }
 
@@ -1063,7 +1034,16 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
 {
     if (size > 0)  {
         size_t alloc_size = size + offset;
-        m_entity.mem_alloc(alloc_size, &m_mem, &m_rkey, mem_type);
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
+            m_entity.mem_alloc_host(alloc_size, &m_mem);
+        } else {
+            m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
+            m_mem.length   = size;
+            m_mem.mem_type = mem_type;
+            m_mem.memh     = UCT_MEM_HANDLE_NULL;
+            m_mem.md       = NULL;
+            m_entity.mem_type_reg(&m_mem);
+        }
         m_buf = (char*)m_mem.address + offset;
         m_end = (char*)m_buf         + size;
         pattern_fill(seed);
@@ -1079,130 +1059,31 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_rkey.rkey   = UCT_INVALID_RKEY;
         m_rkey.handle = NULL;
     }
-    m_rkey.type  = NULL;
     m_iov.buffer = ptr();
     m_iov.length = length();
     m_iov.count  = 1;
     m_iov.stride = 0;
     m_iov.memh   = memh();
+
+    m_entity.rkey_unpack(&m_mem, &m_rkey);
+    m_rkey.type  = NULL;
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
-    m_entity.mem_free(&m_mem, m_rkey, m_mem.mem_type);
+    m_entity.rkey_release(&m_rkey);
+    if (m_mem.mem_type == UCS_MEMORY_TYPE_HOST) {
+        m_entity.mem_free_host(&m_mem);
+    } else {
+        mem_buffer::release(m_mem.address, m_mem.mem_type);
+    }
 }
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
-    switch(m_mem.mem_type) {
-    case UCS_MEMORY_TYPE_HOST:
-        pattern_fill(m_buf, (char*)m_end - (char*)m_buf, seed);
-        break;
-    case UCS_MEMORY_TYPE_CUDA:
-        pattern_fill_cuda(m_buf, (char*)m_end - (char*)m_buf, seed);
-        break;
-    default:
-        UCS_TEST_ABORT("Wrong buffer memory type");
-    }
-}
-
-
-void uct_test::mapped_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed)
-{
-    uint64_t *ptr = (uint64_t*)buffer;
-    char *end = (char *)buffer + length;
-
-    while ((char*)(ptr + 1) <= end) {
-        *ptr = seed;
-        seed = pat(seed);
-        ++ptr;
-    }
-    memcpy(ptr, &seed, end - (char*)ptr);
-}
-
-void uct_test::mapped_buffer::pattern_fill_cuda(void *start, size_t length, uint64_t seed)
-{
-#if HAVE_CUDA
-    void *temp;
-    cudaError_t cerr;
-
-    temp = malloc(length);
-    ASSERT_TRUE(temp != NULL);
-
-    pattern_fill(temp, length, seed);
-
-    cerr = cudaMemcpy(start, temp, length, cudaMemcpyHostToDevice);
-    ASSERT_TRUE(cerr == cudaSuccess);
-    cerr = cudaDeviceSynchronize();
-    ASSERT_TRUE(cerr == cudaSuccess);
-    free(temp);
-#endif
+    mem_buffer::pattern_fill(ptr(), length(), seed, m_mem.mem_type);
 }
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
-    switch(m_mem.mem_type) {
-    case UCS_MEMORY_TYPE_HOST:
-        pattern_check(ptr(), length(), seed);
-        break;
-    case UCS_MEMORY_TYPE_CUDA:
-        pattern_check_cuda(ptr(), length(), seed);
-        break;
-    default:
-        UCS_TEST_ABORT("Wrong buffer memory type");
-    }
-}
-
-void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length) {
-    if (length > sizeof(uint64_t)) {
-        pattern_check(buffer, length, *(const uint64_t*)buffer);
-    }
-}
-
-void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length,
-                                            uint64_t seed) {
-    const char* end = (const char*)buffer + length;
-    const uint64_t *ptr = (const uint64_t*)buffer;
-
-    while ((const char*)(ptr + 1) <= end) {
-       if (*ptr != seed) {
-            UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) << ": " <<
-                           "Expected: 0x" << std::hex << seed << " " <<
-                           "Got: 0x" << std::hex << (*ptr) << std::dec);
-        }
-        seed = pat(seed);
-        ++ptr;
-    }
-
-    size_t remainder = (end - (const char*)ptr);
-    if (remainder > 0) {
-        ucs_assert(remainder < sizeof(*ptr));
-        uint64_t mask = UCS_MASK_SAFE(remainder * 8 * sizeof(char));
-        uint64_t value = 0;
-        memcpy(&value, ptr, remainder);
-        if (value != (seed & mask)) {
-             UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) <<
-                            " (remainder " << remainder << ") : " <<
-                            "Expected: 0x" << std::hex << (seed & mask) << " " <<
-                            "Mask: 0x" << std::hex << mask << " " <<
-                            "Got: 0x" << std::hex << value << std::dec);
-         }
-
-    }
-}
-
-void uct_test::mapped_buffer::pattern_check_cuda(const void *buffer, size_t length,
-                                                 uint64_t seed) {
-#if HAVE_CUDA
-    void *temp = NULL;
-    cudaError_t cerr;
-
-    temp = malloc(length);
-    ASSERT_TRUE(temp != NULL);
-
-    cerr = cudaMemcpy(temp, buffer, length, cudaMemcpyDeviceToHost);
-    ASSERT_TRUE(cerr == cudaSuccess);
-
-    pattern_check(temp, length, seed);
-    free(temp);
-#endif
+    mem_buffer::pattern_check(ptr(), length(), seed, m_mem.mem_type);
 }
 
 void *uct_test::mapped_buffer::ptr() const {
@@ -1215,12 +1096,6 @@ uintptr_t uct_test::mapped_buffer::addr() const {
 
 size_t uct_test::mapped_buffer::length() const {
     return (char*)m_end - (char*)m_buf;
-}
-
-uint64_t uct_test::mapped_buffer::pat(uint64_t prev) {
-    /* LFSR pattern */
-    static const uint64_t polynom = 1337;
-    return (prev << 1) | (__builtin_parityl(prev & polynom) & 1);
 }
 
 uct_mem_h uct_test::mapped_buffer::memh() const {
@@ -1237,7 +1112,7 @@ const uct_iov_t*  uct_test::mapped_buffer::iov() const {
 
 size_t uct_test::mapped_buffer::pack(void *dest, void *arg) {
     const mapped_buffer* buf = (const mapped_buffer*)arg;
-    memcpy(dest, buf->ptr(), buf->length());
+    mem_buffer::copy_from(dest, buf->ptr(), buf->length(), buf->m_mem.mem_type);
     return buf->length();
 }
 
