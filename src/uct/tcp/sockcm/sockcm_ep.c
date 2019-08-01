@@ -5,6 +5,9 @@
  */
 
 #include "sockcm_ep.h"
+#include <ucs/sys/string.h>
+#include <netinet/tcp.h>
+#include <dirent.h>
 
 #define UCT_SOCKCM_CB_FLAGS_CHECK(_flags) \
     do { \
@@ -48,16 +51,61 @@ out:
     return status;
 }
 
+ucs_status_t uct_sockcm_get_device_name(char *dev_name)
+{
+    static const char *netdev_dir = "/sys/class/net";
+    ucs_status_t status           = UCS_OK;
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir(netdev_dir);
+    if (dir == NULL) {
+        ucs_error("opendir(%s) failed: %m", netdev_dir);
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    for (;;) {
+        errno = 0;
+        entry = readdir(dir);
+        if (entry == NULL) {
+            if (errno != 0) {
+                ucs_error("readdir(%s) failed: %m", netdev_dir);
+                status = UCS_ERR_IO_ERROR;
+                goto out_closedir;
+            }
+            break; /* no more items */
+        }
+
+        if (!ucs_netif_is_active(entry->d_name)) {
+            continue;
+        }
+
+        ucs_snprintf_zero(dev_name, UCT_DEVICE_NAME_MAX, "%s", entry->d_name);
+        break;
+    }
+
+out_closedir:
+    closedir(dir);
+out:
+    return status;
+}
+
 ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
 {
     uct_sockcm_conn_param_t conn_param;
     ssize_t transfer_len = 0;
-    ssize_t sent_len = 0;
+    ssize_t sent_len     = 0;
+    char dev_name[UCT_DEVICE_NAME_MAX];
 
     memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
 
+    if (UCS_OK != uct_sockcm_get_device_name(dev_name)) {
+        ucs_error("sockcm unable to find aux tl device");
+        return UCS_ERR_IO_ERROR;
+    }
     /* pack worker address into private data */
-    conn_param.length = ep->pack_cb(ep->pack_cb_arg, "DEV_NAME_NULL",
+    conn_param.length = ep->pack_cb(ep->pack_cb_arg, dev_name,
                               (void*)conn_param.private_data);
     if (conn_param.length < 0) {
         ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
