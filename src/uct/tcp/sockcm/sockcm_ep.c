@@ -51,25 +51,23 @@ out:
 ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
 {
     uct_sockcm_conn_param_t conn_param;
-    uct_sockcm_priv_data_hdr_t *hdr;
     ssize_t transfer_len = 0;
     ssize_t sent_len = 0;
 
     memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
-    hdr = &conn_param.hdr;
 
     /* pack worker address into private data */
-    hdr->length = ep->pack_cb(ep->pack_cb_arg, "DEV_NAME_NULL",
+    conn_param.length = ep->pack_cb(ep->pack_cb_arg, "DEV_NAME_NULL",
                               (void*)conn_param.private_data);
-    if (hdr->length < 0) {
+    if (conn_param.length < 0) {
         ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
                   "private data. status: %s",
-                  iface, ep, ucs_status_string(hdr->length));
+                  iface, ep, ucs_status_string(conn_param.length));
         return UCS_ERR_IO_ERROR;
     }
-    ucs_assert(hdr->length <= UCT_SOCKCM_PRIV_DATA_LEN);
+    ucs_assert(conn_param.length <= UCT_SOCKCM_PRIV_DATA_LEN);
     transfer_len = sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN;
-    transfer_len += hdr->length;
+    transfer_len += conn_param.length;
 
     sent_len = send(ep->sock_id_ctx->sock_id, (char *) &conn_param,
                     transfer_len, 0);
