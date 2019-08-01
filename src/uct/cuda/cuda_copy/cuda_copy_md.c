@@ -142,7 +142,7 @@ uct_component_t uct_cuda_copy_component = {
         .size           = sizeof(uct_cuda_copy_md_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_copy_component),
-    .cap_flags          = 0
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);
 

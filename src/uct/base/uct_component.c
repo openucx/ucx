@@ -84,8 +84,8 @@ ucs_status_t uct_component_query(uct_component_h component,
                sizeof(uct_md_resource_desc_t) * num_resources);
     }
 
-    if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_CAP_FLAGS) {
-        component_attr->cap_flags = mdc->cap_flags;
+    if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_FLAGS) {
+        component_attr->flags = mdc->flags;
     }
 
     ucs_free(resources);

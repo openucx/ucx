@@ -58,6 +58,6 @@ uct_component_t uct_tcp_component = {
     .name               = UCT_TCP_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
-    .cap_flags          = 0
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_tcp_component)

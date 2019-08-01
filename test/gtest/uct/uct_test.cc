@@ -107,7 +107,7 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
             component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
                                         UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
-                                        UCT_COMPONENT_ATTR_FIELD_CAP_FLAGS;
+                                        UCT_COMPONENT_ATTR_FIELD_FLAGS;
             /* coverity[var_deref_model] */
             status = uct_component_query(uct_components[cmpt_index], &component_attr);
             ASSERT_UCS_OK(status);

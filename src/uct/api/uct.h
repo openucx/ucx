@@ -218,7 +218,7 @@ enum uct_component_attr_field {
     UCT_COMPONENT_ATTR_FIELD_NAME              = UCS_BIT(0), /**< Component name */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT = UCS_BIT(1), /**< MD resource count */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES      = UCS_BIT(2), /**< MD resources array */
-    UCT_COMPONENT_ATTR_FIELD_CAP_FLAGS         = UCS_BIT(3)  /**< Capability flags */
+    UCT_COMPONENT_ATTR_FIELD_FLAGS             = UCS_BIT(3)  /**< Capability flags */
 };
 
 
@@ -260,9 +260,9 @@ typedef struct uct_component_attr {
     uct_md_resource_desc_t *md_resources;
 
     /**
-     * Capability flags as defined by UCT_COMPONENT_CAP_FLAG_xx.
+     * Flags as defined by UCT_COMPONENT_FLAG_xx.
      */
-    uint64_t cap_flags;
+    uint64_t               flags;
 } uct_component_attr_t;
 
 
@@ -275,7 +275,7 @@ enum {
      * If set, the component supports @ref uct_cm_h functionality.
      * See @ref uct_cm_open for details.
      */
-    UCT_COMPONENT_CAP_FLAG_CM = UCS_BIT(0)
+    UCT_COMPONENT_FLAG_CM = UCS_BIT(0)
 };
 
 
