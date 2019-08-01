@@ -1218,8 +1218,9 @@ err_free_cms:
         if (worker->cms[i] != NULL) {
             uct_cm_close(worker->cms[i]);
         }
-        ucs_free(worker->cms);
     }
+
+    ucs_free(worker->cms);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
