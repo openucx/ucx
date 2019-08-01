@@ -56,14 +56,32 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
     return UCS_OK;
 
 err_destroy_id:
-    rdma_destroy_id(self->id);
+    uct_rdmacm_cm_destroy_id(self->id);
 err:
     return status;
 }
 
+ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
+                                        uct_conn_request_h conn_request)
+{
+    uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener, uct_rdmacm_listener_t);
+    struct rdma_cm_event *event            = (struct rdma_cm_event *)conn_request;
+
+    ucs_assert_always(rdmacm_listener->id == event->listen_id);
+
+    if (rdma_reject(event->id, NULL, 0)) {
+        ucs_error("rdma_reject (id=%p) on listener %p failed: %m",
+                  event->id, rdmacm_listener);
+    }
+
+    uct_rdmacm_cm_destroy_id(event->id);
+
+    return uct_rdmacm_cm_ack_event(event);
+}
+
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
 {
-    rdma_destroy_id(self->id);
+    uct_rdmacm_cm_destroy_id(self->id);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_listener_t, uct_listener_t);

@@ -42,4 +42,9 @@ UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
-ucs_status_t uct_rdmacm_cep_disconnect(uct_ep_h ep, unsigned flags);
+ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags);
+
+ucs_status_t
+uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
+                            const uct_rdmacm_priv_data_hdr_t *hdr,
+                            uct_rdmacm_cm_ep_t *cep);
