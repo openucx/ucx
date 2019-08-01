@@ -110,7 +110,7 @@ typedef struct uct_mm_component {
             }, \
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super), \
-            .cap_flags          = 0, \
+            .flags              = 0, \
        }, \
        .ops                     = (_md_ops) \
     }; \

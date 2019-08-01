@@ -1375,6 +1375,6 @@ uct_component_t uct_ib_component = {
         .size           = sizeof(uct_ib_md_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ib_component),
-    .cap_flags          = 0
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_ib_component);

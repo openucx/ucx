@@ -41,8 +41,8 @@ struct uct_md_component {
     ucs_config_global_list_entry_t md_config;  /**< MD configuration entry */
     ucs_list_link_t        tl_list;            /**< List of uct_md_registered_tl_t */
     ucs_list_link_t        list;
-    uint64_t               cap_flags;          /**< Capability flags as defined
-                                                    by UCT_COMPONENT_CAP_FLAG_xx */
+    uint64_t               flags;              /**< Flags as defined
+                                                    by UCT_COMPONENT_FLAG_xx */
 };
 
 

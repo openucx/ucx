@@ -232,6 +232,6 @@ uct_component_t uct_ugni_component = {
         .size           = sizeof(uct_md_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ugni_component),
-    .cap_flags          = 0
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_ugni_component);

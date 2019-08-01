@@ -408,6 +408,6 @@ static uct_component_t uct_self_component = {
     .name               = UCT_SELF_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
-    .cap_flags          = 0
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_self_component);
