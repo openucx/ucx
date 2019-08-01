@@ -185,7 +185,7 @@ static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
     ucs_debug("process conn req: accepted fd %d %m", *sock_fd);
 
     iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, sock_fd,
-			   conn_param.private_data, conn_param.hdr.length);
+			   conn_param.private_data, conn_param.length);
 }
 
 
@@ -235,7 +235,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     recv_base_len = (sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN);
     if (recv_len >= recv_base_len) {
         conn_param.fd = accept_fd;
-        ucs_assert(conn_param.hdr.length + recv_base_len == recv_len);
+        ucs_assert(conn_param.length + recv_base_len == recv_len);
         uct_sockcm_iface_process_conn_req(iface, conn_param);
     } else {
         ucs_error("sockcm_iface %p:did not receive up to header size on %d\n", 
