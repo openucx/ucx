@@ -159,10 +159,12 @@ Good
         (_obj)->_field = (_val)
 
     #define UCS_MACRO_LONG(_obj, _field1, _field2, _val1, _val2) \
-        do { \
-            (_obj)->_field1 = (_val1); \
-            (_obj)->_field2 = (_val2); \
-        } while (0)
+        { \
+            typeof((_obj)->_field1) sum = (_val1) + (_val2); \
+            \
+            (_obj)->_field1 = sum; \
+            (_obj)->_field2 = sum; \
+        }
 
     #define UCS_MACRO_LONG_RET_VAL(_obj, _field, _val, _func) \
         ({ \
@@ -181,10 +183,11 @@ Bad
         _obj->_field = _val /* need to wrap macro arguments by () */
 
     #define UCS_MACRO_LONG(_obj, _field1, _field2, _val1, _val2) \
-        { \
-            (_obj)->_field1 = (_val1); \
-            (_obj)->_field2 = (_val2); \
-        } /* some compilers may fail a compilation, when add ; in the end */
+            /* possible mixing declarations and code */ \
+            typeof((_obj)->_field1) sum = (_val1) + (_val2); \
+            \
+            (_obj)->_field1 = sum; \
+            (_obj)->_field2 = sum;
 
     #define UCS_MACRO_LONG_RET_VAL(_obj, _field, _val, _func) \
         ({                                                    \
