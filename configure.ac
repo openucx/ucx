@@ -79,7 +79,7 @@ LT_LIB_M
 AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
-PKG_PROG_PKG_CONFIG
+AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
 
 
 #
