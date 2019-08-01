@@ -7,9 +7,50 @@
 #include "rdmacm_cm_ep.h"
 
 
-static ucs_status_t uct_rdmacm_create_dummy_cq_qp(struct rdma_cm_id *id,
-                                                  struct ibv_cq **cq_p,
-                                                  struct ibv_qp **qp_p)
+void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
+                                        ucs_status_t status)
+{
+    cep->wireup.server.connect_cb(&cep->super.super, cep->user_data, status);
+}
+
+void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
+                                        uct_cm_remote_data_t *remote_data,
+                                        ucs_status_t status)
+{
+    cep->wireup.client.connect_cb(&cep->super.super, cep->user_data,
+                                  remote_data, status);
+}
+
+static UCS_F_ALWAYS_INLINE
+uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
+{
+    uct_cm_t *cm = ucs_container_of(cep->super.super.iface, uct_cm_t, iface);
+    /* return the connection manager this ep is using */
+    return ucs_derived_of(cm, uct_rdmacm_cm_t);
+}
+
+static void uct_rdmacm_cm_ep_destroy_dummy_cq_qp(uct_rdmacm_cm_ep_t *cep)
+{
+    int ret;
+
+    if (cep->qp != NULL) {
+        ret = ibv_destroy_qp(cep->qp);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+        }
+    }
+
+    if (cep->cq != NULL) {
+        ret = ibv_destroy_cq(cep->cq);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+        }
+    }
+}
+
+static ucs_status_t uct_rdmacm_cm_create_dummy_cq_qp(struct rdma_cm_id *id,
+                                                     struct ibv_cq **cq_p,
+                                                     struct ibv_qp **qp_p)
 {
     struct ibv_qp_init_attr qp_init_attr;
     ucs_status_t status;
@@ -65,7 +106,7 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
     struct ibv_cq *cq;
 
     /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
-    status = uct_rdmacm_create_dummy_cq_qp(cep->id, &cq, &qp);
+    status = uct_rdmacm_cm_create_dummy_cq_qp(cep->id, &cq, &qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -76,15 +117,69 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
     return UCS_OK;
 }
 
+ucs_status_t uct_rdmacm_cm_ep_prepare_data_to_send(uct_rdmacm_cm_ep_t *cep,
+                                                   struct rdma_conn_param *conn_param)
+{
+    uct_rdmacm_priv_data_hdr_t *hdr;
+    ucs_status_t               status;
+    char                       dev_name[UCT_DEVICE_NAME_MAX];
+    ssize_t                    priv_data_ret;
+
+    uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
+
+    memset(conn_param, 0, sizeof(*conn_param));
+    conn_param->private_data = ucs_malloc(uct_rdmacm_cm_get_max_conn_priv() +
+                                          sizeof(uct_rdmacm_priv_data_hdr_t),
+                                          "conn_parma_priv_data");
+    if (conn_param->private_data == NULL) {
+        ucs_error("failed to allocate private_data");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* Pack data to send inside rdmacm's conn_param to the remote peer */
+    hdr           = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
+    priv_data_ret = cep->wireup.priv_pack_cb(cep->user_data, dev_name, hdr + 1);
+
+    if ((priv_data_ret < 0) || (priv_data_ret > uct_rdmacm_cm_get_max_conn_priv())) {
+        ucs_error("rdma_cm private data pack function on ep %p returned "
+                  "%zd (max: %zu)", cep, priv_data_ret,
+                   uct_rdmacm_cm_get_max_conn_priv());
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_priv_data;
+    }
+
+    ucs_assert(priv_data_ret <= UINT8_MAX);
+    hdr->length = (uint8_t)priv_data_ret;
+    hdr->status = UCS_OK;
+
+    status = uct_rdamcm_cm_ep_set_qp_num(conn_param, hdr, cep);
+    if (status != UCS_OK) {
+        goto err_free_priv_data;
+    }
+
+    conn_param->private_data_len = sizeof(*hdr) + hdr->length;
+
+    return UCS_OK;
+
+err_free_priv_data:
+    ucs_free((void*)conn_param->private_data);
+err:
+    return status;
+}
+
 static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
+    uct_cm_t *cm = ucs_container_of(cep->super.super.iface, uct_cm_t, iface);
+    uct_rdmacm_cm_t *rdmacm_cm = ucs_derived_of(cm, uct_rdmacm_cm_t);
+
     cep->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
 
-    if (rdma_create_id(cep->cm->ev_ch, &cep->id, cep, RDMA_PS_TCP)) {
+    if (rdma_create_id(rdmacm_cm->ev_ch, &cep->id, cep, RDMA_PS_TCP)) {
         ucs_error("rdma_create_id() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
@@ -115,7 +210,43 @@ err:
 static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    struct rdma_cm_event *event = (struct rdma_cm_event *)params->conn_request;
+    struct rdma_conn_param conn_param;
+    uct_rdmacm_priv_data_hdr_t hdr;
+    ucs_status_t status;
+
+    cep->wireup.server.connect_cb = params->sockaddr_connect_cb.server;
+
+    /* TODO: migrate id if cm is different */
+    ucs_assert(event->listen_id->channel == uct_rdmacm_cm_ep_get_cm(cep)->ev_ch);
+
+    cep->id          = event->id;
+    cep->id->context = cep;
+
+    status = uct_rdmacm_cm_ep_prepare_data_to_send(cep, &conn_param);
+    if (status != UCS_OK) {
+        hdr.status = UCS_ERR_REJECTED;
+        hdr.length = 0;
+        if (rdma_reject(event->id, &hdr, sizeof(hdr))) {
+            ucs_error("rdma_reject (id=%p) failed with error: %m", event->id);
+        }
+
+        uct_rdmacm_cm_destroy_id(event->id);
+        goto out_ack_event;
+    }
+
+    if (rdma_accept(event->id, &conn_param)) {
+        ucs_error("rdma_accept(on id=%p) failed: %m", event->id);
+        uct_rdmacm_cm_ep_destroy_dummy_cq_qp(cep);
+        uct_rdmacm_cm_destroy_id(event->id);
+        status = UCS_ERR_IO_ERROR;
+    }
+
+    ucs_free((void*)conn_param.private_data);
+
+out_ack_event:
+    uct_rdmacm_cm_ack_event(event);
+    return status;
 }
 
 ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
@@ -140,7 +271,6 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
-    uct_rdmacm_cm_t *cm;
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
         ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
@@ -163,10 +293,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    cm = ucs_derived_of(params->cm, uct_rdmacm_cm_t);
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &cm->super.iface);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
 
-    self->cm                  = cm;
     self->wireup.priv_pack_cb = (params->field_mask &
                                  UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
                                 params->sockaddr_pack_cb : NULL;
@@ -191,7 +319,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
     if (status == UCS_OK) {
         ucs_debug("created an endpoint %p on rdmacm %p id: %p",
-                  self, self->cm, self->id);
+                  self, uct_rdmacm_cm_ep_get_cm(self), self->id);
     }
 
     return status;
@@ -199,25 +327,13 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 {
-    uct_priv_worker_t *worker_priv = ucs_derived_of(self->cm->super.iface.worker,
-                                                    uct_priv_worker_t);
-    int ret;
+    uct_priv_worker_t *worker_priv =
+                    ucs_derived_of(uct_rdmacm_cm_ep_get_cm(self)->super.iface.worker,
+                                   uct_priv_worker_t);
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 
-    if (self->qp != NULL) {
-        ret = ibv_destroy_qp(self->qp);
-        if (ret != 0) {
-            ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-        }
-    }
-
-    if (self->cq != NULL) {
-        ret = ibv_destroy_cq(self->cq);
-        if (ret != 0) {
-            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
-        }
-    }
+    uct_rdmacm_cm_ep_destroy_dummy_cq_qp(self);
 
     /* rdma_destroy_id() cleans all events not yet reported on progress thread,
      * so no events would be reported to the user after destroying the id */

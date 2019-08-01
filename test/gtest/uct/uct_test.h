@@ -143,6 +143,8 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
+        unsigned num_eps() const;
+
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
         void destroy_eps();
@@ -161,12 +163,19 @@ protected:
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
+        void accept(uct_conn_request_h conn_request,
+                    uct_ep_server_connect_cb_t connect_cb,
+                    uct_ep_disconnect_cb_t disconnect_cb,
+                    void *user_data);
         void listen(const ucs::sock_addr_storage &listen_addr,
                     const uct_listener_params_t &params);
+        void disconnect(uct_ep_h ep);
+
         void flush() const;
 
-        static std::string client_priv_data;
-        size_t             client_cb_arg;
+        static const std::string server_priv_data;
+        static std::string       client_priv_data;
+        size_t                   client_cb_arg;
 
     private:
         class async_wrapper {
@@ -189,6 +198,9 @@ protected:
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
         static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
                                            void *priv_data);
+        static ssize_t server_priv_data_cb(void *arg, const char *dev_name,
+                                           void *priv_data);
+
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
@@ -260,6 +272,17 @@ protected:
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (!(*flag))) {
+            short_progress_loop();
+        }
+    }
+
+    void wait_for_bits(volatile uint64_t *flag, uint64_t mask,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) *
+                              ucs::test_time_multiplier();
+        while ((ucs_get_time() < deadline) && (!ucs_test_all_flags(*flag, mask))) {
             short_progress_loop();
         }
     }

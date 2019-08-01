@@ -550,6 +550,7 @@ int uct_test::max_connect_batch()
     }
 }
 
+const std::string uct_test::entity::server_priv_data = "Server private data";
 std::string uct_test::entity::client_priv_data = "";
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
@@ -833,6 +834,10 @@ uct_ep_h uct_test::entity::ep(unsigned index) const {
     return m_eps.at(index);
 }
 
+unsigned uct_test::entity::num_eps() const {
+    return m_eps.size();
+}
+
 void uct_test::entity::reserve_ep(unsigned index) {
     if (index >= m_eps.size()) {
         m_eps.resize(index + 1);
@@ -912,6 +917,15 @@ ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
     memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
     EXPECT_LE(priv_data_len, (*max_conn_priv));
 
+    return priv_data_len;
+}
+
+ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
+                                              void *priv_data)
+{
+    const size_t priv_data_len = server_priv_data.length() + 1;
+
+    memcpy(priv_data, server_priv_data.c_str(), priv_data_len);
     return priv_data_len;
 }
 
@@ -1057,6 +1071,39 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     }
 }
 
+void uct_test::entity::accept(uct_conn_request_h conn_request,
+                              uct_ep_server_connect_cb_t connect_cb,
+                              uct_ep_disconnect_cb_t disconnect_cb,
+                              void *user_data)
+{
+    uct_ep_params_t ep_params;
+    ucs_status_t status;
+    uct_ep_h ep;
+
+    ASSERT_TRUE(m_listener);
+    reserve_ep(m_eps.size());
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                     |
+                           UCT_EP_PARAM_FIELD_CONN_REQUEST           |
+                           UCT_EP_PARAM_FIELD_USER_DATA              |
+                           UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    |
+                           UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB |
+                           UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      |
+                           UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+
+    ep_params.cm                         = m_cm;
+    ep_params.conn_request               = conn_request;
+    ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
+    ep_params.sockaddr_pack_cb           = server_priv_data_cb;
+    ep_params.sockaddr_connect_cb.server = connect_cb;
+    ep_params.disconnect_cb              = disconnect_cb;
+    ep_params.user_data                  = user_data;
+
+    status = uct_ep_create(&ep_params, &ep);
+    ASSERT_UCS_OK(status);
+    m_eps.back().reset(ep, uct_ep_destroy);
+}
+
 void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
                               const uct_listener_params_t &params)
 {
@@ -1089,6 +1136,10 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
             addr->sin6_port = ucs::get_port();
         }
     }
+}
+
+void uct_test::entity::disconnect(uct_ep_h ep) {
+    ASSERT_UCS_OK(uct_ep_disconnect(ep, 0));
 }
 
 void uct_test::entity::flush() const {
