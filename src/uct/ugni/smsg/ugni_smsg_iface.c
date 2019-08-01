@@ -224,11 +224,17 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 {
+    ucs_status_t status;
+
     uct_worker_progress_remove(self->super.super.worker, &self->super.super.prog);
     ucs_mpool_cleanup(&self->free_desc, 1);
     ucs_mpool_cleanup(&self->free_mbox, 1);
     uct_ugni_destroy_cq(self->remote_cq, &self->super.cdm);
-    ucs_spinlock_destroy(&self->mbox_lock);
+
+    status = ucs_spinlock_destroy(&self->mbox_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 }
 
 static uct_iface_ops_t uct_ugni_smsg_iface_ops = {

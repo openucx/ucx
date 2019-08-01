@@ -26,13 +26,19 @@ ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq)
 
 void ucs_timerq_cleanup(ucs_timer_queue_t *timerq)
 {
+    ucs_status_t status;
+
     ucs_trace_func("timerq=%p", timerq);
 
     if (timerq->num_timers > 0) {
         ucs_warn("timer queue with %d timers being destroyed", timerq->num_timers);
     }
     ucs_free(timerq->timers);
-    ucs_spinlock_destroy(&timerq->lock);
+
+    status = ucs_spinlock_destroy(&timerq->lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 }
 
 ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,

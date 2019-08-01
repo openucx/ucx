@@ -695,7 +695,10 @@ err_destroy_mp:
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_inv_q_lock:
-    ucs_spinlock_destroy(&self->inv_lock);
+    status = ucs_spinlock_destroy(&self->inv_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 err_destroy_rwlock:
     pthread_rwlock_destroy(&self->lock);
 err_free_name:
@@ -708,6 +711,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
+    ucs_status_t status;
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
     ucs_rcache_check_inv_queue(self);
@@ -715,7 +719,10 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 
     ucs_mpool_cleanup(&self->inv_mp, 1);
     ucs_pgtable_cleanup(&self->pgtable);
-    ucs_spinlock_destroy(&self->inv_lock);
+    status = ucs_spinlock_destroy(&self->inv_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
     pthread_rwlock_destroy(&self->lock);
     UCS_STATS_NODE_FREE(self->stats);
     free(self->name);
