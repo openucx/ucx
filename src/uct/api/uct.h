@@ -269,6 +269,9 @@ typedef struct uct_component_attr {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Capability flags of @ref uct_component_h.
+ *
+ * The enumeration defines bit mask of @ref uct_component_h capabilities in
+ * @ref uct_component_attr_t::flags which is set by @ref uct_component_query.
  */
 enum {
     /**
