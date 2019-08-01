@@ -320,9 +320,10 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
             goto err_free_memh;
         }
     } else {
-        ucs_debug("registering user memory at %p length %zu", address, length);
+        ucp_memory_type_detect_mds(context, address, length, &memh->mem_type);
+        ucs_debug("registering user memory at %p length %zu memory type:%s",
+                  address, length, ucs_memory_type_names[memh->mem_type]);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
-        memh->mem_type     = UCS_MEMORY_TYPE_HOST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
