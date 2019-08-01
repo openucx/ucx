@@ -1181,7 +1181,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     UCS_ASYNC_BLOCK(&worker->async);
     worker->num_cms = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
-        if (context->tl_cmpts[i].attr.cap_flags & UCT_COMPONENT_CAP_FLAG_CM) {
+        if (context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) {
             ++worker->num_cms;
         }
     }
@@ -1199,7 +1199,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     }
 
     for (i = 0, j = 0; i < context->num_cmpts; ++i) {
-        if (context->tl_cmpts[i].attr.cap_flags & UCT_COMPONENT_CAP_FLAG_CM) {
+        if (context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) {
             status = uct_cm_open(context->tl_cmpts[i].cmpt, worker->uct,
                                  &worker->cms[j++]);
             if (status != UCS_OK) {
