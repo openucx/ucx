@@ -67,8 +67,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
                   iface, ep, ucs_status_string(hdr->length));
         return UCS_ERR_IO_ERROR;
     }
-    ucs_assert(hdr->length + sizeof(int) <= UCT_SOCKCM_PRIV_DATA_LEN);
-    conn_param.private_data_len = hdr->length;
+    ucs_assert(hdr->length <= UCT_SOCKCM_PRIV_DATA_LEN);
     transfer_len = sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN;
     transfer_len += hdr->length;
 
