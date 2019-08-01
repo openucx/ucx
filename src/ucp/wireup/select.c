@@ -73,13 +73,6 @@ typedef struct {
 } ucp_wireup_select_bw_info_t;
 
 
-typedef struct {
-    ucp_rsc_index_t rsc_index;
-    unsigned        addr_index;
-    double          score;
-} ucp_wireup_select_info_t;
-
-
 static const char *ucp_wireup_md_flags[] = {
     [ucs_ilog2(UCT_MD_FLAG_ALLOC)]               = "memory allocation",
     [ucs_ilog2(UCT_MD_FLAG_REG)]                 = "memory registration",
@@ -213,7 +206,7 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 }
 
 /**
- * Calulates a small value to overcome float imprecision between two scores
+ * Calulate a small value to overcome float imprecision between two scores
  */
 static double ucp_wireup_calc_score_epsilon(double score1, double score2)
 {
@@ -221,22 +214,16 @@ static double ucp_wireup_calc_score_epsilon(double score1, double score2)
 }
 
 /**
- * Check if the one score is bettter than the another one
+ * Compare two scores and return:
+ * - `-1` if socre1 < socre2
+ * -  `0` if score1 == score2
+ * -  `1` if score1 > score2
  */
-static int ucp_wireup_score_better(double score1, double score2)
+static int ucp_wireup_score_cmp(double score1, double score2)
 {
-    return (score1 >= (score2 +
-                       ucp_wireup_calc_score_epsilon(score1, score2)));
-}
-
-/**
- * Check if scores are equal, i.e. the diffrence between
- * them < epsilon
- */
-static int ucp_wireup_scores_equal(double score1, double score2)
-{
-    return (fabs(score1 - score2) <
-            ucp_wireup_calc_score_epsilon(score1, score2));
+    return ((fabs(score1 - score2) <
+             ucp_wireup_calc_score_epsilon(score1, score2)) ?
+            0 : ucs_signum(score1 - score2));
 }
 
 /**
@@ -404,10 +391,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             if (!found ||
                 /* Comparing score with the current best score */
-                ucp_wireup_score_better(score, best_score) ||
+                (ucp_wireup_score_cmp(score, best_score) > 0) ||
                 /* Comparing priority with the priority of the current best
                  * transport (if the scores are equal) */
-                (ucp_wireup_scores_equal(score, best_score) &&
+                ((ucp_wireup_score_cmp(score, best_score) == 0) &&
                  (priority > best_score_priority))) {
                 best_rsc_index      = rsc_index;
                 best_dst_addr_index = ae - address_list;
@@ -668,7 +655,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         if ((status != UCS_OK) ||
             /* - the selected transport is worse than
              *   the transport selected above */
-            !ucp_wireup_score_better(select_info.score, reg_score)) {
+            (ucp_wireup_score_cmp(select_info.score, reg_score) <= 0)) {
             break;
         }
 
@@ -1210,7 +1197,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     /* - transport selection wasn't OK */
     if ((status != UCS_OK) ||
         /* - the TAG transport is worse than the AM transport */
-        !ucp_wireup_score_better(select_info.score, am_info->score)) {
+        (ucp_wireup_score_cmp(select_info.score, am_info->score <= 0))) {
         goto out;
     }
 
@@ -1401,7 +1388,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
          (ucs_popcount(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
         lane = key->rma_bw_lanes[i];
         rsc_index = lane_descs[lane].rsc_index;
-        md_index  = worker->context->tl_rscs[rsc_index].md_index;
+        md_index  = context->tl_rscs[rsc_index].md_index;
 
         /* Pack remote key only if needed for RMA.
          * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
@@ -1432,22 +1419,14 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              const ucp_ep_params_t *params,
                                              const ucp_address_entry_t *address_list,
                                              unsigned address_count,
-                                             ucp_rsc_index_t *rsc_index_p,
-                                             unsigned *addr_index_p)
+                                             ucp_wireup_select_info_t *select_info)
 {
-    ucp_wireup_criteria_t criteria       = {0};
-    ucp_wireup_select_info_t select_info = {0};
-    ucs_status_t status;
+    ucp_wireup_criteria_t criteria = {0};
 
     ucp_wireup_fill_aux_criteria(&criteria, params);
-    status = ucp_wireup_select_transport(ep, address_list, address_count,
-                                         &criteria, -1, -1, -1, -1, 1,
-                                         &select_info);
-
-    *rsc_index_p  = select_info.rsc_index;
-    *addr_index_p = select_info.addr_index;
-
-    return status;
+    return ucp_wireup_select_transport(ep, address_list, address_count,
+                                       &criteria, -1, -1, -1, -1, 1,
+                                       select_info);
 }
 
 ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
