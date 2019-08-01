@@ -185,7 +185,7 @@ static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
     ucs_debug("process conn req: accepted fd %d %m", *sock_fd);
 
     iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, sock_fd,
-			   conn_param.private_data, conn_param.private_data_len);
+			   conn_param.private_data, conn_param.hdr.length);
 }
 
 
