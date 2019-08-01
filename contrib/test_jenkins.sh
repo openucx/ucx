@@ -366,7 +366,7 @@ build_icc() {
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
-		echo "ok 1 - # SKIP because Coverity not installed" >> build_icc.tap
+		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
 	module unload intel/ics
 }
@@ -1111,18 +1111,22 @@ test_jucx() {
 
 #
 # Run Coverity and report errors
+# The argument is a UCX build type: devel or release
 #
 run_coverity() {
 	echo 1..1 > coverity.tap
 	if module_load tools/cov
 	then
+		ucx_build_type=$1
+
 		echo "==== Running coverity ===="
+		../contrib/configure-$ucx_build_type --prefix=$ucx_inst
 		$MAKEP clean
-		cov_build_id="cov_build_${BUILD_NUMBER}"
+		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
 		cov-build   --dir $cov_build $MAKEP all
-		cov-analyze $COV_OPT --dir $cov_build
+		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
 
@@ -1405,8 +1409,9 @@ run_tests() {
 	run_gtest_default
 	run_gtest_armclang
 
-	do_distributed_task 3 4 run_coverity
-	do_distributed_task 0 4 run_gtest_release
+	do_distributed_task 3 4 run_coverity release
+	do_distributed_task 0 4 run_coverity devel
+	do_distributed_task 1 4 run_gtest_release
 }
 
 prepare

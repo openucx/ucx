@@ -12,8 +12,6 @@
 #include <ucs/sys/string.h>
 
 
-UCT_MD_REGISTER_TL(&uct_cma_md_component, &uct_cma_tl);
-
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap;BW=11145MBs", NULL,
     ucs_offsetof(uct_cma_iface_config_t, super),
@@ -62,7 +60,8 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = iface->super.config.bandwidth;
+    iface_attr->bandwidth.dedicated     = iface->super.config.bandwidth;
+    iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
     return UCS_OK;
 }
@@ -142,3 +141,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cma_tl,
                         "CMA_",
                         uct_cma_iface_config_table,
                         uct_cma_iface_config_t);
+UCT_MD_REGISTER_TL(&uct_cma_component, &uct_cma_tl);

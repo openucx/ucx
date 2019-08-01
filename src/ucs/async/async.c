@@ -630,8 +630,8 @@ void ucs_async_global_cleanup()
 {
     int num_elems = kh_size(&ucs_async_global_context.handlers);
     if (num_elems != 0) {
-        ucs_warn("async handler table is not empty during exit (contains %d elems)",
-                 num_elems);
+        ucs_debug("async handler table is not empty during exit (contains %d elems)",
+                  num_elems);
     }
     ucs_async_method_call_all(cleanup);
     kh_destroy_inplace(ucs_async_handler, &ucs_async_global_context.handlers);

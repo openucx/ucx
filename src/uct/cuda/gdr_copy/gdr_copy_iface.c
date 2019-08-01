@@ -42,10 +42,12 @@ static int uct_gdr_copy_iface_is_reachable(const uct_iface_h tl_iface,
     return (addr != NULL) && (iface->id == *addr);
 }
 
-static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
+static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_gdr_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_gdr_copy_iface_t);
+
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(uct_gdr_copy_iface_addr_t);
     iface_attr->device_addr_len         = 0;
@@ -81,7 +83,8 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
 
     iface_attr->latency.overhead        = 1e-6; /* 1 us */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.dedicated     = 0;
+    iface_attr->bandwidth.shared        = 6911 * 1024.0 * 1024.0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 
@@ -169,4 +172,4 @@ UCT_TL_COMPONENT_DEFINE(uct_gdr_copy_tl,
                         "GDR_COPY_",
                         uct_gdr_copy_iface_config_table,
                         uct_gdr_copy_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_gdr_copy_md_component, &uct_gdr_copy_tl);
+UCT_MD_REGISTER_TL(&uct_gdr_copy_component, &uct_gdr_copy_tl);

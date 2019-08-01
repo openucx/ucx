@@ -12,8 +12,6 @@
 #include <ucs/sys/string.h>
 
 
-UCT_MD_REGISTER_TL(&uct_knem_md_component, &uct_knem_tl);
-
 static ucs_config_field_t uct_knem_iface_config_table[] = {
     {"", "BW=13862MBs", NULL,
     ucs_offsetof(uct_knem_iface_config_t, super),
@@ -22,12 +20,12 @@ static ucs_config_field_t uct_knem_iface_config_table[] = {
     {NULL}
 };
 
-
 static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          uct_iface_attr_t *iface_attr)
 {
     uct_knem_iface_t *iface = ucs_derived_of(tl_iface, uct_knem_iface_t);
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+
+    uct_base_iface_query(&iface->super.super, iface_attr);
 
     /* default values for all shared memory transports */
     iface_attr->cap.put.min_zcopy       = 0;
@@ -56,8 +54,10 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->latency.overhead       = 80e-9; /* 80 ns */
     iface_attr->latency.growth         = 0;
-    iface_attr->bandwidth              = iface->super.config.bandwidth;
+    iface_attr->bandwidth.shared       = iface->super.config.bandwidth;
+    iface_attr->bandwidth.dedicated    = 0;
     iface_attr->overhead               = 0.25e-6; /* 0.25 us */
+
     return UCS_OK;
 }
 
@@ -138,3 +138,4 @@ UCT_TL_COMPONENT_DEFINE(uct_knem_tl,
                         "KNEM_",
                         uct_knem_iface_config_table,
                         uct_knem_iface_config_t);
+UCT_MD_REGISTER_TL(&uct_knem_component, &uct_knem_tl);

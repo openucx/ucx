@@ -380,6 +380,13 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     return status;
 }
 
+void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
+{
+    memset(iface_attr, 0, sizeof(*iface_attr));
+
+    iface_attr->max_num_eps = iface->config.max_num_eps;
+}
+
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
     ucs_assert_always(ops->ep_flush                 != NULL);
@@ -459,6 +466,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     }
 
     self->config.failure_level = config->failure;
+    self->config.max_num_eps   = config->max_num_eps;
 
     return UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
                                 stats_parent, "-%s-%p", iface_name, self);
@@ -563,6 +571,10 @@ ucs_config_field_t uct_iface_config_table[] = {
   {"FAILURE", "error",
    "Level of network failure reporting",
    ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+  {"MAX_NUM_EPS", "inf",
+   "Maximum number of endpoints that the transport interface is able to create",
+   ucs_offsetof(uct_iface_config_t, max_num_eps), UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };

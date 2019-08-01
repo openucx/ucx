@@ -1114,7 +1114,11 @@ static inline void ucs_debug_save_original_sighandler(int signum,
         goto out;
     }
 
-    oact_copy = (struct sigaction *)ucs_malloc(sizeof(*orig_handler), "orig_sighandler");
+    oact_copy = ucs_malloc(sizeof(*orig_handler), "orig_sighandler");
+    if (oact_copy == NULL) {
+        goto out;
+    }
+
     *oact_copy = *orig_handler;
     hash_it = kh_put(ucs_signal_orig_action,
                      &ucs_signal_orig_action_map,
@@ -1244,6 +1248,7 @@ void ucs_debug_cleanup(int on_error)
     char *sym;
     int signum;
     struct sigaction *hndl;
+    ucs_status_t status;
 
     ucs_debug_initialized = 0;
 
@@ -1256,7 +1261,11 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
-    ucs_spinlock_destroy(&ucs_kh_lock);
+
+    status = ucs_spinlock_destroy(&ucs_kh_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 }
 
 static inline void ucs_debug_disable_signal_nolock(int signum)

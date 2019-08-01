@@ -18,8 +18,6 @@
 #endif
 
 
-uct_md_component_t uct_cma_md_component;
-
 static int uct_cma_test_ptrace_scope()
 {
     static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
@@ -147,19 +145,12 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
     };
     static uct_md_t md = {
         .ops          = &md_ops,
-        .component    = &uct_cma_md_component
+        .component    = &uct_cma_component
     };
 
     *md_p = &md;
     return UCS_OK;
 }
-
-UCT_MD_COMPONENT_DEFINE(uct_cma_md_component, "cma",
-                        uct_cma_query_md_resources, uct_cma_md_open, NULL,
-                        uct_md_stub_rkey_unpack,
-                        ucs_empty_function_return_success, "CMA_",
-                        uct_md_config_table, uct_md_config_t,
-                        ucs_empty_function_return_unsupported)
 
 ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
@@ -176,3 +167,16 @@ ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
+
+uct_component_t uct_cma_component = {
+    .query_md_resources = uct_cma_query_md_resources,
+    .md_open            = uct_cma_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_md_stub_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = ucs_empty_function_return_success,
+    .name               = "cma",
+    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cma_component)
+};
+UCT_COMPONENT_REGISTER(&uct_cma_component);

@@ -22,6 +22,11 @@
 #include <ucm/api/ucm.h>
 
 
+typedef enum {
+    UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE,
+    UCS_MEMTYPE_CACHE_ACTION_REMOVE
+} ucs_memtype_cache_action_t;
+
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
     return ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN, sizeof(ucs_pgt_dir_t),
@@ -34,86 +39,42 @@ static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
     ucs_free(dir);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache, void *address,
-                         size_t size, ucs_memory_type_t mem_type)
+/*
+ * - Lock must be held in write mode
+ * - start, end must be aligned to page size
+ */
+static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
+                                     ucs_pgt_addr_t start, ucs_pgt_addr_t end,
+                                     ucs_memory_type_t mem_type)
 {
     ucs_memtype_cache_region_t *region;
-    ucs_pgt_addr_t start, end;
     ucs_status_t status;
 
-    ucs_trace("memtype_cache:insert address:%p length:%zu mem_type:%d",
-              address, size, mem_type);
-
-    pthread_rwlock_wrlock(&memtype_cache->lock);
-
-    /* Align to page size */
-    start  = ucs_align_down_pow2((uintptr_t)address, UCS_PGT_ADDR_ALIGN);
-    end    = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
-    region = NULL;
+    ucs_trace("memtype_cache: insert 0x%lx..0x%lx mem_type %d", start, end,
+              mem_type);
 
     /* Allocate structure for new region */
-    region = ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN, sizeof(ucs_memtype_cache_region_t),
+    region = ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN,
+                          sizeof(ucs_memtype_cache_region_t),
                           "memtype_cache_region");
     if (region == NULL) {
         ucs_warn("failed to allocate memtype_cache region");
-        goto out_unlock;
+        return;
     }
+
+    ucs_assert((start % ucs_get_page_size()) == 0);
+    ucs_assert((end   % ucs_get_page_size()) == 0);
 
     region->super.start = start;
     region->super.end   = end;
     region->mem_type    = mem_type;
+
     status = UCS_PROFILE_CALL(ucs_pgtable_insert, &memtype_cache->pgtable,
                               &region->super);
     if (status != UCS_OK) {
         ucs_error("failed to insert region " UCS_PGT_REGION_FMT ": %s",
                   UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
         ucs_free(region);
-        goto out_unlock;
-    }
-
-out_unlock:
-    pthread_rwlock_unlock(&memtype_cache->lock);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucs_memtype_cache_delete(ucs_memtype_cache_t *memtype_cache, void *address,
-                         size_t size, ucs_memory_type_t mem_type)
-{
-    ucs_pgt_addr_t start = (uintptr_t)address;
-    ucs_pgt_region_t *pgt_region;
-    ucs_memtype_cache_region_t *region;
-    ucs_status_t status;
-
-    ucs_trace("memtype_cache:delete address:%p length:%zu mem_type:%d",
-              address, size, mem_type);
-
-    pthread_rwlock_rdlock(&memtype_cache->lock);
-
-    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &memtype_cache->pgtable, start);
-    assert(pgt_region != NULL);
-
-    region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
-
-    status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
-    if (status != UCS_OK) {
-        ucs_warn("failed to remove address:%p from memtype_cache", address);
-    }
-    ucs_free(region);
-    pthread_rwlock_unlock(&memtype_cache->lock);
-}
-
-static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
-                                              ucm_event_t *event, void *arg)
-{
-    ucs_memtype_cache_t *memtype_cache = arg;
-
-    if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucs_memtype_cache_insert(memtype_cache, event->mem_type.address,
-                                 event->mem_type.size, event->mem_type.mem_type);
-    } else if (event_type & UCM_EVENT_MEM_TYPE_FREE) {
-        ucs_memtype_cache_delete(memtype_cache, event->mem_type.address,
-                                 event->mem_type.size, event->mem_type.mem_type);
     }
 }
 
@@ -127,42 +88,126 @@ static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtab
     ucs_list_add_tail(list, &region->list);
 }
 
+UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
+                      (memtype_cache, address, size, mem_type, action),
+                      ucs_memtype_cache_t *memtype_cache, void *address,
+                      size_t size, ucs_memory_type_t mem_type,
+                      ucs_memtype_cache_action_t action)
+{
+    const size_t page_size = ucs_get_page_size();
+    ucs_memtype_cache_region_t *region, *tmp;
+    UCS_LIST_HEAD(region_list);
+    ucs_pgt_addr_t start, end;
+    ucs_status_t status;
+
+    start = ucs_align_down_pow2((uintptr_t)address,        page_size);
+    end   = ucs_align_up_pow2  ((uintptr_t)address + size, page_size);
+
+    pthread_rwlock_wrlock(&memtype_cache->lock);
+
+    /* find and remove all regions which intersect with new one */
+    ucs_pgtable_search_range(&memtype_cache->pgtable, start, end - 1,
+                             ucs_memtype_cache_region_collect_callback,
+                             &region_list);
+    ucs_list_for_each(region, &region_list, list) {
+        status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
+        if (status != UCS_OK) {
+            ucs_error("failed to remove address:%p from memtype_cache", address);
+            goto out_unlock;
+        }
+        ucs_trace("memtype_cache: removed 0x%lx..0x%lx mem_type %d",
+                  region->super.start, region->super.end, region->mem_type);
+    }
+
+    if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
+        ucs_memtype_cache_insert(memtype_cache, start, end, mem_type);
+    }
+
+    /* slice old regions by the new region, to preserve the previous memory type
+     * of the non-overlapping parts
+     */
+    ucs_list_for_each_safe(region, tmp, &region_list, list) {
+        if (start > region->super.start) {
+            /* create previous region */
+            ucs_memtype_cache_insert(memtype_cache, region->super.start, start,
+                                     region->mem_type);
+        }
+        if (end < region->super.end) {
+            /* create next region */
+            ucs_memtype_cache_insert(memtype_cache, end, region->super.end,
+                                     region->mem_type);
+        }
+
+        ucs_free(region);
+    }
+
+out_unlock:
+    pthread_rwlock_unlock(&memtype_cache->lock);
+}
+
+void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache, void *address,
+                              size_t size, ucs_memory_type_t mem_type)
+{
+    ucs_memtype_cache_update_internal(memtype_cache, address, size, mem_type,
+                                      UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
+}
+
+static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
+                                              ucm_event_t *event, void *arg)
+{
+    ucs_memtype_cache_t *memtype_cache = arg;
+    ucs_memtype_cache_action_t action;
+
+    if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
+        action = UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE;
+    } else if (event_type & UCM_EVENT_MEM_TYPE_FREE) {
+        action = UCS_MEMTYPE_CACHE_ACTION_REMOVE;
+    } else {
+        return;
+    }
+
+    ucs_memtype_cache_update_internal(memtype_cache, event->mem_type.address,
+                                      event->mem_type.size,
+                                      event->mem_type.mem_type, action);
+}
+
 static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
 {
     ucs_memtype_cache_region_t *region, *tmp;
-    ucs_list_link_t region_list;
+    UCS_LIST_HEAD(region_list);
 
     ucs_trace_func("memtype_cache purge");
 
-    ucs_list_head_init(&region_list);
-    ucs_pgtable_purge(&memtype_cache->pgtable, ucs_memtype_cache_region_collect_callback,
-                      &region_list);
+    ucs_pgtable_purge(&memtype_cache->pgtable,
+                      ucs_memtype_cache_region_collect_callback, &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        ucs_warn("destroying inuse address:%p ", (void *)region->super.start);
         ucs_free(region);
     }
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
-                 (memtype_cache, address, length, mem_type),
+                 (memtype_cache, address, size, mem_type_p),
                  ucs_memtype_cache_t *memtype_cache, void *address,
-                 size_t length, ucs_memory_type_t *mem_type)
+                 size_t size, ucs_memory_type_t *mem_type_p)
 {
-    ucs_pgt_addr_t start = (uintptr_t)address;
-    ucs_pgt_region_t *pgt_region;
+    const ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_memtype_cache_region_t *region;
+    ucs_pgt_region_t *pgt_region;
     ucs_status_t status;
 
     pthread_rwlock_rdlock(&memtype_cache->lock);
 
-    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &memtype_cache->pgtable, start);
-    if (pgt_region && pgt_region->end >= (start + length)) {
-        region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
-        *mem_type = region->mem_type;
-        status = UCS_OK;
+    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &memtype_cache->pgtable,
+                                  start);
+    if ((pgt_region == NULL) || (pgt_region->end < (start + size))) {
+        status = UCS_ERR_NO_ELEM;
         goto out_unlock;
     }
-    status = UCS_ERR_NO_ELEM;
+
+    region      = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
+    *mem_type_p = region->mem_type;
+    status      = UCS_OK;
+
 out_unlock:
     pthread_rwlock_unlock(&memtype_cache->lock);
     return status;

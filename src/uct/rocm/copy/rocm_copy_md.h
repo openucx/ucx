@@ -8,9 +8,8 @@
 
 #include <uct/base/uct_md.h>
 
-#define UCT_ROCM_COPY_MD_NAME "rocm_cpy"
 
-extern uct_md_component_t uct_rocm_copy_md_component;
+extern uct_md_component_t uct_rocm_copy_component;
 
 typedef struct uct_rocm_copy_md {
     struct uct_md super;

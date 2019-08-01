@@ -495,4 +495,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cm_tl,
                         "CM_",
                         uct_cm_iface_config_table,
                         uct_cm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_cm_tl);
+UCT_MD_REGISTER_TL(&uct_ib_component, &uct_cm_tl);

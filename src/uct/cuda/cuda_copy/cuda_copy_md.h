@@ -9,9 +9,8 @@
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
 
-#define UCT_CUDA_COPY_MD_NAME           "cuda_cpy"
 
-extern uct_md_component_t uct_cuda_copy_md_component;
+extern uct_md_component_t uct_cuda_copy_component;
 
 /**
  * @brief cuda_copy MD descriptor

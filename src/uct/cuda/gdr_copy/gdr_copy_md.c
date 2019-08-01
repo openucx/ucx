@@ -100,42 +100,37 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
                               unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    CUdeviceptr d_ptr = ((CUdeviceptr )(char *) address);
-    gdr_mh_t mh;
-    void *bar_ptr;
-    gdr_info_t info;
+    CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
     int ret;
 
     if (!length) {
-        mem_hndl->mh = 0;
+        memset(mem_hndl, 0, sizeof(*mem_hndl));
         return UCS_OK;
     }
 
-    ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mh);
+    ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mem_hndl->mh);
     if (ret) {
         ucs_error("gdr_pin_buffer failed. length :%lu ret:%d", length, ret);
         goto err;
     }
 
-    ret = gdr_map(md->gdrcpy_ctx, mh, &bar_ptr, length);
+    ret = gdr_map(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->bar_ptr, length);
     if (ret) {
         ucs_error("gdr_map failed. length :%lu ret:%d", length, ret);
         goto unpin_buffer;
     }
 
-    ret = gdr_get_info(md->gdrcpy_ctx, mh, &info);
+    mem_hndl->reg_size = length;
+
+    ret = gdr_get_info(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->info);
     if (ret) {
         ucs_error("gdr_get_info failed. ret:%d", ret);
         goto unmap_buffer;
     }
 
-    mem_hndl->mh        = mh;
-    mem_hndl->info      = info;
-    mem_hndl->bar_ptr   = bar_ptr;
-    mem_hndl->reg_size  = length;
-
     ucs_trace("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
-              address, address + length, length, info.va, bar_ptr);
+              address, address + length, length,
+              mem_hndl->info.va, mem_hndl->bar_ptr);
 
     return UCS_OK;
 
@@ -145,7 +140,7 @@ unmap_buffer:
         ucs_warn("gdr_unmap failed. unpin_size:%lu ret:%d", mem_hndl->reg_size, ret);
     }
 unpin_buffer:
-    ret = gdr_unpin_buffer(md->gdrcpy_ctx, mh);
+    ret = gdr_unpin_buffer(md->gdrcpy_ctx, mem_hndl->mh);
     if (ret) {
         ucs_warn("gdr_unpin_buffer failed. ret;%d", ret);
     }
@@ -365,10 +360,10 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops = &md_ops;
-    md->super.component = &uct_gdr_copy_md_component;
-    md->rcache = NULL;
-    md->reg_cost = md_config->uc_reg_cost;
+    md->super.ops       = &md_ops;
+    md->super.component = &uct_gdr_copy_component;
+    md->rcache          = NULL;
+    md->reg_cost        = md_config->uc_reg_cost;
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
@@ -413,8 +408,21 @@ err_free_md:
     goto out;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_gdr_copy_md_component, UCT_GDR_COPY_MD_NAME,
-                        uct_gdr_copy_query_md_resources, uct_gdr_copy_md_open, NULL,
-                        uct_gdr_copy_rkey_unpack, uct_gdr_copy_rkey_release, "GDR_COPY_",
-                        uct_gdr_copy_md_config_table, uct_gdr_copy_md_config_t,
-                        ucs_empty_function_return_unsupported);
+uct_component_t uct_gdr_copy_component = {
+    .query_md_resources = uct_gdr_copy_query_md_resources,
+    .md_open            = uct_gdr_copy_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_gdr_copy_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_gdr_copy_rkey_release,
+    .name               = "gdr_copy",
+    .md_config          = {
+        .name           = "GDR-copy memory domain",
+        .prefix         = "GDR_COPY_",
+        .table          = uct_gdr_copy_md_config_table,
+        .size           = sizeof(uct_gdr_copy_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gdr_copy_component)
+};
+UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
+

@@ -10,6 +10,6 @@
 #include "ugni_def.h"
 #include <uct/base/uct_md.h>
 
-extern uct_md_component_t uct_ugni_md_component;
+extern uct_md_component_t uct_ugni_component;
 
 #endif

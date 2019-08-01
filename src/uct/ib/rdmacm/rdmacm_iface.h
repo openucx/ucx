@@ -43,6 +43,6 @@ struct uct_rdmacm_iface {
 
 void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface);
 
-extern uct_md_component_t uct_rdmacm_mdc;
+extern uct_component_t uct_rdmacm_component;
 
 #endif

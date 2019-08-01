@@ -656,6 +656,44 @@ private:
     ArgT           m_dtor_arg;
 };
 
+/* simplified version of std::auto_ptr which was deprecated in newer stdc++
+ * versions in favor of unique_ptr */
+template <typename T>
+class auto_ptr {
+public:
+    auto_ptr() : m_ptr(NULL) {
+    }
+
+    auto_ptr(T* ptr) : m_ptr(NULL) {
+        reset(ptr);
+    }
+
+    ~auto_ptr() {
+        reset();
+    }
+
+    void reset(T* ptr = NULL) {
+        if (m_ptr) {
+            delete m_ptr;
+        }
+        m_ptr = ptr;
+    }
+
+    operator T*() const {
+        return m_ptr;
+    }
+
+    T* operator->() const {
+        return m_ptr;
+    }
+
+private:
+    auto_ptr(const auto_ptr&); /* disable copy */
+    auto_ptr operator=(const auto_ptr&); /* disable assign */
+
+    T* m_ptr;
+};
+
 #define UCS_TEST_TRY_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \
     ({ \
         _t h; \

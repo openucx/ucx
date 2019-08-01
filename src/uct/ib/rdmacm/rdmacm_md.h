@@ -28,7 +28,7 @@ typedef struct uct_rdmacm_md_config {
     double                   addr_resolve_timeout;
 } uct_rdmacm_md_config_t;
 
-extern uct_md_component_t uct_rdmacm_mdc;
+extern uct_component_t uct_rdmacm_component;
 
 ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 

@@ -306,6 +306,13 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     uint64_t cap_flags;
     uint64_t bit;
 
+    /* check if at least one of bandwidth values is 0 */
+    if ((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) != 0) {
+        ucs_error("Incorrect bandwidth value: one of bandwidth dedicated/shared must be zero");
+        return -1;
+    }
+
+
     if (ucp_worker_unified_mode(worker)) {
         /* In unified mode all workers have the same transports and tl bitmap.
          * Just send rsc index, so the remote peer could fetch iface attributes
@@ -319,7 +326,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
 
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
-    packed->bandwidth      = iface_attr->bandwidth;
+    packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
     packed->lat_ovh        = iface_attr->latency.overhead;
 
     /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
@@ -376,15 +383,17 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
             iface_attr->atomic.atomic64.op_flags  = wiface->attr.cap.atomic64.op_flags;
             iface_attr->atomic.atomic64.fop_flags = wiface->attr.cap.atomic64.fop_flags;
         }
+
         return sizeof(rsc_idx);
     }
 
-    packed                = ptr;
-    iface_attr->cap_flags = 0;
-    iface_attr->priority  = packed->prio_cap_flags & UCS_MASK(8);
-    iface_attr->overhead  = packed->overhead;
-    iface_attr->bandwidth = packed->bandwidth;
-    iface_attr->lat_ovh   = packed->lat_ovh;
+    packed                          = ptr;
+    iface_attr->cap_flags           = 0;
+    iface_attr->priority            = packed->prio_cap_flags & UCS_MASK(8);
+    iface_attr->overhead            = packed->overhead;
+    iface_attr->bandwidth.dedicated = ucs_max(0.0, packed->bandwidth);
+    iface_attr->bandwidth.shared    = ucs_max(0.0, -packed->bandwidth);
+    iface_attr->lat_ovh             = packed->lat_ovh;
 
     packed_flag = UCS_BIT(8);
     bit         = 1;
@@ -566,6 +575,10 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             /* Transport information */
             attr_len = ucp_address_pack_iface_attr(worker, ptr, i, iface_attr,
                                                    worker->atomic_tls & UCS_BIT(i));
+            if (attr_len < 0) {
+                return UCS_ERR_INVALID_ADDR;
+            }
+
             ucp_address_memchek(ptr, attr_len,
                                 &context->tl_rscs[dev->rsc_index].tl_rsc);
 
@@ -622,12 +635,13 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             }
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
-                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
+                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
                       "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
                       index,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
                       md_flags, iface_attr->cap.flags,
-                      iface_attr->bandwidth,
+                      iface_attr->bandwidth.dedicated,
+                      iface_attr->bandwidth.shared,
                       iface_attr->overhead,
                       iface_attr->latency.overhead,
                       iface_attr->priority,
@@ -833,11 +847,13 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
             last_tl   = (*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_LAST;
 
-            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
+            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
                       "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
                       (int)(address - address_list),
                       address->md_flags, address->iface_attr.cap_flags,
-                      address->iface_attr.bandwidth, address->iface_attr.overhead,
+                      address->iface_attr.bandwidth.dedicated,
+                      address->iface_attr.bandwidth.shared,
+                      address->iface_attr.overhead,
                       address->iface_attr.lat_ovh,
                       address->iface_attr.priority,
                       address->iface_attr.atomic.atomic32.op_flags,

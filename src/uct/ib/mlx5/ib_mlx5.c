@@ -258,7 +258,7 @@ ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
         return UCS_PTR_STATUS(qp->verbs.rd);
     }
 
-    qp->type = UCT_IB_MLX5_QP_TYPE_VERBS;
+    qp->type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
 
     return UCS_OK;
 }
@@ -426,7 +426,7 @@ ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
     }
 
     txwq->reg        = &uar->super;
-    txwq->super.type = UCT_IB_MLX5_QP_TYPE_DEVX;
+    txwq->super.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
 
     return UCS_OK;
 }
@@ -524,14 +524,14 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
     uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
                                                  uct_ib_mlx5_devx_uar_t);
     switch (txwq->super.type) {
-    case UCT_IB_MLX5_QP_TYPE_DEVX:
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
         break;
-    case UCT_IB_MLX5_QP_TYPE_VERBS:
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         uct_ib_mlx5_iface_put_res_domain(&txwq->super);
         uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
         break;
-    case UCT_IB_MLX5_QP_TYPE_LAST:
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
         if (txwq->reg != NULL) {
             uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
         }
@@ -574,10 +574,8 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
                                   size_t sg_byte_count)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
-    uct_ib_mlx5_srq_seg_t *seg;
     uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
-    unsigned i;
 
     obj.dv.srq.in = verbs_srq;
     obj.dv.srq.out = &srq_info.dv;
@@ -605,20 +603,30 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
 
     srq->buf             = srq_info.dv.buf;
     srq->db              = srq_info.dv.dbrec;
-    srq->free_idx        = srq_info.dv.tail;
+    uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
+                              sg_byte_count);
+    return UCS_OK;
+}
+
+void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
+                               uint32_t tail, size_t sg_byte_count)
+{
+    uct_ib_mlx5_srq_seg_t *seg;
+    unsigned i;
+
+    srq->free_idx        = tail;
     srq->ready_idx       = -1;
     srq->sw_pi           = -1;
-    srq->mask            = srq_info.dv.tail;
-    srq->tail            = srq_info.dv.tail;
+    srq->mask            = tail;
+    srq->tail            = tail;
 
-    for (i = srq_info.dv.head; i <= srq_info.dv.tail; ++i) {
+    for (i = head; i <= tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);
-        seg->srq.free        = 0;
-        seg->srq.desc        = NULL;
-        seg->dptr.byte_count = htonl(sg_byte_count);
+        seg->srq.next_wqe_index = htons((i + 1) & tail);
+        seg->srq.free           = 0;
+        seg->srq.desc           = NULL;
+        seg->dptr.byte_count    = htonl(sg_byte_count);
     }
-
-    return UCS_OK;
 }
 
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
@@ -627,6 +635,11 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
     uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
 
+    if (srq->type != UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        return;
+    }
+
+    /* check if mlx5 driver didn't modified SRQ */
     obj.dv.srq.in = verbs_srq;
     obj.dv.srq.out = &srq_info.dv;
 

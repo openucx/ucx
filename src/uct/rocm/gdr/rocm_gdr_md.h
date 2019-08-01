@@ -8,9 +8,8 @@
 
 #include <uct/base/uct_md.h>
 
-#define UCT_ROCM_GDR_MD_NAME "rocm_gdr"
 
-extern uct_md_component_t uct_rocm_gdr_md_component;
+extern uct_md_component_t uct_rocm_gdr_component;
 
 typedef struct uct_rocm_gdr_md {
     struct uct_md super;
