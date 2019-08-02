@@ -140,6 +140,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 
     if (status != UCS_OK) {
         printf("#   < failed to open interface >\n");
+        /* coverity[leaked_storage] */
         return;
     }
 
@@ -149,7 +150,9 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     if (status != UCS_OK) {
         printf("#   < failed to query interface >\n");
     } else {
-        printf("#            bandwidth: %-.2f MB/sec\n", iface_attr.bandwidth / UCS_MBYTE);
+        printf("#            bandwidth: %-.2f + %-.2f MB/sec\n", 
+               iface_attr.bandwidth.dedicated / UCS_MBYTE,
+               iface_attr.bandwidth.shared / UCS_MBYTE);
         printf("#              latency: %-.0f nsec", iface_attr.latency.overhead * 1e9);
         if (iface_attr.latency.growth > 0) {
             printf(" + %.0f * N\n", iface_attr.latency.growth * 1e9);

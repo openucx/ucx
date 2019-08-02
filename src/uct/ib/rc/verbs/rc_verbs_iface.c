@@ -127,7 +127,7 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
     uct_rc_verbs_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_verbs_iface_poll_rx_common(&iface->super);
+    count = uct_rc_verbs_iface_poll_rx_common(iface);
     if (count > 0) {
         return count;
     }
@@ -171,6 +171,23 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->overhead        = 75e-9;           /* Software overhead */
 
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_rc_iface_verbs_init_rx(uct_rc_iface_t *rc_iface,
+                           const uct_rc_iface_common_config_t *config)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
+
+    return uct_rc_iface_init_rx(rc_iface, config, &iface->srq);
+}
+
+void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
+
+    /* TODO flush RX buffers */
+    uct_ib_destroy_srq(iface->srq);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worker,
@@ -238,7 +255,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     /* Create a dummy QP in order to find out max_inline */
     uct_ib_exp_qp_fill_attr(&self->super.super, &attr);
     status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
-                                    self->super.config.tx_qp_len);
+                                    self->super.config.tx_qp_len,
+                                    self->srq);
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
@@ -264,15 +282,15 @@ err:
     return status;
 }
 
-ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface,
                                                      unsigned max)
 {
     unsigned count;
 
-    count = ucs_min(max, iface->rx.srq.quota);
-    iface->rx.srq.available += count;
-    iface->rx.srq.quota     -= count;
-    while (iface->rx.srq.available > 0) {
+    count = ucs_min(max, iface->super.rx.srq.quota);
+    iface->super.rx.srq.available += count;
+    iface->super.rx.srq.quota     -= count;
+    while (iface->super.rx.srq.available > 0) {
         if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
             ucs_error("failed to post receives");
             return UCS_ERR_NO_MEMORY;
@@ -283,7 +301,7 @@ ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
     if (flags & UCT_PROGRESS_RECV) {
         /* ignore return value from prepost_recv, since it's not really possible
@@ -293,11 +311,12 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
         uct_rc_verbs_iface_common_prepost_recvs(iface, UINT_MAX);
     }
 
-    uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress,
+    uct_base_iface_progress_enable_cb(&iface->super.super.super,
+                                      iface->super.progress,
                                       flags);
 }
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max)
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 {
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
@@ -306,17 +325,17 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
-    count = uct_ib_iface_prepare_rx_wrs(&iface->super, &iface->rx.mp,
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super, &iface->super.rx.mp,
                                         wrs, max);
     if (ucs_unlikely(count == 0)) {
         return 0;
     }
 
-    ret = ibv_post_srq_recv(iface->rx.srq.srq, &wrs[0].ibwr, &bad_wr);
+    ret = ibv_post_srq_recv(iface->srq, &wrs[0].ibwr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
     }
-    iface->rx.srq.available -= count;
+    iface->super.rx.srq.available -= count;
 
     return count;
 }
@@ -381,7 +400,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     },
-    .init_rx                  = uct_rc_iface_init_rx,
+    .init_rx                  = uct_rc_iface_verbs_init_rx,
+    .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler
 };

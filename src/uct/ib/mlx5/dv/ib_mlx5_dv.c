@@ -199,7 +199,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_impl(uct_ib_mlx5_md_t *md,
         goto err_free;
     }
 
-    qp->type = UCT_IB_MLX5_QP_TYPE_DEVX;
+    qp->type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
 
     attr->cap.max_send_wr = max_tx;
     attr->cap.max_recv_wr = max_rx;

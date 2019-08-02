@@ -28,7 +28,9 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
+
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
     iface_attr->device_addr_len = 0;

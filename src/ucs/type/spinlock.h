@@ -9,6 +9,7 @@
 
 #include <ucs/type/status.h>
 #include <pthread.h>
+#include <errno.h>
 
 BEGIN_C_DECLS
 
@@ -24,9 +25,40 @@ typedef struct ucs_spinlock {
 } ucs_spinlock_t;
 
 
-ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock);
+static inline ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
+{
+    int ret;
 
-void ucs_spinlock_destroy(ucs_spinlock_t *lock);
+    ret = pthread_spin_init(&lock->lock, 0);
+    if (ret != 0) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    lock->count = 0;
+    lock->owner = 0xfffffffful;
+
+    return UCS_OK;
+}
+
+static inline ucs_status_t ucs_spinlock_destroy(ucs_spinlock_t *lock)
+{
+    int ret;
+
+    if (lock->count != 0) {
+        return UCS_ERR_BUSY;
+    }
+
+    ret = pthread_spin_destroy(&lock->lock);
+    if (ret != 0) {
+        if (errno == EBUSY) {
+            return UCS_ERR_BUSY;
+        } else {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
 
 static inline int ucs_spin_is_owner(ucs_spinlock_t *lock, pthread_t self)
 {

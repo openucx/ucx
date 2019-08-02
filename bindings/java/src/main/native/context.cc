@@ -102,5 +102,8 @@ Java_org_openucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject c
     field =  env->GetFieldID(jucx_mem_cls, "address", "J");
     env->SetLongField(jucx_mem, field, (native_ptr)memh->address);
 
+    /* Coverity thinks that memh is a leaked object here,
+     * but it's stored in a UcpMemory object */
+    /* coverity[leaked_storage] */
     return jucx_mem;
 }

@@ -53,7 +53,8 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
 
     ucs_trace_func("iface=%p", iface);
-    memset(attr, 0, sizeof(*attr));
+
+    uct_base_iface_query(&iface->super, attr);
 
     attr->iface_addr_len         = sizeof(uct_self_iface_addr_t);
     attr->device_addr_len        = 0;
@@ -109,7 +110,8 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
 
     attr->latency.overhead        = 0;
     attr->latency.growth          = 0;
-    attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    attr->bandwidth.dedicated     = 6911 * 1024.0 * 1024.0;
+    attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
     attr->priority                = 0;
 

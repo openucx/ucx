@@ -53,10 +53,12 @@ static int uct_cuda_copy_iface_is_reachable(const uct_iface_h tl_iface,
     return (addr != NULL) && (iface->id == *addr);
 }
 
-static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
+static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
                                               uct_iface_attr_t *iface_attr)
 {
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(uct_cuda_copy_iface_addr_t);
     iface_attr->device_addr_len         = 0;
@@ -95,7 +97,8 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
 
     iface_attr->latency.overhead        = 10e-6; /* 10 us */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.dedicated     = 0;
+    iface_attr->bandwidth.shared        = 6911 * 1024.0 * 1024.0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 

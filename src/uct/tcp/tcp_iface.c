@@ -106,7 +106,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     ucs_status_t status;
     int is_default;
 
-    memset(attr, 0, sizeof(*attr));
+    uct_base_iface_query(&iface->super, attr);
+
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -131,7 +132,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     }
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
-                                &attr->bandwidth, &attr->cap.am.align_mtu);
+                                &attr->bandwidth.shared, &attr->cap.am.align_mtu);
+    attr->bandwidth.dedicated = 0;
     if (status != UCS_OK) {
         return status;
     }

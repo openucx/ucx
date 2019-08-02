@@ -773,6 +773,20 @@ typedef struct uct_linear_growth {
 } uct_linear_growth_t;
 
 
+/*
+ * @ingroup UCT_RESOURCE
+ * @brief Process Per Node (PPN) bandwidth specification: f(x) = dedicated + shared / ppn
+ *
+ *  This structure specifies a function which is used as basis for bandwidth
+ * estimation of various UCT operations. This information can be used to select
+ * the best performing combination of UCT operations.
+ */
+typedef struct uct_ppn_bandwidth {
+    double                   dedicated; /**< Dedicated bandwidth, bytes/second */
+    double                   shared;    /**< Shared bandwidth, bytes/second */
+} uct_ppn_bandwidth_t;
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface attributes: capabilities and limitations.
@@ -887,9 +901,10 @@ struct uct_iface_attr {
      * characteristics and determined at run time.
      */
     double                   overhead;     /**< Message overhead, seconds */
-    double                   bandwidth;    /**< Maximal bandwidth, bytes/second */
+    uct_ppn_bandwidth_t      bandwidth;    /**< Bandwidth model */
     uct_linear_growth_t      latency;      /**< Latency model */
     uint8_t                  priority;     /**< Priority of device */
+    size_t                   max_num_eps;  /**< Maximum number of endpoints */
 };
 
 

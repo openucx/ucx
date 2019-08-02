@@ -172,6 +172,7 @@ typedef struct uct_rc_iface_ops {
     uct_ib_iface_ops_t   super;
     ucs_status_t         (*init_rx)(uct_rc_iface_t *iface,
                                     const uct_rc_iface_common_config_t *config);
+    void                 (*cleanup_rx)(uct_rc_iface_t *iface);
     ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
                                     uct_rc_fc_request_t *req);
     ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
@@ -182,7 +183,6 @@ typedef struct uct_rc_iface_ops {
 
 
 typedef struct uct_rc_srq {
-    struct ibv_srq           *srq;
     unsigned                 available;
     unsigned                 quota;
 } uct_rc_srq_t;
@@ -332,11 +332,13 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
  * Creates an RC or DCI QP
  */
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
-                                    uct_ib_qp_attr_t *attr, unsigned max_send_wr);
+                                    uct_ib_qp_attr_t *attr, unsigned max_send_wr,
+                                    struct ibv_srq *srq);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
                             uct_ib_qp_attr_t *qp_init_attr,
-                            unsigned max_send_wr);
+                            unsigned max_send_wr,
+                            struct ibv_srq *srq);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 
@@ -357,7 +359,8 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
                                            unsigned events, int force_rx_all);
 
 ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
-                                  const uct_rc_iface_common_config_t *config);
+                                  const uct_rc_iface_common_config_t *config,
+                                  struct ibv_srq **p_srq);
 
 ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 

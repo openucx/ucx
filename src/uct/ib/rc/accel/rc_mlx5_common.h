@@ -13,6 +13,15 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 
 
+/*
+ * HW tag matching
+ */
+#if IBV_HW_TM
+#  define UCT_RC_RNDV_HDR_LEN         sizeof(struct ibv_rvh)
+#else
+#  define UCT_RC_RNDV_HDR_LEN         0
+#endif
+
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_FLAG_TM    0x200
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
@@ -470,11 +479,45 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn);
 
+static UCS_F_MAYBE_UNUSED void
+uct_rc_mlx5_iface_tm_set_cmd_qp_len(uct_rc_mlx5_iface_common_t *iface)
+{
+    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. */
+    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + 2;
+}
+
+#if IBV_HW_TM
+void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
+                                   unsigned rndv_hdr_len);
+
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     const uct_rc_iface_common_config_t *config,
                                     struct ibv_exp_create_srq_attr *srq_init_attr,
-                                    unsigned rndv_hdr_len,
-                                    unsigned max_cancel_sync_ops);
+                                    unsigned rndv_hdr_len);
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                       const uct_rc_iface_common_config_t *config,
+                       struct ibv_exp_create_srq_attr *srq_init_attr,
+                       unsigned rndv_hdr_len)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+#endif
+
+#if IBV_HW_TM && HAVE_DEVX
+ucs_status_t uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                                         const uct_rc_iface_common_config_t *config,
+                                         int dc);
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
+                            const uct_rc_iface_common_config_t *config,
+                            int dc)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+#endif
 
 void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
@@ -497,10 +540,29 @@ uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
     rch->rc_hdr.am_id = id;
 }
 
+#if HAVE_DEVX
 ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
                                          const struct ibv_ah_attr *ah_attr);
+
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         uint32_t dest_qp_num,
+                                         const struct ibv_ah_attr *ah_attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+#endif
+
+void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_ib_qp_attr_t *qp_attr,
+                                 unsigned max_send_wr,
+                                 uct_ib_mlx5_srq_t *srq);
+
+void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq);
 
 #endif
