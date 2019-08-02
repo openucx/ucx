@@ -45,14 +45,14 @@ typedef struct uct_md_registered_tl {
  * Add a transport component to a md component
  * (same transport component can be added to multiple md components).
  *
- * @param _mdc           Pointer to MD component to add the TL component to.
+ * @param _component      Pointer to MD component to add the TL component to.
  * @param _tlc           Pointer to TL component.
  */
-#define UCT_MD_REGISTER_TL(_mdc, _tlc) \
+#define UCT_MD_REGISTER_TL(_component, _tlc) \
     UCS_STATIC_INIT { \
         static uct_md_registered_tl_t reg; \
         reg.tl = (_tlc); \
-        ucs_list_add_tail(&(_mdc)->tl_list, &reg.list); \
+        ucs_list_add_tail(&(_component)->tl_list, &reg.list); \
     }
 
 

@@ -353,15 +353,15 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
-    char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
+    char component_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
     if (ENABLE_DEBUG_DATA) {
         if (ENABLE_PARAMS_CHECK &&
             strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
-            ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s",
+            ucs_snprintf_zero(component_name, sizeof(component_name), "%s",
                               (const char*)rkey_buffer);
             ucs_error("invalid component for rkey unpack; "
-                      "expected: %s, actual: %s", mdc_name, component->name);
+                      "expected: %s, actual: %s", component_name, component->name);
             return UCS_ERR_INVALID_PARAM;
         }
 
