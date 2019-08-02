@@ -206,7 +206,7 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 }
 
 /**
- * Calulate a small value to overcome float imprecision between two scores
+ * Calculate a small value to overcome float imprecision between two scores
  */
 static double ucp_wireup_calc_score_epsilon(double score1, double score2)
 {
@@ -221,9 +221,10 @@ static double ucp_wireup_calc_score_epsilon(double score1, double score2)
  */
 static int ucp_wireup_score_cmp(double score1, double score2)
 {
-    return ((fabs(score1 - score2) <
+    double diff = score1 - score2;
+    return ((fabs(diff) <
              ucp_wireup_calc_score_epsilon(score1, score2)) ?
-            0 : ucs_signum(score1 - score2));
+            0 : ucs_signum(diff));
 }
 
 /**

@@ -276,8 +276,8 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     }
 
     wireup_ep->aux_rsc_index = select_info.rsc_index;
-    aux_addr = &address_list[select_info.addr_index];
-    wiface   = ucp_worker_iface(worker, select_info.rsc_index);
+    aux_addr                 = &address_list[select_info.addr_index];
+    wiface                   = ucp_worker_iface(worker, select_info.rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
