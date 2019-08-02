@@ -17,8 +17,8 @@ extern "C" {
 #define UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, _name, _mem_type) \
     INSTANTIATE_TEST_CASE_P(_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_test_params( \
-                                       _test_case::get_ctx_params(), \
-                                       #_test_case, _mem_type)));
+                                              _test_case::get_ctx_params(), \
+                                              #_test_case, _mem_type)));
 
 #define UCP_INSTANTIATE_TEST_CASE_MEMTYPES(_test_case) \
     UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, host,         UCS_MEMORY_TYPE_HOST) \
@@ -44,7 +44,7 @@ public:
         std::vector<ucs_memory_type_t> mem_types =
                         mem_buffer::supported_mem_types();
         if (std::find(mem_types.begin(), mem_types.end(), mem_type) !=
-                        mem_types.end()) {
+            mem_types.end()) {
             generate_test_params_variant(ctx_params, "all", test_case_name,
                                          "all", mem_type, result);
         }
@@ -56,7 +56,6 @@ protected:
     ucs_memory_type_t mem_type() const {
         return static_cast<ucs_memory_type_t>(GetParam().variant);
     }
-
 };
 
 UCS_TEST_P(test_ucp_mem_type, detect) {

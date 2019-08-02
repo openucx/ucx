@@ -1037,6 +1037,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
             m_entity.mem_alloc_host(alloc_size, &m_mem);
         } else {
+            m_mem.method   = UCT_ALLOC_METHOD_LAST;
             m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
             m_mem.length   = size;
             m_mem.mem_type = mem_type;
@@ -1074,6 +1075,7 @@ uct_test::mapped_buffer::~mapped_buffer() {
     if (m_mem.mem_type == UCS_MEMORY_TYPE_HOST) {
         m_entity.mem_free_host(&m_mem);
     } else {
+        ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
         mem_buffer::release(m_mem.address, m_mem.mem_type);
     }
 }
