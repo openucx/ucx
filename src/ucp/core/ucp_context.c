@@ -1089,7 +1089,17 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
             goto err_free_resources;
         }
 
+        if ((context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) &&
+            (context->config.ext.sockaddr_cm_enable == UCS_TRY)) {
+            context->config.ext.sockaddr_cm_enable = UCS_YES;
+        }
+
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
+    }
+
+    if (context->config.ext.sockaddr_cm_enable == UCS_TRY) {
+        /* There is no component which supports CM */
+        context->config.ext.sockaddr_cm_enable = UCS_NO;
     }
 
     /* Allocate actual array of MDs */
