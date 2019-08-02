@@ -14,7 +14,7 @@
 #include <string.h>
 
 
-UCS_LIST_HEAD(uct_md_components_list);
+UCS_LIST_HEAD(uct_components_list);
 
 ucs_status_t uct_query_components(uct_component_h **components_p,
                                   unsigned *num_components_p)
@@ -25,7 +25,7 @@ ucs_status_t uct_query_components(uct_component_h **components_p,
     size_t num_components;
 
     UCS_MODULE_FRAMEWORK_LOAD(uct, 0);
-    num_components = ucs_list_length(&uct_md_components_list);
+    num_components = ucs_list_length(&uct_components_list);
     components = ucs_malloc(num_components * sizeof(*components),
                             "uct_components");
     if (components == NULL) {
@@ -36,7 +36,7 @@ ucs_status_t uct_query_components(uct_component_h **components_p,
     *num_components_p = num_components;
     *components_p     = components;
 
-    ucs_list_for_each(component, &uct_md_components_list, list) {
+    ucs_list_for_each(component, &uct_components_list, list) {
        *(components++) = component;
     }
 

@@ -146,8 +146,8 @@ struct uct_component {
  */
 #define UCT_COMPONENT_REGISTER(_component) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_md_components_list; \
-        ucs_list_add_tail(&uct_md_components_list, &(_component)->list); \
+        extern ucs_list_link_t uct_components_list; \
+        ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config);
 
