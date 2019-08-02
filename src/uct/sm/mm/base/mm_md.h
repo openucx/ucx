@@ -101,9 +101,9 @@ typedef struct uct_mm_component {
             .rkey_unpack        = uct_mm_rkey_unpack, \
             .rkey_ptr           = uct_mm_rkey_ptr, \
             .rkey_release       = uct_mm_rkey_release, \
-            .name               = # _name, \
+            .name               = _name, \
             .md_config          = { \
-                .name           = #_name " memory domain", \
+                .name           = _name " memory domain", \
                 .prefix         = _cfg_prefix, \
                 .table          = _prefix##_md_config_table, \
                 .size           = sizeof(_prefix##_md_config_t), \
