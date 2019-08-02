@@ -37,7 +37,7 @@ ucs_status_t uct_query_components(uct_component_h **components_p,
     *components_p     = components;
 
     ucs_list_for_each(component, &uct_components_list, list) {
-       *(components++) = component;
+        *(components++) = component;
     }
 
     return UCS_OK;
