@@ -74,6 +74,30 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0x02c9, 4113, "Connect-IB",
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 20},
+  /* Bull Inca FDR 1 port */
+  {0x119f, 0x1b83, "Connect-IB",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 20},
+  /* Bull Newsca FDR 1 port */
+  {0x119f, 0x1b93, "Connect-IB",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 20},
+  /* Bull Newsca FDR 2 ports */
+  {0x119f, 0x1b94, "Connect-IB",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 20},
+  /* Bull Newsca HDR 1 port */
+  {0x119f, 0x1bb4, "ConnectX-4",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 30},
+  /* Bull Newsca HDR 2 ports */
+  {0x119f, 0x1bb5, "ConnectX-4",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 30},
+  /* Bull Sequana HDR 1 port */
+  {0x119f, 0x1bc4, "ConnectX-4",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 30},
   {0x02c9, 4115, "ConnectX-4",
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 30},
@@ -99,6 +123,14 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 36},
   {0x02c9, 4123, "ConnectX-6",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 50},
+  /* Bull Sequana HDR 1 port */
+  {0x119f, 0x1bc5, "ConnectX-6",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 50},
+  /* Bull Sequana HDR100 1 port */
+  {0x119f, 0x1bc6, "ConnectX-6",
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
   {0, 0, "Generic HCA", 0, 0}
@@ -345,10 +377,16 @@ void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
+    ucs_status_t status;
+
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_spinlock_destroy(&dev->ah_lock);
+
+    status = ucs_spinlock_destroy(&dev->ah_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 
     if (dev->async_events) {
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);

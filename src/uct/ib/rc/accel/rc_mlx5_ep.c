@@ -619,11 +619,11 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           struct ibv_ah_attr *ah_attr)
 {
     switch (qp->type) {
-    case UCT_IB_MLX5_QP_TYPE_VERBS:
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
-    case UCT_IB_MLX5_QP_TYPE_DEVX:
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num, ah_attr);
-    case UCT_IB_MLX5_QP_TYPE_LAST:
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
 
@@ -848,7 +848,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
-    uct_rc_iface_fill_attr(&iface->super, &attr, iface->super.config.tx_qp_len);
+    uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
+                                &iface->rx.srq);
     uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
     status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.wq.super, &self->tx.wq, &attr);
     if (status != UCS_OK) {
@@ -857,7 +858,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->tx.wq.super.qp_num);
 
-    if (self->tx.wq.super.type == UCT_IB_MLX5_QP_TYPE_VERBS) {
+    if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super, self->tx.wq.super.verbs.qp);
         if (status != UCS_OK) {
             goto err;
@@ -870,7 +871,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
         memset(&attr, 0, sizeof(attr));
-        uct_rc_iface_fill_attr(&iface->super, &attr, 0);
+        uct_rc_mlx5_iface_fill_attr(iface, &attr, 0, &iface->rx.srq);
         uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
@@ -950,7 +951,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                               self->tx.wq.bb_max -
                               uct_rc_txqp_available(&self->super.txqp));
 
-    uct_ib_mlx5_srq_cleanup(&iface->rx.srq, iface->super.rx.srq.srq);
+    uct_ib_mlx5_srq_cleanup(&iface->rx.srq, iface->rx.srq.verbs.srq);
 
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(&self->tx.wq.super);

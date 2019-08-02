@@ -307,7 +307,7 @@ static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
     status = UCS_OK;
 
 err_destroy_srq:
-    ibv_destroy_srq(srq);
+    uct_ib_destroy_srq(srq);
 err_destroy_cq:
     ibv_destroy_cq(cq);
 err_dealloc_pd:
@@ -588,7 +588,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 err:
     uct_ib_destroy_qp(qp);
 err_qp:
-    ibv_destroy_srq(srq);
+    uct_ib_destroy_srq(srq);
 err_srq:
     ibv_destroy_cq(cq);
 err_cq:

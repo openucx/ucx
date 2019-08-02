@@ -53,6 +53,7 @@ typedef struct uct_rc_verbs_iface_config {
  */
 typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t              super;
+    struct ibv_srq              *srq;
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
     struct ibv_sge              inl_sge[2];
