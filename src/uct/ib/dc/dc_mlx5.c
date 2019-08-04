@@ -231,7 +231,7 @@ static unsigned uct_dc_mlx5_iface_progress(void *arg)
     uct_dc_mlx5_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, 0);
+    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, 0, 0);
     if (count > 0) {
         return count;
     }
@@ -244,7 +244,7 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
     uct_dc_mlx5_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, 1);
+    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, 1, 0);
     if (count > 0) {
         return count;
     }
@@ -584,7 +584,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
     status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
                                   iface->super.rx.srq.verbs.srq,
-                                  iface->super.super.super.config.seg_size);
+                                  iface->super.super.super.config.seg_size,
+                                  iface->super.tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }

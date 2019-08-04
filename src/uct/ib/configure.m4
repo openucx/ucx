@@ -381,6 +381,8 @@ AS_IF([test "x$with_ib" = "xyes"],
             AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params],
                              [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
                              [], [#include <infiniband/verbs_exp.h>])
+            AC_CHECK_DECLS([IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM], [], [],
+                          [[#include <infiniband/verbs_exp.h>]])
            ])
        AS_IF([test "x$with_ib_hw_tm" = xupstream],
            [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])

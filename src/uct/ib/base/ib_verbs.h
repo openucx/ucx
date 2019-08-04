@@ -300,6 +300,13 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #define IBV_DEVICE_MAX_UNEXP_COUNT          UCS_BIT(14)
 #define IBV_DEVICE_MIN_UWQ_POST             33
 
+#if HAVE_DECL_IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM
+#  define IBV_DEVICE_MP_CAPS(_dev, _field)  ((_dev)->dev_attr.mp_rq_caps._field)
+#else
+#  define IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM     0
+#  define IBV_DEVICE_MP_CAPS(_dev, _field)  0
+#endif
+
 #if !HAVE_DECL_IBV_EXP_CREATE_SRQ
 #  if HAVE_DECL_IBV_CREATE_SRQ_EX
 #    define ibv_exp_create_srq_attr         ibv_srq_init_attr_ex

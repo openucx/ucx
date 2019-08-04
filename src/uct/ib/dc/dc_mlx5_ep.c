@@ -647,9 +647,8 @@ ssize_t uct_dc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
 
-    UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(&iface->super.super,
-                                        &iface->super.super.tx.mp, desc, tag,
-                                        app_ctx, pack_cb, arg, length);
+    UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(&iface->super.super, iface->super.tm.bcopy_mp,
+                                        desc, tag, app_ctx, pack_cb, arg, length);
 
     uct_dc_mlx5_iface_bcopy_post(iface, ep, opcode,
                                  sizeof(struct ibv_exp_tmh) + length,
@@ -674,7 +673,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                        "uct_dc_mlx5_ep_tag_eager_zcopy");
     UCT_RC_CHECK_ZCOPY_DATA(sizeof(struct ibv_exp_tmh),
                             uct_iov_total_length(iov, iovcnt),
-                            iface->super.super.super.config.seg_size);
+                            iface->super.tm.max_zcopy);
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
     UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);

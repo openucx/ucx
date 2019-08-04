@@ -61,7 +61,9 @@ enum uct_am_trace_type {
  *
  */
 enum uct_cb_param_flags {
-    UCT_CB_PARAM_FLAG_DESC = UCS_BIT(0)
+    UCT_CB_PARAM_FLAG_DESC  = UCS_BIT(0),
+    UCT_CB_PARAM_FLAG_FIRST = UCS_BIT(1),
+    UCT_CB_PARAM_FLAG_MORE  = UCS_BIT(2)
 };
 
 /**
@@ -530,7 +532,8 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  */
 typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
                                                  size_t length, unsigned flags,
-                                                 uct_tag_t stag, uint64_t imm);
+                                                 uct_tag_t stag, uint64_t imm,
+                                                 uint64_t *context);
 
 
 /**

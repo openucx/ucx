@@ -59,6 +59,10 @@ public:
                                                 "RC_TM_ENABLE", "y");
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
 
+        // TODO: Re-enable MP XRQ when tests are adjusted
+        status = uct_config_modify(m_iface_config, "RC_TM_MP_NUM_STRIDES", "1");
+        ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
+
         uct_test::init();
 
         uct_iface_params params;
@@ -400,7 +404,8 @@ public:
     }
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
-                                    unsigned flags, uct_tag_t stag, uint64_t imm)
+                                    unsigned flags, uct_tag_t stag,
+                                    uint64_t imm, uint64_t *context)
     {
         recv_ctx *user_ctx = reinterpret_cast<recv_ctx*>(imm);
         user_ctx->unexp    = true;

@@ -69,7 +69,7 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
         wqe_ctr = ntohs(ecqe->wqe_counter);
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
-        uct_rc_mlx5_iface_release_srq_seg(iface, seg, wqe_ctr, UCS_OK,
+        uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, UCS_OK,
                                           iface->super.super.config.rx_headroom_offset,
                                           &iface->super.super.release_desc);
     } else {
@@ -117,7 +117,7 @@ unsigned uct_rc_mlx5_iface_progress(void *arg)
     uct_rc_mlx5_iface_common_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(iface, 0);
+    count = uct_rc_mlx5_iface_common_poll_rx(iface, 0, 1);
     if (count > 0) {
         return count;
     }
@@ -292,7 +292,7 @@ static UCS_F_MAYBE_UNUSED unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
     uct_rc_mlx5_iface_common_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(iface, 1);
+    count = uct_rc_mlx5_iface_common_poll_rx(iface, 1, 1);
     if (count > 0) {
         return count;
     }
@@ -333,6 +333,8 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint32_t cap_flags                = IBV_DEVICE_TM_FLAGS(dev);
     struct ibv_tmh tmh;
+    int log_num_strides, mtu;
+    ucs_status_t status;
 
     iface->tm.enabled = mlx5_config->tm.enable && (cap_flags & init_attr->tm_cap_bit);
 
@@ -374,16 +376,60 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     init_attr->rx_cq_len = rc_config->super.rx.queue_len + iface->tm.num_tags * 3 +
                            rc_config->super.rx.queue_len /
                            IBV_DEVICE_MAX_UNEXP_COUNT;
+
     init_attr->seg_size  = ucs_max(mlx5_config->tm.seg_size,
                                    rc_config->super.seg_size);
+
+    if (!(IBV_DEVICE_MP_CAPS(dev, supported_qps) & IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM)) {
+        goto out_mp_disabled;
+    }
+
+    log_num_strides = IBV_DEVICE_MP_CAPS(dev, min_single_wqe_log_num_of_strides);
+    if (mlx5_config->tm.mp_num_strides < UCS_BIT(log_num_strides)) {
+        ucs_debug("Minimal strides number is %lu, disabling MP XRQ",
+                  UCS_BIT(log_num_strides));
+        goto out_mp_disabled;
+    }
+
+    status = uct_ib_device_mtu(params->mode.device.dev_name, md, &mtu);
+    if (status != UCS_OK) {
+        ucs_warn("Failed to get port MTU: %s, disabling MP XRQ",
+                 ucs_status_string(status));
+        goto out_mp_disabled;
+    }
+    init_attr->seg_size = mtu;
+
+    if (mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) {
+        iface->tm.mp.num_strides = UCS_BIT(log_num_strides);
+    } else {
+        iface->tm.mp.num_strides = ucs_roundup_pow2(mlx5_config->tm.mp_num_strides);
+    }
+
+    /* TODO: Reconsider this threshold when have circular XRQ.
+     * Now we have to keep a bitmask of stride descriptors usingi specific
+     * uint16_t field of XRQ segment. */
+    if (iface->tm.mp.num_strides > UCT_RC_MLX5_MP_MAX_NUM_STRIDES) {
+        UCS_STATIC_ASSERT(ucs_is_pow2(UCT_RC_MLX5_MP_MAX_NUM_STRIDES));
+        iface->tm.mp.num_strides = UCT_RC_MLX5_MP_MAX_NUM_STRIDES;
+    }
+
+    iface->tm.bcopy_mp  = &iface->tm.mp.tx_mp;
+    iface->tm.max_zcopy = uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
+    iface->tm.max_bcopy = UCT_RC_MLX5_TAG_BCOPY_MAX;
+
     return;
 
 out_tm_disabled:
 #else
-    iface->tm.enabled    = 0;
+    iface->tm.enabled        = 0;
 #endif
-    init_attr->rx_cq_len = rc_config->super.rx.queue_len;
-    init_attr->seg_size  = rc_config->super.seg_size;
+    init_attr->rx_cq_len     = rc_config->super.rx.queue_len;
+    init_attr->seg_size      = rc_config->super.seg_size;
+out_mp_disabled:
+    iface->tm.max_zcopy      = rc_config->super.seg_size;
+    iface->tm.max_bcopy      = rc_config->super.seg_size;
+    iface->tm.mp.num_strides = 1;
+    iface->tm.bcopy_mp       = &iface->super.tx.mp;
 }
 
 static ucs_status_t
@@ -416,8 +462,11 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         goto err;
     }
 
+    /* MP XRQ is supported with HW TM only */
+    ucs_assert(iface->tm.mp.num_strides == 1);
     status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                  iface->super.super.config.seg_size);
+                                  iface->super.super.config.seg_size,
+                                  iface->tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }

@@ -11,6 +11,7 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
+#include <ucs/algorithm/crc.h>
 
 
 /*
@@ -22,9 +23,11 @@
 #  define UCT_RC_RNDV_HDR_LEN         0
 #endif
 
-#define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
-#define UCT_RC_MLX5_OPCODE_FLAG_TM    0x200
-#define UCT_RC_MLX5_OPCODE_MASK       0xff
+#define UCT_RC_MLX5_OPCODE_FLAG_RAW    0x100
+#define UCT_RC_MLX5_OPCODE_FLAG_TM     0x200
+#define UCT_RC_MLX5_OPCODE_MASK        0xff
+#define UCT_RC_MLX5_TAG_BCOPY_MAX      131072
+#define UCT_RC_MLX5_MP_MAX_NUM_STRIDES 16
 
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
     UCT_CHECK_AM_ID(_id); \
@@ -88,6 +91,14 @@ enum {
     UCT_RC_MLX5_OPCODE_TAG_MATCHING        = 0x28,
     UCT_RC_MLX5_CQE_APP_TAG_MATCHING       = 1,
 
+    /* last packet flag for multi-packet RQs */
+    UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD       = 0x40000000,
+
+    /* Byte count mask for multi-packet RQs */
+    UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK  = 0x0000FFFF,
+
+    UCT_RC_MLX5_MP_RQ_NUM_STRIDES_FIELD_MASK = 0x3FFF0000,
+
     /* tag segment flags */
     UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT         = (1 << 6),
     UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ        = (1 << 7),
@@ -106,6 +117,16 @@ enum {
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
        (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_tmh))/ \
         sizeof(struct mlx5_wqe_data_seg))
+
+typedef struct uct_rc_mlx5_tm_mp_val {
+    ucs_list_link_t list;
+    uint64_t        val;
+    uint8_t         gid[16];
+} uct_rc_mlx5_tm_mp_val_t;
+
+KHASH_INIT(uct_rc_mlx5_tm_mp_hash, uint64_t, ucs_list_link_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
 # else
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size)   0
 #endif /* IBV_HW_TM  */
@@ -257,14 +278,25 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_tag_entry_t      *head;
         uct_rc_mlx5_tag_entry_t      *tail;
         uct_rc_mlx5_tag_entry_t      *list;
+        ucs_mpool_t                  *bcopy_mp;
 
         ucs_ptr_array_t              rndv_comps;
+        size_t                       max_bcopy;
+        size_t                       max_zcopy;
         unsigned                     num_tags;
         unsigned                     num_outstanding;
         unsigned                     max_rndv_data;
         uint16_t                     unexpected_cnt;
         uint16_t                     cmd_qp_len;
         uint8_t                      enabled;
+
+        struct {
+            unsigned                 num_strides;
+            ucs_mpool_t              tx_mp;
+            ucs_mpool_t              rx_meta_mp;
+            khash_t(uct_rc_mlx5_tm_mp_hash) hash;
+        } mp;
+
         struct {
             void                     *arg; /* User defined arg */
             uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
@@ -274,6 +306,7 @@ typedef struct uct_rc_mlx5_iface_common {
             void                     *arg; /* User defined arg */
             uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
         } rndv_unexp;
+
         uct_rc_mlx5_release_desc_t  eager_desc;
         uct_rc_mlx5_release_desc_t  rndv_desc;
         UCS_STATS_NODE_DECLARE(stats);
@@ -301,6 +334,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
         int                    enable;
         unsigned               list_size;
         size_t                 seg_size;
+        size_t                 mp_num_strides;
     } tm;
     unsigned                   exp_backoff;
 } uct_rc_mlx5_iface_common_config_t;
@@ -319,6 +353,8 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
     UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_MLX5_STAT_TAG_##_op, 1)
 
 #define UCT_RC_MLX5_TM_ENABLED(_iface) (_iface)->tm.enabled
+
+#define UCT_RC_MLX5_MP_ENABLED(_iface) ((_iface)->tm.mp.num_strides > 1)
 
 /* TMH can carry 2 bytes of data in its reserved filed */
 #define UCT_RC_MLX5_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_mlx5_tmh_priv_data_t, \
@@ -449,7 +485,7 @@ uct_rc_mlx5_handle_rndv_fin(uct_rc_mlx5_iface_common_t *iface, uint32_t app_ctx)
 
 extern ucs_config_field_t uct_rc_mlx5_common_config_table[];
 
-unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
+unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface);
 

@@ -191,6 +191,7 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
     uint16_t                           tail;       /* tail in the driver */
+    uint16_t                           stride;
     union {
         struct {
             struct ibv_srq             *srq;
@@ -333,23 +334,27 @@ typedef struct uct_ib_mlx5_err_cqe {
  * SRQ segment
  *
  * We add some SW book-keeping information in the unused HW fields:
- *  - next_hole - points to the next out-of-order completed segment
- *  - desc      - the receive descriptor.
+ *  - strides - Number of available strides in this WQE. When it is 0,
+ *              this segment can be reposted to the HW. Relevant for
+ *              Multi-Packet SRQ only.
+ *  - free    - points to the next out-of-order completed segment.
+ *  - desc    - the receive descriptor.
  *
  */
 typedef struct uct_rc_mlx5_srq_seg {
     union {
         struct mlx5_wqe_srq_next_seg   mlx5_srq;
         struct {
-            uint8_t                    rsvd0[2];
+            uint16_t                   ptr_mask;
             uint16_t                   next_wqe_index; /* Network byte order */
             uint8_t                    signature;
-            uint8_t                    rsvd1[2];
+            uint8_t                    rsvd1[1];
+            uint8_t                    strides;
             uint8_t                    free;           /* Released but not posted */
             uct_ib_iface_recv_desc_t   *desc;          /* Host byte order */
         } srq;
     };
-    struct mlx5_wqe_data_seg           dptr;
+    struct mlx5_wqe_data_seg           dptr[0];
 } uct_ib_mlx5_srq_seg_t;
 
 
@@ -476,10 +481,10 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
  * Initialize srq structure.
  */
 ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count);
+                                  size_t sg_byte_count, int sge_num);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                               uint32_t tail, size_t sg_byte_count);
+                               uint32_t tail, size_t sg_byte_count, int sge_num);
 
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 

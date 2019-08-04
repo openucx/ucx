@@ -752,8 +752,8 @@ ssize_t uct_rc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
     UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND,
                              _IMM);
 
-    UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
-                                        tag, app_ctx, pack_cb, arg, length);
+    UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(&iface->super, iface->tm.bcopy_mp,
+                                        desc, tag, app_ctx, pack_cb, arg, length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
                                 opcode, sizeof(struct ibv_tmh) + length,
@@ -778,7 +778,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                        "uct_rc_mlx5_ep_tag_eager_zcopy");
     UCT_RC_CHECK_ZCOPY_DATA(sizeof(struct ibv_tmh),
                             uct_iov_total_length(iov, iovcnt),
-                            iface->super.super.config.seg_size);
+                            iface->tm.max_zcopy);
 
     UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND,
                              _IMM);
@@ -882,6 +882,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->mp_context   = -1;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     return UCS_OK;
 

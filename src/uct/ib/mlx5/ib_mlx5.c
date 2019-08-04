@@ -571,11 +571,12 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 }
 
 ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count)
+                                  size_t sg_byte_count, int sge_num)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
+    uint16_t stride;
 
     obj.dv.srq.in = verbs_srq;
     obj.dv.srq.out = &srq_info.dv;
@@ -590,9 +591,12 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (srq_info.dv.stride != UCT_IB_MLX5_SRQ_STRIDE) {
-        ucs_error("SRQ stride is not %lu (%d)", UCT_IB_MLX5_SRQ_STRIDE,
-                  srq_info.dv.stride);
+    stride = sizeof(struct mlx5_wqe_srq_next_seg) +
+             sge_num * sizeof(struct mlx5_wqe_data_seg);
+    stride = pow(2, ceil(ucs_log2(stride)));
+    if (srq_info.dv.stride != stride) {
+        ucs_error("SRQ stride is not %u (%d), sgenum %d",
+                  stride, srq_info.dv.stride, sge_num);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -601,31 +605,36 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
         return UCS_ERR_NO_DEVICE;
     }
 
-    srq->buf             = srq_info.dv.buf;
-    srq->db              = srq_info.dv.dbrec;
+    srq->buf    = srq_info.dv.buf;
+    srq->db     = srq_info.dv.dbrec;
+    srq->stride = stride;
     uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
-                              sg_byte_count);
+                              sg_byte_count, sge_num);
     return UCS_OK;
 }
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                               uint32_t tail, size_t sg_byte_count)
+                               uint32_t tail, size_t sg_byte_count, int sge_num)
 {
     uct_ib_mlx5_srq_seg_t *seg;
-    unsigned i;
+    unsigned i, j;
 
-    srq->free_idx        = tail;
-    srq->ready_idx       = -1;
-    srq->sw_pi           = -1;
-    srq->mask            = tail;
-    srq->tail            = tail;
+    srq->free_idx  = tail;
+    srq->ready_idx = -1;
+    srq->sw_pi     = -1;
+    srq->mask      = tail;
+    srq->tail      = tail;
 
     for (i = head; i <= tail; ++i) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, i);
+        seg                     = uct_ib_mlx5_srq_get_wqe(srq, i);
         seg->srq.next_wqe_index = htons((i + 1) & tail);
+        seg->srq.ptr_mask       = 0;
         seg->srq.free           = 0;
         seg->srq.desc           = NULL;
-        seg->dptr.byte_count    = htonl(sg_byte_count);
+        seg->srq.strides        = sge_num;
+        for (j = 0; j < sge_num; ++j) {
+            seg->dptr[j].byte_count = htonl(sg_byte_count);
+        }
     }
 }
 

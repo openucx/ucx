@@ -45,9 +45,12 @@ typedef struct {
 /**
  * Hash table entry for tag message fragments
  */
-typedef union {
-    ucs_queue_head_t      unexp_q;    /* Queue of unexpected descriptors */
-    ucp_request_t         *exp_req;   /* Expected request */
+typedef struct {
+    union {
+        ucs_queue_head_t  unexp_q;    /* Queue of unexpected descriptors */
+        ucp_request_t     *exp_req;   /* Expected request */
+    };
+    size_t                offset;
 } ucp_tag_frag_match_t;
 
 

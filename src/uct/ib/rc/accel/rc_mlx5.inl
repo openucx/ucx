@@ -76,11 +76,30 @@ uct_rc_mlx5_srq_prefetch_setup(uct_rc_mlx5_iface_common_t *iface)
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_ib_mlx5_srq_seg_t *seg, uint16_t wqe_ctr,
+                                  uct_ib_mlx5_srq_seg_t *seg,
+                                  struct mlx5_cqe64 * cqe, uint16_t wqe_ctr,
                                   ucs_status_t status, unsigned offset,
                                   uct_recv_desc_t *release_desc)
 {
     void *udesc;
+
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+        if (status != UCS_OK) {
+             udesc = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
+             udesc = udesc - iface->super.super.config.rx_hdr_offset + offset;
+             uct_recv_desc(udesc) = release_desc;
+             seg->srq.ptr_mask &= ~UCS_BIT(ntohs(cqe->ib_stride_index));
+        }
+        if (--seg->srq.strides) {
+            return;
+        }
+        seg->srq.strides = iface->tm.mp.num_strides;
+    } else if (status != UCS_OK) {
+             udesc                = (char*)seg->srq.desc + offset;
+             uct_recv_desc(udesc) = release_desc;
+             seg->srq.ptr_mask   &= ~1;
+             seg->srq.desc        = NULL; /* TODO MP: No need ?? */
+    }
 
     if (ucs_likely((status == UCS_OK) &&
          (wqe_ctr == ((iface->rx.srq.ready_idx + 1) &
@@ -95,11 +114,6 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
          ++iface->rx.srq.ready_idx;
          ++iface->rx.srq.free_idx;
     } else {
-         if (status != UCS_OK) {
-             udesc                = (char*)seg->srq.desc + offset;
-             uct_recv_desc(udesc) = release_desc;
-             seg->srq.desc        = NULL;
-         }
          if (wqe_ctr == ((iface->rx.srq.free_idx + 1) & iface->rx.srq.mask)) {
              ++iface->rx.srq.free_idx;
          } else {
@@ -177,6 +191,172 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
     return hdr;
 }
 
+static UCS_F_ALWAYS_INLINE uint64_t*
+uct_rc_mlx5_iface_mp_add_context(uct_rc_mlx5_iface_common_t *iface,
+                                 struct mlx5_cqe64 *cqe, ucs_list_link_t *list,
+                                 unsigned *flags, int grh_present)
+{
+    uct_rc_mlx5_tm_mp_val_t *mp_data;
+    void *gid;
+
+    mp_data = ucs_mpool_get(&iface->tm.mp.rx_meta_mp);
+    ucs_assert(mp_data != NULL);
+    ucs_list_add_tail(list, &mp_data->list);
+    if (grh_present) {
+        /* GRH is present, need to take GID */
+        gid = uct_ib_mlx5_gid_from_cqe(cqe);
+        memcpy(&mp_data->gid, gid, sizeof(mp_data->gid));
+    }
+
+    *flags |= UCT_CB_PARAM_FLAG_MORE;
+
+    return &mp_data->val;
+}
+
+static UCS_F_ALWAYS_INLINE uint64_t*
+uct_rc_mlx5_iface_rx_context(uct_rc_mlx5_iface_common_t *iface,
+                             struct mlx5_cqe64 *cqe, unsigned *flags,
+                             int has_ep)
+{
+    static uint64_t dummy_ctx;
+    uint64_t key;
+    ucs_list_link_t *head;
+    uct_rc_mlx5_tm_mp_val_t *mp_data;
+    void *gid;
+    int last, ret;
+    khiter_t h_it;
+    uct_rc_mlx5_ep_t *ep;
+    uint32_t qp_num;
+
+    last = ntohl(cqe->byte_cnt) & UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD;
+
+    if (has_ep) {
+        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                                uct_rc_mlx5_ep_t);
+        if (ep->mp_context == -1) {
+            *flags |= UCT_CB_PARAM_FLAG_FIRST;
+        }
+
+        if (last) {
+            dummy_ctx      = ep->mp_context;
+            ep->mp_context = -1;
+            return &dummy_ctx;
+        }
+        *flags |= UCT_CB_PARAM_FLAG_MORE;
+        return &ep->mp_context;
+    }
+
+    /* No need to convert to le ?
+     * ( ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER) */
+    key  = (uint64_t)cqe->flags_rqpn << 32 | cqe->slid;
+
+    h_it = kh_get(uct_rc_mlx5_tm_mp_hash, &iface->tm.mp.hash, key);
+    if (h_it == kh_end(&iface->tm.mp.hash)) {
+        /* No data from this sender - this must be the first fragment */
+        *flags |= UCT_CB_PARAM_FLAG_FIRST;
+        if (last) {
+            /* fast path - single fragment message */
+            return &dummy_ctx;
+        }
+
+        h_it = kh_put(uct_rc_mlx5_tm_mp_hash, &iface->tm.mp.hash, key, &ret);
+        head = &kh_value(&iface->tm.mp.hash, h_it);
+        ucs_assert(ret != 0);
+        ucs_list_head_init(head);
+        return uct_rc_mlx5_iface_mp_add_context(iface, cqe, head, flags,
+                                                uct_ib_mlx5_cqe_is_grh_present(cqe));
+    }
+
+    head = &kh_value(&iface->tm.mp.hash, h_it);
+    if (!uct_ib_mlx5_cqe_is_grh_present(cqe)) {
+        ucs_assert(ucs_list_length(head) == 1);
+        mp_data = ucs_list_head(head, uct_rc_mlx5_tm_mp_val_t, list);
+    } else {
+        /* GRH is present, need to compare gids */
+        gid = uct_ib_mlx5_gid_from_cqe(cqe);
+        ucs_list_for_each(mp_data, head, list) {
+            if (!memcmp(mp_data->gid, gid, sizeof(mp_data->gid))) {
+                goto out;
+            }
+        }
+
+        /* No element with our gid in the list */
+        *flags |= UCT_CB_PARAM_FLAG_FIRST;
+        if (last) {
+            /* Single fragment, no need to add new element */
+            return &dummy_ctx;
+        }
+
+        /* Add new list element */
+        return uct_rc_mlx5_iface_mp_add_context(iface, cqe, head, flags, 1);
+    }
+
+out:
+    if (last) {
+        /* Not the first, but last fragment */
+        dummy_ctx = mp_data->val;
+        ucs_list_del(&mp_data->list);
+        ucs_mpool_put(mp_data);
+        if (ucs_list_is_empty(head)) {
+            kh_del(uct_rc_mlx5_tm_mp_hash, &iface->tm.mp.hash, h_it);
+        }
+        return &dummy_ctx;
+    }
+
+    /* Some middle fragment (not first and not last) */
+    *flags |= UCT_CB_PARAM_FLAG_MORE;
+    return &mp_data->val;
+}
+
+static UCS_F_ALWAYS_INLINE void*
+uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
+                                 struct mlx5_cqe64 *cqe,
+                                 unsigned *byte_count, unsigned *flags,
+                                 int has_ep, uint64_t **context_p)
+{
+    uct_ib_mlx5_srq_seg_t *seg;
+    void *hdr;
+    unsigned byte_len;
+    static uint64_t dummy_context;
+
+    if (!UCT_RC_MLX5_MP_ENABLED(iface)) {
+        /* uct_rc_mlx5_iface_common_data will initialize flags value */
+        hdr        = uct_rc_mlx5_iface_common_data(iface, cqe, *byte_count, flags);
+        *flags    |= UCT_CB_PARAM_FLAG_FIRST;
+        *context_p = &dummy_context;
+        return hdr;
+    }
+
+    byte_len   = *byte_count & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK;
+    *flags     = 0;
+    *context_p = uct_rc_mlx5_iface_rx_context(iface, cqe, flags, has_ep);
+
+
+    /* Get a pointer to the tag header or the payload (if it is not the first
+     * fragment). */
+    if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+        hdr = cqe;
+        uct_rc_mlx5_iface_common_rx_inline(iface, NULL,
+                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
+                                           byte_len);
+    } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
+        hdr = cqe - 1;
+        uct_rc_mlx5_iface_common_rx_inline(iface, NULL,
+                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
+                                           byte_len);
+    } else {
+        seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
+        hdr = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
+        VALGRIND_MAKE_MEM_DEFINED(hdr - iface->super.super.config.rx_hdr_offset,
+                                  byte_len);
+        *flags |= UCT_CB_PARAM_FLAG_DESC;
+    }
+
+    *byte_count = byte_len;
+    return hdr;
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                     struct mlx5_cqe64 *cqe,
@@ -209,7 +389,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                      flags);
     }
 
-    uct_rc_mlx5_iface_release_srq_seg(iface, seg, wqe_ctr, status,
+    uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, status,
                                       iface->super.super.config.rx_headroom_offset,
                                       &iface->super.super.release_desc);
 }
@@ -425,7 +605,9 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     case MLX5_OPCODE_SEND:
         /* Data segment only */
         ucs_assert(length < (2ul << 30));
-        ucs_assert(length <= iface->super.super.config.seg_size);
+
+        /* TODO: make proper check for all cases TM, MP, etc
+         * ucs_assert(length <= iface->super.super.config.seg_size); */
 
         wqe_size = ctrl_av_size + sizeof(struct mlx5_wqe_data_seg);
         uct_ib_mlx5_set_data_seg(next_seg, buffer, length, *lkey_p);
@@ -956,13 +1138,14 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
                                  uct_rc_mlx5_release_desc_t *release,
-                                 ucs_status_t status, uint16_t wqe_ctr)
+                                 struct mlx5_cqe64 *cqe, ucs_status_t status,
+                                 uint16_t wqe_ctr)
 {
     uct_ib_mlx5_srq_seg_t *seg;
 
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
 
-    uct_rc_mlx5_iface_release_srq_seg(iface, seg, wqe_ctr,
+    uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr,
                                       status, release->offset, &release->super);
 
     if (ucs_unlikely(!(++iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
@@ -977,23 +1160,40 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
-                                   struct mlx5_cqe64 *cqe, unsigned byte_len)
+                                   struct mlx5_cqe64 *cqe, unsigned byte_len,
+                                   int has_ep)
 {
-    struct ibv_tmh     *tmh;
-    uint64_t           imm_data;
-    ucs_status_t       status;
-    unsigned           flags;
+    struct ibv_tmh *tmh;
+    uint64_t       imm_data;
+    ucs_status_t   status;
+    unsigned       flags;
+    uint64_t       *context;
 
-    tmh = uct_rc_mlx5_iface_common_data(iface, cqe,
-                                        byte_len, &flags);
+    tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, &byte_len, &flags,
+                                           has_ep, &context);
+
+    if (!(flags & UCT_CB_PARAM_FLAG_FIRST)) {
+        imm_data = uct_rc_mlx5_tag_imm_data_unpack(cqe->imm_inval_pkey,
+                                                   tmh->app_ctx,
+                                                   UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe));
+        status  = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
+                                           tmh, byte_len, flags, tmh->tag,
+                                           imm_data, context);
+
+        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc, cqe,
+                                         status, ntohs(cqe->wqe_counter));
+        return;
+    }
+
+
 
     if (ucs_likely((tmh->opcode == IBV_TMH_EAGER) &&
                    !UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe))) {
         status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                           tmh + 1, byte_len - sizeof(*tmh),
-                                          flags, tmh->tag, 0);
+                                          flags, tmh->tag, 0, context);
 
-        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc,
+        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc, cqe,
                                          status, ntohs(cqe->wqe_counter));
 
         UCT_RC_MLX5_TM_STAT(iface, RX_EAGER_UNEXP);
@@ -1013,19 +1213,20 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         } else {
             status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                               tmh + 1, byte_len - sizeof(*tmh),
-                                              flags, tmh->tag, imm_data);
+                                              flags, tmh->tag, imm_data,
+                                              context);
 
             UCT_RC_MLX5_TM_STAT(iface, RX_EAGER_UNEXP);
         }
 
-        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc,
+        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc, cqe,
                                          status, ntohs(cqe->wqe_counter));
     } else {
         ucs_assertv_always(tmh->opcode == IBV_TMH_RNDV,
                            "Unsupported packet arrived %d", tmh->opcode);
         status = uct_rc_mlx5_handle_rndv(iface, tmh, tmh->tag, byte_len);
 
-        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.rndv_desc,
+        uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.rndv_desc, cqe,
                                          status, ntohs(cqe->wqe_counter));
 
         UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_UNEXP);
@@ -1035,7 +1236,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
-                                 int is_tag_enabled)
+                                 int is_tag_enabled, int has_ep)
 {
     uct_ib_mlx5_srq_seg_t UCS_V_UNUSED *seg;
     struct mlx5_cqe64 *cqe;
@@ -1049,6 +1250,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
+    uint64_t *dummy_ctx;
 #endif
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
@@ -1068,8 +1270,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     count    = 1;
 
     if (!is_tag_enabled) {
-        rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe,
-                                               byte_len, &flags);
+        rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
         uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags, byte_len);
         goto done;
     }
@@ -1080,8 +1281,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     /* Should be a fast path, because small (latency-critical) messages
      * are not supposed to be offloaded to the HW.  */
     if (ucs_likely(cqe->app_op == UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED)) {
-        uct_rc_mlx5_iface_tag_handle_unexp(iface, cqe,
-                                           byte_len);
+        uct_rc_mlx5_iface_tag_handle_unexp(iface, cqe, byte_len, has_ep);
         goto done;
     }
 
@@ -1097,7 +1297,13 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         break;
 
     case UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG:
-        tmh = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
+        tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, &byte_len, &flags,
+                                               has_ep, &dummy_ctx);
+
+        ucs_assert(!UCT_RC_MLX5_MP_ENABLED(iface) ||
+                   ((flags & UCT_CB_PARAM_FLAG_FIRST) &&
+                   !(flags & UCT_CB_PARAM_FLAG_MORE)));
+
         if (tmh->opcode == IBV_TMH_NO_TAG) {
             uct_rc_mlx5_iface_common_am_handler(iface, cqe,
                                                 (uct_rc_mlx5_hdr_t*)tmh,
@@ -1108,7 +1314,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
             seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
                                           ntohs(cqe->wqe_counter));
 
-            uct_rc_mlx5_iface_release_srq_seg(iface, seg,
+            uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe,
                                               ntohs(cqe->wqe_counter), UCS_OK,
                                               0, NULL);
 
@@ -1149,7 +1355,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 done:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
-        uct_rc_mlx5_iface_srq_post_recv(&iface->super, &iface->rx.srq);
+        uct_rc_mlx5_iface_srq_post_recv(iface);
     }
     return count;
 }

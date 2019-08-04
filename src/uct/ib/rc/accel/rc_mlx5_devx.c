@@ -89,7 +89,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->rx.srq.srq_num     = UCT_IB_MLX5DV_GET(create_xrq_out, out, xrqn);
     uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
-                              iface->super.super.config.seg_size);
+                              iface->super.super.config.seg_size,
+                              iface->tm.mp.num_strides);
     iface->super.rx.srq.quota = max - 1;
     return UCS_OK;
 
