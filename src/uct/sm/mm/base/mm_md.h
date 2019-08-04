@@ -50,7 +50,7 @@ typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*alloc)(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                           unsigned flags, const char *alloc_name, void **address_p,
-                          uct_mm_id_t *mmid_p, const char **path_p, int *is_hugetlb);
+                          uct_mm_id_t *mmid_p, const char **path_p);
 
     ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length,
                            void *remote_address, void **address, uint64_t *cookie,
@@ -101,9 +101,9 @@ typedef struct uct_mm_component {
             .rkey_unpack        = uct_mm_rkey_unpack, \
             .rkey_ptr           = uct_mm_rkey_ptr, \
             .rkey_release       = uct_mm_rkey_release, \
-            .name               = # _name, \
+            .name               = _name, \
             .md_config          = { \
-                .name           = #_name " memory domain", \
+                .name           = _name " memory domain", \
                 .prefix         = _cfg_prefix, \
                 .table          = _prefix##_md_config_table, \
                 .size           = sizeof(_prefix##_md_config_t), \
@@ -124,7 +124,6 @@ typedef struct uct_mm_seg {
     void             *address;   /* Virtual address */
     size_t           length;     /* Size of the memory */
     const char       *path;      /* Path to the backing file when using posix */
-    int              is_hugetlb; /* If hugetlb was used for memory allocation */
 } uct_mm_seg_t;
 
 
@@ -177,7 +176,5 @@ ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void 
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p);
-
-int uct_mm_is_hugetlb(uct_md_h md, uct_mem_h memh);
 
 #endif

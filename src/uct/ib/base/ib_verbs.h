@@ -333,6 +333,16 @@ static inline void uct_ib_destroy_qp(struct ibv_qp *qp)
     }
 }
 
+static inline void uct_ib_destroy_srq(struct ibv_srq *srq)
+{
+    int ret;
+
+    ret = ibv_destroy_srq(srq);
+    if (ret) {
+        ucs_warn("ibv_destroy_srq() failed: %m");
+    }
+}
+
 typedef struct uct_ib_qpnum {
     uct_ib_uint24_t qp_num;
 } uct_ib_qpnum_t;

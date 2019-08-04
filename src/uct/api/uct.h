@@ -1976,16 +1976,6 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
 
 /**
  * @ingroup UCT_MD
- * @brief Check if the memory allocated by the md was allocated with hugetlb.
- *
- * @param [in]  md           Memory domain to check
- * @param [in]  memh         Memory handle to the allocated memory
- */
-int uct_md_is_hugetlb(uct_md_h md, uct_mem_h memh);
-
-
-/**
- * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy communications and remote access.
  *
  * Allocate potentially registered memory. Every one of the provided allocation

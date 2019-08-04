@@ -261,7 +261,12 @@ static ucs_status_t ucs_async_thread_spinlock_init(ucs_async_context_t *async)
 
 static void ucs_async_thread_spinlock_cleanup(ucs_async_context_t *async)
 {
-    ucs_spinlock_destroy(&async->thread.spinlock);
+    ucs_status_t status;
+
+    status = ucs_spinlock_destroy(&async->thread.spinlock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 }
 
 static int ucs_async_thread_spinlock_try_block(ucs_async_context_t *async)
@@ -404,8 +409,8 @@ static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
 static void ucs_async_signal_global_cleanup()
 {
     if (ucs_async_thread_global_context.thread != NULL) {
-        ucs_warn("async thread still running (use count %d)",
-                 ucs_async_thread_global_context.use_count);
+        ucs_debug("async thread still running (use count %u)",
+                  ucs_async_thread_global_context.use_count);
     }
 }
 

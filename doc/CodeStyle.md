@@ -79,9 +79,9 @@ Good
 
 Bad
 ```C
-  if(val != XXX) {   /* Require space after if */
-  if (val != XXX){   /* Require space after )  */
-  if ( val != XXX) { /* Remove space after (   */
+    if(val != XXX) {   /* Require space after if */
+    if (val != XXX){   /* Require space after )  */
+    if ( val != XXX) { /* Remove space after (   */
 ```
 
 ### goto style
@@ -125,7 +125,7 @@ Bad
     event.data.ptr = udata;
 ```
 
-### Comment in C file
+### comment in C file
 
 Good
 ```C
@@ -149,4 +149,53 @@ Bad
 ```
     int fd;  
         /* ^^ Remove trailing space */
+```
+
+### macro definition
+
+Good
+```C
+    #define UCS_MACRO_SHORT(_obj, _field, _val) \
+        (_obj)->_field = (_val)
+
+    #define UCS_MACRO_LONG(_obj, _field1, _field2, _val1, _val2) \
+        { \
+            typeof((_obj)->_field1) sum = (_val1) + (_val2); \
+            \
+            (_obj)->_field1 = sum; \
+            (_obj)->_field2 = sum; \
+        }
+
+    #define UCS_MACRO_LONG_RET_VAL(_obj, _field, _val, _func) \
+        ({ \
+            ucs_status_t status; \
+            \
+            (_obj)->_field = (_val); \
+            \
+            status = _func(_obj); \
+            status; \
+        })
+```
+
+Bad
+```C
+    #define UCS_MACRO_SHORT(_obj, _field, _val) \
+        _obj->_field = _val /* need to wrap macro arguments by () */
+
+    #define UCS_MACRO_LONG(_obj, _field1, _field2, _val1, _val2) \
+            /* possible mixing declarations and code */ \
+            typeof((_obj)->_field1) sum = (_val1) + (_val2); \
+            \
+            (_obj)->_field1 = sum; \
+            (_obj)->_field2 = sum;
+
+    #define UCS_MACRO_LONG_RET_VAL(_obj, _field, _val, _func) \
+        ({                                                    \
+            ucs_status_t status;                              \
+                                                              \
+            (_obj)->_field = (_val);                          \
+                                                              \
+            status = _func(_obj);                             \
+            status;                                           \
+        }) /* wrong alignment of "\" */
 ```
