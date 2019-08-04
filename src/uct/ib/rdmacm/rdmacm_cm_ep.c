@@ -98,7 +98,6 @@ err:
 
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
-                            const uct_rdmacm_priv_data_hdr_t *hdr,
                             uct_rdmacm_cm_ep_t *cep)
 {
     ucs_status_t status;
@@ -117,8 +116,8 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
     return UCS_OK;
 }
 
-ucs_status_t uct_rdmacm_cm_ep_prepare_data_to_send(uct_rdmacm_cm_ep_t *cep,
-                                                   struct rdma_conn_param *conn_param)
+ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
+                                              struct rdma_conn_param *conn_param)
 {
     uct_rdmacm_priv_data_hdr_t *hdr;
     ucs_status_t               status;
@@ -153,7 +152,7 @@ ucs_status_t uct_rdmacm_cm_ep_prepare_data_to_send(uct_rdmacm_cm_ep_t *cep,
     hdr->length = (uint8_t)priv_data_ret;
     hdr->status = UCS_OK;
 
-    status = uct_rdamcm_cm_ep_set_qp_num(conn_param, hdr, cep);
+    status = uct_rdamcm_cm_ep_set_qp_num(conn_param, cep);
     if (status != UCS_OK) {
         goto err_free_priv_data;
     }
@@ -171,11 +170,9 @@ err:
 static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
+    uct_rdmacm_cm_t *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
-
-    uct_cm_t *cm = ucs_container_of(cep->super.super.iface, uct_cm_t, iface);
-    uct_rdmacm_cm_t *rdmacm_cm = ucs_derived_of(cm, uct_rdmacm_cm_t);
 
     cep->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
 
@@ -223,9 +220,9 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     cep->id          = event->id;
     cep->id->context = cep;
 
-    status = uct_rdmacm_cm_ep_prepare_data_to_send(cep, &conn_param);
+    status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
-        hdr.status = UCS_ERR_REJECTED;
+        hdr.status = status;
         hdr.length = 0;
         if (rdma_reject(event->id, &hdr, sizeof(hdr))) {
             ucs_error("rdma_reject (id=%p) failed with error: %m", event->id);
@@ -327,9 +324,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 {
-    uct_priv_worker_t *worker_priv =
-                    ucs_derived_of(uct_rdmacm_cm_ep_get_cm(self)->super.iface.worker,
-                                   uct_priv_worker_t);
+    uct_rdmacm_cm_t *rdmacm_cm     = uct_rdmacm_cm_ep_get_cm(self);
+    uct_priv_worker_t *worker_priv = ucs_derived_of(rdmacm_cm->super.iface.worker,
+                                                    uct_priv_worker_t);
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 

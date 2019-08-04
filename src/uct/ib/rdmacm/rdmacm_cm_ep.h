@@ -45,11 +45,10 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags);
 
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
-                            const uct_rdmacm_priv_data_hdr_t *hdr,
                             uct_rdmacm_cm_ep_t *cep);
 
-ucs_status_t uct_rdmacm_cm_ep_prepare_data_to_send(uct_rdmacm_cm_ep_t *cep,
-                                                   struct rdma_conn_param *conn_param);
+ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
+                                              struct rdma_conn_param *conn_param);
 
 void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         ucs_status_t status);

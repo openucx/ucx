@@ -447,7 +447,7 @@ typedef void (*uct_ep_client_connect_cb_t)(uct_ep_h ep, void *arg,
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Callback to handle the disconnecion of the remote peer.
+ * @brief Callback to handle the disconnection of the remote peer.
  *
  * This callback routine will be invoked on the client and server sides upon
  * a disconnect of the remote peer. It will disconnect the given endpoint from
