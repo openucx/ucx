@@ -1102,6 +1102,9 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
 
     for (i = 0; i < md_config->pci_bw.count; i++) {
         if (!strcmp(ib_device->name, md_config->pci_bw.device[i].name)) {
+            if (md_config->pci_bw.device[i].bw == UCS_BANDWIDTH_AUTO) {
+                break; /* read data from system */
+            }
             return md_config->pci_bw.device[i].bw;
         }
     }
