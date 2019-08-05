@@ -98,6 +98,15 @@ struct uct_md {
 };
 
 
+#define UCT_MD_DEFAULT_CONFIG_INITIALIZER \
+    { \
+        .name        = "Default memory domain", \
+        .prefix      =  "", \
+        .table       = uct_md_config_table, \
+        .size        = sizeof(uct_md_config_t), \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void*
 uct_md_fill_md_name(uct_md_h md, void *buffer)
 {

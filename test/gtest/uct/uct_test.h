@@ -148,19 +148,25 @@ protected:
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
-                     const ucs::sock_addr_storage &remote_addr);
+                     const ucs::sock_addr_storage &remote_addr,
+                     uct_ep_client_connect_cb_t connect_cb,
+                     uct_ep_disconnect_cb_t disconnect_cb,
+                     void *user_data);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index, entity& other,
-                                 const ucs::sock_addr_storage &remote_addr);
+                                 const ucs::sock_addr_storage &remote_addr,
+                                 uct_ep_client_connect_cb_t connect_cb,
+                                 uct_ep_disconnect_cb_t disconnect_cb,
+                                 void *user_sata);
 
         void listen(const ucs::sock_addr_storage &listen_addr,
                     const uct_listener_params_t &params);
         void flush() const;
 
         static std::string client_priv_data;
-        static size_t      client_cb_arg;
+        size_t             client_cb_arg;
 
     private:
         class async_wrapper {
@@ -184,18 +190,18 @@ protected:
         static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
                                            void *priv_data);
 
-        const resource             m_resource;
-        ucs::handle<uct_md_h>      m_md;
-        uct_md_attr_t              m_md_attr;
-        mutable async_wrapper      m_async;
-        ucs::handle<uct_worker_h>  m_worker;
-        ucs::handle<uct_cm_h>      m_cm;
-        uct_cm_attr_t              m_cm_attr;
+        const resource              m_resource;
+        ucs::handle<uct_md_h>       m_md;
+        uct_md_attr_t               m_md_attr;
+        mutable async_wrapper       m_async;
+        ucs::handle<uct_worker_h>   m_worker;
+        ucs::handle<uct_cm_h>       m_cm;
+        uct_cm_attr_t               m_cm_attr;
         ucs::handle<uct_listener_h> m_listener;
-        ucs::handle<uct_iface_h>   m_iface;
-        eps_vec_t                  m_eps;
-        uct_iface_attr_t           m_iface_attr;
-        uct_iface_params_t         m_iface_params;
+        ucs::handle<uct_iface_h>    m_iface;
+        eps_vec_t                   m_eps;
+        uct_iface_attr_t            m_iface_attr;
+        uct_iface_params_t          m_iface_params;
     };
 
     class mapped_buffer {

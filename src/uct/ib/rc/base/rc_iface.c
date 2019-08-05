@@ -74,7 +74,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
 /* Config relevant for rc_mlx5 and rc_verbs only (not for dc) */
 ucs_config_field_t uct_rc_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 
@@ -489,21 +489,24 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
 }
 
 ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
-                                  const uct_rc_iface_common_config_t *config)
+                                  const uct_rc_iface_common_config_t *config,
+                                  struct ibv_srq **srq_p)
 {
     struct ibv_srq_init_attr srq_init_attr;
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
+    struct ibv_srq *srq;
 
     srq_init_attr.attr.max_sge   = 1;
     srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
     srq_init_attr.attr.srq_limit = 0;
     srq_init_attr.srq_context    = iface;
-    iface->rx.srq.srq            = ibv_create_srq(pd, &srq_init_attr);
-    if (iface->rx.srq.srq == NULL) {
+    srq                          = ibv_create_srq(pd, &srq_init_attr);
+    if (srq == NULL) {
         ucs_error("ibv_create_srq() failed: %m");
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
+    *srq_p                       = srq;
 
     return UCS_OK;
 }
@@ -642,7 +645,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                 &uct_rc_fc_pending_mpool_ops,
                                 "pending-fc-grants-only");
         if (status != UCS_OK) {
-            goto err_destroy_srq;
+            goto err_cleanup_rx;
         }
     } else {
         self->config.fc_wnd_size     = INT16_MAX;
@@ -651,10 +654,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     return UCS_OK;
 
-err_destroy_srq:
-    if (self->rx.srq.srq != NULL) {
-        ibv_destroy_srq(self->rx.srq.srq);
-    }
+err_cleanup_rx:
+    ops->cleanup_rx(self);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
     uct_rc_iface_tx_ops_cleanup(self);
@@ -668,8 +669,8 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 {
+    uct_rc_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_rc_iface_ops_t);
     unsigned i;
-    int ret;
 
     /* Release table. TODO release on-demand when removing ep. */
     for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
@@ -684,13 +685,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
     UCS_STATS_NODE_FREE(self->stats);
 
-    if (self->rx.srq.srq != NULL) {
-        /* TODO flush RX buffers */
-        ret = ibv_destroy_srq(self->rx.srq.srq);
-        if (ret) {
-            ucs_warn("failed to destroy SRQ: %m");
-        }
-    }
+    ops->cleanup_rx(self);
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
@@ -703,11 +698,10 @@ UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
                             uct_ib_qp_attr_t *qp_init_attr,
-                            unsigned max_send_wr)
+                            unsigned max_send_wr,
+                            struct ibv_srq *srq)
 {
-    if (iface->super.config.qp_type == IBV_QPT_RC) {
-        qp_init_attr->srq             = iface->rx.srq.srq;
-    }
+    qp_init_attr->srq                 = srq;
     qp_init_attr->cap.max_send_wr     = max_send_wr;
     qp_init_attr->cap.max_recv_wr     = 0;
     qp_init_attr->cap.max_send_sge    = iface->config.tx_min_sge;
@@ -719,9 +713,10 @@ void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
 }
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
-                                    uct_ib_qp_attr_t *attr, unsigned max_send_wr)
+                                    uct_ib_qp_attr_t *attr, unsigned max_send_wr,
+                                    struct ibv_srq *srq)
 {
-    uct_rc_iface_fill_attr(iface, attr, max_send_wr);
+    uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
     uct_ib_iface_fill_attr(&iface->super, attr);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);

@@ -90,6 +90,11 @@ libuct_ib_la_SOURCES += \
 	rc/accel/rc_mlx5_common.c
 endif # HAVE_MLX5_HW
 
+if HAVE_DEVX
+libuct_ib_la_SOURCES += \
+	rc/accel/rc_mlx5_devx.c
+endif # HAVE_DEVX
+
 endif # HAVE_TL_RC
 
 

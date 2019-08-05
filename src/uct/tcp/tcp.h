@@ -269,7 +269,7 @@ typedef struct uct_tcp_iface_config {
 } uct_tcp_iface_config_t;
 
 
-extern uct_md_component_t uct_tcp_md;
+extern uct_component_t uct_tcp_component;
 extern const char *uct_tcp_address_type_names[];
 extern const uct_tcp_cm_state_t uct_tcp_ep_cm_state[];
 

@@ -30,3 +30,6 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_listener_t, uct_listener_t,
                            uct_cm_h , const struct sockaddr *, socklen_t ,
                            const uct_listener_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_listener_t, uct_listener_t);
+
+ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
+                                        uct_conn_request_h conn_request);

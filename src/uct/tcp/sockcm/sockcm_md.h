@@ -26,7 +26,7 @@ typedef struct uct_sockcm_md_config {
     uct_md_config_t          super;
 } uct_sockcm_md_config_t;
 
-extern uct_md_component_t uct_sockcm_mdc;
+extern uct_component_t uct_sockcm_component;
 
 ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 

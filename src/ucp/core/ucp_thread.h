@@ -44,22 +44,27 @@ typedef struct ucp_mt_lock {
 
 #define UCP_THREAD_IS_REQUIRED(_lock_ptr) \
     ((_lock_ptr)->mt_type)
-#define UCP_THREAD_LOCK_INIT(_lock_ptr)                                 \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_init(&((_lock_ptr)->lock.mt_mutex), NULL);    \
-        } else {                                                        \
-            ucs_spinlock_init(&((_lock_ptr)->lock.mt_spinlock));        \
-        }                                                               \
-    }
-#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                             \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_destroy(&((_lock_ptr)->lock.mt_mutex));       \
-        } else {                                                        \
-            ucs_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock));     \
-        }                                                               \
-    }
+#define UCP_THREAD_LOCK_INIT(_lock_ptr) \
+    do { \
+        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) { \
+            pthread_mutex_init(&((_lock_ptr)->lock.mt_mutex), NULL); \
+        } else { \
+            ucs_spinlock_init(&((_lock_ptr)->lock.mt_spinlock)); \
+        } \
+    } while (0)
+#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                                  \
+    do { \
+        ucs_status_t status; \
+        \
+        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) { \
+            pthread_mutex_destroy(&((_lock_ptr)->lock.mt_mutex)); \
+        } else { \
+            status = ucs_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock)); \
+            if (status != UCS_OK) { \
+                ucs_warn("ucs_spinlock_destroy() failed (%d)", status); \
+            } \
+        } \
+    } while (0)
 #define UCP_THREAD_CS_ENTER(_lock_ptr)                                  \
     {                                                                   \
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \

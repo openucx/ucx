@@ -26,6 +26,20 @@ ucs_config_field_t uct_mm_md_config_table[] = {
   {NULL}
 };
 
+ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
+{
+    uct_mm_component_t *mmc = ucs_derived_of(component, uct_mm_component_t);
+
+    if (mmc->ops->query() == UCS_OK) {
+        return uct_md_query_single_md_resource(component, resources_p,
+                                               num_resources_p);
+    } else {
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+}
+
 ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               unsigned flags, const char *alloc_name,
                               uct_mem_h *memh_p)
@@ -223,7 +237,7 @@ static void uct_mm_md_close(uct_md_h md)
 {
     uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
 
-    ucs_config_parser_release_opts(mm_md->config, md->component->md_config_table);
+    ucs_config_parser_release_opts(mm_md->config, md->component->md_config.table);
     ucs_free(mm_md->config);
     ucs_free(mm_md);
 }
@@ -260,7 +274,7 @@ ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
         goto err;
     }
 
-    mm_md->config = ucs_malloc(component->md_config_size, "mm_md config");
+    mm_md->config = ucs_malloc(component->md_config.size, "mm_md config");
     if (mm_md->config == NULL) {
         ucs_error("Failed to allocate memory for mm_md config");
         status = UCS_ERR_NO_MEMORY;
@@ -268,7 +282,7 @@ ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
     }
 
     status = ucs_config_parser_clone_opts(config, mm_md->config,
-                                          component->md_config_table);
+                                          component->md_config.table);
     if (status != UCS_OK) {
         ucs_error("Failed to clone opts");
         goto err_free_mm_md_config;

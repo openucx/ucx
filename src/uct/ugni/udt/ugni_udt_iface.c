@@ -167,7 +167,8 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
 {
     uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_udt_iface_t);
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&iface->super.super, iface_attr);
+
     iface_attr->cap.am.max_short       = iface->config.udt_seg_size -
                                          sizeof(uct_ugni_udt_header_t);
     iface_attr->cap.am.max_bcopy       = iface->config.udt_seg_size -
@@ -187,8 +188,10 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->overhead               = 1e-6;  /* 1 usec */
     iface_attr->latency.overhead       = 40e-6; /* 40 usec */
     iface_attr->latency.growth         = 0;
-    iface_attr->bandwidth              = pow(1024, 2); /* bytes */
+    iface_attr->bandwidth.dedicated    = pow(1024, 2); /* bytes */
+    iface_attr->bandwidth.shared       = 0;
     iface_attr->priority               = 0;
+
     return UCS_OK;
 }
 
@@ -494,5 +497,4 @@ UCT_TL_COMPONENT_DEFINE(uct_ugni_udt_tl_component,
                         "UGNI_UDT",
                         uct_ugni_udt_iface_config_table,
                         uct_ugni_iface_config_t);
-
-UCT_MD_REGISTER_TL(&uct_ugni_md_component, &uct_ugni_udt_tl_component);
+UCT_MD_REGISTER_TL(&uct_ugni_component, &uct_ugni_udt_tl_component);

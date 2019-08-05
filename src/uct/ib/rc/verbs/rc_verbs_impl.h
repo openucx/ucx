@@ -29,24 +29,24 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
     uct_rc_txqp_available_add(txqp, count);
 }
 
-ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface,
                                                      unsigned max);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max);
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max);
 
-static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_iface_t *iface,
+static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
                                                            int fill)
 {
-    unsigned batch = iface->super.config.rx_max_batch;
+    unsigned batch = iface->super.super.config.rx_max_batch;
     unsigned count;
 
-    if (iface->rx.srq.available < batch) {
+    if (iface->super.rx.srq.available < batch) {
         if (ucs_likely(fill == 0)) {
             return 0;
         } else {
-            count = iface->rx.srq.available;
+            count = iface->super.rx.srq.available;
         }
     } else {
         count = batch;
@@ -105,28 +105,28 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
+uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
 {
     uct_rc_hdr_t *hdr;
     unsigned i;
     ucs_status_t status;
-    unsigned num_wcs = iface->super.config.rx_max_poll;
+    unsigned num_wcs = iface->super.super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
 
-    status = uct_ib_poll_cq(iface->super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
+    status = uct_ib_poll_cq(iface->super.super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
     if (status != UCS_OK) {
         num_wcs = 0;
         goto out;
     }
 
-    UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, hdr, wc, num_wcs) {
-        uct_ib_log_recv_completion(&iface->super, &wc[i], hdr, wc[i].byte_len,
+    UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, hdr, wc, num_wcs) {
+        uct_ib_log_recv_completion(&iface->super.super, &wc[i], hdr, wc[i].byte_len,
                                    uct_rc_ep_packet_dump);
-        uct_rc_verbs_iface_handle_am(iface, hdr, wc[i].wr_id, wc[i].qp_num,
+        uct_rc_verbs_iface_handle_am(&iface->super, hdr, wc[i].wr_id, wc[i].qp_num,
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
-    iface->rx.srq.available += num_wcs;
-    UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
+    iface->super.rx.srq.available += num_wcs;
+    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
     uct_rc_verbs_iface_post_recv_common(iface, 0);

@@ -28,10 +28,10 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
-    uct_sockcm_iface_t  *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
+    uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
     struct sockaddr_in sin;
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    uct_base_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
     iface_attr->device_addr_len = 0;
@@ -411,4 +411,4 @@ UCT_TL_COMPONENT_DEFINE(uct_sockcm_tl,
                         "SOCKCM_",
                         uct_sockcm_iface_config_table,
                         uct_sockcm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_sockcm_mdc, &uct_sockcm_tl);
+UCT_MD_REGISTER_TL(&uct_sockcm_component, &uct_sockcm_tl);

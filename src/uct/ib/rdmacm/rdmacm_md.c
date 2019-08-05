@@ -6,7 +6,6 @@
 #include "rdmacm_md.h"
 #include "rdmacm_cm.h"
 
-#define UCT_RDMACM_MD_PREFIX              "rdmacm"
 
 static ucs_config_field_t uct_rdmacm_md_config_table[] = {
   {"", "", NULL,
@@ -215,7 +214,7 @@ uct_rdmacm_md_open(uct_component_t *component, const char *md_name,
     }
 
     md->super.ops            = &uct_rdmacm_md_ops;
-    md->super.component      = &uct_rdmacm_mdc;
+    md->super.component      = &uct_rdmacm_component;
     md->addr_resolve_timeout = md_config->addr_resolve_timeout;
 
     /* cppcheck-suppress autoVariables */
@@ -226,14 +225,24 @@ out:
     return status;
 }
 
-UCT_MD_COMPONENT_DEFINE(uct_rdmacm_mdc, UCT_RDMACM_MD_PREFIX,
-                        uct_rdmacm_query_md_resources, uct_rdmacm_md_open, NULL,
-                        ucs_empty_function_return_unsupported,
-                        (void*)ucs_empty_function_return_success,
-                        "RDMACM_", uct_rdmacm_md_config_table,
-                        uct_rdmacm_md_config_t,
+uct_component_t uct_rdmacm_component = {
+    .query_md_resources = uct_rdmacm_query_md_resources,
+    .md_open            = uct_rdmacm_md_open,
 #if HAVE_RDMACM_QP_LESS
-                        UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_t));
+    .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_t),
 #else
-                        ucs_empty_function_return_unsupported);
-#endif /* HAVE_RDMACM_QP_LESS */
+    .cm_open            = ucs_empty_function_return_unsupported,
+#endif
+    .rkey_unpack        = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = ucs_empty_function_return_success,
+    .name               = "rdmacm",
+    .md_config          = {
+        .name           = "RDMA-CM memory domain",
+        .prefix         =  "IB_",
+        .table          = uct_rdmacm_md_config_table,
+        .size           = sizeof(uct_rdmacm_md_config_t),
+    },
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component)
+};
+UCT_COMPONENT_REGISTER(&uct_rdmacm_component)
