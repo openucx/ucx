@@ -1737,6 +1737,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     if ((worker->num_cms == 0) &&
         ucp_worker_sockaddr_is_cm_proto(worker)) {
         ucs_error("there is no available CM to support close protocol");
+        status = UCS_ERR_UNSUPPORTED;
         goto err_close_cms;
     }
 
