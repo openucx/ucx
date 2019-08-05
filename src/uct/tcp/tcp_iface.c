@@ -419,6 +419,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
+        ucs_error("TCP transport does not support multi-threaded worker");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_tcp_iface_ops, md, worker,
                               params, tl_config
                               UCS_STATS_ARG((params->field_mask &
@@ -487,11 +492,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                             &uct_tcp_mpool_ops, "uct_tcp_iface_rx_buf_mp");
     if (status != UCS_OK) {
         goto err_cleanup_tx_mpool;
-    }
-
-    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
-        ucs_error("TCP transport does not support multi-threaded worker");
-        return UCS_ERR_INVALID_PARAM;
     }
 
     status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
