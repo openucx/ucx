@@ -349,12 +349,8 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
         return max_zcopy;
     }
 
-    if (ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
-        return ucs_min(max_zcopy, msg_config->mem_type_zcopy_thresh[req->send.mem_type]);
-    }
-
     if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
-        return ucs_min(max_zcopy, msg_config->zcopy_thresh[0]);
+        return ucs_min(max_zcopy, msg_config->mem_type_zcopy_thresh[req->send.mem_type]);
     } else if (UCP_DT_IS_IOV(req->send.datatype)) {
         if (0 == count) {
             /* disable zcopy */
