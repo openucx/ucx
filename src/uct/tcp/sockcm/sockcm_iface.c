@@ -210,13 +210,19 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_sockcm_ctx_t *sock_id_ctx;
 
+    /* what if an error event invoked the handler?, How can I query the event
+     * type? : TODO
+     */
+
     /* accept initial client connection; iface accept/reject happens later */
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-    if (accept_fd < 0) {
-        if ((errno != EAGAIN) && (errno != EINTR)) {
-            ucs_error("accept() failed: %m");
-            return;
-        }
+    if (accept_fd == -1) {
+         if ((errno == EAGAIN) || (errno == EINTR)) {
+              ucs_warn("accept() failed: %m");
+         } else {
+              ucs_fatal("accept() failed with non-recoverable error\n");
+         }
+         return;
     }
 
     ucs_debug("sockcm_iface %p: accepted connection from %s at fd %d %m", iface,
