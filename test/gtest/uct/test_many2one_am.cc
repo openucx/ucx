@@ -79,7 +79,7 @@ public:
             ucs_atomic_add32(&m_am_count, 1);
             return (flags & UCT_CB_PARAM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
         }
-        mapped_buffer::pattern_check(data, length);
+        mem_buffer::pattern_check(data, length);
         ucs_atomic_add32(&m_am_count, 1);
         return UCS_OK;
     }
@@ -88,7 +88,7 @@ public:
         while (!m_backlog.empty()) {
             receive_desc_t *my_desc = m_backlog.back();
             m_backlog.pop_back();
-            mapped_buffer::pattern_check(my_desc + 1, my_desc->length);
+            mem_buffer::pattern_check(my_desc + 1, my_desc->length);
             if (my_desc->magic == MAGIC_DESC) {
                 uct_iface_release_desc(my_desc);
             } else {
