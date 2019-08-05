@@ -65,9 +65,9 @@ static ucs_status_t uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_rkey_unpack(uct_md_component_t *mdc,
-                                             const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                             void **handle_p)
+static ucs_status_t uct_gdr_copy_rkey_unpack(uct_component_t *component,
+                                             const void *rkey_buffer,
+                                             uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_gdr_copy_key_t *packed = (uct_gdr_copy_key_t *)rkey_buffer;
     uct_gdr_copy_key_t *key;
@@ -87,8 +87,8 @@ static ucs_status_t uct_gdr_copy_rkey_unpack(uct_md_component_t *mdc,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey,
-                                              void *handle)
+static ucs_status_t uct_gdr_copy_rkey_release(uct_component_t *component,
+                                              uct_rkey_t rkey, void *handle)
 {
     ucs_assert(NULL == handle);
     ucs_free((void *)rkey);

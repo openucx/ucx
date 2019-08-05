@@ -14,18 +14,18 @@
 #include <string.h>
 
 
-UCS_LIST_HEAD(uct_md_components_list);
+UCS_LIST_HEAD(uct_components_list);
 
 ucs_status_t uct_query_components(uct_component_h **components_p,
                                   unsigned *num_components_p)
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct);
     uct_component_h *components;
-    uct_md_component_t *mdc;
+    uct_component_t *component;
     size_t num_components;
 
     UCS_MODULE_FRAMEWORK_LOAD(uct, 0);
-    num_components = ucs_list_length(&uct_md_components_list);
+    num_components = ucs_list_length(&uct_components_list);
     components = ucs_malloc(num_components * sizeof(*components),
                             "uct_components");
     if (components == NULL) {
@@ -36,8 +36,8 @@ ucs_status_t uct_query_components(uct_component_h **components_p,
     *num_components_p = num_components;
     *components_p     = components;
 
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-       *(components++) = mdc;
+    ucs_list_for_each(component, &uct_components_list, list) {
+        *(components++) = component;
     }
 
     return UCS_OK;
@@ -51,25 +51,25 @@ void uct_release_component_list(uct_component_h *components)
 ucs_status_t uct_component_query(uct_component_h component,
                                  uct_component_attr_t *component_attr)
 {
-    uct_md_component_t *mdc = component;
     uct_md_resource_desc_t *resources = NULL;
     unsigned num_resources = 0;
     ucs_status_t status;
 
     if (component_attr->field_mask & (UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT|
                                       UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES)) {
-        status = mdc->query_md_resources(mdc, &resources, &num_resources);
+        status = component->query_md_resources(component, &resources,
+                                               &num_resources);
         if (status != UCS_OK) {
             return status;
         }
 
         ucs_assertv((num_resources == 0) || (resources != NULL),
-                    "component=%s", mdc->name);
+                    "component=%s", component->name);
     }
 
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_NAME) {
         ucs_snprintf_zero(component_attr->name, sizeof(component_attr->name),
-                          "%s", mdc->name);
+                          "%s", component->name);
     }
 
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT) {
