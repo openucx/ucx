@@ -84,6 +84,19 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
     uct_rdmacm_cm_destroy_id(self->id);
 }
 
+ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
+                                       uct_listener_attr_t *listener_attr)
+{
+    uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener,
+                                                            uct_rdmacm_listener_t);
+
+    if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_LISTEN_PORT) {
+        listener_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_listener->id));
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_DEFINE(uct_rdmacm_listener_t, uct_listener_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_listener_t, uct_listener_t,
                           uct_cm_h , const struct sockaddr *, socklen_t ,

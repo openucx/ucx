@@ -398,6 +398,23 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
     }
 }
 
+UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
+{
+    uct_listener_attr_t attr;
+    ucs_status_t status;
+
+    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
+
+    cm_start_listen();
+
+    attr.field_mask = UCT_LISTENER_ATTR_FIELD_LISTEN_PORT;
+    status = uct_listener_query(m_server->listener(), &attr);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(m_listen_addr.get_port(), htons(attr.listen_port));
+}
+
 UCS_TEST_P(test_uct_cm_sockaddr, listen_and_init_connect)
 {
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr

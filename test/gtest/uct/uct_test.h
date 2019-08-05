@@ -135,6 +135,8 @@ protected:
 
         const uct_cm_attr_t& cm_attr() const;
 
+        uct_listener_h listener() const;
+
         uct_iface_h iface() const;
 
         const uct_iface_attr& iface_attr() const;

@@ -682,6 +682,19 @@ enum uct_cm_attr_field {
 
 /**
  * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_listener_attr_t are
+ * present, for backward compatibility support.
+ */
+enum uct_listener_attr_field {
+    /** Enables @ref uct_listener_attr::listen_port */
+    UCT_LISTENER_ATTR_FIELD_LISTEN_PORT = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
  * @brief UCT listener created by @ref uct_listener_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_listener_params_t
@@ -1075,6 +1088,25 @@ struct uct_cm_attr {
      * establishment with sockaddr.
      */
     size_t      max_conn_priv;
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener attributes, capabilities and limitations.
+ */
+struct uct_listener_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_listener_attr_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t    field_mask;
+
+    /**
+     * Port number on which this listener is listening. (in host byte order)
+     */
+    int         listen_port;
 };
 
 
@@ -3017,6 +3049,8 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
  */
 void uct_listener_destroy(uct_listener_h listener);
 
+ucs_status_t uct_listener_query(uct_listener_h listener,
+                                uct_listener_attr_t *listener_attr);
 
 /**
  * @example uct_hello_world.c

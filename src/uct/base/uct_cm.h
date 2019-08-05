@@ -24,6 +24,8 @@ typedef struct uct_cm_ops {
                                     uct_listener_h *listener_p);
     ucs_status_t (*listener_reject)(uct_listener_h listener,
                                     uct_conn_request_h conn_request);
+    ucs_status_t (*listener_query) (uct_listener_h listener,
+                                    uct_listener_attr_t *listener_attr);
     void         (*listener_destroy)(uct_listener_h listener);
     ucs_status_t (*ep_create)(const uct_ep_params_t *params, uct_ep_h *ep_p);
 } uct_cm_ops_t;
