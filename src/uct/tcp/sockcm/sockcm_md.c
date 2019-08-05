@@ -83,6 +83,7 @@ uct_component_t uct_sockcm_component = {
         .table          = uct_sockcm_md_config_table,
         .size           = sizeof(uct_sockcm_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_sockcm_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_sockcm_component),
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_sockcm_component)
