@@ -14,6 +14,7 @@
  * UCP listener
  */
 typedef struct ucp_listener {
+    ucp_worker_h                   worker;
     ucp_worker_iface_t             *wifaces;  /* Array of UCT interfaces to listen on */
     uint8_t                        num_wifaces;
     ucp_listener_accept_callback_t accept_cb; /* Listen accept callback

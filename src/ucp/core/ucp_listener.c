@@ -67,10 +67,9 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     ucp_conn_request_h               conn_request = arg;
     ucp_listener_h                   listener     = conn_request->listener;
     const ucp_wireup_client_data_t   *client_data = &conn_request->client_data;
-    ucp_worker_h                     worker;
+    ucp_worker_h                     worker       = listener->worker;
     ucp_ep_h                         ep;
     ucs_status_t                     status;
-    ucp_worker_iface_t               *listening_wiface;
 
     ucs_trace_func("listener=%p", listener);
 
@@ -78,9 +77,6 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         listener->conn_cb(conn_request, listener->arg);
         return 1;
     }
-
-    listening_wiface = &listener->wifaces[conn_request->wiface_idx];
-    worker           = listening_wiface->worker;
 
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
@@ -103,7 +99,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         goto out;
     }
 
-    status = uct_iface_accept(listening_wiface->iface, conn_request->uct_req);
+    status = uct_iface_accept(conn_request->uct_iface, conn_request->uct_req);
     if (status != UCS_OK) {
         ucp_ep_destroy_internal(ep);
         goto out;
@@ -123,7 +119,7 @@ out:
     if (status != UCS_OK) {
         ucs_error("connection request failed on listener %p with status %s",
                   listener, ucs_status_string(status));
-        uct_iface_reject(listening_wiface->iface, conn_request->uct_req);
+        uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -147,7 +143,6 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucp_listener_h     listener = arg;
     uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
     ucp_conn_request_h conn_request;
-    int                i;
 
     ucs_trace("listener %p: got connection request", listener);
 
@@ -162,32 +157,19 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
         return;
     }
 
-    conn_request->listener = listener;
-    conn_request->uct_req  = uct_req;
+    conn_request->listener  = listener;
+    conn_request->uct_req   = uct_req;
+    conn_request->uct_iface = tl_iface;
     memcpy(&conn_request->client_data, conn_priv_data, length);
 
-    /* Find the iface the connection request was received on and save its
-     * index for future usage by the listener */
-    for (i = 0; i < listener->num_wifaces; i++) {
-        if (listener->wifaces[i].iface == tl_iface) {
-            conn_request->wiface_idx = i;
+    uct_worker_progress_register_safe(listener->worker->uct,
+                                      ucp_listener_conn_request_progress,
+                                      conn_request, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
 
-            uct_worker_progress_register_safe(listener->wifaces[i].worker->uct,
-                                              ucp_listener_conn_request_progress,
-                                              conn_request, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                              &prog_id);
-
-            /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
-             * that he can wake-up on this event */
-            ucp_worker_signal_internal(listener->wifaces[i].worker);
-            return;
-        }
-    }
-
-    ucs_error("connection request received on listener %p on an unknown interface",
-              listener);
-    uct_iface_reject(tl_iface, uct_req);
-    ucs_free(conn_request);
+    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
+     * that he can wake-up on this event */
+    ucp_worker_signal_internal(listener->worker);
 }
 
 ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *attr)
@@ -265,6 +247,8 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
+
+    listener->worker = worker;
 
     if (params->field_mask & UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER) {
         UCP_CHECK_PARAM_NON_NULL(params->accept_handler.cb, status,
@@ -392,12 +376,11 @@ void ucp_listener_destroy(ucp_listener_h listener)
 ucs_status_t ucp_listener_reject(ucp_listener_h listener,
                                  ucp_conn_request_h conn_request)
 {
-    ucp_worker_h worker = listener->wifaces[conn_request->wiface_idx].worker;
+    ucp_worker_h worker = listener->worker;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    uct_iface_reject(listener->wifaces[conn_request->wiface_idx].iface,
-                     conn_request->uct_req);
+    uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 
