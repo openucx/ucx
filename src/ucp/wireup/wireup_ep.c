@@ -257,28 +257,27 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
                           const ucp_ep_params_t *params, unsigned address_count,
                           const ucp_address_entry_t *address_list)
 {
-    ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
-    ucp_worker_h worker = ucp_ep->worker;
+    ucp_ep_h ucp_ep                      = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker                  = ucp_ep->worker;
+    ucp_context_h context                = worker->context;
+    ucp_wireup_select_info_t select_info = {0};
     uct_ep_params_t uct_ep_params;
     const ucp_address_entry_t *aux_addr;
     ucp_worker_iface_t *wiface;
-    ucp_rsc_index_t rsc_index;
-    unsigned aux_addr_index;
     ucs_status_t status;
 
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
     status = ucp_wireup_select_aux_transport(ucp_ep, params, address_list,
-                                             address_count, &rsc_index,
-                                             &aux_addr_index);
+                                             address_count, &select_info);
     if (status != UCS_OK) {
         return status;
     }
 
-    wireup_ep->aux_rsc_index = rsc_index;
-    aux_addr = &address_list[aux_addr_index];
-    wiface   = ucp_worker_iface(worker, rsc_index);
+    wireup_ep->aux_rsc_index = select_info.rsc_index;
+    aux_addr                 = &address_list[select_info.addr_index];
+    wiface                   = ucp_worker_iface(worker, select_info.rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
@@ -297,7 +296,8 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
               ucp_ep_peer_name(ucp_ep),
-              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
+              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[select_info.rsc_index].tl_rsc));
+
     return UCS_OK;
 }
 

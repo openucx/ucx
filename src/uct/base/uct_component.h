@@ -13,8 +13,8 @@
 #include <ucs/datastruct/list.h>
 
 
-typedef struct uct_md_component uct_component_t;
-typedef uct_component_t uct_md_component_t;
+/* Forward declaration */
+typedef struct uct_component uct_component_t;
 
 
 /**
@@ -124,7 +124,7 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 /**
  * Defines a UCT component
  */
-struct uct_md_component {
+struct uct_component {
     const char                              name[UCT_MD_COMPONENT_NAME_MAX]; /**< Component name */
     uct_component_query_md_resources_func_t query_md_resources; /**< Query memory domain resources method */
     uct_component_md_open_func_t            md_open;            /**< Memory domain open method */
@@ -135,8 +135,8 @@ struct uct_md_component {
     ucs_config_global_list_entry_t          md_config;          /**< MD configuration entry */
     ucs_list_link_t                         tl_list;            /**< List of transports */
     ucs_list_link_t                         list;               /**< Entry in global list of components */
-    uint64_t                                flags;              /**< Flags as defined
-                                                                     by UCT_COMPONENT_FLAG_xx */
+    uint64_t                                flags;              /**< Flags as defined by 
+                                                                     UCT_COMPONENT_FLAG_xx */
 };
 
 
@@ -148,8 +148,8 @@ struct uct_md_component {
  */
 #define UCT_COMPONENT_REGISTER(_component) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_md_components_list; \
-        ucs_list_add_tail(&uct_md_components_list, &(_component)->list); \
+        extern ucs_list_link_t uct_components_list; \
+        ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config);
 

@@ -81,7 +81,7 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
 {
     uct_tl_resource_desc_t *resources, *tl_resources, *tmp;
     unsigned i, num_resources, num_tl_resources;
-    uct_md_component_t *mdc = md->component;
+    uct_component_t *component = md->component;
     uct_md_registered_tl_t *tlr;
     uct_tl_component_t *tlc;
     ucs_status_t status;
@@ -89,7 +89,7 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
     resources     = NULL;
     num_resources = 0;
 
-    ucs_list_for_each(tlr, &mdc->tl_list, list) {
+    ucs_list_for_each(tlr, &component->tl_list, list) {
         tlc = tlr->tl;
 
         status = tlc->query_resources(md, &tl_resources, &num_tl_resources);
@@ -166,7 +166,7 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
     return UCS_OK;
 }
 
-ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
+ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p)
 {
@@ -212,13 +212,13 @@ err:
     return status;
 }
 
-uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
+uct_tl_component_t *uct_find_tl_on_md(uct_component_t *component,
                                       uint64_t md_flags,
                                       const char *tl_name)
 {
     uct_md_registered_tl_t *tlr;
 
-    ucs_list_for_each(tlr, &mdc->tl_list, list) {
+    ucs_list_for_each(tlr, &component->tl_list, list) {
         if (((tl_name != NULL) && !strcmp(tl_name, tlr->tl->name)) ||
             ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR))) {
             return tlr->tl;
@@ -353,15 +353,15 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
-    char mdc_name[UCT_MD_COMPONENT_NAME_MAX + 1];
+    char component_name[UCT_MD_COMPONENT_NAME_MAX + 1];
 
     if (ENABLE_DEBUG_DATA) {
         if (ENABLE_PARAMS_CHECK &&
             strncmp(rkey_buffer, component->name, UCT_MD_COMPONENT_NAME_MAX)) {
-            ucs_snprintf_zero(mdc_name, sizeof(mdc_name), "%s",
+            ucs_snprintf_zero(component_name, sizeof(component_name), "%s",
                               (const char*)rkey_buffer);
             ucs_error("invalid component for rkey unpack; "
-                      "expected: %s, actual: %s", mdc_name, component->name);
+                      "expected: %s, actual: %s", component_name, component->name);
             return UCS_ERR_INVALID_PARAM;
         }
 

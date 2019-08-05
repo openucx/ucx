@@ -12,7 +12,7 @@
 #include "gdrapi.h"
 
 
-extern uct_md_component_t uct_gdr_copy_component;
+extern uct_component_t uct_gdr_copy_component;
 
 
 /**

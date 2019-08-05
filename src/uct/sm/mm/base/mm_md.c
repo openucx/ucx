@@ -56,7 +56,7 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
 
     status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, flags,
                                              alloc_name, address_p, &seg->mmid,
-                                             &seg->path, &seg->is_hugetlb);
+                                             &seg->path);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -174,8 +174,9 @@ ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return UCS_OK;
 }
 
-ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
-                                uct_rkey_t *rkey_p, void **handle_p)
+ucs_status_t uct_mm_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p)
 {
     /* user is responsible to free rkey_buffer */
     const uct_mm_packed_rkey_t *rkey = rkey_buffer;
@@ -190,11 +191,11 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
         return UCS_ERR_NO_RESOURCE;
     }
 
-    status = uct_mm_mdc_mapper_ops(mdc)->attach(rkey->mmid, rkey->length,
-                                                (void *)rkey->owner_ptr, 
-                                                &mm_desc->address,
-                                                &mm_desc->cookie,
-                                                rkey->path);
+    status = uct_mm_mdc_mapper_ops(component)->attach(rkey->mmid, rkey->length,
+                                                      (void *)rkey->owner_ptr,
+                                                      &mm_desc->address,
+                                                      &mm_desc->cookie,
+                                                      rkey->path);
     if (status != UCS_OK) {
         ucs_free(mm_desc);
         return status;
@@ -209,7 +210,7 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
     return UCS_OK;
 }
 
-ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
+ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p)
 {
     uct_mm_remote_seg_t *mm_desc = handle;
@@ -223,12 +224,13 @@ ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
     return UCS_OK;
 }
 
-ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle)
+ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
+                                 void *handle)
 {
     ucs_status_t status;
     uct_mm_remote_seg_t *mm_desc = handle;
 
-    status = uct_mm_mdc_mapper_ops(mdc)->detach(mm_desc);
+    status = uct_mm_mdc_mapper_ops(component)->detach(mm_desc);
     ucs_free(mm_desc);
     return status;
 }
@@ -242,13 +244,6 @@ static void uct_mm_md_close(uct_md_h md)
     ucs_free(mm_md);
 }
 
-int uct_mm_is_hugetlb(uct_md_h md, uct_mem_h memh)
-{
-    uct_mm_seg_t *seg = memh;
-
-    return seg->is_hugetlb;
-}
-
 uct_md_ops_t uct_mm_md_ops = {
     .close              = uct_mm_md_close,
     .query              = uct_mm_md_query,
@@ -258,7 +253,6 @@ uct_md_ops_t uct_mm_md_ops = {
     .mem_dereg          = uct_mm_mem_dereg,
     .mkey_pack          = uct_mm_mkey_pack,
     .detect_memory_type = ucs_empty_function_return_unsupported,
-    .is_hugetlb         = uct_mm_is_hugetlb,
 };
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,

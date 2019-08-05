@@ -25,6 +25,8 @@ typedef struct ucs_spinlock {
 } ucs_spinlock_t;
 
 
+#define UCS_SPINLOCK_OWNER_NULL ((pthread_t)-1)
+
 static inline ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
 {
     int ret;
@@ -35,7 +37,7 @@ static inline ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
     }
 
     lock->count = 0;
-    lock->owner = 0xfffffffful;
+    lock->owner = UCS_SPINLOCK_OWNER_NULL;
 
     return UCS_OK;
 }
@@ -101,7 +103,7 @@ static inline void ucs_spin_unlock(ucs_spinlock_t *lock)
 {
     --lock->count;
     if (lock->count == 0) {
-        lock->owner = 0xfffffffful;
+        lock->owner = UCS_SPINLOCK_OWNER_NULL;
         pthread_spin_unlock(&lock->lock);
     }
 }

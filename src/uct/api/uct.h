@@ -269,6 +269,9 @@ typedef struct uct_component_attr {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Capability flags of @ref uct_component_h.
+ *
+ * The enumeration defines bit mask of @ref uct_component_h capabilities in
+ * @ref uct_component_attr_t::flags which is set by @ref uct_component_query.
  */
 enum {
     /**
@@ -1989,16 +1992,6 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  */
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
                                        ucs_memory_type_t *mem_type_p);
-
-
-/**
- * @ingroup UCT_MD
- * @brief Check if the memory allocated by the md was allocated with hugetlb.
- *
- * @param [in]  md           Memory domain to check
- * @param [in]  memh         Memory handle to the allocated memory
- */
-int uct_md_is_hugetlb(uct_md_h md, uct_mem_h memh);
 
 
 /**
