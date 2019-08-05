@@ -88,7 +88,7 @@ static inline void uct_tcp_ep_ctx_init(uct_tcp_ep_ctx_t *ctx)
 
 static inline void uct_tcp_ep_ctx_reset(uct_tcp_ep_ctx_t *ctx)
 {
-    ucs_mpool_put_inline(ctx->buf);
+    UCT_TL_IFACE_PUT_DESC(ctx->buf);
     uct_tcp_ep_ctx_init(ctx);
 }
 
@@ -697,11 +697,8 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
     if (!uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
         ucs_assert(ep->rx.buf == NULL);
 
-        ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
-        if (ucs_unlikely(ep->rx.buf == NULL)) {
-            ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
-            return 0;
-        }
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->rx_mpool,
+                                 ep->rx.buf, return 0);
 
         /* post the entire AM buffer */
         recv_length = iface->config.rx_seg_size;
@@ -782,10 +779,8 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
 
     ucs_assertv(ep->tx.buf == NULL, "ep=%p", ep);
 
-    ep->tx.buf = ucs_mpool_get_inline(&iface->tx_mpool);
-    if (ucs_unlikely(ep->tx.buf == NULL)) {
-        goto err_no_res;
-    }
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, &iface->tx_mpool,
+                             ep->tx.buf, goto err_no_res);
 
     *hdr          = ep->tx.buf;
     (*hdr)->am_id = am_id;
