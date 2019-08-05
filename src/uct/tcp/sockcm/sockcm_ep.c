@@ -101,7 +101,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
     memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
 
     if (UCS_OK != uct_sockcm_get_device_name(dev_name)) {
-        ucs_error("sockcm unable to find aux tl device");
+        ucs_error("sockcm unable to find a tcp-capable device");
         return UCS_ERR_IO_ERROR;
     }
     /* pack worker address into private data */

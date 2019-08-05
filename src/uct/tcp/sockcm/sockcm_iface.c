@@ -67,15 +67,19 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
     ucs_status_t status   = UCS_OK;
-    int          *fd      = conn_request;
     char         accept   = 0;
     ssize_t      sent_len = -1;
+    int          fd       = -1;
+    uct_sockcm_conn_param_t *conn_param;
+
+    conn_param = (uct_sockcm_conn_param_t *) conn_request;
+    fd         = conn_param->fd;
 
     /* Notify client of accept and close associated fd */
-    sent_len = send(*fd, (char *) &accept, sizeof(accept), 0);
+    sent_len = send(fd, (char *) &accept, sizeof(accept), 0);
 
     if (sent_len < 0) {
-        ucs_error("sockcm_listener: unable to send accept on %d %m", *fd);
+        ucs_error("sockcm_listener: unable to send accept on %d %m", fd);
         status = UCS_ERR_IO_ERROR;
     } else {
         ucs_debug("sockcm_listener: sent accept");
@@ -90,15 +94,19 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
                                             uct_conn_request_h conn_request)
 {
     ucs_status_t status   = UCS_OK;
-    int          *fd      = conn_request;
     char         reject = 1;
     ssize_t      sent_len = -1;
+    int          fd       = -1;
+    uct_sockcm_conn_param_t *conn_param;
+
+    conn_param = (uct_sockcm_conn_param_t *) conn_request;
+    fd         = conn_param->fd;
 
     /* Notify client of rejection and close associated fd */
-    sent_len = send(*fd, (char *) &reject, sizeof(reject), 0);
+    sent_len = send(fd, (char *) &reject, sizeof(reject), 0);
 
     if (sent_len < 0) {
-        ucs_error("sockcm_listener: unable to send reject on %d %m", *fd);
+        ucs_error("sockcm_listener: unable to send reject on %d %m", fd);
         status = UCS_ERR_IO_ERROR;
     } else {
         ucs_debug("sockcm_listener: sent reject");
@@ -178,13 +186,14 @@ void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
 static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
                                              uct_sockcm_conn_param_t conn_param)
 {
-    int *sock_fd;
-    sock_fd = ucs_malloc(sizeof(int), "sock_fd");
+    uct_sockcm_conn_param_t *conn_param_copy = NULL;
+    conn_param_copy = ucs_malloc(sizeof(uct_sockcm_conn_param_t), "conn_param_copy");
+    ucs_assert(conn_param_copy != NULL);
 
-    *sock_fd = conn_param.fd;
-    ucs_debug("process conn req: accepted fd %d %m", *sock_fd);
+    memcpy(conn_param_copy, &conn_param, sizeof(uct_sockcm_conn_param_t));
+    ucs_debug("process conn req: accepted fd %d %m", conn_param_copy->fd);
 
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, sock_fd,
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, conn_param_copy,
 			   conn_param.private_data, conn_param.length);
 }
 
