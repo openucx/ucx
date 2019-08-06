@@ -398,8 +398,8 @@ int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
     case AF_INET:
         return UCS_SOCKET_INET_ADDR(addr).s_addr == INADDR_ANY;
     case AF_INET6:
-        return !memcmp(&(UCS_SOCKET_INET_ADDR(addr)), &in6addr_any,
-                       sizeof(UCS_SOCKET_INET_ADDR(addr)));
+        return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_any,
+                       sizeof(UCS_SOCKET_INET6_ADDR(addr)));
     default:
         ucs_debug("Invalid address family: %d", addr->sa_family);
     }
