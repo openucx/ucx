@@ -329,4 +329,10 @@ ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
     return worker->context->config.cm_cmpts_bitmap != 0;
 }
 
+static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
+ucp_worker_get_cm_num(const ucp_worker_h worker)
+{
+    return ucs_popcount(worker->context->config.cm_cmpts_bitmap);
+}
+
 #endif

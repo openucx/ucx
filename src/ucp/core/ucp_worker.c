@@ -1171,8 +1171,7 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 
 static void ucp_worker_close_cms(ucp_worker_h worker)
 {
-    const uint64_t cm_cmpts_bitmap = worker->context->config.cm_cmpts_bitmap;
-    const ucp_rsc_index_t num_cms  = ucs_popcount(cm_cmpts_bitmap);
+    const ucp_rsc_index_t num_cms = ucp_worker_get_cm_num(worker);
     ucp_rsc_index_t i;
 
     for (i = 0; (i < num_cms) && (worker->cms[i] != NULL); ++i) {
@@ -1196,7 +1195,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    worker->cms = ucs_calloc(ucs_popcount(context->config.cm_cmpts_bitmap),
+    worker->cms = ucs_calloc(ucp_worker_get_cm_num(worker),
                              sizeof(*worker->cms), "ucp cms");
     if (worker->cms == NULL) {
         ucs_error("can't allocate CMs array");

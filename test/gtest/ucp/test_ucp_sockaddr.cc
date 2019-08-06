@@ -461,9 +461,9 @@ UCS_TEST_P(test_ucp_sockaddr, query_listener) {
     EXPECT_EQ(test_addr.sin_port, htons(listener_attr.port));
 
     /* Make sure that all the listening sockaddr ifaces are listening on the same port */
-    for (i = 0; i < receiver().listenerh()->num_wifaces; i++) {
+    for (i = 0; i < receiver().listenerh()->ifaces.num_wifaces; i++) {
         EXPECT_EQ(test_addr.sin_port,
-                  htons(receiver().listenerh()->wifaces[i].attr.listen_port));
+                  htons(receiver().listenerh()->ifaces.wifaces[i].attr.listen_port));
     }
 }
 
