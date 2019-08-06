@@ -148,7 +148,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
         goto err_free_priv_data;
     }
 
-    ucs_assert(priv_data_ret <= UINT8_MAX);
+    ucs_assert_always(priv_data_ret <= UINT8_MAX);
     hdr->length = (uint8_t)priv_data_ret;
     hdr->status = UCS_OK;
 

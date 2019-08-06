@@ -806,7 +806,7 @@ uct_ep_h uct_test::entity::ep(unsigned index) const {
     return m_eps.at(index);
 }
 
-unsigned uct_test::entity::num_eps() const {
+size_t uct_test::entity::num_eps() const {
     return m_eps.size();
 }
 

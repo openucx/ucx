@@ -338,10 +338,7 @@ protected:
 
 public:
     test_uct_cm_sockaddr() : m_cm_state(0), m_server(NULL), m_client(NULL),
-                             server_recv_req_cnt(0), client_connect_cb_cnt(0),
-                             server_connect_cb_cnt(0),
-                             server_disconnect_cnt(0), client_disconnect_cnt(0),
-                             reject_conn_request(false) {
+                             m_reject_conn_request(false) {
     }
 
     void init() {
@@ -400,10 +397,9 @@ protected:
         EXPECT_EQ(entity::client_priv_data,
                   std::string(static_cast<const char *>(remote_data->conn_priv_data)));
 
-        self->server_recv_req_cnt++;
         self->m_cm_state |= TEST_CM_STATE_CONNECT_REQUESTED;
 
-        if (!self->reject_conn_request) {
+        if (!self->m_reject_conn_request) {
             self->m_server->accept(conn_request, server_connect_cb,
                                    server_disconnect_cb, self);
         } else {
@@ -419,7 +415,6 @@ protected:
 
          self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
          self->m_cm_state |= TEST_CM_STATE_SERVER_CONNECTED;
-         self->server_connect_cb_cnt++;
     }
 
     static void
@@ -429,7 +424,6 @@ protected:
         self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         self->m_server->disconnect(ep);
         self->m_cm_state |= TEST_CM_STATE_SERVER_DISCONNECTED;
-        self->server_disconnect_cnt++;
     }
 
     static void
@@ -445,7 +439,6 @@ protected:
             EXPECT_EQ(entity::server_priv_data.length() + 1, remote_data->conn_priv_data_length);
             EXPECT_EQ(entity::server_priv_data,
                       std::string(static_cast<const char *>(remote_data->conn_priv_data)));
-            self->client_connect_cb_cnt++;
             self->m_cm_state |= TEST_CM_STATE_CLIENT_CONNECTED;
         }
 
@@ -457,7 +450,6 @@ protected:
 
         self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         self->m_cm_state |= TEST_CM_STATE_CLIENT_DISCONNECTED;
-        self->client_disconnect_cnt++;
     }
 
     void cm_disconnect(entity *client) {
@@ -479,10 +471,7 @@ protected:
     uint64_t               m_cm_state;
     entity                 *m_server;
     entity                 *m_client;
-    volatile int           server_recv_req_cnt, client_connect_cb_cnt,
-                           server_connect_cb_cnt;
-    volatile int           server_disconnect_cnt, client_disconnect_cnt;
-    bool                   reject_conn_request;
+    bool                   m_reject_conn_request;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
@@ -522,7 +511,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
-    reject_conn_request = true;
+    m_reject_conn_request = true;
 
     cm_listen_and_connect();
 
@@ -530,6 +519,9 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
                                TEST_CM_STATE_CLIENT_GOT_REJECT);
     EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_REJECTED |
                                                 TEST_CM_STATE_CLIENT_GOT_REJECT)));
+
+    EXPECT_FALSE((m_cm_state &
+                (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED)));
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)

@@ -147,7 +147,7 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
-        unsigned num_eps() const;
+        size_t num_eps() const;
 
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
