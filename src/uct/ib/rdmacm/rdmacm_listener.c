@@ -90,8 +90,9 @@ ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
     uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener,
                                                             uct_rdmacm_listener_t);
 
-    if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_LISTEN_PORT) {
-        listener_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_listener->id));
+    if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_SOCKADDR) {
+        listener_attr->sockaddr.addr    = rdma_get_local_addr(rdmacm_listener->id);
+        listener_attr->sockaddr.addrlen = sizeof(*listener_attr->sockaddr.addr);
     }
 
     return UCS_OK;

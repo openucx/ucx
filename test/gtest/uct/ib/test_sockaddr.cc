@@ -402,17 +402,29 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
 {
     uct_listener_attr_t attr;
     ucs_status_t status;
+    uint16_t port;
+    char m_listener_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char attr_addr_ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     UCS_TEST_MESSAGE << "Testing " << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     cm_start_listen();
 
-    attr.field_mask = UCT_LISTENER_ATTR_FIELD_LISTEN_PORT;
+    attr.field_mask = UCT_LISTENER_ATTR_FIELD_SOCKADDR;
     status = uct_listener_query(m_server->listener(), &attr);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(m_listen_addr.get_port(), htons(attr.listen_port));
+    ucs_sockaddr_str(&m_listen_addr.get_sock_addr(), m_listener_ip_port_str,
+                     UCS_SOCKADDR_STRING_LEN) ,
+    ucs_sockaddr_str(attr.sockaddr.addr, attr_addr_ip_port_str,
+                     UCS_SOCKADDR_STRING_LEN);
+    EXPECT_EQ(strcmp(m_listener_ip_port_str, attr_addr_ip_port_str), 0);
+
+    status = ucs_sockaddr_get_port(attr.sockaddr.addr, &port);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(m_listen_addr.get_port(), htons(port));
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, listen_and_init_connect)

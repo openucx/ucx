@@ -708,8 +708,8 @@ enum uct_cm_attr_field {
  * present, for backward compatibility support.
  */
 enum uct_listener_attr_field {
-    /** Enables @ref uct_listener_attr::listen_port */
-    UCT_LISTENER_ATTR_FIELD_LISTEN_PORT = UCS_BIT(0)
+    /** Enables @ref uct_listener_attr::sockaddr */
+    UCT_LISTENER_ATTR_FIELD_SOCKADDR = UCS_BIT(0)
 };
 
 
@@ -1121,12 +1121,12 @@ struct uct_listener_attr {
      * @ref uct_listener_attr_field. Fields not specified by this mask
      * will be ignored.
      */
-    uint64_t    field_mask;
+    uint64_t        field_mask;
 
     /**
-     * Port number on which this listener is listening. (in host byte order)
+     * Sockaddr on which this listener is listening.
      */
-    int         listen_port;
+    ucs_sock_addr_t sockaddr;
 };
 
 
