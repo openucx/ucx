@@ -387,7 +387,7 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
     return UCS_OK;
 }
 
-static ucs_status_t uct_self_md_rkey_unpack(uct_md_component_t *mdc,
+static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
                                             const void *rkey_buffer, uct_rkey_t *rkey_p,
                                             void **handle_p)
 {
@@ -409,6 +409,7 @@ static uct_component_t uct_self_component = {
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_SELF_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_self_component);

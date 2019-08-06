@@ -80,6 +80,7 @@ typedef struct {
     double          bw_mbits;
     double          bw_gbits;
     double          bw_tbits;
+    double          bw_auto;
 
     ucs_config_bw_spec_t can_pci_bw; /* CAN-bus */
 } car_opts_t;
@@ -184,6 +185,9 @@ ucs_config_field_t car_opts_table[] = {
 
   {"BW_TBITS", "1024Tbs", "Bandwidth in tbits",
    ucs_offsetof(car_opts_t, bw_tbits), UCS_CONFIG_TYPE_BW},
+
+  {"BW_AUTO", "auto", "Auto bandwidth value",
+   ucs_offsetof(car_opts_t, bw_auto), UCS_CONFIG_TYPE_BW},
 
   {"CAN_BUS_BW", "mlx5_0:1024Tbs", "Bandwidth in tbits of CAN-bus",
    ucs_offsetof(car_opts_t, can_pci_bw), UCS_CONFIG_TYPE_BW_SPEC},
@@ -370,6 +374,7 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ(UCS_MBYTE * 128.0, opts->bw_mbits);
     EXPECT_EQ(UCS_GBYTE * 128.0, opts->bw_gbits);
     EXPECT_EQ(UCS_TBYTE * 128.0, opts->bw_tbits);
+    EXPECT_EQ(UCS_BANDWIDTH_AUTO, opts->bw_auto);
 
     EXPECT_EQ(UCS_TBYTE * 128.0, opts->can_pci_bw.bw);
     EXPECT_EQ(std::string("mlx5_0"), opts->can_pci_bw.name);
@@ -500,14 +505,14 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 24u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 25u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN),
-                           31u);
+                           32u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
@@ -515,12 +520,12 @@ UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN |
                             UCS_CONFIG_PRINT_DOC),
-                           31u);
+                           32u);
 
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN |
                             UCS_CONFIG_PRINT_DOC),
-                           31u, "TEST_");
+                           32u, "TEST_");
 }
 
 UCS_TEST_F(test_config, deprecated) {

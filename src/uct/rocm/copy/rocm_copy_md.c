@@ -46,17 +46,17 @@ static ucs_status_t uct_rocm_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_rkey_unpack(uct_md_component_t *mdc,
-                                              const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                              void **handle_p)
+static ucs_status_t uct_rocm_copy_rkey_unpack(uct_component_t *component,
+                                              const void *rkey_buffer,
+                                              uct_rkey_t *rkey_p, void **handle_p)
 {
     *rkey_p   = 0xdeadbeef;
     *handle_p = NULL;
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey,
-                                               void *handle)
+static ucs_status_t uct_rocm_copy_rkey_release(uct_component_t *component,
+                                               uct_rkey_t rkey, void *handle)
 {
     return UCS_OK;
 }
@@ -146,7 +146,8 @@ uct_component_t uct_rocm_copy_component = {
         .table          = uct_rocm_copy_md_config_table,
         .size           = sizeof(uct_rocm_copy_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_copy_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_copy_component),
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_copy_component);
 

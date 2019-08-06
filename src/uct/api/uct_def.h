@@ -68,7 +68,7 @@ enum uct_cb_param_flags {
  * @addtogroup UCT_RESOURCE
  * @{
  */
-typedef struct uct_md_component    *uct_component_h;
+typedef struct uct_component       *uct_component_h;
 typedef struct uct_iface           *uct_iface_h;
 typedef struct uct_iface_config    uct_iface_config_t;
 typedef struct uct_md_config       uct_md_config_t;

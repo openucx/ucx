@@ -362,10 +362,7 @@ typedef struct ucp_wireup_client_data {
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
     uct_conn_request_h          uct_req;
-    uint8_t                     wiface_idx;  /**< Index of the listening wiface in
-                                                  the array of listening wifaces,
-                                                  on which the connection request
-                                                  was received on */
+    uct_iface_h                 uct_iface;
     ucp_wireup_client_data_t    client_data;
     /* packed worker address follows */
 } ucp_conn_request_t;

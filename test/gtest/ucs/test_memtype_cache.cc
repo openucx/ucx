@@ -5,32 +5,26 @@
  */
 
 #include <common/test.h>
+#include <common/mem_buffer.h>
+
 #include <ucs/sys/sys.h>
-#if HAVE_CUDA
-#include <cuda.h>
-#include <cuda_runtime.h>
-#endif
-extern "C" {
 #include <ucs/memory/memtype_cache.h>
-}
 
 
-class test_memtype_cache : public ucs::test {
+class test_memtype_cache : public ucs::test_with_param<ucs_memory_type_t> {
 protected:
     test_memtype_cache() : m_memtype_cache(NULL) {
     }
 
     virtual void init() {
-        ucs_status_t status;
-
-        ucs::test::init();
-        status = ucs_memtype_cache_create(&m_memtype_cache);
+        ucs::test_with_param<ucs_memory_type_t>::init();
+        ucs_status_t status = ucs_memtype_cache_create(&m_memtype_cache);
         ASSERT_UCS_OK(status);
     }
 
     virtual void cleanup() {
         ucs_memtype_cache_destroy(m_memtype_cache);
-        ucs::test::cleanup();
+        ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
 
     void test_lookup_found(void *ptr, size_t size) {
@@ -38,8 +32,7 @@ protected:
         ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
                                                        size, &mem_type);
         EXPECT_UCS_OK(status);
-        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_type)
-              << "ptr=" << ptr << " size=" << size;
+        EXPECT_EQ(GetParam(), mem_type) << "ptr=" << ptr << " size=" << size;
     }
 
     void test_lookup_notfound(void *ptr, size_t size) {
@@ -50,42 +43,43 @@ protected:
         EXPECT_TRUE((status == UCS_ERR_NO_ELEM) ||
                     ((status == UCS_OK) && (mem_type == UCS_MEMORY_TYPE_LAST)))
               << "ptr=" << ptr << " size=" << size << ": "
-              << ucs_status_string(status);
+              << ucs_status_string(status)
+              << " memtype=" << mem_buffer::mem_type_name(mem_type);
     }
 
 private:
     ucs_memtype_cache_t *m_memtype_cache;
 };
 
-#if HAVE_CUDA
-UCS_TEST_SKIP_COND_F(test_memtype_cache, basic_cuda,
-                     /* skip if unable to set CUDA device */
-                     (cudaSetDevice(0) != cudaSuccess)) {
+UCS_TEST_P(test_memtype_cache, basic) {
     const size_t size = 64;
-    cudaError_t cerr;
     void *ptr;
 
-    cerr = cudaMalloc(&ptr, size);
-    EXPECT_EQ(cerr, cudaSuccess);
+    {
+        mem_buffer b(size, GetParam());
 
-    test_lookup_found(ptr, size);
-    test_lookup_found(ptr, size / 2);
-    test_lookup_found((char*)ptr + 1, 7);
-    test_lookup_found(ptr, 1);
-    test_lookup_found((char*)ptr + size - 1, 1);
-    test_lookup_found(ptr, 0);
+        if (GetParam() != UCS_MEMORY_TYPE_HOST) {
+            test_lookup_found(b.ptr(), size);
+            test_lookup_found(b.ptr(), size / 2);
+            test_lookup_found((char*)b.ptr() + 1, 7);
+            test_lookup_found(b.ptr(), 1);
+            test_lookup_found((char*)b.ptr() + size - 1, 1);
+            test_lookup_found(b.ptr(), 0);
+        }
 
-    /* memtype cache is page-aligned, so need to step by page size
-     * to make something not found
-     */
-    test_lookup_notfound(ptr, size + ucs_get_page_size());
-    test_lookup_notfound((char*)ptr + size + ucs_get_page_size(), 1);
+        /* memtype cache is page-aligned, so need to step by page size
+         * to make something not found
+         */
+        test_lookup_notfound(b.ptr(), size + ucs_get_page_size());
+        test_lookup_notfound((char*)b.ptr() + size + ucs_get_page_size(), 1);
 
-    cerr = cudaFree(ptr);
-    EXPECT_EQ(cerr, cudaSuccess);
+        ptr = b.ptr();
+    }
 
     /* buffer is released */
     test_lookup_notfound(ptr, size);
     test_lookup_notfound(ptr, 1);
 }
-#endif
+
+INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache,
+                        ::testing::ValuesIn(mem_buffer::supported_mem_types()));
