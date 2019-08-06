@@ -197,7 +197,6 @@ static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
 			   conn_param.private_data, conn_param.length);
 }
 
-
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
 {
     ssize_t recv_len          = 0;

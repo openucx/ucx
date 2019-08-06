@@ -599,62 +599,45 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
                                                uct_tl_resource_desc_t **resource_p,
                                                unsigned *num_resources_p)
 {
-    uct_tl_resource_desc_t *resources, *tmp, *resource;
-    static const char *netdev_dir = "/sys/class/net";
-    struct dirent *entry;
-    unsigned num_resources;
+    uct_tl_resource_desc_t *resources, *resource, tmp_rsc;
+    unsigned num_resources, i;
+    char *dev_names;
+    char *tmp_dev_name;
     ucs_status_t status;
-    DIR *dir;
-
-    dir = opendir(netdev_dir);
-    if (dir == NULL) {
-        ucs_error("opendir(%s) failed: %m", netdev_dir);
-        status = UCS_ERR_IO_ERROR;
-        goto out;
-    }
 
     resources     = NULL;
     num_resources = 0;
-    for (;;) {
-        errno = 0;
-        entry = readdir(dir);
-        if (entry == NULL) {
-            if (errno != 0) {
-                ucs_error("readdir(%s) failed: %m", netdev_dir);
-                ucs_free(resources);
-                status = UCS_ERR_IO_ERROR;
-                goto out_closedir;
-            }
-            break; /* no more items */
-        }
 
-        if (!ucs_netif_is_active(entry->d_name)) {
-            continue;
-        }
+    status = ucs_sockaddr_get_dev_names(&num_resources, &dev_names, 
+                                        sizeof(tmp_rsc.dev_name));
+    if (UCS_OK != status) {
+        ucs_error("sockcm unable to find a sockets-capable device");
+        goto out;
+    }
 
-        tmp = ucs_realloc(resources, sizeof(*resources) * (num_resources + 1),
-                          "resource desc");
-        if (tmp == NULL) {
-            ucs_free(resources);
-            status = UCS_ERR_NO_MEMORY;
-            goto out_closedir;
-        }
-        resources = tmp;
+    resources = ucs_malloc(sizeof(*resources) * num_resources, "resource desc");
+    if (resources == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
 
-        resource = &resources[num_resources++];
+    for (i = 0; i < num_resources; i++) {
+
+        resource = &resources[i];
         ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name),
                           "%s", UCT_TCP_NAME);
+        tmp_dev_name = (char *) dev_names + (i * sizeof(resource->dev_name));
         ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name),
-                          "%s", entry->d_name);
+                          "%s", tmp_dev_name);
         resource->dev_type = UCT_DEVICE_TYPE_NET;
     }
+    
+    ucs_free(dev_names);
 
     *num_resources_p = num_resources;
     *resource_p      = resources;
     status           = UCS_OK;
 
-out_closedir:
-    closedir(dir);
 out:
     return status;
 }
