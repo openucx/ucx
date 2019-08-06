@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -14,27 +14,28 @@
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_in)] = {};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_in)]   = {};
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_out)] = {};
-    struct mlx5dv_pd dvpd = {};
-    struct mlx5dv_cq dvcq = {};
+    struct mlx5dv_pd dvpd   = {};
+    struct mlx5dv_cq dvcq   = {};
     struct mlx5dv_srq dvsrq = {};
-    struct mlx5dv_obj dv = {};
+    struct mlx5dv_obj dv    = {};
     int dvflags;
     void *dctc;
 
-    dvflags = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
+    dvflags             = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
+    dv.pd.in            = uct_ib_iface_md(&iface->super.super.super)->pd;
+    dv.pd.out           = &dvpd;
+    dv.cq.in            = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    dv.cq.out           = &dvcq;
+
     if (!UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        dvflags    |= MLX5DV_OBJ_SRQ;
+        dvflags        |= MLX5DV_OBJ_SRQ;
+        dv.srq.in       = iface->super.rx.srq.verbs.srq;
+        dv.srq.out      = &dvsrq;
+        dvsrq.comp_mask = MLX5DV_SRQ_MASK_SRQN;
     }
 
-    dv.pd.in        = uct_ib_iface_md(&iface->super.super.super)->pd;
-    dv.cq.in        = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    dv.srq.in       = iface->super.rx.srq.verbs.srq;
-    dv.pd.out       = &dvpd;
-    dv.cq.out       = &dvcq;
-    dv.srq.out      = &dvsrq;
-    dvsrq.comp_mask = MLX5DV_SRQ_MASK_SRQN;
     mlx5dv_init_obj(&dv, dvflags);
 
     UCT_IB_MLX5DV_SET(create_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_DCT);
@@ -52,7 +53,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, rre, 1);
     UCT_IB_MLX5DV_SET(dctc, dctc, rwe, 1);
     UCT_IB_MLX5DV_SET(dctc, dctc, rae, 1);
-    UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, 2);
+    UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, UCT_IB_MLX5_QPC_CS_RES(iface->super.super.super.config.max_inl_resp));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, 3);
     UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, iface->super.super.super.pkey_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->super.super.super.config.port_num);
@@ -78,7 +79,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
 {
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_in)] = {};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_in)]   = {};
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_out)] = {};
     int ret;
 

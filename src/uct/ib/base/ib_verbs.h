@@ -264,23 +264,6 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
 #endif
 
-#if IBV_HW_TM
-#  if HAVE_INFINIBAND_TM_TYPES_H
-#    include <infiniband/tm_types.h>
-#    define IBV_TM_CAP_DC                   UCS_BIT(16)
-#  else
-#    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
-#    if IBV_HW_TM_DC
-#      define IBV_TM_CAP_DC                 IBV_EXP_TM_CAP_DC
-#    else
-#      define IBV_TM_CAP_DC                 0
-#    endif
-#  endif
-#else
-#  define IBV_TM_CAP_RC                     0
-#  define IBV_TM_CAP_DC                     0
-#endif
-
 
 typedef uint8_t uct_ib_uint24_t[3];
 

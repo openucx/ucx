@@ -379,6 +379,12 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
     }
 #endif
 
+#if IBV_HW_TM_DC
+    if (dev->dev_attr.tm_caps.capability_flags & IBV_EXP_TM_CAP_DC) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DC_TM;
+    }
+#endif
+
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr))

@@ -128,6 +128,7 @@ struct mlx5_grh_av {
 enum {
     UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0),   /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_DEVX     = UCS_BIT(1),   /* Device supports DEVX */
+    UCT_IB_MLX5_MD_FLAG_DC_TM    = UCS_BIT(2),   /* Device supports TM DC */
 };
 
 /**
@@ -489,11 +490,6 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count);
 
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
-
-/**
- * Portable DC TM wrapper
- */
-uint32_t uct_ib_mlx5_tm_flags(uct_ib_device_t *dev);
 
 /**
  * DEVX UAR API

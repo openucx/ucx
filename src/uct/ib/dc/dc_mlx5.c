@@ -517,8 +517,6 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
-
-    iface->rx.dct.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 }
 #endif
 
@@ -531,7 +529,7 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     }
 }
 
-#if IBV_EXP_HW_TM_DC || HAVE_DC_EXP
+#if HAVE_DC_EXP
 static uint64_t
 uct_dc_mlx5_iface_ooo_flag(uct_dc_mlx5_iface_t *iface, uint64_t flag,
                            char *str, uint32_t qp_num)
@@ -555,10 +553,9 @@ static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
-    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(rc_config,
-                                                        uct_dc_mlx5_iface_config_t);
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_md_t *md                 = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
+    uct_dc_mlx5_iface_config_t *config   = ucs_derived_of(rc_config, uct_dc_mlx5_iface_config_t);
+    uct_dc_mlx5_iface_t *iface           = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
     struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
@@ -732,10 +729,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
 
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
 {
-    if (iface->rx.dct.verbs.dct != NULL) {
-        ibv_exp_destroy_dct(iface->rx.dct.verbs.dct);
-        iface->rx.dct.verbs.dct = NULL;
-    }
+    ibv_exp_destroy_dct(iface->rx.dct.verbs.dct);
 }
 #endif
 
@@ -1119,12 +1113,13 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .fc_handler               = uct_dc_mlx5_iface_fc_handler,
 };
 
-static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_dc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_dc_mlx5_iface_config_t);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     ucs_trace_func("");
@@ -1141,11 +1136,14 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         return UCS_ERR_INVALID_PARAM;
     }
 
-    init_attr.tm_cap_bit  = IBV_TM_CAP_DC;
     init_attr.qp_type     = UCT_IB_QPT_DCI;
     init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.fc_req_size = sizeof(uct_dc_fc_request_t);
     init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
+        init_attr.flags  |= UCT_IB_TM_ENABLE;
+    }
 
     /* driver will round up to pow of 2 if needed */
     init_attr.tx_cq_len   = config->super.super.tx.queue_len *
@@ -1160,10 +1158,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_ops,
-                              md, worker, params, &config->super,
+                              tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 
-    uct_dc_mlx5_iface_init_version(self, md);
+    uct_dc_mlx5_iface_init_version(self, tl_md);
 
     self->tx.ndci                          = config->ndci;
     self->tx.policy                        = config->tx_policy;

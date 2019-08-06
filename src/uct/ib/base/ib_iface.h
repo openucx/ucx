@@ -123,6 +123,7 @@ typedef struct uct_ib_qp_attr {
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
     unsigned                    max_inl_recv;
+    unsigned                    max_inl_resp;
     unsigned                    suppress_log:1;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     struct ibv_exp_qp_init_attr ibv;
@@ -200,6 +201,7 @@ typedef struct uct_ib_fence_info {
 
 enum {
     UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
+    UCT_IB_TM_ENABLE                 = UCS_BIT(1),
 };
 
 typedef struct uct_ib_iface_init_attr {
@@ -208,7 +210,6 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    tx_cq_len;       /* Send CQ length */
     unsigned    rx_cq_len;       /* Receive CQ length */
     size_t      seg_size;        /* Transport segment size */
-    int         tm_cap_bit;      /* Required HW tag-matching capabilities */
     unsigned    fc_req_size;     /* Flow control request size */
     int         qp_type;         /* IB QP type */
     int         flags;           /* Various flags (see enum) */

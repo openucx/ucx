@@ -23,9 +23,12 @@
 #endif
 
 #if IBV_HW_TM
-#  if !HAVE_INFINIBAND_TM_TYPES_H
+#  if HAVE_INFINIBAND_TM_TYPES_H
+#    include <infiniband/tm_types.h>
+#  else
 #    define ibv_tmh                         ibv_exp_tmh
 #    define ibv_rvh                         ibv_exp_tmh_rvh
+#    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
 #    define IBV_TMH_EAGER                   IBV_EXP_TMH_EAGER
 #    define IBV_TMH_RNDV                    IBV_EXP_TMH_RNDV
 #    define IBV_TMH_FIN                     IBV_EXP_TMH_FIN
@@ -33,7 +36,14 @@
 #  endif
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
 #else
+#  define IBV_TM_CAP_RC                     0
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
+#endif
+
+#if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+#  define IBV_DEVICE_TM_FLAGS(_dev)         IBV_DEVICE_TM_CAPS(_dev, flags)
+#else
+#  define IBV_DEVICE_TM_FLAGS(_dev)         IBV_DEVICE_TM_CAPS(_dev, capability_flags)
 #endif
 
 #define IBV_DEVICE_MAX_UNEXP_COUNT          UCS_BIT(14)

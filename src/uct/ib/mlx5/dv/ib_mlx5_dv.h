@@ -11,7 +11,6 @@
 #  error "Never include <uct/ib/mlx5/ib_mlx5_dv.h> directly; use <uct/ib/mlx5/ib_mlx5.h> instead."
 #endif
 
-#include <uct/ib/base/ib_device.h>
 #include <ucs/type/status.h>
 #include <infiniband/verbs.h>
 

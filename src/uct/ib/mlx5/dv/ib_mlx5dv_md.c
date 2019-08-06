@@ -397,7 +397,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC_TM;
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DC_TM;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, compact_address_vector)) {

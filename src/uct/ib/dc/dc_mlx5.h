@@ -19,23 +19,21 @@
 /*
  * HW tag matching
  */
-#if IBV_HW_TM
+#if IBV_HW_TM_DC
 #  if HAVE_INFINIBAND_TM_TYPES_H
+/* upstream tm_types.h doesn't provide RAVH header */
 struct ibv_ravh {
     uint32_t    sl_dct;
     uint32_t    reserved;    /* must be zero */
     uint64_t    dc_access_key;
 };
 #  else
-#    define ibv_ravh                        ibv_exp_tmh_ravh
+#    define ibv_ravh            ibv_exp_tmh_ravh
 #  endif
-#endif
-
-#if IBV_HW_TM_DC
-#  define UCT_DC_RNDV_HDR_LEN               (sizeof(struct ibv_rvh) + \
-                                             sizeof(struct ibv_ravh))
+#  define UCT_DC_RNDV_HDR_LEN   (sizeof(struct ibv_rvh) + \
+                                 sizeof(struct ibv_ravh))
 #else
-#  define UCT_DC_RNDV_HDR_LEN               0
+#  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
 #define UCT_DC_MLX5_IFACE_MAX_DCIS   16
