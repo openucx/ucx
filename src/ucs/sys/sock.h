@@ -341,6 +341,7 @@ int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
  *                                 user is responsible to free
  * @param [in]     dev_name_len    Length of each of the device names
  *
+ * @return UCS_OK on success or appropriate error on failure.
  */
 ucs_status_t ucs_sockaddr_get_dev_names(unsigned *num_resources_p, 
                                         char **dev_names_pp, 

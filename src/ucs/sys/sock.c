@@ -394,16 +394,12 @@ ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port)
 
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
 {
-    struct sockaddr_in6 *addr_in6;
-    struct sockaddr_in *addr_in;
-
     switch (addr->sa_family) {
     case AF_INET:
-        addr_in = (struct sockaddr_in *)addr;
-        return addr_in->sin_addr.s_addr == INADDR_ANY;
+        return UCS_SOCKET_INET_ADDR(addr).s_addr == INADDR_ANY;
     case AF_INET6:
-        addr_in6 = (struct sockaddr_in6 *)addr;
-        return !memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr));
+        return !memcmp(&(UCS_SOCKET_INET_ADDR(addr)), &in6addr_any,
+                       sizeof(UCS_SOCKET_INET_ADDR(addr)));
     default:
         ucs_debug("Invalid address family: %d", addr->sa_family);
     }
@@ -549,6 +545,7 @@ ucs_status_t ucs_sockaddr_get_dev_names(unsigned *num_resources_p,
         tmp = ucs_realloc(dev_names, dev_name_len * (num_resources + 1),
                           "dev_names");
         if (tmp == NULL) {
+            ucs_error("Unable to reallocate memory");
             ucs_free(dev_names);
             status = UCS_ERR_NO_MEMORY;
             goto out_closedir;

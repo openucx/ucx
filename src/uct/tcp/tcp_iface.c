@@ -611,7 +611,6 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
     status = ucs_sockaddr_get_dev_names(&num_resources, &dev_names, 
                                         sizeof(tmp_rsc.dev_name));
     if (UCS_OK != status) {
-        ucs_error("sockcm unable to find a sockets-capable device");
         goto out;
     }
 
