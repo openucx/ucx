@@ -809,3 +809,111 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, msg_before_ep_create) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
+
+class test_ucp_wireup_fallback : public test_ucp_wireup {
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_wireup::get_ctx_params();
+
+                params.features |= UCP_FEATURE_TAG   | UCP_FEATURE_RMA  |
+                    UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64;
+                return params;
+    }
+
+    void init() {
+        /* do nothing */
+    }
+
+    void cleanup() {
+        /* do nothing */
+    }
+
+    bool test_est_num_eps_fallback(size_t est_num_eps,
+                                   size_t &min_max_num_eps) {
+        bool res = true;
+        min_max_num_eps = UCS_ULUNITS_INF;
+
+        UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
+        modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
+        test_ucp_wireup::init();
+
+        sender().connect(&receiver(), get_ep_params());
+        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+        flush_worker(sender());
+
+        for (ucp_lane_index_t lane = 0;
+             lane < ucp_ep_num_lanes(sender().ep()); lane++) {
+            uct_ep_h uct_ep = sender().ep()->uct_eps[lane];
+            if (uct_ep == NULL) {
+                continue;
+            }
+
+            uct_iface_attr_t iface_attr;
+            ucs_status_t status = uct_iface_query(uct_ep->iface, &iface_attr);
+            ASSERT_UCS_OK(status);
+
+            if (iface_attr.max_num_eps < est_num_eps) {
+                res = false;
+                goto out;
+            }
+
+            if (iface_attr.max_num_eps < min_max_num_eps) {
+                min_max_num_eps = iface_attr.max_num_eps;
+            }
+        }
+
+out:
+        test_ucp_wireup::cleanup();
+        return res;
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
+    const size_t N = 20;
+    size_t test_min_max_eps, min_max_eps;
+
+    test_est_num_eps_fallback(1, test_min_max_eps);
+
+    while (test_min_max_eps != UCS_ULUNITS_INF) {
+        if (test_min_max_eps > 1) {
+            EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps - 1,
+                                                  min_max_eps));
+        }
+
+        EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps,
+                                              min_max_eps));
+
+        bool res = false;
+        /* The current implementation of transport selection uses
+         * scoring that reduces score of a transport depending on
+         * scaling capability. Test estimated number of EPs from
+         * [max_num_eps + 1; max_num_eps + N] range that should
+         * give the realability of the test so as not to fail with
+         * a small deviation of the estimated number of EPs from
+         * the maximum number of EPs supported by transport */
+        for (size_t max_eps = test_min_max_eps + 1;
+             max_eps < (test_min_max_eps + N); max_eps++) {
+            res = test_est_num_eps_fallback(max_eps, min_max_eps);
+            if (res) {
+                test_min_max_eps = min_max_eps;
+                break;
+            }
+        }
+
+        EXPECT_TRUE(res);
+    }
+}
+
+/* Test fallback from RC to UD, since RC isn't scalable enough
+ * as its iface max_num_eps attribute = 256 by default */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              rc_ud, "rc_x,rc_v,ud_x,ud_v")
+/* Test two scalable enough transports */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              dc_ud, "dc_x,ud_x,ud_v")
+/* Test fallback from RC to DC, since RC isn't scalable enough
+ * as its iface max_num_eps attribute = 256 by default.
+ * Also add UD to the TLs list as DC may not be available on
+ * some systems */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              rc_dc_ud, "rc_x,rc_v,dc_x,ud_x,ud_v")

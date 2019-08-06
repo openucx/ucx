@@ -51,6 +51,19 @@ typedef struct {
                               const uct_md_attr_t *md_attr,
                               const uct_iface_attr_t *iface_attr,
                               const ucp_address_iface_attr_t *remote_iface_attr);
+
+    /**
+     * Calculates scalability score of a potential transport.
+     *
+     * @param [in]  context      UCP context.
+     * @param [in]  iface_attr   Local interface attributes.
+     *
+     * @return Transport scalability score in a range of (0, 1].
+     *         1 means that the transport is scalable.
+     */
+    double      (*calc_scale_score)(ucp_context_h context,
+                                    const uct_iface_attr_t *iface_attr);
+
     uint8_t     tl_rsc_flags; /* Flags that describe TL specifics */
 
     ucp_tl_iface_atomic_flags_t local_atomic_flags;
