@@ -84,3 +84,12 @@ GTAGS
 /modules
 *.swp
 compile_commands.json
+.externalToolBuilders
+test/examples/ucp_static.c
+test/mpi/dtype-bench.c
+test/mpi/mpitest_cfgf.h
+test/mpi/mpitest_deff.h
+test/mpi/mpitestf.h
+test/mpi/mt-msgrate.c
+/tmp
+
