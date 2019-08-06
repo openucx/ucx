@@ -123,7 +123,7 @@ public:
         tracer_ctx_t *ctx = (tracer_ctx_t *)arg;
 
         EXPECT_EQ(uint8_t(AM_ID), id);
-        mapped_buffer::pattern_check(data, length, SEED1);
+        mem_buffer::pattern_check(data, length, SEED1);
         *buffer = '\0';
         ++ctx->count;
     }
@@ -150,7 +150,7 @@ public:
             pthread_mutex_unlock(&m_lock);
             return (my_desc->magic == MAGIC_DESC) ? UCS_INPROGRESS : UCS_OK;
         }
-        mapped_buffer::pattern_check(data, length, SEED1);
+        mem_buffer::pattern_check(data, length, SEED1);
         return UCS_OK;
     }
 
@@ -159,7 +159,7 @@ public:
         while (!m_backlog.empty()) {
             receive_desc_t *my_desc = m_backlog.back();
             m_backlog.pop_back();
-            mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
+            mem_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
             pthread_mutex_unlock(&m_lock);
             if (my_desc->magic == MAGIC_DESC) {
                 uct_iface_release_desc(my_desc);
@@ -602,7 +602,7 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_multi,
 
     size_t size = ucs_min(sender().iface_attr().cap.am.max_short, 8192ul);
     std::string sendbuf(size, 0);
-    mapped_buffer::pattern_fill(&sendbuf[0], sendbuf.size(), SEED1);
+    mem_buffer::pattern_fill(&sendbuf[0], sendbuf.size(), SEED1);
     ucs_assert(SEED1 == *(uint64_t*)&sendbuf[0]);
 
     /* exhaust all resources or time out 1sec */

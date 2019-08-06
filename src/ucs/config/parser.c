@@ -387,6 +387,11 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     double  value;
     int     num_fields;
 
+    if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
+        *dst = UCS_BANDWIDTH_AUTO;
+        return 1;
+    }
+
     num_fields = sscanf(buf, "%lf%15s", &value, str);
     if (num_fields < 2) {
         return 0;
@@ -428,6 +433,10 @@ int ucs_config_sprintf_bw(char *buf, size_t max, void *src, const void *arg)
 {
     double value = *(double*)src;
     size_t len;
+
+    if (value == UCS_BANDWIDTH_AUTO) {
+        snprintf(buf, max, UCS_VALUE_AUTO_STR);
+    }
 
     ucs_memunits_to_str((size_t)value, buf, max);
     len = strlen(buf);
@@ -521,7 +530,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     if (sz == UCS_MEMUNITS_INF) {
         snprintf(buf, max, UCS_NUMERIC_INF_STR);
     } else if (sz == UCS_MEMUNITS_AUTO) {
-        snprintf(buf, max, "auto");
+        snprintf(buf, max, UCS_VALUE_AUTO_STR);
     } else {
         ucs_memunits_to_str(sz, buf, max);
     }
@@ -531,7 +540,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
 int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg)
 {
     /* Special value: auto */
-    if (!strcasecmp(buf, "auto")) {
+    if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
         *(size_t*)dest = UCS_ULUNITS_AUTO;
         return 1;
     } else if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
@@ -547,7 +556,7 @@ int ucs_config_sprintf_ulunits(char *buf, size_t max, void *src, const void *arg
     size_t val = *(size_t*)src;
 
     if (val == UCS_ULUNITS_AUTO) {
-        return snprintf(buf, max, "auto");
+        return snprintf(buf, max, UCS_VALUE_AUTO_STR);
     } else if (val == UCS_ULUNITS_INF) {
         return snprintf(buf, max, UCS_NUMERIC_INF_STR);
     }

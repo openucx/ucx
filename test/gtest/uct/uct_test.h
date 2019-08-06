@@ -13,12 +13,10 @@
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
+#include <common/mem_buffer.h>
 #include <common/test.h>
 #include <vector>
-#if HAVE_CUDA
-#include <cuda.h>
-#include <cuda_runtime.h>
-#endif
+
 
 
 #define DEFAULT_DELAY_MS           1.0
@@ -112,12 +110,18 @@ protected:
 
         entity(const resource& resource, uct_md_config_t *md_config);
 
-        void mem_alloc(size_t length, uct_allocated_memory_t *mem,
-                       uct_rkey_bundle *rkey_bundle, int mem_type) const;
+        void mem_alloc_host(size_t length, uct_allocated_memory_t *mem) const;
 
-        void mem_free(const uct_allocated_memory_t *mem,
-                      const uct_rkey_bundle_t& rkey,
-                      const ucs_memory_type_t mem_type) const;
+        void mem_free_host(const uct_allocated_memory_t *mem) const;
+
+        void mem_type_reg(uct_allocated_memory_t *mem) const;
+
+        void mem_type_dereg(uct_allocated_memory_t *mem) const;
+
+        void rkey_unpack(const uct_allocated_memory_t *mem,
+                         uct_rkey_bundle *rkey_bundle) const;
+
+        void rkey_release(const uct_rkey_bundle *rkey_bundle) const;
 
         unsigned progress() const;
 
@@ -224,13 +228,8 @@ protected:
         void pattern_check(uint64_t seed);
 
         static size_t pack(void *dest, void *arg);
-        static void pattern_fill(void *buffer, size_t length, uint64_t seed);
-        static void pattern_fill_cuda(void *buffer, size_t length, uint64_t seed);
-        static void pattern_check(const void *buffer, size_t length);
-        static void pattern_check(const void *buffer, size_t length, uint64_t seed);
-        static void pattern_check_cuda(const void *buffer, size_t length, uint64_t seed);
+
     private:
-        static uint64_t pat(uint64_t prev);
 
         const uct_test::entity& m_entity;
 

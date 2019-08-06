@@ -77,6 +77,13 @@ typedef struct ucp_wireup_msg {
 } UCS_S_PACKED ucp_wireup_msg_t;
 
 
+typedef struct {
+    ucp_rsc_index_t rsc_index;
+    unsigned        addr_index;
+    double          score;
+} ucp_wireup_select_info_t;
+
+
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
@@ -87,8 +94,7 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              const ucp_ep_params_t *params,
                                              const ucp_address_entry_t *address_list,
                                              unsigned address_count,
-                                             ucp_rsc_index_t *rsc_index_p,
-                                             unsigned *addr_index_p);
+                                             ucp_wireup_select_info_t *select_info);
 
 ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
                                                   const ucp_ep_params_t *params,

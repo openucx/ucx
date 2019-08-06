@@ -77,7 +77,7 @@ static ucs_stats_context_t ucs_stats_context = {
     .root_node        = {},
     .root_filter_node = {},
     .lock             = PTHREAD_MUTEX_INITIALIZER,
-    .thread           = 0xfffffffful
+    .thread           = (pthread_t)-1
 };
 
 static ucs_stats_class_t ucs_stats_root_node_class = {

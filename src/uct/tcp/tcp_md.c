@@ -57,6 +57,7 @@ uct_component_t uct_tcp_component = {
     .rkey_release       = ucs_empty_function_return_unsupported,
     .name               = UCT_TCP_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_tcp_component)

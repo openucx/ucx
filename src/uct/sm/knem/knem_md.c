@@ -196,9 +196,9 @@ static ucs_status_t uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_rkey_unpack(uct_md_component_t *mdc,
-                                         const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                         void **handle_p)
+static ucs_status_t uct_knem_rkey_unpack(uct_component_t *component,
+                                         const void *rkey_buffer,
+                                         uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_knem_key_t *packed = (uct_knem_key_t *)rkey_buffer;
     uct_knem_key_t *key;
@@ -217,8 +217,8 @@ static ucs_status_t uct_knem_rkey_unpack(uct_md_component_t *mdc,
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey,
-                                          void *handle)
+static ucs_status_t uct_knem_rkey_release(uct_component_t *component,
+                                          uct_rkey_t rkey, void *handle)
 {
     ucs_assert(NULL == handle);
     ucs_free((void *)rkey);
@@ -391,6 +391,7 @@ uct_component_t uct_knem_component = {
         .table          = uct_knem_md_config_table,
         .size           = sizeof(uct_knem_md_config_t),
     },
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component)
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component),
+    .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_knem_component);

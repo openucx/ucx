@@ -22,6 +22,9 @@ BEGIN_C_DECLS
 /* value which specifies "infinity" for a numeric variable */
 #define UCS_NUMERIC_INF_STR "inf"
 
+/* value which specifies "auto" for a variable */
+#define UCS_VALUE_AUTO_STR "auto"
+
 /* the numeric value of "infinity" */
 #define UCS_MEMUNITS_INF    SIZE_MAX
 #define UCS_ULUNITS_INF     SIZE_MAX
@@ -29,6 +32,8 @@ BEGIN_C_DECLS
 /* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
 #define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
+
+#define UCS_BANDWIDTH_AUTO  (-1.0)
 
 /**
  * Expand a partial path to full path.

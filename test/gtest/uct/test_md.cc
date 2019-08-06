@@ -6,6 +6,8 @@
 
 #include "test_md.h"
 
+#include <common/mem_buffer.h>
+
 #include <uct/api/uct.h>
 extern "C" {
 #include <ucs/time/time.h>
@@ -20,12 +22,6 @@ extern "C" {
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <net/if.h>
-
-
-#if HAVE_CUDA
-#include <cuda.h>
-#include <cuda_runtime.h>
-#endif
 
 
 void* test_md::alloc_thread(void *arg)
@@ -103,74 +99,24 @@ bool test_md::check_caps(uint64_t flags)
     return ((md() == NULL) || ucs_test_all_flags(m_md_attr.cap.flags, flags));
 }
 
-void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int mem_type)
+void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
+                           ucs_memory_type_t mem_type)
 {
-    if (mem_type == UCS_MEMORY_TYPE_HOST) {
-        *address = malloc(size);
-        ASSERT_TRUE(*address != NULL);
-        if (fill_buffer) {
-            memcpy(*address, fill_buffer, size);
-        }
-#if HAVE_CUDA
-    } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
-        cudaError_t cerr;
-
-        cerr = cudaMalloc(address, size);
-        ASSERT_TRUE(cerr == cudaSuccess);
-
-        if(fill_buffer) {
-            cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
-            ASSERT_TRUE(cerr == cudaSuccess);
-        }
-    } else if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
-        cudaError_t cerr;
-
-        cerr = cudaMallocManaged(address, size);
-        ASSERT_TRUE(cerr == cudaSuccess);
-
-        if (fill_buffer) {
-            memcpy(*address, fill_buffer, size);
-        }
-#endif
-    } else {
-        std::stringstream ss;
-        ss << "can't allocate " << ucs_memory_type_names[mem_type]
-           << " memory for " << GetParam().md_name;
-        UCS_TEST_SKIP_R(ss.str());
+    *address = mem_buffer::allocate(size, mem_type);
+    if (fill_buffer) {
+        mem_buffer::copy_to(*address, fill_buffer, size, mem_type);
     }
 }
 
-void test_md::check_memory(void *address, void *expect, size_t size, int mem_type)
+void test_md::check_memory(void *address, void *expect, size_t size,
+                           ucs_memory_type_t mem_type)
 {
-    int ret;
-    if (mem_type == UCS_MEMORY_TYPE_HOST) {
-        ret = memcmp(address, expect, size);
-        EXPECT_EQ(0, ret);
-    } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
-#if HAVE_CUDA
-        void *temp;
-        cudaError_t cerr;
-
-        temp = malloc(size);
-        ASSERT_TRUE(temp != NULL);
-        cerr = cudaMemcpy(temp, address, size, cudaMemcpyDeviceToHost);
-        ASSERT_TRUE(cerr == cudaSuccess);
-        ret = memcmp(temp, expect, size);
-        EXPECT_EQ(0, ret);
-        free(temp);
-#endif
-    }
+    EXPECT_TRUE(mem_buffer::compare(expect, address, size, mem_type));
 }
 
-void test_md::free_memory(void *address, int mem_type)
+void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
 {
-    if (mem_type == UCS_MEMORY_TYPE_HOST) {
-        free(address);
-    } else if (mem_type == UCS_MEMORY_TYPE_CUDA) {
-#if HAVE_CUDA
-        cudaFree(address);
-#endif
-    }
+    mem_buffer::release(address, mem_type);
 }
 
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
@@ -284,7 +230,8 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
     }
 
     ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
-        alloc_memory(&address, UCS_KBYTE, NULL, mem_type_id);
+        alloc_memory(&address, UCS_KBYTE, NULL,
+                     static_cast<ucs_memory_type_t>(mem_type_id));
         status = uct_md_detect_memory_type(md(), address, 1024, &mem_type);
         ASSERT_UCS_OK(status);
         EXPECT_TRUE(mem_type == mem_type_id);
@@ -301,12 +248,16 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
-    for (unsigned mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << " memory "
-                             << "registration is not supported by " << GetParam().md_name;
+    for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
+        ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
+
+        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type_id))) {
+            UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
+                             << "registration is not supported by "
+                             << GetParam().md_name;
             continue;
         }
+
         for (unsigned i = 0; i < 300; ++i) {
             size = ucs::rand() % 65536;
             if (size == 0) {
@@ -343,14 +294,17 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
 
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
-    for (unsigned mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << " memory "
-                             << " registration is not supported by " << GetParam().md_name;
+    for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
+        ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
+        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type_id))) {
+            UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
+                             << " registration is not supported by "
+                             << GetParam().md_name;
             continue;
         }
         for (size_t size = 4 * UCS_KBYTE; size <= 4 * UCS_MBYTE; size *= 2) {
-            alloc_memory(&ptr, size, NULL, mem_type);
+            alloc_memory(&ptr, size, NULL,
+                         static_cast<ucs_memory_type_t>(mem_type_id));
 
             ucs_time_t start_time = ucs_get_time();
             ucs_time_t end_time = start_time;

@@ -10,7 +10,7 @@
 #include <hsa_ext_amd.h>
 
 
-extern uct_md_component_t uct_rocm_ipc_component;
+extern uct_component_t uct_rocm_ipc_component;
 
 typedef struct uct_rocm_ipc_md {
     struct uct_md super;
