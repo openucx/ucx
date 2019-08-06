@@ -1169,45 +1169,49 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
     ucp_worker_uct_iface_close(wiface);
 }
 
+static void ucp_worker_close_cms(ucp_worker_h worker)
+{
+    const uint64_t cm_cmpts_bitmap   = worker->context->config.cm_cmpts_bitmap;
+    const ucp_rsc_index_t n_cm_cmpts = ucs_popcount(cm_cmpts_bitmap);
+    ucp_rsc_index_t i;
+
+    for (i = 0; (i < n_cm_cmpts) && (worker->cms[i] != NULL); ++i) {
+        uct_cm_close(worker->cms[i]);
+    }
+
+    ucs_free(worker->cms);
+}
+
 static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
-    ucp_context_h   context  = worker->context;
+    ucp_context_h   context = worker->context;
+    ucp_rsc_index_t cmpt_i, cm_i;
     ucs_status_t    status;
-    ucp_rsc_index_t i, j;
 
     if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    worker->num_cms = 0;
-    for (i = 0; i < context->num_cmpts; ++i) {
-        if (context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) {
-            ++worker->num_cms;
-        }
-    }
 
-    if (worker->num_cms == 0) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto out;
-    }
-
-    worker->cms = ucs_malloc(worker->num_cms * sizeof(*worker->cms), "ucp cms");
+    worker->cms = ucs_calloc(ucs_popcount(context->config.cm_cmpts_bitmap),
+                             sizeof(*worker->cms), "ucp cms");
     if (worker->cms == NULL) {
         ucs_error("can't allocate CMs array");
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
-    for (i = 0, j = 0; i < context->num_cmpts; ++i) {
-        if (context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) {
-            status = uct_cm_open(context->tl_cmpts[i].cmpt, worker->uct,
-                                 &worker->cms[j++]);
-            if (status != UCS_OK) {
-                ucs_error("failed to open CM on component %s",
-                          context->tl_cmpts[i].attr.name);
-                goto err_free_cms;
-            }
+    cm_i = 0;
+    ucs_for_each_bit(cmpt_i, context->config.cm_cmpts_bitmap) {
+        ucs_assert(context->tl_cmpts[cmpt_i].attr.flags &
+                   UCT_COMPONENT_FLAG_CM);
+        status = uct_cm_open(context->tl_cmpts[cmpt_i].cmpt, worker->uct,
+                             &worker->cms[cm_i++]);
+        if (status != UCS_OK) {
+            ucs_error("failed to open CM on component %s",
+                      context->tl_cmpts[cmpt_i].attr.name);
+            goto err_free_cms;
         }
     }
 
@@ -1215,28 +1219,11 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     goto out;
 
 err_free_cms:
-    for (i = 0; i < worker->num_cms; ++i) {
-        if (worker->cms[i] != NULL) {
-            uct_cm_close(worker->cms[i]);
-        }
-    }
-
-    ucs_free(worker->cms);
+    ucp_worker_close_cms(worker);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
-}
-
-static void ucp_worker_close_cms(ucp_worker_h worker)
-{
-    ucp_rsc_index_t i;
-
-    for (i = 0; i < worker->num_cms; ++i) {
-        uct_cm_close(worker->cms[i]);
-    }
-
-    ucs_free(worker->cms);
 }
 
 static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
@@ -1731,13 +1718,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Open all resources as connection managers on this worker */
     status = ucp_worker_add_resource_cms(worker);
     if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
-        goto err_close_cms;
-    }
-
-    if ((worker->num_cms == 0) &&
-        ucp_worker_sockaddr_is_cm_proto(worker)) {
-        ucs_error("there is no available CM to support close protocol");
-        status = UCS_ERR_UNSUPPORTED;
         goto err_close_cms;
     }
 

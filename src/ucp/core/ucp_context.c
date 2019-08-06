@@ -1075,6 +1075,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_release_components;
     }
 
+    context->config.cm_cmpts_bitmap = 0;
+
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
@@ -1090,16 +1092,18 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         if ((context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) &&
-            (context->config.ext.sockaddr_cm_enable == UCS_TRY)) {
-            context->config.ext.sockaddr_cm_enable = UCS_YES;
+            (context->config.ext.sockaddr_cm_enable != UCS_NO)) {
+            context->config.cm_cmpts_bitmap |= UCS_BIT(i);
         }
 
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
     }
 
-    if (context->config.ext.sockaddr_cm_enable == UCS_TRY) {
-        /* There is no component which supports CM */
-        context->config.ext.sockaddr_cm_enable = UCS_NO;
+    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
+        (context->config.cm_cmpts_bitmap == 0)) {
+        ucs_error("there is no UCT components with CM capability");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_resources;
     }
 
     /* Allocate actual array of MDs */

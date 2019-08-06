@@ -222,7 +222,6 @@ typedef struct ucp_worker {
     unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
     uct_cm_h                      *cms;          /* Array of CMs, one for each component */
-    ucp_rsc_index_t               num_cms;       /* Number of CMs*/
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
@@ -327,7 +326,7 @@ ucp_worker_unified_mode(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
 {
-    return worker->context->config.ext.sockaddr_cm_enable == UCS_YES;
+    return worker->context->config.cm_cmpts_bitmap != 0;
 }
 
 #endif

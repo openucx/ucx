@@ -205,6 +205,10 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 
+        /* Cached map of components which support CM capability or 0 if disabled
+         * by user */
+        uint64_t                  cm_cmpts_bitmap;
+
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
 
