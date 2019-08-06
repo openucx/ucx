@@ -601,14 +601,6 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     struct dirent *entry;
     unsigned num_devices;
     ucs_status_t status;
-    DIR *dir;
-
-    dir = opendir(netdev_dir);
-    if (dir == NULL) {
-        ucs_error("opendir(%s) failed: %m", netdev_dir);
-        status = UCS_ERR_IO_ERROR;
-        goto out;
-    }
 
     devices     = NULL;
     num_devices = 0;
@@ -625,9 +617,12 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             break; /* no more items */
         }
 
-        if (!ucs_netif_is_active(entry->d_name)) {
-            continue;
-        }
+    status = ucs_sockaddr_get_dev_names(&num_resources, &dev_names, 
+                                        sizeof(tmp_rsc.dev_name));
+    if (UCS_OK != status) {
+        ucs_error("sockcm unable to find a sockets-capable device");
+        goto out;
+    }
 
         tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),
                           "tcp devices");
@@ -644,13 +639,13 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         devices[num_devices].type = UCT_DEVICE_TYPE_NET;
         ++num_devices;
     }
+    
+    ucs_free(dev_names);
 
     *num_devices_p = num_devices;
     *devices_p     = devices;
     status         = UCS_OK;
 
-out_closedir:
-    closedir(dir);
 out:
     return status;
 }

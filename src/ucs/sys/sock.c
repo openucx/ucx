@@ -11,6 +11,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <dirent.h>
 
 #include <unistd.h>
 #include <errno.h>
