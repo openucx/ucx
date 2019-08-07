@@ -1221,7 +1221,6 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 
 err_free_cms:
     ucp_worker_close_cms(worker);
-
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
@@ -1718,7 +1717,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Open all resources as connection managers on this worker */
     status = ucp_worker_add_resource_cms(worker);
-    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+    if (status != UCS_OK) {
         goto err_close_cms;
     }
 
