@@ -183,18 +183,23 @@ void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
-static void uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
-                                             uct_sockcm_conn_param_t conn_param)
+static ucs_status_t uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
+                                                      uct_sockcm_conn_param_t conn_param)
 {
     uct_sockcm_conn_param_t *conn_param_copy = NULL;
     conn_param_copy = ucs_malloc(sizeof(uct_sockcm_conn_param_t), "conn_param_copy");
-    ucs_assert(conn_param_copy != NULL);
+    if (conn_param_copy == NULL) {
+        ucs_error("Unable to allocate memory");
+        return UCS_ERR_NO_MEMORY;
+    }
 
     memcpy(conn_param_copy, &conn_param, sizeof(uct_sockcm_conn_param_t));
     ucs_debug("process conn req: accepted fd %d %m", conn_param_copy->fd);
 
     iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, conn_param_copy,
 			   conn_param.private_data, conn_param.length);
+
+    return UCS_OK;
 }
 
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
@@ -250,7 +255,9 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     if (recv_len >= recv_base_len) {
         conn_param.fd = accept_fd;
         ucs_assert(conn_param.length + recv_base_len == recv_len);
-        uct_sockcm_iface_process_conn_req(iface, conn_param);
+        if (UCS_OK != uct_sockcm_iface_process_conn_req(iface, conn_param)) {
+            ucs_error("Unable to process connection request"); 
+        }
     } else {
         ucs_error("sockcm_iface %p:did not receive up to header size on %d\n", 
                   iface, conn_param.fd);

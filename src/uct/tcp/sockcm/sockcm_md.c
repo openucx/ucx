@@ -44,8 +44,8 @@ ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static int uct_sockcm_is_addr_route_resolved(int sock_id, struct sockaddr *addr,
-                                            int addrlen)
+static int uct_sockcm_is_addr_accessible(int sock_id, struct sockaddr *addr,
+                                         int addrlen)
 {
     char host[UCS_SOCKADDR_STRING_LEN];
     char serv[UCS_SOCKADDR_STRING_LEN];
@@ -111,8 +111,8 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         }
     }
 
-    is_accessible = uct_sockcm_is_addr_route_resolved(sock_id, param_sockaddr,
-                                                     sockaddr->addrlen);
+    is_accessible = uct_sockcm_is_addr_accessible(sock_id, param_sockaddr,
+                                                  sockaddr->addrlen);
     if (!is_accessible) {
         goto out_destroy_id;
     }
