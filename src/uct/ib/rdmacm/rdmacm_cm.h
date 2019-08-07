@@ -23,3 +23,6 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_t, uct_cm_t);
 ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id);
 
 ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event);
+
+ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id, uint8_t is_hdr,
+                                  ucs_status_t hdr_status, uint8_t hdr_length);

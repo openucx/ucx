@@ -388,10 +388,8 @@ protected:
                        const char *local_dev_name,
                        uct_conn_request_h conn_request,
                        const uct_cm_remote_data_t *remote_data) {
-        test_uct_cm_sockaddr *self;
+        test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         ucs_status_t status;
-
-        self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
         EXPECT_EQ(entity::client_priv_data.length() + 1, remote_data->conn_priv_data_length);
         EXPECT_EQ(entity::client_priv_data,
@@ -411,17 +409,14 @@ protected:
 
     static void
     server_connect_cb(uct_ep_h ep, void *arg, ucs_status_t status) {
-         test_uct_cm_sockaddr *self;
-
-         self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
          self->m_cm_state |= TEST_CM_STATE_SERVER_CONNECTED;
     }
 
     static void
     server_disconnect_cb(uct_ep_h ep, void *arg) {
-        test_uct_cm_sockaddr *self;
+        test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         self->m_server->disconnect(ep);
         self->m_cm_state |= TEST_CM_STATE_SERVER_DISCONNECTED;
     }

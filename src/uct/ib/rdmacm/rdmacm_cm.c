@@ -18,6 +18,8 @@
 
 ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id)
 {
+    ucs_trace("destroying cm_id %p", id);
+
     if (rdma_destroy_id(id)) {
         ucs_warn("rdma_destroy_id() failed: %m");
         return UCS_ERR_IO_ERROR;
@@ -28,6 +30,8 @@ ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id)
 
 ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
 {
+    ucs_trace("ack event %p, cm_id %p", event, event->id);
+
     if (rdma_ack_cm_event(event)) {
         ucs_warn("rdma_ack_cm_event failed on event %s: %m",
                  rdma_event_str(event->event));
@@ -35,6 +39,32 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
     }
 
     return UCS_OK;
+}
+
+ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id, uint8_t is_hdr,
+                                  ucs_status_t hdr_status, uint8_t hdr_length)
+{
+    uct_rdmacm_priv_data_hdr_t hdr;
+
+    ucs_trace("reject on cm_id %p", id);
+
+    if (is_hdr) {
+        hdr.status = hdr_status;
+        hdr.length = hdr_length;
+        if (rdma_reject(id, &hdr, sizeof(hdr))) {
+            goto err;
+        }
+    } else {
+        if (rdma_reject(id, NULL, 0)) {
+            goto err;
+        }
+    }
+
+    return UCS_OK;
+
+err:
+    ucs_error("rdma_reject (id=%p) failed with error: %m", id);
+    return UCS_ERR_IO_ERROR;
 }
 
 size_t uct_rdmacm_cm_get_max_conn_priv()
@@ -59,6 +89,8 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 
     ucs_assert(event->id == cep->id);
 
+    ucs_trace("rdma_resolve_route on cm_id %p", event->id);
+
     if (rdma_resolve_route(event->id, 1000 /* TODO */)) {
         ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
                   ucs_sockaddr_str(remote_addr, ip_port_str,
@@ -79,12 +111,18 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
 
     ucs_assert(event->id == cep->id);
 
+    memset(&conn_param, 0, sizeof(conn_param));
+    conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
+                                          sizeof(uct_rdmacm_priv_data_hdr_t));
+
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
         remote_data.field_mask = 0;
         uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data, status);
         return;
     }
+
+    ucs_trace("rdma_connect on ep %p, cm_id %p", cep, cep->id);
 
     if (rdma_connect(cep->id, &conn_param)) {
         ucs_error("rdma_connect(to addr=%s) failed: %m",
@@ -93,46 +131,49 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
         remote_data.field_mask = 0;
         uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
-
-    ucs_free((void*)conn_param.private_data);
 }
 
 static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                                                  uct_device_addr_t **dev_addr_p,
                                                  size_t *dev_addr_len_p)
 {
-    struct ibv_port_attr port_arrt;
+    struct ibv_port_attr port_attr;
     uct_ib_address_t *dev_addr;
     struct ibv_qp_attr qp_attr;
     size_t addr_length;
     int qp_attr_mask;
+    char dev_name[UCT_DEVICE_NAME_MAX];
 
-    qp_attr.qp_state = IBV_QPS_RTR;
     /* get the qp attributes in order to modify the qp state.
      * the ah_attr fields from them are required to extract the device address
      * of the remote peer.
      */
+    qp_attr.qp_state = IBV_QPS_RTR;
     if (rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask)) {
-        ucs_error("rdma_init_qp_attr failed. id %p, state: %d. %m",
+        ucs_error("rdma_init_qp_attr (id=%p, qp_state=%d) failed: %m",
                   cm_id, qp_attr.qp_state);
         return UCS_ERR_IO_ERROR;
      }
 
-    if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_arrt)) {
-        ucs_error("ibv_query_port failed. %m");
+    if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_attr)) {
+        uct_rdmacm_cm_id_to_dev_name(cm_id, dev_name);
+        ucs_error("ibv_query_port (%s) failed: %m", dev_name);
         return UCS_ERR_IO_ERROR;
     }
 
-    addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid, 0,
-                                      port_arrt.link_layer == IBV_LINK_LAYER_ETHERNET);
+    addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
+                                      qp_attr.ah_attr.is_global,
+                                      IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr));
 
     dev_addr = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
+        ucs_error("failed to allocate IB device address");
         return UCS_ERR_NO_MEMORY;
     }
 
     uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
-                        port_arrt.link_layer == IBV_LINK_LAYER_ETHERNET, 0,
+                        IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr),
+                        qp_attr.ah_attr.is_global,
                         dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
@@ -142,28 +183,22 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
 
 static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *event)
 {
-    uct_rdmacm_priv_data_hdr_t *hdr;
-    uct_rdmacm_listener_t      *listener;
+    uct_rdmacm_priv_data_hdr_t *hdr      = (uct_rdmacm_priv_data_hdr_t *)
+                                           event->param.conn.private_data;
+    uct_rdmacm_listener_t      *listener = event->listen_id->context;
     char                       dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t          *dev_addr;
     size_t                     addr_length;
     uct_cm_remote_data_t       remote_data;
     ucs_status_t               status;
 
-    listener = event->listen_id->context;
-    hdr      = (uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
     ucs_assert(hdr->status == UCS_OK);
 
     uct_rdmacm_cm_id_to_dev_name(event->id, dev_name);
 
     status = uct_rdmacm_cm_id_to_dev_addr(event->id, &dev_addr, &addr_length);
     if (status != UCS_OK) {
-        hdr->status = status;
-        hdr->length = 0;
-        if (rdma_reject(event->id, hdr, sizeof(*hdr))) {
-            ucs_error("rdma_reject (id=%p) failed with error: %m", event->id);
-        }
-
+        uct_rdmacm_cm_reject(event->id, 1, status, 0);
         uct_rdmacm_cm_destroy_id(event->id);
         return;
     }
@@ -185,18 +220,16 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
 static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *event)
 {
     struct sockaddr            *remote_addr = rdma_get_peer_addr(event->id);
-    uct_rdmacm_priv_data_hdr_t *hdr;
-    uct_rdmacm_cm_ep_t         *cep;
+    uct_rdmacm_priv_data_hdr_t *hdr         = (uct_rdmacm_priv_data_hdr_t *)
+                                              event->param.conn.private_data;
+    uct_rdmacm_cm_ep_t         *cep         = event->id->context;
     char                       ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_device_addr_t          *dev_addr;
     size_t                     addr_length;
     uct_cm_remote_data_t       remote_data;
     ucs_status_t               status;
 
-    cep = event->id->context;
     ucs_assert(event->id == cep->id);
-
-    hdr = (uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
 
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
@@ -226,7 +259,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
         ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
                   cep, ucs_sockaddr_str(remote_addr, ip_port_str,
                                         UCS_SOCKADDR_STRING_LEN));
-        uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        cep->disconnect_cb(&cep->super.super, cep->user_data);
     }
 }
 
@@ -262,14 +295,13 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t *cep = event->id->context;
 
     ucs_assert(event->id == cep->id);
-    uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
+    cep->wireup.server.connect_cb(&cep->super.super, cep->user_data, UCS_OK);
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t *cep = event->id->context;
 
-    cep = event->id->context;
     cep->disconnect_cb(&cep->super.super, cep->user_data);
 }
 
@@ -367,7 +399,6 @@ static void uct_rdmacm_cm_event_handler(int fd, void *arg)
             return;
         }
         uct_rdmacm_cm_process_event(cm, event);
-
     }
 }
 
@@ -447,6 +478,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
         goto err_destroy_ev_ch;
     }
 
+    ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
+              self, self->ev_ch, self->ev_ch->fd);
+
     return UCS_OK;
 
 err_destroy_ev_ch:
@@ -465,6 +499,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
                  self->ev_ch->fd, ucs_status_string(status));
     }
 
+    ucs_trace("destroying event_channel %p", self->ev_ch);
     rdma_destroy_event_channel(self->ev_ch);
 }
 

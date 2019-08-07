@@ -50,9 +50,6 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
 ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
                                               struct rdma_conn_param *conn_param);
 
-void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
-                                        ucs_status_t status);
-
 void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         uct_cm_remote_data_t *remote_data,
                                         ucs_status_t error);
