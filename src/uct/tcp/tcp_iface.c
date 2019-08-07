@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -611,13 +612,13 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
     status = ucs_sockaddr_get_dev_names(&num_resources, &dev_names, 
                                         sizeof(tmp_rsc.dev_name));
     if (UCS_OK != status) {
-        goto out;
+        return status;
     }
 
     resources = ucs_malloc(sizeof(*resources) * num_resources, "resource desc");
     if (resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        return status;
     }
 
     for (i = 0; i < num_resources; i++) {
@@ -637,8 +638,8 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
     *resource_p      = resources;
     status           = UCS_OK;
 
-out:
     return status;
+
 }
 
 UCT_TL_COMPONENT_DEFINE(uct_tcp_tl, uct_tcp_query_tl_resources, uct_tcp_iface_t,
