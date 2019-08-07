@@ -623,7 +623,7 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
                            const char *name, ucs_stats_node_t *stats_parent)
 {
-    ucs_status_t status;
+    ucs_status_t status, spinlock_status;
     int ret;
 
     if (params->region_struct_size < sizeof(ucs_rcache_region_t)) {
@@ -695,9 +695,9 @@ err_destroy_mp:
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_inv_q_lock:
-    status = ucs_spinlock_destroy(&self->inv_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    spinlock_status = ucs_spinlock_destroy(&self->inv_lock);
+    if (spinlock_status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", spinlock_status);
     }
 err_destroy_rwlock:
     pthread_rwlock_destroy(&self->lock);
@@ -712,6 +712,7 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
     ucs_status_t status;
+
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
     ucs_rcache_check_inv_queue(self);
