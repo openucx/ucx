@@ -1101,7 +1101,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
         (context->config.cm_cmpts_bitmap == 0)) {
-        ucs_error("there is no UCT components with CM capability");
+        ucs_error("there are no UCT components with CM capability");
         status = UCS_ERR_UNSUPPORTED;
         goto err_free_resources;
     }

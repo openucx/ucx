@@ -1171,25 +1171,27 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 
 static void ucp_worker_close_cms(ucp_worker_h worker)
 {
-    const uint64_t cm_cmpts_bitmap   = worker->context->config.cm_cmpts_bitmap;
-    const ucp_rsc_index_t n_cm_cmpts = ucs_popcount(cm_cmpts_bitmap);
+    const uint64_t cm_cmpts_bitmap = worker->context->config.cm_cmpts_bitmap;
+    const ucp_rsc_index_t num_cms  = ucs_popcount(cm_cmpts_bitmap);
     ucp_rsc_index_t i;
 
-    for (i = 0; (i < n_cm_cmpts) && (worker->cms[i] != NULL); ++i) {
+    for (i = 0; (i < num_cms) && (worker->cms[i] != NULL); ++i) {
         uct_cm_close(worker->cms[i]);
     }
 
     ucs_free(worker->cms);
+    worker->cms = NULL;
 }
 
 static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
     ucp_context_h   context = worker->context;
-    ucp_rsc_index_t cmpt_i, cm_i;
+    ucp_rsc_index_t cmpt_index, cm_index;
     ucs_status_t    status;
 
     if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
-        return UCS_ERR_UNSUPPORTED;
+        worker->cms = NULL;
+        return UCS_OK;
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -1202,15 +1204,14 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         goto out;
     }
 
-    cm_i = 0;
-    ucs_for_each_bit(cmpt_i, context->config.cm_cmpts_bitmap) {
-        ucs_assert(context->tl_cmpts[cmpt_i].attr.flags &
-                   UCT_COMPONENT_FLAG_CM);
-        status = uct_cm_open(context->tl_cmpts[cmpt_i].cmpt, worker->uct,
-                             &worker->cms[cm_i++]);
+    cm_index = 0;
+    ucs_for_each_bit(cmpt_index, context->config.cm_cmpts_bitmap) {
+        status = uct_cm_open(context->tl_cmpts[cmpt_index].cmpt, worker->uct,
+                             &worker->cms[cm_index++]);
         if (status != UCS_OK) {
-            ucs_error("failed to open CM on component %s",
-                      context->tl_cmpts[cmpt_i].attr.name);
+            ucs_error("failed to open CM on component %s with status %s",
+                      context->tl_cmpts[cmpt_index].attr.name,
+                      ucs_status_string(status));
             goto err_free_cms;
         }
     }
