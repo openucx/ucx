@@ -54,6 +54,7 @@ out:
 ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
 {
     uct_sockcm_conn_param_t conn_param;
+    ucs_status_t status;
     ssize_t transfer_len = 0;
     ssize_t sent_len     = 0;
     unsigned num_resources;
@@ -61,10 +62,11 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
     char dev_name[UCT_DEVICE_NAME_MAX];
 
     memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
-
-    if (UCS_OK != ucs_sockaddr_get_dev_names(&num_resources, 
-                                             &dev_names, UCT_DEVICE_NAME_MAX)) {
+    status = ucs_sockaddr_get_dev_names(&num_resources, 
+                                        &dev_names, UCT_DEVICE_NAME_MAX);
+    if (UCS_OK != status || num_resources <= 0) {
         ucs_error("sockcm unable to find a tcp-capable device");
+        return (status == UCS_OK) ? UCS_ERR_IO_ERROR : status;
     }
     memcpy(dev_name, dev_names, UCT_DEVICE_NAME_MAX);
     ucs_free(dev_names);
