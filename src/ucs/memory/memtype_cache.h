@@ -57,6 +57,9 @@ void ucs_memtype_cache_destroy(ucs_memtype_cache_t *memtype_cache);
  * @param [in]  address         Address to lookup
  * @param [in]  size            Length of the memory
  * @param [out] mem_type_p      Set to the memory type of the address range.
+ *                              UCS_MEMORY_TYPE_LAST is a special value which
+ *                              means the memory type is an unknown non-host
+ *                              memory, and should be detected in another way.
  *
  * @return Error code.
  */
@@ -67,6 +70,8 @@ ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache, void *address,
 
 /**
  * Update the memory type of an address range.
+ * Can be used after @ucs_memtype_cache_lookup returns UCM_MEM_TYPE_LAST, to
+ * set the memory type after it was detected.
  *
  * @param [in]  address         Start address to update.
  * @param [in]  size            Size of the memory to update.

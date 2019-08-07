@@ -44,8 +44,14 @@ typedef enum ucm_event_type {
     UCM_EVENT_MEM_TYPE_ALLOC  = UCS_BIT(20),
     UCM_EVENT_MEM_TYPE_FREE   = UCS_BIT(21),
 
-    /* Auxiliary flags */
-    UCM_EVENT_FLAG_NO_INSTALL = UCS_BIT(24)
+    /* Add event handler, but don't install new hooks */
+    UCM_EVENT_FLAG_NO_INSTALL = UCS_BIT(24),
+
+    /* When the event handler is added, generate approximated events for
+     * existing memory allocations.
+     * Currently implemented only for @ref UCM_EVENT_MEM_TYPE_ALLOC.
+     */
+    UCM_EVENT_FLAG_EXISTING_ALLOC = UCS_BIT(25)
 
 } ucm_event_type_t;
 
@@ -157,7 +163,11 @@ typedef union ucm_event {
     } vm_mapped, vm_unmapped;
 
     /*
-     * memory type allocation and deallocation event
+     * UCM_EVENT_MEM_TYPE_ALLOC, UCM_EVENT_MEM_TYPE_FREE
+     *
+     * Memory type allocation and deallocation event.
+     * If mem_type is @ref UCS_MEMORY_TYPE_LAST, the memory type is unknown, and
+     * further memory type detection is required.
      */
     struct {
         void               *address;
