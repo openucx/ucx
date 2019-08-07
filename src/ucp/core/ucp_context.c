@@ -1524,8 +1524,10 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
         status   = uct_md_detect_memory_type(context->tl_mds[md_index].md,
                                              address, size, &mem_type);
         if (status == UCS_OK) {
-            ucs_memtype_cache_update(context->memtype_cache, address, size,
-                                     mem_type);
+            if (context->memtype_cache != NULL) {
+                ucs_memtype_cache_update(context->memtype_cache, address, size,
+                                         mem_type);
+            }
             return mem_type;
         }
     }

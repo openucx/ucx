@@ -532,12 +532,18 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
     ucm_event_installer_t *event_installer;
     ucm_event_handler_t *handler;
     ucs_status_t status;
+    int flags;
 
     if (!ucm_global_opts.enable_events) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (!(events & UCM_EVENT_FLAG_NO_INSTALL) && (events & ~ucm_external_events)) {
+    /* separate event flags from real events */
+    flags   = events & (UCM_EVENT_FLAG_NO_INSTALL |
+                        UCM_EVENT_FLAG_EXISTING_ALLOC);
+    events &= ~flags;
+
+    if (!(flags & UCM_EVENT_FLAG_NO_INSTALL) && (events & ~ucm_external_events)) {
         status = ucm_event_install(events & ~ucm_external_events);
         if (status != UCS_OK) {
             return status;
@@ -556,7 +562,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
 
     ucm_event_handler_add(handler);
 
-    if (events & UCM_EVENT_FLAG_EXISTING_ALLOC) {
+    if (flags & UCM_EVENT_FLAG_EXISTING_ALLOC) {
         ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
             event_installer->get_existing_alloc(handler);
         }

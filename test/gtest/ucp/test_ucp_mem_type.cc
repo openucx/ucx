@@ -12,21 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
 }
-#include <memory> // for std::autp_ptr
 
-
-#define UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, _name, _mem_type) \
-    INSTANTIATE_TEST_CASE_P(_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_test_params( \
-                                       _test_case::get_ctx_params(), \
-                                       #_test_case, _mem_type)));
-
-#define UCP_INSTANTIATE_TEST_CASE_MEMTYPES(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, host,         UCS_MEMORY_TYPE_HOST) \
-    UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, cuda,         UCS_MEMORY_TYPE_CUDA) \
-    UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, cuda_managed, UCS_MEMORY_TYPE_CUDA_MANAGED) \
-    UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, rocm,         UCS_MEMORY_TYPE_ROCM) \
-    UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, rocm_managed, UCS_MEMORY_TYPE_ROCM_MANAGED)
 
 #define UCP_INSTANTIATE_TEST_CASE_MEMTYPE(_test_case, _name, _mem_type) \
     INSTANTIATE_TEST_CASE_P(_name, _test_case, \

@@ -237,6 +237,8 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
                                    1000, ucs_memtype_cache_event_callback,
                                    self);
     if (status != UCS_OK) {
+        ucs_error("failed to set UCM memtype event handler: %s",
+                  ucs_status_string(status));
         goto err_cleanup_pgtable;
     }
 
