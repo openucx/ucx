@@ -396,7 +396,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
                                        int prot, const char *path)
 {
     static const char *cuda_path_pattern = "/dev/nvidia";
-    ucm_event_handler_t *handler    = arg;
+    ucm_event_handler_t *handler         = arg;
     ucm_event_t event;
 
     /* we are interested in blocks which don't have any access permissions, or
@@ -407,7 +407,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
         return 0;
     }
 
-    ucm_debug("dispatching initial memtype allocation for 0x%p..0x%p %s",
+    ucm_debug("dispatching initial memtype allocation for %p..%p %s",
               addr, addr + length, path);
 
     event.mem_type.address  = addr;
