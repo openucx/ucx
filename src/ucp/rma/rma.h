@@ -64,7 +64,7 @@ typedef struct {
 
 typedef struct {
     uint64_t                  address;
-    ucp_request_hdr_t         req; // NULL if no reply
+    ucp_request_hdr_t         req; /* NULL if no reply */
     uint8_t                   length;
     uint8_t                   opcode;
 } UCS_S_PACKED ucp_atomic_req_hdr_t;

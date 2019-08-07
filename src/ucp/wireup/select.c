@@ -16,8 +16,11 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sock.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/rma/rma.h>
 #include <string.h>
 #include <inttypes.h>
+
+#define UCP_WIREUP_RMA_TEST_MSG_SIZE          4096
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE       262144
 
@@ -402,7 +405,8 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             priority = iface_attr->priority + ae->iface_attr.priority;
 
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f priority %d",
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      "->addr[%zd] : %s score %.2f priority %d",
                       UCT_TL_RESOURCE_DESC_ARG(resource), ae - address_list,
                       criteria->title, score, priority);
 
@@ -465,6 +469,21 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
 {
     return ucs_max(iface_attr->latency.overhead, remote_iface_attr->lat_ovh) +
            (iface_attr->latency.growth * context->config.est_num_eps);
+}
+
+static double
+ucp_wireup_calc_send_msg(ucp_context_h context,
+                         const uct_iface_attr_t *iface_attr,
+                         const ucp_address_iface_attr_t *remote_iface_attr,
+                         size_t msg_size)
+{
+    return (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
+            iface_attr->overhead +
+            (msg_size /
+             ucs_min(ucp_tl_iface_bandwidth(context,
+                                            &iface_attr->bandwidth),
+                     ucp_tl_iface_bandwidth(context,
+                                            &remote_iface_attr->bandwidth))));
 }
 
 static UCS_F_NOINLINE void
@@ -737,18 +756,6 @@ static double ucp_wireup_scale_score_func(ucp_context_h context,
                              iface_attr->max_num_eps))));
 }
 
-static double ucp_wireup_rma_score_func(ucp_context_h context,
-                                        const uct_md_attr_t *md_attr,
-                                        const uct_iface_attr_t *iface_attr,
-                                        const ucp_address_iface_attr_t *remote_iface_attr)
-{
-    /* best for 4k messages */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                   iface_attr->overhead +
-                   (4096.0 / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                                     ucp_tl_iface_bandwidth(context, &remote_iface_attr->bandwidth))));
-}
-
 static int ucp_wireup_ep_params_is_err_mode_peer(const ucp_ep_params_t *params)
 {
     return (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
@@ -799,6 +806,71 @@ static int ucp_wireup_allow_am_emulation_layer(const ucp_ep_params_t *params,
             !ucp_wireup_ep_params_is_err_mode_peer(params));
 }
 
+static double
+ucp_wireup_calc_rma_sw(ucp_context_h context,
+                       const uct_iface_attr_t *iface_attr,
+                       const ucp_address_iface_attr_t *remote_iface_attr,
+                       size_t msg_size)
+{
+    /* consider a worst case - maximum between PUT and GET headers */
+    size_t frag_hdr_size    = ucs_max(sizeof(ucp_put_hdr_t),
+                                      sizeof(ucp_rma_rep_hdr_t));
+    size_t full_frag_size   = (iface_attr->cap.am.max_bcopy -
+                               frag_hdr_size);
+    size_t remain_frag_size = (msg_size % full_frag_size);
+    size_t full_frags_cnt   = (msg_size / full_frag_size);
+    size_t remain_frags_cnt = (remain_frag_size != 0);
+
+    return ((/* sending time of full fragments of AM maximum Bcopy size */
+             full_frags_cnt *
+             (remote_iface_attr->overhead +
+              ucp_wireup_calc_send_msg(context, iface_attr,
+                                       remote_iface_attr,
+                                       iface_attr->cap.am.max_bcopy))) +
+            (/* sending time of remaining fragment if needed */
+             remain_frags_cnt *
+             (remote_iface_attr->overhead +
+              ucp_wireup_calc_send_msg(context, iface_attr,
+                                       remote_iface_attr,
+                                       remain_frag_size +
+                                       frag_hdr_size))) +
+            (/* consider a worst case - sending 2 protocol
+              * messages w/o payload included */
+             (/* sending time of 1st protocol message - RMA GET request */
+              remote_iface_attr->overhead +
+              ucp_wireup_calc_send_msg(context, iface_attr,
+                                       remote_iface_attr,
+                                       sizeof(ucp_get_req_hdr_t))) +
+             (/* sending time of 2nd protocol message - RMA completion */
+              remote_iface_attr->overhead +
+              ucp_wireup_calc_send_msg(context, iface_attr,
+                                       remote_iface_attr,
+                                       sizeof(ucp_cmpl_hdr_t)))));
+}
+
+static double
+ucp_wireup_rma_sw_score_func(ucp_context_h context,
+                             const uct_md_attr_t *md_attr,
+                             const uct_iface_attr_t *iface_attr,
+                             const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    return 1e-3 / ucp_wireup_calc_rma_sw(context, iface_attr,
+                                         remote_iface_attr,
+                                         UCP_WIREUP_RMA_TEST_MSG_SIZE);
+}
+
+static double
+ucp_wireup_rma_score_func(ucp_context_h context,
+                          const uct_md_attr_t *md_attr,
+                          const uct_iface_attr_t *iface_attr,
+                          const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    /* best for 4k messages */
+    return 1e-3 / (ucp_wireup_calc_send_msg(context, iface_attr,
+                                            remote_iface_attr,
+                                            UCP_WIREUP_RMA_TEST_MSG_SIZE));
+}
+
 static ucs_status_t
 ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                          unsigned ep_init_flags, unsigned address_count,
@@ -837,6 +909,29 @@ ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                           lane_descs, num_lanes_p, &criteria,
                                           -1, UCP_WIREUP_LANE_USAGE_RMA,
                                           am_score, allow_am, need_am);
+}
+
+static double
+ucp_wireup_amo_sw_score_func(ucp_context_h context,
+                             const uct_md_attr_t *md_attr,
+                             const uct_iface_attr_t *iface_attr,
+                             const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    /* consider a worst case - 64-bit compare-and-swap operation */
+    size_t amo_payload = 2 * sizeof(uint64_t);
+
+    return 1e-3 / ((/* sending time of AMO request */
+                    remote_iface_attr->overhead +
+                    ucp_wireup_calc_send_msg(context, iface_attr,
+                                             remote_iface_attr,
+                                             sizeof(ucp_atomic_req_hdr_t) +
+                                             amo_payload)) +
+                   (/* sending time of AMO reply */
+                    remote_iface_attr->overhead +
+                    ucp_wireup_calc_send_msg(context, iface_attr,
+                                             remote_iface_attr,
+                                             sizeof(ucp_rma_rep_hdr_t) +
+                                             amo_payload)));
 }
 
 double ucp_wireup_amo_score_func(ucp_context_h context,
@@ -905,22 +1000,6 @@ static double ucp_wireup_am_score_func(ucp_context_h context,
     /* best end-to-end latency */
     return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                    iface_attr->overhead + remote_iface_attr->overhead);
-}
-
-static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
-                                           const uct_md_attr_t *md_attr,
-                                           const uct_iface_attr_t *iface_attr,
-                                           const ucp_address_iface_attr_t *remote_iface_attr)
-{
-    /* highest bandwidth with lowest overhead - test a message size of 256KB,
-     * a size which is likely to be used for high-bw memory access protocol, for
-     * how long it would take to transfer it with a certain transport. */
-    return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                        ucp_tl_iface_bandwidth(context, &remote_iface_attr->bandwidth))) +
-                ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                iface_attr->overhead + md_attr->reg_cost.overhead +
-                (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
 
 static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
@@ -1032,10 +1111,9 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
 {
     /* best single MTU bandwidth */
     double size = iface_attr->cap.am.max_bcopy;
-    double time = (size / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                                  ucp_tl_iface_bandwidth(context, &remote_iface_attr->bandwidth))) +
-                  iface_attr->overhead + remote_iface_attr->overhead +
-                  ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
+    double time = (ucp_wireup_calc_send_msg(context, iface_attr,
+                                            remote_iface_attr, size) +
+                   remote_iface_attr->overhead);
 
     return size / time * 1e-5;
 }
@@ -1174,6 +1252,33 @@ ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     return ucp_wireup_add_bw_lanes(ep, address_count, address_list, &bw_info,
                                    1, -1, lane_descs, num_lanes_p, am_score);
+}
+
+static double
+ucp_wireup_rma_bw_sw_score_func(ucp_context_h context,
+                                const uct_md_attr_t *md_attr,
+                                const uct_iface_attr_t *iface_attr,
+                                const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    return 1 / ucp_wireup_calc_rma_sw(context, iface_attr,
+                                      remote_iface_attr,
+                                      UCP_WIREUP_RMA_BW_TEST_MSG_SIZE);
+}
+
+static double
+ucp_wireup_rma_bw_score_func(ucp_context_h context,
+                             const uct_md_attr_t *md_attr,
+                             const uct_iface_attr_t *iface_attr,
+                             const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    /* highest bandwidth with lowest overhead - test a message size of 256KB,
+     * a size which is likely to be used for high-bw memory access protocol, for
+     * how long it would take to transfer it with a certain transport. */
+    return 1 / (ucp_wireup_calc_send_msg(context, iface_attr,
+                                         remote_iface_attr,
+                                         UCP_WIREUP_RMA_BW_TEST_MSG_SIZE) +
+                md_attr->reg_cost.overhead +
+                (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
 
 static ucs_status_t
@@ -1354,8 +1459,15 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     ucp_worker_h worker              = ep->worker;
     ucp_context_h context            = worker->context;
     int need_am                      = 0;
+    ucp_wireup_criteria_t criteria   = {0};
     ucp_wireup_select_info_t am_info = {0};
+    double rma_sw_score              = 0;
+    double amo_sw_score              = 0;
+    double rma_bw_sw_score           = 0;
     ucp_wireup_lane_desc_t lane_descs[UCP_MAX_LANES];
+    const ucp_address_entry_t *ae;
+    const uct_md_attr_t *md_attr;
+    const uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
@@ -1364,26 +1476,56 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     memset(lane_descs, 0, sizeof(lane_descs));
 
-    /* Just select AM lane w/o adding it to the array of lanes and
-     * w/o showing errors.
-     * Save AM lane selection status to a separate variable that
-     * will be used when adding AM lane. If AM selection info is 0'ed,
-     * hence nothing should be done to handle errors from AM selection
-     * lane when selecting RMA/AMO/etc lanes - AM lane "lose" selection
-     * as its score equal to 0 */
+    /* Just select AM lane w/o adding it to the array of lanes and w/o
+     * showing errors. Save AM lane selection status to a separate
+     * status variable that will be used when adding AM lane. */
     am_status = ucp_wireup_select_am_lane(ep, params, address_count,
                                           address_list, 0, &am_info);
 
+    if (am_status == UCS_OK) {
+        /* Calculate RMA/AMO/RMA_BW emulation over AM scores
+         * and use the scores when selecting the lanes to
+         * check if we need to use emulation instead */
+        ae         = &address_list[am_info.addr_index];
+        iface_attr = ucp_worker_iface_get_attr(worker, am_info.rsc_index);
+        md_attr    = &context->tl_mds[context->tl_rscs[am_info.rsc_index].md_index].attr;
+
+        criteria.calc_scale_score = ucp_wireup_scale_score_func;
+        criteria.calc_score       = ucp_wireup_rma_sw_score_func;
+        rma_sw_score              =
+            ucp_wireup_calc_score(&criteria, context, md_attr,
+                                  iface_attr, &ae->iface_attr);
+
+        criteria.calc_score       = ucp_wireup_amo_sw_score_func;
+        amo_sw_score              =
+            ucp_wireup_calc_score(&criteria, context, md_attr,
+                                  iface_attr, &ae->iface_attr);
+
+        criteria.calc_score       = ucp_wireup_rma_bw_sw_score_func;
+        rma_bw_sw_score           =
+            ucp_wireup_calc_score(&criteria, context, md_attr,
+                                  iface_attr, &ae->iface_attr);
+
+        ucs_trace("ep %p: emulation over " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
+                  " -> '%s' address[%d],md[%d] RMA score %.2f"
+                  "AMO score %.2f RMA BW score %.2f", ep,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[am_info.rsc_index].tl_rsc),
+                  context->tl_rscs[am_info.rsc_index].md_index,
+                  ucp_ep_peer_name(ep), am_info.addr_index,
+                  address_list[am_info.addr_index].md_index,
+                  rma_sw_score, amo_sw_score, rma_bw_sw_score);
+    }
+
     status = ucp_wireup_add_rma_lanes(ep, params, ep_init_flags, address_count,
                                       address_list, lane_descs, &key->num_lanes,
-                                      am_info.score, &need_am);
+                                      rma_sw_score, &need_am);
     if (status != UCS_OK) {
         return status;
     }
 
     status = ucp_wireup_add_amo_lanes(ep, params, ep_init_flags, address_count,
                                       address_list, lane_descs, &key->num_lanes,
-                                      am_info.score, &need_am);
+                                      amo_sw_score, &need_am);
     if (status != UCS_OK) {
         return status;
     }
@@ -1401,7 +1543,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     status = ucp_wireup_add_rma_bw_lanes(ep, params, ep_init_flags, address_count,
                                          address_list, lane_descs, &key->num_lanes,
-                                         am_info.score);
+                                         rma_bw_sw_score);
     if (status != UCS_OK) {
         return status;
     }
