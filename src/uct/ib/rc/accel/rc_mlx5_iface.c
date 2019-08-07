@@ -414,8 +414,6 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     }
 
     iface->tm.bcopy_mp  = &iface->tm.mp.tx_mp;
-    iface->tm.max_zcopy = uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
-    iface->tm.max_bcopy = UCT_RC_MLX5_TAG_BCOPY_MAX;
 
     return;
 
@@ -426,8 +424,6 @@ out_tm_disabled:
     init_attr->rx_cq_len     = rc_config->super.rx.queue_len;
     init_attr->seg_size      = rc_config->super.seg_size;
 out_mp_disabled:
-    iface->tm.max_zcopy      = rc_config->super.seg_size;
-    iface->tm.max_bcopy      = rc_config->super.seg_size;
     iface->tm.mp.num_strides = 1;
     iface->tm.bcopy_mp       = &iface->super.tx.mp;
 }

@@ -656,6 +656,9 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
     iface->tm.max_rndv_data       = IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) -
                                     tmh_hdrs_len;
 
+    iface->tm.max_zcopy           = iface->super.super.config.seg_size;
+    iface->tm.max_bcopy           = iface->super.super.config.seg_size;
+
     /* Init ptr array to store completions of RNDV operations. Index in
      * ptr_array is used as operation ID and is passed in "app_context"
      * of TM header. */
@@ -714,6 +717,10 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
         }
 
         kh_init_inplace(uct_rc_mlx5_tm_mp_hash, &iface->tm.mp.hash);
+
+        /* Redefine tag eager thresholds */
+        iface->tm.max_zcopy = uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
+        iface->tm.max_bcopy = UCT_RC_MLX5_TAG_BCOPY_MAX;
 
         ucs_debug("Multi-Packet WQ config: stride size %d, WQEs %d, strides per WQE %d",
                   iface->super.super.config.seg_size, max_wr, iface->tm.mp.num_strides);
