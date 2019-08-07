@@ -485,3 +485,80 @@ out:
     }
     return result;
 }
+
+int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        return UCS_SOCKET_INET_ADDR(addr).s_addr == INADDR_ANY;
+    case AF_INET6:
+        return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_any,
+                       sizeof(UCS_SOCKET_INET6_ADDR(addr)));
+    default:
+        ucs_debug("Invalid address family: %d", addr->sa_family);
+    }
+
+    return 0;
+}
+
+ucs_status_t ucs_sockaddr_get_dev_names(unsigned *num_resources_p, 
+                                        char **dev_names_pp, 
+                                        size_t dev_name_len)
+
+{
+    char *dev_names, *tmp, *dev_name;
+    static const char *netdev_dir = "/sys/class/net";
+    ucs_status_t status = UCS_OK;
+    unsigned num_resources;
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir(netdev_dir);
+    if (dir == NULL) {
+        ucs_error("opendir(%s) failed: %m", netdev_dir);
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    dev_names     = NULL;
+    num_resources = 0;
+    for (;;) {
+        errno = 0;
+        entry = readdir(dir);
+        if (entry == NULL) {
+            if (errno != 0) {
+                ucs_error("readdir(%s) failed: %m", netdev_dir);
+                ucs_free(dev_names);
+                status = UCS_ERR_IO_ERROR;
+                goto out_closedir;
+            }
+            break; /* no more items */
+        }
+
+        if (!ucs_netif_is_active(entry->d_name)) {
+            continue;
+        }
+
+        tmp = ucs_realloc(dev_names, dev_name_len * (num_resources + 1),
+                          "dev_names");
+        if (tmp == NULL) {
+            ucs_error("Unable to reallocate memory");
+            ucs_free(dev_names);
+            status = UCS_ERR_NO_MEMORY;
+            goto out_closedir;
+        }
+        dev_names = tmp;
+
+        /* UCT_DEVICE_NAME_MAX */
+        dev_name = (char *)dev_names + (num_resources * dev_name_len);
+        num_resources++;
+        ucs_snprintf_zero(dev_name, dev_name_len, "%s", entry->d_name);
+    }
+    *num_resources_p = num_resources;
+    *dev_names_pp    = dev_names;
+
+out_closedir:
+    closedir(dir);
+out:
+    return status;
+}

@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <dirent.h>
 
 BEGIN_C_DECLS
 
@@ -319,6 +320,33 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      const struct sockaddr *sa2,
                      ucs_status_t *status_p);
+
+/**
+ * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ *
+ * @return 1 if input is INADDR_ANY or in6addr_any
+ *         0 if not
+ */
+int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
+
+/**
+ * Return the number of devices and a string of names of devices under
+ * /sys/class/net that are in active state as determined by ucs_netif_is_active
+ *
+ * @param [out]    num_resources_p Return number of active net devices
+ * @param [in/out] dev_names_pp    Return pointer to string of device names
+ *                                 Length of string = num_resources_p * dev_name_len
+ *                                 Function allocates memory for the string and
+ *                                 user is responsible to free
+ * @param [in]     dev_name_len    Length of each of the device names
+ *
+ * @return UCS_OK on success or appropriate error on failure.
+ */
+ucs_status_t ucs_sockaddr_get_dev_names(unsigned *num_resources_p, 
+                                        char **dev_names_pp, 
+                                        size_t dev_name_len);
 
 
 END_C_DECLS
