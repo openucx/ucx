@@ -17,7 +17,6 @@
 
 #define UCT_COMPONENT_NAME_MAX     16
 #define UCT_TL_NAME_MAX            10
-#define UCT_MD_COMPONENT_NAME_MAX  16
 #define UCT_MD_NAME_MAX            16
 #define UCT_DEVICE_NAME_MAX        32
 #define UCT_PENDING_REQ_PRIV_LEN   40

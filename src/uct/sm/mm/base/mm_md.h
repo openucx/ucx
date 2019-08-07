@@ -73,19 +73,20 @@ typedef struct uct_mm_component {
 } uct_mm_component_t;
 
 
-/* Extract mapper ops from MD component */
+/* Extract mapper ops from MM component */
 #define uct_mm_mdc_mapper_ops(_component) \
     (ucs_derived_of(_component, uct_mm_component_t)->ops)
 
 
-/* Extract mapped ops from MD */
+/* Extract mapper ops from MM MD */
 #define uct_mm_md_mapper_ops(_md) \
     uct_mm_mdc_mapper_ops((_md)->component)
+
 
 /*
  * Define a memory-mapper component for MM.
  *
- * @param _var          Variable for MD component.
+ * @param _var          Variable for MM component.
  * @param _name         String which is the component name.
  * @param _ops          Mapper operations, of type uct_mm_mapper_ops_t.
  * @param _prefix       Prefix for defining the vars config table and config struct.
