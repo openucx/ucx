@@ -379,7 +379,7 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
     }
 #endif
 
-#if IBV_HW_TM_DC
+#if IBV_HW_TM
     if (dev->dev_attr.tm_caps.capability_flags & IBV_EXP_TM_CAP_DC) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_DC_TM;
     }

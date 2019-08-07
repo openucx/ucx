@@ -19,7 +19,7 @@
 /*
  * HW tag matching
  */
-#if IBV_HW_TM_DC
+#if IBV_HW_TM
 #  if HAVE_INFINIBAND_TM_TYPES_H
 /* upstream tm_types.h doesn't provide RAVH header */
 struct ibv_ravh {
@@ -255,7 +255,7 @@ uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
 
 #endif
 
-#if IBV_HW_TM_DC
+#if IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 {

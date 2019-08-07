@@ -568,7 +568,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       comp, txwq->sig_pi);
 }
 
-#if IBV_HW_TM_DC
+#if IBV_HW_TM
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                       const void *data, size_t length)

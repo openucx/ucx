@@ -377,14 +377,12 @@ AS_IF([test "x$with_ib" = "xyes"],
                             [[#include <infiniband/tm_types.h>]])
            ])
        AS_IF([test "x$with_ib_hw_tm" = xexp],
-           [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
-            AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params], [
-            AC_DEFINE([IBV_HW_TM_DC], 1, [IB DC Tag Matching support])
+           [AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params], [
+            AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
                       ], [], [#include <infiniband/verbs_exp.h>])
            ])
        AS_IF([test "x$with_ib_hw_tm" = xupstream],
            [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
-            AC_DEFINE([IBV_HW_TM_DC], 1, [IB DC Tag Matching support])
             AC_CHECK_MEMBERS([struct ibv_tm_caps.flags], [], [],
                              [#include <infiniband/verbs.h>])])
 

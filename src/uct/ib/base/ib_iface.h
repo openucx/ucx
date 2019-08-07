@@ -201,7 +201,7 @@ typedef struct uct_ib_fence_info {
 
 enum {
     UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_ENABLE                 = UCS_BIT(1),
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1),
 };
 
 typedef struct uct_ib_iface_init_attr {

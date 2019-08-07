@@ -1028,10 +1028,12 @@ enum {
     UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B  = 0x22
 };
 
-#define UCT_IB_MLX5_QPC_CS_REQ(_size) \
-    ((_size) > 32 ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B : \
-          (_size) ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_32B : \
-                    UCT_IB_MLX5_QPC_CS_REQ_DISABLE)
+static inline unsigned uct_ib_mlx5_qpc_cs_req(unsigned size)
+{
+    return size > 32 ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B :
+                size ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_32B :
+                       UCT_IB_MLX5_QPC_CS_REQ_DISABLE;
+}
 
 enum {
     UCT_IB_MLX5_QPC_CS_RES_DISABLE    = 0x0,
@@ -1039,10 +1041,12 @@ enum {
     UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B  = 0x2
 };
 
-#define UCT_IB_MLX5_QPC_CS_RES(_size) \
-    ((_size) > 32 ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B : \
-          (_size) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B : \
-                    UCT_IB_MLX5_QPC_CS_RES_DISABLE)
+static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size)
+{
+    return size > 32 ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B :
+                size ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
+                       UCT_IB_MLX5_QPC_CS_RES_DISABLE;
+}
 
 struct uct_ib_mlx5_qpc_bits {
     uint8_t         state[0x4];

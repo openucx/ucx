@@ -53,7 +53,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, rre, 1);
     UCT_IB_MLX5DV_SET(dctc, dctc, rwe, 1);
     UCT_IB_MLX5DV_SET(dctc, dctc, rae, 1);
-    UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, UCT_IB_MLX5_QPC_CS_RES(iface->super.super.super.config.max_inl_resp));
+    UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, uct_ib_mlx5_qpc_cs_res(
+                iface->super.super.super.config.max_inl_resp));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, 3);
     UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, iface->super.super.super.pkey_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->super.super.super.config.port_num);

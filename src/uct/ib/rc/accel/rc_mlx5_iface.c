@@ -333,7 +333,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     struct ibv_tmh tmh;
 
-    iface->tm.enabled = mlx5_config->tm.enable && (init_attr->flags & UCT_IB_TM_ENABLE);
+    iface->tm.enabled = mlx5_config->tm.enable && (init_attr->flags & UCT_IB_TM_SUPPORTED);
 
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
@@ -575,7 +575,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.qp_type     = IBV_QPT_RC;
 
     if (IBV_DEVICE_TM_FLAGS(&md->super.dev)) {
-        init_attr.flags  |= UCT_IB_TM_ENABLE;
+        init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,

@@ -1076,7 +1076,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_pending_purge         = uct_dc_mlx5_ep_pending_purge,
     .ep_flush                 = uct_dc_mlx5_ep_flush,
     .ep_fence                 = uct_dc_mlx5_ep_fence,
-#if IBV_HW_TM_DC
+#if IBV_HW_TM
     .ep_tag_eager_short       = uct_dc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_dc_mlx5_ep_tag_eager_bcopy,
     .ep_tag_eager_zcopy       = uct_dc_mlx5_ep_tag_eager_zcopy,
@@ -1142,7 +1142,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
-        init_attr.flags  |= UCT_IB_TM_ENABLE;
+        init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
     /* driver will round up to pow of 2 if needed */

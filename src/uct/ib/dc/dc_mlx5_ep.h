@@ -122,7 +122,7 @@ ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uct_completion_t *comp);
 
-#if IBV_HW_TM_DC
+#if IBV_HW_TM
 ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length);
 
