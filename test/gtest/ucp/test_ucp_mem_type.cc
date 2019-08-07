@@ -76,7 +76,7 @@ class test_ucp_mem_type_alloc_before_init : public test_ucp_mem_type {
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_TAG;
+        params.features    |= UCP_FEATURE_TAG;
         return params;
     }
 
@@ -97,7 +97,7 @@ public:
     }
 
 protected:
-    size_t                    m_size;
+    size_t                     m_size;
     ucs::auto_ptr<mem_buffer>  m_send_buffer, m_recv_buffer;
 };
 
