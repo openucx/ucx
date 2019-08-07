@@ -416,12 +416,12 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
     ASSERT_UCS_OK(status);
 
     ucs_sockaddr_str(&m_listen_addr.get_sock_addr(), m_listener_ip_port_str,
-                     UCS_SOCKADDR_STRING_LEN) ,
-    ucs_sockaddr_str(attr.sockaddr.addr, attr_addr_ip_port_str,
+                     UCS_SOCKADDR_STRING_LEN);
+    ucs_sockaddr_str((struct sockaddr*)&attr.sockaddr, attr_addr_ip_port_str,
                      UCS_SOCKADDR_STRING_LEN);
     EXPECT_EQ(strcmp(m_listener_ip_port_str, attr_addr_ip_port_str), 0);
 
-    status = ucs_sockaddr_get_port(attr.sockaddr.addr, &port);
+    status = ucs_sockaddr_get_port((struct sockaddr*)&attr.sockaddr, &port);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(m_listen_addr.get_port(), htons(port));

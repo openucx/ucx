@@ -89,10 +89,18 @@ ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
 {
     uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener,
                                                             uct_rdmacm_listener_t);
+    struct sockaddr *addr;
 
     if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_SOCKADDR) {
-        listener_attr->sockaddr.addr    = rdma_get_local_addr(rdmacm_listener->id);
-        listener_attr->sockaddr.addrlen = sizeof(*listener_attr->sockaddr.addr);
+        addr = rdma_get_local_addr(rdmacm_listener->id);
+        if (addr->sa_family == AF_INET) {
+            memcpy(&listener_attr->sockaddr, addr, sizeof(struct sockaddr_in));
+        } else if (addr->sa_family == AF_INET6) {
+            memcpy(&listener_attr->sockaddr, addr, sizeof(struct sockaddr_in6));
+        } else {
+            ucs_error("unknown sa_family=%d", addr->sa_family);
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     return UCS_OK;

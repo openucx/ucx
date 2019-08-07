@@ -1121,12 +1121,12 @@ struct uct_listener_attr {
      * @ref uct_listener_attr_field. Fields not specified by this mask
      * will be ignored.
      */
-    uint64_t        field_mask;
+    uint64_t                field_mask;
 
     /**
      * Sockaddr on which this listener is listening.
      */
-    ucs_sock_addr_t sockaddr;
+    struct sockaddr_storage sockaddr;
 };
 
 
