@@ -20,6 +20,7 @@ mlx4_am = {
       32 :      "rc",
       64 :      "rc",
      256 :      "ud",
+     512 :      "ud",
     1024 :      "ud",
  1000000 :      "ud",
 }
@@ -30,6 +31,7 @@ mlx5_am = {
       32 :      "rc_mlx5",
       64 :      "dc_mlx5",
      256 :      "dc_mlx5",
+     512 :      "dc_mlx5",
     1024 :      "dc_mlx5",
  1000000 :      "dc_mlx5",
 }
@@ -40,6 +42,7 @@ mlx5_am_no_dc = {
       32 :      "rc_mlx5",
       64 :      "rc_mlx5",
      256 :      "ud_mlx5",
+     512 :      "ud_mlx5",
     1024 :      "ud_mlx5",
  1000000 :      "ud_mlx5",
 }
@@ -51,6 +54,7 @@ mlx5_am_override = {
       32 :      "rc_mlx5",
       64 :      "rc_mlx5",
      256 :      "rc_mlx5",
+     512 :      "rc_mlx5",
     1024 :      "rc_mlx5",
  1000000 :      "rc_mlx5",
 }
@@ -61,6 +65,7 @@ mlx4_am_override = {
       32 :      "rc",
       64 :      "rc",
      256 :      "rc",
+     512 :      "rc",
     1024 :      "rc",
  1000000 :      "rc",
 }
@@ -76,21 +81,20 @@ am_tls =  {
 
 def find_am_transport(dev, neps, override = 0) :
 
-    ucx_info = bin_prefix+"/ucx_info -e -u t"
-
     os.putenv("UCX_TLS", "ib")
     os.putenv("UCX_NET_DEVICES", dev)
 
     if (override):
         os.putenv("UCX_NUM_EPS", "2")
 
-    status, output = commands.getstatusoutput(ucx_info + " -n " + str(neps) + " | grep am")
-    #print output
+    status, output = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep am")
 
-    match  = re.search(r'\d+:(\S+)/\S+', output)
+    os.unsetenv("UCX_TLS")
+    os.unsetenv("UCX_NET_DEVICES")
+
+    match = re.search(r'\d+:(\S+)/\S+', output)
     if match:
         am_tls = match.group(1)
-        #print am_tls
         if (override):
             os.unsetenv("UCX_NUM_EPS")
 
@@ -98,11 +102,34 @@ def find_am_transport(dev, neps, override = 0) :
     else:
         return "no am tls"
 
+def test_fallback_from_rc(dev, neps) :
+
+    os.putenv("UCX_TLS", "ib")
+    os.putenv("UCX_NET_DEVICES", dev)
+
+    status,output = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep rc")
+
+    os.unsetenv("UCX_TLS")
+    os.unsetenv("UCX_NET_DEVICES")
+
+    if output != "":
+        print "RC transport must not be used when estimated number of EPs = " + str(neps)
+        sys.exit(1)
 
 if len(sys.argv) > 1:
     bin_prefix = sys.argv[1] + "/bin"
 else:
     bin_prefix = "./src/tools/info"
+
+ucx_info = bin_prefix + "/ucx_info"
+ucx_info_args = " -e -u t -n "
+
+status, output = commands.getstatusoutput(ucx_info + " -c | grep -e \"UCX_RC_.*_MAX_NUM_EPS\"")
+match = re.findall(r'\S+=(\d+)', output)
+if match:
+    rc_max_num_eps = int(max(match))
+else:
+    rc_max_num_eps = 0
 
 status, output = commands.getstatusoutput("ibv_devinfo  -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1 ")
 dev_list = output.splitlines()
@@ -146,6 +173,9 @@ for dev in sorted(dev_list):
 
             if dev_tl_override_map[n_eps] != tl:
                 sys.exit(1)
+
+        if n_eps >= (rc_max_num_eps * 2):
+            test_fallback_from_rc(dev + ':' + port, n_eps)
 
 sys.exit(0)
 
