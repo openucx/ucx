@@ -253,6 +253,13 @@ static ucs_config_field_t ucp_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
 
+  {"SOCKADDR_CM_ENABLE", "n" /* TODO: set try by default */,
+   "Enable alternative wireup protocol for sockaddr connected endpoints.\n"
+   "Enabling this mode changes underlying UCT mechanism for connection\n"
+   "establishment and enables synchronized close protocol which does not\n"
+   "require out of band synchronization before destroying UCP resources.",
+   ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
@@ -1068,20 +1075,35 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_release_components;
     }
 
+    context->config.cm_cmpts_bitmap = 0;
+
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
                         UCT_COMPONENT_ATTR_FIELD_NAME |
-                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
+                        UCT_COMPONENT_ATTR_FIELD_FLAGS;
         status = uct_component_query(context->tl_cmpts[i].cmpt,
                                      &context->tl_cmpts[i].attr);
         if (status != UCS_OK) {
             goto err_free_resources;
         }
 
+        if ((context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) &&
+            (context->config.ext.sockaddr_cm_enable != UCS_NO)) {
+            context->config.cm_cmpts_bitmap |= UCS_BIT(i);
+        }
+
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
+    }
+
+    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
+        (context->config.cm_cmpts_bitmap == 0)) {
+        ucs_error("there are no UCT components with CM capability");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_resources;
     }
 
     /* Allocate actual array of MDs */
