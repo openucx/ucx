@@ -2,8 +2,10 @@
 
 trigger:
   - master
+  - v1.6.x
 pr:
   - master
+  - v1.6.x
 
 resources:
   containers:
