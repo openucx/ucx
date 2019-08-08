@@ -3069,8 +3069,19 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
  */
 void uct_listener_destroy(uct_listener_h listener);
 
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Get attributes specific to a particular listener.
+ *
+ * @param [in]  listener      listener object to query.
+ * @param [out] listener_attr Filled with attributes of the listener.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
 ucs_status_t uct_listener_query(uct_listener_h listener,
                                 uct_listener_attr_t *listener_attr);
+
 
 /**
  * @example uct_hello_world.c
