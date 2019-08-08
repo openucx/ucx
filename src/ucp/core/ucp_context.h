@@ -198,8 +198,8 @@ typedef struct ucp_context {
             /* Allocation method */
             uct_alloc_method_t    method;
 
-            /* MD name to use, if method is MD */
-            char                  mdc_name[UCT_MD_COMPONENT_NAME_MAX];
+            /* Component name to use, if method is MD */
+            char                  cmpt_name[UCT_COMPONENT_NAME_MAX];
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 

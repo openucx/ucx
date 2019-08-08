@@ -125,7 +125,7 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
  * Defines a UCT component
  */
 struct uct_component {
-    const char                              name[UCT_MD_COMPONENT_NAME_MAX]; /**< Component name */
+    const char                              name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     uct_component_query_md_resources_func_t query_md_resources; /**< Query memory domain resources method */
     uct_component_md_open_func_t            md_open;            /**< Memory domain open method */
     uct_component_cm_open_func_t            cm_open;            /**< Connection manager open method */

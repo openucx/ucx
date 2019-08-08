@@ -39,14 +39,14 @@ void* test_md::alloc_thread(void *arg)
     return NULL;
 }
 
-std::vector<test_md_param> test_md::enum_mds(const std::string& mdc_name) {
+std::vector<test_md_param> test_md::enum_mds(const std::string& cmpt_name) {
 
     std::vector<md_resource> md_resources = enum_md_resources();
 
     std::vector<test_md_param> result;
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
          iter != md_resources.end(); ++iter) {
-        if (iter->cmpt_attr.name == mdc_name) {
+        if (iter->cmpt_attr.name == cmpt_name) {
             result.push_back(test_md_param());
             result.back().component = iter->cmpt;
             result.back().md_name   = iter->rsc_desc.md_name;

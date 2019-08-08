@@ -26,7 +26,7 @@ class test_md : public testing::TestWithParam<test_md_param>,
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<test_md_param> enum_mds(const std::string& mdc_name);
+    static std::vector<test_md_param> enum_mds(const std::string& cmpt_name);
 
     test_md();
 
@@ -62,7 +62,7 @@ private:
 };
 
 
-#define _UCT_MD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
-    INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
+#define _UCT_MD_INSTANTIATE_TEST_CASE(_test_case, _cmpt_name) \
+    INSTANTIATE_TEST_CASE_P(_cmpt_name, _test_case, \
+                            testing::ValuesIn(_test_case::enum_mds(#_cmpt_name)));
 #endif

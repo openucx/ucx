@@ -94,8 +94,8 @@ static ucs_config_field_t ucp_config_table[] = {
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
-   "specified memory domain for allocation. NAME can be either a MD component\n"
-   "name, or a wildcard - '*' - which expands to all MD components.",
+   "specified memory domain for allocation. NAME can be either a UCT component\n"
+   "name, or a wildcard - '*' - which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"SOCKADDR_TLS_PRIORITY", "rdmacm,*",
@@ -1266,8 +1266,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
              * component name.
              */
             context->config.alloc_methods[i].method = UCT_ALLOC_METHOD_MD;
-            ucs_strncpy_zero(context->config.alloc_methods[i].mdc_name,
-                             method_name + 3, UCT_MD_COMPONENT_NAME_MAX);
+            ucs_strncpy_zero(context->config.alloc_methods[i].cmpt_name,
+                             method_name + 3, UCT_COMPONENT_NAME_MAX);
             ucs_debug("allocation method[%d] is md '%s'", i, method_name + 3);
         } else {
             /* Otherwise, this is specific allocation method name.
@@ -1279,7 +1279,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                 {
                     /* Found the allocation method in the internal name list */
                     context->config.alloc_methods[i].method = method;
-                    strcpy(context->config.alloc_methods[i].mdc_name, "");
+                    strcpy(context->config.alloc_methods[i].cmpt_name, "");
                     ucs_debug("allocation method[%d] is '%s'", i, method_name);
                     break;
                 }
