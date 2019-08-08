@@ -1278,6 +1278,20 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 #if IBV_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
+    if (ucs_unlikely(UCT_RC_MLX5_MP_ENABLED(iface) && (byte_len & UCS_BIT(31)))) {
+        /* This is a filler CQE.
+         * TODO: Check if cqe->app_op is valid for filler CQE. Then this check
+         * could be done for specific CQE types only.
+         * TODO: Check how often this CQE arrives. Can move this handling to
+         * non-inline function. */
+        seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
+        ucs_assert(seg->srq.strides);
+        --seg->srq.strides;
+        uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe,
+                                          ntohs(cqe->wqe_counter), UCS_OK,
+                                          0, NULL);
+    }
+
     /* Should be a fast path, because small (latency-critical) messages
      * are not supposed to be offloaded to the HW.  */
     if (ucs_likely(cqe->app_op == UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED)) {
