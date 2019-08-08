@@ -42,10 +42,10 @@ typedef struct uct_md_registered_tl {
 
 
 /**
- * Add a transport component to a md component
- * (same transport component can be added to multiple md components).
+ * Add a transport component to a UCT component
+ * (same transport component can be added to multiple UCT components).
  *
- * @param _component     Pointer to MD component to add the TL component to.
+ * @param _component     Pointer to UCT component to add the TL component to.
  * @param _tlc           Pointer to TL component.
  */
 #define UCT_MD_REGISTER_TL(_component, _tlc) \
@@ -109,8 +109,8 @@ static UCS_F_ALWAYS_INLINE void*
 uct_md_fill_md_name(uct_md_h md, void *buffer)
 {
 #if ENABLE_DEBUG_DATA
-    memcpy(buffer, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
-    return (char*)buffer + UCT_MD_COMPONENT_NAME_MAX;
+    memcpy(buffer, md->component->name, UCT_COMPONENT_NAME_MAX);
+    return (char*)buffer + UCT_COMPONENT_NAME_MAX;
 #else
     return buffer;
 #endif

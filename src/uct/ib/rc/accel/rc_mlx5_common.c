@@ -451,7 +451,7 @@ ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
     size_t rndv_data_len;
     void *rndv_usr_hdr;
     void *rb;
-    char packed_rkey[UCT_MD_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
+    char packed_rkey[UCT_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
 
     rvh = (struct ibv_rvh*)(tmh + 1);
 

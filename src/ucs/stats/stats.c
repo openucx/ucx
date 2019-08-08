@@ -19,7 +19,9 @@
 #include <ucs/datastruct/khash.h>
 
 #include <sys/ioctl.h>
+#ifdef HAVE_LINUX_FUTEX_H
 #include <linux/futex.h>
+#endif
 
 const char *ucs_stats_formats_names[] = {
     [UCS_STATS_FULL]        = "full",
@@ -69,6 +71,9 @@ typedef struct {
     khash_t(ucs_stats_cls) cls;
 
     pthread_mutex_t      lock;
+#ifndef HAVE_LINUX_FUTEX_H
+    pthread_cond_t       cv;
+#endif
     pthread_t            thread;
 } ucs_stats_context_t;
 
@@ -77,6 +82,9 @@ static ucs_stats_context_t ucs_stats_context = {
     .root_node        = {},
     .root_filter_node = {},
     .lock             = PTHREAD_MUTEX_INITIALIZER,
+#ifndef HAVE_LINUX_FUTEX_H
+    .cv               = PTHREAD_COND_INITIALIZER,
+#endif
     .thread           = (pthread_t)-1
 };
 
@@ -89,12 +97,14 @@ static ucs_stats_class_t ucs_stats_root_node_class = {
 };
 
 
+#ifdef HAVE_LINUX_FUTEX_H
 static inline int
 ucs_sys_futex(volatile void *addr1, int op, int val1, struct timespec *timeout,
               void *uaddr2, int val3)
 {
     return syscall(SYS_futex, addr1, op, val1, timeout, uaddr2, val3);
 }
+#endif
 
 static void ucs_stats_clean_node(ucs_stats_node_t *node) {
     ucs_stats_filter_node_t * temp_filter_node;
@@ -496,6 +506,12 @@ static void* ucs_stats_thread_func(void *arg)
         ptime = NULL;
     }
 
+    /*
+     * TODO: Switch to use the condvar on all systems, eliminating
+     * futexes.  For now it is kept conditionally to not commit the
+     * change, runtime-untested on FreeBSD, to working Linux codebase.
+     */
+#ifdef HAVE_LINUX_FUTEX_H
     flags = ucs_stats_context.flags;
     while (flags & UCS_STATS_FLAG_ON_TIMER) {
         /* Wait for timeout/wakeup */
@@ -503,6 +519,18 @@ static void* ucs_stats_thread_func(void *arg)
         ucs_stats_dump();
         flags = ucs_stats_context.flags;
     }
+#else
+    pthread_mutex_lock(&ucs_stats_context.lock);
+    flags = ucs_stats_context.flags;
+    while (flags & UCS_STATS_FLAG_ON_TIMER) {
+        /* Wait for timeout/wakeup */
+        pthread_cond_timedwait(&ucs_stats_context.cv, &ucs_stats_context.lock,
+                               ptime);
+        __ucs_stats_dump(0);
+        flags = ucs_stats_context.flags;
+    }
+    pthread_mutex_unlock(&ucs_stats_context.lock);
+#endif
 
     return NULL;
 }
@@ -623,11 +651,23 @@ static void ucs_stats_unset_trigger()
 {
     void *result;
 
+#ifdef HAVE_LINUX_FUTEX_H
     if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER) {
         ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_TIMER;
         ucs_sys_futex(&ucs_stats_context.flags, FUTEX_WAKE, 1, NULL, NULL, 0);
         pthread_join(ucs_stats_context.thread, &result);
     }
+#else
+    pthread_mutex_lock(&ucs_stats_context.lock);
+    if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER) {
+        ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_TIMER;
+        pthread_cond_broadcast(&ucs_stats_context.cv);
+        pthread_mutex_unlock(&ucs_stats_context.lock);
+        pthread_join(ucs_stats_context.thread, &result);
+    } else {
+        pthread_mutex_unlock(&ucs_stats_context.lock);
+    }
+#endif
 
     if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT) {
         ucs_debug("dumping stats");
