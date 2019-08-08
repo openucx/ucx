@@ -633,7 +633,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     ucp_wireup_criteria_t mem_criteria   = *criteria;
     ucp_wireup_select_info_t select_info = {0};
     int show_error                       = !allow_am;
-    int num_memaccess_lanes              = 0;
+    int need_am_flag                     = 0;
     ucp_address_entry_t *address_list_copy;
     ucp_rsc_index_t dst_md_index;
     size_t address_list_size;
@@ -682,7 +682,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         remote_md_map &= ~UCS_BIT(dst_md_index);
         tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap,
                                                    select_info.rsc_index);
-        num_memaccess_lanes++;
+    } else {
+        need_am_flag   = 1;
     }
 
     /* Select additional transports which can access allocated memory, but
@@ -708,6 +709,9 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
             /* - the selected transport is worse than
              *   the selected AM transport */
             (ucp_wireup_score_cmp(select_info.score, am_score) < 0)) {
+            /* If a transport with UCT_MD_FLAG_ALLOC capability
+             * wasn't selected by some reason, no need to ask
+             * for mulation over AM */
             break;
         }
 
@@ -718,7 +722,6 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         remote_md_map &= ~UCS_BIT(dst_md_index);
         tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap,
                                                    select_info.rsc_index);
-        num_memaccess_lanes++;
     }
 
     status = UCS_OK;
@@ -726,7 +729,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
 out_free_address_list:
     ucs_free(address_list_copy);
 out:
-    if (((status != UCS_OK) || !num_memaccess_lanes) && allow_am) {
+    if (((status != UCS_OK) || need_am_flag) && allow_am) {
         *need_am = 1;  /* using emulation over active messages */
         status = UCS_OK;
     }
