@@ -176,7 +176,8 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL
 };
 
-static ucs_status_t uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md, void *cap)
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md, void *cap)
 {
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
@@ -404,10 +405,14 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
+    /* TODO temorarily disabled, pending resolution
+     * of RM 1860351 "ODP support for QP created via DEVX" */
+#if HAVE_DEVX_ODP_QP
     status = uct_ib_mlx5_devx_check_odp(md, cap);
     if (status != UCS_OK) {
         goto err_free;
     }
+#endif
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
