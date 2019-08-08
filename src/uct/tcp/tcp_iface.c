@@ -617,6 +617,7 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
 
     resources = ucs_malloc(sizeof(*resources) * num_resources, "resource desc");
     if (resources == NULL) {
+        ucs_free(dev_names);
         status = UCS_ERR_NO_MEMORY;
         return status;
     }

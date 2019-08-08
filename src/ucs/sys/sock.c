@@ -496,20 +496,18 @@ int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
         return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_any,
                        sizeof(UCS_SOCKET_INET6_ADDR(addr)));
     default:
-        ucs_debug("Invalid address family: %d", addr->sa_family);
+        ucs_debug("invalid address family: %d", addr->sa_family);
+        return 0;
     }
-
-    return 0;
 }
 
 ucs_status_t ucs_sockaddr_get_dev_names(unsigned *num_resources_p, 
                                         char **dev_names_pp, 
                                         size_t dev_name_len)
-
 {
-    char *dev_names, *tmp, *dev_name;
     static const char *netdev_dir = "/sys/class/net";
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status           = UCS_OK;
+    char *dev_names, *tmp, *dev_name;
     unsigned num_resources;
     struct dirent *entry;
     DIR *dir;
