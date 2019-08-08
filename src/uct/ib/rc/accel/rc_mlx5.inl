@@ -82,13 +82,16 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
                                   uct_recv_desc_t *release_desc)
 {
     void *udesc;
+    int stride_idx;
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         if (status != UCS_OK) {
+             stride_idx = ntohs(cqe->ib_stride_index);
+             ucs_assert(stride_idx < iface->tm.mp.num_strides);
              udesc = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
              udesc = udesc - iface->super.super.config.rx_hdr_offset + offset;
              uct_recv_desc(udesc) = release_desc;
-             seg->srq.ptr_mask &= ~UCS_BIT(ntohs(cqe->ib_stride_index));
+             seg->srq.ptr_mask   &= ~UCS_BIT(stride_idx);
         }
         if (--seg->srq.strides) {
             return;
@@ -348,8 +351,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
     } else {
         seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
         hdr = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
-        VALGRIND_MAKE_MEM_DEFINED(hdr - iface->super.super.config.rx_hdr_offset,
-                                  byte_len);
+        VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         *flags |= UCT_CB_PARAM_FLAG_DESC;
     }
 
@@ -1172,13 +1174,11 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, &byte_len, &flags,
                                            has_ep, &context);
 
-    if (!(flags & UCT_CB_PARAM_FLAG_FIRST)) {
-        imm_data = uct_rc_mlx5_tag_imm_data_unpack(cqe->imm_inval_pkey,
-                                                   tmh->app_ctx,
-                                                   UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe));
-        status  = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
-                                           tmh, byte_len, flags, tmh->tag,
-                                           imm_data, context);
+    if (ucs_unlikely(!(flags & UCT_CB_PARAM_FLAG_FIRST))) {
+        /* Either middle or last fragment. Can pass zero tag and imm_data,
+         * because they were already provided in the first fragment. */
+        status  = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg, tmh,
+                                           byte_len, flags, 0ul, 0ul, context);
 
         uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc, cqe,
                                          status, ntohs(cqe->wqe_counter));

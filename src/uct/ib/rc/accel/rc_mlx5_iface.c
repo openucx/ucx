@@ -397,7 +397,6 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
                  ucs_status_string(status));
         goto out_mp_disabled;
     }
-    init_attr->seg_size = mtu;
 
     if (mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) {
         iface->tm.mp.num_strides = UCS_BIT(log_num_strides);
@@ -413,6 +412,7 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
         iface->tm.mp.num_strides = UCT_RC_MLX5_MP_MAX_NUM_STRIDES;
     }
 
+    init_attr->seg_size = mtu;
     iface->tm.bcopy_mp  = &iface->tm.mp.tx_mp;
 
     return;
