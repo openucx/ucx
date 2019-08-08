@@ -382,7 +382,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                            IBV_QP_PORT;
 
     if (ibv_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("error modifying QP to INIT : %m");
+        ucs_error("ibv_modify_qp(DCI, INIT) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -399,7 +399,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                       IBV_QP_AV;
 
     if (ibv_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("error modifying DCI QP to RTR: %m");
+        ucs_error("ibv_modify_qp(DCI, RTR) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -418,7 +418,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                           IBV_QP_MAX_QP_RD_ATOMIC;
 
     if (ibv_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("error modifying DCI QP to RTS: %m");
+        ucs_error("ibv_modify_qp(DCI, RTS) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -553,9 +553,9 @@ static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
 {
-    uct_ib_mlx5_md_t *md                 = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
-    uct_dc_mlx5_iface_config_t *config   = ucs_derived_of(rc_config, uct_dc_mlx5_iface_config_t);
-    uct_dc_mlx5_iface_t *iface           = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_md_t *md               = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
+    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(rc_config, uct_dc_mlx5_iface_config_t);
+    uct_dc_mlx5_iface_t *iface         = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
     struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
@@ -683,7 +683,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                            IBV_EXP_QP_DC_KEY;
 
     if (ibv_exp_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("error modifying QP to INIT : %m");
+        ucs_error("ibv_exp_modify_qp(DCI, INIT) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -702,7 +702,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                       ooo_qp_flag;
 
     if (ibv_exp_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("error modifying QP to RTR: %m");
+        ucs_error("ibv_exp_modify_qp(DCI, RTR) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -720,7 +720,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                           IBV_EXP_QP_MAX_QP_RD_ATOMIC;
 
     if (ibv_exp_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("error modifying QP to RTS: %m");
+        ucs_error("ibv_exp_modify_qp(DCI, RTS) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
 

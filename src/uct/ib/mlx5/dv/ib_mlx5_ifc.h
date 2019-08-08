@@ -1030,9 +1030,9 @@ enum {
 
 static inline unsigned uct_ib_mlx5_qpc_cs_req(unsigned size)
 {
-    return size > 32 ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B :
-                size ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_32B :
-                       UCT_IB_MLX5_QPC_CS_REQ_DISABLE;
+    return (size > 32) ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B :
+                  size ? UCT_IB_MLX5_QPC_CS_REQ_UP_TO_32B :
+                         UCT_IB_MLX5_QPC_CS_REQ_DISABLE;
 }
 
 enum {
@@ -1043,9 +1043,9 @@ enum {
 
 static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size)
 {
-    return size > 32 ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B :
-                size ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
-                       UCT_IB_MLX5_QPC_CS_RES_DISABLE;
+    return (size > 32) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B :
+                  size ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
+                         UCT_IB_MLX5_QPC_CS_RES_DISABLE;
 }
 
 struct uct_ib_mlx5_qpc_bits {
