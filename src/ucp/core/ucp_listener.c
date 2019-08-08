@@ -265,7 +265,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
             ucs_debug("uct_listener_create failed on CM %p with address %s",
                       worker->cms[i],
                       ucs_sockaddr_str(params->sockaddr.addr, addr_str,
-                                       ucs_static_array_size(addr_str)));
+                                       UCS_SOCKADDR_STRING_LEN));
             ucs_assert(status == UCS_ERR_INVALID_ADDR);
         }
     }
