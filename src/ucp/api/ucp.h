@@ -990,7 +990,7 @@ typedef struct ucp_listener_params {
  *
  * The structure defines the endpoint and its user data.
  */
-typedef struct {
+typedef struct ucp_stream_poll_ep {
     /**
      * Endpoint handle.
      */
