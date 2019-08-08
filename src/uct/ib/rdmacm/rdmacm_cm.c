@@ -41,30 +41,20 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
     return UCS_OK;
 }
 
-ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id, uint8_t is_hdr,
-                                  ucs_status_t hdr_status, uint8_t hdr_length)
+ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id, ucs_status_t hdr_status)
 {
     uct_rdmacm_priv_data_hdr_t hdr;
 
     ucs_trace("reject on cm_id %p", id);
 
-    if (is_hdr) {
-        hdr.status = hdr_status;
-        hdr.length = hdr_length;
-        if (rdma_reject(id, &hdr, sizeof(hdr))) {
-            goto err;
-        }
-    } else {
-        if (rdma_reject(id, NULL, 0)) {
-            goto err;
-        }
+    hdr.status = hdr_status;
+    hdr.length = 0;
+    if (rdma_reject(id, &hdr, sizeof(hdr))) {
+        ucs_error("rdma_reject (id=%p) failed with error: %m", id);
+        return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
-
-err:
-    ucs_error("rdma_reject (id=%p) failed with error: %m", id);
-    return UCS_ERR_IO_ERROR;
 }
 
 size_t uct_rdmacm_cm_get_max_conn_priv()
@@ -113,7 +103,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
 
     memset(&conn_param, 0, sizeof(conn_param));
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
-                                          sizeof(uct_rdmacm_priv_data_hdr_t));
+                                         sizeof(uct_rdmacm_priv_data_hdr_t));
 
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
@@ -198,7 +188,7 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
 
     status = uct_rdmacm_cm_id_to_dev_addr(event->id, &dev_addr, &addr_length);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id, 1, status, 0);
+        uct_rdmacm_cm_reject(event->id, status);
         uct_rdmacm_cm_destroy_id(event->id);
         return;
     }
@@ -259,6 +249,9 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
         ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
                   cep, ucs_sockaddr_str(remote_addr, ip_port_str,
                                         UCS_SOCKADDR_STRING_LEN));
+        /* in case of an error here, call disconnect because the client already
+         * called the connect_cb with status UCS_OK so the client is considered
+         * as connected to the server at this point. */
         cep->disconnect_cb(&cep->super.super, cep->user_data);
     }
 }
@@ -268,26 +261,26 @@ static void uct_rdmacm_cm_handle_event_rejected(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t         *cep = event->id->context;
     uct_rdmacm_priv_data_hdr_t *hdr;
     uct_cm_remote_data_t       remote_data;
+    ucs_status_t               status;
 
     ucs_assert(event->id == cep->id);
 
     /* Network reject or called by rdma_reject on the server */
     remote_data.field_mask = 0;
     if (event->param.conn.private_data != NULL) {
-        /* Server side called rdma_reject */
-        hdr = (uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
-        if (hdr->length > 0) {
-            remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA |
-                                                UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
-            remote_data.conn_priv_data        = hdr + 1;
-            remote_data.conn_priv_data_length = hdr->length;
-
-            ucs_debug("rdmacm event rejected on ep %p (cm_id %p) with status %s.",
-                      cep, event->id, ucs_status_string(hdr->status));
-        }
+        /* The server always passes private data when rejecting a connection request */
+        hdr    = (uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
+        status = hdr->status;
+        ucs_assert(hdr->length == 0);
+    } else {
+        /* Network reject */
+        status = UCS_ERR_REJECTED;
     }
 
-    uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data, UCS_ERR_REJECTED);
+    ucs_debug("rdmacm event rejected on ep %p (cm_id %p) with status %s.",
+              cep, event->id, ucs_status_string(status));
+
+    uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data, status);
 }
 
 static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)

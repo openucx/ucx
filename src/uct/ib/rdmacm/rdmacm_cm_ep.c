@@ -212,7 +212,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
 
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id, 1, status, 0);
+        uct_rdmacm_cm_reject(event->id, status);
         goto err_destroy_id;
     }
 

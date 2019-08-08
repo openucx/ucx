@@ -69,7 +69,7 @@ ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
 
     ucs_assert_always(rdmacm_listener->id == event->listen_id);
 
-    uct_rdmacm_cm_reject(event->id, 0, 0, 0);
+    uct_rdmacm_cm_reject(event->id, UCS_ERR_REJECTED);
 
     uct_rdmacm_cm_destroy_id(event->id);
 
