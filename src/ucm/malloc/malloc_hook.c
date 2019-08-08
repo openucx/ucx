@@ -555,16 +555,22 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
     ucs_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
-static int ucs_malloc_is_ready(int events)
+static int ucs_malloc_is_ready(int events, const char *title)
 {
     /*
-     * If malloc hooks are installed - we're good here.
+     * In RELOC mode, if malloc hooks are installed - we're good here.
      * Otherwise, we have to make sure all events are indeed working - because
      *  we can't be sure what the existing implementation is doing.
      * The implication of this is that in some cases (e.g infinite mmap threshold)
-     *  we will install out memory hooks, even though it may not be required.
+     *  we will install our memory hooks, even though it may not be required.
      */
-    return ucm_malloc_hook_state.hook_called ||
+    ucm_debug("ucs_malloc_is_ready(%s): have 0x%x/0x%x events;"
+              " mmap_mode=%d hook_called=%d",
+              title, ucm_malloc_hook_state.installed_events, events,
+              ucm_mmap_hook_mode(), ucm_malloc_hook_state.hook_called);
+
+    return ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&
+            ucm_malloc_hook_state.hook_called) ||
            ucs_test_all_flags(ucm_malloc_hook_state.installed_events, events);
 }
 
@@ -793,12 +799,12 @@ ucs_status_t ucm_malloc_install(int events)
 
     ucm_malloc_init_orig_funcs();
 
-    if (ucs_malloc_is_ready(events)) {
+    if (ucs_malloc_is_ready(events, "before test")) {
         goto out_succ;
     }
 
     ucm_malloc_test(events);
-    if (ucs_malloc_is_ready(events)) {
+    if (ucs_malloc_is_ready(events, "after test")) {
         goto out_succ;
     }
 
@@ -859,7 +865,7 @@ ucs_status_t ucm_malloc_install(int events)
 
     /* Just installed the symbols, test again */
     ucm_malloc_test(events);
-    if (ucm_malloc_hook_state.hook_called) {
+    if (ucs_malloc_is_ready(events, "after install")) {
         goto out_install_opt_syms;
     }
 
