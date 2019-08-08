@@ -85,6 +85,8 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
+    /** Enable cm wireup and close proto for client-server connections */
+    ucs_ternary_value_t                    sockaddr_cm_enable;
 } ucp_context_config_t;
 
 
@@ -202,6 +204,10 @@ typedef struct ucp_context {
             char                  cmpt_name[UCT_COMPONENT_NAME_MAX];
         } *alloc_methods;
         unsigned                  num_alloc_methods;
+
+        /* Cached map of components which support CM capability or 0 if disabled
+         * by user */
+        uint64_t                  cm_cmpts_bitmap;
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
