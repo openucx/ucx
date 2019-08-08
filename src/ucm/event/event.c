@@ -540,7 +540,8 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
                    UCM_EVENT_MADVISE|
                    UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED|
                    UCM_EVENT_MEM_TYPE_ALLOC|UCM_EVENT_MEM_TYPE_FREE|
-                   UCM_EVENT_FLAG_NO_INSTALL)) {
+                   UCM_EVENT_FLAG_NO_INSTALL|
+                   UCM_EVENT_FLAG_EXISTING_ALLOC)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
