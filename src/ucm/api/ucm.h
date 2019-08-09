@@ -433,7 +433,7 @@ int ucm_brk(void *addr);
 
 
 /**
- * @brief Call the original implementation of @ref ucm_madvise and all handlers
+ * @brief Call the original implementation of @ref madvise and all handlers
  * associated with it.
  */
 int ucm_madvise(void *addr, size_t length, int advice);
