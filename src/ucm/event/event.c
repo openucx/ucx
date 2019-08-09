@@ -478,7 +478,7 @@ static int ucm_events_to_native_events(int events)
 
 static ucs_status_t ucm_event_install(int events)
 {
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INIITIALIZER;
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     UCS_MODULE_FRAMEWORK_DECLARE(ucm);
     ucm_event_installer_t *event_installer;
     int native_events, malloc_events;

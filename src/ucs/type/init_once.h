@@ -21,7 +21,7 @@ typedef struct ucs_init_once {
 
 
 /* Static initializer for @ref ucs_init_once_t */
-#define UCS_INIT_ONCE_INIITIALIZER \
+#define UCS_INIT_ONCE_INITIALIZER \
     { PTHREAD_MUTEX_INITIALIZER, 0 }
 
 

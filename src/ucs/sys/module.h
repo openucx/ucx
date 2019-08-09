@@ -30,7 +30,7 @@ typedef enum {
  */
 #define UCS_MODULE_FRAMEWORK_DECLARE(_name) \
     static ucs_init_once_t ucs_framework_init_once_##_name = \
-        UCS_INIT_ONCE_INIITIALIZER
+        UCS_INIT_ONCE_INITIALIZER
 
 
 /**
