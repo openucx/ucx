@@ -92,6 +92,7 @@ typedef struct uct_ep_params       uct_ep_params_t;
 typedef struct uct_cm_attr         uct_cm_attr_t;
 typedef struct uct_cm              uct_cm_t;
 typedef uct_cm_t                   *uct_cm_h;
+typedef struct uct_listener_attr   uct_listener_attr_t;
 typedef struct uct_listener        *uct_listener_h;
 typedef struct uct_listener_params uct_listener_params_t;
 typedef struct uct_tag_context     uct_tag_context_t;

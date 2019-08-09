@@ -216,6 +216,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
     .cm_query         = uct_rdmacm_cm_query,
     .listener_create  = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_listener_t),
     .listener_reject  = uct_rdmacm_listener_reject,
+    .listener_query   = uct_rdmacm_listener_query,
     .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_listener_t),
     .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_ep_t)
 };
