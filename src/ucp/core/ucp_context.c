@@ -1082,7 +1082,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
-                        UCT_COMPONENT_ATTR_FIELD_NAME |
+                        UCT_COMPONENT_ATTR_FIELD_NAME              |
                         UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
                         UCT_COMPONENT_ATTR_FIELD_FLAGS;
         status = uct_component_query(context->tl_cmpts[i].cmpt,
