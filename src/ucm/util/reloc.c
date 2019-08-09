@@ -18,16 +18,20 @@
 
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucm/util/sys.h>
 
 #include <sys/fcntl.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <link.h>
+#include <limits.h>
 
 
 typedef struct ucm_auxv {
@@ -41,6 +45,12 @@ typedef struct ucm_reloc_dl_iter_context {
     ucs_status_t       status;
     ElfW(Addr)         libucm_base_addr;  /* Base address to store previous value */
 } ucm_reloc_dl_iter_context_t;
+
+
+static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
+    .symbol = "dlopen",
+    .value  = ucm_dlopen
+};
 
 
 /* List of patches to be applied to additional libraries */
@@ -302,21 +312,123 @@ static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch,
     return ctx.status;
 }
 
-static void *ucm_dlopen(const char *filename, int flag)
+/* read serinfo from 'module_path', result buffer must be destroyed
+ * by free() call */
+static Dl_serinfo *ucm_dlopen_load_serinfo(const char *module_path)
 {
-    ucm_reloc_patch_t *patch;
-    void *handle;
+    Dl_serinfo *serinfo = NULL;
+    Dl_serinfo serinfo_size;
+    void *module;
+    int res;
 
-    if (ucm_reloc_orig_dlopen == NULL) {
-        ucm_fatal("ucm_reloc_orig_dlopen is NULL");
+    module = ucm_reloc_orig_dlopen(module_path, RTLD_LAZY);
+    if (module == NULL) { /* requested module can't be loaded */
+        ucm_debug("failed to open %s: %s", module_path, dlerror());
         return NULL;
     }
 
+    /* try to get search info from requested module */
+    res = dlinfo(module, RTLD_DI_SERINFOSIZE, &serinfo_size);
+    if (res) {
+        ucm_debug("dlinfo(RTLD_DI_SERINFOSIZE) failed");
+        goto close_caller;
+    }
+
+    serinfo = malloc(serinfo_size.dls_size);
+    if (serinfo == NULL) {
+        ucm_error("failed to allocate %zu bytes for Dl_serinfo",
+                  serinfo_size.dls_size);
+        goto close_caller;
+    }
+
+    *serinfo = serinfo_size;
+    res      = dlinfo(module, RTLD_DI_SERINFO, serinfo);
+    if (res) {
+        ucm_debug("dlinfo(RTLD_DI_SERINFO) failed");
+        free(serinfo);
+        serinfo = NULL;
+    }
+
+close_caller:
+    dlclose(module);
+    return serinfo;
+}
+
+void *ucm_dlopen(const char *filename, int flag)
+{
+    void *handle;
+    ucm_reloc_patch_t *patch;
+    Dl_serinfo *serinfo;
+    Dl_info dl_info;
+    int res;
+    int i;
+    char rpath_path[PATH_MAX];
+    struct stat file_stat;
+
+    ucm_debug("open module: %s, flag: %x", filename, flag);
+
+    if (ucm_reloc_orig_dlopen == NULL) {
+        ucm_reloc_orig_dlopen = ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
+                                                   ucm_reloc_dlopen_patch.value);
+
+        if (ucm_reloc_orig_dlopen == NULL) {
+            ucm_fatal("ucm_reloc_orig_dlopen is NULL");
+        }
+    }
+
+    if (!ucm_global_opts.dlopen_process_rpath) {
+        goto fallback_load_lib;
+    }
+
+    /* failed to open module directly, try to use RPATH from from caller
+     * to locate requested module */
+    if (filename[0] == '/') { /* absolute path - fallback to legacy mode */
+        goto fallback_load_lib;
+    }
+
+    /* try to get module info */
+    res = dladdr(__builtin_return_address(0), &dl_info);
+    if (!res) {
+        ucm_debug("dladdr failed");
+        goto fallback_load_lib;
+    }
+
+    serinfo = ucm_dlopen_load_serinfo(dl_info.dli_fname);
+    if (serinfo == NULL) {
+        /* failed to load serinfo, try just dlopen */
+        goto fallback_load_lib;
+    }
+
+    for (i = 0; i < serinfo->dls_cnt; i++) {
+        ucm_concat_path(rpath_path, sizeof(rpath_path),
+                        serinfo->dls_serpath[i].dls_name, filename);
+        ucm_debug("check for %s", rpath_path);
+
+        res = stat(rpath_path, &file_stat);
+        if (res) {
+            continue;
+        }
+
+        free(serinfo);
+        /* ok, file exists, let's try to load it */
+        handle = ucm_reloc_orig_dlopen(rpath_path, flag);
+        if (handle == NULL) {
+            return NULL;
+        }
+
+        goto out_apply_patches;
+    }
+
+    free(serinfo);
+    /* ok, we can't lookup module in dirs listed in caller module,
+     * let's fallback to legacy mode */
+fallback_load_lib:
     handle = ucm_reloc_orig_dlopen(filename, flag);
     if (handle == NULL) {
         return NULL;
     }
 
+out_apply_patches:
     /*
      * Every time a new shared object is loaded, we must update its relocations
      * with our list of patches (including dlopen itself). We have to go over
@@ -334,11 +446,6 @@ static void *ucm_dlopen(const char *filename, int flag)
 
     return handle;
 }
-
-static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
-    .symbol = "dlopen",
-    .value  = ucm_dlopen
-};
 
 /* called with lock held */
 static ucs_status_t ucm_reloc_install_dlopen()

@@ -75,6 +75,11 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ucs_offsetof(ucm_global_config_t, enable_dynamic_mmap_thresh),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"DLOPEN_PROCESS_RPATH", "yes",
+   "Process RPATH section of caller module during dynamic libraries opening.",
+   ucs_offsetof(ucm_global_config_t, dlopen_process_rpath),
+   UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 

@@ -75,4 +75,17 @@ void ucm_strerror(int eno, char *buf, size_t max);
 void ucm_prevent_dl_unload();
 
 
+/*
+ * Concatenate directory and file names into full path.
+ *
+ * @param buffer        Filled with the result path.
+ * @param max           Maximal buffer size.
+ * @param dir           Directory name.
+ * @param file          File name.
+ *
+ * @return Result buffer.
+ */
+char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file);
+
+
 #endif
