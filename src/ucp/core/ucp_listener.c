@@ -207,10 +207,8 @@ static void ucp_listener_close_uct_listeners(ucp_listener_h listener)
 
     ucs_free(listener->cms.listeners);
 
-#if ENABLE_ASSERT
     listener->cms.listeners     = NULL;
     listener->cms.num_listeners = 0;
-#endif
 }
 
 static void ucp_listener_close_ifaces(ucp_listener_h listener)
@@ -237,47 +235,72 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 {
     ucp_worker_h worker           = listener->worker;
     const ucp_rsc_index_t num_cms = ucp_worker_get_cm_num(worker);
+    struct sockaddr addr          = *params->sockaddr.addr;
+    uct_listener_h *listeners;
     uct_listener_params_t uct_params;
-    ucp_rsc_index_t i, count;
+    uct_listener_attr_t   uct_attr;
+    int                   port, listener_port;
+    ucp_rsc_index_t i;
     char addr_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
-    uct_params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
-                                 UCT_LISTENER_PARAM_FIELD_USER_DATA;
-    uct_params.conn_request_cb = (void *)0xdeadbeaf; /* TODO: ucp_listener_conn_request_cb; */
-    uct_params.user_data       = listener;
+    uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
+                                  UCT_LISTENER_PARAM_FIELD_USER_DATA;
+    uct_params.conn_request_cb  = (void *)0xdeadbeaf; /* TODO: ucp_listener_conn_request_cb; */
+    uct_params.user_data        = listener;
 
-    listener->cms.listeners = ucs_calloc(num_cms,
-                                         sizeof(*listener->cms.listeners),
-                                         "uct_listeners_arr");
-    if (listener->cms.listeners == NULL) {
+    listener->cms.num_listeners = 0;
+    listeners                   = ucs_calloc(num_cms, sizeof(*listeners),
+                                             "uct_listeners_arr");
+    if (listeners == NULL) {
         ucs_error("Can't allocate memory for UCT listeners array");
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (i = 0, count = 0; i < num_cms; ++i) {
-        status = uct_listener_create(worker->cms[i], params->sockaddr.addr,
+    listener->cms.listeners = listeners;
+
+    for (i = 0; i < num_cms; ++i) {
+        status = uct_listener_create(worker->cms[i], addr,
                                      params->sockaddr.addrlen, &uct_params,
-                                     &listener->cms.listeners[count]);
-        if (status == UCS_OK) {
-            ++count;
-        } else {
-            ucs_debug("uct_listener_create failed on CM %p with address %s",
+                                     &listeners[listener->cms.num_listeners]);
+        if (status == UCS_ERR_INVALID_ADDR) {
+            ucs_debug("uct_listener_create failed on CM %p with address %s status %s",
+            continue;
+        } else if (status != UCS_OK) {
+            ucs_error("uct_listener_create failed on CM %p with address %s status %s",
                       worker->cms[i],
                       ucs_sockaddr_str(params->sockaddr.addr, addr_str,
                                        UCS_SOCKADDR_STRING_LEN));
-            ucs_assert(status == UCS_ERR_INVALID_ADDR);
+            goto destroy_listeners;
+        }
+
+        ++listener->cms.num_listeners;
+
+        status = ucs_sockaddr_get_port(&addr, &port);
+        if (status != UCS_OK) {
+            goto destroy_listeners;
+        }
+
+        uct_attr.field_mask = UCT_LISTENER_ATTR_FIELD_SOCKADDR;
+        status = uct_listener_query(listeners[listener->cms.num_listeners - 1],
+                                    &uct_attr);
+        if (status != UCS_OK) {
+            goto destroy_listeners;
+        }
+
+        status = ucs_sockaddr_get_port((struct sockaddr *)&uct_attr.sockaddr,
+                                       &listener_port);
+        if (port != listener_port) {
+            ucs_assert(port == 0);
+            ucs_sockaddr_set_port(addr, listener_port);
         }
     }
 
-    listener->cms.num_listeners = count;
-
-    if (listener->cms.num_listeners == 0) {
-        ucs_free(listener->cms.listeners);
-        return UCS_ERR_INVALID_ADDR;
-    }
-
     return UCS_OK;
+
+destroy_listeners:
+    ucp_listener_close_uct_listeners(listener);
+    return status;
 }
 
 static ucs_status_t
