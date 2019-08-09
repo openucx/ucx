@@ -631,12 +631,14 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 
 #if IBV_HW_TM
 
+#if HAVE_DECL_IBV_EXP_CREATE_SRQ
 static ucs_mpool_ops_t uct_rc_mlx5_tm_mp_mpool_ops = {
     ucs_mpool_chunk_malloc,
     ucs_mpool_chunk_free,
     NULL,
     NULL
 };
+#endif
 
 void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
                                    unsigned rndv_hdr_len)

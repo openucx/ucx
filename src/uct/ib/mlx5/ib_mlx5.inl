@@ -25,6 +25,16 @@ uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
     return (ntohl(cqe->flags_rqpn) >> 28) & 3;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
+{
+#if HAVE_DECL_IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM
+    return ntohs(cqe->ib_stride_index);
+#else
+    return 0;
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
 {

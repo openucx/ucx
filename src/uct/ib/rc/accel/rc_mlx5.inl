@@ -86,9 +86,9 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         if (status != UCS_OK) {
-             stride_idx = ntohs(cqe->ib_stride_index);
+             stride_idx = uct_ib_mlx5_cqe_stride_index(cqe);
              ucs_assert(stride_idx < iface->tm.mp.num_strides);
-             udesc = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
+             udesc = (void*)be64toh(seg->dptr[stride_idx].addr);
              udesc = udesc - iface->super.super.config.rx_hdr_offset + offset;
              uct_recv_desc(udesc) = release_desc;
              seg->srq.ptr_mask   &= ~UCS_BIT(stride_idx);
@@ -350,7 +350,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
                                            byte_len);
     } else {
         seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, ntohs(cqe->wqe_counter));
-        hdr = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
+        hdr = (void*)be64toh(seg->dptr[uct_ib_mlx5_cqe_stride_index(cqe)].addr);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         *flags |= UCT_CB_PARAM_FLAG_DESC;
     }

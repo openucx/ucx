@@ -212,16 +212,13 @@ ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
     return NULL;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE void
 ucp_request_recv_offload_data(ucp_request_t *req, const void *data, size_t length,
                               size_t offset, unsigned recv_flags, int *last)
 {
-    ucs_status_t status;
-
-
     *last = recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST;
     if (ucs_unlikely(req->status != UCS_OK)) {
-       return req->status;
+       return;
     }
 
     if (UCP_DT_IS_CONTIG(req->recv.datatype)) {
@@ -234,11 +231,15 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data, size_t lengt
              * that we will not receive more than expected. */
             req->recv.tag.gen_buf = ucs_malloc(req->recv.length, "UCP tmp buffer");
             if (req->recv.tag.gen_buf == NULL){
-               return UCS_ERR_NO_MEMORY;
+               req->status = UCS_ERR_NO_MEMORY;
+               return;
             }
         }
-        ucp_request_unpack_contig(req, req->recv.tag.gen_buf + offset, data, length);
+        ucp_request_unpack_contig(req, req->recv.tag.gen_buf + offset,
+                                  data, length);
     }
+
+    req->status = UCS_OK;
 
     if (*last) {
         /* Need to update recv info length. In tag offload protocol we do not
@@ -246,18 +247,13 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data, size_t lengt
          req->recv.tag.info.length = offset + length;
 
         if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
-            status = ucp_request_recv_data_unpack(req, req->recv.tag.gen_buf,
-                                                  req->recv.tag.info.length, 0, 1);
+            req->status = ucp_request_recv_data_unpack(req,
+                                                       req->recv.tag.gen_buf,
+                                                       req->recv.tag.info.length,
+                                                       0, 1);
             ucs_free(req->recv.tag.gen_buf);
-        } else {
-            status = req->status;
         }
-        ucs_assert(status != UCS_INPROGRESS);
-    } else {
-        status = UCS_INPROGRESS;
     }
-
-    return status;
 }
 
 /*
@@ -273,8 +269,8 @@ ucp_tag_request_process_recv_data(ucp_request_t *req, const void *data,
     int last;
 
     if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        status = ucp_request_recv_offload_data(req, data, length, offset,
-                                               recv_flags, &last);
+        ucp_request_recv_offload_data(req, data, length, offset, recv_flags,
+                                      &last);
     } else {
         last = req->recv.tag.remaining == length;
 
