@@ -241,6 +241,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     sock_id_ctx = ucs_malloc(sizeof(uct_sockcm_ctx_t), "accepted sock_id_ctx");
     if (sock_id_ctx == NULL) {
         ucs_error("sockcm_listener: unable to create mem for accepted fd");
+        close(accept_fd);
         return;
     }
 
@@ -259,8 +260,8 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
             ucs_error("Unable to process connection request"); 
         }
     } else {
-        ucs_error("sockcm_iface %p:did not receive up to header size on %d\n", 
-                  iface, conn_param.fd);
+        ucs_error("sockcm_iface %p:recved (%ld of %ld) header size on %d\n", 
+                  iface, recv_len, recv_base_len, conn_param.fd);
     }
 }
 
