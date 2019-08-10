@@ -543,13 +543,7 @@ static void ucs_profile_check_active_threads()
 
 void ucs_profile_reset_locations()
 {
-    ucs_profile_global_location_t *loc;
-
     pthread_mutex_lock(&ucs_profile_global_ctx.mutex);
-
-    ucs_profile_for_each_location(loc) {
-        *loc->loc_id_p = -1;
-    }
 
     ucs_profile_global_ctx.num_locations = 0;
     ucs_profile_global_ctx.max_locations = 0;

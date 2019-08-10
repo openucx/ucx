@@ -570,6 +570,7 @@ static void ucs_stats_free_recurs(ucs_stats_node_t *node)
     }
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
         ucs_stats_free_recurs(child);
+        free(child->cls);
         free(child);
     }
 }

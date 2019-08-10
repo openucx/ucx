@@ -195,6 +195,35 @@ static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
     return dup;
 }
 
+static ucs_stats_class_t* ucs_stats_node_clone_cls(ucs_stats_class_t *orig_cls)
+{
+    size_t i, size = sizeof(ucs_stats_class_t) + strlen(orig_cls->name) + 1;
+    for (i = 0; i < orig_cls->num_counters; i++) {
+        size += sizeof(char*) + strlen(orig_cls->counter_names[i]) + 1;
+    }
+
+    ucs_stats_class_t *clone_cls = ucs_malloc(size, "stats_cls");
+    if (!clone_cls) {
+        return NULL;
+    }
+
+    char *write_iterator = (char*)clone_cls + sizeof(ucs_stats_class_t) +
+            (orig_cls->num_counters * sizeof(char*));
+    clone_cls->name = write_iterator;
+    strcpy(write_iterator, orig_cls->name);
+    write_iterator += strlen(orig_cls->name) + 1;
+
+    for (i = 0; i < orig_cls->num_counters; i++) {
+        clone_cls->counter_names[i] = write_iterator;
+        strcpy(write_iterator, orig_cls->counter_names[i]);
+        write_iterator += strlen(orig_cls->counter_names[i]) + 1;
+    }
+
+    clone_cls->num_counters = orig_cls->num_counters;
+    ucs_assert(write_iterator - size == (char*)clone_cls);
+    return clone_cls;
+}
+
 static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
 {
     ucs_assert(node != &ucs_stats_context.root_node);
@@ -211,6 +240,7 @@ static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
         node->cls = ucs_stats_get_class(node->cls);
         if (node->cls) {
             ucs_list_add_tail(&node->parent->children[UCS_STATS_INACTIVE_CHILDREN], &node->list);
+            node->cls = ucs_stats_node_clone_cls(node->cls);
         } else {
             /* failed to allocate class duplicate - remove node */
             ucs_stats_clean_node(node);
@@ -692,6 +722,7 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
 
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
         ucs_stats_clean_node_recurs(child);
+        ucs_free(child->cls);
         ucs_stats_node_remove(child, 0);
     }
 }
