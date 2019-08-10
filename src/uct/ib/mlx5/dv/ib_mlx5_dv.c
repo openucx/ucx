@@ -154,7 +154,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_impl(uct_ib_mlx5_md_t *md,
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sq_size, ucs_ilog2_or0(max_tx));
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rq_size, ucs_ilog2_or0(max_rx));
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_req, UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B);
-    UCT_IB_MLX5DV_SET(qpc, qpc, cs_res, UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cs_res,
+                      uct_ib_mlx5_qpc_cs_res(attr->max_inl_resp));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);

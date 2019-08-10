@@ -331,11 +331,10 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
 {
 #if IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    uint32_t cap_flags                = IBV_DEVICE_TM_FLAGS(dev);
     struct ibv_tmh tmh;
 
-    iface->tm.enabled = mlx5_config->tm.enable && (cap_flags & init_attr->tm_cap_bit);
-
+    iface->tm.enabled = mlx5_config->tm.enable && (init_attr->flags &
+                                                   UCT_IB_TM_SUPPORTED);
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
     }
@@ -392,12 +391,13 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
-    struct ibv_exp_create_srq_attr srq_attr = {};
+    struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
-            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0);
+            status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0,
+                                                 UCT_RC_RNDV_HDR_LEN);
         } else {
             status = uct_rc_mlx5_init_rx_tm(iface, rc_config, &srq_attr,
                                             UCT_RC_RNDV_HDR_LEN);
@@ -558,24 +558,28 @@ typedef struct {
 } uct_rc_mlx5_iface_t;
 
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
-                    uct_md_h md, uct_worker_h worker,
+                    uct_md_h tl_md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     const uct_iface_config_t *tl_config)
 {
     uct_rc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_rc_mlx5_iface_config_t);
+    uct_ib_mlx5_md_t UCS_V_UNUSED *md  = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
-    init_attr.tm_cap_bit  = IBV_TM_CAP_RC;
     init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
     init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
     init_attr.tx_cq_len   = config->super.tx_cq_len;
     init_attr.qp_type     = IBV_QPT_RC;
 
+    if (IBV_DEVICE_TM_FLAGS(&md->super.dev)) {
+        init_attr.flags  |= UCT_IB_TM_SUPPORTED;
+    }
+
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
-                              md, worker, params, &config->super.super,
+                              tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
     self->super.super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,

@@ -710,6 +710,7 @@ void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
     qp_init_attr->qp_type             = iface->super.config.qp_type;
     qp_init_attr->sq_sig_all          = !iface->config.tx_moderation;
     qp_init_attr->max_inl_recv        = iface->config.rx_inline;
+    qp_init_attr->max_inl_resp        = iface->super.config.max_inl_resp;
 }
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,

@@ -10,33 +10,71 @@ resources:
     - container: centos7
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
+    - container: fedora
+      image: ucfconsort.azurecr.io/ucx/fedora:1
+      endpoint: ucfconsort_registry
 
 stages:
   - stage: Build
     jobs:
-      - job: Compile
-        displayName: Compile Tests
-        pool:
-          vmImage: 'Ubuntu-16.04'
+      - job: latest_cc
+        displayName: Latest CCs and CppCheck
+        container: fedora
         steps:
-          - bash: |
-              ./autogen.sh
+          - bash: ./autogen.sh
             displayName: Setup autotools
 
           - bash: |
-              mkdir build && cd build
-              ../configure --disable-numa
-            displayName: Configure
+              set -eE
+
+              mkdir build-gcc && cd build-gcc
+              gcc --version
+              # cscppc wraps gcc to use its output for cppcheck
+              export PATH="`cscppc --print-path-to-wrap`:$PATH"
+              ../contrib/configure-release
+              make -j`nproc` 2>&1 | tee cc.log
+            displayName: GCC
 
           - bash: |
-               cd build
-               gcc -v
-               make -s -j `nproc`
-            displayName: Build gcc 5.4
+              set -eE
+
+              cd build-gcc
+              cppcheck --version
+
+              cppcheck_err="cppcheck.err"
+              # use cs* tools to keep only UCX related issues
+              cslinker --quiet cc.log \
+                | csgrep --mode=json --path $(dirname $PWD) --strip-path-prefix $(dirname $PWD) \
+                | csgrep --mode=json --invert-match --path 'conftest.c' \
+                | csgrep --mode=grep --invert-match --event "internal warning" --prune-events=1 \
+                > $cppcheck_err
+
+                if [ -s $cppcheck_err ]; then
+                  echo "CppCheck found errors:"
+                  cat $cppcheck_err
+                  exit 100
+                fi
+
+                echo "No errors reported by cppcheck"
+
+            displayName: CppCheck
+
+          - bash: |
+              set -eE
+              mkdir build-clang && cd build-clang
+              clang --version
+              ../contrib/configure-release CC=clang CXX=clang++
+            displayName: Configure for Clang
+
+          - bash: |
+              set -eE
+              cd build-clang
+              make -j`nproc`
+            displayName: Clang
 
       # Perform test builds on relevant distributions.
       - job: Distros
-        displayName: Test Build for
+        displayName: Build for
         strategy:
           matrix:
             centos7:
@@ -44,17 +82,18 @@ stages:
               CONFIGURE_OPTS:
         container: $[ variables['CONTAINER'] ]
         steps:
-          - bash: |
-              ./autogen.sh
+          - bash: ./autogen.sh
             displayName: Setup autotools
 
           - bash: |
+              set -eE
               mkdir build && cd build
               ../configure $(CONFIGURE_OPTS)
             displayName: Configure
 
           - bash: |
-               cd build
-               gcc -v
-               make -s -j `nproc`
+              set -eE
+              cd build
+              gcc -v
+              make -s -j `nproc`
             displayName: Build for $(CONTAINER)

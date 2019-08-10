@@ -14,12 +14,15 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
+#include <ucm/util/sys.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 
-#include <unistd.h>
+#include <sys/mman.h>
 #include <pthread.h>
+#include <string.h>
+#include <unistd.h>
 
 
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFree, CUresult,-1, CUdeviceptr)
@@ -389,8 +392,45 @@ out:
     return status;
 }
 
+static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
+                                       int prot, const char *path)
+{
+    static const char *cuda_path_pattern = "/dev/nvidia";
+    ucm_event_handler_t *handler         = arg;
+    ucm_event_t event;
+
+    /* we are interested in blocks which don't have any access permissions, or
+     * mapped to nvidia device.
+     */
+    if ((prot & (PROT_READ|PROT_WRITE|PROT_EXEC)) &&
+        strncmp(path, cuda_path_pattern, strlen(cuda_path_pattern))) {
+        return 0;
+    }
+
+    ucm_debug("dispatching initial memtype allocation for %p..%p %s",
+              addr, addr + length, path);
+
+    event.mem_type.address  = addr;
+    event.mem_type.size     = length;
+    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+
+    ucm_event_enter();
+    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
+    ucm_event_leave();
+
+    return 0;
+}
+
+static void ucm_cudamem_get_existing_alloc(ucm_event_handler_t *handler)
+{
+    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
+        ucm_parse_proc_self_maps(ucm_cudamem_scan_regions_cb, handler);
+    }
+}
+
 static ucm_event_installer_t ucm_cuda_initializer = {
-    .func = ucm_cudamem_install
+    .install            = ucm_cudamem_install,
+    .get_existing_alloc = ucm_cudamem_get_existing_alloc
 };
 
 UCS_STATIC_INIT {

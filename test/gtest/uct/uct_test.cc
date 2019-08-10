@@ -790,6 +790,10 @@ const uct_cm_attr_t& uct_test::entity::cm_attr() const {
     return m_cm_attr;
 }
 
+uct_listener_h uct_test::entity::listener() const {
+    return m_listener;
+}
+
 uct_iface_h uct_test::entity::iface() const {
     return m_iface;
 }

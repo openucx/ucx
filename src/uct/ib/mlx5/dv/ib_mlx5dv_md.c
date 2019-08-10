@@ -271,7 +271,7 @@ static ucs_status_t uct_ib_mlx5_devx_check_rndv(uct_ib_mlx5_md_t *md)
     }
 
     srq_attr.attr.max_sge        = 1;
-    srq_attr.attr.max_wr         = IBV_DEVICE_MIN_UWQ_POST;
+    srq_attr.attr.max_wr         = UCT_IB_MLX5_XRQ_MIN_UWQ_POST;
     srq_attr.srq_type            = IBV_SRQT_TM;
     srq_attr.pd                  = pd;
     srq_attr.cq                  = cq;
@@ -394,6 +394,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {
         dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DC_TM;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, compact_address_vector)) {

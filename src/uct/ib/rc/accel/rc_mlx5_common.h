@@ -22,6 +22,36 @@
 #  define UCT_RC_RNDV_HDR_LEN         0
 #endif
 
+#if IBV_HW_TM
+#  if HAVE_INFINIBAND_TM_TYPES_H
+#    include <infiniband/tm_types.h>
+#  else
+#    define ibv_tmh                         ibv_exp_tmh
+#    define ibv_rvh                         ibv_exp_tmh_rvh
+#    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
+#    define IBV_TMH_EAGER                   IBV_EXP_TMH_EAGER
+#    define IBV_TMH_RNDV                    IBV_EXP_TMH_RNDV
+#    define IBV_TMH_FIN                     IBV_EXP_TMH_FIN
+#    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
+#  endif
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
+#else
+#  define IBV_TM_CAP_RC                     0
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
+#endif
+
+#if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+#  define IBV_DEVICE_TM_FLAGS(_dev)         IBV_DEVICE_TM_CAPS(_dev, flags)
+#else
+#  define IBV_DEVICE_TM_FLAGS(_dev)         IBV_DEVICE_TM_CAPS(_dev, capability_flags)
+#endif
+
+#define IBV_DEVICE_MAX_UNEXP_COUNT          UCS_BIT(14)
+
+#if HAVE_DECL_IBV_EXP_CREATE_SRQ
+#  define ibv_srq_init_attr_ex              ibv_exp_create_srq_attr
+#endif
+
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_FLAG_TM    0x200
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
@@ -492,13 +522,13 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
 
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     const uct_rc_iface_common_config_t *config,
-                                    struct ibv_exp_create_srq_attr *srq_init_attr,
+                                    struct ibv_srq_init_attr_ex *srq_init_attr,
                                     unsigned rndv_hdr_len);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                        const uct_rc_iface_common_config_t *config,
-                       struct ibv_exp_create_srq_attr *srq_init_attr,
+                       struct ibv_srq_init_attr_ex *srq_init_attr,
                        unsigned rndv_hdr_len)
 {
     return UCS_ERR_UNSUPPORTED;
@@ -508,12 +538,12 @@ uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 #if IBV_HW_TM && HAVE_DEVX
 ucs_status_t uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                          const uct_rc_iface_common_config_t *config,
-                                         int dc);
+                                         int dc, unsigned rndv_hdr_len);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
-                            int dc)
+                            int dc, unsigned rndv_hdr_len)
 {
     return UCS_ERR_UNSUPPORTED;
 }
