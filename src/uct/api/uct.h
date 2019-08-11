@@ -1814,21 +1814,6 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 
 
 /**
- * @ingroup UCT_CLIENT_SERVER
- * @brief Reject connection request.
- *
- * @param [in] listener     Listener which will reject the connection request.
- * @param [in] conn_request Connection establishment request passed as parameter
- *                          of @ref uct_listener_conn_request_callback_t.
- *
- *
- * @return Error code as defined by @ref ucs_status_t
- */
-ucs_status_t uct_listener_reject(uct_listener_h listener,
-                                 uct_conn_request_h conn_request);
-
-
-/**
  * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
@@ -3034,6 +3019,9 @@ void uct_cm_close(uct_cm_h cm);
  * @ingroup UCT_CLIENT_SERVER
  * @brief Get connection manager attributes.
  *
+ * This routine queries the @ref uct_cm_h "cm" for its attributes
+ * @ref uct_cm_attr_t.
+ *
  * @param [in]  cm      Connection manager to query.
  * @param [out] cm_attr Filled with connection manager attributes.
  */
@@ -3043,6 +3031,9 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
 /**
  * @ingroup UCT_CLIENT_SERVER
  * @brief Create a new transport listener object.
+ *
+ * This routine creates a new transport listener on the given CM which
+ * willl start listening on a given sockaddr.
  *
  * @param [in]  cm          Connection manager on which to open the listener.
  *                          This cm should not be closed as long as there are
@@ -3072,9 +3063,30 @@ void uct_listener_destroy(uct_listener_h listener);
 
 /**
  * @ingroup UCT_CLIENT_SERVER
+ * @brief Reject a connection request.
+ *
+ * This routine is performed by the server side. It rejects a connection request
+ * from the client.
+ *
+ * @param [in] listener     Listener which will reject the connection request.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_listener_conn_request_callback_t.
+ *
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_listener_reject(uct_listener_h listener,
+                                 uct_conn_request_h conn_request);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Get attributes specific to a particular listener.
  *
- * @param [in]  listener      listener object to query.
+ * This routine queries the @ref uct_listener_h "listener" for its attributes
+ * @ref uct_listener_attr_t.
+ *
+ * @param [in]  listener      Listener object to query.
  * @param [out] listener_attr Filled with attributes of the listener.
  *
  * @return Error code as defined by @ref ucs_status_t
