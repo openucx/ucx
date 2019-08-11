@@ -7,8 +7,14 @@
 ##
 #
 
-## 1.6.1 (TBD)
+## 1.6.1-rc1 (August 13, 2019)
+Features:
+- Add Bull Atos HCA device IDs
+- Add Azure Pipelines testing
 
+Bugfixes:
+- Multiple static checker fixes
+- Remove pkg.m4 dependency
 
 ## 1.6.0 (July 17, 2019)
 Features:
