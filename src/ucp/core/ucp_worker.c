@@ -1797,6 +1797,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker->am_cbs);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
+    ucp_worker_close_cms(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);

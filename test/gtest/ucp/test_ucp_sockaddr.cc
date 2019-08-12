@@ -5,6 +5,8 @@
 */
 
 #include "ucp_test.h"
+#include "common/test.h"
+#include "ucp/ucp_test.h"
 
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
@@ -446,7 +448,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, reject,
 UCS_TEST_P(test_ucp_sockaddr, query_listener) {
     ucp_listener_attr_t listener_attr;
     ucs_status_t status;
-    int i;
 
     listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
 
@@ -459,12 +460,6 @@ UCS_TEST_P(test_ucp_sockaddr, query_listener) {
     EXPECT_UCS_OK(status);
 
     EXPECT_EQ(test_addr.sin_port, htons(listener_attr.port));
-
-    /* Make sure that all the listening sockaddr ifaces are listening on the same port */
-    for (i = 0; i < receiver().listenerh()->ifaces.num_wifaces; i++) {
-        EXPECT_EQ(test_addr.sin_port,
-                  htons(receiver().listenerh()->ifaces.wifaces[i].attr.listen_port));
-    }
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {
