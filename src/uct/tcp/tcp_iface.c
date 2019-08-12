@@ -91,12 +91,9 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_iface_addr_t *iface_addr)
 {
-    uct_tcp_iface_t *iface         = ucs_derived_of(tl_iface, uct_tcp_iface_t);
-    const in_addr_t *remote_inaddr = (const in_addr_t*)dev_addr;
-    in_addr_t netmask              = iface->config.netmask.sin_addr.s_addr;
-
-    return (*remote_inaddr & netmask) ==
-           (iface->config.ifaddr.sin_addr.s_addr & netmask);
+    /* We always report that a peer is reachable. connect() call will
+     * fail if the peer is unreachable when creating UCT/TCP EP */
+    return 1;
 }
 
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
