@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -14,6 +15,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <dirent.h>
 
 BEGIN_C_DECLS
 
@@ -320,6 +322,15 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      const struct sockaddr *sa2,
                      ucs_status_t *status_p);
 
+/**
+ * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ *
+ * @return 1 if input is INADDR_ANY or in6addr_any
+ *         0 if not
+ */
+int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
 
 END_C_DECLS
 
