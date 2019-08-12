@@ -392,4 +392,20 @@ static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 }
 
 
+/**
+ * Return the number of devices and a string of names of devices under
+ * /sys/class/net that are in active state as determined by ucs_netif_is_active
+ *
+ * @param [out]    num_resources_p Return number of active net devices
+ * @param [in/out] dev_names_pp    Return pointer to string of device names
+ *                                 Length of string = num_resources_p * dev_name_len
+ *                                 Function allocates memory for the string and
+ *                                 user is responsible to free
+ * @param [in]     dev_name_len    Length of each of the device names
+ *
+ * @return UCS_OK on success or appropriate error on failure.
+ */
+ucs_status_t uct_tcp_get_dev_names(unsigned *num_resources_p, 
+                                   char **dev_names_pp, 
+                                   size_t dev_name_len);
 #endif
