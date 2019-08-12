@@ -94,8 +94,8 @@ static ucs_config_field_t ucp_config_table[] = {
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
-   "specified memory domain for allocation. NAME can be either a MD component\n"
-   "name, or a wildcard - '*' - which expands to all MD components.",
+   "specified memory domain for allocation. NAME can be either a UCT component\n"
+   "name, or a wildcard - '*' - which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"SOCKADDR_TLS_PRIORITY", "rdmacm,*",
@@ -252,6 +252,13 @@ static ucs_config_field_t ucp_config_table[] = {
    "Enabling this mode implies that the local transport resources/devices\n"
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
+
+  {"SOCKADDR_CM_ENABLE", "n" /* TODO: set try by default */,
+   "Enable alternative wireup protocol for sockaddr connected endpoints.\n"
+   "Enabling this mode changes underlying UCT mechanism for connection\n"
+   "establishment and enables synchronized close protocol which does not\n"
+   "require out of band synchronization before destroying UCP resources.",
+   ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
@@ -1068,20 +1075,35 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_release_components;
     }
 
+    context->config.cm_cmpts_bitmap = 0;
+
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
-                        UCT_COMPONENT_ATTR_FIELD_NAME |
-                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+                        UCT_COMPONENT_ATTR_FIELD_NAME              |
+                        UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
+                        UCT_COMPONENT_ATTR_FIELD_FLAGS;
         status = uct_component_query(context->tl_cmpts[i].cmpt,
                                      &context->tl_cmpts[i].attr);
         if (status != UCS_OK) {
             goto err_free_resources;
         }
 
+        if ((context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) &&
+            (context->config.ext.sockaddr_cm_enable != UCS_NO)) {
+            context->config.cm_cmpts_bitmap |= UCS_BIT(i);
+        }
+
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
+    }
+
+    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
+        (context->config.cm_cmpts_bitmap == 0)) {
+        ucs_error("there are no UCT components with CM capability");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_resources;
     }
 
     /* Allocate actual array of MDs */
@@ -1266,8 +1288,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
              * component name.
              */
             context->config.alloc_methods[i].method = UCT_ALLOC_METHOD_MD;
-            ucs_strncpy_zero(context->config.alloc_methods[i].mdc_name,
-                             method_name + 3, UCT_MD_COMPONENT_NAME_MAX);
+            ucs_strncpy_zero(context->config.alloc_methods[i].cmpt_name,
+                             method_name + 3, UCT_COMPONENT_NAME_MAX);
             ucs_debug("allocation method[%d] is md '%s'", i, method_name + 3);
         } else {
             /* Otherwise, this is specific allocation method name.
@@ -1279,7 +1301,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                 {
                     /* Found the allocation method in the internal name list */
                     context->config.alloc_methods[i].method = method;
-                    strcpy(context->config.alloc_methods[i].mdc_name, "");
+                    strcpy(context->config.alloc_methods[i].cmpt_name, "");
                     ucs_debug("allocation method[%d] is '%s'", i, method_name);
                     break;
                 }
@@ -1510,4 +1532,28 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
     }
 
     return NULL;
+}
+
+ucs_memory_type_t
+ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
+{
+    ucs_memory_type_t mem_type;
+    unsigned i, md_index;
+    ucs_status_t status;
+
+    for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
+        md_index = context->mem_type_detect_mds[i];
+        status   = uct_md_detect_memory_type(context->tl_mds[md_index].md,
+                                             address, size, &mem_type);
+        if (status == UCS_OK) {
+            if (context->memtype_cache != NULL) {
+                ucs_memtype_cache_update(context->memtype_cache, address, size,
+                                         mem_type);
+            }
+            return mem_type;
+        }
+    }
+
+    /* Memory type not detected by any memtype MD - assume it is host memory */
+    return UCS_MEMORY_TYPE_HOST;
 }

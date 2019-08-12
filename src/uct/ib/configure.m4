@@ -377,10 +377,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                             [[#include <infiniband/tm_types.h>]])
            ])
        AS_IF([test "x$with_ib_hw_tm" = xexp],
-           [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
-            AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params],
-                             [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
-                             [], [#include <infiniband/verbs_exp.h>])
+           [AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params], [
+            AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
+                      ], [], [#include <infiniband/verbs_exp.h>])
             AC_CHECK_DECLS([IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM], [], [],
                           [[#include <infiniband/verbs_exp.h>]])
            ])
@@ -420,7 +419,6 @@ AS_IF([test "x$with_ib" = "xyes"],
         with_ud=no
         with_mlx5_hw=no
         with_mlx5_dv=no
-        with_ib_hw_tm=no
     ])
 
 #
@@ -437,7 +435,6 @@ AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
-AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])
 
 uct_ib_modules=""
 m4_include([src/uct/ib/cm/configure.m4])

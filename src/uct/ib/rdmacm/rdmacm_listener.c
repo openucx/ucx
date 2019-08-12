@@ -69,10 +69,7 @@ ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
 
     ucs_assert_always(rdmacm_listener->id == event->listen_id);
 
-    if (rdma_reject(event->id, NULL, 0)) {
-        ucs_error("rdma_reject (id=%p) on listener %p failed: %m",
-                  event->id, rdmacm_listener);
-    }
+    uct_rdmacm_cm_reject(event->id, UCS_ERR_REJECTED);
 
     uct_rdmacm_cm_destroy_id(event->id);
 
@@ -82,6 +79,27 @@ ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
 {
     uct_rdmacm_cm_destroy_id(self->id);
+}
+
+ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
+                                       uct_listener_attr_t *listener_attr)
+{
+    uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener,
+                                                            uct_rdmacm_listener_t);
+    struct sockaddr *addr;
+    ucs_status_t status;
+    size_t addr_size;
+
+    if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_SOCKADDR) {
+        addr   = rdma_get_local_addr(rdmacm_listener->id);
+        status = ucs_sockaddr_sizeof(addr, &addr_size);
+        if (status != UCS_OK) {
+            return status;
+        }
+        memcpy(&listener_attr->sockaddr, addr, addr_size);
+    }
+
+    return UCS_OK;
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_listener_t, uct_listener_t);

@@ -329,6 +329,7 @@ enum ucp_context_attr_field {
     UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1)  /**< UCP context thread flag */
 };
 
+
 /**
  * @ingroup UCP_WORKER
  * @brief UCP worker attributes field mask.
@@ -341,6 +342,7 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
     UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2)  /**< UCP address flags */
 };
+
 
 /**
  * @ingroup UCP_WORKER
@@ -794,6 +796,7 @@ typedef struct ucp_context_attr {
     ucs_thread_mode_t     thread_mode;
 } ucp_context_attr_t;
 
+
 /**
  * @ingroup UCP_WORKER
  * @brief UCP worker attributes.
@@ -987,7 +990,7 @@ typedef struct ucp_listener_params {
  *
  * The structure defines the endpoint and its user data.
  */
-typedef struct {
+typedef struct ucp_stream_poll_ep {
     /**
      * Endpoint handle.
      */
@@ -1009,6 +1012,7 @@ typedef struct {
      */
     uint8_t     reserved[16];
 } ucp_stream_poll_ep_t;
+
 
 /**
  * @ingroup UCP_MEM
@@ -1332,6 +1336,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
  */
 void ucp_worker_destroy(ucp_worker_h worker);
 
+
 /**
  * @ingroup UCP_WORKER
  * @brief Get attributes specific to a particular worker.
@@ -1345,6 +1350,7 @@ void ucp_worker_destroy(ucp_worker_h worker);
  */
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr);
+
 
 /**
  * @ingroup UCP_WORKER

@@ -16,6 +16,33 @@ extern "C" {
 }
 
 
+class test_rcache_basic : public ucs::test {
+};
+
+UCS_TEST_F(test_rcache_basic, create_fail) {
+    static const ucs_rcache_ops_t ops = {
+        NULL, NULL, NULL
+    };
+    ucs_rcache_params_t params = {
+        sizeof(ucs_rcache_region_t),
+        UCS_PGT_ADDR_ALIGN,
+        ucs_get_page_size(),
+        UCS_BIT(30), /* non-existing event */
+        1000,
+        &ops,
+        NULL
+    };
+
+    ucs_rcache_t *rcache;
+    ucs_status_t status = ucs_rcache_create(&params, "test",
+                                            ucs_stats_get_root(), &rcache);
+    EXPECT_NE(UCS_OK, status); /* should fail */
+    if (status == UCS_OK) {
+        ucs_rcache_destroy(rcache);
+    }
+}
+
+
 class test_rcache : public ucs::test {
 protected:
 

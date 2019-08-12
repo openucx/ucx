@@ -140,14 +140,14 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
                                         unsigned config_method_index,
                                         unsigned md_index)
 {
-    const char *cfg_mdc_name;
-    const char *mdc_name;
+    const char *cfg_cmpt_name;
+    const char *cmpt_name;
 
-    cfg_mdc_name = context->config.alloc_methods[config_method_index].mdc_name;
-    mdc_name     = context->tl_mds[md_index].attr.component_name;
+    cfg_cmpt_name = context->config.alloc_methods[config_method_index].cmpt_name;
+    cmpt_name     = context->tl_mds[md_index].attr.component_name;
 
-    return !strncmp(cfg_mdc_name, "*",      UCT_MD_COMPONENT_NAME_MAX) ||
-           !strncmp(cfg_mdc_name, mdc_name, UCT_MD_COMPONENT_NAME_MAX);
+    return !strncmp(cfg_cmpt_name, "*",      UCT_COMPONENT_NAME_MAX) ||
+           !strncmp(cfg_cmpt_name, cmpt_name, UCT_COMPONENT_NAME_MAX);
 }
 
 static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
@@ -320,12 +320,13 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
             goto err_free_memh;
         }
     } else {
-        ucp_memory_type_detect_mds(context, address, length, &memh->mem_type);
-        ucs_debug("registering user memory at %p length %zu memory type:%s",
-                  address, length, ucs_memory_type_names[memh->mem_type]);
+        memh->mem_type     = ucp_memory_type_detect(context, address, length);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
+
+        ucs_debug("registering user memory at %p length %zu mem_type %s",
+                  address, length, ucs_memory_type_names[memh->mem_type]);
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
                                    memh->address, memh->length, uct_flags, NULL,
                                    memh->mem_type, NULL, memh->uct, &memh->md_map);

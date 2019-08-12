@@ -52,7 +52,7 @@ private:
     static const ucs_init_once_t INIT_ONCE_INIT;
 };
 
-const ucs_init_once_t test_init_once::INIT_ONCE_INIT = UCS_INIT_ONCE_INIITIALIZER;
+const ucs_init_once_t test_init_once::INIT_ONCE_INIT = UCS_INIT_ONCE_INITIALIZER;
 
 UCS_MT_TEST_F(test_init_once, init_once, 10) {
 

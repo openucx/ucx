@@ -6,11 +6,11 @@
 if HAVE_XPMEM
 
 module_LTLIBRARIES       = libuct_xpmem.la
-libuct_xpmem_la_CFLAGS   = $(BASE_CFLAGS)
-libuct_xpmem_la_CPPFLAGS = $(BASE_CPPFLAGS) $(XPMEM_CPPFLAGS)
+libuct_xpmem_la_CFLAGS   = $(BASE_CFLAGS) $(XPMEM_CFLAGS)
+libuct_xpmem_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_xpmem_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la
-libuct_xpmem_la_LDFLAGS  = $(XPMEM_LDFLAGS) -version-info $(SOVERSION)
+libuct_xpmem_la_LDFLAGS  = $(XPMEM_LIBS) -version-info $(SOVERSION)
 libuct_xpmem_la_SOURCES  = mm_xpmem.c
 
 include $(top_srcdir)/config/module.am

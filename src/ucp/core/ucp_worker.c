@@ -1169,6 +1169,63 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
     ucp_worker_uct_iface_close(wiface);
 }
 
+static void ucp_worker_close_cms(ucp_worker_h worker)
+{
+    const uint64_t cm_cmpts_bitmap = worker->context->config.cm_cmpts_bitmap;
+    const ucp_rsc_index_t num_cms  = ucs_popcount(cm_cmpts_bitmap);
+    ucp_rsc_index_t i;
+
+    for (i = 0; (i < num_cms) && (worker->cms[i] != NULL); ++i) {
+        uct_cm_close(worker->cms[i]);
+    }
+
+    ucs_free(worker->cms);
+    worker->cms = NULL;
+}
+
+static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
+{
+    ucp_context_h   context = worker->context;
+    ucp_rsc_index_t cmpt_index, cm_index;
+    ucs_status_t    status;
+
+    if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
+        worker->cms = NULL;
+        return UCS_OK;
+    }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    worker->cms = ucs_calloc(ucs_popcount(context->config.cm_cmpts_bitmap),
+                             sizeof(*worker->cms), "ucp cms");
+    if (worker->cms == NULL) {
+        ucs_error("can't allocate CMs array");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    cm_index = 0;
+    ucs_for_each_bit(cmpt_index, context->config.cm_cmpts_bitmap) {
+        status = uct_cm_open(context->tl_cmpts[cmpt_index].cmpt, worker->uct,
+                             &worker->cms[cm_index++]);
+        if (status != UCS_OK) {
+            ucs_error("failed to open CM on component %s with status %s",
+                      context->tl_cmpts[cmpt_index].attr.name,
+                      ucs_status_string(status));
+            goto err_free_cms;
+        }
+    }
+
+    status = UCS_OK;
+    goto out;
+
+err_free_cms:
+    ucp_worker_close_cms(worker);
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return status;
+}
+
 static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
                                         ucp_rsc_index_t rsc_index)
 {
@@ -1658,16 +1715,22 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_close_ifaces;
     }
 
+    /* Open all resources as connection managers on this worker */
+    status = ucp_worker_add_resource_cms(worker);
+    if (status != UCS_OK) {
+        goto err_close_cms;
+    }
+
     /* create mem type endponts */
     status = ucp_worker_create_mem_type_endpoints(worker);
     if (status != UCS_OK) {
-        goto err_close_ifaces;
+        goto err_close_cms;
     }
 
     /* Init AM and registered memory pools */
     status = ucp_worker_init_mpools(worker);
     if (status != UCS_OK) {
-        goto err_close_ifaces;
+        goto err_close_cms;
     }
 
     /* Select atomic resources */
@@ -1681,6 +1744,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     *worker_p = worker;
     return UCS_OK;
 
+err_close_cms:
+    ucp_worker_close_cms(worker);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);

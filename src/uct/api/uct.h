@@ -702,6 +702,19 @@ enum uct_cm_attr_field {
 
 /**
  * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_listener_attr_t are
+ * present, for backward compatibility support.
+ */
+enum uct_listener_attr_field {
+    /** Enables @ref uct_listener_attr::sockaddr */
+    UCT_LISTENER_ATTR_FIELD_SOCKADDR = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
  * @brief UCT listener created by @ref uct_listener_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_listener_params_t
@@ -1100,6 +1113,25 @@ struct uct_cm_attr {
 
 /**
  * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener attributes, capabilities and limitations.
+ */
+struct uct_listener_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_listener_attr_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Sockaddr on which this listener is listening.
+     */
+    struct sockaddr_storage sockaddr;
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Parameters for creating a listener object @ref uct_listener_h by
  * @ref uct_listener_create
  */
@@ -1151,7 +1183,7 @@ struct uct_md_attr {
                                              (time,seconds) as a linear function
                                              of the buffer size. */
 
-    char                     component_name[UCT_MD_COMPONENT_NAME_MAX]; /**< MD component name */
+    char                     component_name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
     cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
 };
@@ -1931,12 +1963,12 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
 
 /**
  * @ingroup UCT_MD
- * @brief Give advice about the use of memory 
+ * @brief Give advice about the use of memory
  *
  * This routine advises the UCT about how to handle memory range beginning at
  * address and size of length bytes. This call does not influence the semantics
- * of the application, but may influence its performance. The advice may be 
- * ignored. 
+ * of the application, but may influence its performance. The advice may be
+ * ignored.
  *
  * @param [in]     md          Memory domain memory was allocated or registered on.
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc
@@ -3036,6 +3068,19 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
  * @param [in]  listener    Listener to destroy.
  */
 void uct_listener_destroy(uct_listener_h listener);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Get attributes specific to a particular listener.
+ *
+ * @param [in]  listener      listener object to query.
+ * @param [out] listener_attr Filled with attributes of the listener.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_listener_query(uct_listener_h listener,
+                                uct_listener_attr_t *listener_attr);
 
 
 /**

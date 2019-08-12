@@ -350,11 +350,26 @@ typedef struct {
 } ucp_ep_ext_proto_t;
 
 
+enum {
+    UCP_WIREUP_SOCKADDR_CD_FULL_ADDR = 0, /* Client data contains full address. */
+    UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR,  /* Client data contains partial
+                                             address, wireup protocol requires
+                                             extra MSGs. */
+    UCP_WIREUP_SOCKADDR_CD_CM_ADDR        /* Client data contains address for CM
+                                             based wireup: there is only iface
+                                             and ep address of transport lanes,
+                                             remote device address is provided
+                                             by CM and has to be added to
+                                             unpacked UCP address locally. */
+};
+
+
 typedef struct ucp_wireup_client_data {
     uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
-    uint8_t                   is_full_addr;  /**< Whether the attached address is
-                                                  full or partial */
+    uint8_t                   addr_mode;     /**< The attached address format
+                                                  defined by
+                                                  UCP_WIREUP_SOCKADDR_CD_xx */
     /* packed worker address follows */
 } UCS_S_PACKED ucp_wireup_client_data_t;
 

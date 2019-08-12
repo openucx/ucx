@@ -231,9 +231,14 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
         goto err_destroy_rwlock;
     }
 
-    status = ucm_set_event_handler((UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE),
-                                   1000, ucs_memtype_cache_event_callback, self);
+    status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC |
+                                   UCM_EVENT_MEM_TYPE_FREE |
+                                   UCM_EVENT_FLAG_EXISTING_ALLOC,
+                                   1000, ucs_memtype_cache_event_callback,
+                                   self);
     if (status != UCS_OK) {
+        ucs_error("failed to set UCM memtype event handler: %s",
+                  ucs_status_string(status));
         goto err_cleanup_pgtable;
     }
 

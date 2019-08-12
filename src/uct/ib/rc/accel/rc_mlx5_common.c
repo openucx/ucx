@@ -474,7 +474,7 @@ ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
     size_t rndv_data_len;
     void *rndv_usr_hdr;
     void *rb;
-    char packed_rkey[UCT_MD_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
+    char packed_rkey[UCT_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
 
     rvh = (struct ibv_rvh*)(tmh + 1);
 
@@ -669,7 +669,7 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
 
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                     const uct_rc_iface_common_config_t *config,
-                                    struct ibv_exp_create_srq_attr *srq_init_attr,
+                                    struct ibv_srq_init_attr_ex *srq_attr,
                                     unsigned rndv_hdr_len)
 {
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
@@ -688,11 +688,10 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
         ucs_assert_always(IBV_DEVICE_MP_CAPS(&md->dev, min_single_wqe_log_num_of_strides) <=
                           log_num_strides);
 
-        srq_init_attr->comp_mask               |= IBV_EXP_CREATE_SRQ_MP_WR;
-        srq_init_attr->mp_wr.log_num_of_strides = log_num_strides;
-        srq_init_attr->mp_wr.log_stride_size    = ucs_ilog2(iface->super.super.config.seg_size);
-        max_wr = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                         config->super.rx.queue_len/iface->tm.mp.num_strides);
+        srq_attr->comp_mask               |= IBV_EXP_CREATE_SRQ_MP_WR;
+        srq_attr->mp_wr.log_num_of_strides = log_num_strides;
+        srq_attr->mp_wr.log_stride_size    = ucs_ilog2(iface->super.super.config.seg_size);
+        max_wr = config->super.rx.queue_len/iface->tm.mp.num_strides;
 
         status = uct_iface_mpool_init(&iface->super.super.super,
                                       &iface->tm.mp.tx_mp,
@@ -712,7 +711,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                 sizeof(uct_rc_mlx5_tm_mp_val_t), 0,
                                 UCS_SYS_CACHE_LINE_SIZE, 64, UINT_MAX,
                                 &uct_rc_mlx5_tm_mp_mpool_ops,
-                                "mp-rx-meta-data");
+                                "mp_rx_meta_data");
         if (status != UCS_OK) {
             ucs_mpool_cleanup(&iface->tm.mp.tx_mp, 0);
             return status;
@@ -727,57 +726,58 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
         ucs_debug("Multi-Packet WQ config: stride size %d, WQEs %d, strides per WQE %d",
                   iface->super.super.config.seg_size, max_wr, iface->tm.mp.num_strides);
     } else {
-        max_wr = ucs_max(IBV_DEVICE_MIN_UWQ_POST, config->super.rx.queue_len);
+        max_wr = config->super.rx.queue_len;
     }
 
-    srq_init_attr->base.attr.max_sge   = iface->tm.mp.num_strides;
-    srq_init_attr->base.attr.max_wr    = max_wr;
-    srq_init_attr->base.attr.srq_limit = 0;
-    srq_init_attr->base.srq_context    = iface;
-    srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
-    srq_init_attr->pd                  = md->pd;
-    srq_init_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
-    srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
+    srq_attr->base.attr.max_sge   = iface->tm.mp.num_strides;
+    srq_attr->base.attr.max_wr    = ucs_max(UCT_IB_MLX5_XRQ_MIN_UWQ_POST,
+                                            max_wr);
+    srq_attr->base.attr.srq_limit = 0;
+    srq_attr->base.srq_context    = iface;
+    srq_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
+    srq_attr->pd                  = md->pd;
+    srq_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
+    srq_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
     uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
-    srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
-    srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
+    srq_attr->tm_cap.max_ops      = iface->tm.cmd_qp_len;
+    srq_attr->comp_mask          |= IBV_EXP_CREATE_SRQ_CQ |
                                     IBV_EXP_CREATE_SRQ_TM;
 
-    iface->rx.srq.verbs.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
+    iface->rx.srq.verbs.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_attr);
     if (iface->rx.srq.verbs.srq == NULL) {
         ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
                   uct_ib_device_name(&md->dev));
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->super.rx.srq.quota = srq_init_attr->base.attr.max_wr;
+    iface->super.rx.srq.quota = srq_attr->base.attr.max_wr;
 #elif HAVE_DECL_IBV_CREATE_SRQ_EX
-    srq_init_attr->attr.max_sge        = 1;
-    srq_init_attr->attr.max_wr         = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                                                 config->super.rx.queue_len);
-    srq_init_attr->attr.srq_limit      = 0;
-    srq_init_attr->srq_context         = iface;
-    srq_init_attr->srq_type            = IBV_SRQT_TM;
-    srq_init_attr->pd                  = md->pd;
-    srq_init_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
-    srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
+    srq_attr->attr.max_sge        = 1;
+    srq_attr->attr.max_wr         = ucs_max(UCT_IB_MLX5_XRQ_MIN_UWQ_POST,
+                                            config->super.rx.queue_len);
+    srq_attr->attr.srq_limit      = 0;
+    srq_attr->srq_context         = iface;
+    srq_attr->srq_type            = IBV_SRQT_TM;
+    srq_attr->pd                  = md->pd;
+    srq_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
+    srq_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
-    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + 2;
-    srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
-    srq_init_attr->comp_mask     |= IBV_SRQ_INIT_ATTR_TYPE |
+    uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
+    srq_attr->tm_cap.max_ops      = iface->tm.cmd_qp_len;
+    srq_attr->comp_mask          |= IBV_SRQ_INIT_ATTR_TYPE |
                                     IBV_SRQ_INIT_ATTR_PD |
                                     IBV_SRQ_INIT_ATTR_CQ |
                                     IBV_SRQ_INIT_ATTR_TM;
 
-    iface->rx.srq.verbs.srq = ibv_create_srq_ex(md->dev.ibv_context, srq_init_attr);
+    iface->rx.srq.verbs.srq = ibv_create_srq_ex(md->dev.ibv_context, srq_attr);
     if (iface->rx.srq.verbs.srq == NULL) {
         ucs_error("ibv_create_srq_ex(device=%s) failed: %m",
                   uct_ib_device_name(&md->dev));
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->super.rx.srq.quota = srq_init_attr->attr.max_wr;
+    iface->super.rx.srq.quota = srq_attr->attr.max_wr;
 #endif
 
     status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,

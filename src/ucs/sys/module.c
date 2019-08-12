@@ -37,7 +37,7 @@ static struct {
     unsigned         srchpath_cnt;
     char             *srch_path[UCS_MODULE_SRCH_PATH_MAX];
 } ucs_module_loader_state = {
-    .init         = UCS_INIT_ONCE_INIITIALIZER,
+    .init         = UCS_INIT_ONCE_INITIALIZER,
     .module_ext   = ".so", /* default extension */
     .srchpath_cnt = 0,
     .srch_path    = { NULL, NULL}
