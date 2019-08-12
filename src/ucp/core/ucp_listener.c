@@ -313,7 +313,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     char addr_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
-    ucs_assert(num_cms > 0);
+    ucs_assert_always(num_cms > 0);
 
     uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
                                   UCT_LISTENER_PARAM_FIELD_USER_DATA;
