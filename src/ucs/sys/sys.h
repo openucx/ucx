@@ -159,6 +159,20 @@ ucs_status_t ucs_read_file_number(long *value, int silent,
 
 
 /**
+ * Read file contents into a string closed by null terminator.
+ *
+ * @param buffer        Buffer to fill with file contents.
+ * @param max           Maximal buffer size.
+ * @param filename_fmt  File name printf-like format string.
+ *
+ * @return Number of bytes read, or -1 in case of error.
+ */
+ssize_t ucs_read_file_str(char *buffer, size_t max, int silent,
+                          const char *filename_fmt, ...)
+    UCS_F_PRINTF(4, 5);
+
+
+/**
  * @return Regular _SC_IOV_MAX on the system.
  */
 size_t ucs_get_max_iov();

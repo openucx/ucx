@@ -393,4 +393,13 @@ static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 }
 
 
+/**
+ * Query for active network devices under /sys/class/net, as determined by
+ * ucs_netif_is_active(). 'md' parameter is not used, and is added for
+ * compatibility with uct_tl_t::query_devices definition.
+ */
+ucs_status_t uct_tcp_query_devices(uct_md_h md,
+                                   uct_tl_device_resource_t **devices_p,
+                                   unsigned *num_devices_p);
+
 #endif

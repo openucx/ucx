@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -90,12 +91,9 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_iface_addr_t *iface_addr)
 {
-    uct_tcp_iface_t *iface         = ucs_derived_of(tl_iface, uct_tcp_iface_t);
-    const in_addr_t *remote_inaddr = (const in_addr_t*)dev_addr;
-    in_addr_t netmask              = iface->config.netmask.sin_addr.s_addr;
-
-    return (*remote_inaddr & netmask) ==
-           (iface->config.ifaddr.sin_addr.s_addr & netmask);
+    /* We always report that a peer is reachable. connect() call will
+     * fail if the peer is unreachable when creating UCT/TCP EP */
+    return 1;
 }
 
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
@@ -594,9 +592,9 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
-static ucs_status_t uct_tcp_query_devices(uct_md_h md,
-                                          uct_tl_device_resource_t **devices_p,
-                                          unsigned *num_devices_p)
+ucs_status_t uct_tcp_query_devices(uct_md_h md,
+                                   uct_tl_device_resource_t **devices_p,
+                                   unsigned *num_devices_p)
 {
     uct_tl_device_resource_t *devices, *tmp;
     static const char *netdev_dir = "/sys/class/net";
