@@ -1120,7 +1120,7 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
     uct_ib_md_ops_entry_t *md_ops_entry;
-    int i, num_devices;
+    int i, num_devices, ret;
 
     ucs_trace("opening IB device %s", md_name);
 
@@ -1152,6 +1152,21 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         ucs_debug("IB device %s not found", md_name);
         status = UCS_ERR_NO_DEVICE;
         goto out_free_dev_list;
+    }
+
+    if (md_config->fork_init != UCS_NO) {
+        ret = ibv_fork_init();
+        if (ret) {
+            if (md_config->fork_init == UCS_YES) {
+                ucs_error("ibv_fork_init() failed: %m");
+                status = UCS_ERR_IO_ERROR;
+                goto out_free_dev_list;
+            }
+            ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
+            uct_ib_fork_warn_enable();
+        }
+    } else {
+        uct_ib_fork_warn_enable();
     }
 
     ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
@@ -1186,7 +1201,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 {
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    int ret;
 
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_component;
@@ -1202,21 +1216,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                   "%s-%p", ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
         goto err;
-    }
-
-    if (md_config->fork_init != UCS_NO) {
-        ret = ibv_fork_init();
-        if (ret) {
-            if (md_config->fork_init == UCS_YES) {
-                ucs_error("ibv_fork_init() failed: %m");
-                status = UCS_ERR_IO_ERROR;
-                goto err_release_stats;
-            }
-            ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
-            uct_ib_fork_warn_enable();
-        }
-    } else {
-        uct_ib_fork_warn_enable();
     }
 
     status = uct_ib_device_init(&md->dev, ib_device, md_config->async_events
@@ -1287,6 +1286,7 @@ void uct_ib_md_close(uct_md_h uct_md)
     uct_ib_device_cleanup_ah_cached(&md->dev);
     ibv_dealloc_pd(md->pd);
     uct_ib_device_cleanup(&md->dev);
+    ibv_close_device(md->dev.ibv_context);
     UCS_STATS_NODE_FREE(md->stats);
     ucs_free(md);
 }

@@ -312,7 +312,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                   ibv_get_device_name(ibv_device), dev->num_ports,
                   UCT_IB_DEV_MAX_PORTS);
         status = UCS_ERR_UNSUPPORTED;
-        goto err_free_context;
+        goto err;
     }
 
     /* Get device locality */
@@ -326,14 +326,14 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
             status = UCS_ERR_IO_ERROR;
-            goto err_free_context;
+            goto err;
         }
     }
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");
     if (status != UCS_OK) {
-        goto err_free_context;
+        goto err;
     }
 
     status = ucs_sys_fcntl_modfl(dev->ibv_context->async_fd, O_NONBLOCK, 0);
@@ -363,8 +363,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
 err_release_stats:
     UCS_STATS_NODE_FREE(dev->stats);
-err_free_context:
-    ibv_close_device(dev->ibv_context);
+err:
     return status;
 }
 
@@ -392,7 +391,6 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
     }
     UCS_STATS_NODE_FREE(dev->stats);
-    ibv_close_device(dev->ibv_context);
 }
 
 static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
