@@ -6,10 +6,6 @@
 #include "rocm_ipc_md.h"
 
 #include <uct/rocm/base/rocm_base.h>
-#include <ucs/debug/assert.h>
-#include <ucs/debug/log.h>
-#include <ucs/sys/compiler.h>
-#include <limits.h>
 
 
 static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {

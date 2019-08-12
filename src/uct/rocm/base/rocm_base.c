@@ -5,14 +5,10 @@
 
 #include "rocm_base.h"
 
-#include <ucs/debug/assert.h>
-#include <ucs/debug/log.h>
 #include <ucs/sys/module.h>
 
 #include <hsa_ext_amd.h>
-
 #include <pthread.h>
-#include <unistd.h>
 
 
 #define MAX_AGENTS 16

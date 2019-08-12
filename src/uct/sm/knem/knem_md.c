@@ -12,10 +12,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
-#include <sys/fcntl.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <unistd.h>
 
 
 static ucs_config_field_t uct_knem_md_config_table[] = {
