@@ -1320,8 +1320,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-
-    if (uct_ib_device_odp_has_global_mr(&md->dev)) {
+    if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
         md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
