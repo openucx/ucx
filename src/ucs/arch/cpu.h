@@ -14,6 +14,7 @@
 
 #include <ucs/sys/compiler_def.h>
 
+BEGIN_C_DECLS
 
 /* CPU models */
 typedef enum ucs_cpu_model {
@@ -58,6 +59,16 @@ typedef enum ucs_cpu_vendor {
 } ucs_cpu_vendor_t;
 
 
+/* CPU cache types */
+typedef enum ucs_cpu_cache_type {
+    UCS_CPU_CACHE_L1d, /**< L1 data cache */
+    UCS_CPU_CACHE_L1i, /**< L1 instruction cache */
+    UCS_CPU_CACHE_L2,  /**< L2 cache */
+    UCS_CPU_CACHE_L3,  /**< L3 cache */
+    UCS_CPU_CACHE_LAST
+} ucs_cpu_cache_type_t;
+
+
 /* System constants */
 #define UCS_SYS_POINTER_SIZE       (sizeof(void*))
 #define UCS_SYS_PARAGRAPH_SIZE     16
@@ -81,6 +92,17 @@ typedef enum ucs_cpu_vendor {
 #endif
 
 /**
+ * Get size of CPU cache.
+ *
+ * @param type  Cache type.
+ * @param value Filled with the cache size.
+ * 
+ * @return Cache size value or 0 if cache is not supported or can't be read.
+ */
+size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type);
+
+
+/**
  * Clear processor data and instruction caches, intended for
  * self-modifying code.
  *
@@ -98,4 +120,7 @@ static inline void ucs_clear_cache(void *start, void *end)
     ucs_arch_clear_cache(start, end);
 #endif
 }
+
+END_C_DECLS
+
 #endif

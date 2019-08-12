@@ -356,10 +356,11 @@ enum {
                                              address, wireup protocol requires
                                              extra MSGs. */
     UCP_WIREUP_SOCKADDR_CD_CM_ADDR        /* Client data contains address for CM
-                                             based wireup, there is only iface
-                                             and ep address, remote device
-                                             address is provided by CM and full
-                                             address have to be merged locally. */
+                                             based wireup: there is only iface
+                                             and ep address of transport lanes,
+                                             remote device address is provided
+                                             by CM and has to be added to
+                                             unpacked UCP address locally. */
 };
 
 

@@ -41,8 +41,9 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
-    ucp_memory_type_detect_mds(ep->worker->context, (void *)buffer,
-                               req->send.length, &req->send.mem_type);
+    req->send.mem_type     = ucp_memory_type_detect(ep->worker->context,
+                                                    (void*)buffer,
+                                                    req->send.length);
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.tag, sizeof(req->send.tag));
 }
 

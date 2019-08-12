@@ -54,6 +54,12 @@ void uct_listener_destroy(uct_listener_h listener)
     listener->cm->ops->listener_destroy(listener);
 }
 
+ucs_status_t uct_listener_query(uct_listener_h listener,
+                                uct_listener_attr_t *listener_attr)
+{
+    return listener->cm->ops->listener_query(listener, listener_attr);
+}
+
 ucs_status_t uct_listener_reject(uct_listener_h listener,
                                  uct_conn_request_h conn_request)
 {

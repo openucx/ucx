@@ -128,7 +128,7 @@ static ucs_list_link_t ucm_event_handlers =
                                      &ucm_event_orig_handler.list);
 
 
- void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
+void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
 {
     ucm_event_handler_t *handler;
 
@@ -478,7 +478,7 @@ static int ucm_events_to_native_events(int events)
 
 static ucs_status_t ucm_event_install(int events)
 {
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INIITIALIZER;
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     UCS_MODULE_FRAMEWORK_DECLARE(ucm);
     ucm_event_installer_t *event_installer;
     int native_events, malloc_events;
@@ -513,7 +513,7 @@ static ucs_status_t ucm_event_install(int events)
     /* Call extra event installers */
     UCS_MODULE_FRAMEWORK_LOAD(ucm, UCS_MODULE_LOAD_FLAG_NODELETE);
     ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
-        status = event_installer->func(events);
+        status = event_installer->install(events);
         if (status != UCS_OK) {
             goto out_unlock;
         }
@@ -529,14 +529,32 @@ out_unlock:
 ucs_status_t ucm_set_event_handler(int events, int priority,
                                    ucm_event_callback_t cb, void *arg)
 {
+    ucm_event_installer_t *event_installer;
     ucm_event_handler_t *handler;
     ucs_status_t status;
+    int flags;
+
+    if (events & ~(UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP|
+                   UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|
+                   UCM_EVENT_SBRK|
+                   UCM_EVENT_MADVISE|
+                   UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED|
+                   UCM_EVENT_MEM_TYPE_ALLOC|UCM_EVENT_MEM_TYPE_FREE|
+                   UCM_EVENT_FLAG_NO_INSTALL|
+                   UCM_EVENT_FLAG_EXISTING_ALLOC)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     if (!ucm_global_opts.enable_events) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (!(events & UCM_EVENT_FLAG_NO_INSTALL) && (events & ~ucm_external_events)) {
+    /* separate event flags from real events */
+    flags   = events & (UCM_EVENT_FLAG_NO_INSTALL |
+                        UCM_EVENT_FLAG_EXISTING_ALLOC);
+    events &= ~flags;
+
+    if (!(flags & UCM_EVENT_FLAG_NO_INSTALL) && (events & ~ucm_external_events)) {
         status = ucm_event_install(events & ~ucm_external_events);
         if (status != UCS_OK) {
             return status;
@@ -554,6 +572,12 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
     handler->arg      = arg;
 
     ucm_event_handler_add(handler);
+
+    if (flags & UCM_EVENT_FLAG_EXISTING_ALLOC) {
+        ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
+            event_installer->get_existing_alloc(handler);
+        }
+    }
 
     ucm_debug("added user handler (func=%p arg=%p) for events=0x%x prio=%d", cb,
               arg, events, priority);

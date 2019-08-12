@@ -1082,7 +1082,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
-                        UCT_COMPONENT_ATTR_FIELD_NAME |
+                        UCT_COMPONENT_ATTR_FIELD_NAME              |
                         UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
                         UCT_COMPONENT_ATTR_FIELD_FLAGS;
         status = uct_component_query(context->tl_cmpts[i].cmpt,
@@ -1532,4 +1532,28 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
     }
 
     return NULL;
+}
+
+ucs_memory_type_t
+ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
+{
+    ucs_memory_type_t mem_type;
+    unsigned i, md_index;
+    ucs_status_t status;
+
+    for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
+        md_index = context->mem_type_detect_mds[i];
+        status   = uct_md_detect_memory_type(context->tl_mds[md_index].md,
+                                             address, size, &mem_type);
+        if (status == UCS_OK) {
+            if (context->memtype_cache != NULL) {
+                ucs_memtype_cache_update(context->memtype_cache, address, size,
+                                         mem_type);
+            }
+            return mem_type;
+        }
+    }
+
+    /* Memory type not detected by any memtype MD - assume it is host memory */
+    return UCS_MEMORY_TYPE_HOST;
 }

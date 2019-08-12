@@ -106,6 +106,12 @@ noinst_HEADERS += \
 libuct_ib_la_SOURCES += \
 	dc/dc_mlx5_ep.c \
 	dc/dc_mlx5.c
+
+if HAVE_DEVX
+libuct_ib_la_SOURCES += \
+	dc/dc_mlx5_devx.c
+endif # HAVE_DEVX
+
 endif # HAVE_TL_DC
 
 

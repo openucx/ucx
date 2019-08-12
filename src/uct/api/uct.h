@@ -702,6 +702,19 @@ enum uct_cm_attr_field {
 
 /**
  * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_listener_attr_t are
+ * present, for backward compatibility support.
+ */
+enum uct_listener_attr_field {
+    /** Enables @ref uct_listener_attr::sockaddr */
+    UCT_LISTENER_ATTR_FIELD_SOCKADDR = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
  * @brief UCT listener created by @ref uct_listener_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_listener_params_t
@@ -1095,6 +1108,25 @@ struct uct_cm_attr {
      * establishment with sockaddr.
      */
     size_t      max_conn_priv;
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT listener attributes, capabilities and limitations.
+ */
+struct uct_listener_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_listener_attr_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Sockaddr on which this listener is listening.
+     */
+    struct sockaddr_storage sockaddr;
 };
 
 
@@ -3036,6 +3068,19 @@ ucs_status_t uct_listener_create(uct_cm_h cm, const struct sockaddr *saddr,
  * @param [in]  listener    Listener to destroy.
  */
 void uct_listener_destroy(uct_listener_h listener);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Get attributes specific to a particular listener.
+ *
+ * @param [in]  listener      listener object to query.
+ * @param [out] listener_attr Filled with attributes of the listener.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_listener_query(uct_listener_h listener,
+                                uct_listener_attr_t *listener_attr);
 
 
 /**

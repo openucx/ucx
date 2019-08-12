@@ -92,6 +92,7 @@ typedef struct uct_ep_params       uct_ep_params_t;
 typedef struct uct_cm_attr         uct_cm_attr_t;
 typedef struct uct_cm              uct_cm_t;
 typedef uct_cm_t                   *uct_cm_h;
+typedef struct uct_listener_attr   uct_listener_attr_t;
 typedef struct uct_listener        *uct_listener_h;
 typedef struct uct_listener_params uct_listener_params_t;
 typedef struct uct_tag_context     uct_tag_context_t;
@@ -446,7 +447,7 @@ typedef void (*uct_ep_client_connect_cb_t)(uct_ep_h ep, void *arg,
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Callback to handle the disconnecion of the remote peer.
+ * @brief Callback to handle the disconnection of the remote peer.
  *
  * This callback routine will be invoked on the client and server sides upon
  * a disconnect of the remote peer. It will disconnect the given endpoint from

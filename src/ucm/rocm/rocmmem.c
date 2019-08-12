@@ -181,8 +181,13 @@ out:
     return status;
 }
 
+static void ucm_rocmmem_get_existing_alloc(ucm_event_handler_t *handler)
+{
+}
+
 static ucm_event_installer_t ucm_rocm_initializer = {
-    .func = ucm_rocmmem_install
+    .install            = ucm_rocmmem_install,
+    .get_existing_alloc = ucm_rocmmem_get_existing_alloc
 };
 
 UCS_STATIC_INIT {
