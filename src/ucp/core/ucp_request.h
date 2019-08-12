@@ -251,9 +251,16 @@ struct ucp_request {
                     uint64_t                sn;       /* Tag match sequence */
                     ucp_tag_recv_callback_t cb;       /* Completion callback */
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
-                    ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                     ssize_t                 remaining; /* How much more data to be received */
-                    void                    *gen_buf;
+
+                    /* Can use union, because rdesc is used in expected flow,
+                     * while gen_buf is used in unexpected flow only. */
+                    union {
+                        ucp_mem_desc_t      *rdesc;   /* Offload bounce buffer */
+                        void                *gen_buf; /* Used for assemling multi-fragment
+                                                         non-contig unexpected message
+                                                         in tag offload flow. */
+                    };
                     ucp_worker_iface_t      *wiface;  /* Cached iface this request
                                                          is received on. Used in
                                                          tag offload expected callbacks*/
