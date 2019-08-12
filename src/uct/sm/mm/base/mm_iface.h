@@ -123,7 +123,6 @@ struct uct_mm_recv_desc {
 /*
  * Define a memory-mapper transport for MM.
  *
- * @param _var          Variable for MD component.
  * @param _name         Component name token
  * @param _ops          Memory domain operations, of type uct_mm_mapper_ops_t.
  * @param _cfg_prefix   Prefix for configuration variables.
@@ -138,6 +137,7 @@ struct uct_mm_recv_desc {
                   "MM_", \
                   uct_mm_iface_config_table, \
                   uct_mm_iface_config_t);
+
 
 extern ucs_config_field_t uct_mm_iface_config_table[];
 

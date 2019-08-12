@@ -612,7 +612,7 @@ uct_rdmacm_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p
                             unsigned *num_tl_devices_p)
 {
     *num_tl_devices_p = 0;
-    *tl_devices_p      = NULL;
+    *tl_devices_p     = NULL;
     return UCS_OK;
 }
 

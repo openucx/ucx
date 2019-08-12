@@ -7,7 +7,6 @@
 
 #include <uct/rocm/base/rocm_base.h>
 #include <ucs/debug/assert.h>
-#include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <limits.h>

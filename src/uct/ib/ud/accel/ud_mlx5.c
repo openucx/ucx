@@ -818,8 +818,8 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
 uct_ud_mlx5_query_tl_devices(uct_md_h md,
-                              uct_tl_device_resource_t **tl_devices_p,
-                              unsigned *num_tl_devices_p)
+                             uct_tl_device_resource_t **tl_devices_p,
+                             unsigned *num_tl_devices_p)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_MLX5_PRM,

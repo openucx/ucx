@@ -256,11 +256,11 @@ typedef struct uct_tl_device_resource {
 
 
 /**
- * UCT transport definition. This structure should not be sued directly; use
+ * UCT transport definition. This structure should not be used directly; use
  * @ref UCT_TL_DEFINE macro to define a transport.
  */
 typedef struct uct_tl {
-    char                   name[UCT_TL_NAME_MAX];/**< Transport name */
+    char                   name[UCT_TL_NAME_MAX]; /**< Transport name */
 
     ucs_status_t           (*query_devices)(uct_md_h md,
                                             uct_tl_device_resource_t **tl_devices_p,
@@ -279,7 +279,7 @@ typedef struct uct_tl {
 /**
  * Define a transport
  *
- * @param _component      Component to add the transport to.
+ * @param _component      Component to add the transport to
  * @param _name           Name of the transport (should be a token, not a string)
  * @param _query_devices  Function to query the list of available devices
  * @param _iface_class    Struct type defining the uct_iface class

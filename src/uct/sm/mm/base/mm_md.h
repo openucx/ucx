@@ -88,7 +88,7 @@ typedef struct uct_mm_component {
  *
  * @param _var          Variable for MM component.
  * @param _name         String which is the component name.
- * @param _ops          Mapper operations, of type uct_mm_mapper_ops_t.
+ * @param _md_ops       Mapper operations, of type uct_mm_mapper_ops_t.
  * @param _cfg_prefix   Prefix for configuration environment vars.
  */
 #define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _cfg_prefix) \
