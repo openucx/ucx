@@ -2,8 +2,10 @@
 
 trigger:
   - master
+  - v*.*.x
 pr:
   - master
+  - v*.*.x
 
 resources:
   containers:
