@@ -6,9 +6,12 @@
 
 #include "sockcm_iface.h"
 #include "sockcm_ep.h"
+
 #include <uct/base/uct_worker.h>
+#include <uct/tcp/tcp.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
+
 
 enum uct_sockcm_process_event_flags {
     UCT_SOCKCM_PROCESS_EVENT_DESTROY_SOCK_ID_FLAG = UCS_BIT(0),
@@ -122,15 +125,7 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sockcm_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 
-static ucs_status_t uct_sockcm_query_devices(uct_md_h md,
-                                             uct_tl_device_resource_t **devices_p,
-                                             unsigned *num_devices_p)
-{
-    *num_devices_p = 0;
-    *devices_p      = NULL;
-    return UCS_OK;
-}
 
-UCT_TL_DEFINE(&uct_sockcm_component, sockcm, uct_sockcm_query_devices,
+UCT_TL_DEFINE(&uct_sockcm_component, sockcm, uct_tcp_query_devices,
               uct_sockcm_iface_t, "SOCKCM_", uct_sockcm_iface_config_table,
               uct_sockcm_iface_config_t);
