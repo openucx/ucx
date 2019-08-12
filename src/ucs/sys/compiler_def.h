@@ -107,6 +107,12 @@
     })
 
 /**
+ * @return count of elements in const-size array
+ */
+#define ucs_array_size(_array) \
+    (sizeof(_array) / sizeof((_array)[0]))
+
+/**
  * @return Offset of _member in _type. _type is a structure type.
  */
 #define ucs_offsetof(_type, _member) \
