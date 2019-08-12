@@ -462,13 +462,15 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 void ucs_cpu_init()
 {
 #if ENABLE_BUILTIN_MEMCPY
+    /* use L3/2 (half of L3) memcpy threshold - this is the most performance value */
     size_t l3_cache = ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3);
 
     ucs_global_opts.arch.builtin_memcpy_min =
-        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_min, 1 * UCS_KBYTE);
+        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_min,
+                              l3_cache ? (1 * UCS_KBYTE) : UCS_MEMUNITS_INF);
     ucs_global_opts.arch.builtin_memcpy_max =
         ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max,
-                              l3_cache ? l3_cache / 2 : UCS_MEMUNITS_INF);
+                              l3_cache ? (l3_cache / 2) : UCS_MEMUNITS_INF);
 #endif
 }
 
