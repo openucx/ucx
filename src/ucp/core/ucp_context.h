@@ -166,12 +166,12 @@ typedef struct ucp_context {
     /* List of MDs which detect non host memory type */
     ucp_rsc_index_t               mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
-    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache*/
+    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
-                                                 Not all resources may be used if unified
-                                                 mode is enabled. */
+                                               * Not all resources may be used if unified
+                                               * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
@@ -337,6 +337,10 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
 
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
+
+double ucp_calc_epsilon(double val1, double val2);
+
+int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps);
 
 ucs_memory_type_t
 ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t length);

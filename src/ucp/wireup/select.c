@@ -206,16 +206,8 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 }
 
 /**
- * Calculate a small value to overcome float imprecision between two scores
- */
-static double ucp_wireup_calc_score_epsilon(double score1, double score2)
-{
-    return (score1 + score2) * (1e-6);
-}
-
-/**
  * Compare two scores and return:
- * - `-1` if socre1 < socre2
+ * - `-1` if score1 < score2
  * -  `0` if score1 == score2
  * -  `1` if score1 > score2
  */
@@ -223,7 +215,7 @@ static int ucp_wireup_score_cmp(double score1, double score2)
 {
     double diff = score1 - score2;
     return ((fabs(diff) <
-             ucp_wireup_calc_score_epsilon(score1, score2)) ?
+             ucp_calc_epsilon(score1, score2)) ?
             0 : ucs_signum(diff));
 }
 

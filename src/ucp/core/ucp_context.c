@@ -720,6 +720,23 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
     return str;
 }
 
+/**
+ * Calculate a small value to overcome float imprecision
+ * between two float values
+ */
+double ucp_calc_epsilon(double val1, double val2)
+{
+    return (val1 + val2) * (1e-6);
+}
+
+/**
+ * Check whether the transport scalable or not
+ */
+int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
+{
+    return (max_num_eps >= context->config.est_num_eps);
+}
+
 static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
