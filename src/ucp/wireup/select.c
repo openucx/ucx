@@ -24,6 +24,11 @@
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE       262144
 
+/* The factor reduces score of RMA/AMO emulation over AM
+ * that requires progress on a target side. So, it ensures
+ * that real RMA/AMO is better than RMA/AMO emulation */
+#define UCP_WIREUP_AM_EMULATION_PENALTY       10
+
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
                             (_criteria)->remote_atomic_flags.atomic##_size._op##_flags)) { \
@@ -816,13 +821,13 @@ ucp_wireup_calc_rma_sw(ucp_context_h context,
                        size_t msg_size)
 {
     /* consider a worst case - maximum between PUT and GET headers */
-    size_t frag_hdr_size    = ucs_max(sizeof(ucp_put_hdr_t),
-                                      sizeof(ucp_rma_rep_hdr_t));
-    size_t full_frag_size   = (iface_attr->cap.am.max_bcopy -
-                               frag_hdr_size);
-    size_t remain_frag_size = (msg_size % full_frag_size);
-    size_t full_frags_cnt   = (msg_size / full_frag_size);
-    size_t remain_frags_cnt = (remain_frag_size != 0);
+    size_t frag_hdr_size            = ucs_max(sizeof(ucp_put_hdr_t),
+                                              sizeof(ucp_rma_rep_hdr_t));
+    size_t full_frag_size           = (iface_attr->cap.am.max_bcopy -
+                                       frag_hdr_size);
+    size_t remain_frag_size         = (msg_size % full_frag_size);
+    size_t full_frags_cnt           = (msg_size / full_frag_size);
+    size_t remain_frags_cnt         = (remain_frag_size != 0);
 
     return ((/* sending time of full fragments of AM maximum Bcopy size */
              full_frags_cnt *
@@ -848,7 +853,8 @@ ucp_wireup_calc_rma_sw(ucp_context_h context,
               remote_iface_attr->overhead +
               ucp_wireup_calc_send_msg(context, iface_attr,
                                        remote_iface_attr,
-                                       sizeof(ucp_cmpl_hdr_t)))));
+                                       sizeof(ucp_cmpl_hdr_t))))) *
+           UCP_WIREUP_AM_EMULATION_PENALTY;
 }
 
 static double
@@ -923,18 +929,19 @@ ucp_wireup_amo_sw_score_func(ucp_context_h context,
     /* consider a worst case - 64-bit compare-and-swap operation */
     size_t amo_payload = 2 * sizeof(uint64_t);
 
-    return 1e-3 / ((/* sending time of AMO request */
-                    remote_iface_attr->overhead +
-                    ucp_wireup_calc_send_msg(context, iface_attr,
-                                             remote_iface_attr,
-                                             sizeof(ucp_atomic_req_hdr_t) +
-                                             amo_payload)) +
-                   (/* sending time of AMO reply */
-                    remote_iface_attr->overhead +
-                    ucp_wireup_calc_send_msg(context, iface_attr,
-                                             remote_iface_attr,
-                                             sizeof(ucp_rma_rep_hdr_t) +
-                                             amo_payload)));
+    return 1e-3 / (((/* sending time of AMO request */
+                     remote_iface_attr->overhead +
+                     ucp_wireup_calc_send_msg(context, iface_attr,
+                                              remote_iface_attr,
+                                              sizeof(ucp_atomic_req_hdr_t) +
+                                              amo_payload)) +
+                    (/* sending time of AMO reply */
+                     remote_iface_attr->overhead +
+                     ucp_wireup_calc_send_msg(context, iface_attr,
+                                              remote_iface_attr,
+                                              sizeof(ucp_rma_rep_hdr_t) +
+                                              amo_payload))) * 
+                   UCP_WIREUP_AM_EMULATION_PENALTY);
 }
 
 double ucp_wireup_amo_score_func(ucp_context_h context,
