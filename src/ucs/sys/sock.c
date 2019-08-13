@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
 *
 * See file LICENSE for terms.
 */
@@ -484,4 +485,18 @@ out:
         *status_p = status;
     }
     return result;
+}
+
+int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        return UCS_SOCKET_INET_ADDR(addr).s_addr == INADDR_ANY;
+    case AF_INET6:
+        return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_any,
+                       sizeof(UCS_SOCKET_INET6_ADDR(addr)));
+    default:
+        ucs_debug("invalid address family: %d", addr->sa_family);
+        return 0;
+    }
 }
