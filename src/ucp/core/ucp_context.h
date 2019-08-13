@@ -341,6 +341,9 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 ucs_memory_type_t
 ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t length);
 
+ucp_rsc_index_t ucp_resource_get_cmpt_idx(ucp_context_h context,
+                                          ucp_rsc_index_t rsc_idx);
+
 /**
  * Calculate a small value to overcome float imprecision
  * between two float values

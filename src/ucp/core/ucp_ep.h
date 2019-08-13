@@ -17,7 +17,6 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/debug/assert.h>
 
-
 #define UCP_MAX_IOV                16UL
 
 
@@ -110,6 +109,7 @@ typedef struct ucp_ep_config_key {
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
     ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
+    ucp_lane_index_t       cm_lane;      /* Lane for holding a connection */
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
@@ -374,21 +374,25 @@ enum {
 };
 
 
-typedef struct ucp_wireup_client_data {
-    uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
+typedef struct ucp_wireup_sockaddr_data {
+    uintptr_t                 ep_ptr;        /**< Endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SOCKADDR_CD_xx */
     /* packed worker address follows */
-} UCS_S_PACKED ucp_wireup_client_data_t;
+} UCS_S_PACKED ucp_wireup_sockaddr_data_t;
 
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
+    union {
+        uct_listener_h          listener;
+        uct_iface_h             iface;
+    } uct;
     uct_conn_request_h          uct_req;
-    uct_iface_h                 uct_iface;
-    ucp_wireup_client_data_t    client_data;
+    uct_device_addr_t           *remote_dev_addr;
+    ucp_wireup_sockaddr_data_t  client_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
 
@@ -418,7 +422,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const char *message, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_client_data_t *client_data,
+                                  const ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
@@ -463,5 +467,11 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            double bandwidth);
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+
+ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+
+void ucp_ep_sockaddr_disconnect_cb(uct_ep_h ep, void *arg);
+
+void ucp_ep_sockaddr_cm_wireup_complete(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
 
 #endif

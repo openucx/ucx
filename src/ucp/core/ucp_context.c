@@ -1626,3 +1626,9 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
     /* Memory type not detected by any memtype MD - assume it is host memory */
     return UCS_MEMORY_TYPE_HOST;
 }
+
+ucp_rsc_index_t ucp_resource_get_cmpt_idx(ucp_context_h context,
+                                          ucp_rsc_index_t rsc_idx)
+{
+    return context->tl_mds[context->tl_rscs[rsc_idx].md_index].cmpt_index;
+}
