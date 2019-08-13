@@ -173,9 +173,28 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
 }
 
 static ucs_status_t
+ucp_listener_query_uct_port(ucp_listener_h listener,
+                            ucp_rsc_index_t uct_listener_idx, uint16_t *port_p)
+{
+    uct_listener_attr_t attr;
+    ucs_status_t status;
+
+    attr.field_mask = UCT_LISTENER_ATTR_FIELD_SOCKADDR;
+    status = uct_listener_query(listener->cms.listeners[uct_listener_idx],
+                                &attr);
+    if (status != UCS_OK) {
+        ucs_error("failed to query UCT listener %p status %s",
+                  listener->cms.listeners[uct_listener_idx],
+                  ucs_status_string(status));
+        return status;
+    }
+
+    return ucs_sockaddr_get_port((struct sockaddr *)&attr.sockaddr, port_p);
+}
+
+static ucs_status_t
 ucp_listener_uct_listeners_query_port(ucp_listener_h listener, int *port_p)
 {
-    uct_listener_attr_t attr_0, attr_i;
     uint16_t port_0, port_i;
     int i;
     ucs_status_t status;
@@ -185,31 +204,16 @@ ucp_listener_uct_listeners_query_port(ucp_listener_h listener, int *port_p)
         return UCS_ERR_IO_ERROR;
     }
 
-    attr_0.field_mask =
-    attr_i.field_mask = UCT_LISTENER_ATTR_FIELD_SOCKADDR;
-
     /* Make sure that all the listeners are listening on the same port */
     for (i = 0; i < listener->cms.num_listeners; i++) {
-        status = uct_listener_query(listener->cms.listeners[i],
-                                    (i == 0) ? &attr_0 : &attr_i);
-
+        status = ucp_listener_query_uct_port(listener, i, &port_i);
         if (status != UCS_OK) {
             return status;
         }
 
         if (i == 0) {
-            status = ucs_sockaddr_get_port((struct sockaddr *)&attr_0.sockaddr,
-                                           &port_0);
-        } else {
-            status = ucs_sockaddr_get_port((struct sockaddr *)&attr_i.sockaddr,
-                                           &port_i);
-        }
-
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        if ((i > 0) && (port_0 != port_i)) {
+            port_0 = port_i;
+        } else if (port_0 != port_i) {
             ucs_error("different ports detected on the listener: %d and %d",
                       port_0, port_i);
             return UCS_ERR_IO_ERROR;
@@ -305,7 +309,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     ucp_worker_h          worker  = listener->worker;
     const ucp_rsc_index_t num_cms = ucp_worker_get_cm_num(worker);
     struct sockaddr       addr    = *params->sockaddr.addr;
-    uct_listener_h        *listeners;
+    uct_listener_h        *uct_listeners;
     uct_listener_params_t uct_params;
     uct_listener_attr_t   uct_attr;
     uint16_t              port, listener_port;
@@ -321,25 +325,25 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     uct_params.user_data        = listener;
 
     listener->cms.num_listeners = 0;
-    listeners                   = ucs_calloc(num_cms, sizeof(*listeners),
+    uct_listeners               = ucs_calloc(num_cms, sizeof(*uct_listeners),
                                              "uct_listeners_arr");
-    if (listeners == NULL) {
+    if (uct_listeners == NULL) {
         ucs_error("Can't allocate memory for UCT listeners array");
         return UCS_ERR_NO_MEMORY;
     }
 
-    listener->cms.listeners = listeners;
+    listener->cms.listeners = uct_listeners;
 
     for (i = 0; i < num_cms; ++i) {
         status = uct_listener_create(worker->cms[i], &addr,
                                      params->sockaddr.addrlen, &uct_params,
-                                     &listeners[listener->cms.num_listeners]);
+                                     &uct_listeners[listener->cms.num_listeners]);
         if (status != UCS_OK) {
-            ucs_debug("uct_listener_create failed on CM %p with address %s status %s",
+            ucs_debug("failed to create UCT listener on CM %p with address %s status %s",
                       worker->cms[i],
                       ucs_sockaddr_str(params->sockaddr.addr, addr_str,
                                        UCS_SOCKADDR_STRING_LEN),
-                                       ucs_status_string(status));
+                      ucs_status_string(status));
             continue;
         }
 
@@ -351,7 +355,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         }
 
         uct_attr.field_mask = UCT_LISTENER_ATTR_FIELD_SOCKADDR;
-        status = uct_listener_query(listeners[listener->cms.num_listeners - 1],
+        status = uct_listener_query(uct_listeners[listener->cms.num_listeners - 1],
                                     &uct_attr);
         if (status != UCS_OK) {
             goto destroy_listeners;
@@ -372,8 +376,8 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         }
     }
 
-    /* return the status of the last call of uct_listener_create if no one
-       listener is started */
+    /* return the status of the last call of uct_listener_create if no listener
+       was created */
     return listener->cms.num_listeners > 0 ? UCS_OK : status;
 
 destroy_listeners:
