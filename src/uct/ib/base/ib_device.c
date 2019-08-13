@@ -312,7 +312,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                   ibv_get_device_name(ibv_device), dev->num_ports,
                   UCT_IB_DEV_MAX_PORTS);
         status = UCS_ERR_UNSUPPORTED;
-        goto err_free_context;
+        goto err;
     }
 
     /* Get device locality */
@@ -326,14 +326,14 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
             status = UCS_ERR_IO_ERROR;
-            goto err_free_context;
+            goto err;
         }
     }
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");
     if (status != UCS_OK) {
-        goto err_free_context;
+        goto err;
     }
 
     status = ucs_sys_fcntl_modfl(dev->ibv_context->async_fd, O_NONBLOCK, 0);
@@ -363,8 +363,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
 err_release_stats:
     UCS_STATS_NODE_FREE(dev->stats);
-err_free_context:
-    ibv_close_device(dev->ibv_context);
+err:
     return status;
 }
 
@@ -392,7 +391,6 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
     }
     UCS_STATS_NODE_FREE(dev->stats);
-    ibv_close_device(dev->ibv_context);
 }
 
 static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
@@ -905,58 +903,6 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
 #else
     return 0;
 #endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS */
-}
-
-static ucs_status_t
-uct_ib_device_parse_fw_ver_triplet(uct_ib_device_t *dev, unsigned *major,
-                                   unsigned *minor, unsigned *release)
-{
-    int ret;
-
-    ret = sscanf(IBV_DEV_ATTR(dev, fw_ver), "%u.%u.%u", major, minor, release);
-    if (ret != 3) {
-        ucs_debug("failed to parse firmware version string '%s'",
-                  IBV_DEV_ATTR(dev, fw_ver));
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
-int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev)
-{
-    unsigned fw_major, fw_minor, fw_release;
-    ucs_status_t status;
-
-    if (!uct_ib_device_odp_max_size(dev)) {
-        return 0;
-    }
-
-#if HAVE_DECL_IBV_EXP_ODP_SUPPORT_IMPLICIT
-    if (!(dev->dev_attr.odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT_IMPLICIT)) {
-        return 0;
-    }
-#endif
-
-    if (uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MELLANOX) {
-        status = uct_ib_device_parse_fw_ver_triplet(dev, &fw_major, &fw_minor,
-                                                    &fw_release);
-        if (status != UCS_OK) {
-            return 0;
-        }
-
-        if ((fw_major < 12) || (fw_minor < 21)) {
-            return 0;
-        } else if (fw_minor == 21) {
-            return (fw_release >= 2031) && (fw_release <= 2099);
-        } else if (fw_minor == 22) {
-            return (fw_release >= 84);
-        } else {
-            return 1;
-        }
-    }
-
-    return 1;
 }
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)

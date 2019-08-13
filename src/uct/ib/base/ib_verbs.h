@@ -154,7 +154,6 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 
 #if HAVE_ODP
 #  if HAVE_VERBS_EXP_H
-#    define IBV_ODP_SUPPORT_IMPLICT     IBV_EXP_ODP_SUPPORT_IMPLICIT
 static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
                                             size_t length, long access)
 {
@@ -175,6 +174,16 @@ static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
 #else
 #  define IBV_ACCESS_ON_DEMAND          0
 #  define ibv_reg_mr_func_name          "ibv_reg_mr"
+#endif
+
+#if HAVE_ODP_IMPLICIT
+#  if HAVE_VERBS_EXP_H
+#    define UCT_IB_HAVE_ODP_IMPLICIT(_attr)         ((_attr)->odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT_IMPLICIT)
+#  else
+#    define UCT_IB_HAVE_ODP_IMPLICIT(_attr)         ((_attr)->odp_caps.general_caps & IBV_ODP_SUPPORT_IMPLICIT)
+#  endif
+#else
+#  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           0
 #endif
 
 #if !HAVE_DECL_IBV_EXP_PREFETCH_WRITE_ACCESS

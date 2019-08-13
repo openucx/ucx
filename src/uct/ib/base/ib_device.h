@@ -260,8 +260,6 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
 
 size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
 
-int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev);
-
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
 ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
