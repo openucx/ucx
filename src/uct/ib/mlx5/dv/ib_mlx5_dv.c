@@ -145,6 +145,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     if (qp->devx.mem == NULL) {
         UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, 1);
         UCT_IB_MLX5DV_SET(qpc, qpc, offload_type, 1);
+        UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, md->zero_mem->umem_id);
     } else {
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem->umem_id);
     }
@@ -188,6 +189,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         tx->dbrec  = &qp->devx.dbrec->db[MLX5_SND_DBR];
         tx->bb_max = max_tx - 2 * UCT_IB_MLX5_MAX_BB;
         uct_ib_mlx5_txwq_reset(tx);
+    } else {
+        uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
     }
 
     return UCS_OK;

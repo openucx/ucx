@@ -392,11 +392,27 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    md->zero_buf = ucs_memalign(ucs_get_page_size(), ucs_get_page_size(), "zero umem");
+    if (md->zero_buf == NULL) {
+        ucs_error("failed to allocate zero buffer: %m");
+        goto err_release_dbrec;
+    }
+
+    md->zero_mem = mlx5dv_devx_umem_reg(dev->ibv_context, md->zero_buf, ucs_get_page_size(), 0);
+    if (!md->zero_mem) {
+        ucs_error("mlx5dv_devx_umem_reg() zero umem failed: %m");
+        goto err_free_zero_buf;
+    }
+
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags |= UCT_IB_MLX5_MD_FLAG_DEVX;
     *p_md = &md->super;
     return status;
 
+err_free_zero_buf:
+    ucs_free(md->zero_buf);
+err_release_dbrec:
+    ucs_mpool_cleanup(&md->dbrec_pool, 1);
 err_free:
     ucs_free(md);
 err_free_context:
@@ -409,6 +425,8 @@ void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
+    mlx5dv_devx_umem_dereg(md->zero_mem);
+    ucs_free(md->zero_buf);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
 }
 

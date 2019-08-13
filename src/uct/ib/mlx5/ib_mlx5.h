@@ -142,6 +142,9 @@ typedef struct uct_ib_mlx5_md {
     ucs_mpool_t              dbrec_pool;
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+
+    void                     *zero_buf;
+    struct mlx5dv_devx_umem  *zero_mem;
 } uct_ib_mlx5_md_t;
 
 
