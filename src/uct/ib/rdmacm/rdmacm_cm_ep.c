@@ -196,11 +196,25 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
     struct rdma_cm_event *event = (struct rdma_cm_event *)params->conn_request;
+    uct_rdmacm_cm_t *cm         = uct_rdmacm_cm_ep_get_cm(cep);
     struct rdma_conn_param conn_param;
     ucs_status_t status;
 
-    /* TODO: migrate id if cm is different */
-    ucs_assert(event->listen_id->channel == uct_rdmacm_cm_ep_get_cm(cep)->ev_ch);
+    if (event->listen_id->channel != cm->ev_ch) {
+        /* the server will open the ep to the client on a new CM.
+         * not the one on which its listener is listening on */
+        if (rdma_migrate_id(event->id, cm->ev_ch)) {
+            ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",
+                      event->id, cm->ev_ch, cm);
+            uct_rdmacm_cm_reject(event->id, UCS_ERR_IO_ERROR);
+            status = UCS_ERR_IO_ERROR;
+            goto err_destroy_id;
+        }
+
+        ucs_debug("migrated id %p from event_channel=%p to "
+                  "new cm %p (event_channel=%p)",
+                  event->id, event->listen_id->channel, cm, cm->ev_ch);
+    }
 
     cep->wireup.server.connect_cb = params->sockaddr_connect_cb.server;
     cep->id                       = event->id;
@@ -317,6 +331,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
     uct_rdmacm_cm_t *rdmacm_cm     = uct_rdmacm_cm_ep_get_cm(self);
     uct_priv_worker_t *worker_priv = ucs_derived_of(rdmacm_cm->super.iface.worker,
                                                     uct_priv_worker_t);
+
+    ucs_trace("destroy ep %p on cm %p (worker_priv=%p)",
+              self, rdmacm_cm, worker_priv);
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 

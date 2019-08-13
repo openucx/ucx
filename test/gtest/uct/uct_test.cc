@@ -1047,7 +1047,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     }
 }
 
-void uct_test::entity::accept(uct_conn_request_h conn_request,
+void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
                               uct_ep_server_connect_cb_t connect_cb,
                               uct_ep_disconnect_cb_t disconnect_cb,
                               void *user_data)
@@ -1067,7 +1067,7 @@ void uct_test::entity::accept(uct_conn_request_h conn_request,
                            UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      |
                            UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
 
-    ep_params.cm                         = m_cm;
+    ep_params.cm                         = cm;
     ep_params.conn_request               = conn_request;
     ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     ep_params.sockaddr_pack_cb           = server_priv_data_cb;

@@ -169,7 +169,7 @@ protected:
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
-        void accept(uct_conn_request_h conn_request,
+        void accept(uct_cm_h cm, uct_conn_request_h conn_request,
                     uct_ep_server_connect_cb_t connect_cb,
                     uct_ep_disconnect_cb_t disconnect_cb,
                     void *user_data);

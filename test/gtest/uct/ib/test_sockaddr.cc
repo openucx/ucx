@@ -338,7 +338,8 @@ protected:
 
 public:
     test_uct_cm_sockaddr() : m_cm_state(0), m_server(NULL), m_client(NULL),
-                             m_reject_conn_request(false) {
+                             m_cm_test(NULL), m_reject_conn_request(false),
+                             m_switch_cm(false) {
     }
 
     void init() {
@@ -397,13 +398,18 @@ protected:
 
         self->m_cm_state |= TEST_CM_STATE_CONNECT_REQUESTED;
 
-        if (!self->m_reject_conn_request) {
-            self->m_server->accept(conn_request, server_connect_cb,
-                                   server_disconnect_cb, self);
-        } else {
+        if (self->m_switch_cm) {
+            self->m_server->accept(self->m_cm_test, conn_request,
+                                   server_connect_cb, server_disconnect_cb,
+                                   self);
+        } else if (self->m_reject_conn_request) {
             status = uct_listener_reject(listener, conn_request);
             ASSERT_UCS_OK(status);
             self->m_cm_state |= TEST_CM_STATE_SERVER_REJECTED;
+        } else {
+            self->m_server->accept(self->m_server->cm(), conn_request,
+                                   server_connect_cb, server_disconnect_cb,
+                                   self);
         }
     }
 
@@ -436,7 +442,6 @@ protected:
                       std::string(static_cast<const char *>(remote_data->conn_priv_data)));
             self->m_cm_state |= TEST_CM_STATE_CLIENT_CONNECTED;
         }
-
     }
 
     static void
@@ -466,7 +471,9 @@ protected:
     uint64_t               m_cm_state;
     entity                 *m_server;
     entity                 *m_client;
+    uct_cm_h               m_cm_test;
     bool                   m_reject_conn_request;
+    bool                   m_switch_cm;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
@@ -546,6 +553,45 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
 
     EXPECT_FALSE((m_cm_state &
                 (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED)));
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, server_switch_cm)
+{
+    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
+
+    m_switch_cm = true;
+
+    ucs_async_context_t *async;
+    uct_worker_h worker_test;
+    ucs_status_t status;
+
+    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+    ASSERT_UCS_OK(status);
+
+    status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker_test);
+    ASSERT_UCS_OK(status);
+
+    status = uct_cm_open(GetParam()->component, worker_test, &m_cm_test);
+    ASSERT_UCS_OK(status);
+
+    cm_listen_and_connect();
+
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
+                               TEST_CM_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_CONNECTED |
+                                                TEST_CM_STATE_CLIENT_CONNECTED)));
+
+    cm_disconnect(m_client);
+
+    /* destroy the server's ep here (and not in the test's destroy flow) since
+     * the cm it is using was created in this test and therefore needs to be
+     * destoyed here - after - its ep is destroyed */
+    m_server->destroy_ep(0);
+
+    uct_cm_close(m_cm_test);
+    uct_worker_destroy(worker_test);
+    ucs_async_context_destroy(async);
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
