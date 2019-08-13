@@ -3032,8 +3032,8 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
  * @ingroup UCT_CLIENT_SERVER
  * @brief Create a new transport listener object.
  *
- * This routine creates a new transport listener on the given CM which
- * willl start listening on a given sockaddr.
+ * This routine creates a new listener on the given CM which will start
+ * listening on a given sockaddr.
  *
  * @param [in]  cm          Connection manager on which to open the listener.
  *                          This cm should not be closed as long as there are
@@ -3065,7 +3065,7 @@ void uct_listener_destroy(uct_listener_h listener);
  * @ingroup UCT_CLIENT_SERVER
  * @brief Reject a connection request.
  *
- * This routine is performed by the server side. It rejects a connection request
+ * This routine can be invoked on the server side. It rejects a connection request
  * from the client.
  *
  * @param [in] listener     Listener which will reject the connection request.
