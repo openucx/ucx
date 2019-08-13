@@ -96,6 +96,8 @@ struct mlx5_grh_av {
         uint8_t         rgid[16];
 };
 
+#  define HAVE_STRUCT_MLX5_GRH_AV_RMAC 1
+
 #endif
 
 #if !(HAVE_MLX5_WQE_CTRL_SOLICITED)

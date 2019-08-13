@@ -4,6 +4,8 @@
 * See file LICENSE for terms.
 */
 
+#define __STDC_LIMIT_MACROS // needed for SIZE_MAX
+
 #include <common/test.h>
 extern "C" {
 #include <ucs/sys/module.h>
@@ -74,6 +76,17 @@ protected:
         munmap(src, size);
     out:
         return result;
+    }
+
+    static void check_cache_type(ucs_cpu_cache_type_t type, const char *name)
+    {
+        size_t cache;
+        char memunits[32];
+
+        cache = ucs_cpu_get_cache_size(type);
+
+        ucs_memunits_to_str(cache, memunits, sizeof(memunits));
+        UCS_TEST_MESSAGE << name << " cache: " << memunits;
     }
 };
 
@@ -212,4 +225,11 @@ UCS_TEST_SKIP_COND_F(test_sys, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_c
                             "GB/s iterations: "     << i + 1;
         EXPECT_GE(memcpy_relax_bw / memcpy_bw, diff);
     }
+}
+
+UCS_TEST_F(test_sys, cpu_cache) {
+    check_cache_type(UCS_CPU_CACHE_L1d, "L1d");
+    check_cache_type(UCS_CPU_CACHE_L1i, "L1i");
+    check_cache_type(UCS_CPU_CACHE_L2, "L2");
+    check_cache_type(UCS_CPU_CACHE_L3, "L3");
 }

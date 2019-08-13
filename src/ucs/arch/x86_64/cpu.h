@@ -51,6 +51,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
 ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 ucs_cpu_vendor_t ucs_arch_get_cpu_vendor();
 void ucs_cpu_init();
+ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes);
 
 static inline int ucs_arch_x86_rdtsc_enabled()
 {
