@@ -6,9 +6,14 @@
 #ifndef UCT_CUDA_IFACE_H
 #define UCT_CUDA_IFACE_H
 
+#include <uct/base/uct_iface.h>
 #include <ucs/sys/preprocessor.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
+
+
+#define UCT_CUDA_DEV_NAME       "cuda"
+
 
 #define UCT_CUDA_FUNC(_func)                                    \
     ({                                                          \
@@ -43,5 +48,10 @@
         } while (0);                                            \
         _status;                                                \
     })
+
+
+ucs_status_t
+uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                           unsigned *num_tl_devices_p);
 
 #endif

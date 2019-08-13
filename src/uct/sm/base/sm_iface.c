@@ -16,6 +16,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/arch/cpu.h>
 
+
 ucs_config_field_t uct_sm_iface_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_sm_iface_config_t, super),
@@ -28,28 +29,26 @@ ucs_config_field_t uct_sm_iface_config_table[] = {
     {NULL}
 };
 
-static uint64_t uct_sm_iface_node_guid(uct_base_iface_t *iface)
+ucs_status_t
+uct_sm_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                             unsigned *num_tl_devices_p)
 {
-    /* The address should be different for different mm 'devices' so that
-     * they won't seem reachable one to another. Their 'name' will create the
-     * uniqueness in the address */
-    return ucs_machine_guid() *
-           ucs_string_to_id(iface->md->component->name);
+    return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
+                                      UCT_DEVICE_TYPE_SHM, tl_devices_p,
+                                      num_tl_devices_p);
 }
 
 ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr)
 {
-    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    *(uint64_t*)addr = uct_sm_iface_node_guid(iface);
+    *(uint64_t*)addr = ucs_machine_guid();
     return UCS_OK;
 }
 
 int uct_sm_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr)
 {
-    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    return uct_sm_iface_node_guid(iface) == *(const uint64_t*)dev_addr;
+    return ucs_machine_guid() == *(const uint64_t*)dev_addr;
 }
 
 ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags)
@@ -97,5 +96,3 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sm_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_sm_iface_t, uct_base_iface_t);
-
-

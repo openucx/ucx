@@ -457,15 +457,15 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .arm_cq                   = (void*)ucs_empty_function_return_success,
 };
 
-static int uct_cm_is_module_loaded(uct_md_h md)
+static int uct_cm_is_module_loaded(uct_ib_md_t *ib_md)
 {
     struct ib_cm_device *cmdev = NULL;
 
-    cmdev = ib_cm_open_device(ucs_derived_of(md, uct_ib_md_t)->dev.ibv_context);
+    cmdev = ib_cm_open_device(ib_md->dev.ibv_context);
     if (cmdev == NULL) {
         ucs_debug("ib_cm_open_device() for %s failed: %m. "
                   "Check if ib_ucm.ko module is loaded.",
-                  uct_ib_device_name(&ucs_derived_of(md, uct_ib_md_t)->dev));
+                  uct_ib_device_name(&ib_md->dev));
         return 0;
     }
 
@@ -473,26 +473,21 @@ static int uct_cm_is_module_loaded(uct_md_h md)
     return 1;
 }
 
-static ucs_status_t uct_cm_query_resources(uct_md_h md,
-                                           uct_tl_resource_desc_t **resources_p,
-                                           unsigned *num_resources_p)
+static ucs_status_t
+uct_cm_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                        unsigned *num_tl_devices_p)
 {
-    if (uct_cm_is_module_loaded(md)) {
-        return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                                "cm", UCT_IB_DEVICE_FLAG_LINK_IB,
-                                                resources_p, num_resources_p);
-    } else {
-        *num_resources_p = 0;
-        *resources_p     = NULL;
+    uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+
+    if (!uct_cm_is_module_loaded(ib_md)) {
+        *num_tl_devices_p = 0;
+        *tl_devices_p     = NULL;
         return UCS_OK;
     }
+
+   return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_LINK_IB,
+                                    tl_devices_p, num_tl_devices_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_cm_tl,
-                        uct_cm_query_resources,
-                        uct_cm_iface_t,
-                        "cm",
-                        "CM_",
-                        uct_cm_iface_config_table,
-                        uct_cm_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_component, &uct_cm_tl);
+UCT_TL_DEFINE(&uct_ib_component, cm, uct_cm_query_tl_devices, uct_cm_iface_t,
+              "CM_", uct_cm_iface_config_table, uct_cm_iface_config_t);

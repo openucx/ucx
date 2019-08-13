@@ -13,9 +13,6 @@
 #include <uct/sm/base/sm_iface.h>
 
 
-#define UCT_KNEM_TL_NAME "knem"
-
-
 typedef struct uct_knem_iface_config {
     uct_sm_iface_config_t         super;
 } uct_knem_iface_config_t;
@@ -26,7 +23,5 @@ typedef struct uct_knem_iface {
     uct_knem_md_t                 *knem_md;
 } uct_knem_iface_t;
 
-
-extern uct_tl_component_t uct_knem_tl;
 
 #endif

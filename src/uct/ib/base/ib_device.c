@@ -732,27 +732,25 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
-                                              const char *tl_name, unsigned flags,
-                                              uct_tl_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
+ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
+                                       uct_tl_device_resource_t **tl_devices_p,
+                                       unsigned *num_tl_devices_p)
 {
-    uct_tl_resource_desc_t *resources, *rsc;
-    unsigned num_resources;
+    uct_tl_device_resource_t *tl_devices;
+    unsigned num_tl_devices;
     ucs_status_t status;
     uint8_t port_num;
 
     /* Allocate resources array
      * We may allocate more memory than really required, but it's not so bad. */
-    resources = ucs_calloc(dev->num_ports, sizeof(uct_tl_resource_desc_t),
-                           "ib resource");
-    if (resources == NULL) {
+    tl_devices = ucs_calloc(dev->num_ports, sizeof(*tl_devices), "ib device resource");
+    if (tl_devices == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
     /* Second pass: fill port information */
-    num_resources = 0;
+    num_tl_devices = 0;
     for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
          ++port_num)
     {
@@ -765,30 +763,26 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
            continue;
         }
 
-        /* Get port information */
-        rsc = &resources[num_resources];
-        ucs_snprintf_zero(rsc->dev_name, sizeof(rsc->dev_name), "%s:%d",
-                          uct_ib_device_name(dev), port_num);
-        ucs_snprintf_zero(rsc->tl_name, UCT_TL_NAME_MAX, "%s", tl_name);
-        rsc->dev_type = UCT_DEVICE_TYPE_NET;
-
-        ucs_debug("found usable port for tl %s %s:%d", tl_name,
-                  uct_ib_device_name(dev), port_num);
-        ++num_resources;
+        /* Save device information */
+        ucs_snprintf_zero(tl_devices[num_tl_devices].name,
+                          sizeof(tl_devices[num_tl_devices].name),
+                          "%s:%d", uct_ib_device_name(dev), port_num);
+        tl_devices[num_tl_devices].type = UCT_DEVICE_TYPE_NET;
+        ++num_tl_devices;
     }
 
-    if (num_resources == 0) {
+    if (num_tl_devices == 0) {
         ucs_debug("no compatible IB ports found for flags 0x%x", flags);
         status = UCS_ERR_NO_DEVICE;
         goto err_free;
     }
 
-    *num_resources_p = num_resources;
-    *resources_p     = resources;
+    *num_tl_devices_p = num_tl_devices;
+    *tl_devices_p     = tl_devices;
     return UCS_OK;
 
 err_free:
-    ucs_free(resources);
+    ucs_free(tl_devices);
 err:
     return status;
 }

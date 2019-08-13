@@ -7,6 +7,7 @@
 #define UCT_TCP_MD_H
 
 #include <uct/base/uct_md.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/khash.h>
@@ -393,19 +394,12 @@ static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 
 
 /**
- * Return the number of devices and a string of names of devices under
- * /sys/class/net that are in active state as determined by ucs_netif_is_active
- *
- * @param [out]    num_resources_p Return number of active net devices
- * @param [in/out] dev_names_pp    Return pointer to string of device names
- *                                 Length of string = num_resources_p * dev_name_len
- *                                 Function allocates memory for the string and
- *                                 user is responsible to free
- * @param [in]     dev_name_len    Length of each of the device names
- *
- * @return UCS_OK on success or appropriate error on failure.
+ * Query for active network devices under /sys/class/net, as determined by
+ * ucs_netif_is_active(). 'md' parameter is not used, and is added for
+ * compatibility with uct_tl_t::query_devices definition.
  */
-ucs_status_t uct_tcp_get_dev_names(unsigned *num_resources_p, 
-                                   char **dev_names_pp, 
-                                   size_t dev_name_len);
+ucs_status_t uct_tcp_query_devices(uct_md_h md,
+                                   uct_tl_device_resource_t **devices_p,
+                                   unsigned *num_devices_p);
+
 #endif

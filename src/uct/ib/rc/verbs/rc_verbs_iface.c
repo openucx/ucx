@@ -406,22 +406,19 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .fc_handler               = uct_rc_iface_fc_handler
 };
 
-static ucs_status_t uct_rc_verbs_query_resources(uct_md_h md,
-                                                 uct_tl_resource_desc_t **resources_p,
-                                                 unsigned *num_resources_p)
+static ucs_status_t
+uct_rc_verbs_query_tl_devices(uct_md_h md,
+                              uct_tl_device_resource_t **tl_devices_p,
+                              unsigned *num_tl_devices_p)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+    int flags;
 
-    return uct_ib_device_query_tl_resources(&ib_md->dev, "rc",
-                                            (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB),
-                                            resources_p, num_resources_p);
+    flags = ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB;
+    return uct_ib_device_query_ports(&ib_md->dev, flags, tl_devices_p,
+                                     num_tl_devices_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_rc_verbs_tl,
-                        uct_rc_verbs_query_resources,
-                        uct_rc_verbs_iface_t,
-                        "rc",
-                        "RC_VERBS_",
-                        uct_rc_verbs_iface_config_table,
-                        uct_rc_verbs_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_component, &uct_rc_verbs_tl);
+UCT_TL_DEFINE(&uct_ib_component, rc, uct_rc_verbs_query_tl_devices,
+              uct_rc_verbs_iface_t, "RC_VERBS_", uct_rc_verbs_iface_config_table,
+              uct_rc_verbs_iface_config_t);
