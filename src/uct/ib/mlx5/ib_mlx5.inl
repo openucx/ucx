@@ -35,6 +35,17 @@ uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
 #endif
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_srq_stride(int num_sge)
+{
+    int stride;
+
+    stride = sizeof(struct mlx5_wqe_srq_next_seg) +
+             num_sge * sizeof(struct mlx5_wqe_data_seg);
+
+    return ucs_roundup_pow2(stride);
+}
+
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
 {

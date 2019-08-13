@@ -591,9 +591,7 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
         return UCS_ERR_NO_DEVICE;
     }
 
-    stride = sizeof(struct mlx5_wqe_srq_next_seg) +
-             sge_num * sizeof(struct mlx5_wqe_data_seg);
-    stride = pow(2, ceil(ucs_log2(stride)));
+    stride = uct_ib_mlx5_srq_stride(sge_num);
     if (srq_info.dv.stride != stride) {
         ucs_error("SRQ stride is not %u (%d), sgenum %d",
                   stride, srq_info.dv.stride, sge_num);
@@ -624,6 +622,7 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->sw_pi     = -1;
     srq->mask      = tail;
     srq->tail      = tail;
+    srq->stride    = uct_ib_mlx5_srq_stride(sge_num);
 
     for (i = head; i <= tail; ++i) {
         seg                     = uct_ib_mlx5_srq_get_wqe(srq, i);
