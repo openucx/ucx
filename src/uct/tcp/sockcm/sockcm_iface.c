@@ -11,6 +11,7 @@
 #include <uct/tcp/tcp.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
+#include <pthread.h>
 
 
 enum uct_sockcm_process_event_flags {
@@ -73,10 +74,9 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
     char         accept   = 0;
     ssize_t      sent_len = -1;
     int          fd       = -1;
-    uct_sockcm_conn_param_t *conn_param;
-
-    conn_param = (uct_sockcm_conn_param_t *) conn_request;
-    fd         = conn_param->fd;
+    
+    fd = ((uct_sockcm_ctx_t *) conn_request)->sock_id;
+    ucs_debug("accept fd =%d\n", fd);
 
     /* Notify client of accept and close associated fd */
     sent_len = send(fd, (char *) &accept, sizeof(accept), 0);
@@ -88,8 +88,6 @@ static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
         ucs_debug("sockcm_listener: sent accept");
     }
 
-    ucs_free(conn_request);
-
     return status;
 }
 
@@ -100,10 +98,9 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
     char         reject = 1;
     ssize_t      sent_len = -1;
     int          fd       = -1;
-    uct_sockcm_conn_param_t *conn_param;
 
-    conn_param = (uct_sockcm_conn_param_t *) conn_request;
-    fd         = conn_param->fd;
+    fd = ((uct_sockcm_ctx_t *) conn_request)->sock_id;
+    ucs_debug("reject fd =%d\n", fd);
 
     /* Notify client of rejection and close associated fd */
     sent_len = send(fd, (char *) &reject, sizeof(reject), 0);
@@ -114,8 +111,6 @@ static ucs_status_t uct_sockcm_iface_reject(uct_iface_h tl_iface,
     } else {
         ucs_debug("sockcm_listener: sent reject");
     }
-
-    ucs_free(conn_request);
 
     return status;
 }
@@ -186,36 +181,57 @@ void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
-static ucs_status_t uct_sockcm_iface_process_conn_req(uct_sockcm_iface_t *iface,
-                                                      uct_sockcm_conn_param_t conn_param)
+static ucs_status_t uct_sockcm_iface_process_conn_req(uct_sockcm_ctx_t *sock_id_ctx)
 {
-    uct_sockcm_conn_param_t *conn_param_copy = NULL;
-    conn_param_copy = ucs_malloc(sizeof(uct_sockcm_conn_param_t), "conn_param_copy");
-    if (conn_param_copy == NULL) {
-        ucs_error("Unable to allocate memory");
-        return UCS_ERR_NO_MEMORY;
-    }
+    uct_sockcm_iface_t      *iface      = sock_id_ctx->iface;
+    uct_sockcm_conn_param_t *conn_param = &(sock_id_ctx->conn_param);
 
-    memcpy(conn_param_copy, &conn_param, sizeof(uct_sockcm_conn_param_t));
-    ucs_debug("process conn req: accepted fd %d %m", conn_param_copy->fd);
-
-    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, conn_param_copy,
-			   conn_param.private_data, conn_param.length);
+    ucs_debug("process conn req conn_param = %p, conn_param->length = %ld\n", 
+              conn_param, conn_param->length);
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg, sock_id_ctx,
+			               conn_param->private_data, conn_param->length);
 
     return UCS_OK;
+}
+
+static void uct_sockcm_iface_recv_handler(int fd, void *arg)
+{
+    uct_sockcm_ctx_t *sock_id_ctx = (uct_sockcm_ctx_t *) arg;
+    ucs_status_t status;
+    ssize_t recv_len, recv_base_len;
+
+    if (sock_id_ctx->recv_len == -1) {
+        /* attempt another receive only if initial receive was not successful */
+        recv_len = recv(sock_id_ctx->sock_id, (char *) &sock_id_ctx->conn_param,
+                        sizeof(uct_sockcm_conn_param_t), 0);
+        ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
+
+        recv_base_len = (sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN);
+        ucs_assert(sock_id_ctx->conn_param.length + recv_base_len == recv_len);
+
+        status = ucs_async_modify_handler(fd, 0);
+        if (status != UCS_OK) {
+            ucs_debug("Unable to modify handler"); 
+        }
+
+        ucs_async_remove_handler(sock_id_ctx->sock_id, 0);
+    }
+
+    if (UCS_OK != uct_sockcm_iface_process_conn_req((uct_sockcm_ctx_t *) arg)) {
+        ucs_error("Unable to process connection request"); 
+    }
 }
 
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
 {
     ssize_t recv_len          = 0;
-    ssize_t recv_base_len     = 0;
     uct_sockcm_iface_t *iface = arg;
     struct sockaddr peer_addr;
     socklen_t addrlen;
     int accept_fd;
-    uct_sockcm_conn_param_t conn_param;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_sockcm_ctx_t *sock_id_ctx;
+    ucs_status_t status;
 
     /* what if an error event invoked the handler?, How can I query the event
      * type? : TODO
@@ -249,22 +265,36 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     }
 
     sock_id_ctx->sock_id = accept_fd;
+    sock_id_ctx->iface = iface;
     ucs_list_add_tail(&iface->used_sock_ids_list, &sock_id_ctx->list);
 
-    recv_len = recv(accept_fd, (char *) &conn_param,
+    status = ucs_sys_fcntl_modfl(sock_id_ctx->sock_id, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        ucs_error("sockcm_listener: unable make accepted fd non-blocking");
+        close(accept_fd);
+        return;
+    }
+
+    recv_len = recv(sock_id_ctx->sock_id, (char *) &sock_id_ctx->conn_param,
                     sizeof(uct_sockcm_conn_param_t), 0);
     ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
+    sock_id_ctx->recv_len = recv_len;
 
-    recv_base_len = (sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN);
-    if (recv_len >= recv_base_len) {
-        conn_param.fd = accept_fd;
-        ucs_assert(conn_param.length + recv_base_len == recv_len);
-        if (UCS_OK != uct_sockcm_iface_process_conn_req(iface, conn_param)) {
-            ucs_error("Unable to process connection request"); 
+    if (-1 == recv_len && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        ucs_debug("assigning recv handler for message from client\n");
+        status = ucs_async_set_event_handler(iface->super.worker->async->mode,
+                                             sock_id_ctx->sock_id,
+                                             UCS_EVENT_SET_EVREAD, 
+                                             uct_sockcm_iface_recv_handler,
+                                             sock_id_ctx, iface->super.worker->async);
+        if (status != UCS_OK) {
+            ucs_error("sockcm_listener: unable to create handler for new connection");
+            close(accept_fd);
+            return;
         }
     } else {
-        ucs_error("sockcm_iface %p:recved (%ld of %ld) header size on %d\n", 
-                  iface, recv_len, recv_base_len, conn_param.fd);
+        ucs_debug("not assigning recv handler for message from client\n");
+        uct_sockcm_iface_recv_handler(sock_id_ctx->sock_id, sock_id_ctx);
     }
 }
 
