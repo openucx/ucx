@@ -201,7 +201,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     ucs_status_t status;
 
     if (event->listen_id->channel != cm->ev_ch) {
-        /* the server will open the ep to the client on a new CM.
+        /* the server will open the ep to the client on a different CM.
          * not the one on which its listener is listening on */
         if (rdma_migrate_id(event->id, cm->ev_ch)) {
             ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",

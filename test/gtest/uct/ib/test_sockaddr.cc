@@ -338,7 +338,7 @@ protected:
 
 public:
     test_uct_cm_sockaddr() : m_cm_state(0), m_server(NULL), m_client(NULL),
-                             m_cm_test(NULL), m_reject_conn_request(false),
+                             m_reject_conn_request(false),
                              m_switch_cm(false) {
     }
 
@@ -384,6 +384,15 @@ protected:
         EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CONNECT_REQUESTED);
     }
 
+    virtual void server_accept(entity *server, uct_conn_request_h conn_request,
+                               uct_ep_server_connect_cb_t connect_cb,
+                               uct_ep_disconnect_cb_t disconnect_cb,
+                               void *user_data)
+    {
+        server->accept(server->cm(), conn_request, connect_cb, disconnect_cb,
+                       user_data);
+    }
+
     static void
     cm_conn_request_cb(uct_listener_h listener, void *arg,
                        const char *local_dev_name,
@@ -398,18 +407,13 @@ protected:
 
         self->m_cm_state |= TEST_CM_STATE_CONNECT_REQUESTED;
 
-        if (self->m_switch_cm) {
-            self->m_server->accept(self->m_cm_test, conn_request,
-                                   server_connect_cb, server_disconnect_cb,
-                                   self);
-        } else if (self->m_reject_conn_request) {
+        if (self->m_reject_conn_request) {
             status = uct_listener_reject(listener, conn_request);
             ASSERT_UCS_OK(status);
             self->m_cm_state |= TEST_CM_STATE_SERVER_REJECTED;
         } else {
-            self->m_server->accept(self->m_server->cm(), conn_request,
-                                   server_connect_cb, server_disconnect_cb,
-                                   self);
+            self->server_accept(self->m_server, conn_request,
+                                server_connect_cb, server_disconnect_cb, self);
         }
     }
 
@@ -471,7 +475,6 @@ protected:
     uint64_t               m_cm_state;
     entity                 *m_server;
     entity                 *m_client;
-    uct_cm_h               m_cm_test;
     bool                   m_reject_conn_request;
     bool                   m_switch_cm;
 };
@@ -555,25 +558,55 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
                 (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED)));
 }
 
-UCS_TEST_P(test_uct_cm_sockaddr, server_switch_cm)
+
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
+
+
+class test_uct_cm_sockaddr_multiple_cms : public test_uct_cm_sockaddr {
+public:
+    void init() {
+        ucs_status_t status;
+
+        test_uct_cm_sockaddr::init();
+
+        status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &m_async);
+        ASSERT_UCS_OK(status);
+
+        UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker_test, uct_worker_destroy,
+                               uct_worker_create, m_async,
+                               UCS_THREAD_MODE_SINGLE)
+
+        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm_test, uct_cm_close,
+                               uct_cm_open, GetParam()->component,
+                               m_worker_test);
+    }
+
+    void cleanup() {
+        test_uct_cm_sockaddr::cleanup();
+        ucs_async_context_destroy(m_async);
+    }
+
+    void server_accept(entity *server, uct_conn_request_h conn_request,
+                       uct_ep_server_connect_cb_t connect_cb,
+                       uct_ep_disconnect_cb_t disconnect_cb,
+                       void *user_data)
+    {
+        server->accept(m_cm_test, conn_request, connect_cb, disconnect_cb,
+                       user_data);
+    }
+
+protected:
+    ucs::handle<uct_worker_h> m_worker_test;
+    ucs::handle<uct_cm_h>     m_cm_test;
+    ucs_async_context_t       *m_async;
+};
+
+UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
 {
     UCS_TEST_MESSAGE << "Testing " << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
     m_switch_cm = true;
-
-    ucs_async_context_t *async;
-    uct_worker_h worker_test;
-    ucs_status_t status;
-
-    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
-    ASSERT_UCS_OK(status);
-
-    status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker_test);
-    ASSERT_UCS_OK(status);
-
-    status = uct_cm_open(GetParam()->component, worker_test, &m_cm_test);
-    ASSERT_UCS_OK(status);
 
     cm_listen_and_connect();
 
@@ -584,14 +617,16 @@ UCS_TEST_P(test_uct_cm_sockaddr, server_switch_cm)
 
     cm_disconnect(m_client);
 
-    /* destroy the server's ep here (and not in the test's destroy flow) since
-     * the cm it is using was created in this test and therefore needs to be
-     * destoyed here - after - its ep is destroyed */
+    /* the cm that was created in the constructor has to be destroyed before
+     * the entities (client and server) are destroyed.
+     * this is required in order to first remove the handler that the cm added
+     * on the global async (that belongs to the server's entity) and then remove
+     * the async context.
+     * since the cm is destroyed here, the ep that is using it needs to be
+     * destroyed here as well */
     m_server->destroy_ep(0);
 
-    uct_cm_close(m_cm_test);
-    uct_worker_destroy(worker_test);
-    ucs_async_context_destroy(async);
+    m_cm_test.reset();
 }
 
-UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr_multiple_cms)
