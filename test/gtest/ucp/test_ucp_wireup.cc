@@ -120,7 +120,7 @@ test_ucp_wireup::enum_test_params_features(const ucp_params_t& ctx_params,
         generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/stream",
                                      tls, TEST_STREAM, result);
 
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/stream",
                                      tls, TEST_STREAM | UNIFIED_MODE, result);
     }
 

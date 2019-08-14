@@ -36,26 +36,25 @@ static uct_ugni_job_info_t job_info = {
 
 uint32_t ugni_domain_counter = 0;
 
-void uct_ugni_device_get_resource(const char *tl_name, uct_ugni_device_t *dev,
-                                  uct_tl_resource_desc_t *resource)
+void uct_ugni_device_get_resource(uct_ugni_device_t *dev,
+                                  uct_tl_device_resource_t *tl_device)
 {
-    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", tl_name);
-    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
-    resource->dev_type = UCT_DEVICE_TYPE_NET;
+    ucs_snprintf_zero(tl_device->name, sizeof(tl_device->name), "%s", dev->fname);
+    tl_device->type = UCT_DEVICE_TYPE_NET;
 }
 
-ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
-                                         uct_tl_resource_desc_t **resource_p,
-                                         unsigned *num_resources_p)
+ucs_status_t uct_ugni_query_devices(uct_md_h md,
+                                    uct_tl_device_resource_t **tl_devices_p,
+                                    unsigned *num_tl_devices_p)
 {
-    uct_tl_resource_desc_t *resources;
+    uct_tl_device_resource_t *resources;
     int num_devices = job_info.num_devices;
     uct_ugni_device_t *devs = job_info.devices;
     int i;
     ucs_status_t status = UCS_OK;
 
-    resources = ucs_calloc(job_info.num_devices, sizeof(uct_tl_resource_desc_t),
-                          "resource desc");
+    resources = ucs_calloc(job_info.num_devices, sizeof(*resources),
+                           "resource desc");
     if (NULL == resources) {
       ucs_error("Failed to allocate memory");
       num_devices = 0;
@@ -65,12 +64,12 @@ ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
     }
 
     for (i = 0; i < job_info.num_devices; i++) {
-        uct_ugni_device_get_resource(tl_name, &devs[i], &resources[i]);
+        uct_ugni_device_get_resource(&devs[i], &resources[i]);
     }
 
 error:
-    *num_resources_p = num_devices;
-    *resource_p      = resources;
+    *num_tl_devices_p = num_devices;
+    *tl_devices_p     = resources;
 
     return status;
 }

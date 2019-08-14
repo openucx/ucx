@@ -10,7 +10,6 @@
 
 #include "tcp.h"
 
-#include <uct/base/uct_md.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/config/types.h>
@@ -593,15 +592,15 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
-ucs_status_t uct_tcp_get_dev_names(unsigned *num_resources_p, 
-                                   char **dev_names_pp, 
-                                   size_t dev_name_len)
+ucs_status_t uct_tcp_query_devices(uct_md_h md,
+                                   uct_tl_device_resource_t **devices_p,
+                                   unsigned *num_devices_p)
 {
+    uct_tl_device_resource_t *devices, *tmp;
     static const char *netdev_dir = "/sys/class/net";
-    ucs_status_t status           = UCS_OK;
-    char *dev_names, *tmp, *dev_name;
-    unsigned num_resources;
     struct dirent *entry;
+    unsigned num_devices;
+    ucs_status_t status;
     DIR *dir;
 
     dir = opendir(netdev_dir);
@@ -611,15 +610,15 @@ ucs_status_t uct_tcp_get_dev_names(unsigned *num_resources_p,
         goto out;
     }
 
-    dev_names     = NULL;
-    num_resources = 0;
+    devices     = NULL;
+    num_devices = 0;
     for (;;) {
         errno = 0;
         entry = readdir(dir);
         if (entry == NULL) {
             if (errno != 0) {
                 ucs_error("readdir(%s) failed: %m", netdev_dir);
-                ucs_free(dev_names);
+                ucs_free(devices);
                 status = UCS_ERR_IO_ERROR;
                 goto out_closedir;
             }
@@ -630,23 +629,25 @@ ucs_status_t uct_tcp_get_dev_names(unsigned *num_resources_p,
             continue;
         }
 
-        tmp = ucs_realloc(dev_names, dev_name_len * (num_resources + 1),
-                          "dev_names");
+        tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),
+                          "tcp devices");
         if (tmp == NULL) {
-            ucs_error("Unable to reallocate memory");
-            ucs_free(dev_names);
+            ucs_free(devices);
             status = UCS_ERR_NO_MEMORY;
             goto out_closedir;
         }
-        dev_names = tmp;
+        devices = tmp;
 
-        /* UCT_DEVICE_NAME_MAX */
-        dev_name = (char *)dev_names + (num_resources * dev_name_len);
-        num_resources++;
-        ucs_snprintf_zero(dev_name, dev_name_len, "%s", entry->d_name);
+        ucs_snprintf_zero(devices[num_devices].name,
+                          sizeof(devices[num_devices].name),
+                          "%s", entry->d_name);
+        devices[num_devices].type = UCT_DEVICE_TYPE_NET;
+        ++num_devices;
     }
-    *num_resources_p = num_resources;
-    *dev_names_pp    = dev_names;
+
+    *num_devices_p = num_devices;
+    *devices_p     = devices;
+    status         = UCS_OK;
 
 out_closedir:
     closedir(dir);
@@ -654,54 +655,5 @@ out:
     return status;
 }
 
-static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
-                                               uct_tl_resource_desc_t **resource_p,
-                                               unsigned *num_resources_p)
-{
-    uct_tl_resource_desc_t *resources, *resource, tmp_rsc;
-    unsigned num_resources, i;
-    char *dev_names;
-    char *tmp_dev_name;
-    ucs_status_t status;
-
-    resources     = NULL;
-    num_resources = 0;
-
-    status = uct_tcp_get_dev_names(&num_resources, &dev_names, 
-                                   sizeof(tmp_rsc.dev_name));
-    if (UCS_OK != status) {
-        return status;
-    }
-
-    resources = ucs_malloc(sizeof(*resources) * num_resources, "resource desc");
-    if (resources == NULL) {
-        ucs_free(dev_names);
-        status = UCS_ERR_NO_MEMORY;
-        return status;
-    }
-
-    for (i = 0; i < num_resources; i++) {
-
-        resource = &resources[i];
-        ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name),
-                          "%s", UCT_TCP_NAME);
-        tmp_dev_name = (char *) dev_names + (i * sizeof(resource->dev_name));
-        ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name),
-                          "%s", tmp_dev_name);
-        resource->dev_type = UCT_DEVICE_TYPE_NET;
-    }
-    
-    ucs_free(dev_names);
-
-    *num_resources_p = num_resources;
-    *resource_p      = resources;
-    status           = UCS_OK;
-
-    return status;
-
-}
-
-UCT_TL_COMPONENT_DEFINE(uct_tcp_tl, uct_tcp_query_tl_resources, uct_tcp_iface_t,
-                        UCT_TCP_NAME, "TCP_", uct_tcp_iface_config_table,
-                        uct_tcp_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_tcp_component, &uct_tcp_tl);
+UCT_TL_DEFINE(&uct_tcp_component, tcp, uct_tcp_query_devices, uct_tcp_iface_t,
+              "TCP_", uct_tcp_iface_config_table, uct_tcp_iface_config_t);

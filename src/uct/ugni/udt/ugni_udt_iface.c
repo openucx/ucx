@@ -10,7 +10,6 @@
 #include <uct/ugni/base/ugni_md.h>
 #include <poll.h>
 
-#define UCT_UGNI_UDT_TL_NAME "ugni_udt"
 
 static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap", NULL,
@@ -153,14 +152,6 @@ static void uct_ugni_udt_iface_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_assert_always(NULL != ugni_desc);
     uct_ugni_udt_reset_desc(ugni_desc, iface);
     ucs_mpool_put(ugni_desc);
-}
-
-static ucs_status_t uct_ugni_udt_query_tl_resources(uct_md_h md,
-                                                    uct_tl_resource_desc_t **resource_p,
-                                                    unsigned *num_resources_p)
-{
-    return uct_ugni_query_tl_resources(md, UCT_UGNI_UDT_TL_NAME,
-                                       resource_p, num_resources_p);
 }
 
 static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -490,11 +481,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_udt_iface_t, uct_iface_t, uct_md_h,
                           uct_worker_h, const uct_iface_params_t*,
                           const uct_iface_config_t*);
 
-UCT_TL_COMPONENT_DEFINE(uct_ugni_udt_tl_component,
-                        uct_ugni_udt_query_tl_resources,
-                        uct_ugni_udt_iface_t,
-                        UCT_UGNI_UDT_TL_NAME,
-                        "UGNI_UDT",
-                        uct_ugni_udt_iface_config_table,
-                        uct_ugni_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ugni_component, &uct_ugni_udt_tl_component);
+UCT_TL_DEFINE(&uct_ugni_component, ugni_udt, uct_ugni_query_devices,
+              uct_ugni_udt_iface_t, "UGNI_UDT_",
+              uct_ugni_udt_iface_config_table, uct_ugni_iface_config_t);

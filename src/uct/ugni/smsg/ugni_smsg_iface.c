@@ -11,7 +11,6 @@
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/arch/cpu.h>
 
-#define UCT_UGNI_SMSG_TL_NAME "ugni_smsg"
 
 static ucs_config_field_t uct_ugni_smsg_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap", NULL,
@@ -181,14 +180,6 @@ static unsigned uct_ugni_smsg_progress(void *arg)
     ucs_arbiter_dispatch(&iface->super.arbiter, iface->config.smsg_max_credit,
                          uct_ugni_ep_process_pending, NULL);
     return count - 2;
-}
-
-static ucs_status_t uct_ugni_smsg_query_tl_resources(uct_md_h md,
-                                                     uct_tl_resource_desc_t **resource_p,
-                                                     unsigned *num_resources_p)
-{
-    return uct_ugni_query_tl_resources(md, UCT_UGNI_SMSG_TL_NAME,
-                                       resource_p, num_resources_p);
 }
 
 static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -380,11 +371,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_iface_t, uct_iface_t, uct_md_h,
                           uct_worker_h, const uct_iface_params_t*,
                           const uct_iface_config_t *);
 
-UCT_TL_COMPONENT_DEFINE(uct_ugni_smsg_tl_component,
-                        uct_ugni_smsg_query_tl_resources,
-                        uct_ugni_smsg_iface_t,
-                        UCT_UGNI_SMSG_TL_NAME,
-                        "UGNI_SMSG",
-                        uct_ugni_smsg_iface_config_table,
-                        uct_ugni_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ugni_component, &uct_ugni_smsg_tl_component);
+UCT_TL_DEFINE(&uct_ugni_component, ugni_smsg, uct_ugni_query_devices,
+              uct_ugni_smsg_iface_t, "UGNI_SMSG_",
+              uct_ugni_smsg_iface_config_table, uct_ugni_iface_config_t);

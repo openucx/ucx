@@ -830,16 +830,6 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
     return UCS_OK;
 }
 
-ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
-                                              const char *tl_name, unsigned flags,
-                                              uct_tl_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
-{
-    return uct_ib_device_query_tl_resources(dev, tl_name,
-                                            flags | UCT_IB_DEVICE_FLAG_DC,
-                                            resources_p, num_resources_p);
-}
-
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *iface)
 {
     int i;
@@ -1252,24 +1242,19 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_mlx5_iface_t, uct_iface_t);
 
-static
-ucs_status_t uct_dc_mlx5_query_resources(uct_md_h md,
-                                         uct_tl_resource_desc_t **resources_p,
-                                         unsigned *num_resources_p)
+static ucs_status_t
+uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                             unsigned *num_tl_devices_p)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+    int flags;
 
-    return uct_dc_device_query_tl_resources(&ib_md->dev,"dc_mlx5",
-                                            UCT_IB_DEVICE_FLAG_MLX5_PRM |
-                                            (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB),
-                                            resources_p, num_resources_p);
+    flags = UCT_IB_DEVICE_FLAG_MLX5_PRM | UCT_IB_DEVICE_FLAG_DC |
+            (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);
+    return uct_ib_device_query_ports(&ib_md->dev, flags, tl_devices_p,
+                                     num_tl_devices_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_dc_mlx5_tl,
-                        uct_dc_mlx5_query_resources,
-                        uct_dc_mlx5_iface_t,
-                        "dc_mlx5",
-                        "DC_MLX5_",
-                        uct_dc_mlx5_iface_config_table,
-                        uct_dc_mlx5_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_component, &uct_dc_mlx5_tl);
+UCT_TL_DEFINE(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
+              uct_dc_mlx5_iface_t, "DC_MLX5_", uct_dc_mlx5_iface_config_table,
+              uct_dc_mlx5_iface_config_t);

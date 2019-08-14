@@ -16,8 +16,6 @@
 #include "cuda_ipc_ep.h"
 
 
-#define UCT_CUDA_IPC_TL_NAME    "cuda_ipc"
-#define UCT_CUDA_IPC_DEV_NAME   "cudaipc0"
 #define UCT_CUDA_IPC_MAX_PEERS  16
 
 

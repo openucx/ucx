@@ -113,34 +113,6 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
 
-static ucs_status_t uct_cma_query_tl_resources(uct_md_h md,
-                                              uct_tl_resource_desc_t **resource_p,
-                                              unsigned *num_resources_p)
-{
-    uct_tl_resource_desc_t *resource;
-
-    resource = ucs_calloc(1, sizeof(uct_tl_resource_desc_t), "resource desc");
-    if (NULL == resource) {
-        ucs_error("Failed to allocate memory");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
-                      UCT_CMA_TL_NAME);
-    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                      md->component->name);
-    resource->dev_type = UCT_DEVICE_TYPE_SHM;
-
-    *num_resources_p = 1;
-    *resource_p      = resource;
-    return UCS_OK;
-}
-
-UCT_TL_COMPONENT_DEFINE(uct_cma_tl,
-                        uct_cma_query_tl_resources,
-                        uct_cma_iface_t,
-                        UCT_CMA_TL_NAME,
-                        "CMA_",
-                        uct_cma_iface_config_table,
-                        uct_cma_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_cma_component, &uct_cma_tl);
+UCT_TL_DEFINE(&uct_cma_component, cma, uct_sm_base_query_tl_devices,
+              uct_cma_iface_t, "CMA_", uct_cma_iface_config_table,
+              uct_cma_iface_config_t);

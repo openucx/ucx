@@ -79,48 +79,50 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
                                        uct_tl_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
-    uct_tl_resource_desc_t *resources, *tl_resources, *tmp;
-    unsigned i, num_resources, num_tl_resources;
     uct_component_t *component = md->component;
-    uct_md_registered_tl_t *tlr;
-    uct_tl_component_t *tlc;
+    uct_tl_resource_desc_t *resources, *tmp;
+    uct_tl_device_resource_t *tl_devices;
+    unsigned i, num_resources, num_tl_devices;
     ucs_status_t status;
+    uct_tl_t *tl;
 
     resources     = NULL;
     num_resources = 0;
 
-    ucs_list_for_each(tlr, &component->tl_list, list) {
-        tlc = tlr->tl;
-
-        status = tlc->query_resources(md, &tl_resources, &num_tl_resources);
+    ucs_list_for_each(tl, &component->tl_list, list) {
+        status = tl->query_devices(md, &tl_devices, &num_tl_devices);
         if (status != UCS_OK) {
-            ucs_debug("Failed to query %s resources: %s", tlc->name,
+            ucs_debug("failed to query %s resources: %s", tl->name,
                       ucs_status_string(status));
             continue;
         }
 
-        if (num_tl_resources == 0) {
-            ucs_free(tl_resources);
+        if (num_tl_devices == 0) {
+            ucs_free(tl_devices);
             continue;
         }
 
         tmp = ucs_realloc(resources,
-                          sizeof(*resources) * (num_resources + num_tl_resources),
+                          sizeof(*resources) * (num_resources + num_tl_devices),
                           "md_resources");
         if (tmp == NULL) {
-            ucs_free(tl_resources);
+            ucs_free(tl_devices);
             status = UCS_ERR_NO_MEMORY;
             goto err;
         }
 
-        for (i = 0; i < num_tl_resources; ++i) {
-            ucs_assert_always(!strcmp(tlc->name, tl_resources[i].tl_name));
+        /* add tl devices to overall list of resources */
+        for (i = 0; i < num_tl_devices; ++i) {
+            ucs_strncpy_zero(tmp[num_resources + i].tl_name, tl->name,
+                             sizeof(tmp[num_resources + i].tl_name));
+            ucs_strncpy_zero(tmp[num_resources + i].dev_name, tl_devices[i].name,
+                             sizeof(tmp[num_resources + i].dev_name));
+            tmp[num_resources + i].dev_type = tl_devices[i].type;
         }
-        resources = tmp;
-        memcpy(resources + num_resources, tl_resources,
-               sizeof(*tl_resources) * num_tl_resources);
-        num_resources += num_tl_resources;
-        ucs_free(tl_resources);
+
+        resources      = tmp;
+        num_resources += num_tl_devices;
+        ucs_free(tl_devices);
     }
 
     *resources_p     = resources;
@@ -212,16 +214,15 @@ err:
     return status;
 }
 
-uct_tl_component_t *uct_find_tl_on_md(uct_component_t *component,
-                                      uint64_t md_flags,
-                                      const char *tl_name)
+static uct_tl_t *uct_find_tl(uct_component_h component, uint64_t md_flags,
+                             const char *tl_name)
 {
-    uct_md_registered_tl_t *tlr;
+    uct_tl_t *tl;
 
-    ucs_list_for_each(tlr, &component->tl_list, list) {
-        if (((tl_name != NULL) && !strcmp(tl_name, tlr->tl->name)) ||
+    ucs_list_for_each(tl, &component->tl_list, list) {
+        if (((tl_name != NULL) && !strcmp(tl_name, tl->name)) ||
             ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR))) {
-            return tlr->tl;
+            return tl;
         }
     }
     return NULL;
@@ -232,9 +233,9 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
                                       uct_iface_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
-    uct_tl_component_t *tlc;
     uct_md_attr_t md_attr;
     ucs_status_t status;
+    uct_tl_t *tl;
 
     status = uct_md_query(md, &md_attr);
     if (status != UCS_OK) {
@@ -242,8 +243,8 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
         return status;
     }
 
-    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, tl_name);
-    if (tlc == NULL) {
+    tl = uct_find_tl(md->component, md_attr.cap.flags, tl_name);
+    if (tl == NULL) {
         if (tl_name == NULL) {
             ucs_error("There is no sockaddr transport registered on the md");
         } else {
@@ -253,8 +254,8 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
         return status;
     }
 
-    status = uct_config_read(&bundle, tlc->iface_config_table,
-                             tlc->iface_config_size, env_prefix, tlc->cfg_prefix);
+    status = uct_config_read(&bundle, tl->config.table, tl->config.size,
+                             env_prefix, tl->config.prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read iface config");
         return status;
@@ -270,9 +271,9 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             const uct_iface_config_t *config,
                             uct_iface_h *iface_p)
 {
-    uct_tl_component_t *tlc;
     uct_md_attr_t md_attr;
     ucs_status_t status;
+    uct_tl_t *tl;
 
     status = uct_md_query(md, &md_attr);
     if (status != UCS_OK) {
@@ -284,21 +285,22 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
-        tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, params->mode.device.tl_name);
+        tl = uct_find_tl(md->component, md_attr.cap.flags,
+                         params->mode.device.tl_name);
     } else if ((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT) ||
                (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER)) {
-        tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, NULL);
+        tl = uct_find_tl(md->component, md_attr.cap.flags, NULL);
     } else {
         ucs_error("Invalid open mode %zu", params->open_mode);
         return status;
     }
 
-    if (tlc == NULL) {
+    if (tl == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;
     }
 
-    return tlc->iface_open(md, worker, params, config, iface_p);
+    return tl->iface_open(md, worker, params, config, iface_p);
 }
 
 ucs_status_t uct_md_config_read(uct_component_h component,

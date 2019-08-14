@@ -7,6 +7,7 @@
 #ifndef ROCM_BASE_H
 #define ROCM_BASE_H
 
+#include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <hsa.h>
 
@@ -15,6 +16,9 @@ hsa_status_t uct_rocm_base_init(void);
 ucs_status_t uct_rocm_base_query_md_resources(uct_component_h component,
                                               uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
+ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
+                                         uct_tl_device_resource_t **tl_devices_p,
+                                         unsigned *num_tl_devices_p);
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num);
 int uct_rocm_base_is_gpu_agent(hsa_agent_t agent);
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents);
