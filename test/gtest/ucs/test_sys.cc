@@ -206,7 +206,18 @@ UCS_TEST_SKIP_COND_F(test_sys, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_c
     double secs;
     size_t size;
     char memunits_str[256];
+    char thresh_min_str[16];
+    char thresh_max_str[16];
     int i;
+
+    ucs_memunits_to_str(ucs_global_opts.arch.builtin_memcpy_min,
+                        thresh_min_str, sizeof(thresh_min_str));
+    ucs_memunits_to_str(ucs_global_opts.arch.builtin_memcpy_max,
+                        thresh_max_str, sizeof(thresh_max_str));
+
+    UCS_TEST_MESSAGE << "Using memcpy relaxed for size " <<
+                        thresh_min_str << ".." <<
+                        thresh_max_str;
 
     for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
         secs = ucs_get_accurate_time();
