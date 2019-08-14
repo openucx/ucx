@@ -341,7 +341,8 @@ public:
                              m_server_recv_req_cnt(0), m_client_connect_cb_cnt(0),
                              m_server_connect_cb_cnt(0),
                              m_server_disconnect_cnt(0), m_client_disconnect_cnt(0),
-                             m_reject_conn_request(false) {
+                             m_reject_conn_request(false),
+                             m_server_start_disconnect(false) {
     }
 
     void init() {
@@ -451,16 +452,21 @@ protected:
         test_uct_cm_sockaddr *self;
 
         self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+
+        if (self->m_server_start_disconnect) {
+            self->m_client->disconnect(ep);
+        }
+
         self->m_cm_state |= TEST_CM_STATE_CLIENT_DISCONNECTED;
         self->m_client_disconnect_cnt++;
     }
 
-    void cm_disconnect(entity *client) {
+    void cm_disconnect(entity *ent) {
         size_t i;
 
         /* Disconnect all the existing endpoints */
-        for (i = 0; i < client->num_eps(); ++i) {
-            client->disconnect(client->ep(i));
+        for (i = 0; i < ent->num_eps(); ++i) {
+            ent->disconnect(ent->ep(i));
         }
 
         wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_DISCONNECTED |
@@ -478,6 +484,7 @@ protected:
                            m_server_connect_cb_cnt;
     volatile int           m_server_disconnect_cnt, m_client_disconnect_cnt;
     bool                   m_reject_conn_request;
+    bool                   m_server_start_disconnect;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
@@ -592,19 +599,16 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 
     /* Disconnect */
     for (i = 0; i < num_clients; ++i) {
-        client_test = m_entities.back();
+        /* first 2 entities are m_server and m_client */
+        client_test = &m_entities.at(2 + i);
         ASSERT_TRUE(client_test != m_client);
+
         cm_disconnect(client_test);
-
-        /* don't remove the ep, i.e. don't call uct_ep_destroy before the client
-         * finished disconnecting so that a disconnect event won't arrive on a
-         * destroyed endpoint on the client side */
-        while (m_client_disconnect_cnt < (i + 1)) {
-            progress();
-        }
-
-        m_entities.remove(client_test);
     }
+
+    /* don't remove the ep, i.e. don't call uct_ep_destroy on the client's ep
+     * before the client finished disconnecting so that a disconnect event won't
+     * arrive on a destroyed endpoint on the client side */
 
     while ((m_server_disconnect_cnt < num_clients) ||
            (m_client_disconnect_cnt < num_clients)) {
@@ -612,6 +616,11 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     }
     EXPECT_EQ(num_clients, m_server_disconnect_cnt);
     EXPECT_EQ(num_clients, m_client_disconnect_cnt);
+
+    for (i = 0; i < num_clients; ++i) {
+        client_test = m_entities.back();
+        m_entities.remove(client_test);
+    }
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
@@ -620,6 +629,8 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
+
+    m_server_start_disconnect = true;
 
     /* Listen */
     cm_start_listen();
@@ -643,7 +654,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
     EXPECT_EQ(num_conns_on_client, (int)m_server->num_eps());
 
     /* Disconnect */
-    cm_disconnect(m_client);
+    cm_disconnect(m_server);
 
     /* wait for disconnect to complete */
     while ((m_server_disconnect_cnt < num_conns_on_client) ||
