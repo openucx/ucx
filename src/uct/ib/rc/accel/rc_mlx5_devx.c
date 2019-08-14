@@ -106,14 +106,15 @@ ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         const struct ibv_ah_attr *ah_attr)
+                                         struct ibv_ah_attr *ah_attr)
 {
     uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
     uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
     uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
     uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
-    const uint8_t *gid = ah_attr->grh.dgid.raw;
-    uint8_t mac[6];
+    struct mlx5_wqe_av mlx5_av;
+    ucs_status_t status;
+    struct ibv_ah *ah;
     void *qpc;
     int ret;
 
@@ -123,26 +124,34 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 14);
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, 5);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.config.path_mtu);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, 30);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {
-        /* TODO resolve L3->L2 address */
-        mac[0] = gid[8] ^ 0x02;
-        memcpy(mac + 1, gid + 9, 2);
-        memcpy(mac + 3, gid + 13, 3);
-        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32), mac, 6);
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, 1);
+        status = uct_ib_iface_create_ah(&iface->super.super, ah_attr, &ah);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        uct_ib_mlx5_get_av(ah, &mlx5_av);
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+               &mlx5_av.rmac, sizeof(mlx5_av.rmac));
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+               &mlx5_av.rgid, sizeof(mlx5_av.rgid));
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, mlx5_av.hop_limit);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index, ah_attr->grh.sgid_index);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
+                          uct_ib_mlx5_calc_av_sport(dest_qp_num, qp->qp_num));
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid, ah_attr->src_path_bits & 0x7f);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, ah_attr->grh.hop_limit);
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+                &ah_attr->grh.dgid,
+                UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
     }
 
-    memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-            &ah_attr->grh.dgid,
-            UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, 2);
