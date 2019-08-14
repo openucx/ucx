@@ -11,6 +11,15 @@
 
 typedef struct uct_sockcm_ep_op uct_sockcm_ep_op_t;
 
+typedef enum uct_sockcm_ep_conn_state {
+    UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING,
+    UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED,
+    UCT_SOCKCM_EP_CONN_STATE_INFO_SENDING,
+    UCT_SOCKCM_EP_CONN_STATE_INFO_SENT,
+    UCT_SOCKCM_EP_CONN_STATE_CLOSED,
+    UCT_SOCKCM_EP_CONN_STATE_CONNECTED
+} uct_sockcm_ep_conn_state_t;
+
 struct uct_sockcm_ep_op {
     ucs_queue_elem_t    queue_elem;
     uct_completion_t    *user_comp;
@@ -22,6 +31,7 @@ struct uct_sockcm_ep {
     void                               *pack_cb_arg;
     uint32_t                           pack_cb_flags;
     int                                is_on_pending;
+    uct_sockcm_ep_conn_state_t         conn_state;
 
     pthread_mutex_t                    ops_mutex;  /* guards ops and status */
     ucs_queue_head_t                   ops;
