@@ -11,6 +11,8 @@
 
 BEGIN_C_DECLS
 
+#define UCS_ARCH_MEMCPY_RELAXED_SUPPORTED 0
+
 #define UCS_ARCH_GLOBAL_OPTS_INITALIZER {}
 
 /* built-in memcpy config */

@@ -199,6 +199,7 @@ UCS_TEST_F(test_sys, memunits_to_str) {
 }
 
 UCS_TEST_SKIP_COND_F(test_sys, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_count) {
+#if UCS_ARCH_MEMCPY_RELAXED_SUPPORTED
     const double diff      = 0.95; /* allow 5% fluctuations */
     const double timeout   = 30; /* 30 seconds to complete test successfully */
     double memcpy_bw       = 0;
@@ -214,11 +215,9 @@ UCS_TEST_SKIP_COND_F(test_sys, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_c
                         thresh_min_str, sizeof(thresh_min_str));
     ucs_memunits_to_str(ucs_global_opts.arch.builtin_memcpy_max,
                         thresh_max_str, sizeof(thresh_max_str));
-
     UCS_TEST_MESSAGE << "Using memcpy relaxed for size " <<
                         thresh_min_str << ".." <<
                         thresh_max_str;
-
     for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
         secs = ucs_get_accurate_time();
         for (i = 0; ucs_get_accurate_time() - secs < timeout; i++) {
@@ -236,6 +235,9 @@ UCS_TEST_SKIP_COND_F(test_sys, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_c
                             "GB/s iterations: "     << i + 1;
         EXPECT_GE(memcpy_relax_bw / memcpy_bw, diff);
     }
+#else
+    UCS_TEST_SKIP_R("unsupported");
+#endif
 }
 
 UCS_TEST_F(test_sys, cpu_cache) {
