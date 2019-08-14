@@ -385,6 +385,10 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
     }
 #endif
 
+    if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
+    }
+
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||
         IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr))

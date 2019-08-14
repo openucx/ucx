@@ -10,8 +10,6 @@
 #include <uct/base/uct_iface.h>
 #include <uct/sm/base/sm_iface.h>
 
-#define UCT_CMA_TL_NAME "cma"
-
 
 typedef struct uct_cma_iface_config {
     uct_sm_iface_config_t         super;
@@ -22,7 +20,5 @@ typedef struct uct_cma_iface {
     uct_sm_iface_t                super;
 } uct_cma_iface_t;
 
-
-extern uct_tl_component_t uct_cma_tl;
 
 #endif

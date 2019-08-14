@@ -8,7 +8,10 @@
 #define UCT_CM_H_
 
 #include <uct/api/uct_def.h>
+#include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
+#include <ucs/type/class.h>
+
 
 UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
 

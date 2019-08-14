@@ -11,6 +11,11 @@
 
 #include "mm_md.h"
 
+#include <ucs/debug/log.h>
+#include <inttypes.h>
+#include <limits.h>
+
+
 ucs_config_field_t uct_mm_md_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_mm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},

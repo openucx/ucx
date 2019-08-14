@@ -354,6 +354,8 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *                               should accept or reject the request by calling
  *                               @ref uct_iface_accept or @ref uct_iface_reject
  *                               routines respectively.
+ *                               conn_request should not be used outside the
+ *                               scope of this callback.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
  *                               @ref uct_ep_params_t::sockaddr_pack_cb on the

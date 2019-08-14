@@ -674,24 +674,19 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .fc_handler               = uct_rc_iface_fc_handler,
 };
 
-
-static ucs_status_t uct_rc_mlx5_query_resources(uct_md_h md,
-                                                uct_tl_resource_desc_t **resources_p,
-                                                unsigned *num_resources_p)
+static ucs_status_t
+uct_rc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                             unsigned *num_tl_devices_p)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+    int flags;
 
-    return uct_ib_device_query_tl_resources(&ib_md->dev, "rc_mlx5",
-                                            UCT_IB_DEVICE_FLAG_MLX5_PRM |
-                                            (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB),
-                                            resources_p, num_resources_p);
+    flags = UCT_IB_DEVICE_FLAG_MLX5_PRM |
+            (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);
+    return uct_ib_device_query_ports(&ib_md->dev, flags, tl_devices_p,
+                                     num_tl_devices_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_rc_mlx5_tl,
-                        uct_rc_mlx5_query_resources,
-                        uct_rc_mlx5_iface_t,
-                        "rc_mlx5",
-                        "RC_MLX5_",
-                        uct_rc_mlx5_iface_config_table,
-                        uct_rc_mlx5_iface_config_t);
-UCT_MD_REGISTER_TL(&uct_ib_component, &uct_rc_mlx5_tl);
+UCT_TL_DEFINE(&uct_ib_component, rc_mlx5, uct_rc_mlx5_query_tl_devices,
+              uct_rc_mlx5_iface_t, "RC_MLX5_", uct_rc_mlx5_iface_config_table,
+              uct_rc_mlx5_iface_config_t);

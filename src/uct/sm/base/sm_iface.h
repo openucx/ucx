@@ -12,8 +12,11 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 
+
 #define UCT_SM_IFACE_DEVICE_ADDR_LEN    sizeof(uint64_t)
 #define UCT_SM_MAX_IOV                  16
+#define UCT_SM_DEVICE_NAME              "memory"
+
 
 extern ucs_config_field_t uct_sm_iface_config_table[];
 
@@ -28,6 +31,11 @@ typedef struct uct_sm_iface {
         double             bandwidth; /* Memory bandwidth in bytes per second */
     } config;
 } uct_sm_iface_t;
+
+
+ucs_status_t
+uct_sm_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                             unsigned *num_tl_devices_p);
 
 ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr);

@@ -8,7 +8,9 @@
 #define _GNU_SOURCE
 #include "cma_md.h"
 
+#include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <sys/prctl.h>
 #include <sys/uio.h>
 #include <string.h>

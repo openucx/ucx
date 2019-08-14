@@ -391,6 +391,24 @@ ucs_status_t ucs_read_file_number(long *value, int silent,
     return UCS_OK;
 }
 
+ssize_t ucs_read_file_str(char *buffer, size_t max, int silent,
+                          const char *filename_fmt, ...)
+{
+    size_t max_read = ucs_max(max, 1) - 1;
+    ssize_t read_bytes;
+    va_list ap;
+
+    va_start(ap, filename_fmt);
+    read_bytes = ucs_read_file_vararg(buffer, max_read, silent, filename_fmt, ap);
+    va_end(ap);
+
+    if ((read_bytes >= 0) && (max > 0)) {
+        buffer[read_bytes] = '\0';
+    }
+
+    return read_bytes;
+}
+
 size_t ucs_get_max_iov()
 {
     static long max_iov = 0;

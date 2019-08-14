@@ -95,6 +95,7 @@ public:
     }
 
     virtual void cleanup() {
+        flush();
         delete lbuf;
         delete rbuf;
         uct_p2p_test::cleanup();
