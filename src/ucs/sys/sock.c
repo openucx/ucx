@@ -390,21 +390,6 @@ ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port)
     }
 }
 
-int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
-{
-    switch (addr->sa_family) {
-    case AF_INET:
-        return UCS_SOCKET_INET_ADDR(addr).s_addr == INADDR_ANY;
-    case AF_INET6:
-        return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_any,
-                       sizeof(UCS_SOCKET_INET6_ADDR(addr)));
-    default:
-        ucs_debug("Invalid address family: %d", addr->sa_family);
-    }
-
-    return 0;
-}
-
 const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
 {
     switch (addr->sa_family) {

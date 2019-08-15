@@ -61,23 +61,6 @@ static int uct_sockcm_is_addr_accessible(int sock_id, struct sockaddr *addr,
     return 1;
 }
 
-static int uct_sockcm_is_addr_accessible(int sock_id, struct sockaddr *addr,
-                                         int addrlen)
-{
-    char host[UCS_SOCKADDR_STRING_LEN];
-    char serv[UCS_SOCKADDR_STRING_LEN];
-    int ret = -1;
-
-    ret = getnameinfo(addr, addrlen, host, UCS_SOCKADDR_STRING_LEN, serv,
-                      UCS_SOCKADDR_STRING_LEN, NI_NAMEREQD);
-    if (0 != ret) {
-        ucs_debug("getnameinfo error : %s\n", gai_strerror(ret));
-        return 0;
-    }
-
-    return 1;
-}
-
 int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                       uct_sockaddr_accessibility_t mode)
 {

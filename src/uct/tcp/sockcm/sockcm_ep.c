@@ -7,6 +7,7 @@
 #include "sockcm_ep.h"
 #include <ucs/sys/string.h>
 #include <netinet/tcp.h>
+#include <uct/tcp/tcp.h>
 #include <dirent.h>
 #include <pthread.h>
 
@@ -54,33 +55,34 @@ out:
 
 ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
 {
-    uct_sockcm_conn_param_t conn_param;
-    ucs_status_t status;
     ssize_t transfer_len = 0;
     ssize_t sent_len     = 0;
+    uct_md_h dummy_md    = 0;
+    ucs_status_t status;
     unsigned num_resources;
-    char *dev_names;
-    char dev_name[UCT_DEVICE_NAME_MAX];
+    uct_tl_device_resource_t *devices;
+    uct_sockcm_conn_param_t conn_param;
 
     memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
-    status = ucs_sockaddr_get_dev_names(&num_resources, 
-                                        &dev_names, UCT_DEVICE_NAME_MAX);
+
+    status = uct_tcp_query_devices(dummy_md, &devices, &num_resources);
     if (UCS_OK != status || num_resources == 0) {
         ucs_error("sockcm unable to find a tcp-capable device");
         return (status == UCS_OK) ? UCS_ERR_IO_ERROR : status;
     }
-    memcpy(dev_name, dev_names, UCT_DEVICE_NAME_MAX);
-    ucs_free(dev_names);
+    ucs_debug("using device %s at client side\n", devices[0].name);
 
     /* pack worker address into private data */
-    conn_param.length = ep->pack_cb(ep->pack_cb_arg, dev_name,
+    conn_param.length = ep->pack_cb(ep->pack_cb_arg, devices[0].name,
                               (void*)conn_param.private_data);
     if (conn_param.length < 0) {
         ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
                   "private data. status: %s",
                   iface, ep, ucs_status_string(conn_param.length));
+        ucs_free(devices);
         return UCS_ERR_IO_ERROR;
     }
+    ucs_free(devices);
     ucs_assert(conn_param.length <= UCT_SOCKCM_PRIV_DATA_LEN);
     transfer_len = sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN;
     transfer_len += conn_param.length;
