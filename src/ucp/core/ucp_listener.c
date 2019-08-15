@@ -195,7 +195,7 @@ ucp_listener_query_uct_port(ucp_listener_h listener,
 static ucs_status_t
 ucp_listener_uct_listeners_query_port(ucp_listener_h listener, int *port_p)
 {
-    uint16_t port_0, port_i;
+    uint16_t port_0 = 0, port_i;
     int i;
     ucs_status_t status;
 
