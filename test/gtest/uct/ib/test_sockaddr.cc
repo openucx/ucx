@@ -338,8 +338,7 @@ protected:
 
 public:
     test_uct_cm_sockaddr() : m_cm_state(0), m_server(NULL), m_client(NULL),
-                             m_reject_conn_request(false),
-                             m_switch_cm(false) {
+                             m_reject_conn_request(false) {
     }
 
     void init() {
@@ -476,7 +475,6 @@ protected:
     entity                 *m_server;
     entity                 *m_client;
     bool                   m_reject_conn_request;
-    bool                   m_switch_cm;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
@@ -569,21 +567,22 @@ public:
 
         test_uct_cm_sockaddr::init();
 
-        status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &m_async);
+        status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK,
+                                          &m_test_async);
         ASSERT_UCS_OK(status);
 
-        UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker_test, uct_worker_destroy,
-                               uct_worker_create, m_async,
+        UCS_TEST_CREATE_HANDLE(uct_worker_h, m_test_worker, uct_worker_destroy,
+                               uct_worker_create, m_test_async,
                                UCS_THREAD_MODE_SINGLE)
 
-        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm_test, uct_cm_close,
+        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_test_cm, uct_cm_close,
                                uct_cm_open, GetParam()->component,
-                               m_worker_test);
+                               m_test_worker);
     }
 
     void cleanup() {
         test_uct_cm_sockaddr::cleanup();
-        ucs_async_context_destroy(m_async);
+        ucs_async_context_destroy(m_test_async);
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
@@ -591,22 +590,20 @@ public:
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {
-        server->accept(m_cm_test, conn_request, connect_cb, disconnect_cb,
+        server->accept(m_test_cm, conn_request, connect_cb, disconnect_cb,
                        user_data);
     }
 
 protected:
-    ucs::handle<uct_worker_h> m_worker_test;
-    ucs::handle<uct_cm_h>     m_cm_test;
-    ucs_async_context_t       *m_async;
+    ucs::handle<uct_worker_h> m_test_worker;
+    ucs::handle<uct_cm_h>     m_test_cm;
+    ucs_async_context_t       *m_test_async;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
 {
     UCS_TEST_MESSAGE << "Testing " << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
-
-    m_switch_cm = true;
 
     cm_listen_and_connect();
 
@@ -626,7 +623,7 @@ UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
      * destroyed here as well */
     m_server->destroy_ep(0);
 
-    m_cm_test.reset();
+    m_test_cm.reset();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr_multiple_cms)
