@@ -13,8 +13,6 @@
 
 BEGIN_C_DECLS
 
-#define UCS_ARCH_MEMCPY_RELAXED_SUPPORTED 1
-
 #define UCS_ARCH_GLOBAL_OPTS_INITALIZER {   \
     .builtin_memcpy_min = UCS_MEMUNITS_AUTO, \
     .builtin_memcpy_max = UCS_MEMUNITS_AUTO  \
