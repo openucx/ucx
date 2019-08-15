@@ -36,7 +36,8 @@ ucm_global_config_t ucm_global_opts = {
     .enable_malloc_reloc        = 0,
     .enable_cuda_reloc          = 1,
     .enable_dynamic_mmap_thresh = 1,
-    .alloc_alignment            = 16
+    .alloc_alignment            = 16,
+    .dlopen_process_rpath       = 1
 };
 
 size_t ucm_get_page_size()
@@ -300,4 +301,34 @@ void ucm_prevent_dl_unload()
 
     /* Now we drop our reference to the lib, and it won't be unloaded anymore */
     dlclose(dl);
+}
+
+char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file)
+{
+    size_t len;
+
+    len = strlen(dir);
+    while (len && (dir[len - 1] == '/')) {
+        len--; /* trim closing '/' */
+    }
+
+    len = ucs_min(len, max);
+    memcpy(buffer, dir, len);
+    max -= len;
+    if (max < 2) { /* buffer is shorter than dir - copy dir only */
+        buffer[len - 1] = '\0';
+        return buffer;
+    }
+
+    buffer[len] = '/';
+    max--;
+
+    while (file[0] == '/') {
+        file++; /* trim beginning '/' */
+    }
+
+    strncpy(buffer + len + 1, file, max);
+    buffer[max + len] = '\0'; /* force close string */
+
+    return buffer;
 }
