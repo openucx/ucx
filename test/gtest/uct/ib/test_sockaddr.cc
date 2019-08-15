@@ -454,6 +454,9 @@ protected:
         self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
         if (self->m_server_start_disconnect) {
+            /* if the server was the one who initiated the disconnect flow,
+             * the client should also disconnect its ep from the server in
+             * its disconnect cb */
             self->m_client->disconnect(ep);
         }
 
@@ -473,6 +476,20 @@ protected:
                                    TEST_CM_STATE_SERVER_DISCONNECTED);
         EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_DISCONNECTED |
                                                     TEST_CM_STATE_CLIENT_DISCONNECTED)));
+    }
+
+    void wait_for_client_server_counters(volatile int *server_cnt,
+                                         volatile int *client_cnt, int val,
+                                         double timeout = DEFAULT_TIMEOUT_SEC) {
+        ucs_time_t deadline;
+
+        deadline = ucs_get_time() + ucs_time_from_sec(timeout) *
+                                    ucs::test_time_multiplier();
+
+        while (((*server_cnt < val) || (*client_cnt < val)) &&
+               (ucs_get_time() < deadline)) {
+            progress();
+        }
     }
 
 protected:
@@ -588,10 +605,9 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     }
 
     /* wait for the server to connect to all the clients */
-    while ((m_client_connect_cb_cnt < num_clients) ||
-           (m_server_connect_cb_cnt < num_clients )) {
-        progress();
-    }
+    wait_for_client_server_counters(&m_server_connect_cb_cnt,
+                                    &m_client_connect_cb_cnt, num_clients);
+
     EXPECT_EQ(num_clients, m_server_recv_req_cnt);
     EXPECT_EQ(num_clients, m_client_connect_cb_cnt);
     EXPECT_EQ(num_clients, m_server_connect_cb_cnt);
@@ -606,14 +622,13 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
         cm_disconnect(client_test);
     }
 
-    /* don't remove the ep, i.e. don't call uct_ep_destroy on the client's ep
+    /* don't remove the ep, i.e. don't call uct_ep_destroy on the client's ep,
      * before the client finished disconnecting so that a disconnect event won't
      * arrive on a destroyed endpoint on the client side */
 
-    while ((m_server_disconnect_cnt < num_clients) ||
-           (m_client_disconnect_cnt < num_clients)) {
-        progress();
-    }
+    wait_for_client_server_counters(&m_server_disconnect_cnt,
+                                    &m_client_disconnect_cnt, num_clients);
+
     EXPECT_EQ(num_clients, m_server_disconnect_cnt);
     EXPECT_EQ(num_clients, m_client_disconnect_cnt);
 
@@ -643,10 +658,10 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
     }
 
     /* wait for the server to connect to all the endpoints on the cm */
-    while ((m_client_connect_cb_cnt < num_conns_on_client) ||
-           (m_server_connect_cb_cnt < num_conns_on_client )) {
-        progress();
-    }
+    wait_for_client_server_counters(&m_server_connect_cb_cnt,
+                                    &m_client_connect_cb_cnt,
+                                    num_conns_on_client);
+
     EXPECT_EQ(num_conns_on_client, m_server_recv_req_cnt);
     EXPECT_EQ(num_conns_on_client, m_client_connect_cb_cnt);
     EXPECT_EQ(num_conns_on_client, m_server_connect_cb_cnt);
@@ -657,10 +672,10 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
     cm_disconnect(m_server);
 
     /* wait for disconnect to complete */
-    while ((m_server_disconnect_cnt < num_conns_on_client) ||
-           (m_client_disconnect_cnt < num_conns_on_client)) {
-        progress();
-    }
+    wait_for_client_server_counters(&m_server_disconnect_cnt,
+                                    &m_client_disconnect_cnt,
+                                    num_conns_on_client);
+
     EXPECT_EQ(num_conns_on_client, m_server_disconnect_cnt);
     EXPECT_EQ(num_conns_on_client, m_client_disconnect_cnt);
 }
