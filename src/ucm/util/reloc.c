@@ -331,14 +331,14 @@ static Dl_serinfo *ucm_dlopen_load_serinfo(const char *module_path)
     res = dlinfo(module, RTLD_DI_SERINFOSIZE, &serinfo_size);
     if (res) {
         ucm_debug("dlinfo(RTLD_DI_SERINFOSIZE) failed");
-        goto close_caller;
+        goto close_module;
     }
 
     serinfo = malloc(serinfo_size.dls_size);
     if (serinfo == NULL) {
         ucm_error("failed to allocate %zu bytes for Dl_serinfo",
                   serinfo_size.dls_size);
-        goto close_caller;
+        goto close_module;
     }
 
     *serinfo = serinfo_size;
@@ -349,7 +349,7 @@ static Dl_serinfo *ucm_dlopen_load_serinfo(const char *module_path)
         serinfo = NULL;
     }
 
-close_caller:
+close_module:
     dlclose(module);
     return serinfo;
 }
@@ -362,7 +362,7 @@ void *ucm_dlopen(const char *filename, int flag)
     Dl_info dl_info;
     int res;
     int i;
-    char rpath_path[PATH_MAX];
+    char file_path[PATH_MAX];
     struct stat file_stat;
 
     ucm_debug("open module: %s, flag: %x", filename, flag);
@@ -400,18 +400,18 @@ void *ucm_dlopen(const char *filename, int flag)
     }
 
     for (i = 0; i < serinfo->dls_cnt; i++) {
-        ucm_concat_path(rpath_path, sizeof(rpath_path),
+        ucm_concat_path(file_path, sizeof(file_path),
                         serinfo->dls_serpath[i].dls_name, filename);
-        ucm_debug("check for %s", rpath_path);
+        ucm_debug("check for %s", file_path);
 
-        res = stat(rpath_path, &file_stat);
+        res = stat(file_path, &file_stat);
         if (res) {
             continue;
         }
 
         free(serinfo);
         /* ok, file exists, let's try to load it */
-        handle = ucm_reloc_orig_dlopen(rpath_path, flag);
+        handle = ucm_reloc_orig_dlopen(file_path, flag);
         if (handle == NULL) {
             return NULL;
         }
