@@ -4,8 +4,8 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCS_DYNAMIC_STRING_H_
-#define UCS_DYNAMIC_STRING_H_
+#ifndef UCS_STRING_BUFFER_H_
+#define UCS_STRING_BUFFER_H_
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>

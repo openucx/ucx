@@ -82,7 +82,7 @@ ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
      * double the previous size (to reduce the amortized cost of realloc) */
     if (ret >= max_print) {
         status = ucs_string_buffer_grow(strb, ucs_max(strb->capacity * 2,
-                                              strb->length + ret + 1));
+                                                      strb->length + ret + 1));
         if (status != UCS_OK) {
             return status;
         }
