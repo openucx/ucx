@@ -582,6 +582,9 @@ public:
 
     void cleanup() {
         test_uct_cm_sockaddr::cleanup();
+
+        m_test_cm.reset();
+        m_test_worker.reset();
         ucs_async_context_destroy(m_test_async);
     }
 
@@ -613,17 +616,6 @@ UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
                                                 TEST_CM_STATE_CLIENT_CONNECTED)));
 
     cm_disconnect(m_client);
-
-    /* the cm that was created in the constructor has to be destroyed before
-     * the entities (client and server) are destroyed.
-     * this is required in order to first remove the handler that the cm added
-     * on the global async (that belongs to the server's entity) and then remove
-     * the async context.
-     * since the cm is destroyed here, the ep that is using it needs to be
-     * destroyed here as well */
-    m_server->destroy_ep(0);
-
-    m_test_cm.reset();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr_multiple_cms)
