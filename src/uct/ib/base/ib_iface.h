@@ -124,7 +124,6 @@ typedef struct uct_ib_qp_attr {
     unsigned                    sq_sig_all;
     unsigned                    max_inl_recv;
     unsigned                    max_inl_resp;
-    unsigned                    suppress_log:1;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     struct ibv_exp_qp_init_attr ibv;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
