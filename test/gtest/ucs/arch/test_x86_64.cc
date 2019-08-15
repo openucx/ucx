@@ -62,17 +62,6 @@ protected:
     out:
         return result;
     }
-
-    static void check_cache_type(ucs_cpu_cache_type_t type, const char *name)
-    {
-        size_t cache;
-        char memunits[32];
-
-        cache = ucs_cpu_get_cache_size(type);
-
-        ucs_memunits_to_str(cache, memunits, sizeof(memunits));
-        UCS_TEST_MESSAGE << name << " cache: " << memunits;
-    }
 };
 
 UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_count) {
