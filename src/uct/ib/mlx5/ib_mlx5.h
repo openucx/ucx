@@ -142,6 +142,9 @@ typedef struct uct_ib_mlx5_md {
     ucs_mpool_t              dbrec_pool;
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+
+    void                     *zero_buf;
+    struct mlx5dv_devx_umem  *zero_mem;
 } uct_ib_mlx5_md_t;
 
 
@@ -516,12 +519,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_qp_attr_t *attr);
-
-ucs_status_t uct_ib_mlx5_devx_create_qp_impl(uct_ib_mlx5_md_t *md,
-                                             uct_ib_mlx5_devx_uar_t *uar,
-                                             uct_ib_mlx5_qp_t *qp,
-                                             uct_ib_mlx5_txwq_t *tx,
-                                             uct_ib_qp_attr_t *attr);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         enum ibv_qp_state state);
