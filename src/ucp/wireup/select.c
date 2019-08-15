@@ -1200,7 +1200,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     /* - transport selection wasn't OK */
     if ((status != UCS_OK) ||
         /* - the TAG transport is worse than the AM transport */
-        (ucp_wireup_score_cmp(select_info.score, am_info->score <= 0))) {
+        (ucp_wireup_score_cmp(select_info.score, am_info->score) < 0)) {
         goto out;
     }
 
