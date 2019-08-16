@@ -197,7 +197,8 @@ static void uct_sockcm_iface_recv_handler(int fd, void *arg)
 {
     uct_sockcm_ctx_t *sock_id_ctx = (uct_sockcm_ctx_t *) arg;
     ucs_status_t status;
-    ssize_t recv_len, recv_base_len;
+    ssize_t recv_len;
+    ssize_t UCS_V_UNUSED recv_base_len;
 
     if (sock_id_ctx->recv_len == -1) {
         /* attempt another receive only if initial receive was not successful */
