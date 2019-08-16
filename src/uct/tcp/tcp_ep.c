@@ -846,7 +846,7 @@ uct_tcp_ep_am_short_fill_data(uct_tcp_am_hdr_t *hdr, uint64_t header,
                               const void *payload, unsigned length)
 {
     *((uint64_t*)(hdr + 1)) = header;
-    memcpy((uint8_t*)(hdr + 1) + sizeof(header), payload, length);
+    memcpy(UCS_PTR_BYTE_OFFSET(hdr + 1, sizeof(header)), payload, length);
 }
 
 static const void*
@@ -922,7 +922,6 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
 
     if (length <= iface->config.min_am_shortv) {
         uct_tcp_ep_am_short_fill_data(hdr, header, payload, length);
-
         uct_tcp_ep_am_send(iface, ep, hdr);
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
     } else {

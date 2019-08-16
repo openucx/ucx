@@ -38,8 +38,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
 
   {"MIN_AM_SHORTV", "2kb",
-   "Threshold for switching from non-blocking send to non-blocking\n"
-   "vector send if available",
+   "Threshold for switching non-blocking send to IOV non-blocking\n"
+   "send if available",
    ucs_offsetof(uct_tcp_iface_config_t, min_am_shortv), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PREFER_DEFAULT", "y",
@@ -435,11 +435,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
-    self->outstanding              = 0;
-    self->config.tx_seg_size       = config->tx_seg_size +
-                                    sizeof(uct_tcp_am_hdr_t);
-    self->config.rx_seg_size       = config->rx_seg_size +
-                                    sizeof(uct_tcp_am_hdr_t);
+    self->outstanding        = 0;
+    self->config.tx_seg_size = config->tx_seg_size +
+                               sizeof(uct_tcp_am_hdr_t);
+    self->config.rx_seg_size = config->rx_seg_size +
+                               sizeof(uct_tcp_am_hdr_t);
 
     if (ucs_socket_max_iov() >= UCT_TCP_EP_AM_SHORTV_IOV_COUNT) {
         self->config.min_am_shortv = config->min_am_shortv;
@@ -451,11 +451,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     /* Maximum IOV count allowed by user's configuration (considering TCP
      * protocol and user's AM headers that use 1st and 2nd IOVs
      * correspondingly) and system constraints */
-    self->config.zcopy.max_iov     = ucs_min(config->max_iov +
+    self->config.zcopy.max_iov    = ucs_min(config->max_iov +
                                             UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT,
                                             ucs_socket_max_iov());
     /* Use a remaining part of TX segment for AM Zcopy header */
-    self->config.zcopy.hdr_offset  = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
+    self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
                                      sizeof(struct iovec) *
                                      self->config.zcopy.max_iov);
     if ((self->config.zcopy.hdr_offset > self->config.tx_seg_size) &&
@@ -467,13 +467,13 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->config.zcopy.max_hdr     = self->config.tx_seg_size -
-                                    self->config.zcopy.hdr_offset;
-    self->config.prefer_default    = config->prefer_default;
-    self->config.max_poll          = config->max_poll;
-    self->sockopt.nodelay          = config->sockopt_nodelay;
-    self->sockopt.sndbuf           = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf           = config->sockopt_rcvbuf;
+    self->config.zcopy.max_hdr  = self->config.tx_seg_size -
+                                  self->config.zcopy.hdr_offset;
+    self->config.prefer_default = config->prefer_default;
+    self->config.max_poll       = config->max_poll;
+    self->sockopt.nodelay       = config->sockopt_nodelay;
+    self->sockopt.sndbuf        = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
