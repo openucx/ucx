@@ -32,6 +32,7 @@ typedef struct uct_sockcm_conn_param {
 
 typedef struct uct_sockcm_ctx {
     int                     sock_id;
+    int                     handler_added;
     ssize_t                 recv_len;
     uct_sockcm_iface_t      *iface;
     uct_sockcm_conn_param_t conn_param;

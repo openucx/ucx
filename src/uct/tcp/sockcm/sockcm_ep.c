@@ -68,6 +68,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
     status = uct_tcp_query_devices(dummy_md, &devices, &num_resources);
     if (UCS_OK != status || num_resources == 0) {
         ucs_error("sockcm unable to find a tcp-capable device");
+        ucs_free(devices);
         return (status == UCS_OK) ? UCS_ERR_IO_ERROR : status;
     }
     ucs_debug("using device %s at client side\n", devices[0].name);
@@ -82,7 +83,6 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
         ucs_free(devices);
         return UCS_ERR_IO_ERROR;
     }
-    ucs_free(devices);
     ucs_assert(conn_param.length <= UCT_SOCKCM_PRIV_DATA_LEN);
     transfer_len = sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN;
     transfer_len += conn_param.length;
@@ -171,12 +171,25 @@ static void uct_sockcm_ep_event_handler(int fd, void *arg)
             recv_len = recv(ep->sock_id_ctx->sock_id, (char *) &conn_status,
                             sizeof(conn_status), 0);
             ucs_debug("sockcm_listener: recv len = %d\n", (int) recv_len);
-            if (recv_len == -1) return;
+            if (recv_len == -1) {
+                return;
+            } else if (recv_len == 0) {
+                ucs_debug("server closed; client also closing\n");
+                status = UCS_ERR_IO_ERROR;
+                ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
+                goto out;
+            }
 
             status = conn_status ? UCS_ERR_REJECTED : UCS_OK;
             if (UCS_OK == status) {
                 ucs_debug("event_handler OK after accept\n");
                 ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_CONNECTED;
+
+                status = ucs_async_modify_handler(fd, 0);
+                if (status != UCS_OK) {
+                    goto out;
+                }
+                goto out;
             } else {
                 ucs_debug("event_handler REJECTED after reject\n");
                 ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;

@@ -215,6 +215,7 @@ static void uct_sockcm_iface_recv_handler(int fd, void *arg)
         }
 
         ucs_async_remove_handler(sock_id_ctx->sock_id, 0);
+        sock_id_ctx->handler_added = 0;
     }
 
     if (UCS_OK != uct_sockcm_iface_process_conn_req((uct_sockcm_ctx_t *) arg)) {
@@ -265,6 +266,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     }
 
     sock_id_ctx->sock_id = accept_fd;
+    sock_id_ctx->handler_added = 0;
     sock_id_ctx->iface = iface;
     ucs_list_add_tail(&iface->used_sock_ids_list, &sock_id_ctx->list);
 
@@ -292,6 +294,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
             close(accept_fd);
             return;
         }
+        sock_id_ctx->handler_added = 1;
     } else {
         ucs_debug("not assigning recv handler for message from client\n");
         uct_sockcm_iface_recv_handler(sock_id_ctx->sock_id, sock_id_ctx);
@@ -422,6 +425,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_sockcm_ctx_t, list);
         ucs_debug("cleaning client fd = %d", sock_id_ctx->sock_id);
+        if (sock_id_ctx->handler_added) {
+            ucs_async_remove_handler(sock_id_ctx->sock_id, 0);
+            sock_id_ctx->handler_added = 0;
+        }
         close(sock_id_ctx->sock_id);
         ucs_free(sock_id_ctx);
     }
