@@ -331,7 +331,6 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
  *         0 if not
  */
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
-
 END_C_DECLS
 
 #endif
