@@ -411,6 +411,44 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     return req + 1;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
+ucp_am_rdma_send_req(ucp_request_t *req, size_t count,
+                const ucp_ep_msg_config_t *msg_config,
+                ucp_send_callback_t cb, const ucp_proto_t *proto)
+{
+
+    size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
+                                                        count, SIZE_MAX);
+    size_t max_short;
+    ucs_status_t status;
+
+    max_short = ucp_am_get_short_max(req, msg_config);
+
+    status = ucp_request_send_start(req, max_short,
+                                    zcopy_thresh, SIZE_MAX,
+                                    count, msg_config,
+                                    proto);
+    if (status != UCS_OK) {
+       return UCS_STATUS_PTR(status);
+    }
+
+    /* Start the request.
+     * If it is completed immediately, release the request and return the status.
+     * Otherwise, return the request.
+     */
+    status = ucp_request_send(req, 0);
+    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        ucs_trace_req("releasing send request %p, returning status %s", req,
+                      ucs_status_string(status));
+        ucp_request_put(req);
+        return UCS_STATUS_PTR(status);
+    }
+
+    ucp_request_set_callback(req, send.cb, cb);
+
+    return req + 1;
+}
+
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb, 
                  (ep, id, payload, count, datatype, cb, flags),
                  ucp_ep_h ep, uint16_t id, const void *payload, 
@@ -465,6 +503,66 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb,
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, cb,
                               ucp_ep_config(ep)->am_u.proto);
     }
+
+out:
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    return ret;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
+                 (ep, id, payload, count, datatype, cb, flags),
+                 ucp_ep_h ep, uint16_t id, const void *payload,
+                 size_t count, uintptr_t datatype,
+                 ucp_send_callback_t cb, unsigned flags)
+{
+    ucs_status_t status;
+    ucs_status_ptr_t ret;
+    ucp_request_t *req;
+    size_t length;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+
+    if (ucs_unlikely((flags != 0) && !(flags & UCP_AM_SEND_REPLY))) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    if (ucs_likely(!(flags & UCP_AM_SEND_REPLY)) &&
+        (ucs_likely(UCP_DT_IS_CONTIG(datatype)))) {
+        length = ucp_contig_dt_length(datatype, count);
+
+        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_short)) {
+            status = ucp_am_send_short(ep, id, payload, length);
+            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+                UCP_EP_STAT_TAG_OP(ep, EAGER);
+                ret = UCS_STATUS_PTR(status);
+                goto out;
+            }
+        }
+    }
+
+    req = ucp_request_get(ep->worker);
+    if (ucs_unlikely(req == NULL)) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out;
+    }
+
+    ucp_am_send_req_init(req, ep, payload, datatype, count, flags, id);
+    status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ret = UCS_STATUS_PTR(status);
+        goto out;
+    }
+
+//    if (flags & UCP_AM_SEND_REPLY) {
+        ret = ucp_am_rdma_send_req(req, count, &ucp_ep_config(ep)->am, cb,
+                              ucp_ep_config(ep)->am_u.reply_proto);
+//    } else {
+//        ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, cb,
+//                              ucp_ep_config(ep)->am_u.proto);
+//    }
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);

@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "rndv.h"
+#include "rdma.h"
 #include "tag_match.inl"
 
 #include "offload.h"
