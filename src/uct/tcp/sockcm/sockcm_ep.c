@@ -180,6 +180,7 @@ static void uct_sockcm_ep_event_handler(int fd, void *arg)
             } else {
                 ucs_debug("event_handler REJECTED after reject\n");
                 ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
+                goto out;
             }
             return;
             break;
