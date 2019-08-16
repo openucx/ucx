@@ -1558,7 +1558,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
 
 out:
     *config_idx_p = config_idx;
-    return UCS_OK;;
+    return UCS_OK;
 }
 
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
