@@ -435,7 +435,15 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sockcm_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sockcm_iface_t, uct_iface_t);
 
+static ucs_status_t
+uct_sockcm_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                            unsigned *num_tl_devices_p)
+{
+    *num_tl_devices_p = 0;
+    *tl_devices_p     = NULL;
+    return UCS_OK;
+}
 
-UCT_TL_DEFINE(&uct_sockcm_component, sockcm, uct_tcp_query_devices,
+UCT_TL_DEFINE(&uct_sockcm_component, sockcm, uct_sockcm_query_tl_devices,
               uct_sockcm_iface_t, "SOCKCM_", uct_sockcm_iface_config_table,
               uct_sockcm_iface_config_t);
