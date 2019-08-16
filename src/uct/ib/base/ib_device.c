@@ -562,10 +562,30 @@ uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
         }
     }
 #else
+#define UCT_IB_SYSFS_GID_TYPE_FMT \
+    "/sys/class/infiniband/%s/ports/%d/gid_attrs/types/%d"
+    char buf[16];
+
     ret = ibv_query_gid(dev->ibv_context, port_num, gid_index, &info->gid);
     if (ret == 0) {
-        info->roce_version.major = 1;
-        info->roce_version.minor = 0;
+        ret = ucs_read_file(buf, sizeof(buf) - 1, 1, UCT_IB_SYSFS_GID_TYPE_FMT,
+                            uct_ib_device_name(dev), port_num, gid_index);
+        if (ret > 0) {
+            if (!strncmp(buf, "IB/RoCE v1", 10)) {
+                info->roce_version.major = 1;
+                info->roce_version.minor = 0;
+            } else if (!strncmp(buf, "RoCE v2", 7)) {
+                info->roce_version.major = 2;
+                info->roce_version.minor = 0;
+            } else {
+                ucs_error("failed to parse gid type '%s' (dev=%s port=%d index=%d)",
+                          buf, uct_ib_device_name(dev), port_num, gid_index);
+                return UCS_ERR_INVALID_PARAM;
+            }
+        } else {
+            info->roce_version.major = 1;
+            info->roce_version.minor = 0;
+        }
         return UCS_OK;
     }
 #endif

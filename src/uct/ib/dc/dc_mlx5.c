@@ -1013,7 +1013,7 @@ void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
                                     uint32_t remote_dctn)
 {
     uct_ib_mlx5_iface_set_av_sport(&iface->super.super.super, av,
-                                   remote_dctn ^ iface->rx.dct.qp_num);
+                                   remote_dctn, iface->rx.dct.qp_num);
 }
 
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
