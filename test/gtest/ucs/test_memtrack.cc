@@ -159,12 +159,17 @@ UCS_TEST_F(test_memtrack, sysv) {
 
 UCS_TEST_F(test_memtrack, memalign_realloc) {
     void* ptr;
+    int ret;
 
-    ptr = ucs_memalign(10, ALLOC_SIZE, ALLOC_NAME);
+    ret = ucs_posix_memalign(&ptr, 8, ALLOC_SIZE, ALLOC_NAME);
+    ASSERT_EQ(0, ret);
     ASSERT_NE((void *)NULL, ptr);
     ucs_free(ptr);
+    /* Silence coverity warning. */
+    ptr = NULL;
 
-    ptr = ucs_memalign(1000, ALLOC_SIZE, ALLOC_NAME);
+    ret = ucs_posix_memalign(&ptr, 1024, ALLOC_SIZE, ALLOC_NAME);
+    ASSERT_EQ(0, ret);
     ASSERT_NE((void *)NULL, ptr);
 
     ptr = ucs_realloc(ptr, 2*ALLOC_SIZE, ALLOC_NAME);
