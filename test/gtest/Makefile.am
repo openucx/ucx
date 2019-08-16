@@ -162,7 +162,8 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
 	ucs/test_type.cc \
-	ucs/test_log.cc
+	ucs/test_log.cc \
+	ucs/arch/test_x86_64.cc
 
 if HAVE_IB
 gtest_SOURCES += \
