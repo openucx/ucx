@@ -128,6 +128,8 @@ ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 int ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr);
 
+int ucp_wireup_is_lane_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index);
+
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     return ucp_worker_iface_is_tl_p2p(ucp_worker_iface_get_attr(worker,

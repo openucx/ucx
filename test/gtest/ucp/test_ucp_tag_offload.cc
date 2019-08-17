@@ -9,6 +9,7 @@
 #include "ucp_datatype.h"
 
 extern "C" {
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/tag/tag_match.h>
 }
@@ -401,6 +402,48 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
 // And since they do not support TM offload, this test would be skipped.
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
                               "\\rc,\\ud,rc_x,dc_x")
+
+
+class test_ucp_tag_offload_selection : public test_ucp_tag_offload {
+public:
+
+    void init()
+    {
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        test_ucp_tag::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
+{
+    ucp_ep_h ep          = sender().ep();
+    bool has_tag_offload = false;
+    bool has_shm_or_self = false;
+
+    for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
+        if (ucp_wireup_is_lane_self_or_shm(ep, idx)) {
+            has_shm_or_self = true;
+        }
+
+        uct_iface_attr_t *attr = ucp_worker_iface_get_attr(sender().worker(), idx);
+        if (attr->cap.flags & UCT_IFACE_FLAG_TAG_EAGER_BCOPY) {
+            // We do not have transports with partial tag offload support
+            EXPECT_TRUE(attr->cap.flags & UCT_IFACE_FLAG_TAG_RNDV_ZCOPY);
+            has_tag_offload = true;
+        }
+    }
+
+    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
+        // If shm or self transport exists it should be used for tag matching
+        EXPECT_TRUE(!has_shm_or_self && has_tag_offload);
+    } else {
+        EXPECT_TRUE(!has_tag_offload || has_shm_or_self);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_selection);
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_selection, self_rcx,
+                              "self,rc_x");
 
 
 #if ENABLE_STATS
