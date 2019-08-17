@@ -31,7 +31,7 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
-
+    ep->sock_id_ctx->handler_added = 0;
     dest_addr = (struct sockaddr *) &(ep->remote_addr);
 
     status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
