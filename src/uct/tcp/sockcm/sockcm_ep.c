@@ -188,9 +188,6 @@ static void uct_sockcm_ep_event_handler(int fd, void *arg)
                 ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_CONNECTED;
 
                 status = ucs_async_modify_handler(fd, 0);
-                if (status != UCS_OK) {
-                    goto out;
-                }
                 goto out;
             } else {
                 ucs_debug("event_handler REJECTED after reject\n");
