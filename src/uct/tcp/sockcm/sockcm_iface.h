@@ -10,6 +10,10 @@
 #include "sockcm_def.h"
 #include "sockcm_md.h"
 
+#define UCT_SOCKCM_MAX_CONN_PRIV \
+        (UCT_SOCKCM_PRIV_DATA_LEN) - (sizeof(ssize_t))
+
+
 typedef struct uct_sockcm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;
@@ -18,7 +22,6 @@ typedef struct uct_sockcm_iface_config {
 struct uct_sockcm_iface {
     uct_base_iface_t                     super;
 
-    int                                  sock_id;
     int                                  listen_fd;
 
     uint8_t                              is_server;

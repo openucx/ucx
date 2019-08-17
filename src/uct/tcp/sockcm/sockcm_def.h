@@ -19,14 +19,24 @@
 #include <net/if.h>
 
 #define UCT_SOCKCM_TL_NAME              "sockcm"
+#define UCT_SOCKCM_PRIV_DATA_LEN        1024
 
 typedef struct uct_sockcm_iface   uct_sockcm_iface_t;
 typedef struct uct_sockcm_ep      uct_sockcm_ep_t;
 
+typedef struct uct_sockcm_conn_param {
+    ssize_t length;
+    int     fd;
+    char    private_data[UCT_SOCKCM_PRIV_DATA_LEN];
+} uct_sockcm_conn_param_t;
+
 typedef struct uct_sockcm_ctx {
-    int               sock_id;
-    uct_sockcm_ep_t   *ep;
-    ucs_list_link_t   list;
+    int                     sock_id;
+    int                     handler_added;
+    ssize_t                 recv_len;
+    uct_sockcm_iface_t      *iface;
+    uct_sockcm_conn_param_t conn_param;
+    ucs_list_link_t         list;
 } uct_sockcm_ctx_t;
 
 ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep);
