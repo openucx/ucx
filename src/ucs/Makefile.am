@@ -23,6 +23,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/callbackq.h \
+	datastruct/khash.h \
 	datastruct/list_types.h \
 	datastruct/list.h \
 	datastruct/mpool.h \
@@ -79,7 +80,6 @@ noinst_HEADERS = \
 	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
-	datastruct/khash.h \
 	debug/assert.h \
 	debug/debug.h \
 	debug/log.h \
