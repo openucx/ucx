@@ -68,8 +68,8 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
     status = uct_tcp_query_devices(dummy_md, &devices, &num_resources);
     if (UCS_OK != status || num_resources == 0) {
         ucs_error("sockcm unable to find a tcp-capable device");
-        ucs_free(devices);
-        return (status == UCS_OK) ? UCS_ERR_IO_ERROR : status;
+        status = (status == UCS_OK) ? UCS_ERR_IO_ERROR : status;
+        goto out;
     }
     ucs_debug("using device %s at client side\n", devices[0].name);
 
@@ -80,8 +80,8 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
         ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
                   "private data. status: %s",
                   iface, ep, ucs_status_string(conn_param.length));
-        ucs_free(devices);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out;
     }
     ucs_assert(conn_param.length <= UCT_SOCKCM_PRIV_DATA_LEN);
     transfer_len = sizeof(uct_sockcm_conn_param_t) - UCT_SOCKCM_PRIV_DATA_LEN;
@@ -95,14 +95,16 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockc
             ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_INFO_SENDING;
         } else {
             ucs_error("unable to send client info %s", strerror(errno));
-            return UCS_ERR_IO_ERROR;
+            status = UCS_ERR_IO_ERROR;
+            goto out;
         }
     } else {
         ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_INFO_SENT;
     }
-    //ucs_assert(sent_len == transfer_len);
 
-    return UCS_OK;
+out:
+    ucs_free(devices);
+    return status;
 }
 
 static inline void uct_sockcm_ep_add_to_pending(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
@@ -120,7 +122,7 @@ static void uct_sockcm_ep_event_handler(int fd, void *arg)
     uct_sockcm_ep_t *ep       = (uct_sockcm_ep_t *) arg;
     char conn_status;
     int optval;
-    size_t optlen;
+    socklen_t optlen;
     ucs_status_t status;
 
     iface = ucs_derived_of(ep->super.super.iface, uct_sockcm_iface_t);

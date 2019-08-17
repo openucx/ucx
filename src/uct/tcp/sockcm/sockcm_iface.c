@@ -239,6 +239,7 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
      */
 
     /* accept initial client connection; iface accept/reject happens later */
+    addrlen = sizeof(struct sockaddr);
     accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
     if (accept_fd == -1) {
          if ((errno == EAGAIN) || (errno == EINTR)) {
