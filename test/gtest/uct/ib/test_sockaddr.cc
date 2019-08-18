@@ -712,11 +712,10 @@ public:
     }
 
     void cleanup() {
-        test_uct_cm_sockaddr::cleanup();
-
         m_test_cm.reset();
         m_test_worker.reset();
         ucs_async_context_destroy(m_test_async);
+        test_uct_cm_sockaddr::cleanup();
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
@@ -747,6 +746,10 @@ UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
                                                 TEST_CM_STATE_CLIENT_CONNECTED)));
 
     cm_disconnect(m_client);
+
+    /* destroy the server's ep here so that it would be destroyed before the cm
+     * it is using */
+    m_server->destroy_ep(0);
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr_multiple_cms)
