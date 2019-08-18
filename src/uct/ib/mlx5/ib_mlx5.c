@@ -265,7 +265,7 @@ ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
 
 void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp)
 {
-    if (qp->verbs.rd != NULL) {
+    if (qp->type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         uct_worker_tl_data_put(qp->verbs.rd, uct_ib_mlx5_res_domain_cleanup);
     }
 }

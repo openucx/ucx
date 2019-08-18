@@ -1071,7 +1071,65 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
 }
 
 class malloc_hook_dlopen : public malloc_hook {
+protected:
+    class library {
+    public:
+        typedef void* (*loader_t)(const char*, int);
+
+        library(loader_t loader, const std::string &name = ""):
+            m_loader(loader), m_name(name), m_lib(NULL)
+        {
+        }
+
+        ~library()
+        {
+            close();
+        }
+
+        void *open(const std::string name = "")
+        {
+            if (!name.empty()) {
+                m_name = name;
+            }
+
+            close();
+
+            return (m_lib = m_loader(m_name.c_str(), RTLD_NOW));
+        }
+
+        void attach(void *lib)
+        {
+            close();
+            m_lib = lib;
+        }
+
+        void close()
+        {
+            if (m_lib != NULL) {
+                dlclose(m_lib);
+                m_lib = NULL;
+            }
+        }
+
+        operator bool()
+        {
+            return m_lib != NULL;
+        }
+
+        void* sym(const char *name)
+        {
+            return dlsym(m_lib, name);
+        }
+
+    protected:
+        loader_t    m_loader;
+        std::string m_name;
+        void       *m_lib;
+    };
+
 public:
+    typedef library::loader_t loader_t;
+
     static std::string get_lib_dir() {
 #ifndef GTEST_UCM_HOOK_LIB_DIR
 #  error "Missing build configuration"
@@ -1087,62 +1145,113 @@ public:
     static std::string get_lib_path_do_mmap() {
         return get_lib_dir() + "/libdlopen_test_do_mmap.so";
     }
+
+    static std::string get_lib_path_do_load_rpath() {
+        return get_lib_dir() + "/libdlopen_test_do_load_rpath.so";
+    }
+
+    static std::string get_lib_path_do_load_sub_rpath() {
+        return "libdlopen_test_rpath.so"; // library should be located using rpath
+    }
+
+    /* test for mmap events are fired from non-direct load modules
+     * we are trying to load lib1, from lib1 load lib2, and
+     * fire mmap event from lib2 */
+    void test_indirect_dlopen(loader_t loader)
+    {
+        typedef void (*fire_mmap_f)(void);
+        typedef void* (*load_lib_f)(const char *path, void* (*func)(const char*, int));
+
+        const char *load_lib  = "load_lib";
+        const char *fire_mmap = "fire_mmap";
+
+        library lib(loader, get_lib_path_do_load());
+        library lib2(NULL); // lib2 is used for attach only
+        load_lib_f load;
+        fire_mmap_f fire;
+        ucs_status_t status;
+        mmap_event<malloc_hook> event(this);
+
+        status = event.set(UCM_EVENT_VM_MAPPED);
+        ASSERT_UCS_OK(status);
+
+        lib.open();
+        ASSERT_TRUE(lib);
+
+        load = (load_lib_f)lib.sym(load_lib);
+        ASSERT_TRUE(load != NULL);
+
+        lib2.attach(load(get_lib_path_do_mmap().c_str(), loader));
+        ASSERT_TRUE(lib2);
+
+        fire = (fire_mmap_f)lib2.sym(fire_mmap);
+        ASSERT_TRUE(fire != NULL);
+
+        m_got_event = 0;
+        fire();
+        EXPECT_GT(m_got_event, 0);
+    }
+
+    /* Test for rpath section of caller module is processes */
+    void test_rpath_dlopen(loader_t loader)
+    {
+        typedef void* (*load_lib_f)(const char *path, void* (*func)(const char*, int));
+
+        const char *load_lib = "load_lib";
+
+        library lib(loader);
+        library lib2(NULL); // lib2 is used for attach only
+        load_lib_f load;
+        ucs_status_t status;
+        mmap_event<malloc_hook> event(this);
+
+        /* in case if reloc mode is used - it force hook dlopen */
+        status = event.set(UCM_EVENT_VM_MAPPED);
+        ASSERT_UCS_OK(status);
+
+        /* first check that without rpath library located in subdirectory could not be loaded */
+        lib.open(get_lib_path_do_load());
+        ASSERT_TRUE(lib);
+        if (!lib) {
+            return;
+        }
+
+        load = (load_lib_f)lib.sym(load_lib);
+        ASSERT_TRUE(load != NULL);
+
+        lib2.attach(load(get_lib_path_do_load_sub_rpath().c_str(), loader));
+        ASSERT_FALSE(lib2);
+
+        /* next check that rpath helps to load library located in subdirectory */
+        /* don't care about opened libs - it will be closed automatically */
+        lib.open(get_lib_path_do_load_rpath());
+        ASSERT_TRUE(lib);
+        if (!lib) {
+            return;
+        }
+
+        load = (load_lib_f)lib.sym(load_lib);
+        ASSERT_TRUE(load != NULL);
+
+        lib2.attach(load(get_lib_path_do_load_sub_rpath().c_str(), loader));
+        ASSERT_TRUE(lib2);
+    }
 };
 
-/* test for mmap events are fired from non-direct load modules
- * we are trying to load lib1, from lib1 load lib2, and
- * fire mmap event from lib2 */
 UCS_TEST_F(malloc_hook_dlopen, indirect_dlopen) {
-    typedef void (fire_mmap_f)(void);
-    typedef void* (load_lib_f)(const char *path);
+    test_indirect_dlopen(dlopen);
+}
 
-    const char *load_lib       = "load_lib";
-    const char *fire_mmap      = "fire_mmap";
+UCS_TEST_F(malloc_hook_dlopen, indirect_ucm_dlopen) {
+    test_indirect_dlopen(ucm_dlopen);
+}
 
-    void *lib;
-    void *lib2;
-    load_lib_f *load;
-    fire_mmap_f *fire;
-    ucs_status_t status;
-    mmap_event<malloc_hook> event(this);
+UCS_TEST_F(malloc_hook_dlopen, rpath_dlopen) {
+    test_rpath_dlopen(dlopen);
+}
 
-    status = event.set(UCM_EVENT_VM_MAPPED);
-    ASSERT_UCS_OK(status);
-
-    lib = dlopen(get_lib_path_do_load().c_str(), RTLD_NOW);
-    EXPECT_NE((uintptr_t)lib, (uintptr_t)NULL);
-    if (!lib) {
-        goto no_lib;
-    }
-
-    load = (load_lib_f*)dlsym(lib, load_lib);
-    EXPECT_NE((uintptr_t)load, (uintptr_t)NULL);
-    if (!load) {
-        goto no_load;
-    }
-
-    lib2 = load(get_lib_path_do_mmap().c_str());
-    EXPECT_NE((uintptr_t)lib2, (uintptr_t)NULL);
-    if (!lib2) {
-        goto no_load;
-    }
-
-    fire = (fire_mmap_f*)dlsym(lib2, fire_mmap);
-    EXPECT_NE((uintptr_t)fire, (uintptr_t)NULL);
-    if (!fire) {
-        goto no_fire;
-    }
-
-    m_got_event = 0;
-    fire();
-    EXPECT_GT(m_got_event, 0);
-
-no_fire:
-    dlclose(lib2);
-no_load:
-    dlclose(lib);
-no_lib:
-    event.unset();
+UCS_TEST_F(malloc_hook_dlopen, rpath_ucm_dlopen) {
+    test_rpath_dlopen(ucm_dlopen);
 }
 
 UCS_MT_TEST_F(malloc_hook_dlopen, dlopen_mt_with_memtype, 2) {

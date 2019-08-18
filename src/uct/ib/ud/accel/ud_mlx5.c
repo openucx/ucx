@@ -531,7 +531,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     ep->is_global   = is_global;
     ep->av.dqp_dct |= htonl(remote_qpn);
     uct_ib_mlx5_iface_set_av_sport(&iface->super.super, &ep->av,
-                                   remote_qpn ^ iface->super.qp->qp_num);
+                                   remote_qpn, iface->super.qp->qp_num);
     return UCS_OK;
 }
 

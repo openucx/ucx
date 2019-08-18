@@ -459,19 +459,24 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
     return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
 }
 
+static inline uint16_t uct_ib_mlx5_calc_av_sport(uint32_t rqpn, uint32_t qpn)
+{
+    uint32_t flow_id = qpn ^ rqpn;
+    uint16_t sport   = flow_id ^ (flow_id >> 16);
+
+    return UCT_IB_MLX5_ROCE_SRC_PORT_MIN | sport;
+}
+
 static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
                                                   uct_ib_mlx5_base_av_t *av,
-                                                  uint32_t flow_id)
+                                                  uint32_t rqpn, uint32_t qpn)
 {
-    uint16_t sport;
-
     if (!uct_ib_iface_is_roce(iface) ||
         (ntohs(av->rlid) >= UCT_IB_MLX5_ROCE_SRC_PORT_MIN)) {
         return;
     }
 
-    sport    = flow_id ^ (flow_id >> 16);
-    av->rlid = htons(UCT_IB_MLX5_ROCE_SRC_PORT_MIN | sport);
+    av->rlid = htons(uct_ib_mlx5_calc_av_sport(qpn, rqpn));
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED

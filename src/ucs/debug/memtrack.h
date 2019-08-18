@@ -13,7 +13,6 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <stdlib.h>
-#include <malloc.h>
 #include <stdio.h>
 
 
@@ -103,7 +102,8 @@ void ucs_memtrack_releasing(void *ptr);
 void *ucs_malloc(size_t size, const char *name);
 void *ucs_calloc(size_t nmemb, size_t size, const char *name);
 void *ucs_realloc(void *ptr, size_t size, const char *name);
-void *ucs_memalign(size_t boundary, size_t size, const char *name);
+int ucs_posix_memalign(void **ptr, size_t boundary, size_t size,
+                       const char *name);
 void ucs_free(void *ptr);
 void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
                off_t offset, const char *name);
@@ -130,7 +130,9 @@ char *ucs_strndup(const char *src, size_t n, const char *name);
 #define ucs_malloc(_s, ...)                        malloc(_s)
 #define ucs_calloc(_n, _s, ...)                    calloc(_n, _s)
 #define ucs_realloc(_p, _s, ...)                   realloc(_p, _s)
-#define ucs_memalign(_b, _s, ...)                  memalign(_b, _s)
+#if HAVE_POSIX_MEMALIGN
+#define ucs_posix_memalign(_pp, _b, _s, ...)       posix_memalign(_pp, _b, _s)
+#endif
 #define ucs_free(_p)                               free(_p)
 #define ucs_mmap(_a, _l, _p, _fl, _fd, _o, ...)    mmap(_a, _l, _p, _fl, _fd, _o)
 #define ucs_munmap(_a, _l)                         munmap(_a, _l)

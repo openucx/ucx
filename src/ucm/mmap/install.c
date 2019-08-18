@@ -68,7 +68,9 @@ typedef struct ucm_mmap_test_events_data {
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0, UCM_HOOK_BOTH},
     { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0, UCM_HOOK_BOTH},
+#if HAVE_MREMAP
     { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0, UCM_HOOK_BOTH},
+#endif
     { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0, UCM_HOOK_BOTH},
     { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_HOOK_BOTH},
     { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0, UCM_HOOK_RELOC},
@@ -114,6 +116,7 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
         UCM_FIRE_EVENT(events, UCM_EVENT_MMAP|UCM_EVENT_VM_MAPPED,
                        data, p = mmap(NULL, ucm_get_page_size(), PROT_READ | PROT_WRITE,
                                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+#ifdef HAVE_MREMAP
         /* generate MAP event */
         UCM_FIRE_EVENT(events, UCM_EVENT_MREMAP|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
                        data, p = mremap(p, ucm_get_page_size(),
@@ -121,6 +124,7 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
         /* generate UNMAP event */
         UCM_FIRE_EVENT(events, UCM_EVENT_MREMAP|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
                        data, p = mremap(p, ucm_get_page_size() * 2, ucm_get_page_size(), 0));
+#endif
         /* generate UNMAP event */
         UCM_FIRE_EVENT(events, UCM_EVENT_MMAP|UCM_EVENT_VM_MAPPED,
                        data, p = mmap(p, ucm_get_page_size(), PROT_READ | PROT_WRITE,

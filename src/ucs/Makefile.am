@@ -29,6 +29,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
+	datastruct/string_buffer.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -124,6 +125,7 @@ libucs_la_SOURCES = \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
 	datastruct/strided_alloc.c \
+	datastruct/string_buffer.c \
 	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \

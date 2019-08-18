@@ -60,8 +60,9 @@ enum {
     UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
-
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22),/* DEBUG: flush_state is valid */
+    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(23) /* DEBUG: close protocol is started and
+                                                               close_req is valid */
 };
 
 
@@ -313,6 +314,14 @@ typedef struct {
 } ucp_ep_flush_state_t;
 
 
+/**
+ * Status of protocol-level remote completions
+ */
+typedef struct {
+    ucp_request_t             *req;             /* Flush request which is
+                                                   used in close protocol */
+} ucp_ep_close_proto_req_t;
+
 /*
  * Endpoint extension for generic non fast-path data
  */
@@ -330,6 +339,7 @@ typedef struct {
         ucp_ep_match_t            ep_match;      /* Matching with remote endpoints */
         ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
         ucp_listener_h            listener;      /* Listener that may be associated with ep */
+        ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
     };
 } ucp_ep_ext_gen_t;
 

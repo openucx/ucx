@@ -10,6 +10,7 @@
 
 #include "dt_generic.h"
 
+#include <ucs/sys/math.h>
 #include <ucs/debug/memtrack.h>
 
 
@@ -17,9 +18,12 @@ ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *contex
                                    ucp_datatype_t *datatype_p)
 {
     ucp_dt_generic_t *dt;
+    int ret;
 
-    dt = ucs_memalign(UCS_BIT(UCP_DATATYPE_SHIFT), sizeof(*dt), "generic_dt");
-    if (dt == NULL) {
+    ret = ucs_posix_memalign((void **)&dt,
+                             ucs_max(sizeof(void *), UCS_BIT(UCP_DATATYPE_SHIFT)),
+                             sizeof(*dt), "generic_dt");
+    if (ret != 0) {
         return UCS_ERR_NO_MEMORY;
     }
 

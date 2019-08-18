@@ -192,6 +192,7 @@ typedef struct ucm_global_config {
     int                  enable_cuda_reloc;           /* Enable installing CUDA relocations */
     int                  enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t               alloc_alignment;             /* Alignment for memory allocations */
+    int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */
 } ucm_global_config_t;
 
 
@@ -437,6 +438,13 @@ int ucm_brk(void *addr);
  * associated with it.
  */
 int ucm_madvise(void *addr, size_t length, int advice);
+
+
+/**
+ * @brief Call the original implementation of @ref dlopen and all handlers
+ * associated with it.
+ */
+void *ucm_dlopen(const char *filename, int flag);
 
 
 END_C_DECLS
