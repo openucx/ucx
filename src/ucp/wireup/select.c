@@ -1433,7 +1433,8 @@ static double ucp_wireup_aux_score_func(ucp_context_h context,
             iface_attr->overhead + remote_iface_attr->overhead));
 }
 
-ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep, const ucp_ep_params_t *params,
+ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
+                                             const ucp_ep_params_t *params,
                                              const ucp_address_entry_t *address_list,
                                              unsigned address_count,
                                              ucp_wireup_select_info_t *select_info)
