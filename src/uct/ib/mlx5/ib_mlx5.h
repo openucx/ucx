@@ -140,6 +140,7 @@ typedef struct uct_ib_mlx5_md {
     uct_ib_md_t              super;
     uint32_t                 flags;
     ucs_mpool_t              dbrec_pool;
+    ucs_spinlock_t           dbrec_lock;
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
 
@@ -178,6 +179,7 @@ typedef struct uct_ib_mlx5_dbrec {
    volatile uint32_t  db[2];
    uint32_t           mem_id;
    size_t             offset;
+   uct_ib_mlx5_md_t   *md;
 } uct_ib_mlx5_dbrec_t;
 
 
@@ -546,5 +548,28 @@ uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp) { }
 
 #endif
+
+static inline uct_ib_mlx5_dbrec_t *uct_ib_mlx5_get_dbrec(uct_ib_mlx5_md_t *md)
+{
+    uct_ib_mlx5_dbrec_t *dbrec;
+
+    ucs_spin_lock(&md->dbrec_lock);
+    dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md->dbrec_pool);
+    ucs_spin_unlock(&md->dbrec_lock);
+    if (dbrec != NULL) {
+        dbrec->md = md;
+    }
+
+    return dbrec;
+}
+
+static inline void uct_ib_mlx5_put_dbrec(uct_ib_mlx5_dbrec_t *dbrec)
+{
+    uct_ib_mlx5_md_t *md = dbrec->md;
+
+    ucs_spin_lock(&md->dbrec_lock);
+    ucs_mpool_put_inline(dbrec);
+    ucs_spin_unlock(&md->dbrec_lock);
+}
 
 #endif

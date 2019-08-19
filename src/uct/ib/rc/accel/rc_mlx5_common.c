@@ -418,7 +418,7 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
         if (ret) {
             ucs_warn("mlx5dv_devx_obj_destroy(SRQ) failed: %m");
         }
-        ucs_mpool_put_inline(srq->devx.dbrec);
+        uct_ib_mlx5_put_dbrec(srq->devx.dbrec);
         mlx5dv_devx_umem_dereg(srq->devx.mem);
         ucs_free(srq->buf);
 #endif

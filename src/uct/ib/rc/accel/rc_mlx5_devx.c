@@ -46,7 +46,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
         goto err_free_buf;
     }
 
-    iface->rx.srq.devx.dbrec = ucs_mpool_get_inline(&md->dbrec_pool);
+    iface->rx.srq.devx.dbrec = uct_ib_mlx5_get_dbrec(md);
     if (!iface->rx.srq.devx.dbrec) {
         goto err_free_mem;
     }

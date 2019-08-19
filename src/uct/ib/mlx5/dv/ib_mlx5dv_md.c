@@ -384,6 +384,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    ucs_spinlock_init(&md->dbrec_lock);
     status = ucs_mpool_init(&md->dbrec_pool, 0,
                             sizeof(uct_ib_mlx5_dbrec_t), 0,
                             UCS_SYS_CACHE_LINE_SIZE,
@@ -426,10 +427,15 @@ err:
 void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
+    ucs_status_t status;
 
     mlx5dv_devx_umem_dereg(md->zero_mem);
     ucs_free(md->zero_buf);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
+    status = ucs_spinlock_destroy(&md->dbrec_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {

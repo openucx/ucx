@@ -96,7 +96,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         qp->devx.wq_buf = qp->devx.mem = NULL;
     }
 
-    qp->devx.dbrec = ucs_mpool_get_inline(&md->dbrec_pool);
+    qp->devx.dbrec = uct_ib_mlx5_get_dbrec(md);
     if (!qp->devx.dbrec) {
         goto err_free_mem;
     }
@@ -199,7 +199,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 err_free:
     mlx5dv_devx_obj_destroy(qp->devx.obj);
 err_free_db:
-    ucs_mpool_put_inline(qp->devx.dbrec);
+    uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
 err_free_mem:
     if (qp->devx.mem != NULL) {
         mlx5dv_devx_umem_dereg(qp->devx.mem);
@@ -248,7 +248,7 @@ void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp)
     if (ret) {
         ucs_error("mlx5dv_devx_obj_destroy(QP) failed: %m");
     }
-    ucs_mpool_put_inline(qp->devx.dbrec);
+    uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
     if (qp->devx.mem != NULL) {
         mlx5dv_devx_umem_dereg(qp->devx.mem);
     }
