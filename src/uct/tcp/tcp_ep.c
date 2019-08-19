@@ -948,7 +948,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
                     /* Copy the remaining part of the user's payload
                      * to the TX buffer */
                     done = ep->tx.offset - sizeof(*hdr) - sizeof(header);
-                    memcpy(((uint8_t*)hdr + ep->tx.offset),
+                    memcpy(UCS_PTR_BYTE_OFFSET(hdr, ep->tx.offset),
                            payload + done, length - done);
                 }
 
