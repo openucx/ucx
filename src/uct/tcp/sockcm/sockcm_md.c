@@ -125,8 +125,8 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
  out_destroy_id:
     close(sock_id);
 
-    is_accessible = 0; /* WILL REMOVE THIS IN FOLLOW-UP PR */
-    return is_accessible;
+    /* return is_accessible;  // WILL ADD THIS IN FOLLOW-UP PR */
+    return 0;
 }
 
 static ucs_status_t
