@@ -421,7 +421,7 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     bool has_shm_or_self = false;
 
     for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
-        if (ucp_wireup_is_lane_self_or_shm(ep, idx)) {
+        if (ucp_wireup_is_rsc_self_or_shm(ep, idx)) {
             has_shm_or_self = true;
         }
 
@@ -433,11 +433,12 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
         }
     }
 
-    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
-        // If shm or self transport exists it should be used for tag matching
-        EXPECT_TRUE(!has_shm_or_self && has_tag_offload);
+    // If shm or self transports exist they would be used for tag matching
+    // rather than network offload
+    if (has_tag_offload && !has_shm_or_self) {
+        EXPECT_TRUE(ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep)));
     } else {
-        EXPECT_TRUE(!has_tag_offload || has_shm_or_self);
+        EXPECT_FALSE(ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep)));
     }
 }
 
