@@ -231,8 +231,8 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
         return UCS_ERR_NO_PROGRESS;
     }
 
-    if ((err_cb != NULL) && (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
-        ucs_error("%s(fd=%d) failed: %m", name, fd);
+    if ((err_cb == NULL) || (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
+        ucs_error("%s(fd=%d) failed: %d", name, fd, io_errno);
     }
 
     return UCS_ERR_IO_ERROR;
