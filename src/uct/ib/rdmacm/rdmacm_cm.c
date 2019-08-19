@@ -305,8 +305,8 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     uint8_t         ack_event    = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_trace("rdmacm event (fd=%d cm_id %p): %s. Peer: %s.",
-              cm->ev_ch->fd, event->id, rdma_event_str(event->event),
+    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p): %s. Peer: %s.",
+              cm->ev_ch->fd, event->id, cm, cm->ev_ch, rdma_event_str(event->event),
               ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     /* The following applies for rdma_cm_id of type RDMA_PS_TCP only */
@@ -493,7 +493,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
                  self->ev_ch->fd, ucs_status_string(status));
     }
 
-    ucs_trace("destroying event_channel %p", self->ev_ch);
+    ucs_trace("destroying event_channel %p on cm %p", self->ev_ch, self);
     rdma_destroy_event_channel(self->ev_ch);
 }
 
