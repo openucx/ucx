@@ -73,17 +73,22 @@ typedef struct {
 } ucp_wireup_select_bw_info_t;
 
 
+/**
+ * Context for lanes selection during UCP wireup procedure
+ */
 typedef struct {
-    ucp_ep_h                  ep;
-    const ucp_ep_params_t     *params;
-    unsigned                  ep_init_flags;
-    const ucp_address_entry_t *address_list;
-    unsigned                  address_count;
-    ucp_wireup_lane_desc_t    lane_descs[UCP_MAX_LANES];
-    ucp_lane_index_t          num_lanes;
-    int                       allow_am;
-    int                       need_am;
-    ucp_wireup_select_info_t  am_info;
+    ucp_ep_h                  ep;                        /* UCP Endpoint */
+    const ucp_ep_params_t     *params;                   /* Tuning parameters for the
+                                                          * UCP endpoint */
+    unsigned                  ep_init_flags;             /* Endpoint init flags */
+    const ucp_address_entry_t *address_list;             /* Array of remote addresses */
+    unsigned                  address_count;             /* Number of remote addresses */
+    ucp_wireup_lane_desc_t    lane_descs[UCP_MAX_LANES]; /* Array of active lanes that are
+                                                          * found during selection */
+    ucp_lane_index_t          num_lanes;                 /* Number of active lanes */
+    int                       allow_am;                  /* Shows whether emulation over AM
+                                                          * is allowed or not for RMA/AMO */
+    ucp_wireup_select_info_t  am_info;                   /* AM transport selection info */
 } ucp_wireup_select_ctx_t;
 
 
@@ -457,8 +462,7 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
 }
 
 static UCS_F_NOINLINE void
-ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
-                         ucp_lane_index_t *num_lanes_p,
+ucp_wireup_add_lane_desc(ucp_wireup_select_ctx_t *select_ctx,
                          const ucp_wireup_select_info_t *select_info,
                          ucp_rsc_index_t dst_md_index,
                          uint32_t usage, int is_proxy)
@@ -471,11 +475,12 @@ ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
      * on the same transport resources.
      */
     proxy_changed = 0;
-    for (lane_desc = lane_descs; lane_desc < lane_descs + (*num_lanes_p); ++lane_desc) {
+    for (lane_desc = select_ctx->lane_descs;
+         lane_desc < select_ctx->lane_descs + select_ctx->num_lanes; ++lane_desc) {
         if ((lane_desc->rsc_index == select_info->rsc_index) &&
             (lane_desc->addr_index == select_info->addr_index))
         {
-            lane = lane_desc - lane_descs;
+            lane = lane_desc - select_ctx->lane_descs;
             ucs_assertv_always(dst_md_index == lane_desc->dst_md_index,
                                "lane[%d].dst_md_index=%d, dst_md_index=%d",
                                lane, lane_desc->dst_md_index, dst_md_index);
@@ -492,7 +497,7 @@ ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
                  * could use the new lane. It also means we should be able to
                  * add our new lane.
                  */
-                lane_desc->proxy_lane = *num_lanes_p;
+                lane_desc->proxy_lane = select_ctx->num_lanes;
                 proxy_changed = 1;
             } else if (!is_proxy && (lane_desc->proxy_lane == UCP_NULL_LANE)) {
                 /* Found non-proxy lane with same resource - don't add */
@@ -504,11 +509,11 @@ ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
     }
 
     /* If a proxy cannot find other lane with same resource, proxy to self */
-    proxy_lane = is_proxy ? (*num_lanes_p) : UCP_NULL_LANE;
+    proxy_lane = is_proxy ? select_ctx->num_lanes : UCP_NULL_LANE;
 
 out_add_lane:
-    lane_desc = &lane_descs[*num_lanes_p];
-    ++(*num_lanes_p);
+    lane_desc = &select_ctx->lane_descs[select_ctx->num_lanes];
+    ++select_ctx->num_lanes;
 
     lane_desc->rsc_index    = select_info->rsc_index;
     lane_desc->addr_index   = select_info->addr_index;
@@ -622,8 +627,7 @@ ucp_wireup_add_memaccess_lanes(ucp_wireup_select_ctx_t *select_ctx,
 
     /* Add to the list of lanes and remove all occurrences of the remote md
      * from the address list, to avoid selecting the same remote md again. */
-    ucp_wireup_add_lane_desc(select_ctx->lane_descs, &select_ctx->num_lanes,
-                             &select_info, dst_md_index, usage, 0);
+    ucp_wireup_add_lane_desc(select_ctx, &select_info, dst_md_index, usage, 0);
     remote_md_map &= ~UCS_BIT(dst_md_index);
     tl_bitmap = ucp_wireup_unset_tl_by_md(ep, tl_bitmap,
                                           select_info.rsc_index);
@@ -654,8 +658,7 @@ ucp_wireup_add_memaccess_lanes(ucp_wireup_select_ctx_t *select_ctx,
 
         /* Add lane description and remove all occurrences of the remote md. */
         dst_md_index = select_ctx->address_list[select_info.addr_index].md_index;
-        ucp_wireup_add_lane_desc(select_ctx->lane_descs, &select_ctx->num_lanes,
-                                 &select_info, dst_md_index, usage, 0);
+        ucp_wireup_add_lane_desc(select_ctx, &select_info, dst_md_index, usage, 0);
         remote_md_map &= ~UCS_BIT(dst_md_index);
         tl_bitmap = ucp_wireup_unset_tl_by_md(ep, tl_bitmap,
                                               select_info.rsc_index);
@@ -665,8 +668,9 @@ ucp_wireup_add_memaccess_lanes(ucp_wireup_select_ctx_t *select_ctx,
 
 out:
     if ((status != UCS_OK) && select_ctx->allow_am) {
-        select_ctx->need_am = 1;  /* using emulation over active messages */
-        status              = UCS_OK;
+        /* using emulation over active messages */
+        select_ctx->ep_init_flags |= UCP_EP_CREATE_AM_LANE;
+        status                     = UCS_OK;
     }
 
     return status;
@@ -849,31 +853,30 @@ static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
             UCT_IFACE_FLAG_EVENT_RECV_SIG);
 }
 
-static inline int ucp_wireup_is_am_required(ucp_ep_h ep,
-                                            const ucp_ep_params_t *params,
-                                            unsigned ep_init_flags,
-                                            ucp_wireup_lane_desc_t *lane_descs,
-                                            int num_lanes_p)
+static inline int
+ucp_wireup_is_am_required(const ucp_wireup_select_ctx_t *select_ctx)
 {
+    ucp_ep_h ep = select_ctx->ep;
     ucp_lane_index_t lane;
 
     /* Check if we need active messages from the configurations, for wireup.
      * If not, check if am is required due to p2p transports */
 
-    if ((ep_init_flags & UCP_EP_CREATE_AM_LANE) ||
-        (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR)) {
+    if ((select_ctx->ep_init_flags & UCP_EP_CREATE_AM_LANE) ||
+        (select_ctx->params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR)) {
         return 1;
     }
 
-    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+    if (!(select_ctx->ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
         (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | 
                                             UCP_FEATURE_STREAM | 
                                             UCP_FEATURE_AM))) {
         return 1;
     }
 
-    for (lane = 0; lane < num_lanes_p; ++lane) {
-        if (ucp_worker_is_tl_p2p(ep->worker, lane_descs[lane].rsc_index)) {
+    for (lane = 0; lane < select_ctx->num_lanes; ++lane) {
+        if (ucp_worker_is_tl_p2p(ep->worker,
+                                 select_ctx->lane_descs[lane].rsc_index)) {
             return 1;
         }
     }
@@ -891,10 +894,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_wireup_select_ctx_t *select_ctx)
     ucs_status_t status;
     int is_proxy;
 
-    if (!ucp_wireup_is_am_required(ep, select_ctx->params,
-                                   select_ctx->ep_init_flags,
-                                   select_ctx->lane_descs,
-                                   select_ctx->num_lanes)) {
+    if (!ucp_wireup_is_am_required(select_ctx)) {
         return UCS_OK;
     }
 
@@ -929,9 +929,8 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_wireup_select_ctx_t *select_ctx)
     is_proxy         = ucp_wireup_is_lane_proxy(ep, am_info->rsc_index,
                                                 remote_cap_flags);
 
-    ucp_wireup_add_lane_desc(select_ctx->lane_descs, &select_ctx->num_lanes,
-                             am_info, dst_md_index, UCP_WIREUP_LANE_USAGE_AM,
-                             is_proxy);
+    ucp_wireup_add_lane_desc(select_ctx, am_info, dst_md_index,
+                             UCP_WIREUP_LANE_USAGE_AM, is_proxy);
 
     return UCS_OK;
 }
@@ -999,9 +998,8 @@ ucp_wireup_add_bw_lanes(ucp_wireup_select_ctx_t *select_ctx,
                                                      remote_cap_flags));
         dst_md_index     = select_ctx->address_list[select_info.addr_index].md_index;
 
-        ucp_wireup_add_lane_desc(select_ctx->lane_descs, &select_ctx->num_lanes,
-                                 &select_info, dst_md_index, bw_info->usage,
-                                 is_proxy);
+        ucp_wireup_add_lane_desc(select_ctx, &select_info, dst_md_index,
+                                 bw_info->usage, is_proxy);
         md_map |= UCS_BIT(context->tl_rscs[select_info.rsc_index].md_index);
         num_lanes++;
 
@@ -1194,9 +1192,8 @@ ucp_wireup_add_tag_lane(ucp_wireup_select_ctx_t *select_ctx,
                                                 remote_cap_flags);
     dst_md_index     = select_ctx->address_list[select_info.addr_index].md_index;
 
-    ucp_wireup_add_lane_desc(select_ctx->lane_descs, &select_ctx->num_lanes,
-                             &select_info, dst_md_index, UCP_WIREUP_LANE_USAGE_TAG,
-                             is_proxy);
+    ucp_wireup_add_lane_desc(select_ctx, &select_info, dst_md_index,
+                             UCP_WIREUP_LANE_USAGE_TAG, is_proxy);
 
 out:
     return UCS_OK;
@@ -1259,7 +1256,6 @@ ucp_wireup_select_ctx_init(ucp_wireup_select_ctx_t *select_ctx,
     select_ctx->num_lanes          = 0;
     select_ctx->allow_am           =
         ucp_wireup_allow_am_emulation_layer(params, ep_init_flags);
-    select_ctx->need_am            = 0;
     memset(select_ctx->lane_descs, 0, sizeof(select_ctx->lane_descs));
 }
 
@@ -1277,10 +1273,6 @@ ucp_wireup_search_lanes(ucp_wireup_select_ctx_t *select_ctx,
     status = ucp_wireup_add_amo_lanes(select_ctx);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (select_ctx->need_am) {
-        select_ctx->ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     }
 
     status = ucp_wireup_add_am_lane(select_ctx);
