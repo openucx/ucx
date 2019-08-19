@@ -37,10 +37,9 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "call to non-blocking vector socket send",
    ucs_offsetof(uct_tcp_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
 
-  {"MIN_AM_SHORTV", "2kb",
-   "Threshold for switching non-blocking send to IOV non-blocking\n"
-   "send if available",
-   ucs_offsetof(uct_tcp_iface_config_t, min_am_shortv), UCS_CONFIG_TYPE_MEMUNITS},
+  {"SENDV_THRESH", "2kb",
+   "Threshold for switching from send() to sendmsg() for short active messages",
+   ucs_offsetof(uct_tcp_iface_config_t, sendv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PREFER_DEFAULT", "y",
    "Give higher priority to the default network interface on the host",
@@ -442,10 +441,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                                sizeof(uct_tcp_am_hdr_t);
 
     if (ucs_socket_max_iov() >= UCT_TCP_EP_AM_SHORTV_IOV_COUNT) {
-        self->config.min_am_shortv = config->min_am_shortv;
+        self->config.sendv_thresh = config->sendv_thresh;
     } else {
         /* AM Short with non-blocking vector send can't be used */
-        self->config.min_am_shortv = UCS_MEMUNITS_INF;
+        self->config.sendv_thresh = UCS_MEMUNITS_INF;
     }
 
     /* Maximum IOV count allowed by user's configuration (considering TCP

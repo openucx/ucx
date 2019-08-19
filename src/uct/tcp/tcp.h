@@ -235,7 +235,7 @@ typedef struct uct_tcp_iface {
     struct {
         size_t                    tx_seg_size;       /* TX AM buffer size */
         size_t                    rx_seg_size;       /* RX AM buffer size */
-        size_t                    min_am_shortv;     /* Minimum size of user's payload from which
+        size_t                    sendv_thresh;      /* Minimum size of user's payload from which
                                                       * non-blocking vector send should be used */
         struct {
             size_t                max_iov;           /* Maximum supported IOVs limited by
@@ -267,7 +267,7 @@ typedef struct uct_tcp_iface_config {
     size_t                        tx_seg_size;
     size_t                        rx_seg_size;
     size_t                        max_iov;
-    size_t                        min_am_shortv;
+    size_t                        sendv_thresh;
     int                           prefer_default;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
