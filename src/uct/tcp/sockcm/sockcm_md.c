@@ -68,8 +68,8 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     uct_sockcm_md_t *sockcm_md      = ucs_derived_of(md, uct_sockcm_md_t);
     int is_accessible               = 0;
     int sock_id                     = -1;
+    size_t sockaddr_len             = 0;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    size_t sockaddr_len;
 
     param_sockaddr = (struct sockaddr *) sockaddr->addr;
 
@@ -83,11 +83,12 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         return 0;
     }
 
+    if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
+        ucs_debug("family != AF_INET and != AF_INET6");
+        goto out_destroy_id;
+    }
+
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
-        if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
-            ucs_debug("family != AF_INET and != AF_INET6");
-            goto out_destroy_id;
-        }
         ucs_debug("addr_len = %ld", (long int) sockaddr_len);
 
         if (bind(sock_id, param_sockaddr, sockaddr_len)) {
