@@ -180,6 +180,15 @@ struct ucp_worker_iface {
 };
 
 
+/**
+ * UCP worker CM, which encapsulates UCT CM and its auxiliary info.
+ */
+struct ucp_worker_cm {
+    uct_cm_h                      cm;            /* UCT CM handle */
+    ucp_rsc_index_t               cmpt_idx;      /* Index of corresponding
+                                                    component */
+};
+
 /** 
  * Data that is stored about each callback registered with a worker
  */
@@ -221,7 +230,7 @@ typedef struct ucp_worker {
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
-    uct_cm_h                      *cms;          /* Array of CMs, one for each component */
+    ucp_worker_cm_t               *cms;          /* Array of CMs, one for each component */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */

@@ -1174,8 +1174,8 @@ static void ucp_worker_close_cms(ucp_worker_h worker)
     const ucp_rsc_index_t num_cms = ucp_worker_num_cm_cmpts(worker);
     ucp_rsc_index_t i;
 
-    for (i = 0; (i < num_cms) && (worker->cms[i] != NULL); ++i) {
-        uct_cm_close(worker->cms[i]);
+    for (i = 0; (i < num_cms) && (worker->cms[i].cm != NULL); ++i) {
+        uct_cm_close(worker->cms[i].cm);
     }
 
     ucs_free(worker->cms);
@@ -1206,13 +1206,15 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     cm_index = 0;
     ucs_for_each_bit(cmpt_index, context->config.cm_cmpts_bitmap) {
         status = uct_cm_open(context->tl_cmpts[cmpt_index].cmpt, worker->uct,
-                             &worker->cms[cm_index++]);
+                             &worker->cms[cm_index].cm);
         if (status != UCS_OK) {
             ucs_error("failed to open CM on component %s with status %s",
                       context->tl_cmpts[cmpt_index].attr.name,
                       ucs_status_string(status));
             goto err_free_cms;
         }
+
+        worker->cms[cm_index++].cmpt_idx = cmpt_index;
     }
 
     status = UCS_OK;
