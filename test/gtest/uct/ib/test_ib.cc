@@ -261,21 +261,11 @@ public:
             UCS_TEST_SKIP_R(device_str.str() + " is empty");
         }
 
-        struct ibv_ah_attr ah_attr;
-        memset(&ah_attr, 0, sizeof(ah_attr));
-        ah_attr.dlid           = m_port_attr.lid;
-        ah_attr.port_num       = m_port;
-        ah_attr.is_global      = 1;
-        ah_attr.grh.dgid       = gid;
-        ah_attr.grh.sgid_index = gid_index;
-        ah_attr.grh.hop_limit  = 255;
-
-        struct ibv_ah *ah = ibv_create_ah(ib_md->pd, &ah_attr);
-        if (ah == NULL) {
-            UCS_TEST_SKIP_R("failed to create address handle on " + device_str.str());
+        if (!uct_ib_device_test_roce_gid_index(&ib_md->dev, m_port, &gid,
+                                               gid_index)) {
+            UCS_TEST_SKIP_R("failed to create address handle on " +
+                            device_str.str());
         }
-
-        ibv_destroy_ah(ah);
     }
 };
 

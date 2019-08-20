@@ -285,6 +285,10 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
                                      unsigned gid_index, union ibv_gid *gid,
                                      int *is_roce_v2);
 
+int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
+                                      const union ibv_gid *gid,
+                                      uint8_t gid_index);
+
 int uct_ib_get_cqe_size(int cqe_size_min);
 
 static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
