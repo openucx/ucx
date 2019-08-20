@@ -11,7 +11,7 @@
 #include "sockcm_md.h"
 
 #define UCT_SOCKCM_MAX_CONN_PRIV \
-        (UCT_SOCKCM_PRIV_DATA_LEN) - (sizeof(ssize_t))
+        (UCT_SOCKCM_PRIV_DATA_LEN - sizeof(ssize_t))
 
 
 typedef struct uct_sockcm_iface_config {
@@ -31,7 +31,6 @@ struct uct_sockcm_iface {
     uint32_t                             cb_flags;
 
     /* Field used only for client side */
-    ucs_list_link_t                      pending_eps_list;
     ucs_list_link_t                      used_sock_ids_list;
 };
 

@@ -122,29 +122,6 @@ static uct_iface_ops_t uct_sockcm_iface_ops = {
     .iface_get_address        = uct_sockcm_iface_get_address
 };
 
-void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface)
-{
-    ucs_status_t status;
-    uct_sockcm_ep_t *ep, *tmp;
-
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-
-    /* try to start an ep from the pending eps list */
-    ucs_list_for_each_safe(ep, tmp, &iface->pending_eps_list, list_elem) {
-        status = uct_sockcm_ep_set_sock_id(iface, ep);
-        if (status != UCS_OK) {
-            continue;
-        }
-
-        ucs_list_del(&ep->list_elem);
-        ep->is_on_pending = 0;
-
-        uct_sockcm_ep_set_failed(&iface->super.super, &ep->super.super, status);
-    }
-
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-}
-
 static void uct_sockcm_iface_event_handler(int fd, void *arg)
 {
     ucs_debug("not implemented yet");
@@ -245,7 +222,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
         self->is_server        = 0;
     }
 
-    ucs_list_head_init(&self->pending_eps_list);
     ucs_list_head_init(&self->used_sock_ids_list);
 
     return UCS_OK;

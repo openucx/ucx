@@ -45,7 +45,7 @@ ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 }
 
 static int uct_sockcm_is_addr_accessible(int sock_id, struct sockaddr *addr,
-                                         int addrlen)
+                                         size_t addrlen)
 {
     char host[UCS_SOCKADDR_STRING_LEN];
     char serv[UCS_SOCKADDR_STRING_LEN];
@@ -64,13 +64,12 @@ static int uct_sockcm_is_addr_accessible(int sock_id, struct sockaddr *addr,
 int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                       uct_sockaddr_accessibility_t mode)
 {
-    uct_sockcm_md_t *sockcm_md = ucs_derived_of(md, uct_sockcm_md_t);
-    int is_accessible = 0;
-    int sock_id = -1;
-    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr *param_sockaddr = NULL;
-    struct sockaddr_in *addr;
-    socklen_t sockaddr_len;
+    uct_sockcm_md_t *sockcm_md      = ucs_derived_of(md, uct_sockcm_md_t);
+    int is_accessible               = 0;
+    int sock_id                     = -1;
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    size_t sockaddr_len;
 
     param_sockaddr = (struct sockaddr *) sockaddr->addr;
 
@@ -85,16 +84,9 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     }
 
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
-        addr = (struct sockaddr_in *) param_sockaddr;
-        if (addr->sin_family == AF_INET) {
-            ucs_debug("family = AF_INET");
-            sockaddr_len = sizeof(struct sockaddr_in);
-        } else if (addr->sin_family == AF_INET6) {
-            ucs_debug("family = AF_INET6");
-            sockaddr_len = sizeof(struct sockaddr_in6);
-        } else {
+        if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
             ucs_debug("family != AF_INET and != AF_INET6");
-            sockaddr_len = -1;
+            goto out_destroy_id;
         }
         ucs_debug("addr_len = %ld", (long int) sockaddr_len);
 
@@ -112,7 +104,7 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     }
 
     is_accessible = uct_sockcm_is_addr_accessible(sock_id, param_sockaddr,
-                                                  sockaddr->addrlen);
+                                                  sockaddr_len);
     if (!is_accessible) {
         goto out_destroy_id;
     }
@@ -134,12 +126,10 @@ uct_sockcm_md_open(uct_component_t *component, const char *md_name,
                    const uct_md_config_t *config, uct_md_h *md_p)
 {
     uct_sockcm_md_t *md;
-    ucs_status_t status;
 
     md = ucs_malloc(sizeof(*md), "sockcm_md");
     if (md == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
+        return UCS_ERR_NO_MEMORY;
     }
 
     md->super.ops            = &uct_sockcm_md_ops;
@@ -147,10 +137,8 @@ uct_sockcm_md_open(uct_component_t *component, const char *md_name,
 
     /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
-    status = UCS_OK;
+    return UCS_OK;
 
-out:
-    return status;
 }
 
 uct_component_t uct_sockcm_component = {

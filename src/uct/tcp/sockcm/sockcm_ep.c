@@ -48,14 +48,6 @@ out:
     return status;
 }
 
-static inline void uct_sockcm_ep_add_to_pending(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
-{
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_list_add_tail(&iface->pending_eps_list, &ep->list_elem);
-    ep->is_on_pending = 1;
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-}
-
 static void uct_sockcm_ep_event_handler(int fd, void *arg)
 {
     ucs_debug("not implemented");
@@ -65,8 +57,10 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
 {
     const ucs_sock_addr_t *sockaddr = params->sockaddr;
     uct_sockcm_iface_t    *iface    = NULL;
+    struct sockaddr *param_sockaddr = NULL;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
+    size_t sockaddr_len;
 
     iface = ucs_derived_of(params->iface, uct_sockcm_iface_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
@@ -95,23 +89,19 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     pthread_mutex_init(&self->ops_mutex, NULL);
     ucs_queue_head_init(&self->ops);
 
-    if (sockaddr->addr->sa_family == AF_INET) {
-        memcpy(&self->remote_addr, sockaddr->addr, sizeof(struct sockaddr_in));
-    } else if (sockaddr->addr->sa_family == AF_INET6) {
-        memcpy(&self->remote_addr, sockaddr->addr, sizeof(struct sockaddr_in6));
-    } else {
-        ucs_error("sockcm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
-        status = UCS_ERR_IO_ERROR;
-        goto err;
+    param_sockaddr = (struct sockaddr *) sockaddr->addr;
+    if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
+       ucs_error("sockcm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
+       status = UCS_ERR_IO_ERROR;
+       goto err;
     }
 
+    memcpy(&self->remote_addr, param_sockaddr, sockaddr_len);
+
     self->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
-    self->is_on_pending = 0;
 
     status = uct_sockcm_ep_set_sock_id(iface, self);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        goto add_to_pending;
-    } else if (status != UCS_OK) {
+    if (status != UCS_OK) {
         goto err;
     }
 
@@ -120,8 +110,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
-    status = ucs_socket_connect(self->sock_id_ctx->sock_id, sockaddr->addr);
-    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+    status = ucs_socket_connect(self->sock_id_ctx->sock_id, param_sockaddr);
+    if (UCS_STATUS_IS_ERR(status)) {
         ucs_debug("%d: connect fail\n", self->sock_id_ctx->sock_id);
         self->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
         goto err;
@@ -144,12 +134,10 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
 
     goto out;
 
-add_to_pending:
-    uct_sockcm_ep_add_to_pending(iface, self);
 out:
     ucs_debug("created an SOCKCM endpoint on iface %p, "
               "remote addr: %s", iface,
-               ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
+               ucs_sockaddr_str(param_sockaddr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
     self->status = UCS_INPROGRESS;
     return UCS_OK;
@@ -172,10 +160,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
     ucs_async_remove_handler(self->sock_id_ctx->sock_id, 0);
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
-    if (self->is_on_pending) {
-        ucs_list_del(&self->list_elem);
-        self->is_on_pending = 0;
-    }
 
     uct_worker_progress_unregister_safe(&iface->super.worker->super,
                                         &self->slow_prog_id);
