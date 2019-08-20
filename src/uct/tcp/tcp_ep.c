@@ -628,7 +628,8 @@ static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
             count += uct_tcp_ep_sendv(ep, &sent_length);
         }
 
-        ucs_trace_data("tcp_ep %p: sent %zu bytes", ep, sent_length);
+        ucs_trace_data("ep %p fd %d sent %zu/%zu bytes, moved to offest %zu",
+                       ep, ep->fd, ep->tx.offset, ep->tx.length, sent_length);
 
         if (!uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
             uct_tcp_ep_ctx_reset(&ep->tx);
@@ -653,7 +654,9 @@ uct_tcp_ep_comp_recv_am(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                         uct_tcp_am_hdr_t *hdr)
 {
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, hdr->am_id,
-                       hdr + 1, hdr->length, "RECV ep %p fd %d", ep, ep->fd);
+                       hdr + 1, hdr->length,
+                       "RECV: ep %p fd %d received %zu/%zu bytes",
+                       ep, ep->fd, ep->rx.offset, ep->rx.length);
     uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1, hdr->length, 0);
 }
 
@@ -792,7 +795,7 @@ uct_tcp_ep_set_outstanding_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
         memcpy(ctx->iov[1].iov_base, header, header_length);
     }
 
-    ctx->iov_index  = 0;
+    ctx->iov_index = 0;
     ucs_iov_advance(ctx->iov, ctx->iov_cnt, &ctx->iov_index, ep->tx.offset);
     uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
 }
@@ -808,8 +811,9 @@ static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     uct_tcp_ep_send(ep, &sent_length);
 
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
-                       hdr + 1, hdr->length, "SEND (sent %zu bytes) %p fd %d",
-                       sent_length, ep, ep->fd);
+                       hdr + 1, hdr->length, "SEND: ep %p fd %d sent "
+                       "%zu/%zu bytes, moved to offest %zu",
+                       ep, ep->fd, ep->tx.offset, ep->tx.length, sent_length);
 
     if (ucs_likely(!uct_tcp_ep_ctx_buf_need_progress(&ep->tx))) {
         uct_tcp_ep_ctx_reset(&ep->tx);
@@ -863,9 +867,11 @@ uct_tcp_ep_am_sendv(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                         * data tracing is enabled */
                        uct_tcp_ep_am_sendv_get_trace_payload(hdr, header,
                                                              &iov[2], short_sendv),
-                       hdr->length, "SENDV (sent %zu bytes) %p fd %d iov cnt %zu "
-                       "iov[1](addr %p len %zu) iov[2](addr %p len %zu)",
-                       ep->tx.offset, ep, ep->fd, iov_cnt,
+                       hdr->length, "SEND: ep %p fd %d sent %zu/%zu bytes, "
+                       "moved to offest %zu, iov cnt %zu "
+                       "[addr %p len %zu] [addr %p len %zu]",
+                       ep, ep->fd, ep->tx.offset, ep->tx.length,
+                       ep->tx.offset, iov_cnt,
                        /* print user-defined header or
                         * first iovec with a payload */
                        ((iov_cnt > 1) ? iov[1].iov_base : NULL),
