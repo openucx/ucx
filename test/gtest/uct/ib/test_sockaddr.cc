@@ -333,7 +333,8 @@ protected:
         TEST_CM_STATE_CLIENT_DISCONNECTED = UCS_BIT(3),
         TEST_CM_STATE_SERVER_DISCONNECTED = UCS_BIT(4),
         TEST_CM_STATE_SERVER_REJECTED     = UCS_BIT(5),
-        TEST_CM_STATE_CLIENT_GOT_REJECT   = UCS_BIT(6)
+        TEST_CM_STATE_CLIENT_GOT_REJECT   = UCS_BIT(6),
+        TEST_CM_STATE_CLIENT_GOT_ERROR    = UCS_BIT(7)
     };
 
 public:
@@ -449,8 +450,12 @@ protected:
 
         if (status == UCS_ERR_REJECTED) {
             self->m_cm_state |= TEST_CM_STATE_CLIENT_GOT_REJECT;
+        } else if (status != UCS_OK) {
+            self->m_cm_state |= TEST_CM_STATE_CLIENT_GOT_ERROR;
         } else {
-            ASSERT_UCS_OK(status);
+            EXPECT_TRUE(ucs_test_all_flags(remote_data->field_mask,
+                                           (UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH |
+                                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA)));
             EXPECT_EQ(entity::server_priv_data.length() + 1, remote_data->conn_priv_data_length);
             EXPECT_EQ(entity::server_priv_data,
                       std::string(static_cast<const char *>(remote_data->conn_priv_data)));
@@ -584,6 +589,8 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
 
     m_reject_conn_request = true;
 
+    /* wrap errors since a reject is expected */
+    scoped_log_handler slh(wrap_errors_logger);
     cm_listen_and_connect();
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_REJECTED |
@@ -690,6 +697,90 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     EXPECT_EQ(num_conns_on_client, m_server_disconnect_cnt);
     EXPECT_EQ(num_conns_on_client, m_client_disconnect_cnt);
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
+{
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                     << " Interface: " << GetParam()->dev_name;
+
+    /* wrap errors since a reject is expected */
+    scoped_log_handler slh(wrap_errors_logger);
+
+    /* client - try to connect to a server that isn't listening */
+    m_client->connect(0, *m_server, 0, m_connect_addr,
+                      client_connect_cb, client_disconnect_cb, this);
+
+    EXPECT_FALSE(m_cm_state & TEST_CM_STATE_CONNECT_REQUESTED);
+
+    /* with the TCP port space (which is currently tested with rdmacm),
+     * in this case, a REJECT event will be generated on the client side */
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT));
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
+{
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                    << " Interface: " << GetParam()->dev_name;
+
+    /* Listen */
+    cm_start_listen();
+
+    m_connect_addr.set_port(1);
+
+    /* wrap errors since a reject is expected */
+    scoped_log_handler slh(wrap_errors_logger);
+
+    /* client - try to connect to a non-existing port on the server side. */
+    m_client->connect(0, *m_server, 0, m_connect_addr,
+                      client_connect_cb, client_disconnect_cb, this);
+
+    /* with the TCP port space (which is currently tested with rdmacm),
+     * in this case, a REJECT event will be generated on the client side */
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT));
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
+{
+    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
+                    << " Interface: " << GetParam()->dev_name;
+
+    struct sockaddr_in addr;
+    ucs_status_t status;
+    size_t size;
+
+    /* Listen */
+    cm_start_listen();
+
+    /* 240.0.0.0/4 - This block, formerly known as the Class E address
+       space, is reserved for future use; see [RFC1112], Section 4.
+       therefore, this value can be used as a non-existing IP for this test */
+    memset(&addr, 0, sizeof(struct sockaddr_in));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("240.0.0.0");
+    addr.sin_port        = m_listen_addr.get_port();
+
+    status = ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size);
+    ASSERT_UCS_OK(status);
+
+    m_connect_addr.set_sock_addr(*(struct sockaddr*)&addr, size);
+
+    /* wrap errors now since the client will try to connect to a non existing IP */
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        /* client - try to connect to a non-existing IP */
+        m_client->connect(0, *m_server, 0, m_connect_addr,
+                          client_connect_cb, client_disconnect_cb, this);
+
+        wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_ERROR);
+        EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_ERROR));
+
+        EXPECT_FALSE(m_cm_state & TEST_CM_STATE_CONNECT_REQUESTED);
+        EXPECT_FALSE(m_cm_state &
+                    (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED));
+    }
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)

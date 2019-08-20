@@ -15,6 +15,30 @@ void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                   remote_data, status);
 }
 
+void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
+                                        ucs_status_t status)
+{
+    cep->wireup.server.connect_cb(&cep->super.super, cep->user_data, status);
+}
+
+void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
+                               uct_cm_remote_data_t *remote_data,
+                               ucs_status_t status)
+{
+    if (cep->flags & UCT_RDMACM_CM_EP_CONNECTED) {
+        cep->disconnect_cb(&cep->super.super, cep->user_data);
+        cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
+    } else {
+        ucs_assert(status != UCS_OK);
+        if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
+            uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
+        } else {
+            ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
+            uct_rdmacm_cm_ep_server_connect_cb(cep, status);
+        }
+    }
+}
+
 static UCS_F_ALWAYS_INLINE
 uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
 {
@@ -158,6 +182,7 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
+    cep->flags                   |= UCT_RDMACM_CM_EP_ON_CLIENT;
     cep->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
 
     ucs_trace("rdma_create_id on client ep %p (rdmacm %p,event_channel=%p)",
@@ -200,15 +225,17 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     struct rdma_conn_param conn_param;
     ucs_status_t status;
 
+    cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
+
     if (event->listen_id->channel != cm->ev_ch) {
         /* the server will open the ep to the client on a different CM.
          * not the one on which its listener is listening on */
         if (rdma_migrate_id(event->id, cm->ev_ch)) {
             ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",
                       event->id, cm->ev_ch, cm);
-            uct_rdmacm_cm_reject(event->id, UCS_ERR_IO_ERROR);
+            uct_rdmacm_cm_reject(event->id);
             status = UCS_ERR_IO_ERROR;
-            goto err_destroy_id;
+            goto err_server_cb;
         }
 
         ucs_debug("migrated id %p from event_channel=%p to "
@@ -226,8 +253,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
 
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id, status);
-        goto err_destroy_id;
+        uct_rdmacm_cm_reject(event->id);
+        goto err_server_cb;
     }
 
     ucs_trace("rdma_accept on cm_id %p", event->id);
@@ -236,13 +263,14 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         ucs_error("rdma_accept(on id=%p) failed: %m", event->id);
         uct_rdmacm_cm_ep_destroy_dummy_cq_qp(cep);
         status = UCS_ERR_IO_ERROR;
-        goto err_destroy_id;
+        goto err_server_cb;
     }
 
     uct_rdmacm_cm_ack_event(event);
     return UCS_OK;
 
-err_destroy_id:
+err_server_cb:
+    uct_rdmacm_cm_ep_error_cb(cep, NULL, status);
     uct_rdmacm_cm_destroy_id(event->id);
     uct_rdmacm_cm_ack_event(event);
     return status;
@@ -307,6 +335,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
                                 params->user_data : NULL;
     self->cq                  = NULL;
     self->qp                  = NULL;
+    self->flags               = 0;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_ep_client_init(self, params);

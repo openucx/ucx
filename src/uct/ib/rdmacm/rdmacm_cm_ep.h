@@ -16,7 +16,8 @@ typedef struct uct_rdmacm_cm_ep {
     struct ibv_qp          *qp; /* Dummy qp used for generating a unique qp_num */
     void                   *user_data;    /* User data associated with the endpoint */
     uct_ep_disconnect_cb_t disconnect_cb; /* Callback to handle the disconnection
-                                             of the remote peer*/
+                                             of the remote peer */
+    uint8_t                flags;
 
     struct {
         /* Callback to fill the user's private data */
@@ -36,6 +37,11 @@ typedef struct uct_rdmacm_cm_ep {
     } wireup;
 } uct_rdmacm_cm_ep_t;
 
+enum {
+    UCT_RDMACM_CM_EP_ON_CLIENT   = UCS_BIT(0),
+    UCT_RDMACM_CM_EP_ON_SERVER   = UCS_BIT(1),
+    UCT_RDMACM_CM_EP_CONNECTED   = UCS_BIT(2)
+};
 
 UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
@@ -53,3 +59,10 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
 void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         uct_cm_remote_data_t *remote_data,
                                         ucs_status_t error);
+
+void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
+                                        ucs_status_t status);
+
+void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
+                               uct_cm_remote_data_t *remote_data,
+                               ucs_status_t status);
