@@ -488,7 +488,7 @@ protected:
 
     void wait_for_client_server_counters(volatile int *server_cnt,
                                          volatile int *client_cnt, int val,
-                                         double timeout = DEFAULT_TIMEOUT_SEC) {
+                                         double timeout = 10 * DEFAULT_TIMEOUT_SEC) {
         ucs_time_t deadline;
 
         deadline = ucs_get_time() + ucs_time_from_sec(timeout) *
