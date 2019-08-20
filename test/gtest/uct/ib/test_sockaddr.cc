@@ -376,6 +376,10 @@ protected:
         params.user_data       = static_cast<test_uct_cm_sockaddr *>(this);
         /* if origin port set in init() is busy, listen() will retry with another one */
         m_server->listen(m_listen_addr, params);
+
+        /* the listen function may have changed the initial port on the listener's
+         * address. update this port for the address to connect to */
+        m_connect_addr.set_port(m_listen_addr.get_port());
     }
 
     void cm_listen_and_connect() {
