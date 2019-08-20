@@ -23,12 +23,15 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/callbackq.h \
+	datastruct/khash.h \
 	datastruct/list_types.h \
 	datastruct/list.h \
 	datastruct/mpool.h \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
+	datastruct/string_buffer.h \
+	datastruct/string_set.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -77,7 +80,6 @@ noinst_HEADERS = \
 	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
-	datastruct/khash.h \
 	debug/assert.h \
 	debug/debug.h \
 	debug/log.h \
@@ -124,6 +126,8 @@ libucs_la_SOURCES = \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
 	datastruct/strided_alloc.c \
+	datastruct/string_buffer.c \
+	datastruct/string_set.c \
 	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \

@@ -14,7 +14,6 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
-#include <malloc.h>
 
 
 /* Initial allocation size */

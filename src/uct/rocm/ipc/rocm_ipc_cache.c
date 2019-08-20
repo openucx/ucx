@@ -15,8 +15,13 @@
 
 static ucs_pgt_dir_t *uct_rocm_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
-    return ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN, sizeof(ucs_pgt_dir_t),
-                        "rocm_ipc_cache_pgdir");
+    void *ptr;
+    int ret;
+
+    ret =  ucs_posix_memalign(&ptr,
+                              ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                              sizeof(ucs_pgt_dir_t), "rocm_ipc_cache_pgdir");
+    return (ret == 0) ? ptr : NULL;
 }
 
 static void uct_rocm_ipc_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
@@ -93,6 +98,7 @@ ucs_status_t uct_rocm_ipc_cache_map_memhandle(void *arg, uct_rocm_ipc_key_t *key
     ucs_pgt_region_t *pgt_region;
     uct_rocm_ipc_cache_region_t *region;
     hsa_status_t hsa_status;
+    int ret;
 
     pthread_rwlock_rdlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
@@ -136,10 +142,11 @@ ucs_status_t uct_rocm_ipc_cache_map_memhandle(void *arg, uct_rocm_ipc_key_t *key
     }
 
     /*create new cache entry */
-    region = ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN,
-                          sizeof(uct_rocm_ipc_cache_region_t),
-                          "uct_rocm_ipc_cache_region");
-    if (region == NULL) {
+    ret = ucs_posix_memalign((void **)&region,
+                             ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                             sizeof(uct_rocm_ipc_cache_region_t),
+                             "uct_rocm_ipc_cache_region");
+    if (ret != 0) {
         ucs_warn("failed to allocate uct_rocm_ipc_cache region");
         status = UCS_ERR_NO_MEMORY;
         goto err;

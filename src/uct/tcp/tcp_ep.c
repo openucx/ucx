@@ -601,7 +601,7 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
         (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
         (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */) {
         ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
-                  "was dropped by the peer",
+                  "connection was dropped by the peer",
                   ep, io_errno, strerror(io_errno),
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
                                    str_local_addr, UCS_SOCKADDR_STRING_LEN),

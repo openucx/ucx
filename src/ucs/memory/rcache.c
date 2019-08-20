@@ -101,8 +101,13 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
 
 static ucs_pgt_dir_t *ucs_rcache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
-    return ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN, sizeof(ucs_pgt_dir_t),
-                        "rcache_pgdir");
+    void *ptr;
+    int error;
+
+    error = ucs_posix_memalign(&ptr,
+                               ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                               sizeof(ucs_pgt_dir_t), "rcache_pgdir");
+    return (error == 0) ? ptr : NULL;
 }
 
 static void ucs_rcache_pgt_dir_release(const ucs_pgtable_t *pgtable,
@@ -463,7 +468,7 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
     ucs_rcache_region_t *region;
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
-    int merged;
+    int error, merged;
 
     ucs_trace_func("rcache=%s, address=%p, length=%zu", rcache->name, address,
                    length);
@@ -498,9 +503,11 @@ retry:
     }
 
     /* Allocate structure for new region */
-    region = ucs_memalign(UCS_PGT_ENTRY_MIN_ALIGN, rcache->params.region_struct_size,
-                          "rcache_region");
-    if (region == NULL) {
+    error = ucs_posix_memalign((void **)&region,
+                               ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                               rcache->params.region_struct_size,
+                               "rcache_region");
+    if (error != 0) {
         status = UCS_ERR_NO_MEMORY;
         goto out_unlock;
     }
