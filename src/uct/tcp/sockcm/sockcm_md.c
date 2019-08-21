@@ -83,7 +83,7 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         return 0;
     }
 
-    if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
+    if (UCS_OK != ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
         ucs_debug("family != AF_INET and != AF_INET6");
         goto out_destroy_id;
     }
@@ -139,7 +139,6 @@ uct_sockcm_md_open(uct_component_t *component, const char *md_name,
     /* cppcheck-suppress autoVariables */
     *md_p = &md->super;
     return UCS_OK;
-
 }
 
 uct_component_t uct_sockcm_component = {

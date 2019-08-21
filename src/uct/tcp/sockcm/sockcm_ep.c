@@ -85,7 +85,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     ucs_queue_head_init(&self->ops);
 
     param_sockaddr = (struct sockaddr *) sockaddr->addr;
-    if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
+    if (UCS_OK != ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
        ucs_error("sockcm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
        status = UCS_ERR_IO_ERROR;
        goto err;
@@ -102,16 +102,14 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
 
     status = ucs_sys_fcntl_modfl(self->sock_id_ctx->sock_id, O_NONBLOCK, 0); 
     if (status != UCS_OK) {
-        goto err;
+        goto sock_err;
     }
 
     status = ucs_socket_connect(self->sock_id_ctx->sock_id, param_sockaddr);
     if (UCS_STATUS_IS_ERR(status)) {
         ucs_debug("%d: connect fail\n", self->sock_id_ctx->sock_id);
         self->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
-        close(self->sock_id_ctx->sock_id);
-        ucs_free(self->sock_id_ctx);
-        goto err;
+        goto sock_err;
     } else {
         ucs_debug("%d: connect pass/pending\n", self->sock_id_ctx->sock_id);
         /* no need to look for connection completion */
@@ -120,19 +118,18 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
             UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
     }
 
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_list_add_tail(&iface->used_sock_ids_list, &self->sock_id_ctx->list);
-    ucs_debug("ep %p, new sock_id %d", self, self->sock_id_ctx->sock_id);
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
                                          self->sock_id_ctx->sock_id,
                                          UCS_EVENT_SET_EVWRITE,
                                          uct_sockcm_ep_event_handler,
                                          self, iface->super.worker->async);
     if (status != UCS_OK) {
-        goto err;
+        goto sock_err;
     }
+
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_add_tail(&iface->used_sock_ids_list, &self->sock_id_ctx->list);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
     goto out;
 
@@ -144,6 +141,9 @@ out:
     self->status = UCS_INPROGRESS;
     return UCS_OK;
 
+sock_err:
+    close(self->sock_id_ctx->sock_id);
+    ucs_free(self->sock_id_ctx);
 err:
     ucs_debug("error in sock connect\n");
     pthread_mutex_destroy(&self->ops_mutex);

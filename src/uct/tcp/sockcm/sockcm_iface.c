@@ -134,7 +134,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_sockcm_iface_config_t *config = ucs_derived_of(tl_config, uct_sockcm_iface_config_t);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
-    int ret = 0;
     struct sockaddr *param_sockaddr;
     int param_sockaddr_len;
 
@@ -182,15 +181,13 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_close_sock;
         }
 
-        ret = bind(self->listen_fd, param_sockaddr, param_sockaddr_len);
-        if (ret < 0) {
+        if (0 > bind(self->listen_fd, param_sockaddr, param_sockaddr_len)) {
             ucs_error("bind(fd=%d) failed: %m", self->listen_fd);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
         }
 
-        ret = listen(self->listen_fd, config->backlog);
-        if (ret < 0) {
+        if (0 > listen(self->listen_fd, config->backlog)) {
             ucs_error("listen(fd=%d; backlog=%d)", self->listen_fd, config->backlog);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
