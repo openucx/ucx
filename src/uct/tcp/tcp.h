@@ -25,13 +25,21 @@
  * where %s value can be -/Tx/Rx */
 #define UCT_TCP_EP_CTX_CAPS_STR_MAX           8
 
-/* How many IOVs are needed to keep AM Zcopy service data
- * (TCP protocol and user's AM headers) */
-#define UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT 2
+/* How many IOVs are needed to keep AM/PUT Zcopy service data
+ * (TCP protocol and user's AM (or PUT) headers) */
+#define UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT 2
 
 /* How many IOVs are needed to do AM Short
  * (TCP protocol and user's AM headers, payload) */
 #define UCT_TCP_EP_AM_SHORTV_IOV_COUNT        3
+
+/* Maximum size of a data that can be sent by PUT Zcopy
+ * operation */
+#define UCT_TCP_EP_PUT_ZCOPY_MAX              SIZE_MAX
+
+/* Length of a data that is used by PUT protocol */
+#define UCT_TCP_EP_PUT_SERVICE_LENGTH        (sizeof(uct_tcp_am_hdr_t) + \
+                                              sizeof(uct_tcp_ep_put_req_t))
 
 
 /**
@@ -48,9 +56,11 @@ typedef enum uct_tcp_ep_ctx_type {
      * free memory allocating for this EP. */
     UCT_TCP_EP_CTX_TYPE_RX,
 
-    /* Additional flags that controls EP behavior. */
-    /* AM Zcopy operation is in progress on a given EP. */
+    /* Additional flags that controls EP behavior: */
+    /* - Zcopy TX operation is in progress on a given EP. */
     UCT_TCP_EP_CTX_TYPE_ZCOPY_TX,
+    /* - PUT RX operation is in progress on a given EP. */
+    UCT_TCP_EP_CTX_TYPE_PUT_RX,
 } uct_tcp_ep_ctx_type_t;
 
 
@@ -177,6 +187,47 @@ typedef struct uct_tcp_am_hdr {
 
 
 /**
+ * AM IDs reserved for TCP protocols
+ */
+typedef enum uct_tcp_ep_am_id {
+    /* AM ID reserved for TCP internal Connection Manager messages */
+    UCT_TCP_EP_CM_AM_ID      = UCT_AM_ID_MAX,
+    /* AM ID reserved for TCP internal PUT REQ message */
+    UCT_TCP_EP_PUT_REQ_AM_ID = UCT_AM_ID_MAX + 1,
+    /* AM ID reserved for TCP internal PUT ACK message */
+    UCT_TCP_EP_PUT_ACK_AM_ID = UCT_AM_ID_MAX + 2
+} uct_tcp_ep_am_id_t;
+
+
+/**
+ * TCP PUT request header
+ */
+typedef struct uct_tcp_ep_put_req {
+    uint64_t                      addr;
+    size_t                        length;
+    uint64_t                      remote_comp;
+} UCS_S_PACKED uct_tcp_ep_put_req_t;
+
+
+/**
+ * TCP PUT ack header
+ */
+typedef struct uct_tcp_ep_put_ack {
+    uint64_t                      remote_comp;
+} UCS_S_PACKED uct_tcp_ep_put_ack_t;
+
+
+/**
+ * TCP PUT ack message pending request
+ */
+typedef struct uct_tcp_ep_put_ack_pending_req {
+    uct_pending_req_t             super;
+    uct_tcp_ep_t                  *ep;
+    uct_tcp_ep_put_ack_t          put_ack;
+} uct_tcp_ep_put_ack_pending_req_t;
+
+
+/**
  * TCP endpoint communication context
  */
 typedef struct uct_tcp_ep_ctx {
@@ -187,16 +238,16 @@ typedef struct uct_tcp_ep_ctx {
 
 
 /**
- * TCP AM Zcopy communication context mapped to
+ * TCP AM/PUT Zcopy communication context mapped to
  * buffer from TCP EP context
  */
-typedef struct uct_tcp_ep_zcopy_ctx {
+typedef struct uct_tcp_ep_zcopy_tx {
     uct_tcp_am_hdr_t              super;
     uct_completion_t              *comp;
     size_t                        iov_index;
     size_t                        iov_cnt;
     struct iovec                  iov[0];
-} uct_tcp_ep_zcopy_ctx_t;
+} uct_tcp_ep_zcopy_tx_t;
 
 
 /**
@@ -356,6 +407,10 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
                                  unsigned header_length, const uct_iov_t *iov,
                                  size_t iovcnt, unsigned flags,
                                  uct_completion_t *comp);
+
+ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp);
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
                                     unsigned flags);
