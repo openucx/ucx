@@ -332,6 +332,19 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
  */
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
 
+
+/**
+ * Copy the src_addr sockaddr to dst_addr sockaddr. The length to copy is
+ * the size of the src_addr sockaddr.
+ *
+ * @param [in] dst_addr  Pointer to destination sockaddr (to copy to).
+ * @param [in] src_addr  Pointer to source sockaddr (to copy from).
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
+                               const struct sockaddr *src_addr);
+
 END_C_DECLS
 
 #endif

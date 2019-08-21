@@ -34,12 +34,11 @@
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
 
-
-const char test_message[] = "UCX Client-Server Hello World";
-static uint16_t server_port = 13337;
-
 #define TEST_STRING_LEN sizeof(test_message)
+#define DEFAULT_PORT    13337
 
+const char test_message[]   = "UCX Client-Server Hello World";
+static uint16_t server_port = DEFAULT_PORT;
 
 /**
  * Server's application context to be used in the user's connection request
@@ -296,7 +295,9 @@ static void usage()
     fprintf(stderr, " -a Set IP address of the server "
                     "(required for client and should not be specified "
                     "for the server)\n");
-    fprintf(stderr, " -p Set alternative server port (default:13337)\n");
+    fprintf(stderr, " -p Port number to listen/connect to (default = %d). "
+                    "0 on the server side means select a random port and print it",
+                    DEFAULT_PORT);
     fprintf(stderr, "\n");
 }
 
@@ -330,6 +331,46 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr)
     }
 
     return 0;
+}
+
+static char* sockaddr_get_ip_str(const struct sockaddr_storage *sock_addr,
+                                 char *ip_str, size_t max_size)
+{
+    struct sockaddr_in  addr_in;
+    struct sockaddr_in6 addr_in6;
+
+    switch (sock_addr->ss_family) {
+    case AF_INET:
+        memcpy(&addr_in, sock_addr, sizeof(struct sockaddr_in));
+        inet_ntop(AF_INET, &addr_in.sin_addr, ip_str, max_size);
+        return ip_str;
+    case AF_INET6:
+        memcpy(&addr_in6, sock_addr, sizeof(struct sockaddr_in6));
+        inet_ntop(AF_INET6, &addr_in6.sin6_addr, ip_str, max_size);
+        return ip_str;
+    default:
+        return "Invalid address family";
+    }
+}
+
+static char* sockaddr_get_port_str(const struct sockaddr_storage *sock_addr,
+                                   char *port_str, size_t max_size)
+{
+    struct sockaddr_in  addr_in;
+    struct sockaddr_in6 addr_in6;
+
+    switch (sock_addr->ss_family) {
+    case AF_INET:
+        memcpy(&addr_in, sock_addr, sizeof(struct sockaddr_in));
+        snprintf(port_str, max_size, "%d", ntohs(addr_in.sin_port));
+        return port_str;
+    case AF_INET6:
+        memcpy(&addr_in6, sock_addr, sizeof(struct sockaddr_in6));
+        snprintf(port_str, max_size, "%d", ntohs(addr_in6.sin6_port));
+        return port_str;
+    default:
+        return "Invalid address family";
+    }
 }
 
 /**
@@ -405,6 +446,8 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     ucp_listener_params_t params;
     ucp_listener_attr_t attr;
     ucs_status_t status;
+    char ip_str[50];
+    char port_str[8];
 
     set_listen_addr(&listen_addr);
 
@@ -423,7 +466,7 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     }
 
     /* Query the created listener to get the port it is listening on. */
-    attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
+    attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
     status = ucp_listener_query(*listener_p, &attr);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to query the listener (%s)\n",
@@ -431,7 +474,10 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
         ucp_listener_destroy(*listener_p);
         goto out;
     }
-    fprintf(stderr,"server is listening on port %d\n", attr.port);
+
+    fprintf(stderr, "server is listening on IP %s port %s\n",
+            sockaddr_get_ip_str(&attr.sockaddr, ip_str, 50),
+            sockaddr_get_port_str(&attr.sockaddr, port_str, 8));
 
 out:
     return status;
