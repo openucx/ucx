@@ -64,7 +64,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(xrqc, xrqc, topology, UCT_IB_MLX5_XRQC_TOPOLOGY_TAG_MATCHING);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, offload,  UCT_IB_MLX5_XRQC_OFFLOAD_RNDV);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, tag_matching_topology_context.log_matching_list_sz,
-                                  ucs_ilog2(iface->tm.num_tags));
+                                  ucs_ilog2(iface->tm.num_tags) + 1);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, dc,       dc);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, cqn,      dvcq.cqn);
 
