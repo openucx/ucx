@@ -14,12 +14,10 @@
         } \
     } while (0)
 
-ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
+ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep)
 {
     ucs_status_t status;
     struct sockaddr *dest_addr = NULL;
-
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
 
     ep->sock_id_ctx = ucs_malloc(sizeof(*ep->sock_id_ctx), "client sock_id_ctx");
     if (ep->sock_id_ctx == NULL) {
@@ -36,15 +34,12 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
         goto out_free;
     }
 
-    ucs_list_add_tail(&iface->used_sock_ids_list, &ep->sock_id_ctx->list);
-    ucs_debug("ep %p, new sock_id %d", ep, ep->sock_id_ctx->sock_id);
     status = UCS_OK;
     goto out;
 
 out_free:
     ucs_free(ep->sock_id_ctx);
 out:
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     return status;
 }
 
@@ -100,7 +95,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
 
     self->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
 
-    status = uct_sockcm_ep_set_sock_id(iface, self);
+    status = uct_sockcm_ep_set_sock_id(self);
     if (status != UCS_OK) {
         goto err;
     }
@@ -114,6 +109,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     if (UCS_STATUS_IS_ERR(status)) {
         ucs_debug("%d: connect fail\n", self->sock_id_ctx->sock_id);
         self->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
+        close(self->sock_id_ctx->sock_id);
+        ucs_free(self->sock_id_ctx);
         goto err;
     } else {
         ucs_debug("%d: connect pass/pending\n", self->sock_id_ctx->sock_id);
@@ -122,6 +119,11 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
             UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING : 
             UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
     }
+
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_add_tail(&iface->used_sock_ids_list, &self->sock_id_ctx->list);
+    ucs_debug("ep %p, new sock_id %d", self, self->sock_id_ctx->sock_id);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
                                          self->sock_id_ctx->sock_id,

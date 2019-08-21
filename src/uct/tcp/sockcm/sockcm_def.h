@@ -39,6 +39,6 @@ typedef struct uct_sockcm_ctx {
     ucs_list_link_t         list;
 } uct_sockcm_ctx_t;
 
-ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep);
+ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep);
 
 #endif /* UCT_SOCKCM_H */
