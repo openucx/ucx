@@ -110,13 +110,11 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
         ucs_debug("%d: connect fail\n", self->sock_id_ctx->sock_id);
         self->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
         goto sock_err;
-    } else {
-        ucs_debug("%d: connect pass/pending\n", self->sock_id_ctx->sock_id);
-        /* no need to look for connection completion */
-        self->conn_state = (status == UCS_INPROGRESS) ? 
-            UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING : 
-            UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
     }
+
+    self->conn_state = (status == UCS_INPROGRESS) ? 
+        UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING : 
+        UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
 
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
                                          self->sock_id_ctx->sock_id,
@@ -131,9 +129,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     ucs_list_add_tail(&iface->used_sock_ids_list, &self->sock_id_ctx->list);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
-    goto out;
-
-out:
     ucs_debug("created an SOCKCM endpoint on iface %p, "
               "remote addr: %s", iface,
                ucs_sockaddr_str(param_sockaddr,
