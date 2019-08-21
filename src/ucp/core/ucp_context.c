@@ -653,8 +653,8 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
     for (i = 0; i < cfg->count; i++) {
         if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL)) {
             ucs_string_buffer_appendf(&unavail_strb, "%s'%s'",
-                                       found ? "," : "",
-                                       cfg->names[i]);
+                                      found ? "," : "",
+                                      cfg->names[i]);
             ++found;
         }
     }
@@ -1226,7 +1226,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucp_fill_sockaddr_aux_tls_config(context, config);
     ucp_fill_sockaddr_prio_list(context, config);
 
-    status = UCS_OK;
+    ucs_assert(status == UCS_OK);
     goto out_release_components;
 
 err_free_resources:
