@@ -636,6 +636,16 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             break; /* no more items */
         }
 
+        /* According to the sysfs(5) manual page, all of entries
+         * has to be a symbolic link representing one of the real
+         * or virtual networking devices that are visible in the
+         * network namespace of the process that is accessing the
+         * directory. Let's avoid checking files that are not a
+         * symbolic link, e.g. "." and ".." entries */
+        if (entry->d_type != DT_LNK) {
+            continue;
+        }
+
         if (!ucs_netif_is_active(entry->d_name)) {
             continue;
         }
