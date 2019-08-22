@@ -26,8 +26,13 @@
 #define UCT_TCP_EP_CTX_CAPS_STR_MAX           8
 
 /* How many IOVs are needed to keep AM Zcopy service data
- * (TCP protocol and user's AM headers )*/
+ * (TCP protocol and user's AM headers) */
 #define UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT 2
+
+/* How many IOVs are needed to do AM Short
+ * (TCP protocol and user's AM headers, payload) */
+#define UCT_TCP_EP_AM_SHORTV_IOV_COUNT        3
+
 
 /**
  * TCP context type
@@ -230,6 +235,8 @@ typedef struct uct_tcp_iface {
     struct {
         size_t                    tx_seg_size;       /* TX AM buffer size */
         size_t                    rx_seg_size;       /* RX AM buffer size */
+        size_t                    sendv_thresh;      /* Minimum size of user's payload from which
+                                                      * non-blocking vector send should be used */
         struct {
             size_t                max_iov;           /* Maximum supported IOVs limited by
                                                       * user configuration and service buffers
@@ -260,6 +267,7 @@ typedef struct uct_tcp_iface_config {
     size_t                        tx_seg_size;
     size_t                        rx_seg_size;
     size_t                        max_iov;
+    size_t                        sendv_thresh;
     int                           prefer_default;
     unsigned                      max_poll;
     int                           sockopt_nodelay;

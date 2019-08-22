@@ -24,11 +24,11 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-  {"TX_SEG_SIZE", "8k",
+  {"TX_SEG_SIZE", "8kb",
    "Size of send copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
   
-  {"RX_SEG_SIZE", "128k",
+  {"RX_SEG_SIZE", "128kb",
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -36,6 +36,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Maximum IOV count that can contain user-defined payload in a single\n"
    "call to non-blocking vector socket send",
    ucs_offsetof(uct_tcp_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
+
+  {"SENDV_THRESH", "2kb",
+   "Threshold for switching from send() to sendmsg() for short active messages",
+   ucs_offsetof(uct_tcp_iface_config_t, sendv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PREFER_DEFAULT", "y",
    "Give higher priority to the default network interface on the host",
@@ -430,11 +434,18 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
-    self->config.tx_seg_size      = config->tx_seg_size +
-                                    sizeof(uct_tcp_am_hdr_t);
-    self->config.rx_seg_size      = config->rx_seg_size +
-                                    sizeof(uct_tcp_am_hdr_t);
-    self->outstanding             = 0;
+    self->outstanding        = 0;
+    self->config.tx_seg_size = config->tx_seg_size +
+                               sizeof(uct_tcp_am_hdr_t);
+    self->config.rx_seg_size = config->rx_seg_size +
+                               sizeof(uct_tcp_am_hdr_t);
+
+    if (ucs_socket_max_iov() >= UCT_TCP_EP_AM_SHORTV_IOV_COUNT) {
+        self->config.sendv_thresh = config->sendv_thresh;
+    } else {
+        /* AM Short with non-blocking vector send can't be used */
+        self->config.sendv_thresh = UCS_MEMUNITS_INF;
+    }
 
     /* Maximum IOV count allowed by user's configuration (considering TCP
      * protocol and user's AM headers that use 1st and 2nd IOVs
@@ -455,13 +466,13 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->config.zcopy.max_hdr    = self->config.tx_seg_size -
-                                    self->config.zcopy.hdr_offset;
-    self->config.prefer_default   = config->prefer_default;
-    self->config.max_poll         = config->max_poll;
-    self->sockopt.nodelay         = config->sockopt_nodelay;
-    self->sockopt.sndbuf          = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf          = config->sockopt_rcvbuf;
+    self->config.zcopy.max_hdr  = self->config.tx_seg_size -
+                                  self->config.zcopy.hdr_offset;
+    self->config.prefer_default = config->prefer_default;
+    self->config.max_poll       = config->max_poll;
+    self->sockopt.nodelay       = config->sockopt_nodelay;
+    self->sockopt.sndbuf        = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 

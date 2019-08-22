@@ -166,12 +166,12 @@ typedef struct ucp_context {
     /* List of MDs which detect non host memory type */
     ucp_rsc_index_t               mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
-    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache*/
+    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
-                                                 Not all resources may be used if unified
-                                                 mode is enabled. */
+                                               * Not all resources may be used if unified
+                                               * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
@@ -340,6 +340,16 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 
 ucs_memory_type_t
 ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t length);
+
+/**
+ * Calculate a small value to overcome float imprecision
+ * between two float values
+ */
+static UCS_F_ALWAYS_INLINE
+double ucp_calc_epsilon(double val1, double val2)
+{
+    return (val1 + val2) * (1e-6);
+}
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)

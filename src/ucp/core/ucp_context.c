@@ -18,6 +18,7 @@
 #include <ucs/algorithm/crc.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/string_set.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
@@ -541,6 +542,8 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
                                          ucp_rsc_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
+                                         ucs_string_set_t avail_devices[],
+                                         ucs_string_set_t *avail_tls,
                                          uint64_t dev_cfg_masks[],
                                          uint64_t *tl_cfg_mask)
 {
@@ -589,6 +592,12 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
+        if (!(md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
+                                "'%s'(%s)", tl_resources[i].dev_name,
+                                context->tl_cmpts[md->cmpt_index].attr.name);
+            ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
+        }
         ucp_add_tl_resource_if_enabled(context, md, md_index, config,
                                        &tl_resources[i], 0, num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
@@ -614,16 +623,55 @@ err:
     return status;
 }
 
-static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
-                                   uint64_t mask, const char *title)
+static void ucp_get_aliases_set(ucs_string_set_t *avail_tls)
 {
-    int i;
+    ucp_tl_alias_t *alias;
+    const char **tl_name;
 
-    for (i = 0; i < cfg->count; i++) {
-        if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL)) {
-            ucs_warn("%s '%s' is not available", title, cfg->names[i]);
+    for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+        for (tl_name = alias->tls; *tl_name != NULL; ++tl_name) {
+            if (ucs_string_set_contains(avail_tls, *tl_name)) {
+                ucs_string_set_add(avail_tls, alias->alias);
+                break;
+            }
         }
     }
+}
+
+static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
+                                   uint64_t mask, const char *title1,
+                                   const char *title2,
+                                   const ucs_string_set_t *avail_names)
+{
+    ucs_string_buffer_t avail_strb, unavail_strb;
+    unsigned i;
+    int found;
+
+    ucs_string_buffer_init(&unavail_strb);
+
+    found = 0;
+    for (i = 0; i < cfg->count; i++) {
+        if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL)) {
+            ucs_string_buffer_appendf(&unavail_strb, "%s'%s'",
+                                      found ? "," : "",
+                                      cfg->names[i]);
+            ++found;
+        }
+    }
+
+    if (found) {
+        ucs_string_buffer_init(&avail_strb);
+        ucs_string_set_print_sorted(avail_names, &avail_strb, ", ");
+        ucs_warn("%s%s%s %s %s not available, please use one or more of: %s",
+                 title1, title2,
+                 (found > 1) ? "s" : "",
+                 ucs_string_buffer_cstr(&unavail_strb),
+                 (found > 1) ? "are" : "is",
+                 ucs_string_buffer_cstr(&avail_strb));
+        ucs_string_buffer_cleanup(&avail_strb);
+    }
+
+    ucs_string_buffer_cleanup(&unavail_strb);
 }
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum)
@@ -945,13 +993,14 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
 
     if (num_usable_tls == 0) {
         ucp_resource_config_str(config, info_str, sizeof(info_str));
-        ucs_error("No usable transports/devices, asked %s", info_str);
+        ucs_error("no usable transports/devices (asked %s)", info_str);
         return UCS_ERR_NO_DEVICE;
     }
 
     /* Error check: Make sure there are not too many transports */
     if (context->num_tls >= UCP_MAX_RESOURCES) {
-        ucs_error("Exceeded transports/devices limit (%u requested, up to %d are supported)",
+        ucs_error("exceeded transports/devices limit "
+                  "(%u requested, up to %d are supported)",
                   context->num_tls, UCP_MAX_RESOURCES);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
@@ -961,7 +1010,9 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
 
 static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                                                 ucp_rsc_index_t cmpt_index,
-                                                uint64_t *dev_cfg_masks,
+                                                ucs_string_set_t avail_devices[],
+                                                ucs_string_set_t *avail_tls,
+                                                uint64_t dev_cfg_masks[],
                                                 uint64_t *tl_cfg_mask,
                                                 const ucp_config_t *config)
 {
@@ -998,8 +1049,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
 
         /* Add communication resources of each MD */
         status = ucp_add_tl_resources(context, md_index, config,
-                                      &num_tl_resources, dev_cfg_masks,
-                                      tl_cfg_mask);
+                                      &num_tl_resources, avail_devices,
+                                      avail_tls, dev_cfg_masks, tl_cfg_mask);
         if (status != UCS_OK) {
             uct_md_close(context->tl_mds[md_index].md);
             goto out;
@@ -1033,8 +1084,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 {
     uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
     uint64_t tl_cfg_mask                         = 0;
+    ucs_string_set_t avail_devices[UCT_DEVICE_TYPE_LAST];
+    ucs_string_set_t avail_tls;
     uct_component_h *uct_components;
     unsigned i, num_uct_components;
+    uct_device_type_t dev_type;
     ucs_status_t status;
     unsigned max_mds;
 
@@ -1051,21 +1105,26 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->mem_type_access_tls[i] = 0;
     }
 
+    ucs_string_set_init(&avail_tls);
+    for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+        ucs_string_set_init(&avail_devices[dev_type]);
+    }
+
     status = ucp_check_resource_config(config);
     if (status != UCS_OK) {
-        goto err;
+        goto out_cleanup_avail_devices;
     }
 
     status = uct_query_components(&uct_components, &num_uct_components);
     if (status != UCS_OK) {
-        goto err;
+        goto out_cleanup_avail_devices;
     }
 
     if (num_uct_components > UCP_MAX_RESOURCES) {
         ucs_error("too many components: %u, max: %u", num_uct_components,
                   UCP_MAX_RESOURCES);
         status = UCS_ERR_EXCEEDS_LIMIT;
-        goto err_release_components;
+        goto out_release_components;
     }
 
     context->num_cmpts = num_uct_components;
@@ -1073,7 +1132,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                     sizeof(*context->tl_cmpts), "ucp_tl_cmpts");
     if (context->tl_cmpts == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_release_components;
+        goto out_release_components;
     }
 
     context->config.cm_cmpts_bitmap = 0;
@@ -1117,7 +1176,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     /* Collect resources of each component */
     for (i = 0; i < context->num_cmpts; ++i) {
-        status = ucp_add_component_resources(context, i, dev_cfg_masks,
+        status = ucp_add_component_resources(context, i, avail_devices,
+                                             &avail_tls, dev_cfg_masks,
                                              &tl_cfg_mask, config);
         if (status != UCS_OK) {
             goto err_free_resources;
@@ -1141,33 +1201,43 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      */
     context->tl_bitmap = config->ctx.unified_mode ? 0 : UCS_MASK(context->num_tls);
 
+    /* Warn about devices and transports which were specified explicitly in the
+     * configuration, but are not available
+     */
+    if (config->warn_invalid_config) {
+        for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+            ucp_report_unavailable(&config->devices[dev_type],
+                                   dev_cfg_masks[dev_type],
+                                   ucp_device_type_names[dev_type], " device",
+                                   &avail_devices[dev_type]);
+        }
+
+        ucp_get_aliases_set(&avail_tls);
+        ucp_report_unavailable(&config->tls, tl_cfg_mask, "", "transport",
+                               &avail_tls);
+    }
+
     /* Validate context resources */
     status = ucp_check_resources(context, config);
     if (status != UCS_OK) {
         goto err_free_resources;
     }
 
-    /* Warn about devices and transports which were specified explicitly in the
-     * configuration, but are not available
-     */
-    if (config->warn_invalid_config) {
-        for (i = 0; i < UCT_DEVICE_TYPE_LAST; ++i) {
-            ucp_report_unavailable(&config->devices[i], dev_cfg_masks[i], "device");
-        }
-        ucp_report_unavailable(&config->tls, tl_cfg_mask, "transport");
-    }
-
     ucp_fill_sockaddr_aux_tls_config(context, config);
     ucp_fill_sockaddr_prio_list(context, config);
 
-    uct_release_component_list(uct_components);
-    return UCS_OK;
+    ucs_assert(status == UCS_OK);
+    goto out_release_components;
 
 err_free_resources:
     ucp_free_resources(context);
-err_release_components:
+out_release_components:
     uct_release_component_list(uct_components);
-err:
+out_cleanup_avail_devices:
+    for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+        ucs_string_set_cleanup(&avail_devices[dev_type]);
+    }
+    ucs_string_set_cleanup(&avail_tls);
     return status;
 }
 

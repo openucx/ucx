@@ -597,6 +597,31 @@ uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_ERR_INVALID_PARAM;
 }
 
+int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
+                                      const union ibv_gid *gid,
+                                      uint8_t gid_index)
+{
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+
+    ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+
+    memset(&ah_attr, 0, sizeof(ah_attr));
+    ah_attr.port_num       = port_num;
+    ah_attr.is_global      = 1;
+    ah_attr.grh.dgid       = *gid;
+    ah_attr.grh.sgid_index = gid_index;
+    ah_attr.grh.hop_limit  = 255;
+
+    ah = ibv_create_ah(ucs_container_of(dev, uct_ib_md_t, dev)->pd, &ah_attr);
+    if (ah == NULL) {
+        return 0; /* gid entry is not operational */
+    }
+
+    ibv_destroy_ah(ah);
+    return 1;
+}
+
 static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
                                                      uint8_t port_num,
                                                      uint8_t *gid_index)
@@ -626,7 +651,9 @@ static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
             if ((roce_prio[prio_idx].roce_major     == gid_info.roce_version.major) &&
                 (roce_prio[prio_idx].roce_minor     == gid_info.roce_version.minor) &&
                 (roce_prio[prio_idx].address_family ==
-                                uct_ib_device_get_addr_family(&gid_info.gid, i))) {
+                                uct_ib_device_get_addr_family(&gid_info.gid, i)) &&
+                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info.gid, i)) {
+
                 *gid_index = i;
                 goto out_print;
             }
