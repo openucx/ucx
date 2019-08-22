@@ -33,7 +33,4 @@ struct uct_sockcm_iface {
     /* Field used only for client side */
     ucs_list_link_t                      used_sock_ids_list;
 };
-
-void uct_sockcm_iface_client_start_next_ep(uct_sockcm_iface_t *iface);
-
 #endif

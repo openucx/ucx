@@ -286,7 +286,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_sockcm_iface_config_t *config = ucs_derived_of(tl_config, uct_sockcm_iface_config_t);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
-    int ret = 0;
     struct sockaddr *param_sockaddr;
     int param_sockaddr_len;
 
@@ -320,6 +319,10 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
 
+        if (!(params->mode.sockaddr.cb_flags & UCT_CB_FLAG_ASYNC)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
         param_sockaddr = (struct sockaddr *) params->mode.sockaddr.listen_sockaddr.addr;
         param_sockaddr_len = params->mode.sockaddr.listen_sockaddr.addrlen;
 
@@ -334,15 +337,13 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_close_sock;
         }
 
-        ret = bind(self->listen_fd, param_sockaddr, param_sockaddr_len);
-        if (ret < 0) {
+        if (0 > bind(self->listen_fd, param_sockaddr, param_sockaddr_len)) {
             ucs_error("bind(fd=%d) failed: %m", self->listen_fd);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
         }
 
-        ret = listen(self->listen_fd, config->backlog);
-        if (ret < 0) {
+        if (0 > listen(self->listen_fd, config->backlog)) {
             ucs_error("listen(fd=%d; backlog=%d)", self->listen_fd, config->backlog);
             status = UCS_ERR_IO_ERROR;
             goto err_close_sock;
@@ -362,10 +363,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
                   ucs_sockaddr_str(param_sockaddr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
 
-        if (!(params->mode.sockaddr.cb_flags & UCT_CB_FLAG_ASYNC)) {
-            ucs_fatal("Synchronous callback is not supported");
-        }
-
         self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
@@ -381,7 +378,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
  err_close_sock:
     close(self->listen_fd);
     return status;
-
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
@@ -406,8 +402,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
             ucs_async_remove_handler(sock_id_ctx->sock_id, 0);
             sock_id_ctx->handler_added = 0;
         }
-        close(sock_id_ctx->sock_id);
-        ucs_free(sock_id_ctx);
+        uct_sockcm_ep_put_sock_id(sock_id_ctx);
     }
 
     UCS_ASYNC_UNBLOCK(self->super.worker->async);

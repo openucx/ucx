@@ -19,18 +19,16 @@
         } \
     } while (0)
 
-ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
+ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep)
 {
     ucs_status_t status;
     struct sockaddr *dest_addr = NULL;
 
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-
     ep->sock_id_ctx = ucs_malloc(sizeof(*ep->sock_id_ctx), "client sock_id_ctx");
     if (ep->sock_id_ctx == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
+        return UCS_ERR_NO_MEMORY;
     }
+
     ep->sock_id_ctx->handler_added = 0;
     dest_addr = (struct sockaddr *) &(ep->remote_addr);
 
@@ -38,19 +36,17 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_iface_t *iface, uct_sockcm_ep_
                                &ep->sock_id_ctx->sock_id);
     if (status != UCS_OK) {
         ucs_debug("unable to create client socket for sockcm");
-        goto out_free;
+        ucs_free(ep->sock_id_ctx);
+        return status;
     }
 
-    ucs_list_add_tail(&iface->used_sock_ids_list, &ep->sock_id_ctx->list);
-    ucs_debug("ep %p, new sock_id %d", ep, ep->sock_id_ctx->sock_id);
-    status = UCS_OK;
-    goto out;
+    return UCS_OK;
+}
 
-out_free:
-    ucs_free(ep->sock_id_ctx);
-out:
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-    return status;
+void uct_sockcm_ep_put_sock_id(uct_sockcm_ctx_t *sock_id_ctx)
+{
+    close(sock_id_ctx->sock_id);
+    ucs_free(sock_id_ctx);
 }
 
 ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_iface_t *iface, uct_sockcm_ep_t *ep)
@@ -247,7 +243,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     ucs_queue_head_init(&self->ops);
 
     param_sockaddr = (struct sockaddr *) sockaddr->addr;
-    if (UCS_ERR_INVALID_PARAM == ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
+    if (UCS_OK != ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
        ucs_error("sockcm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
        status = UCS_ERR_IO_ERROR;
        goto err;
@@ -257,28 +253,26 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
 
     self->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
 
-    status = uct_sockcm_ep_set_sock_id(iface, self);
+    status = uct_sockcm_ep_set_sock_id(self);
     if (status != UCS_OK) {
         goto err;
     }
 
     status = ucs_sys_fcntl_modfl(self->sock_id_ctx->sock_id, O_NONBLOCK, 0); 
     if (status != UCS_OK) {
-        goto err;
+        goto sock_err;
     }
 
     status = ucs_socket_connect(self->sock_id_ctx->sock_id, param_sockaddr);
     if (UCS_STATUS_IS_ERR(status)) {
         ucs_debug("%d: connect fail\n", self->sock_id_ctx->sock_id);
         self->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
-        goto err;
-    } else {
-        ucs_debug("%d: connect pass/pending\n", self->sock_id_ctx->sock_id);
-        /* no need to look for connection completion */
-        self->conn_state = (status == UCS_INPROGRESS) ? 
-            UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING : 
-            UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
+        goto sock_err;
     }
+
+    self->conn_state = (status == UCS_INPROGRESS) ? 
+        UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING : 
+        UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
 
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
                                          self->sock_id_ctx->sock_id,
@@ -286,12 +280,9 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
                                          uct_sockcm_ep_event_handler,
                                          self, iface->super.worker->async);
     if (status != UCS_OK) {
-        goto err;
+        goto sock_err;
     }
 
-    goto out;
-
-out:
     ucs_debug("created an SOCKCM endpoint on iface %p, "
               "remote addr: %s", iface,
                ucs_sockaddr_str(param_sockaddr,
@@ -299,6 +290,8 @@ out:
     self->status = UCS_INPROGRESS;
     return UCS_OK;
 
+sock_err:
+    uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
 err:
     ucs_debug("error in sock connect\n");
     pthread_mutex_destroy(&self->ops_mutex);
@@ -308,13 +301,12 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 {
-    uct_sockcm_iface_t *iface = NULL;
-
-    iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
+    uct_sockcm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
 
     ucs_debug("sockcm_ep %p: destroying", self);
 
     ucs_async_remove_handler(self->sock_id_ctx->sock_id, 0);
+    uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
