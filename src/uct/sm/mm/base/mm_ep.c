@@ -257,8 +257,7 @@ retry:
     if (is_short) {
         /* AM_SHORT */
         /* write to the remote FIFO */
-        *(uint64_t*) (elem + 1) = header;
-        memcpy((void*) (elem + 1) + sizeof(header), payload, length);
+        uct_am_short_fill_data(elem + 1, header, payload, length);
 
         elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
@@ -271,7 +270,7 @@ retry:
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
         base_address = uct_mm_ep_attach_remote_seg(ep, iface, elem);
-        length = pack_cb(base_address + elem->desc_offset, arg);
+        length       = pack_cb(base_address + elem->desc_offset, arg);
 
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length;

@@ -822,14 +822,6 @@ static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     }
 }
 
-static inline void
-uct_tcp_ep_am_short_fill_data(uct_tcp_am_hdr_t *hdr, uint64_t header,
-                              const void *payload, unsigned length)
-{
-    *((uint64_t*)(hdr + 1)) = header;
-    memcpy(UCS_PTR_BYTE_OFFSET(hdr + 1, sizeof(header)), payload, length);
-}
-
 static const void*
 uct_tcp_ep_am_sendv_get_trace_payload(uct_tcp_am_hdr_t *hdr,
                                       const void *header,
@@ -842,8 +834,8 @@ uct_tcp_ep_am_sendv_get_trace_payload(uct_tcp_am_hdr_t *hdr,
 
     /* If user requested trace data, we copy header and payload
      * to EP TX buffer in order to trace correct data */
-    uct_tcp_ep_am_short_fill_data(hdr, *((const uint64_t*)header),
-                                  payload_iov->iov_base, payload_iov->iov_len);
+    uct_am_short_fill_data(hdr + 1, *(const uint64_t*)header,
+                           payload_iov->iov_base, payload_iov->iov_len);
     return (hdr + 1);
 }
 
@@ -911,7 +903,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     hdr->length = payload_length = length + sizeof(header);
 
     if (length <= iface->config.sendv_thresh) {
-        uct_tcp_ep_am_short_fill_data(hdr, header, payload, length);
+        uct_am_short_fill_data(hdr + 1, header, payload, length);
         uct_tcp_ep_am_send(iface, ep, hdr);
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
     } else {
