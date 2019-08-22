@@ -509,6 +509,36 @@ protected:
         }
     }
 
+    static ucs_log_func_rc_t
+    detect_error_logger(ucs_log_level_t level, const char *message, va_list ap,
+                        const char *err_to_detect)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), err_to_detect)) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
+    detect_reject_error_logger(const char *file, unsigned line, const char *function,
+                               ucs_log_level_t level, const char *message, va_list ap)
+    {
+        std::string err_to_detect ("client got error event RDMA_CM_EVENT_REJECTED");
+        return detect_error_logger(level, message, ap, err_to_detect.c_str());
+    }
+
+    static ucs_log_func_rc_t
+    detect_addr_error_logger(const char *file, unsigned line, const char *function,
+                             ucs_log_level_t level, const char *message, va_list ap)
+    {
+        std::string err_to_detect ("client got error event RDMA_CM_EVENT_ADDR_ERROR");
+        return detect_error_logger(level, message, ap, err_to_detect.c_str());
+    }
+
 protected:
     ucs::sock_addr_storage m_listen_addr, m_connect_addr;
     uint64_t               m_cm_state;
@@ -590,7 +620,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
     m_reject_conn_request = true;
 
     /* wrap errors since a reject is expected */
-    scoped_log_handler slh(wrap_errors_logger);
+    scoped_log_handler slh(detect_reject_error_logger);
     cm_listen_and_connect();
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_REJECTED |
@@ -705,7 +735,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
                      << " Interface: " << GetParam()->dev_name;
 
     /* wrap errors since a reject is expected */
-    scoped_log_handler slh(wrap_errors_logger);
+    scoped_log_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a server that isn't listening */
     m_client->connect(0, *m_server, 0, m_connect_addr,
@@ -722,7 +752,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 {
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                    << " Interface: " << GetParam()->dev_name;
+                     << " Interface: " << GetParam()->dev_name;
 
     /* Listen */
     cm_start_listen();
@@ -730,7 +760,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
     m_connect_addr.set_port(1);
 
     /* wrap errors since a reject is expected */
-    scoped_log_handler slh(wrap_errors_logger);
+    scoped_log_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a non-existing port on the server side. */
     m_client->connect(0, *m_server, 0, m_connect_addr,
@@ -769,7 +799,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
 
     /* wrap errors now since the client will try to connect to a non existing IP */
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        scoped_log_handler slh(detect_addr_error_logger);
         /* client - try to connect to a non-existing IP */
         m_client->connect(0, *m_server, 0, m_connect_addr,
                           client_connect_cb, client_disconnect_cb, this);

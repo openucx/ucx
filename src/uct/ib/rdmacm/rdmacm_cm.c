@@ -265,7 +265,7 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_debug("%s received disconnect event. status = %d. Peer: %s.",
+    ucs_debug("%s got disconnect event, status %d peer %s",
               (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER ? "server" : "client"),
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
                                              UCS_SOCKADDR_STRING_LEN));
@@ -274,14 +274,14 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
 }
 
-static void uct_rdmacm_cm_handle_error_events(struct rdma_cm_event *event)
+static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t *cep      = event->id->context;
     struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
-    ucs_error("%s received an error event %s. status = %d. Peer: %s.",
+    ucs_error("%s got error event %s, status %d peer %s",
               (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER ? "server" : "client"),
               rdma_event_str(event->event), event->status,
               ucs_sockaddr_str(remote_addr, ip_port_str,
@@ -353,7 +353,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     case RDMA_CM_EVENT_ADDR_CHANGE:
         /* client and server error events */
     case RDMA_CM_EVENT_CONNECT_ERROR:
-        uct_rdmacm_cm_handle_error_events(event);
+        uct_rdmacm_cm_handle_error_event(event);
         break;
     default:
         ucs_warn("unexpected RDMACM event: %s", rdma_event_str(event->event));
