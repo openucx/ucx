@@ -21,9 +21,9 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep)
 
     ep->sock_id_ctx = ucs_malloc(sizeof(*ep->sock_id_ctx), "client sock_id_ctx");
     if (ep->sock_id_ctx == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
+        return UCS_ERR_NO_MEMORY;
     }
+
     ep->sock_id_ctx->handler_added = 0;
     dest_addr = (struct sockaddr *) &(ep->remote_addr);
 
@@ -31,16 +31,17 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep)
                                &ep->sock_id_ctx->sock_id);
     if (status != UCS_OK) {
         ucs_debug("unable to create client socket for sockcm");
-        goto out_free;
+        ucs_free(ep->sock_id_ctx);
+        return status;
     }
 
-    status = UCS_OK;
-    goto out;
+    return UCS_OK;
+}
 
-out_free:
-    ucs_free(ep->sock_id_ctx);
-out:
-    return status;
+void uct_sockcm_ep_put_sock_id(uct_sockcm_ctx_t *sock_id_ctx)
+{
+    close(sock_id_ctx->sock_id);
+    ucs_free(sock_id_ctx);
 }
 
 static void uct_sockcm_ep_event_handler(int fd, void *arg)
@@ -125,10 +126,6 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
         goto sock_err;
     }
 
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_list_add_tail(&iface->used_sock_ids_list, &self->sock_id_ctx->list);
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-
     ucs_debug("created an SOCKCM endpoint on iface %p, "
               "remote addr: %s", iface,
                ucs_sockaddr_str(param_sockaddr,
@@ -137,8 +134,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 sock_err:
-    close(self->sock_id_ctx->sock_id);
-    ucs_free(self->sock_id_ctx);
+    uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
 err:
     ucs_debug("error in sock connect\n");
     pthread_mutex_destroy(&self->ops_mutex);
@@ -148,13 +144,12 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 {
-    uct_sockcm_iface_t *iface = NULL;
-
-    iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
+    uct_sockcm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
 
     ucs_debug("sockcm_ep %p: destroying", self);
 
     ucs_async_remove_handler(self->sock_id_ctx->sock_id, 0);
+    uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
@@ -168,6 +163,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
+
 UCS_CLASS_DEFINE(uct_sockcm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_sockcm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sockcm_ep_t, uct_ep_t);

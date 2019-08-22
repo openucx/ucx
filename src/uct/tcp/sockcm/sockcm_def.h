@@ -25,9 +25,9 @@ typedef struct uct_sockcm_iface   uct_sockcm_iface_t;
 typedef struct uct_sockcm_ep      uct_sockcm_ep_t;
 
 typedef struct uct_sockcm_conn_param {
-    ssize_t length;
-    int     fd;
-    char    private_data[UCT_SOCKCM_PRIV_DATA_LEN];
+    ssize_t                 length;
+    int                     fd;
+    char                    private_data[UCT_SOCKCM_PRIV_DATA_LEN];
 } uct_sockcm_conn_param_t;
 
 typedef struct uct_sockcm_ctx {
@@ -40,5 +40,6 @@ typedef struct uct_sockcm_ctx {
 } uct_sockcm_ctx_t;
 
 ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep);
+void uct_sockcm_ep_put_sock_id(uct_sockcm_ctx_t *sock_id_ctx);
 
 #endif /* UCT_SOCKCM_H */
