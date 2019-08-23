@@ -455,8 +455,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 static inline uct_ib_mlx5_srq_seg_t *
 uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
-    ucs_assert(index <= srq->mask);
-    return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
+    return srq->buf + (index & srq->mask) * UCT_IB_MLX5_SRQ_STRIDE;
 }
 
 static inline uint16_t uct_ib_mlx5_calc_av_sport(uint32_t rqpn, uint32_t qpn)

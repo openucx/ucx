@@ -460,7 +460,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 
     uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
 
-    self->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->rx.srq_topo                = mlx5_config->srq_topo;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,

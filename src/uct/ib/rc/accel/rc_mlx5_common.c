@@ -10,6 +10,16 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 
+
+#if HAVE_DEVX
+static const char *uct_rc_mlx5_srq_topo_names[] = {
+    [UCT_RC_MLX5_SRQ_TOPO_LIST]   = "list",
+    [UCT_RC_MLX5_SRQ_TOPO_CYCLIC] = "cyclic",
+    [UCT_RC_MLX5_SRQ_TOPO_LAST]   = NULL
+};
+#endif
+
+
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -46,6 +56,18 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
+#if HAVE_DEVX
+  {"SRQ_TOPO", "list",
+   "SRQ topology type. The types are:\n"
+   "\n"
+   "list       SRQ is organized as a buffer containing linked list of WQEs\n"
+   "\n"
+   "cyclic     SRQ is organized as a continuos array of WQEs.\n"
+   "           Supported with tag offload only.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
+   UCS_CONFIG_TYPE_ENUM(uct_rc_mlx5_srq_topo_names)},
+#endif
+
   {NULL}
 };
 
@@ -68,7 +90,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     index = srq->ready_idx;
     for (;;) {
         next_index = index + 1;
-        seg = uct_ib_mlx5_srq_get_wqe(srq, next_index & srq->mask);
+        seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
         if (UCS_CIRCULAR_COMPARE16(next_index, >, srq->free_idx)) {
             if (!seg->srq.free) {
                 break;
