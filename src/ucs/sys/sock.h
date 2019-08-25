@@ -334,6 +334,17 @@ int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
 ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
                                const struct sockaddr *src_addr);
 
+
+/**
+ * Copy into ifname_name the interface associated the IP on which the socket
+ * file descriptor fd is bound on. IPv4 and IPv6 addresses are handled.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [out]  if_str      A string filled with the interface name.
+ * @param [in]   max_strlen  Maximum length of the if_str.
+ */
+ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen);
+
 END_C_DECLS
 
 #endif

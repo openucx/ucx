@@ -5,6 +5,10 @@
  */
 
 #include "sockcm_ep.h"
+#include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
+#include <netinet/tcp.h>
+#include <uct/tcp/tcp.h>
 
 #define UCT_SOCKCM_CB_FLAGS_CHECK(_flags) \
     do { \
@@ -24,11 +28,10 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep)
         return UCS_ERR_NO_MEMORY;
     }
 
-    ep->sock_id_ctx->handler_added = 0;
     dest_addr = (struct sockaddr *) &(ep->remote_addr);
 
     status = ucs_socket_create(dest_addr->sa_family, SOCK_STREAM,
-                               &ep->sock_id_ctx->sock_id);
+                               &ep->sock_id_ctx->sock_fd);
     if (status != UCS_OK) {
         ucs_debug("unable to create client socket for sockcm");
         ucs_free(ep->sock_id_ctx);
@@ -40,13 +43,159 @@ ucs_status_t uct_sockcm_ep_set_sock_id(uct_sockcm_ep_t *ep)
 
 void uct_sockcm_ep_put_sock_id(uct_sockcm_ctx_t *sock_id_ctx)
 {
-    close(sock_id_ctx->sock_id);
+    close(sock_id_ctx->sock_fd);
     ucs_free(sock_id_ctx);
+}
+
+ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_ep_t *ep)
+{
+    uct_sockcm_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                               uct_sockcm_iface_t);
+    ucs_status_t status;
+    uct_sockcm_conn_param_t conn_param;
+    char dev_name[UCT_DEVICE_NAME_MAX];
+
+    memset(&conn_param, 0, sizeof(uct_sockcm_conn_param_t));
+
+    /* get interface name associated with the connected client fd; use that for pack_cb */
+    status = ucs_sockaddr_get_ifname(ep->sock_id_ctx->sock_fd, dev_name,
+                                     UCT_DEVICE_NAME_MAX);
+    if (UCS_OK != status) {
+        goto out;
+    }
+
+    conn_param.length = ep->pack_cb(ep->pack_cb_arg, dev_name,
+                                    (void*)conn_param.private_data);
+    if (conn_param.length < 0) {
+        ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
+                  "private data. status: %s",
+                  iface, ep, ucs_status_string(conn_param.length));
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    ucs_assert(conn_param.length <= UCT_SOCKCM_PRIV_DATA_LEN);
+
+    status = ucs_socket_send(ep->sock_id_ctx->sock_fd, &conn_param,
+                             sizeof(uct_sockcm_conn_param_t), NULL, NULL);
+
+out:
+    return status;
+}
+
+static void uct_sockcm_change_state(uct_sockcm_ep_t *ep,
+                                    uct_sockcm_ep_conn_state_t conn_state,
+                                    ucs_status_t status)
+{
+    uct_sockcm_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                               uct_sockcm_iface_t);
+
+    pthread_mutex_lock(&ep->ops_mutex);
+    ep->status     = status;
+    ep->conn_state = conn_state;
+
+    if (conn_state == UCT_SOCKCM_EP_CONN_STATE_CLOSED) {
+        uct_sockcm_ep_set_failed(&iface->super.super, &ep->super.super, status);
+    }
+
+    uct_sockcm_ep_invoke_completions(ep, status);
+    pthread_mutex_unlock(&ep->ops_mutex);
+}
+
+static void uct_sockcm_handle_sock_connect(uct_sockcm_ep_t *ep)
+{
+    char sockaddr_str[UCS_SOCKADDR_STRING_LEN];
+    int fd = ep->sock_id_ctx->sock_fd;
+    ucs_status_t status;
+
+    if (!ucs_socket_is_connected(fd)) {
+        ucs_error("failed to connect to %s",
+                  ucs_sockaddr_str((struct sockaddr*)&ep->remote_addr,
+                                   sockaddr_str, sizeof(sockaddr_str)));
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED,
+                                UCS_ERR_UNREACHABLE);
+        goto err;
+    } 
+
+    status = uct_sockcm_ep_send_client_info(ep);
+    if (status != UCS_OK) {
+        ucs_error("failed to send client info: %s", ucs_status_string(status));
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED, status);
+        goto err;
+    }
+
+    ep->conn_state = UCT_SOCKCM_EP_CONN_STATE_INFO_SENT;
+
+    /* Call current handler when server responds to sent message */
+    if (UCS_OK != ucs_async_modify_handler(fd, UCS_EVENT_SET_EVREAD)) {
+        ucs_error("failed to modify async handler for fd %d", fd);
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED,
+                                UCS_ERR_IO_ERROR);
+        goto err;
+    }
+
+    return;
+
+err:
+    ucs_async_modify_handler(fd, 0);
+}
+
+static void uct_sockcm_handle_info_sent(uct_sockcm_ep_t *ep)
+{
+    ucs_status_t status;
+    size_t recv_len;
+    char notif_val;
+
+    recv_len = sizeof(notif_val);
+    status   = ucs_socket_recv_nb(ep->sock_id_ctx->sock_fd, &notif_val,
+                                  &recv_len, NULL, NULL);
+    if (UCS_ERR_NO_PROGRESS == status) {
+        /* will call recv again when ready */
+        return;
+    }
+
+    ucs_async_remove_handler(ep->sock_id_ctx->sock_fd, 0);
+
+    if (UCS_OK != status) {
+        /* receive notif failed, close the connection */
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED, status);
+        return;
+    }
+
+    if (notif_val == UCT_SOCKCM_IFACE_NOTIFY_ACCEPT) {
+        ucs_debug("event_handler OK after accept");
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CONNECTED, UCS_OK);
+    } else {
+        ucs_debug("event_handler REJECTED after reject");
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED,
+                                UCS_ERR_REJECTED);
+    }
 }
 
 static void uct_sockcm_ep_event_handler(int fd, void *arg)
 {
-    ucs_debug("not implemented");
+    uct_sockcm_ep_t *ep = (uct_sockcm_ep_t *) arg;
+
+    switch (ep->conn_state) {
+    case UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING:
+        uct_sockcm_handle_sock_connect(ep);
+        break;
+    case UCT_SOCKCM_EP_CONN_STATE_INFO_SENT:
+        uct_sockcm_handle_info_sent(ep);
+        break;
+    case UCT_SOCKCM_EP_CONN_STATE_CONNECTED:
+        if (UCS_OK != ucs_async_modify_handler(fd, 0)) {
+            ucs_warn("unable to turn off event notifications on %d", fd);
+        }
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CONNECTED, UCS_OK);
+        break;
+    case UCT_SOCKCM_EP_CONN_STATE_CLOSED:
+    default:
+        ucs_debug("handling closed/default state");
+        uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED,
+                                UCS_ERR_IO_ERROR);
+        break;
+    }
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
@@ -87,7 +236,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
 
     param_sockaddr = (struct sockaddr *) sockaddr->addr;
     if (UCS_OK != ucs_sockaddr_sizeof(param_sockaddr, &sockaddr_len)) {
-       ucs_error("sockcm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
+       ucs_error("sockcm ep: unknown remote sa_family=%d",
+                 sockaddr->addr->sa_family);
        status = UCS_ERR_IO_ERROR;
        goto err;
     }
@@ -101,24 +251,23 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
-    status = ucs_sys_fcntl_modfl(self->sock_id_ctx->sock_id, O_NONBLOCK, 0); 
+    status = ucs_sys_fcntl_modfl(self->sock_id_ctx->sock_fd, O_NONBLOCK, 0); 
     if (status != UCS_OK) {
         goto sock_err;
     }
 
-    status = ucs_socket_connect(self->sock_id_ctx->sock_id, param_sockaddr);
+    status = ucs_socket_connect(self->sock_id_ctx->sock_fd, param_sockaddr);
     if (UCS_STATUS_IS_ERR(status)) {
-        ucs_debug("%d: connect fail\n", self->sock_id_ctx->sock_id);
         self->conn_state = UCT_SOCKCM_EP_CONN_STATE_CLOSED;
         goto sock_err;
     }
 
-    self->conn_state = (status == UCS_INPROGRESS) ? 
-        UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING : 
-        UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTED;
+    self->conn_state = UCT_SOCKCM_EP_CONN_STATE_SOCK_CONNECTING; 
+    self->status     = UCS_INPROGRESS;
 
+    /* set ep->status before event handler call to avoid simultaneous writes to state*/
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
-                                         self->sock_id_ctx->sock_id,
+                                         self->sock_id_ctx->sock_fd,
                                          UCS_EVENT_SET_EVWRITE,
                                          uct_sockcm_ep_event_handler,
                                          self, iface->super.worker->async);
@@ -130,13 +279,12 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
               "remote addr: %s", iface,
                ucs_sockaddr_str(param_sockaddr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
-    self->status = UCS_INPROGRESS;
     return UCS_OK;
 
 sock_err:
     uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
 err:
-    ucs_debug("error in sock connect\n");
+    ucs_debug("error in sock connect");
     pthread_mutex_destroy(&self->ops_mutex);
 
     return status;
@@ -144,11 +292,12 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 {
-    uct_sockcm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_sockcm_iface_t);
+    uct_sockcm_iface_t *iface = ucs_derived_of(self->super.super.iface,
+                                               uct_sockcm_iface_t);
 
     ucs_debug("sockcm_ep %p: destroying", self);
 
-    ucs_async_remove_handler(self->sock_id_ctx->sock_id, 0);
+    ucs_async_remove_handler(self->sock_id_ctx->sock_fd, 1);
     uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
