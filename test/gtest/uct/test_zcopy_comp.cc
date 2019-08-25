@@ -78,7 +78,10 @@ UCS_TEST_SKIP_COND_P(test_zcopy_comp, issue1440,
         progress();
     }
 
-    m_sender->flush();
+    /* Call flush on local and remote ifaces to progress data
+     * (e.g. if call flush only on local iface, a target side may
+     *  not be able to send PUT ACK to an initiator in case of TCP) */
+    flush();
 }
 
 
