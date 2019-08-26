@@ -388,7 +388,7 @@ typedef struct uct_iface_mpool_config {
  * TL Memory pool object initialization callback.
  */
 typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
-                uct_mem_h memh);
+                                              uct_mem_h memh);
 
 
 /**
@@ -671,6 +671,28 @@ size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
     }
 
     return total_length;
+}
+
+/**
+ * Copy data to target am_short buffer
+ */
+static UCS_F_ALWAYS_INLINE
+void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
+                            size_t length)
+{
+    /**
+     * Helper structure to fill send buffer of short messages for
+     * non-accelerated transports
+     */
+    struct uct_am_short_packet {
+        uint64_t header;
+        char     payload[];
+    } UCS_S_PACKED *packet = (struct uct_am_short_packet*)buffer;
+
+    packet->header = header;
+    /* suppress false positive diagnostic from uct_mm_ep_am_common_send call */
+    /* cppcheck-suppress ctunullpointer */
+    memcpy(packet->payload, payload, length);
 }
 
 #endif
