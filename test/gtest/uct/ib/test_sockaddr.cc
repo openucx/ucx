@@ -841,8 +841,8 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
                                TEST_CM_STATE_CLIENT_CONNECTED);
-    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_CONNECTED |
-                                                TEST_CM_STATE_CLIENT_CONNECTED)));
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
+                                               TEST_CM_STATE_CLIENT_CONNECTED));
 
     cm_disconnect(m_client);
 }
@@ -875,7 +875,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
     }
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
-    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT));
+    EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CLIENT_GOT_REJECT);
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
