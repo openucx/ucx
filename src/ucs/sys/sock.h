@@ -102,15 +102,14 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
 
 
 /**
- * Report information about non-blocking connection status for
- * the socket referred to by the file descriptor `fd`.
+ * Check whether the socket referred to by the file descriptor `fd`
+ * is connected to a peer or not.
  *
  * @param [in]  fd          Socket fd.
  *
- * @return UCS_OK on success or UCS_ERR_UNREACHABLE on failure or
- *         UCS_INPROGRESS if operation is still in progress.
+ * @return 1 - connected, 0 - not connected.
  */
-ucs_status_t ucs_socket_connect_nb_get_status(int fd);
+int ucs_socket_is_connected(int fd);
 
 
 /**
