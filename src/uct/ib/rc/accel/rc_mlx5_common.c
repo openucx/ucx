@@ -15,6 +15,7 @@
 static const char *uct_rc_mlx5_srq_topo_names[] = {
     [UCT_RC_MLX5_SRQ_TOPO_LIST]   = "list",
     [UCT_RC_MLX5_SRQ_TOPO_CYCLIC] = "cyclic",
+    [UCT_RC_MLX5_SRQ_TOPO_AUTO]   = "auto",
     [UCT_RC_MLX5_SRQ_TOPO_LAST]   = NULL
 };
 #endif
@@ -57,7 +58,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    UCS_CONFIG_TYPE_UINT},
 
 #if HAVE_DEVX
-  {"SRQ_TOPO", "list",
+  {"SRQ_TOPO", "auto",
    "SRQ topology type. The types are:\n"
    "\n"
    "list       SRQ is organized as a buffer containing linked list of WQEs\n"
