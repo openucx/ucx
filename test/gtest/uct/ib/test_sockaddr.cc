@@ -512,6 +512,39 @@ protected:
         }
     }
 
+    void server_handle_delayed_req(bool reject)
+    {
+        ucs_status_t status;
+
+        ASSERT_EQ(1ul, m_delayed_conn_reqs.size());
+
+        if (reject) {
+            /* wrap errors since a reject is expected */
+            scoped_log_handler slh(detect_reject_error_logger);
+
+            while (!m_delayed_conn_reqs.empty()) {
+                status = uct_listener_reject(m_server->listener(),
+                                             m_delayed_conn_reqs.front());
+                ASSERT_UCS_OK(status);
+                m_delayed_conn_reqs.pop();
+            }
+
+            wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
+            EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CLIENT_GOT_REJECT);
+        } else {
+            while (!m_delayed_conn_reqs.empty()) {
+                server_accept(m_server, m_delayed_conn_reqs.front(),
+                              server_connect_cb, server_disconnect_cb, this);
+                m_delayed_conn_reqs.pop();
+            }
+
+            wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
+                                       TEST_CM_STATE_CLIENT_CONNECTED);
+            EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
+                                                       TEST_CM_STATE_CLIENT_CONNECTED));
+        }
+    }
+
     static ucs_log_func_rc_t
     detect_error_logger(ucs_log_level_t level, const char *message, va_list ap,
                         const char *err_to_detect)
@@ -831,18 +864,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
                  (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED |
                   TEST_CM_STATE_CLIENT_GOT_REJECT | TEST_CM_STATE_CLIENT_GOT_ERROR));
 
-    ASSERT_EQ(1ul, m_delayed_conn_reqs.size());
-
-    while (!m_delayed_conn_reqs.empty()) {
-        server_accept(m_server, m_delayed_conn_reqs.front(),
-                      server_connect_cb, server_disconnect_cb, this);
-        m_delayed_conn_reqs.pop();
-    }
-
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
-                               TEST_CM_STATE_CLIENT_CONNECTED);
-    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
-                                               TEST_CM_STATE_CLIENT_CONNECTED));
+    server_handle_delayed_req(false);
 
     cm_disconnect(m_client);
 }
@@ -852,8 +874,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
     UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
                      << " Interface: " << GetParam()->dev_name;
 
-    ucs_status_t status;
-
     m_delay_conn_reply = true;
 
     cm_listen_and_connect();
@@ -862,20 +882,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
                  (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED |
                   TEST_CM_STATE_CLIENT_GOT_REJECT | TEST_CM_STATE_CLIENT_GOT_ERROR));
 
-    ASSERT_EQ(1ul, m_delayed_conn_reqs.size());
-
-    /* wrap errors since a reject is expected */
-    scoped_log_handler slh(detect_reject_error_logger);
-
-    while (!m_delayed_conn_reqs.empty()) {
-        status = uct_listener_reject(m_server->listener(),
-                                     m_delayed_conn_reqs.front());
-        ASSERT_UCS_OK(status);
-        m_delayed_conn_reqs.pop();
-    }
-
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
-    EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CLIENT_GOT_REJECT);
+    server_handle_delayed_req(true);
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
