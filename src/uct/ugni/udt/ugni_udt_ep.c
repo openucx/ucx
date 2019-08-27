@@ -171,17 +171,16 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
     sheader = uct_ugni_udt_get_sheader(desc, iface);
 
     if (is_short) {
-        uint64_t *hdr = (uint64_t *)uct_ugni_udt_get_spayload(desc, iface);
-        *hdr = header;
-        memcpy((void*)(hdr + 1), payload, length);
+        uct_am_short_fill_data(uct_ugni_udt_get_spayload(desc, iface),
+                               header, payload, length);
         sheader->length = length + sizeof(header);
-        msg_length = sheader->length + sizeof(*sheader);
+        msg_length      = sheader->length + sizeof(*sheader);
         UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, SHORT, sizeof(header) + length);
     } else {
-        packed_length = pack_cb((void *)uct_ugni_udt_get_spayload(desc, iface),
-                                arg);
+        packed_length   = pack_cb((void *)uct_ugni_udt_get_spayload(desc, iface),
+                                  arg);
         sheader->length = packed_length;
-        msg_length = sheader->length + sizeof(*sheader);
+        msg_length      = sheader->length + sizeof(*sheader);
         UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, BCOPY, packed_length);
     }
 
@@ -190,7 +189,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
                        is_short ? "TX: AM_SHORT" : "TX: AM_BCOPY");
 
     sheader->am_id = am_id;
-    sheader->type = UCT_UGNI_UDT_PAYLOAD;
+    sheader->type  = UCT_UGNI_UDT_PAYLOAD;
 
     ucs_assertv(msg_length <= GNI_DATAGRAM_MAXSIZE, "msg_length=%u", msg_length);
 

@@ -51,13 +51,14 @@ stages:
                 | csgrep --mode=grep --invert-match --event "internal warning" --prune-events=1 \
                 > $cppcheck_err
 
-                if [ -s $cppcheck_err ]; then
-                  echo "CppCheck found errors:"
-                  cat $cppcheck_err
-                  exit 100
-                fi
-
+              if [ -s $cppcheck_err ]; then
+                echo "CppCheck found errors:"
+                cat $cppcheck_err
+                echo "##vso[task.logissue type=error]CppCheck found errors"
+                echo "##vso[task.complete result=Failed;]"
+              else
                 echo "No errors reported by cppcheck"
+              fi
 
             displayName: CppCheck
 

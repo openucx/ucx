@@ -231,7 +231,6 @@ ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t head
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t);
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_smsg_header_t *smsg_header;
-    uint64_t *header_data;
     uct_ugni_smsg_desc_t *desc;
     ucs_status_t rc;
 
@@ -248,17 +247,18 @@ ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t head
     smsg_header = (uct_ugni_smsg_header_t *)(desc+1);
     smsg_header->length = length + sizeof(header);
 
-    header_data = (uint64_t*)(smsg_header+1);
-    *header_data = header;
-    memcpy((void*)(header_data+1), payload, length);
+    uct_am_short_fill_data(smsg_header + 1, header, payload, length);
 
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND,
-                       id, header_data, length, "TX: AM_SHORT");
+                       id, smsg_header + 1, length, "TX: AM_SHORT");
 
-    rc = uct_ugni_smsg_ep_am_common_send(ep, iface, id, sizeof(uct_ugni_smsg_header_t),
-                                            smsg_header, smsg_header->length, (void*)header_data, desc);
+    rc = uct_ugni_smsg_ep_am_common_send(ep, iface, id,
+                                         sizeof(uct_ugni_smsg_header_t),
+                                         smsg_header, smsg_header->length,
+                                         smsg_header + 1, desc);
 
-    UCT_TL_EP_STAT_OP_IF_SUCCESS(rc, ucs_derived_of(tl_ep, uct_base_ep_t), AM, SHORT, sizeof(header) + length);
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(rc, ucs_derived_of(tl_ep, uct_base_ep_t), AM,
+                                 SHORT, sizeof(header) + length);
 
     return rc;
 }
