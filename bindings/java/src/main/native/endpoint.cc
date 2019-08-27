@@ -150,3 +150,13 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
                   request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, tag);
     return process_request(request, callback);
 }
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_flushNonBlockingNative(JNIEnv *env, jclass cls,
+                                                             jlong ep_ptr,
+                                                             jobject callback)
+{
+    ucs_status_ptr_t request = ucp_ep_flush_nb((ucp_ep_h)ep_ptr, 0, jucx_request_callback);
+
+    return process_request(request, callback);
+}
