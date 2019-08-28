@@ -131,6 +131,15 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         return sendTaggedNonBlocking(sendBuffer, 0, callback);
     }
 
+    /**
+     * This routine flushes all outstanding AMO and RMA communications on this endpoint.
+     * All the AMO and RMA operations issued on this endpoint prior to this call
+     * are completed both at the origin and at the target.
+     */
+    public UcxRequest flushNonBlocking(UcxCallback callback) {
+        return flushNonBlockingNative(getNativeId(), callback);
+    }
+
     private static native long createEndpointNative(UcpEndpointParams params, long workerId);
 
     private static native void destroyEndpointNative(long epId);
@@ -148,4 +157,6 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     private static native UcxRequest sendTaggedNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long tag,
                                                                  UcxCallback callback);
+
+    private static native UcxRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
 }

@@ -6,10 +6,7 @@
 package org.openucx.jucx;
 
 import org.junit.Test;
-import org.openucx.jucx.ucp.UcpContext;
-import org.openucx.jucx.ucp.UcpParams;
-import org.openucx.jucx.ucp.UcpWorker;
-import org.openucx.jucx.ucp.UcpWorkerParams;
+import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
@@ -18,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.*;
 
 public class UcpWorkerTest {
-    static int numWorkers = Runtime.getRuntime().availableProcessors();
+    private static int numWorkers = Runtime.getRuntime().availableProcessors();
 
     @Test
     public void testSingleWorker() {
@@ -37,7 +34,7 @@ public class UcpWorkerTest {
     public void testMultipleWorkersWithinSameContext() {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
         assertNotEquals(context.getNativeId(), null);
-        UcpWorker workers[] = new UcpWorker[numWorkers];
+        UcpWorker[] workers = new UcpWorker[numWorkers];
         UcpWorkerParams workerParam = new UcpWorkerParams();
         for (int i = 0; i < numWorkers; i++) {
             workerParam.clear().setCpu(i).requestThreadSafety();
@@ -55,7 +52,7 @@ public class UcpWorkerTest {
         UcpContext tcpContext = new UcpContext(new UcpParams().requestTagFeature());
         UcpContext rdmaContext = new UcpContext(new UcpParams().requestRmaFeature()
             .requestAtomic64BitFeature().requestAtomic32BitFeature());
-        UcpWorker workers[] = new UcpWorker[numWorkers];
+        UcpWorker[] workers = new UcpWorker[numWorkers];
         UcpWorkerParams workerParams = new UcpWorkerParams();
         for (int i = 0; i < numWorkers; i++) {
             ByteBuffer userData = ByteBuffer.allocateDirect(100);
@@ -119,5 +116,53 @@ public class UcpWorkerTest {
 
         worker.close();
         context.close();
+    }
+
+    @Test
+    public void testFlushWorker() {
+        int numRequests = 10;
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestRmaFeature();
+        UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+
+        ByteBuffer src = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        src.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
+        ByteBuffer dst = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        UcpMemory memory = context2.registerMemory(src);
+
+        UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
+        UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        UcpEndpoint ep = worker1.newEndpoint( new UcpEndpointParams()
+            .setUcpAddress(worker2.getAddress()).setPeerErrorHadnlingMode());
+        UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
+
+        int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
+        for (int i = 0; i < numRequests; i++) {
+            ep.getNonBlocking(memory.getAddress() + i * blockSize, rkey,
+                   UcxUtils.getAddress(dst) + i * blockSize, blockSize, null);
+        }
+
+        UcxRequest request = worker1.flushNonBlocking(new UcxCallback() {
+            @Override
+            public void onSuccess(UcxRequest request) {
+                rkey.close();
+                memory.deregister();
+                assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
+            }
+        });
+
+        while (request.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        ep.close();
+        worker1.close();
+        worker2.close();
+        context1.close();
+        context2.close();
     }
 }
