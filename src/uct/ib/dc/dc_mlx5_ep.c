@@ -1222,7 +1222,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
 }
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
-                                   ucs_status_t status)
+                                   ucs_status_t ep_status)
 {
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci                = ep->dci;
@@ -1231,11 +1231,11 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
     int16_t outstanding;
-    ucs_status_t ep_status;
+    ucs_status_t status;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_txqp_purge_outstanding(txqp, status, 0);
+    uct_rc_txqp_purge_outstanding(txqp, ep_status, 0);
 
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/
@@ -1255,17 +1255,16 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     }
 
     if (ep == iface->tx.fc_ep) {
-        ucs_assert(status != UCS_ERR_CANCELED);
+        ucs_assert(ep_status != UCS_ERR_CANCELED);
         /* Cannot handle errors on flow-control endpoint.
          * Or shall we ignore them?
          */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
-                  ucs_status_string(status));
-        ep_status = UCS_OK;
+                  ucs_status_string(ep_status));
     } else {
-        ep_status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                                 status);
-        if (ep_status != UCS_OK) {
+        status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
+                                              ep_status);
+        if (status != UCS_OK) {
             uct_ib_mlx5_completion_with_err(ib_iface, arg,
                                             &iface->tx.dcis[dci].txwq,
                                             UCS_LOG_LEVEL_FATAL);
@@ -1273,7 +1272,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         }
     }
 
-    if (status != UCS_ERR_CANCELED) {
+    if (ep_status != UCS_ERR_CANCELED) {
         uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dcis[dci].txwq,
                                         ib_iface->super.config.failure_level);
     }
