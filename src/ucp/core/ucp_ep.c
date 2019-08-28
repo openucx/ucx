@@ -1600,7 +1600,6 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         if (aux_rsc_index != UCP_NULL_RESOURCE) {
             snprintf(p, endp - p, "{" UCT_TL_RESOURCE_DESC_FMT "}",
                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[aux_rsc_index].tl_rsc));
-            p += strlen(p);
         }
     }
 }
