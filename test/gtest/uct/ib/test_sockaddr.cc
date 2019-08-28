@@ -99,6 +99,9 @@ public:
 
         /* initiate the client's private data callback argument */
         client->client_cb_arg = server->iface_attr().max_conn_priv;
+
+        UCS_TEST_MESSAGE << "Testing " << m_listen_addr
+                         << " Interface: " << GetParam()->dev_name;
     }
 
     static void conn_request_cb(uct_iface_h iface, void *arg,
@@ -137,9 +140,6 @@ protected:
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
                     &client->client_cb_arg);
 
@@ -160,8 +160,6 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
     client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
                     &client->client_cb_arg);
@@ -191,8 +189,6 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
     delay_conn_reply = true;
     client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
                     &client->client_cb_arg);
@@ -216,9 +212,6 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     uct_iface_params_t client_params;
     entity *client_test;
     int i, num_clients = 100;
@@ -252,9 +245,6 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     int i, num_conns_on_client = 100;
 
     /* multiple clients, on the same iface, connecting to the same server */
@@ -273,9 +263,6 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     client->connect(0, *server, 0, m_connect_addr, NULL, NULL,
                     &client->client_cb_arg);
 
@@ -296,9 +283,6 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
 UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     m_connect_addr.set_port(1);
     err_count = 0;
 
@@ -365,6 +349,9 @@ public:
 
         /* initiate the client's private data callback argument */
         m_client->client_cb_arg = m_client->cm_attr().max_conn_priv;
+
+        UCS_TEST_MESSAGE << "Testing " << m_listen_addr
+                         << " Interface: " << GetParam()->dev_name;
     }
 
 protected:
@@ -598,9 +585,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_query)
     ucs_status_t status;
     size_t i;
 
-    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     for (i = 0; i < m_entities.size(); ++i) {
         uct_cm_attr_t attr;
         attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
@@ -617,9 +601,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
     uint16_t port;
     char m_listener_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char attr_addr_ip_port_str[UCS_SOCKADDR_STRING_LEN];
-
-    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
 
     cm_start_listen();
 
@@ -641,9 +622,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
 {
-    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     cm_listen_and_connect();
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
@@ -656,9 +634,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     m_reject_conn_request = true;
 
     /* wrap errors since a reject is expected */
@@ -678,9 +653,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 {
     int i, num_clients = 100;
     entity *client_test;
-
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
 
     /* Listen */
     cm_start_listen();
@@ -733,9 +705,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 {
     int i, num_conns_on_client = 100;
 
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     m_server_start_disconnect = true;
 
     /* Listen */
@@ -773,9 +742,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
 
@@ -793,9 +759,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     /* Listen */
     cm_start_listen();
 
@@ -816,9 +779,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                    << " Interface: " << GetParam()->dev_name;
-
     struct sockaddr_in addr;
     ucs_status_t status;
     size_t size;
@@ -857,9 +817,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
 
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     test_delayed_server_response(false);
 
     cm_disconnect(m_client);
@@ -867,9 +824,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
 {
-    UCS_TEST_MESSAGE << "Testing "     << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     test_delayed_server_response(true);
 }
 
@@ -920,9 +874,6 @@ protected:
 
 UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
 {
-    UCS_TEST_MESSAGE << "Testing " << m_listen_addr
-                     << " Interface: " << GetParam()->dev_name;
-
     cm_listen_and_connect();
 
     wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
