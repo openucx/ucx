@@ -1001,19 +1001,12 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
         goto out;
     }
 
-#ifndef __clang_analyzer__
-    /* Exclude this code from Clang examination as it generates
-     * false-postive warning about potential leak of memory
-     * pointed to by 'key' variable */
-    kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
+    iter = kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
     if ((ret <= 0) || (iter == kh_end(&ucs_config_parser_env_vars))) {
         ucs_warn("kh_put(key=%s) failed", key);
         ucs_free(key);
         goto out;
     }
-#else
-    ucs_free(key);
-#endif
 
     *added = 1;
 
