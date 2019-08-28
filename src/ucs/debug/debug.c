@@ -1031,14 +1031,16 @@ typedef __sighandler_t *sighandler_t;
 #endif
 sighandler_t signal(int signum, sighandler_t handler)
 {
-    static sighandler_t (*orig)(int, sighandler_t) = NULL;
+    typedef sighandler_t (*sighandler_func_t)(int, sighandler_t);
+
+    static sighandler_func_t orig = NULL;
 
     if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
         return SIG_DFL;
     }
 
     if (orig == NULL) {
-        orig = ucs_debug_get_orig_func("signal", signal);
+        orig = (sighandler_func_t)ucs_debug_get_orig_func("signal", signal);
     }
 
     return orig(signum, handler);
@@ -1047,10 +1049,12 @@ sighandler_t signal(int signum, sighandler_t handler)
 static int orig_sigaction(int signum, const struct sigaction *act,
                           struct sigaction *oact)
 {
-    static int (*orig)(int, const struct sigaction*, struct sigaction*) = NULL;
+    typedef int (*sigaction_func_t)(int, const struct sigaction*, struct sigaction*);
+
+    static sigaction_func_t orig = NULL;
 
     if (orig == NULL) {
-        orig = ucs_debug_get_orig_func("sigaction", sigaction);
+        orig = (sigaction_func_t)ucs_debug_get_orig_func("sigaction", sigaction);
     }
 
     return orig(signum, act, oact);

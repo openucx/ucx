@@ -59,7 +59,7 @@ static void ucs_async_thread_hold(ucs_async_thread_t *thread)
 
 static void ucs_async_thread_put(ucs_async_thread_t *thread)
 {
-    if (ucs_atomic_fadd32(&thread->refcnt, -1) == 1) {
+    if (ucs_atomic_fadd32(&thread->refcnt, (uint32_t)-1) == 1) {
         ucs_event_set_cleanup(thread->event_set);
         ucs_async_pipe_destroy(&thread->wakeup);
         ucs_timerq_cleanup(&thread->timerq);
@@ -317,7 +317,8 @@ static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
 
     /* Store file descriptor into void * storage without memory allocation. */
     status = ucs_event_set_add(thread->event_set, event_fd,
-                               events, (void *)(uintptr_t)event_fd);
+                               (ucs_event_set_type_t)events,
+                               (void *)(uintptr_t)event_fd);
     if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
         goto err_removed;
@@ -352,7 +353,8 @@ static ucs_status_t ucs_async_thread_modify_event_fd(ucs_async_context_t *async,
 {
     /* Store file descriptor into void * storage without memory allocation. */
     return ucs_event_set_mod(ucs_async_thread_global_context.thread->event_set,
-                             event_fd, events, (void *)(uintptr_t)event_fd);
+                             event_fd, (ucs_event_set_type_t)events,
+                             (void *)(uintptr_t)event_fd);
 }
 
 static int ucs_async_thread_mutex_try_block(ucs_async_context_t *async)
