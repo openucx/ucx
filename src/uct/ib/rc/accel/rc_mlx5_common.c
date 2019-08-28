@@ -61,10 +61,12 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"SRQ_TOPO", "auto",
    "SRQ topology type. The types are:\n"
    "\n"
-   "list       SRQ is organized as a buffer containing linked list of WQEs\n"
+   "list       SRQ is organized as a buffer containing linked list of WQEs.\n"
    "\n"
    "cyclic     SRQ is organized as a continuos array of WQEs.\n"
-   "           Supported with tag offload only.",
+   "           Supported with tag offload only.\n"
+   "\n"
+   "auto       The most optimal SRQ topology is selected automatically.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_ENUM(uct_rc_mlx5_srq_topo_names)},
 #endif
