@@ -61,6 +61,8 @@ ucp_stream_worker_dequeue_ep_head(ucp_worker_h worker)
     ucp_ep_ext_proto_t *ep_ext = ucs_list_head(&worker->stream_ready_eps,
                                                ucp_ep_ext_proto_t,
                                                stream.ready_list);
+
+    ucs_assert(ep_ext->stream.ready_list.next != NULL);
     ucp_stream_ep_dequeue(ep_ext);
     return ep_ext;
 }
