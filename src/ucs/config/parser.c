@@ -264,7 +264,6 @@ static void __print_table_values(char * const *table, char *buf, size_t max)
     }
 
     snprintf(ptr, end - ptr, "]");
-    ptr += strlen(ptr);
 
     *buf = '[';
 }
