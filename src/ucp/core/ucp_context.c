@@ -959,7 +959,6 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
          * sockaddr tls bitmap. save the tl_id's for the client/server usage later */
         ucs_for_each_bit(tl_id, sa_tls_bitmap) {
             resource = &context->tl_rscs[tl_id];
-            tl_md    = &context->tl_mds[resource->md_index];
 
             if (!strcmp(sockaddr_tl_names[j], "*") ||
                 !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name, UCT_TL_NAME_MAX)) {
