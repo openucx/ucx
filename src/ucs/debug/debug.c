@@ -621,7 +621,7 @@ static void ucs_debugger_attach()
     char* argv[6 + UCS_GDB_MAX_ARGS];
     pid_t pid, debug_pid;
     int fd, ret, narg;
-    char *self_exe;
+    char UCS_V_UNUSED *self_exe;
 
     /* Fork a process which will execute gdb and attach to the current process.
      * We must avoid trigerring calls to malloc/free, since the heap may be corrupted.
