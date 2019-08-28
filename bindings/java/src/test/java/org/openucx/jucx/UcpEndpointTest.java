@@ -291,4 +291,52 @@ public class UcpEndpointTest {
         context1.close();
         context2.close();
     }
+
+    @Test
+    public void testFlushEp() {
+        int numRequests = 10;
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestRmaFeature();
+        UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+
+        ByteBuffer src = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        src.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
+        ByteBuffer dst = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        UcpMemory memory = context2.registerMemory(src);
+
+        UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
+        UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
+            .setUcpAddress(worker2.getAddress()).setPeerErrorHadnlingMode());
+        UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
+
+        int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
+        for (int i = 0; i < numRequests; i++) {
+            ep.getNonBlocking(memory.getAddress() + i * blockSize, rkey,
+                   UcxUtils.getAddress(dst) + i * blockSize, blockSize, null);
+        }
+
+        UcxRequest request = ep.flushNonBlocking(new UcxCallback() {
+            @Override
+            public void onSuccess(UcxRequest request) {
+                rkey.close();
+                memory.deregister();
+                assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
+            }
+        });
+
+        while (request.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        ep.close();
+        worker1.close();
+        worker2.close();
+        context1.close();
+        context2.close();
+    }
 }

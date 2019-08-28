@@ -109,6 +109,17 @@ Java_org_openucx_jucx_ucp_UcpWorker_progressWorkerNative(JNIEnv *env, jclass cls
     return ucp_worker_progress((ucp_worker_h)ucp_worker_ptr);
 }
 
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_flushNonBlockingNative(JNIEnv *env, jclass cls,
+                                                           jlong ucp_worker_ptr,
+                                                           jobject callback)
+{
+    ucs_status_ptr_t request = ucp_worker_flush_nb((ucp_worker_h)ucp_worker_ptr, 0,
+                                                   jucx_request_callback);
+
+    return process_request(request, callback);
+}
+
 JNIEXPORT void JNICALL
 Java_org_openucx_jucx_ucp_UcpWorker_waitWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
 {

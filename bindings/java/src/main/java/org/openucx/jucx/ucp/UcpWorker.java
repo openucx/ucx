@@ -64,6 +64,15 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * This routine flushes all outstanding AMO and RMA communications on the
+     * this worker. All the AMO and RMA operations issued on this  worker prior to this call
+     * are completed both at the origin and at the target when this call returns.
+     */
+    public UcxRequest flushNonBlocking(UcxCallback callback) {
+        return flushNonBlockingNative(getNativeId(), callback);
+    }
+
+    /**
      * This routine waits (blocking) until an event has happened, as part of the
      * wake-up mechanism.
      *
@@ -157,6 +166,8 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
 
     private static native int progressWorkerNative(long workerId);
+
+    private static native UcxRequest flushNonBlockingNative(long workerId, UcxCallback callback);
 
     private static native void waitWorkerNative(long workerId);
 
