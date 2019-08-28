@@ -293,38 +293,49 @@ public class UcpEndpointTest {
     }
 
     @Test
-    public void testFlushEp() {
-        int numRequests = 10;
+    public void testGetNonBlockingScatterGather() {
+        int nBuffers = 5;
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params);
         UcpContext context2 = new UcpContext(params);
 
-        ByteBuffer src = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
-        src.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
-        ByteBuffer dst = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
-        UcpMemory memory = context2.registerMemory(src);
-
         UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
             .setUcpAddress(worker2.getAddress()).setPeerErrorHadnlingMode());
-        UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
 
-        int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
-        for (int i = 0; i < numRequests; i++) {
-            ep.getNonBlocking(memory.getAddress() + i * blockSize, rkey,
-                   UcxUtils.getAddress(dst) + i * blockSize, blockSize, null);
+        UcpMemory[] buffers = new UcpMemory[nBuffers];
+        UcpRemoteKey[] rkeys = new UcpRemoteKey[nBuffers];
+        long[] remoteAddresses = new long[nBuffers];
+        long[] sizes = new long[nBuffers];
+
+        for (int i = 0; i < nBuffers; i++) {
+            ByteBuffer src = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+            src.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
+            buffers[i] = context2.registerMemory(src);
+            rkeys[i] = ep.unpackRemoteKey(buffers[i].getRemoteKeyBuffer());
+            remoteAddresses[i] = buffers[i].getAddress();
+            sizes[i] = UcpMemoryTest.MEM_SIZE;
         }
+
+        ByteBuffer dst = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE * nBuffers);
+
+        ep.getNonBlockingImplicit(remoteAddresses, rkeys, sizes, dst);
 
         UcxRequest request = ep.flushNonBlocking(new UcxCallback() {
             @Override
             public void onSuccess(UcxRequest request) {
-                rkey.close();
-                memory.deregister();
-                assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
+                for (int i = 0; i < nBuffers; i++) {
+                    dst.position(i * UcpMemoryTest.MEM_SIZE)
+                        .limit(i * UcpMemoryTest.MEM_SIZE + UcpMemoryTest.MEM_SIZE);
+                    ByteBuffer block = dst.slice();
+                    assertEquals(block.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
+                    rkeys[i].close();
+                    buffers[i].deregister();
+                }
             }
         });
 

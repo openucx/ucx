@@ -8,6 +8,8 @@ import org.openucx.jucx.*;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
@@ -95,6 +97,75 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
             localAddress, size, callback);
     }
 
+    // Non-blocking implicit remote memory get operations.
+
+    /**
+     * Non-blocking implicit remote memory get operation.
+     * This routine initiate a load of contiguous block of data that is described
+     * by the remote memory address {@code remoteAddress} and the
+     * {@code remoteKey} "memory handle" in the local contiguous memory region described
+     * by {@code dst} buffer. The routine returns immediately and does not guarantee that
+     * remote data is loaded and stored under the local buffer.
+     */
+    public void getNonBlockingImplicit(long remoteAddress, UcpRemoteKey remoteKey,
+                                       ByteBuffer dst) {
+        getNonBlockingImplicit(new long[] { remoteAddress },
+                               new UcpRemoteKey[] { remoteKey },
+                               new long[] { UcxUtils.getAddress(dst) },
+                               new long[] { dst.remaining() });
+    }
+
+    /**
+     * Non-blocking implicit remote memory get operation.
+     * This routine initiate a load of contiguous blocks of data that is described
+     * by the remote memory addresses {@code remoteAddresses} and the
+     * {@code remoteKeys} "memory handles" in the local contiguous memory region described
+     * by {@code dst} buffer. The routine returns immediately and does not guarantee that
+     * remote data is loaded and stored under the local buffer.
+     */
+    public void getNonBlockingImplicit(long[] remoteAddresses, UcpRemoteKey[] remoteKeys,
+                                       long[] sizes, ByteBuffer dst) {
+        long acc = 0;
+        long startAddress = UcxUtils.getAddress(dst);
+        long[] addresses = new long[remoteAddresses.length];
+        for (int i = 0; i < sizes.length; i++) {
+            addresses[i] = startAddress + acc;
+            acc += sizes[i];
+        }
+        getNonBlockingImplicit(remoteAddresses, remoteKeys, addresses, sizes);
+    }
+
+    /**
+     * Non-blocking implicit remote memory get operation.
+     * This routine initiate a load of contiguous blocks of data that is described
+     * by the remote memory addresses {@code remoteAddresses} and the
+     * {@code remoteKeys} "memory handles" in the multiple local memory regions described
+     * by {@code dst} buffers. The routine returns immediately and does not guarantee that
+     * remote data is loaded and stored under the local buffer.
+     */
+    public void getNonBlockingImplicit(long[] remoteAddresses, UcpRemoteKey[] remoteKeys,
+                                       ByteBuffer[] dst) {
+        getNonBlockingImplicit(remoteAddresses, remoteKeys,
+            Arrays.stream(dst).mapToLong(UcxUtils::getAddress).toArray(),
+            Arrays.stream(dst).mapToLong(ByteBuffer::remaining).toArray());
+    }
+
+    /**
+     * Non-blocking implicit remote memory get operation.
+     * This routine initiate a load of contiguous blocks of data that is described
+     * by the remote memory addresses {@code remoteAddresses} and the
+     * {@code remoteKeys} "memory handles" in the multiple local memory regions described
+     * by {@code localAddresses} remoteAddresses.
+     * The routine returns immediately and does not guarantee that
+     * remote data is loaded and stored under the local buffer.
+     */
+    public void getNonBlockingImplicit(long[] remoteAddresses, UcpRemoteKey[] remoteKeys,
+                                       long[] localAddresses, long[] sizes) {
+
+        long[] rkeys = Arrays.stream(remoteKeys).mapToLong(UcxNativeStruct::getNativeId).toArray();
+        getNonBlockingImplicitNative(getNativeId(), remoteAddresses, rkeys, localAddresses, sizes);
+    }
+
     /**
      * Non-blocking tagged-send operations
      * This routine sends a messages that is described by the local buffer {@code sendBuffer},
@@ -153,6 +224,10 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     private static native UcxRequest getNonBlockingNative(long enpointId, long remoteAddress,
                                                           long ucpRkeyId, long localAddress,
                                                           long size, UcxCallback callback);
+
+    private static native void getNonBlockingImplicitNative(long enpointId, long[] remoteAddresses,
+                                                            long[] ucpRkeyIds, long[] lAddresses,
+                                                            long[] sizes);
 
     private static native UcxRequest sendTaggedNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long tag,

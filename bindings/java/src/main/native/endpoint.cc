@@ -137,6 +137,40 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass c
     return process_request(request, callback);
 }
 
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingImplicitNative(JNIEnv *env, jclass cls,
+                                                                   jlong ep_ptr,
+                                                                   jlongArray rAddresses,
+                                                                   jlongArray rkeys,
+                                                                   jlongArray lAddresses,
+                                                                   jlongArray sizes)
+{
+    ucs_status_t status;
+
+    int n = env->GetArrayLength(rAddresses);
+    long* remote_addresses = env->GetLongArrayElements(rAddresses, NULL);
+    long* remote_keys      = env->GetLongArrayElements(rkeys, NULL);
+    long* local_addresses  = env->GetLongArrayElements(lAddresses, NULL);
+    long* lengths          = env->GetLongArrayElements(sizes, NULL);
+
+    for (int i = 0; i < n; i++) {
+        status = ucp_get_nbi((ucp_ep_h)ep_ptr,
+                             (void *) local_addresses[i],
+                             lengths[i],
+                             remote_addresses[i],
+                             (ucp_rkey_h)remote_keys[i]);
+
+        if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+            JNU_ThrowExceptionByStatus(env, status);
+        }
+    }
+
+    env->ReleaseLongArrayElements(rAddresses, remote_addresses, 0);
+    env->ReleaseLongArrayElements(rkeys, remote_keys, 0);
+    env->ReleaseLongArrayElements(lAddresses, local_addresses, 0);
+    env->ReleaseLongArrayElements(sizes, lengths, 0);
+}
+
 JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, jclass cls,
                                                                   jlong ep_ptr, jlong addr,
