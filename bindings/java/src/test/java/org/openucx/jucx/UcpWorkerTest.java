@@ -24,7 +24,7 @@ public class UcpWorkerTest {
         assertNotEquals(context.getNativeId(), null);
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         assertNotNull(worker.getNativeId());
-        assertEquals(worker.progress(), 0); // No communications was submitted.
+        assertEquals(0, worker.progress()); // No communications was submitted.
         worker.close();
         assertNull(worker.getNativeId());
         context.close();
@@ -128,8 +128,8 @@ public class UcpWorkerTest {
         UcpContext context2 = new UcpContext(params);
 
         ByteBuffer src = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
-        src.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
         ByteBuffer dst = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        dst.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
         UcpMemory memory = context2.registerMemory(src);
 
         UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
@@ -141,8 +141,8 @@ public class UcpWorkerTest {
 
         int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
         for (int i = 0; i < numRequests; i++) {
-            ep.getNonBlocking(memory.getAddress() + i * blockSize, rkey,
-                   UcxUtils.getAddress(dst) + i * blockSize, blockSize, null);
+            ep.putNonBlockingImplicit(UcxUtils.getAddress(dst) + i * blockSize,
+                blockSize, memory.getAddress() + i * blockSize, rkey);
         }
 
         UcxRequest request = worker1.flushNonBlocking(new UcxCallback() {

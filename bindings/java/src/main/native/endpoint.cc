@@ -123,6 +123,20 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass c
     return process_request(request, callback);
 }
 
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingImplicitNative(JNIEnv *env, jclass cls,
+                                                                   jlong ep_ptr, jlong laddr,
+                                                                   jlong size, jlong raddr,
+                                                                   jlong rkey_ptr)
+{
+    ucs_status_t status = ucp_put_nbi((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
+                                      (ucp_rkey_h)rkey_ptr);
+
+    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+}
+
 JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass cls,
                                                            jlong ep_ptr, jlong raddr,
@@ -135,6 +149,20 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass c
     ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %zu",
                   request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), raddr, size, laddr);
     return process_request(request, callback);
+}
+
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingImplicitNative(JNIEnv *env, jclass cls,
+                                                                   jlong ep_ptr, jlong raddr,
+                                                                   jlong rkey_ptr, jlong laddr,
+                                                                   jlong size)
+{
+    ucs_status_t status = ucp_get_nbi((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
+                                      (ucp_rkey_h)rkey_ptr);
+
+    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
 }
 
 JNIEXPORT jobject JNICALL
