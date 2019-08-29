@@ -524,11 +524,9 @@ unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep)
 {
     ucs_status_t status;
 
-    status = ucs_socket_connect_nb_get_status(ep->fd);
-    if (status != UCS_OK) {
-        if (status == UCS_INPROGRESS) {
-            return 0;
-        }
+    if (!ucs_socket_is_connected(ep->fd)) {
+        ucs_error("tcp_ep %p: connection establishment for "
+                  "socket fd %d was unsuccessful", ep, ep->fd);
         goto err;
     }
 

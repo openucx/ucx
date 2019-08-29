@@ -144,31 +144,24 @@ out:
     return status;
 }
 
-ucs_status_t ucs_socket_connect_nb_get_status(int fd)
+int ucs_socket_is_connected(int fd)
 {
-    socklen_t conn_status_sz;
-    int ret, conn_status;
+    struct sockaddr sock_addr = { 0 };
+    socklen_t sock_addr_len;
+    int ret;
 
-    conn_status_sz = sizeof(conn_status);
+    sock_addr_len = sizeof(sock_addr);
 
-    ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,
-                     &conn_status, &conn_status_sz);
+    ret = getpeername(fd, &sock_addr, &sock_addr_len);
     if (ret < 0) {
-        ucs_error("getsockopt(fd=%d) failed to get SOL_SOCKET(SO_ERROR): %m", fd);
-        return UCS_ERR_IO_ERROR;
+        if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
+            ucs_error("getpeername(fd=%d) failed: %m", fd);
+        }
+
+        return 0;
     }
 
-    if ((conn_status == EINPROGRESS) || (conn_status == EWOULDBLOCK)) {
-        return UCS_INPROGRESS;
-    }
-
-    if (conn_status != 0) {
-        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s",
-                  fd, strerror(conn_status));
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    return UCS_OK;
+    return 1;
 }
 
 int ucs_socket_max_conn()
