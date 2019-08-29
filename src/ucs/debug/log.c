@@ -48,7 +48,7 @@ static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static int ucs_log_get_thread_num(void)
 {
     pthread_t self = pthread_self();
-    unsigned i;
+    int i;
 
     for (i = 0; i < threads_count; ++i) {
         if (threads[i] == self) {
@@ -65,7 +65,7 @@ static int ucs_log_get_thread_num(void)
     }
 
     if (threads_count >= ucs_static_array_size(threads)) {
-        i = (unsigned)-1;
+        i = -1;
         goto unlock_and_return_i;
     }
 
@@ -304,7 +304,7 @@ const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
         if (((i % 4) == 0) && (i > 0)) {
             *(p++) = ':';
         }
-        value = *(uint8_t*)(UCS_PTR_BYTE_OFFSET(data, i));
+        value = *(const uint8_t*)(UCS_PTR_BYTE_OFFSET(data, i));
         p[0] = hexchars[value / 16];
         p[1] = hexchars[value % 16];
         p += 2;

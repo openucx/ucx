@@ -523,10 +523,10 @@ static ssize_t ucs_get_meminfo_entry(const char* pattern)
 
 size_t ucs_get_memfree_size()
 {
-    size_t mem_free;
+    ssize_t mem_free;
 
     mem_free = ucs_get_meminfo_entry("MemFree");
-    if ((ssize_t)mem_free == -1) {
+    if (mem_free == -1) {
         mem_free = UCS_DEFAULT_MEM_FREE;
         ucs_info("cannot determine free mem size, using default: %zu",
                   mem_free);

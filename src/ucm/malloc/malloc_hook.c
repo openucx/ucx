@@ -754,8 +754,9 @@ static void ucm_malloc_install_optional_symbols()
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS)) {
         ucm_malloc_install_symbols(ucm_malloc_optional_symbol_patches);
         ucm_malloc_hook_state.usable_size    =
-            (ucm_usable_size_func_t)ucm_malloc_patchlist_prev_value(ucm_malloc_optional_symbol_patches,
-                                                                "malloc_usable_size");
+            (ucm_usable_size_func_t)ucm_malloc_patchlist_prev_value(
+                                        ucm_malloc_optional_symbol_patches,
+                                        "malloc_usable_size");
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_OPT_SYMS;
     }
 }
@@ -869,7 +870,8 @@ ucs_status_t ucm_malloc_install(int events)
             ucm_malloc_populate_glibc_cache();
             ucm_malloc_install_symbols(ucm_malloc_symbol_patches);
             ucm_malloc_hook_state.free           =
-                (ucm_release_func_t)ucm_malloc_patchlist_prev_value(ucm_malloc_symbol_patches, "free");
+                (ucm_release_func_t)ucm_malloc_patchlist_prev_value(
+                                        ucm_malloc_symbol_patches, "free");
             ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
         }
     } else {

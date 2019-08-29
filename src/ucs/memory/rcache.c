@@ -682,7 +682,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     }
 
     status = ucs_mpool_init(&self->inv_mp, 0, sizeof(ucs_rcache_inv_entry_t), 0,
-                            1, 1024, (unsigned)-1, &ucs_rcache_mp_ops, "rcache_inv_mp");
+                            1, 1024, UINT_MAX, &ucs_rcache_mp_ops, "rcache_inv_mp");
     if (status != UCS_OK) {
         goto err_cleanup_pgtable;
     }
