@@ -60,7 +60,7 @@ typedef enum uct_tcp_ep_ctx_type {
     /* - Zcopy TX operation is in progress on a given EP. */
     UCT_TCP_EP_CTX_TYPE_ZCOPY_TX,
     /* - PUT RX operation is in progress on a given EP. */
-    UCT_TCP_EP_CTX_TYPE_PUT_RX,
+    UCT_TCP_EP_CTX_TYPE_PUT_RX
 } uct_tcp_ep_ctx_type_t;
 
 
