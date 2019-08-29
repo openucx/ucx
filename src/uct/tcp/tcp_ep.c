@@ -620,40 +620,6 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
     return 1;
 }
 
-static inline ucs_status_t
-uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
-                      uint8_t am_id, uct_tcp_am_hdr_t **hdr)
-{
-    ucs_status_t status;
-
-    UCT_CHECK_AM_ID(am_id);
-
-    status = uct_tcp_ep_check_tx_res(ep);
-    if (ucs_unlikely(status != UCS_OK)) {
-        if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
-            goto err_no_res;
-        }
-        return status;
-    }
-
-    ucs_assertv(ep->tx.buf == NULL, "ep=%p", ep);
-
-    ep->tx.buf = ucs_mpool_get_inline(&iface->tx_mpool);
-    if (ucs_unlikely(ep->tx.buf == NULL)) {
-        goto err_no_res;
-    }
-
-    *hdr          = ep->tx.buf;
-    (*hdr)->am_id = am_id;
-
-    return UCS_OK;
-
-err_no_res:
-    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
-    UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-    return UCS_ERR_NO_RESOURCE;
-}
-
 static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
 {
     unsigned count = 0;
@@ -850,6 +816,40 @@ static inline unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 
 out:
     return handled;
+}
+
+static inline ucs_status_t
+uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
+                      uint8_t am_id, uct_tcp_am_hdr_t **hdr)
+{
+    ucs_status_t status;
+
+    UCT_CHECK_AM_ID(am_id);
+
+    status = uct_tcp_ep_check_tx_res(ep);
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
+            goto err_no_res;
+        }
+        return status;
+    }
+
+    ucs_assertv(ep->tx.buf == NULL, "ep=%p", ep);
+
+    ep->tx.buf = ucs_mpool_get_inline(&iface->tx_mpool);
+    if (ucs_unlikely(ep->tx.buf == NULL)) {
+        goto err_no_res;
+    }
+
+    *hdr          = ep->tx.buf;
+    (*hdr)->am_id = am_id;
+
+    return UCS_OK;
+
+err_no_res:
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
+    UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static inline unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
