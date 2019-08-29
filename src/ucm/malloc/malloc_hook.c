@@ -75,7 +75,7 @@ KHASH_INIT(mmap_ptrs, void*, char, 0, ucm_mmap_ptr_hash, ucm_mmap_ptr_equal)
 typedef void (*ucm_release_func_t)(void *ptr);
 
 /* Pointer to get usable size function */
-typedef size_t (*usable_size_func_t)(void *ptr);
+typedef size_t (*ucm_usable_size_func_t)(void *ptr);
 
 
 typedef struct ucm_malloc_hook_state {
@@ -90,7 +90,7 @@ typedef struct ucm_malloc_hook_state {
     int                   hook_called; /* Our malloc hook was called */
     size_t                max_freed_size; /* Maximal size released so far */
 
-    usable_size_func_t    usable_size; /* function pointer to get usable size */
+    ucm_usable_size_func_t usable_size; /* function pointer to get usable size */
 
     ucm_release_func_t    free; /* function pointer to release memory */
 
@@ -754,7 +754,7 @@ static void ucm_malloc_install_optional_symbols()
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS)) {
         ucm_malloc_install_symbols(ucm_malloc_optional_symbol_patches);
         ucm_malloc_hook_state.usable_size    =
-            (usable_size_func_t)ucm_malloc_patchlist_prev_value(ucm_malloc_optional_symbol_patches,
+            (ucm_usable_size_func_t)ucm_malloc_patchlist_prev_value(ucm_malloc_optional_symbol_patches,
                                                                 "malloc_usable_size");
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_OPT_SYMS;
     }
