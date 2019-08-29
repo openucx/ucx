@@ -115,7 +115,13 @@ ucs_async_signal_sys_timer_create(int uid, pid_t tid, timer_t *sys_timer_id)
     ev.sigev_notify          = SIGEV_THREAD_ID;
     ev.sigev_signo           = ucs_global_opts.async_signo;
     ev.sigev_value.sival_int = uid; /* user parameter to timer */
+#if defined(HAVE_SIGEVENT_SIGEV_UN_TID)
     ev._sigev_un._tid        = tid; /* target thread */
+#elif defined(HAVE_SIGEVENT_SIGEV_NOTIFY_THREAD_ID)
+    ev.sigev_notify_thread_id = tid; /* target thread */
+#else
+#error "Port me"
+#endif
     ret = timer_create(CLOCK_REALTIME, &ev, &timer);
     if (ret < 0) {
         ucs_error("failed to create an interval timer: %m");
