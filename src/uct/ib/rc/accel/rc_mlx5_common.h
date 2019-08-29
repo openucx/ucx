@@ -101,6 +101,13 @@
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(64)
 
+typedef enum {
+    UCT_RC_MLX5_SRQ_TOPO_LIST,
+    UCT_RC_MLX5_SRQ_TOPO_CYCLIC,
+    UCT_RC_MLX5_SRQ_TOPO_AUTO,
+    UCT_RC_MLX5_SRQ_TOPO_LAST
+} uct_rc_mlx5_srq_topo_t;
+
 enum {
     UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
     UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
@@ -333,6 +340,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
         size_t                 seg_size;
     } tm;
     unsigned                   exp_backoff;
+    uct_rc_mlx5_srq_topo_t     srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
 
