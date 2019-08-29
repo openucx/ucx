@@ -172,8 +172,8 @@ typedef enum uct_tcp_cm_conn_event {
  * TCP connection request packet
  */
 typedef struct uct_tcp_cm_conn_req_pkt {
-    uct_tcp_cm_conn_event_t       event;
-    struct sockaddr_in            iface_addr;
+    uct_tcp_cm_conn_event_t       event;      /* Connection event ID */
+    struct sockaddr_in            iface_addr; /* Socket address of UCT local iface */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
 
 
@@ -181,8 +181,8 @@ typedef struct uct_tcp_cm_conn_req_pkt {
  * TCP active message header
  */
 typedef struct uct_tcp_am_hdr {
-    uint8_t                       am_id;
-    uint32_t                      length;
+    uint8_t                       am_id;      /* UCT AM ID of an AM operation */
+    uint32_t                      length;     /* Length of data sent in an AM operation */
 } UCS_S_PACKED uct_tcp_am_hdr_t;
 
 
@@ -203,9 +203,9 @@ typedef enum uct_tcp_ep_am_id {
  * TCP PUT request header
  */
 typedef struct uct_tcp_ep_put_req {
-    uint64_t                      addr;
-    size_t                        length;
-    uint64_t                      remote_comp;
+    uint64_t                      addr;        /* Address of a remote memory buffer */
+    size_t                        length;      /* Length of a remote memory buffer */
+    uint64_t                      remote_comp; /* Completion ID of a current PUT operation */
 } UCS_S_PACKED uct_tcp_ep_put_req_t;
 
 
@@ -213,7 +213,7 @@ typedef struct uct_tcp_ep_put_req {
  * TCP PUT ack header
  */
 typedef struct uct_tcp_ep_put_ack {
-    uint64_t                      remote_comp;
+    uint64_t                      remote_comp; /* Completion ID of a current PUT operation */
 } UCS_S_PACKED uct_tcp_ep_put_ack_t;
 
 
@@ -221,9 +221,9 @@ typedef struct uct_tcp_ep_put_ack {
  * TCP PUT ack message pending request
  */
 typedef struct uct_tcp_ep_put_ack_pending_req {
-    uct_pending_req_t             super;
-    uct_tcp_ep_t                  *ep;
-    uct_tcp_ep_put_ack_t          put_ack;
+    uct_pending_req_t             super;     /* UCT pending request super */
+    uct_tcp_ep_t                  *ep;       /* TCP Endpoint that handles a PUT request */
+    uct_tcp_ep_put_ack_t          put_ack;   /* PUT ack header */
 } uct_tcp_ep_put_ack_pending_req_t;
 
 
@@ -242,11 +242,11 @@ typedef struct uct_tcp_ep_ctx {
  * buffer from TCP EP context
  */
 typedef struct uct_tcp_ep_zcopy_tx {
-    uct_tcp_am_hdr_t              super;
-    uct_completion_t              *comp;
-    size_t                        iov_index;
-    size_t                        iov_cnt;
-    struct iovec                  iov[0];
+    uct_tcp_am_hdr_t              super;     /* UCT TCP AM header */
+    uct_completion_t              *comp;     /* Local UCT completion object */
+    size_t                        iov_index; /* Current IOV index */
+    size_t                        iov_cnt;   /* Number of IOVs that should be sent */
+    struct iovec                  iov[0];    /* IOVs that should be sent */
 } uct_tcp_ep_zcopy_tx_t;
 
 
