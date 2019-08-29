@@ -36,6 +36,8 @@
 
 #define TEST_STRING_LEN sizeof(test_message)
 #define DEFAULT_PORT    13337
+#define IP_STRING_LEN   50
+#define PORT_STRING_LEN 8
 
 const char test_message[]   = "UCX Client-Server Hello World";
 static uint16_t server_port = DEFAULT_PORT;
@@ -446,8 +448,8 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     ucp_listener_params_t params;
     ucp_listener_attr_t attr;
     ucs_status_t status;
-    char ip_str[50];
-    char port_str[8];
+    char ip_str[IP_STRING_LEN];
+    char port_str[PORT_STRING_LEN];
 
     set_listen_addr(&listen_addr);
 
@@ -476,8 +478,8 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     }
 
     fprintf(stderr, "server is listening on IP %s port %s\n",
-            sockaddr_get_ip_str(&attr.sockaddr, ip_str, 50),
-            sockaddr_get_port_str(&attr.sockaddr, port_str, 8));
+            sockaddr_get_ip_str(&attr.sockaddr, ip_str, IP_STRING_LEN),
+            sockaddr_get_port_str(&attr.sockaddr, port_str, PORT_STRING_LEN));
 
 out:
     return status;
