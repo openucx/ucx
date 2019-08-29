@@ -27,7 +27,7 @@
 
 /* How many IOVs are needed to keep AM/PUT Zcopy service data
  * (TCP protocol and user's AM (or PUT) headers) */
-#define UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT 2
+#define UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT    2
 
 /* How many IOVs are needed to do AM Short
  * (TCP protocol and user's AM headers, payload) */

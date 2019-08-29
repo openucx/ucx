@@ -856,7 +856,7 @@ static inline unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_ep_put_req_t *put_req;
     size_t recv_length;
-    ucs_status_t status;;
+    ucs_status_t status;
 
     put_req     = (uct_tcp_ep_put_req_t*)ep->rx.buf;
     recv_length = put_req->length;
@@ -938,14 +938,6 @@ static inline void uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
     }
 }
 
-static inline void
-uct_tcp_ep_am_short_fill_data(uct_tcp_am_hdr_t *hdr, uint64_t header,
-                              const void *payload, unsigned length)
-{
-    *((uint64_t*)(hdr + 1)) = header;
-    memcpy(UCS_PTR_BYTE_OFFSET(hdr + 1, sizeof(header)), payload, length);
-}
-
 static const void*
 uct_tcp_ep_am_sendv_get_trace_payload(uct_tcp_am_hdr_t *hdr,
                                       const void *header,
@@ -958,8 +950,8 @@ uct_tcp_ep_am_sendv_get_trace_payload(uct_tcp_am_hdr_t *hdr,
 
     /* If user requested trace data, we copy header and payload
      * to EP TX buffer in order to trace correct data */
-    uct_tcp_ep_am_short_fill_data(hdr, *((const uint64_t*)header),
-                                  payload_iov->iov_base, payload_iov->iov_len);
+    uct_am_short_fill_data(hdr + 1, *(const uint64_t*)header,
+                           payload_iov->iov_base, payload_iov->iov_len);
     return (hdr + 1);
 }
 
@@ -1058,7 +1050,10 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
     if (ucs_likely(status == UCS_OK)) {
         uct_tcp_ep_send_put_ack(iface, ep, hdr,
                                 put_req->remote_comp);
-    } else if (status == UCS_ERR_NO_RESOURCE) {
+    } else if (status != UCS_ERR_NO_RESOURCE) {
+        ucs_error("tcp_ep %p: failed to prepare AM data", ep);
+        return;
+    } else {
         /* There are no resources to send this PUT ACK message from
          * this EP. Add request to a pending queue */
         put_ack_req = ucs_calloc(1, sizeof(*put_ack_req),
@@ -1078,8 +1073,6 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
         if (ucs_likely(status != UCS_OK)) {
             ucs_error("tcp_ep %p: failed to add a pending request", ep);
         }
-    } else {
-        ucs_error("tcp_ep %p: failed to prepare AM data", ep);
     }
 }
 
@@ -1301,30 +1294,29 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
 
     status = uct_tcp_ep_am_sendv(iface, ep, 0, hdr, UCT_TCP_EP_PUT_ZCOPY_MAX,
                                  &put_req, ctx->iov, ctx->iov_cnt);
-    if (ucs_likely((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS))) {
-        UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, put_req.length);
-
-        if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-            /* Since EP has to wait for an acknowledgment for this PUT
-             * operation, pass NULL instead of the user's completion
-             * object and always return UCS_INPROGRESS. The completion
-             * will be updated upon receiving the PUT acknowledgment */
-            uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
-                                             sizeof(put_req), NULL);
-        } else {
-            uct_tcp_ep_ctx_reset(&ep->tx);
-        }
-
-        /* Increment iface::outstanding in order to ensure returning
-         * UCS_INPROGRESS uct_iface_flush and do progressing on an iface.
-         * It has to be decremented upon PUT ACK message receiving */
-        iface->outstanding++;
-        return UCS_INPROGRESS;
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        uct_tcp_ep_ctx_reset(&ep->tx);
+        return status;
     }
 
-    /* Error path */
-    uct_tcp_ep_ctx_reset(&ep->tx);
-    return status;
+    UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, put_req.length);
+
+    if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
+        /* Since EP has to wait for an acknowledgment for this PUT
+         * operation, pass NULL instead of the user's completion
+         * object and always return UCS_INPROGRESS. The completion
+         * will be updated upon receiving the PUT acknowledgment */
+        uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
+                                         sizeof(put_req), NULL);
+    } else {
+        uct_tcp_ep_ctx_reset(&ep->tx);
+    }
+
+    /* Increment iface::outstanding in order to ensure returning
+     * UCS_INPROGRESS uct_iface_flush and do progressing on an iface.
+     * It has to be decremented upon PUT ACK message receiving */
+    iface->outstanding++;
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,

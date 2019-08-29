@@ -146,7 +146,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
                                          UCT_TCP_EP_PUT_SERVICE_LENGTH;
         attr->cap.put.opt_zcopy_align  = 512;
-        attr->cap.am.align_mtu         = mtu;
+        attr->cap.put.align_mtu        = mtu;
         attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
     }
 
