@@ -164,10 +164,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     uct_tcp_ep_ctx_init(&self->tx);
     uct_tcp_ep_ctx_init(&self->rx);
 
-    self->events     = 0;
-    self->fd         = fd;
-    self->ctx_caps   = 0;
-    self->conn_state = UCT_TCP_EP_CONN_STATE_CLOSED;
+    self->outstanding = 0;
+    self->events      = 0;
+    self->fd          = fd;
+    self->ctx_caps    = 0;
+    self->conn_state  = UCT_TCP_EP_CONN_STATE_CLOSED;
 
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
@@ -452,6 +453,28 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
     }
 }
 
+static inline void uct_tcp_ep_outstanding_inc(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+
+    ucs_assert(ep->outstanding < UINT16_MAX);
+    ep->outstanding++;
+
+    uct_tcp_iface_outstanding_inc(iface);
+}
+
+static inline void uct_tcp_ep_outstanding_dec(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+
+    ucs_assert(ep->outstanding > 0);
+    ep->outstanding--;
+
+    uct_tcp_iface_outstanding_dec(iface);
+}
+
 void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep)
 {
     uct_pending_req_priv_queue_t *priv;
@@ -703,22 +726,9 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
     ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
 }
 
-static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
-                                             uct_tcp_ep_put_ack_t *put_ack)
+static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-    uct_completion_t *comp = (void*)(uintptr_t)put_ack->remote_comp; 
-
-    iface->outstanding--;
-
-    if (!comp) {
-        return;
-    }
-
-    /* If we received this message, it means that all send()s
-     * were successful. So, report UCS_OK to user */
-    uct_invoke_completion(comp, UCS_OK);
+    uct_tcp_ep_outstanding_dec(ep);
 }
 
 static inline unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
@@ -800,8 +810,8 @@ static inline unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
                 goto out;
             }
         } else if (hdr->am_id == UCT_TCP_EP_PUT_ACK_AM_ID) {
-            ucs_assert(hdr->length == sizeof(uct_tcp_ep_put_ack_t));
-            uct_tcp_ep_handle_put_ack(ep, (uct_tcp_ep_put_ack_t*)(hdr + 1));
+            ucs_assert(hdr->length == 0);
+            uct_tcp_ep_handle_put_ack(ep);
             handled++;
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
@@ -995,17 +1005,12 @@ uct_tcp_ep_am_sendv(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
 
 static inline void uct_tcp_ep_send_put_ack(uct_tcp_iface_t *iface,
                                            uct_tcp_ep_t *ep,
-                                           uct_tcp_am_hdr_t *hdr,
-                                           uint64_t remote_comp)
+                                           uct_tcp_am_hdr_t *hdr)
 {
-    uct_tcp_ep_put_ack_t *put_ack;
-
     ucs_assertv(hdr != NULL, "ep=%p", ep);
 
-    put_ack              = (uct_tcp_ep_put_ack_t*)(hdr + 1);
-    put_ack->remote_comp = remote_comp;
-    hdr->am_id           = UCT_TCP_EP_PUT_ACK_AM_ID;
-    hdr->length          = sizeof(*put_ack);
+    hdr->am_id  = UCT_TCP_EP_PUT_ACK_AM_ID;
+    hdr->length = 0;
     uct_tcp_ep_am_send(iface, ep, hdr);
 }
 
@@ -1023,8 +1028,7 @@ uct_tcp_ep_pending_put_ack_cb(uct_pending_req_t *self)
 
     status = uct_tcp_ep_am_prepare(iface, put_ack_req->ep, 0, &hdr);
     if (ucs_likely(status == UCS_OK)) {
-        uct_tcp_ep_send_put_ack(iface, put_ack_req->ep, hdr,
-                                put_ack_req->put_ack.remote_comp);
+        uct_tcp_ep_send_put_ack(iface, put_ack_req->ep, hdr);
         ucs_free(put_ack_req);
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
@@ -1048,8 +1052,7 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
      * and this PUT ACK message */
     status = uct_tcp_ep_am_prepare(iface, ep, 0, &hdr);
     if (ucs_likely(status == UCS_OK)) {
-        uct_tcp_ep_send_put_ack(iface, ep, hdr,
-                                put_req->remote_comp);
+        uct_tcp_ep_send_put_ack(iface, ep, hdr);
     } else if (status != UCS_ERR_NO_RESOURCE) {
         ucs_error("tcp_ep %p: failed to prepare AM data", ep);
         return;
@@ -1064,9 +1067,8 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
             return;
         }
 
-        put_ack_req->super.func          = uct_tcp_ep_pending_put_ack_cb;
-        put_ack_req->ep                  = ep;
-        put_ack_req->put_ack.remote_comp = put_req->remote_comp;
+        put_ack_req->super.func = uct_tcp_ep_pending_put_ack_cb;
+        put_ack_req->ep         = ep;
 
         status = uct_tcp_ep_pending_add(&ep->super.super,
                                         &put_ack_req->super, 0);
@@ -1285,21 +1287,24 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
         return status;
     }
 
-    ctx                 = ucs_derived_of(hdr, uct_tcp_ep_zcopy_tx_t);
-    hdr->am_id          = UCT_TCP_EP_PUT_REQ_AM_ID;
-    hdr->length         = sizeof(put_req);
-    put_req.addr        = remote_addr;
-    put_req.length      = ep->tx.length;
-    put_req.remote_comp = (uint64_t)(uintptr_t)comp;
+    ctx            = ucs_derived_of(hdr, uct_tcp_ep_zcopy_tx_t);
+    hdr->am_id     = UCT_TCP_EP_PUT_REQ_AM_ID;
+    hdr->length    = sizeof(put_req);
+    put_req.addr   = remote_addr;
+    put_req.length = ep->tx.length;
 
     status = uct_tcp_ep_am_sendv(iface, ep, 0, hdr, UCT_TCP_EP_PUT_ZCOPY_MAX,
                                  &put_req, ctx->iov, ctx->iov_cnt);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
-        uct_tcp_ep_ctx_reset(&ep->tx);
-        return status;
+        goto out;
     }
 
     UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, put_req.length);
+
+    /* Increment ep::outstanding in order to ensure returning
+     * UCS_ERR_NO_RESOURCE from flush functions and do progressing.
+     * It has to be decremented upon PUT ACK message receiving */
+    uct_tcp_ep_outstanding_inc(ep);
 
     if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
         /* Since EP has to wait for an acknowledgment for this PUT
@@ -1307,16 +1312,15 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
          * object and always return UCS_INPROGRESS. The completion
          * will be updated upon receiving the PUT acknowledgment */
         uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
-                                         sizeof(put_req), NULL);
-    } else {
-        uct_tcp_ep_ctx_reset(&ep->tx);
+                                         sizeof(put_req), comp);
+        return UCS_INPROGRESS;
     }
 
-    /* Increment iface::outstanding in order to ensure returning
-     * UCS_INPROGRESS uct_iface_flush and do progressing on an iface.
-     * It has to be decremented upon PUT ACK message receiving */
-    iface->outstanding++;
-    return UCS_INPROGRESS;
+    status = UCS_OK;
+
+out:
+    uct_tcp_ep_ctx_reset(&ep->tx);
+    return status;
 }
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
@@ -1347,7 +1351,8 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
-    if (uct_tcp_ep_check_tx_res(ep) == UCS_ERR_NO_RESOURCE) {
+    if (ep->outstanding ||
+        (uct_tcp_ep_check_tx_res(ep) == UCS_ERR_NO_RESOURCE)) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
         return UCS_ERR_NO_RESOURCE;
     }

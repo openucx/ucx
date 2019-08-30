@@ -205,16 +205,7 @@ typedef enum uct_tcp_ep_am_id {
 typedef struct uct_tcp_ep_put_req {
     uint64_t                      addr;        /* Address of a remote memory buffer */
     size_t                        length;      /* Length of a remote memory buffer */
-    uint64_t                      remote_comp; /* Completion ID of a current PUT operation */
 } UCS_S_PACKED uct_tcp_ep_put_req_t;
-
-
-/**
- * TCP PUT ack header
- */
-typedef struct uct_tcp_ep_put_ack {
-    uint64_t                      remote_comp; /* Completion ID of a current PUT operation */
-} UCS_S_PACKED uct_tcp_ep_put_ack_t;
 
 
 /**
@@ -223,7 +214,6 @@ typedef struct uct_tcp_ep_put_ack {
 typedef struct uct_tcp_ep_put_ack_pending_req {
     uct_pending_req_t             super;     /* UCT pending request super */
     uct_tcp_ep_t                  *ep;       /* TCP Endpoint that handles a PUT request */
-    uct_tcp_ep_put_ack_t          put_ack;   /* PUT ack header */
 } uct_tcp_ep_put_ack_pending_req_t;
 
 
@@ -256,6 +246,9 @@ typedef struct uct_tcp_ep_zcopy_tx {
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
     uint8_t                       ctx_caps;    /* Which contexts are supported */
+    uint16_t                      outstanding; /* Number of outstanding operations that wait
+                                                * for acknowledge from a peer and don't consume
+                                                * a TX buffer (e.g. PUT Zcopy operation) */
     int                           fd;          /* Socket file descriptor */
     uct_tcp_ep_conn_state_t       conn_state;  /* State of connection with peer */
     int                           events;      /* Current notifications */
@@ -349,10 +342,6 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
 size_t uct_tcp_iface_get_max_iov(const uct_tcp_iface_t *iface);
 
 size_t uct_tcp_iface_get_max_zcopy_header(const uct_tcp_iface_t *iface);
-
-void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface);
-
-void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface);
 
 void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
@@ -455,6 +444,16 @@ static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
     return uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
 }
 
+static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
+{
+    iface->outstanding++;
+}
+
+static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
+{
+    ucs_assert(iface->outstanding > 0);
+    iface->outstanding--;
+}
 
 /**
  * Query for active network devices under /sys/class/net, as determined by

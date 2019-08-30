@@ -233,17 +233,6 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
-{
-    iface->outstanding++;
-}
-
-void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
-{
-    ucs_assert(iface->outstanding > 0);
-    iface->outstanding--;
-}
-
 static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 {
     if (iface->listen_fd != -1) {
