@@ -911,7 +911,9 @@ UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
     rc_tls.push_back("rc_v");
     rc_tls.push_back("rc_x");
 
-    /* If test w */
+    /* If test is running with RC only (i.e. unscalable transport),
+     * check that a number of created lanes is the same for different
+     * number of estimated EPs values */
     bool has_only_rc = has_only_transports(rc_tls);
 
     test_est_num_eps_fallback(1, test_min_max_eps, has_only_rc);
