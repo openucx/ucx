@@ -17,7 +17,6 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags               = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->cap.flags               = 0;
     attr->cap.max_alloc           = 0;
     attr->cap.reg_mem_types       = 0;
     attr->cap.access_mem_type     = UCS_MEMORY_TYPE_HOST;
