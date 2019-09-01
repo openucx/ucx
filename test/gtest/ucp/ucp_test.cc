@@ -79,10 +79,28 @@ void ucp_test::init() {
     }
 }
 
+static bool check_transport(const std::string check_tl_name,
+                            const std::vector<std::string>& tl_names) {
+    return (std::find(tl_names.begin(), tl_names.end(),
+                      check_tl_name) != tl_names.end());
+}
+
 bool ucp_test::has_transport(const std::string& tl_name) const {
-    return (std::find(GetParam().transports.begin(),
-                      GetParam().transports.end(),
-                      tl_name) != GetParam().transports.end());
+    return check_transport(tl_name, GetParam().transports);
+}
+
+bool ucp_test::has_only_transports(const std::vector<std::string>& tl_names) const {
+    const std::vector<std::string>& transports = GetParam().transports;
+    size_t other_tls_count                     = 0;
+    std::vector<std::string>::const_iterator iter;
+
+    for(iter = transports.begin(); iter != transports.end(); ++iter) {
+        if (!check_transport(*iter, tl_names)) {
+            other_tls_count++;
+        }
+    }
+
+    return !other_tls_count;
 }
 
 bool ucp_test::is_self() const {

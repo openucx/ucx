@@ -230,6 +230,7 @@ typedef struct ucp_worker {
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
+    uint64_t                      scalable_tl_bitmap; /* Map of scalable tl resources */
     ucp_worker_cm_t               *cms;          /* Array of CMs, one for each component */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
