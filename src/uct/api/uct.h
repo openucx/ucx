@@ -909,8 +909,8 @@ struct uct_iface_attr {
     size_t                   max_conn_priv;  /**< Max size of the iface's private data.
                                                   used for connection
                                                   establishment with sockaddr */
-    int                      listen_port;    /**< Port number on which this iface
-                                                  is listening. (in host byte order) */
+    struct sockaddr_storage  listen_sockaddr; /**< Sockaddr on which this iface
+                                                   is listening. */
     /*
      * The following fields define expected performance of the communication
      * interface, this would usually be a combination of device and system

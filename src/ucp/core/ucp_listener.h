@@ -23,7 +23,7 @@ typedef struct ucp_listener {
                                                  listen on */
     };
 
-    uint16_t                       port;      /* Listening port */
+    struct sockaddr_storage        sockaddr;  /* Listening sockaddr */
     ucp_rsc_index_t                num_tls;   /* Number of UCT listening
                                                  resources  (wifaces or
                                                  listeners) */
