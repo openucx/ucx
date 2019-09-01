@@ -341,6 +341,30 @@ AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
 
 
 #
+# PGI specific switches
+#
+ADD_COMPILER_FLAG_IF_SUPPORTED([--display_error_number],
+                               [--display_error_number],
+                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                               [],
+                               [])
+
+# Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
+ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 181],
+                               [--diag_suppress 181],
+                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                               [],
+                               [])
+
+# Suppress deprecated API warning for PGI18 compiler
+ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1215],
+                               [--diag_suppress 1215],
+                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                               [],
+                               [])
+
+
+#
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CXXFLAGS="$BASE_CFLAGS"
