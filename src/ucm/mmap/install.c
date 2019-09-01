@@ -66,19 +66,19 @@ typedef struct ucm_mmap_test_events_data {
 } ucm_mmap_test_events_data_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0, UCM_HOOK_BOTH},
-    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0, UCM_HOOK_BOTH},
+    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    UCM_EVENT_NONE,  UCM_HOOK_BOTH},
+    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  UCM_EVENT_NONE,  UCM_HOOK_BOTH},
 #if HAVE_MREMAP
-    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0, UCM_HOOK_BOTH},
+    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  UCM_EVENT_NONE,  UCM_HOOK_BOTH},
 #endif
-    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0, UCM_HOOK_BOTH},
+    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   UCM_EVENT_NONE,  UCM_HOOK_BOTH},
     { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_HOOK_BOTH},
-    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0, UCM_HOOK_RELOC},
+    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    UCM_EVENT_NONE,  UCM_HOOK_RELOC},
 #if UCM_BISTRO_HOOKS
-    { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    0, UCM_HOOK_BISTRO},
+    { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    UCM_EVENT_NONE,  UCM_HOOK_BISTRO},
 #endif
-    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0, UCM_HOOK_BOTH},
-    { {NULL, NULL}, 0}
+    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, UCM_EVENT_NONE,  UCM_HOOK_BOTH},
+    { {NULL, NULL}, UCM_EVENT_NONE}
 };
 
 static pthread_mutex_t ucm_mmap_install_mutex = PTHREAD_MUTEX_INITIALIZER;

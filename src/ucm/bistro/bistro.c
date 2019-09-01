@@ -54,7 +54,7 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_EXEC);
     if (!UCS_STATUS_IS_ERR(status)) {
-        ucs_clear_cache(dst, dst + len);
+        ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
     }
     return status;
 }
