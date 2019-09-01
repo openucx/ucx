@@ -619,7 +619,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     m_iface_params = *params;
 
     memset(&m_cm_attr, 0, sizeof(m_cm_attr));
-    client_cb_arg = 0;
+    max_conn_priv = 0;
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
@@ -644,7 +644,7 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     status = uct_cm_query(m_cm, &m_cm_attr);
     ASSERT_UCS_OK(status);
 
-    client_cb_arg = 0;
+    max_conn_priv = 0;
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,

@@ -98,7 +98,7 @@ public:
         m_entities.push_back(client);
 
         /* initiate the client's private data callback argument */
-        client->client_cb_arg = server->iface_attr().max_conn_priv;
+        client->max_conn_priv = server->iface_attr().max_conn_priv;
 
         UCS_TEST_MESSAGE << "Testing " << m_listen_addr
                          << " Interface: " << GetParam()->dev_name;
@@ -153,7 +153,7 @@ protected:
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 {
     client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
-                    NULL, NULL, &client->client_cb_arg);
+                    NULL, NULL, &client->max_conn_priv);
 
 
     /* wait for the server to connect */
@@ -175,7 +175,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
 {
     delay_conn_reply = true;
     client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
-                    NULL, NULL, &client->client_cb_arg);
+                    NULL, NULL, &client->max_conn_priv);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -204,7 +204,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 {
     delay_conn_reply = true;
     client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
-                    NULL, NULL, &client->client_cb_arg);
+                    NULL, NULL, &client->max_conn_priv);
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
@@ -244,10 +244,10 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         client_test = uct_test::create_entity(client_params);
         m_entities.push_back(client_test);
 
-        client_test->client_cb_arg = server->iface_attr().max_conn_priv;
+        client_test->max_conn_priv = server->iface_attr().max_conn_priv;
         client_test->connect(i, *server, 0, m_connect_addr,
                              client_iface_priv_data_cb, NULL, NULL,
-                             &client_test->client_cb_arg);
+                             &client_test->max_conn_priv);
     }
 
     while (server_recv_req < num_clients){
@@ -264,7 +264,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     /* multiple clients, on the same iface, connecting to the same server */
     for (i = 0; i < num_conns_on_client; ++i) {
         client->connect(i, *server, 0, m_connect_addr, client_iface_priv_data_cb,
-                        NULL, NULL, &client->client_cb_arg);
+                        NULL, NULL, &client->max_conn_priv);
     }
 
     while (server_recv_req < num_conns_on_client) {
@@ -278,7 +278,7 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
     client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
-                    NULL, NULL, &client->client_cb_arg);
+                    NULL, NULL, &client->max_conn_priv);
 
     scoped_log_handler slh(wrap_errors_logger);
     /* kill the server */
@@ -305,7 +305,7 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
         scoped_log_handler slh(wrap_errors_logger);
         /* client - try to connect to a non-existing port on the server side */
         client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
-                        NULL, NULL, &client->client_cb_arg);
+                        NULL, NULL, &client->max_conn_priv);
         completion comp;
         ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
         if (status == UCS_INPROGRESS) {
@@ -362,7 +362,7 @@ public:
         m_entities.push_back(m_client);
 
         /* initiate the client's private data callback argument */
-        m_client->client_cb_arg = m_client->cm_attr().max_conn_priv;
+        m_client->max_conn_priv = m_client->cm_attr().max_conn_priv;
 
         UCS_TEST_MESSAGE << "Testing " << m_listen_addr
                          << " Interface: " << GetParam()->dev_name;
@@ -392,7 +392,7 @@ protected:
         size_t priv_data_len;
 
         priv_data_len = uct_test::entity::priv_data_do_pack(priv_data);
-        EXPECT_LE(priv_data_len, self->m_client->client_cb_arg);
+        EXPECT_LE(priv_data_len, self->m_client->max_conn_priv);
         return priv_data_len;
     }
 
@@ -687,7 +687,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     for (i = 0; i < num_clients; ++i) {
         client_test = uct_test::create_entity();
         m_entities.push_back(client_test);
-        client_test->client_cb_arg = client_test->cm_attr().max_conn_priv;
+        client_test->max_conn_priv = client_test->cm_attr().max_conn_priv;
         client_test->connect(0, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                              client_connect_cb, client_disconnect_cb, this);
     }

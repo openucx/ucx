@@ -184,7 +184,7 @@ protected:
 
         static const std::string server_priv_data;
         static std::string       client_priv_data;
-        size_t                   client_cb_arg;
+        size_t                   max_conn_priv;
 
     private:
         class async_wrapper {
