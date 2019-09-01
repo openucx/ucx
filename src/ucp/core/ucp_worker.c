@@ -1481,8 +1481,8 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                    p, endp - p);
     p = ucp_worker_add_feature_rsc(context, key, amo_lanes_map, "amo",
                                    p, endp - p);
-    p = ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
-                                   p, endp - p);
+    ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
+                               p, endp - p);
     ucs_info("%s", info);
 }
 

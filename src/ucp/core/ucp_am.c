@@ -501,7 +501,10 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end,
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucs_error("worker %p  could not allocate descriptor for active message"
                   "on callback : %u", worker, am_id);
+        return status;
     }
+
+    ucs_assert(desc != NULL);
 
     status = worker->am_cbs[am_id].cb(worker->am_cbs[am_id].context,
                                       desc + 1,

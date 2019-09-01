@@ -462,7 +462,8 @@ static int ucp_is_resource_in_transports_list(const char *tl_name,
              */
             alias_arr_count = ucp_tl_alias_count(alias);
             snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
-            tmp_rsc_flags = 0;
+            dummy_mask      = 0;
+            tmp_rsc_flags   = 0;
             tmp_tl_cfg_mask = 0;
             if (ucp_config_is_tl_enabled(names, count, alias->alias, 1,
                                          &tmp_rsc_flags, &tmp_tl_cfg_mask) &&
@@ -907,10 +908,10 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
                                              const ucp_config_t *config)
 {
     const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
-    unsigned count = config->sockaddr_aux_tls.count;
+    unsigned count        = config->sockaddr_aux_tls.count;
+    uint8_t dummy_flags   = 0;
+    uint64_t dummy_mask   = 0;
     ucp_rsc_index_t tl_id;
-    uint8_t dummy_flags;
-    uint64_t dummy_mask;
 
     context->config.sockaddr_aux_rscs_bitmap = 0;
 
@@ -958,7 +959,6 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
          * sockaddr tls bitmap. save the tl_id's for the client/server usage later */
         ucs_for_each_bit(tl_id, sa_tls_bitmap) {
             resource = &context->tl_rscs[tl_id];
-            tl_md    = &context->tl_mds[resource->md_index];
 
             if (!strcmp(sockaddr_tl_names[j], "*") ||
                 !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name, UCT_TL_NAME_MAX)) {
