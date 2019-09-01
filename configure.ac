@@ -220,8 +220,11 @@ AS_IF([test "x$with_docs_only" = xyes],
          [],
          [enable_frame_pointer=no])
      AS_IF([test "x$enable_frame_pointer" = xyes],
-         [AS_MESSAGE([compiling with frame pointer])
-          BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
+         [ADD_COMPILER_FLAG_IF_SUPPORTED([-fno-omit-frame-pointer],
+                                         [-fno-omit-frame-pointer],
+                                         [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                                         [AS_MESSAGE([compiling with frame pointer])],
+                                         [AS_MESSAGE([compiling with frame pointer is not supported])])],
          [:])
 
 

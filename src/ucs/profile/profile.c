@@ -104,7 +104,7 @@ static ucs_status_t
 ucs_profile_file_write_records(int fd, ucs_profile_record_t *begin,
                                ucs_profile_record_t *end)
 {
-    return ucs_profile_file_write_data(fd, begin, (void*)end - (void*)begin);
+    return ucs_profile_file_write_data(fd, begin, UCS_PTR_BYTE_DIFF(begin, end));
 }
 
 /* Global lock must be held */

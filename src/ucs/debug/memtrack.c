@@ -44,8 +44,7 @@ typedef struct ucs_memtrack_context {
 /* Global context for tracking allocated memory */
 static ucs_memtrack_context_t ucs_memtrack_context = {
     .enabled = 0,
-    .lock    = PTHREAD_MUTEX_INITIALIZER,
-    .total   = {0}
+    .lock    = PTHREAD_MUTEX_INITIALIZER
 };
 
 #if ENABLE_STATS

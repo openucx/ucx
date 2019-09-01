@@ -27,7 +27,8 @@ static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_data_t *data,
                                                      ucs_mpool_chunk_t *chunk,
                                                      unsigned elem_index)
 {
-    return chunk->elems + elem_index * ucs_mpool_elem_total_size(data);
+    return UCS_PTR_BYTE_OFFSET(chunk->elems,
+                               elem_index * ucs_mpool_elem_total_size(data));
 }
 
 static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
@@ -196,7 +197,7 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     chunk            = ptr;
     chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
                                    data->alignment);
-    chunk->elems     = (void*)(chunk + 1) + chunk_padding;
+    chunk->elems     = UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
     chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
                        ucs_mpool_elem_total_size(data));
 

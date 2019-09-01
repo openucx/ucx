@@ -200,7 +200,8 @@ AC_DEFUN([CHECK_COMPILER_FLAG],
 AC_DEFUN([ADD_COMPILER_FLAG_IF_SUPPORTED],
 [
          CHECK_COMPILER_FLAG([$1], [$2], [$3],
-                             [BASE_CFLAGS="$BASE_CFLAGS $2" $4],
+                             [BASE_CFLAGS="$BASE_CFLAGS $2"
+                              $4],
                              [$5])
 ])
 
