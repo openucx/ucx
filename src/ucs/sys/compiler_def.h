@@ -90,11 +90,15 @@
 
 /* Helper macro for address arithmetic in bytes */
 #define UCS_PTR_BYTE_OFFSET(_ptr, _offset) \
-    ((void *)((uintptr_t)(_ptr) + (_offset)))
+    ((void *)((intptr_t)(_ptr) + (intptr_t)(_offset)))
 
 /* Helper macro to calculate an address with offset equal to size of _type */
 #define UCS_PTR_TYPE_OFFSET(_ptr, _type) \
     ((void *)((typeof(_type) *)(_ptr) + 1))
+
+/* Helper macro to calculate ptr difference (_end - _start) */
+#define UCS_PTR_BYTE_DIFF(_start, _end) \
+    ((ptrdiff_t)((uintptr_t)(_end) - (uintptr_t)(_start)))
 
 
 /**

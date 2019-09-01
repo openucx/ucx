@@ -17,7 +17,7 @@
 
 #define UCS_CRC_CALC(_width, _buffer, _size, _crc) \
     do { \
-        const uint8_t *end = (const uint8_t*)((_buffer) + (_size)); \
+        const uint8_t *end = (const uint8_t*)(UCS_PTR_BYTE_OFFSET(_buffer, _size)); \
         const uint8_t *p; \
         uint8_t bit; \
         \
@@ -36,7 +36,7 @@
 
 uint16_t ucs_crc16(const void *buffer, size_t size)
 {
-    uint16_t crc = -1;
+    uint16_t crc = UINT16_MAX;
     UCS_CRC_CALC(16, buffer, size, crc);
     return crc;
 }

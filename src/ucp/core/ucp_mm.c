@@ -49,7 +49,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         return UCS_OK; /* shortcut - no changes required */
     }
 
-    prev_num_memh = ucs_popcount(*md_map_p);
+    prev_num_memh = ucs_popcount(*md_map_p & reg_md_map);
     prev_uct_memh = ucs_alloca(prev_num_memh * sizeof(*prev_uct_memh));
 
     /* Go over previous handles, save only the ones we will need */
@@ -84,7 +84,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     }
 
     /* prev_uct_memh should contain the handles which should be reused */
-    ucs_assert(prev_memh_index == ucs_popcount(*md_map_p & reg_md_map));
+    ucs_assert(prev_memh_index == prev_num_memh);
 
     /* Go over requested MD map, and use / register new handles */
     new_md_map      = 0;
@@ -94,6 +94,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         md_attr = &context->tl_mds[md_index].attr;
         if (*md_map_p & UCS_BIT(md_index)) {
             /* already registered, use previous memh */
+            ucs_assert(prev_memh_index < prev_num_memh);
             uct_memh[memh_index++] = prev_uct_memh[prev_memh_index++];
             new_md_map            |= UCS_BIT(md_index);
         } else if (context->tl_mds[md_index].md == alloc_md) {

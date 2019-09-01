@@ -259,7 +259,6 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
 {
     ucp_ep_h ucp_ep                      = wireup_ep->super.ucp_ep;
     ucp_worker_h worker                  = ucp_ep->worker;
-    ucp_context_h context                = worker->context;
     ucp_wireup_select_info_t select_info = {0};
     uct_ep_params_t uct_ep_params;
     const ucp_address_entry_t *aux_addr;
@@ -296,7 +295,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
               ucp_ep_peer_name(ucp_ep),
-              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[select_info.rsc_index].tl_rsc));
+              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[select_info.rsc_index].tl_rsc));
 
     return UCS_OK;
 }

@@ -153,7 +153,8 @@ ucs_stats_sock_send_frags(int sockfd, uint64_t timestamp, void *buffer, size_t s
 {
     struct iovec iov[2];
     ucs_stats_packet_hdr_t hdr;
-    size_t frag_size, offset, nsent;
+    size_t frag_size, offset;
+    ssize_t nsent;
     size_t max_frag = UCS_STATS_MSG_FRAG_SIZE - sizeof(hdr);
 
     offset = 0;
@@ -173,7 +174,7 @@ ucs_stats_sock_send_frags(int sockfd, uint64_t timestamp, void *buffer, size_t s
 
         iov[0].iov_base = &hdr;
         iov[0].iov_len  = sizeof(hdr);
-        iov[1].iov_base = buffer + offset;
+        iov[1].iov_base = UCS_PTR_BYTE_OFFSET(buffer, offset);
         iov[1].iov_len  = hdr.frag_size;
 
         nsent = writev(sockfd, iov, 2);
@@ -258,7 +259,7 @@ static stats_entity_t *ucs_stats_server_entity_alloc(struct sockaddr_in *addr)
 
     entity->in_addr           = *addr;
     entity->timestamp         = 0;
-    entity->buffer_size       = -1;
+    entity->buffer_size       = SIZE_MAX;
     entity->inprogress_buffer = NULL;
     entity->completed_buffer  = NULL;
     entity->refcount          = 1;
@@ -299,7 +300,7 @@ ucs_stats_server_entity_get(ucs_stats_server_h server, struct sockaddr_in *addr)
 
 static void ucs_stats_server_entity_put(stats_entity_t * entity)
 {
-    if (__sync_fetch_and_add(&entity->refcount, -1) == 1) {
+    if (__sync_fetch_and_sub(&entity->refcount, 1) == 1) {
         ucs_stats_server_entity_free(entity);
     }
 }
@@ -310,12 +311,14 @@ static void ucs_stats_server_entity_put(stats_entity_t * entity)
 static frag_hole_t *
 find_frag_hole(stats_entity_t *entity, size_t frag_size, size_t frag_offset)
 {
-    void *frag_start = entity->inprogress_buffer + frag_offset;
-    void *frag_end   = entity->inprogress_buffer + frag_offset + frag_size;
+    void *frag_start = UCS_PTR_BYTE_OFFSET(entity->inprogress_buffer, frag_offset);
+    void *frag_end   = UCS_PTR_BYTE_OFFSET(entity->inprogress_buffer,
+                                           frag_offset + frag_size);
     frag_hole_t *hole;
 
     ucs_list_for_each(hole, &entity->holes, list) {
-        if ((frag_start >= (void*)hole) && (frag_end <= (void*)hole + hole->size)) {
+        if ((frag_start >= (void*)hole) &&
+            (frag_end <= UCS_PTR_BYTE_OFFSET(hole, hole->size))) {
             return hole;
         }
     }
@@ -339,7 +342,7 @@ ucs_stats_server_entity_update(ucs_stats_server_h server, stats_entity_t *entity
 
     if (timestamp < entity->timestamp) {
         ucs_debug("Dropping - old timestamp");
-        return 0;
+        return UCS_OK;
     } else if (timestamp > entity->timestamp) {
         ucs_debug("New timestamp, resetting buffer with size %zu", total_size);
         entity->timestamp = timestamp;
@@ -358,13 +361,14 @@ ucs_stats_server_entity_update(ucs_stats_server_h server, stats_entity_t *entity
         return UCS_ERR_MESSAGE_TRUNCATED;
     }
 
-    frag_start = entity->inprogress_buffer + frag_offset;
-    frag_end   = entity->inprogress_buffer + frag_offset + frag_size;
-    hole_end   = (void*)hole + hole->size;
+    frag_start = UCS_PTR_BYTE_OFFSET(entity->inprogress_buffer, frag_offset);
+    frag_end   = UCS_PTR_BYTE_OFFSET(entity->inprogress_buffer,
+                                     frag_offset + frag_size);
+    hole_end   = UCS_PTR_BYTE_OFFSET(hole, hole->size);
 
     ucs_debug("inserting into a hole of %zu..%zu",
-              (void*)hole - entity->inprogress_buffer,
-              hole_end    - entity->inprogress_buffer);
+              UCS_PTR_BYTE_DIFF(entity->inprogress_buffer, hole),
+              UCS_PTR_BYTE_DIFF(entity->inprogress_buffer, hole_end));
 
     /* If the fragment does not reach the end of the hole, create a new hole
      * in this space.
@@ -373,17 +377,18 @@ ucs_stats_server_entity_update(ucs_stats_server_h server, stats_entity_t *entity
         /* Make sure we don't create a hole which is too small for a free-list
          * pointer to fit in. An exception is the last fragment.
          */
-        assert((hole_end - frag_end >= sizeof(*new_hole)) ||
-               (hole_end == entity->inprogress_buffer + entity->buffer_size));
-        new_hole = frag_end;
-        new_hole->size = hole_end - frag_end;
+        assert((UCS_PTR_BYTE_DIFF(frag_end, hole_end) >= sizeof(*new_hole)) ||
+               (hole_end == UCS_PTR_BYTE_OFFSET(entity->inprogress_buffer,
+                                                entity->buffer_size)));
+        new_hole       = frag_end;
+        new_hole->size = UCS_PTR_BYTE_DIFF(frag_end, hole_end);
         ucs_list_insert_after(&hole->list, &new_hole->list);
     }
 
     /* If we have room before the fragment, resize the hole. Otherwise, delete it */
     if (frag_start > (void*)hole) {
-        assert(frag_start - (void*)hole >= sizeof(*hole));
-        hole->size = frag_start - (void*)hole;
+        assert(UCS_PTR_BYTE_DIFF(hole, frag_start) >= sizeof(*hole));
+        hole->size = UCS_PTR_BYTE_DIFF(hole, frag_start);
     } else {
         ucs_list_del(&hole->list);
     }

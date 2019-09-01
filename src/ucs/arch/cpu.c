@@ -73,7 +73,7 @@ static void ucs_sysfs_get_cache_size()
         }
 
         /* now lookup for cache size entry */
-        for (cache_type = 0; cache_type < UCS_CPU_CACHE_LAST; cache_type++) {
+        for (cache_type = UCS_CPU_CACHE_L1d; cache_type < UCS_CPU_CACHE_LAST; cache_type++) {
             if ((ucs_cpu_cache_sysfs_name[cache_type].level == level) &&
                 !strcasecmp(ucs_cpu_cache_sysfs_name[cache_type].type, type_str)) {
                 if (ucs_cpu_cache_size[cache_type] != 0) {
@@ -95,7 +95,7 @@ size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type)
     ucs_status_t status;
 
     if (type >= UCS_CPU_CACHE_LAST) {
-        return UCS_ERR_INVALID_PARAM;
+        return 0;
     }
 
     UCS_INIT_ONCE(&ucs_cache_read_once) {

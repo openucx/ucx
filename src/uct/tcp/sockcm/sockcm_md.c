@@ -65,7 +65,6 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
                                       uct_sockaddr_accessibility_t mode)
 {
     struct sockaddr *param_sockaddr = NULL;
-    uct_sockcm_md_t *sockcm_md      = ucs_derived_of(md, uct_sockcm_md_t);
     int is_accessible               = 0;
     int sock_id                     = -1;
     size_t sockaddr_len             = 0;
@@ -99,7 +98,6 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         }
 
         if (ucs_sockaddr_is_inaddr_any(param_sockaddr)) {
-            is_accessible = 1;
             goto out_print;
         }
     }
@@ -113,7 +111,8 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
  out_print:
     ucs_debug("address %s is accessible from sockcm_md %p with mode: %d",
               ucs_sockaddr_str(param_sockaddr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN), sockcm_md, mode);
+                               UCS_SOCKADDR_STRING_LEN),
+              ucs_derived_of(md, uct_sockcm_md_t), mode);
 
  out_destroy_id:
     close(sock_id);

@@ -177,7 +177,7 @@ static void ucs_stats_write_counters(ucs_stats_counter_t *counters,
     const unsigned counters_per_byte = 8 / UCS_STATS_BITS_PER_COUNTER;
     ucs_stats_counter_t value;
     uint8_t *counter_desc, v;
-    void *counter_data, *pos;
+    char *counter_data, *pos;
     size_t counter_desc_size;
     unsigned i;
 
@@ -447,7 +447,7 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
         return UCS_ERR_NO_MEMORY;
     }
 
-    node = ptr + headroom;
+    node = UCS_PTR_BYTE_OFFSET(ptr, headroom);
 
     node->cls = cls;
     FREAD(node->name, namelen, stream);

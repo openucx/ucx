@@ -815,8 +815,10 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
     ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *if_iter;
     uint64_t test_flags;
-    double latency_iter, latency_cur;
-    float epsilon;
+    double latency_iter, latency_cur, bw_cur;
+
+    latency_cur = ucp_worker_iface_latency(worker, wiface);
+    bw_cur      = ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth);
 
     test_flags = wiface->attr.cap.flags & ~(UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                             UCT_IFACE_FLAG_CONNECT_TO_EP);
@@ -831,31 +833,33 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
             continue;
         }
 
-        /* Check that another iface:
-         * 1. Supports all capabilities of the target iface (at least), except
-         *    ...CONNECT_TO... caps.
-         * 2. Has the same or better performance charasteristics */
-        if (ucs_test_all_flags(if_iter->attr.cap.flags, test_flags) &&
-            (if_iter->attr.overhead  <= wiface->attr.overhead)      &&
-            (ucp_tl_iface_bandwidth(ctx, &if_iter->attr.bandwidth) >=
-             ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth))  &&
-            (if_iter->attr.priority  >= wiface->attr.priority)) {
+        latency_iter = ucp_worker_iface_latency(worker, if_iter);
 
-            latency_iter = ucp_worker_iface_latency(worker, if_iter);
-            latency_cur  = ucp_worker_iface_latency(worker, wiface);
-            epsilon      = (latency_iter + latency_cur) * 1e-6;
-            if (latency_iter < latency_cur + epsilon) {
-                /* Do not check this iface anymore, because better one exists.
-                 * It helps to avoid the case when two interfaces with the same caps
-                 * and performance exclude each other. */
-                wiface->flags |= UCP_WORKER_IFACE_FLAG_UNUSED;
-                *better_index  = rsc_index;
-                return 1;
-            }
+        /* Check that another iface: */
+        if (/* 1. Supports all capabilities of the target iface (at least),
+             *    except ...CONNECT_TO... caps. */
+            ucs_test_all_flags(if_iter->attr.cap.flags, test_flags) &&
+            /* 2. Has the same or better performance characteristics */
+            (if_iter->attr.overhead <= wiface->attr.overhead) &&
+            (ucp_tl_iface_bandwidth(ctx, &if_iter->attr.bandwidth) >= bw_cur) &&
+            (if_iter->attr.priority >= wiface->attr.priority) &&
+            (ucp_score_cmp(latency_iter, latency_cur) < 0) &&
+            /* 3. The found transport is scalable enough or both
+             *    transport are unscalable */
+            (ucp_is_scalable_transport(ctx, if_iter->attr.max_num_eps) ||
+             !ucp_is_scalable_transport(ctx, wiface->attr.max_num_eps)))
+        {
+            *better_index = rsc_index;
+            /* Do not check this iface anymore, because better one exists.
+             * It helps to avoid the case when two interfaces with the same
+             * caps and performance exclude each other. */
+            wiface->flags |= UCP_WORKER_IFACE_FLAG_UNUSED;
+            return 1;
         }
     }
 
-    *better_index  = 0;
+    /* Better resource wasn't found */
+    *better_index = 0;
     return 0;
 }
 
@@ -870,8 +874,8 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
 static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
                                                   uint64_t *tl_bitmap_p)
 {
-    ucp_context_h context        = worker->context;
-    uint64_t tl_bitmap           = 0;
+    ucp_context_h context = worker->context;
+    uint64_t tl_bitmap    = 0;
     ucp_rsc_index_t repl_ifaces[UCP_MAX_RESOURCES];
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t tl_id, iface_id;
@@ -937,6 +941,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     ucp_tl_resource_desc_t *resource;
     uct_iface_params_t iface_params;
     ucp_rsc_index_t tl_id, iface_id;
+    ucp_worker_iface_t *wiface;
     uint64_t ctx_tl_bitmap, tl_bitmap;
     ucs_status_t status;
 
@@ -990,9 +995,22 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
         context->tl_bitmap = tl_bitmap;
-        ucs_debug("Selected tl bitmap: 0x%lx (%d tls)",
+        ucs_debug("selected tl bitmap: 0x%lx (%d tls)",
                   tl_bitmap, ucs_popcount(tl_bitmap));
     }
+
+    worker->scalable_tl_bitmap = 0;
+    ucs_for_each_bit(tl_id, context->tl_bitmap) {
+        wiface = ucp_worker_iface(worker, tl_id);
+
+        if (ucp_is_scalable_transport(context, wiface->attr.max_num_eps)) {
+            worker->scalable_tl_bitmap |= UCS_BIT(tl_id);
+        }
+    }
+
+    ucs_debug("selected scalable tl bitmap: 0x%lx (%d tls)",
+              worker->scalable_tl_bitmap,
+              ucs_popcount(worker->scalable_tl_bitmap));
 
     iface_id = 0;
     ucs_for_each_bit(tl_id, tl_bitmap) {
@@ -1463,8 +1481,8 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                    p, endp - p);
     p = ucp_worker_add_feature_rsc(context, key, amo_lanes_map, "amo",
                                    p, endp - p);
-    p = ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
-                                   p, endp - p);
+    ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
+                               p, endp - p);
     ucs_info("%s", info);
 }
 

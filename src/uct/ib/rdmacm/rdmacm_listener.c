@@ -88,15 +88,14 @@ ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
                                                             uct_rdmacm_listener_t);
     struct sockaddr *addr;
     ucs_status_t status;
-    size_t addr_size;
 
     if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_SOCKADDR) {
         addr   = rdma_get_local_addr(rdmacm_listener->id);
-        status = ucs_sockaddr_sizeof(addr, &addr_size);
+        status = ucs_sockaddr_copy((struct sockaddr *)&listener_attr->sockaddr,
+                                   addr);
         if (status != UCS_OK) {
             return status;
         }
-        memcpy(&listener_attr->sockaddr, addr, addr_size);
     }
 
     return UCS_OK;

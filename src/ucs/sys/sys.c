@@ -523,7 +523,7 @@ static ssize_t ucs_get_meminfo_entry(const char* pattern)
 
 size_t ucs_get_memfree_size()
 {
-    size_t mem_free;
+    ssize_t mem_free;
 
     mem_free = ucs_get_meminfo_entry("MemFree");
     if (mem_free == -1) {

@@ -32,6 +32,8 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
     uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
+    struct sockaddr *addr;
+    ucs_status_t status;
 
     uct_base_iface_query(&rdmacm_iface->super, iface_attr);
 
@@ -45,7 +47,12 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
     iface_attr->max_conn_priv   = UCT_RDMACM_MAX_CONN_PRIV;
 
     if (rdmacm_iface->is_server) {
-        iface_attr->listen_port = ntohs(rdma_get_src_port(rdmacm_iface->cm_id));
+        addr   = rdma_get_local_addr(rdmacm_iface->cm_id);
+        status = ucs_sockaddr_copy((struct sockaddr *)&iface_attr->listen_sockaddr,
+                                   addr);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;

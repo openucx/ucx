@@ -27,6 +27,8 @@ BEGIN_C_DECLS
  * @brief Memory event types
  */
 typedef enum ucm_event_type {
+    /* Default initialization value */
+    UCM_EVENT_NONE            = 0,
     /* Native events */
     UCM_EVENT_MMAP            = UCS_BIT(0),
     UCM_EVENT_MUNMAP          = UCS_BIT(1),

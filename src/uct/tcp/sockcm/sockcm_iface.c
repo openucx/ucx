@@ -33,6 +33,7 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
 {
     uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
     struct sockaddr_in sin;
+    ucs_status_t status;
 
     uct_base_iface_query(&iface->super, iface_attr);
 
@@ -49,9 +50,12 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
             ucs_error("sockcm_iface: getsockname failed %m");
             return UCS_ERR_IO_ERROR;
         }
-        iface_attr->listen_port = ntohs(sin.sin_port);
-    } else {
-        iface_attr->listen_port = -1;
+
+        status = ucs_sockaddr_copy((struct sockaddr *)&iface_attr->listen_sockaddr,
+                                   (struct sockaddr *)&sin);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;

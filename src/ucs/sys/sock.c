@@ -493,3 +493,18 @@ int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
         return 0;
     }
 }
+
+ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
+                               const struct sockaddr *src_addr)
+{
+    ucs_status_t status;
+    size_t size;
+
+    status = ucs_sockaddr_sizeof(src_addr, &size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    memcpy(dst_addr, src_addr, size);
+    return UCS_OK;
+}
