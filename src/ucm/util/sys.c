@@ -101,7 +101,10 @@ void ucm_sys_free(void *ptr)
         return;
     }
 
-    ptr  = UCS_PTR_BYTE_OFFSET(ptr, -sizeof(size_t));
+    /* Do not use UCS_PTR_BYTE_OFFSET macro here due to coverity
+     * false positive.
+     * TODO: check for false positive on newer coverity. */
+    ptr  = (char*)ptr - sizeof(size_t);
     size = *(size_t*)ptr;
     munmap(ptr, size);
 }
