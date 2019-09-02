@@ -45,3 +45,12 @@ size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
  */
 void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
                      size_t *cur_iov_idx, size_t consumed);
+
+/**
+ * Returns the maximum possible value for the number of IOVs.
+ * It maybe either value from the system configuration or IOV_MAX
+ * value or UIO_MAXIOV value or 1024 if nothing is defined.
+ *
+ * @return The maximum number of IOVs.
+ */
+size_t ucs_iov_get_max();

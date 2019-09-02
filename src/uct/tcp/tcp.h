@@ -13,6 +13,7 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/event_set.h>
+#include <ucs/sys/iovec.h>
 
 #include <net/if.h>
 

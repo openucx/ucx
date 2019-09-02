@@ -8,6 +8,12 @@
 #include <ucs/sys/math.h>
 
 #include <string.h>
+#include <sys/uio.h>
+/* Need this to get IOV_MAX on some platforms. */
+#ifndef __need_IOV_MAX
+#define __need_IOV_MAX
+#endif
+#include <limits.h>
 
 
 size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
@@ -64,4 +70,34 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
     }
 
     ucs_assert(!consumed && (i == *cur_iov_idx));
+}
+
+size_t ucs_iov_get_max()
+{
+    static int max_iov = -1;
+
+#ifdef _SC_IOV_MAX
+    if (max_iov != -1) {
+        return max_iov;
+    }
+
+    max_iov = sysconf(_SC_IOV_MAX);
+    if (max_iov != -1) {
+        return max_iov;
+    }
+    /* if unable to get value from sysconf(),
+     * use a predefined value */
+#endif
+
+#if defined(IOV_MAX)
+    max_iov = IOV_MAX;
+#elif defined(UIO_MAXIOV)
+    max_iov = UIO_MAXIOV;
+#else
+    /* The value is used as a fallback when system value is not available.
+     * The latest kernels define it as 1024 */
+    max_iov = 1024;
+#endif
+
+    return max_iov;
 }

@@ -440,7 +440,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.rx_seg_size = config->rx_seg_size +
                                sizeof(uct_tcp_am_hdr_t);
 
-    if (ucs_socket_max_iov() >= UCT_TCP_EP_AM_SHORTV_IOV_COUNT) {
+    if (ucs_iov_get_max() >= UCT_TCP_EP_AM_SHORTV_IOV_COUNT) {
         self->config.sendv_thresh = config->sendv_thresh;
     } else {
         /* AM Short with non-blocking vector send can't be used */
@@ -452,7 +452,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
      * correspondingly) and system constraints */
     self->config.zcopy.max_iov    = ucs_min(config->max_iov +
                                             UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT,
-                                            ucs_socket_max_iov());
+                                            ucs_iov_get_max());
     /* Use a remaining part of TX segment for AM Zcopy header */
     self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
                                      sizeof(struct iovec) *
