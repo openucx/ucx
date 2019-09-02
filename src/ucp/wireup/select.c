@@ -840,7 +840,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_wireup_select_ctx_t *select_ctx
      * connect back on p2p transport.
      */
     tl_bitmap = worker->atomic_tls;
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         if (!ucp_worker_is_tl_p2p(worker, rsc_index)) {
             tl_bitmap |= UCS_BIT(rsc_index);
         }
