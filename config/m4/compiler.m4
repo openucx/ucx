@@ -184,8 +184,8 @@ AC_DEFUN([CHECK_COMPILER_FLAG],
          CFLAGS="$BASE_CFLAGS $CFLAGS $2"
          AC_COMPILE_IFELSE([$3],
                            [AC_MSG_RESULT([yes])
-                            $4
-                            CFLAGS="$SAVE_CFLAGS"],
+                            CFLAGS="$SAVE_CFLAGS"
+                            $4],
                            [AC_MSG_RESULT([no])
                             CFLAGS="$SAVE_CFLAGS"
                             $5])
