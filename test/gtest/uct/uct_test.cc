@@ -881,7 +881,7 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
-size_t uct_test::entity::priv_data_do_pack(void *priv_data)
+ssize_t uct_test::entity::priv_data_do_pack(void *priv_data)
 {
     size_t priv_data_len;
 
