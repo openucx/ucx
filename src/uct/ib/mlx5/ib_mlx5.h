@@ -131,6 +131,13 @@ enum {
     UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0),   /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_DEVX     = UCS_BIT(1),   /* Device supports DEVX */
     UCT_IB_MLX5_MD_FLAG_DC_TM    = UCS_BIT(2),   /* Device supports TM DC */
+
+    /* Object to be managed via DEVX */
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS      = 3,
+    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP     = UCS_BIT(3),
+    UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ    = UCS_BIT(4),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DCT       = UCS_BIT(5),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ    = UCS_BIT(6),
 };
 
 

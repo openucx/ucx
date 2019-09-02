@@ -276,12 +276,16 @@ void ucs_config_help_enum(char *buf, size_t max, const void *arg)
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
     char *str = strdup(buf);
-    char *p;
+    char *p, *saveptr;
     int ret, i;
+
+    if (str == NULL) {
+        return 0;
+    }
 
     ret = 1;
     *((unsigned*)dest) = 0;
-    p = strtok(str, ",");
+    p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
         i = __find_string_in_list(p, (const char**)arg);
         if (i < 0) {
@@ -289,7 +293,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
             break;
         }
         *((unsigned*)dest) |= UCS_BIT(i);
-        p = strtok(NULL, ",");
+        p = strtok_r(NULL, ",", &saveptr);
     }
 
     free(str);
