@@ -42,11 +42,51 @@ typedef struct {
 } UCS_S_PACKED ucp_am_long_hdr_t;
 
 typedef struct {
+  size_t            total_size; /* length of buffer needed for all data */
+  uint64_t          msg_id;     /* method to match parts of the same AM */
+  uintptr_t         ep;         /* end point ptr, used for maintaing list
+                                   of arrivals */
+  uint16_t          am_id;      /* index into callback array */
+} UCS_S_PACKED ucp_am_rdma_header_t ;
+
+enum {
+  packed_rkey_max_size = 32    /* Max supported size for a packed rkey */
+};
+
+typedef struct {
+  uint64_t          msg_id;     /* method to match parts of the same AM */
+  uintptr_t         ep;         /* end point ptr, used for maintaing list
+                                   of arrivals */
+  uint16_t          am_id;      /* index into callback array */
+  uintptr_t         address;     /* Address for RDMA */
+  char              rkey_buffer[packed_rkey_max_size] ; /* Packed remote key */
+} UCS_S_PACKED ucp_am_rdma_reply_header_t ;
+
+typedef struct {
+  uint64_t          msg_id;     /* method to match parts of the same AM */
+  uintptr_t         ep;         /* end point ptr, used for maintaing list
+                                   of arrivals */
+  uint16_t          am_id;      /* index into callback array */
+} UCS_S_PACKED ucp_am_rdma_completion_header_t ;
+
+typedef struct {
     ucs_list_link_t   list;       /* entry into list of unfinished AM's */
     ucp_recv_desc_t  *all_data;   /* buffer for all parts of the AM */
     uint64_t          msg_id;     /* way to match up all parts of AM */
     size_t            left;
 } ucp_am_unfinished_t;
+
+typedef struct {
+  ucs_list_link_t   list;       /* entry into list of unfinished AM's */
+  ucp_request_t    *req;        /* active message request */
+  uint64_t          msg_id;     /* way to match up all parts of AM */
+} ucp_am_rdma_client_unfinished_t ;
+
+typedef struct {
+  ucs_list_link_t   list;       /* entry into list of unfinished AM's */
+  ucp_recv_desc_t  *all_data;   /* buffer for all parts of the AM */
+  uint64_t          msg_id;     /* way to match up all parts of AM */
+} ucp_am_rdma_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);
 
