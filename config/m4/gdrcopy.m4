@@ -38,6 +38,9 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
                             gdrcopy_happy="no"])
             ], [gdrcopy_happy="no"])
 
+        AS_IF([test "x$gdrcopy_happy" = "xyes"],
+            [AC_CHECK_DECLS([gdr_copy_to_mapping], [], [], [#include "gdrapi.h"])])
+
         CFLAGS="$save_CFLAGS"
         CPPFLAGS="$save_CPPFLAGS"
         LDFLAGS="$save_LDFLAGS"
@@ -52,6 +55,7 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
                     [AC_MSG_ERROR([gdrcopy support is requested but gdrcopy packages cannot be found])],
                     [AC_MSG_WARN([GDR_COPY not found])])
             ])
+
     ],
     [AC_MSG_WARN([GDR_COPY was explicitly disabled])])
 

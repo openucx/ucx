@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -42,11 +43,21 @@ ucs_status_t uct_gdr_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
     if (ucs_likely(length)) {
         bar_offset = remote_addr - gdr_copy_key->vaddr;
+#if HAVE_DECL_GDR_COPY_TO_MAPPING
+        ret = gdr_copy_to_mapping(gdr_copy_key->mh,
+                                  gdr_copy_key->bar_ptr + bar_offset,
+                                  buffer, length);
+        if (ret) {
+            ucs_error("gdr_copy_to_mapping failed. ret:%d", ret);
+            return UCS_ERR_IO_ERROR;
+        }
+#else
         ret = gdr_copy_to_bar(gdr_copy_key->bar_ptr + bar_offset, buffer, length);
         if (ret) {
             ucs_error("gdr_copy_to_bar failed. ret:%d", ret);
             return UCS_ERR_IO_ERROR;
         }
+#endif
     }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
@@ -65,11 +76,20 @@ ucs_status_t uct_gdr_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
 
     if (ucs_likely(length)) {
         bar_offset = remote_addr - gdr_copy_key->vaddr;
+#if HAVE_DECL_GDR_COPY_TO_MAPPING
+        ret = gdr_copy_from_mapping(gdr_copy_key->mh, buffer,
+                                    gdr_copy_key->bar_ptr + bar_offset, length);
+        if (ret) {
+            ucs_error("gdr_copy_from_mapping failed. ret:%d", ret);
+            return UCS_ERR_IO_ERROR;
+        }
+#else
         ret = gdr_copy_from_bar(buffer, gdr_copy_key->bar_ptr + bar_offset, length);
         if (ret) {
             ucs_error("gdr_copy_from_bar failed. ret:%d", ret);
             return UCS_ERR_IO_ERROR;
         }
+#endif
     }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);

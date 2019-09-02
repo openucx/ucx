@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -55,6 +56,7 @@ typedef struct uct_gdr_copy_mem {
 typedef struct uct_gdr_copy_key {
     uint64_t    vaddr;      /**< Mapped GPU address */
     void        *bar_ptr;   /**< BAR address of GPU mapping */
+    gdr_mh_t    mh;         /**< Memory handle of GPU memory */
 } uct_gdr_copy_key_t;
 
 
