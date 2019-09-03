@@ -356,6 +356,8 @@ typedef struct {
 
     struct {
         ucs_list_link_t           started_ams;
+        ucs_list_link_t           started_ams_rdma_client ;
+        ucs_list_link_t           started_ams_rdma_server ;
     } am;
 } ucp_ep_ext_proto_t;
 

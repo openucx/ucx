@@ -41,17 +41,19 @@ typedef struct {
     uint16_t          am_id;      /* index into callback array */
 } UCS_S_PACKED ucp_am_long_hdr_t;
 
+enum {
+  UCP_PACKED_RKEY_MAX_SIZE = 32 ,   /* Max supported size for a packed rkey */
+  UCP_AM_RDMA_IOVEC_0_MAX_SIZE = 32  .* Amount of iovec[0] carried in AM request */
+};
+
 typedef struct {
   size_t            total_size; /* length of buffer needed for all data */
   uint64_t          msg_id;     /* method to match parts of the same AM */
   uintptr_t         ep;         /* end point ptr, used for maintaing list
                                    of arrivals */
+  char              iovec_0[UCP_AM_RDMA_IOVEC_0_MAX_SIZE] ; /* iovec[0] carried in request */
   uint16_t          am_id;      /* index into callback array */
 } UCS_S_PACKED ucp_am_rdma_header_t ;
-
-enum {
-  UCP_PACKED_RKEY_MAX_SIZE = 32    /* Max supported size for a packed rkey */
-};
 
 typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
