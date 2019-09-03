@@ -59,6 +59,17 @@ typedef enum ucs_ternary_value {
 
 
 /**
+ * On/Off/Auto logic value.
+ */
+typedef enum ucs_on_off_auto_value {
+    UCS_OFF  = 0,
+    UCS_ON   = 1,
+    UCS_AUTO = 2,
+    UCS_ON_OFF_LAST
+} ucs_on_off_auto_value_t;
+
+
+/**
  * Error handling modes
  */
 typedef enum {

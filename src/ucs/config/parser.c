@@ -234,6 +234,45 @@ int ucs_config_sprintf_ternary(char *buf, size_t max, void *src, const void *arg
     }
 }
 
+int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg)
+{
+    if (!strcasecmp(buf, "on") || !strcmp(buf, "1")) {
+        *(int*)dest = UCS_ON;
+        return 1;
+    } else if (!strcasecmp(buf, "off") || !strcmp(buf, "0")) {
+        *(int*)dest = UCS_OFF;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int ucs_config_sprintf_on_off(char *buf, size_t max, void *src, const void *arg)
+{
+    return snprintf(buf, max, "%s", *(int*)src ? "on" : "off");
+}
+
+int ucs_config_sscanf_on_off_auto(const char *buf, void *dest, const void *arg)
+{
+    if (!strcasecmp(buf, "try")   ||
+        !strcasecmp(buf, "maybe") ||
+        !strcasecmp(buf, "auto")) {
+        *(int*)dest = UCS_AUTO;
+        return 1;
+    } else {
+        return ucs_config_sscanf_on_off(buf, dest, arg);
+    }
+}
+
+int ucs_config_sprintf_on_off_auto(char *buf, size_t max, void *src, const void *arg)
+{
+    if (*(int*)src == UCS_AUTO) {
+        return snprintf(buf, max, "auto");
+    } else {
+        return ucs_config_sprintf_on_off(buf, max, src, arg);
+    }
+}
+
 int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg)
 {
     int i;

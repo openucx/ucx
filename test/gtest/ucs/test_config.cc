@@ -30,19 +30,19 @@ typedef enum {
 } material_t;
 
 const char *color_names[] = {
-    /* [COLOR_RED]    = */ "red",
-    /* [COLOR_BLUE]   = */ "blue",
-    /* [COLOR_BLACK]  = */ "black",
-    /* [COLOR_YELLOW] = */ "yellow",
-    /* [COLOR_WHITE]  = */ "white",
-    /* [COLOR_LAST]   = */ NULL
+    [COLOR_RED]    = "red",
+    [COLOR_BLUE]   = "blue",
+    [COLOR_BLACK]  = "black",
+    [COLOR_YELLOW] = "yellow",
+    [COLOR_WHITE]  = "white",
+    [COLOR_LAST]   = NULL
 };
 
 const char *material_names[] = {
-    /* [MATERIAL_LEATHER]   = */ "leather",
-    /* [MATERIAL_ALCANTARA] = */ "alcantara",
-    /* [MATERIAL_TEXTILE]   = */ "textile",
-    /* [MATERIAL_LAST]      = */ NULL
+    [MATERIAL_LEATHER]   = "leather",
+    [MATERIAL_ALCANTARA] = "alcantara",
+    [MATERIAL_TEXTILE]   = "textile",
+    [MATERIAL_LAST]      = NULL
 };
 
 typedef struct {
@@ -83,6 +83,10 @@ typedef struct {
     double          bw_auto;
 
     ucs_config_bw_spec_t can_pci_bw; /* CAN-bus */
+
+    int             air_conditioning;
+    int             abs;
+    int             transmission;
 } car_opts_t;
 
 
@@ -191,6 +195,15 @@ ucs_config_field_t car_opts_table[] = {
 
   {"CAN_BUS_BW", "mlx5_0:1024Tbs", "Bandwidth in tbits of CAN-bus",
    ucs_offsetof(car_opts_t, can_pci_bw), UCS_CONFIG_TYPE_BW_SPEC},
+
+  {"AIR_CONDITIONING", "on", "Air conditioning mode",
+   ucs_offsetof(car_opts_t, air_conditioning), UCS_CONFIG_TYPE_ON_OFF},
+
+  {"ABS", "off", "ABS mode",
+   ucs_offsetof(car_opts_t, abs), UCS_CONFIG_TYPE_ON_OFF},
+
+  {"TRANSMISSION", "auto", "Transmission mode",
+   ucs_offsetof(car_opts_t, transmission), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {NULL}
 };
@@ -378,6 +391,10 @@ UCS_TEST_F(test_config, parse_default) {
 
     EXPECT_EQ(UCS_TBYTE * 128.0, opts->can_pci_bw.bw);
     EXPECT_EQ(std::string("mlx5_0"), opts->can_pci_bw.name);
+
+    EXPECT_EQ(UCS_ON, opts->air_conditioning);
+    EXPECT_EQ(UCS_OFF, opts->abs);
+    EXPECT_EQ(UCS_AUTO, opts->transmission);
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -505,14 +522,14 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 25u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 28u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN),
-                           32u);
+                           35u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
@@ -520,12 +537,12 @@ UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN |
                             UCS_CONFIG_PRINT_DOC),
-                           32u);
+                           35u);
 
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN |
                             UCS_CONFIG_PRINT_DOC),
-                           32u, "TEST_");
+                           35u, "TEST_");
 }
 
 UCS_TEST_F(test_config, deprecated) {
