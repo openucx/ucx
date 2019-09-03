@@ -947,3 +947,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 /* Test unsacalable transports only */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               rc, "rc_x,rc_v")
+/* Test all available ib transports */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              ib, "ib")
