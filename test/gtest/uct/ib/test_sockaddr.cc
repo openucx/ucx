@@ -108,7 +108,7 @@ public:
                                              void *priv_data)
     {
         size_t *max_conn_priv = (size_t*)arg;
-        ssize_t priv_data_len;
+        size_t priv_data_len;
 
         priv_data_len = uct_test::entity::priv_data_do_pack(priv_data);
         EXPECT_LE(priv_data_len, (*max_conn_priv));
@@ -389,7 +389,7 @@ protected:
                                           void *priv_data)
     {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
-        ssize_t priv_data_len;
+        size_t priv_data_len;
 
         priv_data_len = uct_test::entity::priv_data_do_pack(priv_data);
         EXPECT_LE(priv_data_len, self->m_client->max_conn_priv);
