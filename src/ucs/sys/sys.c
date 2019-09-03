@@ -409,21 +409,6 @@ ssize_t ucs_read_file_str(char *buffer, size_t max, int silent,
     return read_bytes;
 }
 
-size_t ucs_get_max_iov()
-{
-    static long max_iov = 0;
-
-    if (max_iov == 0) {
-        max_iov = ucs_sysconf(_SC_IOV_MAX);
-        if (max_iov < 0) {
-            max_iov = 1;
-            ucs_debug("_SC_IOV_MAX is undefined, setting default value to %ld",
-                      max_iov);
-        }
-    }
-    return max_iov;
-}
-
 size_t ucs_get_page_size()
 {
     static long page_size = 0;

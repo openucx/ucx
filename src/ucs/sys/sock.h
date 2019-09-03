@@ -124,16 +124,6 @@ int ucs_socket_max_conn();
 
 
 /**
- * Returns the maximum possible value for the number of IOVs.
- * It maybe either value from the system configuration or IOV_MAX
- * value or UIO_MAXIOV value or 1024 if nothing is defined.
- *
- * @return The maximum number of IOVs.
- */
-int ucs_socket_max_iov();
-
-
-/**
  * Non-blocking send operation sends data on the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
  *
