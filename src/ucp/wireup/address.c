@@ -515,7 +515,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                         const ucp_address_packed_device_t *devices,
                                         ucp_rsc_index_t num_devices)
 {
-    ucp_context_h context = worker->context;
+    ucp_context_h context       = worker->context;
+    uint64_t md_flags_pack_mask = (UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC);
     const ucp_address_packed_device_t *dev;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t md_index;
@@ -550,7 +551,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
         /* MD index */
         md_index       = context->tl_rscs[dev->rsc_index].md_index;
-        md_flags       = context->tl_mds[md_index].attr.cap.flags;
+        md_flags       = context->tl_mds[md_index].attr.cap.flags & md_flags_pack_mask;
         ucs_assert_always(!(md_index & ~UCP_ADDRESS_FLAG_MD_MASK));
 
         *(uint8_t*)ptr = md_index |
