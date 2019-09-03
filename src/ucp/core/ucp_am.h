@@ -50,7 +50,7 @@ typedef struct {
 } UCS_S_PACKED ucp_am_rdma_header_t ;
 
 enum {
-  packed_rkey_max_size = 32    /* Max supported size for a packed rkey */
+  UCP_PACKED_RKEY_MAX_SIZE = 32    /* Max supported size for a packed rkey */
 };
 
 typedef struct {
@@ -59,7 +59,7 @@ typedef struct {
                                    of arrivals */
   uint16_t          am_id;      /* index into callback array */
   uintptr_t         address;     /* Address for RDMA */
-  char              rkey_buffer[packed_rkey_max_size] ; /* Packed remote key */
+  char              rkey_buffer[UCP_PACKED_RKEY_MAX_SIZE] ; /* Packed remote key */
 } UCS_S_PACKED ucp_am_rdma_reply_header_t ;
 
 typedef struct {

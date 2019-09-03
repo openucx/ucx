@@ -789,6 +789,27 @@ ucp_am_long_handler(void *am_arg, void *am_data, size_t am_length,
                                       NULL); 
 }
 
+static ucs_status_t
+ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
+                    unsigned am_flags)
+{
+    return UCS_OK ;
+}
+
+static ucs_status_t
+ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
+                          unsigned am_flags)
+{
+    return UCS_OK ;
+}
+
+static ucs_status_t
+ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
+                               unsigned am_flags)
+{
+    return UCS_OK ;
+}
+
 UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE,
               ucp_am_handler, NULL, 0);
 UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI,
@@ -797,6 +818,13 @@ UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE_REPLY,
               ucp_am_handler_reply, NULL, 0);
 UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI_REPLY,
               ucp_am_long_handler_reply, NULL, 0);
+
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_RDMA,
+               ucp_am_rdma_handler, NULL, 0);
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_RDMA_REPLY,
+               ucp_am_rdma_reply_handler, NULL, 0);
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_RDMA_COMPLETION,
+               ucp_am_rdma_completion_handler, NULL, 0);
 
 const ucp_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,

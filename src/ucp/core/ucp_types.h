@@ -91,6 +91,9 @@ enum {
     UCP_AM_ID_SINGLE_REPLY      =  25, /* For user defined AM when a reply
                                           is needed */
     UCP_AM_ID_MULTI_REPLY       =  26,
+    UCP_AM_ID_RDMA              =  27, /* Active message via RDMA request */
+    UCP_AM_ID_RDMA_REPLY        =  28, /* Active message via RDMA reply */
+    UCP_AM_ID_RDMA_COMPLETION   =  29, /* Active message via RDMA completion */
     UCP_AM_ID_LAST
 };
 
