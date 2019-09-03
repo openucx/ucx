@@ -332,35 +332,35 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
      * Failed ep will use that queue for purge. */
     uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
 
-    ops->ep_put_short       = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_put_bcopy       = (void*)ucs_empty_function_return_bc_ep_timeout;
-    ops->ep_put_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_get_short       = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_get_bcopy       = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_get_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_am_short        = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_am_bcopy        = (void*)ucs_empty_function_return_bc_ep_timeout;
-    ops->ep_am_zcopy        = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_cswap64  = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic64_post   = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic32_post   = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic64_fetch  = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic32_fetch  = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_eager_short = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_eager_bcopy = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_eager_zcopy = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_rndv_zcopy  = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_rndv_cancel = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_rndv_request= (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_pending_add     = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_pending_purge   = uct_ep_failed_purge;
-    ops->ep_flush           = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_fence           = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_check           = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_destroy         = uct_ep_failed_destroy;
-    ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout;
+    ops->ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout;
+    ops->ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_purge    = uct_ep_failed_purge;
+    ops->ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_destroy          = uct_ep_failed_destroy;
+    ops->ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout;
 
     ucs_class_call_cleanup_chain(cls, tl_ep, -1);
 
@@ -475,7 +475,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     /* Copy allocation methods configuration. In the process, remove duplicates. */
     UCS_STATIC_ASSERT(sizeof(alloc_methods_bitmap) * 8 >= UCT_ALLOC_METHOD_LAST);
     self->config.num_alloc_methods = 0;
-    alloc_methods_bitmap = 0;
+    alloc_methods_bitmap           = 0;
     for (i = 0; i < config->alloc_methods.count; ++i) {
         method = config->alloc_methods.methods[i];
         if (alloc_methods_bitmap & UCS_BIT(method)) {
