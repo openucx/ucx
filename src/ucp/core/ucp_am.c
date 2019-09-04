@@ -603,6 +603,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     ucp_am_rdma_client_unfinished_t *unfinished;
     ucp_dt_iov_t *iovec ;
 
+    ucs_print("AM RDMA am_id=%u". id) ;
+
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
 
@@ -919,6 +921,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     size_t packed_rkey_size ;
     size_t length_to_copy = (rdma_hdr->total_size < UCP_AM_RDMA_IOVEC_0_MAX_SIZE); ? rdma_hdr->total_size : UCP_AM_RDMA_IOVEC_0_MAX_SIZE ;
 
+    ucs_print("AM RDMA ucp_am_rdma_handler") ;
     all_data = ucs_malloc(rdma_hdr->total_size + sizeof(ucp_recv_desc_t),
                           "ucp recv desc for rdma AM");
     if (ucs_unlikely(all_data == NULL)) {
@@ -998,6 +1001,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_status_t status ;
     ucs_assert(unfinished != NULL) ;
     ucp_request_t *req = unfinshed->req ;
+    ucs_print("AM RDMA ucp_am_rdma_reply_handler") ;
 
     iovec=req->buffer ;
     status=ucp_ep_rkey_unpack(ep, rdma_reply_hdr->rkey_buffer, &rkey) ;
@@ -1026,6 +1030,7 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     uint16_t am_id  = rdma_completion_hdr->am_id;
     ucp_recv_desc_t *all_data ;
     size_t total_size ;
+    ucs_print("AM RDMA ucp_am_rdma_completion_handler") ;
     ucs_assert(unfinished != NULL ) ;
     ucs_status_t status ;
     all_data = unfinished->all_data ;
