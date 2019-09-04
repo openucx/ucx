@@ -132,7 +132,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingImplicitNative(JNIEnv *env, 
     ucs_status_t status = ucp_put_nbi((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
                                       (ucp_rkey_h)rkey_ptr);
 
-    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+    if (UCS_STATUS_IS_ERR(status)) {
         JNU_ThrowExceptionByStatus(env, status);
     }
 }
@@ -160,7 +160,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingImplicitNative(JNIEnv *env, 
     ucs_status_t status = ucp_get_nbi((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
                                       (ucp_rkey_h)rkey_ptr);
 
-    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+    if (UCS_STATUS_IS_ERR(status)) {
         JNU_ThrowExceptionByStatus(env, status);
     }
 }
