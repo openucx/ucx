@@ -936,7 +936,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
                 return UCS_OK;
             }
 
-            status = UCS_OK;
+            ucs_assert(status == UCS_OK);
         }
 
         uct_tcp_ep_ctx_reset(&ep->tx);
