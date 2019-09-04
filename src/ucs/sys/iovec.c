@@ -69,7 +69,7 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
         consumed -= iov[i].iov_len;
     }
 
-    ucs_assert(!consumed && (i == *cur_iov_idx));
+    ucs_assert(!consumed && (i == iov_cnt));
 }
 
 size_t ucs_iov_get_max()

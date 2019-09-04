@@ -11,8 +11,8 @@
 #include <sys/uio.h>
 
 #include "cma_ep.h"
-#include <uct/sm/base/sm_iface.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/iovec.h>
 
 
 static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
@@ -55,67 +55,50 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                                      unsigned long),
                                      char *fn_name)
 {
+    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
+    void *remote_ptr = UCS_PTR_BYTE_OFFSET(remote_addr, 0);
+    size_t iov_idx   = 0;
+    size_t local_iov_idx;
     ssize_t ret;
-    ssize_t delivered = 0;
-    size_t iov_it;
-    size_t iov_it_length;
-    size_t iov_slice_length;
-    size_t iov_slice_delivered;
-    size_t local_iov_it;
-    size_t length = 0;
+    size_t local_iov_cnt;
+    size_t length;
+    size_t cur_iov_cnt;
     struct iovec local_iov[UCT_SM_MAX_IOV];
     struct iovec remote_iov;
-    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
 
-    do {
-        iov_it_length = 0;
-        local_iov_it = 0;
-        for (iov_it = 0; iov_it < ucs_min(UCT_SM_MAX_IOV, iovcnt); ++iov_it) {
-            iov_slice_delivered = 0;
+    while (iovcnt - iov_idx) {
+        cur_iov_cnt   = ucs_min(iovcnt - iov_idx, UCT_SM_MAX_IOV);
+        local_iov_cnt = uct_iovec_fill_iov(local_iov, &iov[iov_idx],
+                                           cur_iov_cnt, &length);
+        ucs_assert(local_iov_cnt <= cur_iov_cnt);
 
-            /* Get length of the particular iov element */
-            iov_slice_length = uct_iov_get_length(iov + iov_it);
+        iov_idx += cur_iov_cnt;
+        ucs_assert(iov_idx <= iovcnt);
 
-            /* Skip the iov element if no data */
-            if (!iov_slice_length) {
-                continue;
+        if (!length) {
+            continue; /* Nothing to deliver */
+        }
+
+        local_iov_idx = 0;
+
+        do {
+            remote_iov.iov_base = remote_ptr;
+            remote_iov.iov_len  = length;
+
+            ret = fn_p(ep->remote_pid, &local_iov[local_iov_idx],
+                       local_iov_cnt - local_iov_idx, &remote_iov, 1, 0);
+            if (ret < 0) {
+                ucs_error("%s failed to deliver %zu bytes, error message %s",
+                          fn_name, length, strerror(errno));
+                return UCS_ERR_IO_ERROR;
             }
-            iov_it_length += iov_slice_length;
 
-            if (iov_it_length <= delivered) {
-                continue; /* Skip the iov element if transferred already */
-            } else {
-                /* Let's assume the iov element buffer can be delivered partially */
-                if ((iov_it_length - delivered) < iov_slice_length) {
-                    iov_slice_delivered = iov_slice_length - (iov_it_length - delivered);
-                }
-            }
-
-            local_iov[local_iov_it].iov_base = (void *)((char *)iov[iov_it].buffer +
-                                                        iov_slice_delivered);
-            local_iov[local_iov_it].iov_len  = iov_slice_length - iov_slice_delivered;
-            ++local_iov_it;
-        }
-        if (!delivered) {
-            length = iov_it_length; /* Keep total length of the iov buffers */
-        }
-
-        if(!length) {
-            return UCS_OK; /* Nothing to deliver */
-        }
-
-        remote_iov.iov_base = (void *)(remote_addr + delivered);
-        remote_iov.iov_len  = length - delivered;
-
-        ret = fn_p(ep->remote_pid, local_iov, local_iov_it, &remote_iov, 1, 0);
-        if (ret < 0) {
-            ucs_error("%s delivered %zu instead of %zu, error message %s",
-                      fn_name, delivered, length, strerror(errno));
-            return UCS_ERR_IO_ERROR;
-        }
-
-        delivered += ret;
-    } while (delivered < length);
+            ucs_iov_advance(local_iov, local_iov_cnt, &local_iov_idx, ret);
+            ucs_assert(ret <= length);
+            length     -= ret;
+            remote_ptr  = UCS_PTR_BYTE_OFFSET(remote_ptr, ret);
+        } while (length);
+    }
 
     return UCS_OK;
 }
