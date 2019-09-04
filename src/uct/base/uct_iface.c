@@ -59,8 +59,14 @@ static ucs_stats_class_t uct_iface_stats_class = {
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
                                               size_t length, unsigned flags)
 {
-    uint8_t id = (uintptr_t)arg;
+    const size_t dump_len = 64;
+    uint8_t id            = (uintptr_t)arg;
+    char dump_str[(dump_len * 3) + 1]; /* 1234:5678\0 */
+
     ucs_warn("got active message id %d, but no handler installed", id);
+    ucs_warn("payload: %s", ucs_log_dump_hex(data, ucs_min(length, dump_len),
+                                             dump_str, sizeof(dump_str)));
+
     return UCS_OK;
 }
 
