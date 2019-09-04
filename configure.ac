@@ -367,6 +367,9 @@ AC_MSG_NOTICE([Building documents only])
 ],
 [
 AC_MSG_NOTICE([UCX build configuration:])
+AC_MSG_NOTICE([Preprocessor flags:   ${BASE_CPPFLAGS}])
+AC_MSG_NOTICE([           C flags:   ${BASE_CFLAGS}])
+AC_MSG_NOTICE([         C++ flags:   ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([     Devel headers:   ${enable_devel_headers}])
