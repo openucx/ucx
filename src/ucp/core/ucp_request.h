@@ -257,6 +257,11 @@ struct ucp_request {
                 } tag;
 
                 struct {
+                    ucp_request_t           *rreq;    /* recv request on recv side */
+                    size_t                  offset;   /* offset in recv buffer */
+                } frag;
+
+                struct {
                     ucp_stream_recv_callback_t cb;     /* Completion callback */
                     size_t                     offset; /* Receive data offset */
                     size_t                     length; /* Completion info to fill */

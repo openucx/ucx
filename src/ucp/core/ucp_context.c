@@ -234,7 +234,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "and the resulting performance.\n",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_SIZE", "256k",
+  {"RNDV_FRAG_SIZE", "512k",
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 

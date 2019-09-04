@@ -22,7 +22,7 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Max number of event completions to pick during cuda events polling",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
-    {"MAX_EVENTS", "1024",
+    {"MAX_EVENTS", "inf",
      "Max number of cuda events. -1 is infinite",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
