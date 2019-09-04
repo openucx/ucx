@@ -625,7 +625,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         goto out ;
     }
 
-    length = ucp_contig_dt_length(datatype, count);
+    length = ucp_dt_iov_length(datatype, count);
     rdma_header.total_size = length ;
     rdma_header.msg_id     = req->send.am.message_id ;
     rdma_header.ep         = (uintptr_t) ep ;
