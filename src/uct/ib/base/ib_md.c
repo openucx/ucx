@@ -45,7 +45,12 @@ static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                UCS_CONFIG_TYPE_BW_SPEC);
 
 static const char *uct_ib_devx_objs[] = {
-    "rcqp", "rcsrq", "dct", "dcsrq", NULL };
+    [UCT_IB_DEVX_OBJ_RCQP]  = "rcqp",
+    [UCT_IB_DEVX_OBJ_RCSRQ] = "rcsrq",
+    [UCT_IB_DEVX_OBJ_DCT]   = "dct",
+    [UCT_IB_DEVX_OBJ_DCSRQ] = "dcsrq",
+    NULL
+};
 
 static ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
@@ -152,7 +157,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
 
     {"MLX5_DEVX_OBJECTS", "dct,dcsrq",
-     "Objects to be managed via DEVX\n",
+     "Objects to be created by DevX\n",
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
 

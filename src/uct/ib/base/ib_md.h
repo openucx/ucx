@@ -46,6 +46,12 @@ enum {
                                                        region */
 };
 
+enum {
+    UCT_IB_DEVX_OBJ_RCQP,
+    UCT_IB_DEVX_OBJ_RCSRQ,
+    UCT_IB_DEVX_OBJ_DCT,
+    UCT_IB_DEVX_OBJ_DCSRQ
+};
 
 typedef struct uct_ib_md_ext_config {
     int                      eth_pause;    /**< Whether or not Pause Frame is
@@ -123,7 +129,7 @@ typedef struct uct_ib_md_config {
     UCS_CONFIG_ARRAY_FIELD(ucs_config_bw_spec_t, device) pci_bw; /**< List of PCI BW for devices */
 
     unsigned                 devx;         /**< DEVX support */
-    unsigned                 devx_objs;    /**< Objects to be managed via DEVX */
+    unsigned                 devx_objs;    /**< Objects to be created by DevX */
 } uct_ib_md_config_t;
 
 
