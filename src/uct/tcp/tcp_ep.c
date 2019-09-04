@@ -1024,18 +1024,21 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
     status = uct_tcp_ep_am_sendv(iface, ep, 0, hdr,
                                  iface->config.rx_seg_size,
                                  header, ctx->iov, ctx->iov_cnt);
-    if ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS)) {
-        UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        uct_tcp_ep_ctx_reset(&ep->tx);
+        return status;
+    }
 
-        if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-            uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, header,
-                                             header_length, comp);
-            return UCS_INPROGRESS;
-        }
+    UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
+
+    if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
+        uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, header,
+                                         header_length, comp);
+        return UCS_INPROGRESS;
     }
 
     uct_tcp_ep_ctx_reset(&ep->tx);
-    return status;
+    return UCS_OK;
 }
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
