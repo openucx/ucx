@@ -318,6 +318,25 @@ CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
 
 
 #
+# Compile code with frame pointer. Optimizations usually omit the frame pointer,
+# but if we are profiling the code with callgraph we need it.
+# This option may affect perofrmance so it is off by default.
+#
+AC_ARG_ENABLE([frame-pointer],
+    AS_HELP_STRING([--enable-frame-pointer],
+                   [Compile with frame pointer, useful for profiling, default: NO]),
+    [],
+    [enable_frame_pointer=no])
+AS_IF([test "x$enable_frame_pointer" = xyes],
+      [ADD_COMPILER_FLAG_IF_SUPPORTED([-fno-omit-frame-pointer],
+                                      [-fno-omit-frame-pointer],
+                                      [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                                      [AS_MESSAGE([compiling with frame pointer])],
+                                      [AS_MESSAGE([compiling with frame pointer is not supported])])],
+      [:])
+
+
+#
 # Check for C++11 support
 #
 AC_MSG_CHECKING([c++11 support])
