@@ -232,10 +232,8 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
             if (callback != NULL) {
                 call_on_error(callback, UCS_PTR_STATUS(request));
             }
-        } else if (UCS_PTR_STATUS(request) == UCS_OK) {
-            if (callback != NULL) {
-                call_on_success(callback, jucx_request);
-            }
+        } else if (callback != NULL) {
+            call_on_success(callback, jucx_request);
         }
         set_jucx_request_completed(env, jucx_request);
     }

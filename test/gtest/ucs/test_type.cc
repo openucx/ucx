@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/type/cpu_set.h>
 #include <ucs/type/init_once.h>
+#include <ucs/type/status.h>
 }
 
 #include <time.h>
@@ -38,6 +39,12 @@ UCS_TEST_F(test_type, cpu_set) {
     EXPECT_FALSE(ucs_cpu_is_set(117, &cpu_mask));
     EXPECT_FALSE(ucs_cpu_is_set(127, &cpu_mask));
     EXPECT_EQ(0, ucs_cpu_set_find_lcs(&cpu_mask));
+}
+
+UCS_TEST_F(test_type, status) {
+    void *ptr = (void*)0xff00000000ul;
+    EXPECT_TRUE(UCS_PTR_IS_PTR(ptr));
+    EXPECT_FALSE(UCS_PTR_IS_PTR(NULL));
 }
 
 class test_init_once: public test_type {

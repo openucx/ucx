@@ -172,7 +172,7 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
     do {
         progress();
         rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
-        if (UCS_PTR_STATUS(rdata) == UCS_OK) {
+        if (rdata == NULL) {
             continue;
         }
 
@@ -378,7 +378,7 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
 
         if ((++recv_i % 2) || ((ssize - roffset) < dt_elem_size)) {
             rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
-            if (UCS_PTR_STATUS(rdata) == UCS_OK) {
+            if (rdata == NULL) {
                 continue;
             }
 
