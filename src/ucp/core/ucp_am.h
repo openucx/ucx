@@ -88,6 +88,7 @@ typedef struct {
   ucs_list_link_t   list;       /* entry into list of unfinished AM's */
   ucp_recv_desc_t  *all_data;   /* buffer for all parts of the AM */
   uint64_t          msg_id;     /* way to match up all parts of AM */
+  size_t            total_size; /* size of data for AM */
 } ucp_am_rdma_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);
