@@ -976,7 +976,9 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_client_unfinished_t *unfinished ;
     ucs_assert(status == UCS_OK) ;
-    unfinished = ucp_am_rdma_client_find_unfinished(ep_ext, req->send.am.message_id) ;
+    unfinished = ucp_am_rdma_client_find_unfinished(
+        ep->worker, ep, ep_ext, req->send.am.message_id
+        ) ;
     ucs_assert(unfinished != NULL) ;
 
     rdma_completion_header.msg_id = req->send.am.message_id ;
