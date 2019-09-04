@@ -19,7 +19,6 @@
     for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
          _iter != m_entities.end(); ++_iter) \
 
-
 std::string resource::name() const {
     std::stringstream ss;
     ss << tl_name << "/" << dev_name;
@@ -336,6 +335,19 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 void uct_test::init() {
 }
 
+int uct_test::get_entity_index(entity *ent) {
+    int index = 0;
+
+    FOR_EACH_ENTITY(iter) {
+        if (ent == *iter) {
+            return index;
+        }
+        index++;
+    }
+
+    return -1;
+}
+
 void uct_test::cleanup() {
     FOR_EACH_ENTITY(iter) {
         (*iter)->destroy_eps();
@@ -552,7 +564,7 @@ int uct_test::max_connect_batch()
 }
 
 const std::string uct_test::entity::server_priv_data = "Server private data";
-std::string uct_test::entity::client_priv_data = "";
+const std::string uct_test::entity::client_priv_data = "Client private data";
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) :
@@ -619,7 +631,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     m_iface_params = *params;
 
     memset(&m_cm_attr, 0, sizeof(m_cm_attr));
-    max_conn_priv = 0;
+
+    max_conn_priv    = 0;
+    index_m_entities = 0;
+    client_arg.self  = NULL;
+    client_arg.ent   = NULL;
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
@@ -644,7 +660,10 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     status = uct_cm_query(m_cm, &m_cm_attr);
     ASSERT_UCS_OK(status);
 
-    max_conn_priv = 0;
+    max_conn_priv    = 0;
+    index_m_entities = 0;
+    client_arg.self  = NULL;
+    client_arg.ent   = NULL;
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,
@@ -879,17 +898,6 @@ void uct_test::entity::destroy_eps() {
         }
         m_eps[index].reset();
     }
-}
-
-size_t uct_test::entity::priv_data_do_pack(void *priv_data)
-{
-    size_t priv_data_len;
-
-    client_priv_data = "Client private data";
-    priv_data_len = 1 + client_priv_data.length();
-
-    memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
-    return priv_data_len;
 }
 
 ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,

@@ -100,10 +100,24 @@ public:
     };
 
 protected:
-
     class entity {
     public:
         typedef uct_test::atomic_mode atomic_mode;
+
+        struct client_data_t {
+            char priv_str[32];
+            int  index;
+        };
+
+        struct client_cb_arg_t {
+            uct_test *self;
+            entity   *ent;
+        };
+
+        struct server_cb_arg_t {
+            uct_test *self;
+            int      client_index;
+        };
 
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
@@ -171,7 +185,6 @@ protected:
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
-        static size_t priv_data_do_pack(void *priv_data);
         void accept(uct_cm_h cm, uct_conn_request_h conn_request,
                     uct_ep_server_connect_cb_t connect_cb,
                     uct_ep_disconnect_cb_t disconnect_cb,
@@ -183,8 +196,12 @@ protected:
         void flush() const;
 
         static const std::string server_priv_data;
-        static std::string       client_priv_data;
+        static const std::string client_priv_data;
         size_t                   max_conn_priv;
+        int                      index_m_entities;
+        client_cb_arg_t          client_arg;
+        std::map<int, uct_ep_h>  map_of_clients;
+
 
     private:
         class async_wrapper {
@@ -311,6 +328,7 @@ protected:
     bool get_config(const std::string& name, std::string& value) const;
     void stats_activate();
     void stats_restore();
+    int get_entity_index(entity *ent);
 
     virtual bool has_transport(const std::string& tl_name) const;
     virtual bool has_ud() const;
