@@ -204,6 +204,23 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
 }
 
 static UCS_F_ALWAYS_INLINE
+void ucp_am_zcopy_complete_last_stage(ucp_request_t *req, ucp_dt_state_t *state,
+                                      ucp_req_complete_func_t complete)
+{
+    ucp_request_send_state_advance(req, state,
+                                   UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                   UCS_OK);
+
+    /* Complete a request on a last stage if all previous AM
+     * Zcopy operations completed successfully. If there are
+     * operations that are in progress on other lanes, the last
+     * completed operation will complete the request */
+    if (!req->send.state.uct_comp.count) {
+        complete(req, UCS_OK);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE
 ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                    uint8_t am_id_middle,
                                    const void *hdr_first, size_t hdr_size_first,
@@ -287,6 +304,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                          &req->send.state.uct_comp);
             } else if (state.offset == req->send.length) {
                 /* Empty IOVs on last stage */
+                ucp_am_zcopy_complete_last_stage(req, &state, complete);
                 return UCS_OK;
             } else {
                 ucs_assert(offset == state.offset);
@@ -303,9 +321,10 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             if (!flag_iov_mid && (offset + mid_len == req->send.length)) {
                 /* Last stage */
                 if (status == UCS_OK) {
-                    complete(req, UCS_OK);
+                    ucp_am_zcopy_complete_last_stage(req, &state, complete);
                     return UCS_OK;
                 }
+
                 ucp_request_send_state_advance(req, &state,
                                                UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
                                                status);
