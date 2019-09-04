@@ -601,6 +601,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_client_unfinished_t *unfinished;
     ucp_dt_iov_t *iovec ;
+    ucs_status_t status ;
 
     ucs_print("AM RDMA am_id=%u", id) ;
 
