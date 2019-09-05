@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -49,13 +49,13 @@ typedef struct ucs_memtrack_entry {
 
 
 /**
- * Start trakcing memory (or increment reference count).
+ * Start tracking memory (or increment reference count).
  */
 void ucs_memtrack_init();
 
 
 /**
- * Stop trakcing memory (or decrement reference count).
+ * Stop tracking memory (or decrement reference count).
  */
 void ucs_memtrack_cleanup();
 
