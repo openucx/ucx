@@ -30,19 +30,19 @@ typedef enum {
 } material_t;
 
 const char *color_names[] = {
-    [COLOR_RED]    = "red",
-    [COLOR_BLUE]   = "blue",
-    [COLOR_BLACK]  = "black",
-    [COLOR_YELLOW] = "yellow",
-    [COLOR_WHITE]  = "white",
-    [COLOR_LAST]   = NULL
+    /* [COLOR_RED]    = */ "red",
+    /* [COLOR_BLUE]   = */ "blue",
+    /* [COLOR_BLACK]  = */ "black",
+    /* [COLOR_YELLOW] = */ "yellow",
+    /* [COLOR_WHITE]  = */ "white",
+    /* [COLOR_LAST]   = */ NULL
 };
 
 const char *material_names[] = {
-    [MATERIAL_LEATHER]   = "leather",
-    [MATERIAL_ALCANTARA] = "alcantara",
-    [MATERIAL_TEXTILE]   = "textile",
-    [MATERIAL_LAST]      = NULL
+    /* [MATERIAL_LEATHER]   = */ "leather",
+    /* [MATERIAL_ALCANTARA] = */ "alcantara",
+    /* [MATERIAL_TEXTILE]   = */ "textile",
+    /* [MATERIAL_LAST]      = */ NULL
 };
 
 typedef struct {
