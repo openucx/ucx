@@ -352,7 +352,7 @@ enum ucp_worker_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_listener_attr_field {
-    UCP_LISTENER_ATTR_FIELD_PORT   = UCS_BIT(0) /**< Port used for listening */
+    UCP_LISTENER_ATTR_FIELD_SOCKADDR = UCS_BIT(0) /**< Sockaddr used for listening */
 };
 
 
@@ -931,13 +931,13 @@ typedef struct ucp_listener_attr {
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t              field_mask;
+    uint64_t                field_mask;
 
     /**
-     * The port on which the listener is listening for incoming connection
-     * requests. The port is returned in host byte order.
+     * Sockaddr on which this listener is listening for incoming connection
+     * requests.
      */
-    int                   port;
+    struct sockaddr_storage sockaddr;
 } ucp_listener_attr_t;
 
 

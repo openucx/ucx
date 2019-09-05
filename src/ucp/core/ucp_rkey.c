@@ -228,8 +228,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
 #endif
 
     /* Unpack rkey of each UCT MD */
-    remote_md_index = 0; /* Index of remote MD */
-    rkey_index      = 0; /* Index of the rkey in the array */
+    rkey_index = 0; /* Index of the rkey in the array */
+    /* Go over remote MD indices */
     ucs_for_each_bit (remote_md_index, remote_md_map) {
         md_size = *((uint8_t*)p++);
 
@@ -321,7 +321,6 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
     }
 
     snprintf(p, endp - p, "}");
-    p += strlen(p);
 }
 
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)

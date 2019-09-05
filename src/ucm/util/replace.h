@@ -65,9 +65,9 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         if (ucs_unlikely(orig_func_ptr == NULL)) { \
             pthread_mutex_lock(&ucm_reloc_get_orig_lock); \
             ucm_reloc_get_orig_thread = pthread_self(); \
-            orig_func_ptr = ucm_reloc_get_orig(UCS_PP_QUOTE(_name), \
-                                               _over_name); \
-            ucm_reloc_get_orig_thread = -1; \
+            orig_func_ptr = (func_ptr_t)ucm_reloc_get_orig(UCS_PP_QUOTE(_name), \
+                                                           _over_name); \
+            ucm_reloc_get_orig_thread = (pthread_t)-1; \
             pthread_mutex_unlock(&ucm_reloc_get_orig_lock); \
         } \
         return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \

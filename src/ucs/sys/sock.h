@@ -102,15 +102,14 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
 
 
 /**
- * Report information about non-blocking connection status for
- * the socket referred to by the file descriptor `fd`.
+ * Check whether the socket referred to by the file descriptor `fd`
+ * is connected to a peer or not.
  *
  * @param [in]  fd          Socket fd.
  *
- * @return UCS_OK on success or UCS_ERR_UNREACHABLE on failure or
- *         UCS_INPROGRESS if operation is still in progress.
+ * @return 1 - connected, 0 - not connected.
  */
-ucs_status_t ucs_socket_connect_nb_get_status(int fd);
+int ucs_socket_is_connected(int fd);
 
 
 /**
@@ -122,16 +121,6 @@ ucs_status_t ucs_socket_connect_nb_get_status(int fd);
  * waiting to be accepted.
  */
 int ucs_socket_max_conn();
-
-
-/**
- * Returns the maximum possible value for the number of IOVs.
- * It maybe either value from the system configuration or IOV_MAX
- * value or UIO_MAXIOV value or 1024 if nothing is defined.
- *
- * @return The maximum number of IOVs.
- */
-int ucs_socket_max_iov();
 
 
 /**
@@ -331,6 +320,19 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
  *         0 if not
  */
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
+
+
+/**
+ * Copy the src_addr sockaddr to dst_addr sockaddr. The length to copy is
+ * the size of the src_addr sockaddr.
+ *
+ * @param [in] dst_addr  Pointer to destination sockaddr (to copy to).
+ * @param [in] src_addr  Pointer to source sockaddr (to copy from).
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
+                               const struct sockaddr *src_addr);
 
 END_C_DECLS
 

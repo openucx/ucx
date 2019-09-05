@@ -264,7 +264,6 @@ static void __print_table_values(char * const *table, char *buf, size_t max)
     }
 
     snprintf(ptr, end - ptr, "]");
-    ptr += strlen(ptr);
 
     *buf = '[';
 }
@@ -1002,11 +1001,24 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
         goto out;
     }
 
-    kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
+#ifndef __clang_analyzer__
+    /* Exclude this code from Clang examination as it generates
+     * false-postive warning about potential leak of memory
+     * pointed to by 'key' variable */
+    iter = kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
+    if ((ret <= 0) || (iter == kh_end(&ucs_config_parser_env_vars))) {
+        ucs_warn("kh_put(key=%s) failed", key);
+        ucs_free(key);
+        goto out;
+    }
+#else
+    ucs_free(key);
+#endif
+
     *added = 1;
+
 out:
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
-    return ;
 }
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
@@ -1340,7 +1352,8 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
              */
             inner_prefix.prefix = field->name;
             ucs_list_add_tail(prefix_list, &inner_prefix.list);
-            ucs_config_parser_print_opts_recurs(stream, opts + field->offset,
+            ucs_config_parser_print_opts_recurs(stream,
+                                                UCS_PTR_BYTE_OFFSET(opts, field->offset),
                                                 field->parser.arg, flags,
                                                 env_prefix, prefix_list);
             ucs_list_del(&inner_prefix.list);
@@ -1355,7 +1368,8 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
 
                 head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
 
-                ucs_config_parser_print_field(stream, opts + alias_table_offset,
+                ucs_config_parser_print_field(stream,
+                                              UCS_PTR_BYTE_OFFSET(opts, alias_table_offset),
                                               env_prefix, prefix_list,
                                               field->name, aliased_field,
                                               flags, "%-*s %s%s%s",

@@ -69,6 +69,11 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(xrqc, xrqc, cqn,      dvcq.cqn);
 
     wq = UCT_IB_MLX5DV_ADDR_OF(xrqc, xrqc, wq);
+
+    ucs_assert((iface->rx.srq.topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) ||
+               (iface->rx.srq.topo == UCT_RC_MLX5_SRQ_TOPO_LIST));
+
+    UCT_IB_MLX5DV_SET(wq, wq, wq_type, iface->rx.srq.topo);
     UCT_IB_MLX5DV_SET(wq, wq, log_wq_sz,     ucs_ilog2(max));
     UCT_IB_MLX5DV_SET(wq, wq, log_wq_stride, ucs_ilog2(UCT_IB_MLX5_SRQ_STRIDE));
     UCT_IB_MLX5DV_SET(wq, wq, pd,            dvpd.pdn);

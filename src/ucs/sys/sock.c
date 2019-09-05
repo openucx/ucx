@@ -15,12 +15,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <sys/uio.h>
-/* need this to get IOV_MAX on some platforms. */
-#ifndef __need_IOV_MAX
-#define __need_IOV_MAX
-#endif
-#include <limits.h>
 
 
 #define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
@@ -144,31 +138,24 @@ out:
     return status;
 }
 
-ucs_status_t ucs_socket_connect_nb_get_status(int fd)
+int ucs_socket_is_connected(int fd)
 {
-    socklen_t conn_status_sz;
-    int ret, conn_status;
+    struct sockaddr sock_addr = { 0 };
+    socklen_t sock_addr_len;
+    int ret;
 
-    conn_status_sz = sizeof(conn_status);
+    sock_addr_len = sizeof(sock_addr);
 
-    ret = getsockopt(fd, SOL_SOCKET, SO_ERROR,
-                     &conn_status, &conn_status_sz);
+    ret = getpeername(fd, &sock_addr, &sock_addr_len);
     if (ret < 0) {
-        ucs_error("getsockopt(fd=%d) failed to get SOL_SOCKET(SO_ERROR): %m", fd);
-        return UCS_ERR_IO_ERROR;
+        if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
+            ucs_error("getpeername(fd=%d) failed: %m", fd);
+        }
+
+        return 0;
     }
 
-    if ((conn_status == EINPROGRESS) || (conn_status == EWOULDBLOCK)) {
-        return UCS_INPROGRESS;
-    }
-
-    if (conn_status != 0) {
-        ucs_error("SOL_SOCKET(SO_ERROR) status on fd %d: %s",
-                  fd, strerror(conn_status));
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    return UCS_OK;
+    return 1;
 }
 
 int ucs_socket_max_conn()
@@ -186,36 +173,6 @@ int ucs_socket_max_conn()
         somaxconn_val = SOMAXCONN;
         return somaxconn_val;
     }
-}
-
-int ucs_socket_max_iov()
-{
-    static int max_iov = -1;
-
-#ifdef _SC_IOV_MAX
-    if (max_iov != -1) {
-        return max_iov;
-    }
-
-    max_iov = sysconf(_SC_IOV_MAX);
-    if (max_iov != -1) {
-        return max_iov;
-    }
-    /* if unable to get value from sysconf(),
-     * use a predefined value */
-#endif
-
-#if defined(IOV_MAX)
-    max_iov = IOV_MAX;
-#elif defined(UIO_MAXIOV)
-    max_iov = UIO_MAXIOV;
-#else
-    /* The value is used as a fallback when system value is not available.
-     * The latest kernels define it as 1024 */
-    max_iov = 1024;
-#endif
-
-    return max_iov;
 }
 
 static ucs_status_t
@@ -499,4 +456,19 @@ int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
         ucs_debug("invalid address family: %d", addr->sa_family);
         return 0;
     }
+}
+
+ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
+                               const struct sockaddr *src_addr)
+{
+    ucs_status_t status;
+    size_t size;
+
+    status = ucs_sockaddr_sizeof(src_addr, &size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    memcpy(dst_addr, src_addr, size);
+    return UCS_OK;
 }

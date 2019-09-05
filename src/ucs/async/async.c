@@ -140,7 +140,7 @@ static ucs_async_handler_t *ucs_async_handler_extract(int id)
 /* decrement reference count and release the handler if reached 0 */
 static void ucs_async_handler_put(ucs_async_handler_t *handler)
 {
-    if (ucs_atomic_fadd32(&handler->refcount, -1) > 1) {
+    if (ucs_atomic_fadd32(&handler->refcount, (uint32_t)-1) > 1) {
         return;
     }
 
@@ -414,7 +414,7 @@ err_free:
     ucs_free(handler);
 err_dec_num_handlers:
     if (async != NULL) {
-        ucs_atomic_add32(&async->num_handlers, -1);
+        ucs_atomic_add32(&async->num_handlers, (uint32_t)-1);
     }
 err:
     return status;
@@ -513,7 +513,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     }
 
     if (handler->async != NULL) {
-        ucs_atomic_add32(&handler->async->num_handlers, -1);
+        ucs_atomic_add32(&handler->async->num_handlers, (uint32_t)-1);
     }
 
     if (sync) {

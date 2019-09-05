@@ -198,8 +198,10 @@ ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp)
 {
-    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_rc_mlx5_ep_t *ep  = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    uct_ib_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                        uct_ib_iface_t);
+    uct_rc_mlx5_ep_t *ep               = ucs_derived_of(tl_ep,
+                                                        uct_rc_mlx5_ep_t);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),

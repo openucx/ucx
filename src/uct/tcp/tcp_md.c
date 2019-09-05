@@ -14,7 +14,9 @@
 
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
-    attr->cap.flags               = 0;
+    /* Dummy memory registration provided. No real memory handling exists */
+    attr->cap.flags               = UCT_MD_FLAG_REG |
+                                    UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->cap.max_alloc           = 0;
     attr->cap.reg_mem_types       = 0;
     attr->cap.access_mem_type     = UCS_MEMORY_TYPE_HOST;
@@ -27,6 +29,14 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     return UCS_OK;
 }
 
+static ucs_status_t uct_tcp_md_mem_reg(uct_md_h md, void *address, size_t length,
+                                       unsigned flags, uct_mem_h *memh_p)
+{
+    /* We have to emulate memory registration. Return dummy pointer */
+    *memh_p = (void*)0xdeadbeef;
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_tcp_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
@@ -34,10 +44,10 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
     static uct_md_ops_t md_ops = {
         .close              = ucs_empty_function,
         .query              = uct_tcp_md_query,
-        .mkey_pack          = ucs_empty_function_return_unsupported,
-        .mem_reg            = ucs_empty_function_return_unsupported,
-        .mem_dereg          = ucs_empty_function_return_unsupported,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .mkey_pack          = ucs_empty_function_return_success,
+        .mem_reg            = uct_tcp_md_mem_reg,
+        .mem_dereg          = ucs_empty_function_return_success,
+        .detect_memory_type = ucs_empty_function_return_unsupported
     };
     static uct_md_t md = {
         .ops          = &md_ops,
@@ -48,13 +58,26 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
+static ucs_status_t uct_tcp_md_rkey_unpack(uct_component_t *component,
+                                           const void *rkey_buffer,
+                                           uct_rkey_t *rkey_p, void **handle_p)
+{
+    /**
+     * Pseudo stub function for the key unpacking
+     * Need rkey == 0 due to work with same process to reuse uct_base_[put|get|atomic]*
+     */
+    *rkey_p   = 0;
+    *handle_p = NULL;
+    return UCS_OK;
+}
+
 uct_component_t uct_tcp_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_tcp_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
-    .rkey_unpack        = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_tcp_md_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_unsupported,
+    .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_TCP_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),

@@ -33,6 +33,7 @@
 #include <link.h>
 #include <limits.h>
 
+typedef void * (*ucm_reloc_dlopen_func_t)(const char *, int);
 
 typedef struct ucm_auxv {
     long               type;
@@ -55,7 +56,7 @@ static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
 
 /* List of patches to be applied to additional libraries */
 static UCS_LIST_HEAD(ucm_reloc_patch_list);
-static void * (*ucm_reloc_orig_dlopen)(const char *, int) = NULL;
+static ucm_reloc_dlopen_func_t ucm_reloc_orig_dlopen = NULL;
 static pthread_mutex_t ucm_reloc_patch_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -156,7 +157,9 @@ ElfW(Rela) *ucm_reloc_find_sym(void *table, size_t table_size, const char *symbo
     ElfW(Rela) *reloc;
     char *elf_sym;
 
-    for (reloc = table; (void*)reloc < table + table_size; ++reloc) {
+    for (reloc = table;
+         (void*)reloc < UCS_PTR_BYTE_OFFSET(table, table_size);
+         ++reloc) {
         elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
         if (!strcmp(symbol, elf_sym)) {
             return reloc;
@@ -193,7 +196,7 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char UCS_V_U
     /* find PT_DYNAMIC */
     dphdr = NULL;
     for (i = 0; i < phnum; ++i) {
-        dphdr = (void*)phdr + phsize * i;
+        dphdr = UCS_PTR_BYTE_OFFSET(phdr, phsize * i);
         if (dphdr->p_type == PT_DYNAMIC) {
             break;
         }
@@ -368,8 +371,9 @@ void *ucm_dlopen(const char *filename, int flag)
     ucm_debug("open module: %s, flag: %x", filename, flag);
 
     if (ucm_reloc_orig_dlopen == NULL) {
-        ucm_reloc_orig_dlopen = ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
-                                                   ucm_reloc_dlopen_patch.value);
+        ucm_reloc_orig_dlopen =
+            (ucm_reloc_dlopen_func_t)ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
+                                                        ucm_reloc_dlopen_patch.value);
 
         if (ucm_reloc_orig_dlopen == NULL) {
             ucm_fatal("ucm_reloc_orig_dlopen is NULL");
@@ -457,8 +461,9 @@ static ucs_status_t ucm_reloc_install_dlopen()
         return UCS_OK;
     }
 
-    ucm_reloc_orig_dlopen = ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
-                                               ucm_reloc_dlopen_patch.value);
+    ucm_reloc_orig_dlopen =
+        (ucm_reloc_dlopen_func_t)ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
+                                                    ucm_reloc_dlopen_patch.value);
 
     status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch, 0);
     if (status != UCS_OK) {

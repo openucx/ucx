@@ -10,7 +10,6 @@
 #include "tcp.h"
 
 #include <ucs/async/async.h>
-#include <ucs/sys/iovec.h>
 
 
 /* Forward declaration */

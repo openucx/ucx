@@ -66,7 +66,7 @@ uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_srq_prefetch_setup(uct_rc_mlx5_iface_common_t *iface)
 {
-    unsigned wqe_ctr = (iface->rx.srq.free_idx + 2) & iface->rx.srq.mask;
+    unsigned wqe_ctr = iface->rx.srq.free_idx + 2;
     uct_ib_mlx5_srq_seg_t *seg;
 
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
@@ -81,17 +81,21 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
                                   uct_recv_desc_t *release_desc)
 {
     void *udesc;
+    uint16_t wqe_index;
 
-    if (ucs_likely((status == UCS_OK) &&
-         (wqe_ctr == ((iface->rx.srq.ready_idx + 1) &
-                       iface->rx.srq.mask)))) {
+    /* Need to wrap wqe_ctr, because in case of cyclic srq topology
+     * it is wrapped around 0xFFFF regardless of real SRQ size.
+     * But it respects srq size when srq topology is a linked-list. */
+    wqe_index = wqe_ctr & iface->rx.srq.mask;
+
+    if (ucs_likely((status == UCS_OK) && (wqe_index ==
+                   ((iface->rx.srq.ready_idx + 1) & iface->rx.srq.mask)))) {
          /* If the descriptor was not used - if there are no "holes", we can just
           * reuse it on the receive queue. Otherwise, ready pointer will stay behind
           * until post_recv allocated more descriptors from the memory pool, fills
           * the holes, and moves it forward.
           */
-         ucs_assert(wqe_ctr == ((iface->rx.srq.free_idx + 1) &
-                                 iface->rx.srq.mask));
+         ucs_assert(wqe_index == ((iface->rx.srq.free_idx + 1) & iface->rx.srq.mask));
          ++iface->rx.srq.ready_idx;
          ++iface->rx.srq.free_idx;
     } else {
@@ -100,7 +104,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
              uct_recv_desc(udesc) = release_desc;
              seg->srq.desc        = NULL;
          }
-         if (wqe_ctr == ((iface->rx.srq.free_idx + 1) & iface->rx.srq.mask)) {
+         if (wqe_index == ((iface->rx.srq.free_idx + 1) & iface->rx.srq.mask)) {
              ++iface->rx.srq.free_idx;
          } else {
              /* Mark the segment as out-of-order, post_recv will advance free */

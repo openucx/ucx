@@ -132,8 +132,8 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
 
     /* Store the size in the first bytes of the chunk */
     *(size_t*)ptr = size;
-    *chunk_p = ptr  + sizeof(size_t);
-    *size_p  = size - sizeof(size_t);
+    *chunk_p      = UCS_PTR_BYTE_OFFSET(ptr, sizeof(size_t));
+    *size_p       = size - sizeof(size_t);
     return UCS_OK;
 }
 
@@ -143,7 +143,7 @@ static void ucs_rcache_mp_chunk_release(ucs_mpool_t *mp, void *chunk)
     void *ptr;
     int ret;
 
-    ptr = chunk - sizeof(size_t);
+    ptr  = UCS_PTR_BYTE_OFFSET(chunk, -sizeof(size_t));
     size = *(size_t*)ptr;
     ret = ucm_orig_munmap(ptr, size);
     if (ret) {
@@ -224,7 +224,7 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
     ucs_rcache_region_trace(rcache, region, lock ? "put" : "put_nolock");
 
     ucs_assert(region->refcount > 0);
-    if (ucs_unlikely(ucs_atomic_fadd32(&region->refcount, -1) == 1)) {
+    if (ucs_unlikely(ucs_atomic_fadd32(&region->refcount, (uint32_t)-1) == 1)) {
         if (lock) {
             pthread_rwlock_wrlock(&rcache->lock);
         }
@@ -360,7 +360,7 @@ static void ucs_rcache_purge(ucs_rcache_t *rcache)
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         if (region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE) {
             region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
-            ucs_atomic_add32(&region->refcount, -1);
+            ucs_atomic_add32(&region->refcount, (uint32_t)-1);
         }
         if (region->refcount > 0) {
             ucs_rcache_region_warn(rcache, region, "destroying inuse");
@@ -682,7 +682,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     }
 
     status = ucs_mpool_init(&self->inv_mp, 0, sizeof(ucs_rcache_inv_entry_t), 0,
-                            1, 1024, -1, &ucs_rcache_mp_ops, "rcache_inv_mp");
+                            1, 1024, UINT_MAX, &ucs_rcache_mp_ops, "rcache_inv_mp");
     if (status != UCS_OK) {
         goto err_cleanup_pgtable;
     }

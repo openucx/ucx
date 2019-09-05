@@ -619,7 +619,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     m_iface_params = *params;
 
     memset(&m_cm_attr, 0, sizeof(m_cm_attr));
-    client_cb_arg = 0;
+    max_conn_priv = 0;
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
@@ -644,7 +644,7 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     status = uct_cm_query(m_cm, &m_cm_attr);
     ASSERT_UCS_OK(status);
 
-    client_cb_arg = 0;
+    max_conn_priv = 0;
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,
@@ -881,18 +881,14 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
-ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
-                                              void *priv_data)
+size_t uct_test::entity::priv_data_do_pack(void *priv_data)
 {
-    size_t *max_conn_priv = (size_t*)arg;
     size_t priv_data_len;
 
     client_priv_data = "Client private data";
     priv_data_len = 1 + client_priv_data.length();
 
     memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
-    EXPECT_LE(priv_data_len, (*max_conn_priv));
-
     return priv_data_len;
 }
 
@@ -908,6 +904,7 @@ ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
 void
 uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                       const ucs::sock_addr_storage &remote_addr,
+                                      uct_sockaddr_priv_pack_callback_t pack_cb,
                                       uct_ep_client_connect_cb_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
@@ -943,7 +940,7 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     params.user_data         = user_data;
     params.sockaddr          = &ucs_remote_addr;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
-    params.sockaddr_pack_cb  = client_priv_data_cb;
+    params.sockaddr_pack_cb  = pack_cb;
     status = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);
 
@@ -1023,13 +1020,14 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
                                const ucs::sock_addr_storage &remote_addr,
+                               uct_sockaddr_priv_pack_callback_t pack_cb,
                                uct_ep_client_connect_cb_t connect_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
 {
     if (m_cm ||
         iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
-        connect_to_sockaddr(index, other, remote_addr, connect_cb,
+        connect_to_sockaddr(index, other, remote_addr, pack_cb, connect_cb,
                             disconnect_cb, user_data);
     } else {
         UCS_TEST_SKIP_R("cannot connect");

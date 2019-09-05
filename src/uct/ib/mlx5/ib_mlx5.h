@@ -133,6 +133,13 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DC_TM    = UCS_BIT(2),   /* Device supports TM DC */
 };
 
+
+enum {
+    UCT_IB_MLX5_SRQ_TOPO_LIST    = 0x0,
+    UCT_IB_MLX5_SRQ_TOPO_CYCLIC  = 0x1
+};
+
+
 /**
  * MLX5 IB memory domain.
  */
@@ -193,6 +200,7 @@ typedef enum {
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
     uct_ib_mlx5_obj_type_t             type;
+    int                                topo;       /* linked-list or cyclic */
     uint32_t                           srq_num;
     void                               *buf;
     volatile uint32_t                  *db;

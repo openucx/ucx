@@ -829,7 +829,7 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker, unsigned address_count,
     unsigned num_dst_mds;
 
     ae_dst_md_map = 0;
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         for (ae = address_list; ae < address_list + address_count; ++ae) {
             if (ucp_wireup_is_reachable(worker, rsc_index, ae)) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);

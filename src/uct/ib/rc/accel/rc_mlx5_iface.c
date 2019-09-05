@@ -447,6 +447,23 @@ static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->cq[dir].cq_sn++;
 }
 
+static int uct_rc_mlx5_iface_srq_topo(uct_rc_mlx5_iface_common_t *iface,
+                                      uct_md_h md,
+                                      uct_rc_mlx5_iface_common_config_t *mlx5_config)
+{
+    uct_ib_mlx5_md_t *ib_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
+
+    /* Cyclic SRQ is supported with HW TM and DEVX only. */
+    if (((mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_AUTO) ||
+        (mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC)) &&
+        UCT_RC_MLX5_TM_ENABLED(iface) &&
+        (ib_md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        return UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
+    }
+
+    return UCT_IB_MLX5_SRQ_TOPO_LIST;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_iface_ops_t *ops,
                     uct_md_h md, uct_worker_h worker,
@@ -460,7 +477,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 
     uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
 
-    self->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->rx.srq.topo                = uct_rc_mlx5_iface_srq_topo(self, md, mlx5_config);
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
