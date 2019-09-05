@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -392,9 +392,9 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ(UCS_TBYTE * 128.0, opts->can_pci_bw.bw);
     EXPECT_EQ(std::string("mlx5_0"), opts->can_pci_bw.name);
 
-    EXPECT_EQ(UCS_ON, opts->air_conditioning);
-    EXPECT_EQ(UCS_OFF, opts->abs);
-    EXPECT_EQ(UCS_AUTO, opts->transmission);
+    EXPECT_EQ(UCS_CONFIG_ON, opts->air_conditioning);
+    EXPECT_EQ(UCS_CONFIG_OFF, opts->abs);
+    EXPECT_EQ(UCS_CONFIG_AUTO, opts->transmission);
 }
 
 UCS_TEST_F(test_config, clone) {
