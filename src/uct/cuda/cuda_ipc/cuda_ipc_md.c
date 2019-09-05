@@ -51,14 +51,14 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
            ? UCS_OK : UCS_ERR_IO_ERROR;
 }
 
-static inline int uuid_equals(const CUuuid* a, const CUuuid* b)
+static inline int uct_cuda_ipc_uuid_equals(const CUuuid* a, const CUuuid* b)
 {
     int64_t *a0 = (int64_t *) a->bytes;
     int64_t *b0 = (int64_t *) b->bytes;
     return (a0[0] == b0[0]) && (a0[1] == b0[1]) ? 1 : 0;
 }
 
-static inline void uuid_copy(CUuuid* dst, const CUuuid* src)
+static inline void uct_cuda_ipc_uuid_copy(CUuuid* dst, const CUuuid* src)
 {
     int64_t *a = (int64_t *) src->bytes;
     int64_t *b = (int64_t *) dst->bytes;
@@ -66,14 +66,14 @@ static inline void uuid_copy(CUuuid* dst, const CUuuid* src)
     *b   = *a;
 }
 
-static ucs_status_t get_unique_index_for_uuid(int* idx,
-                                              uct_cuda_ipc_md_t* md,
-                                              CUuuid* uuid)
+static ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
+                                                           uct_cuda_ipc_md_t* md,
+                                                           CUuuid* uuid)
 {
     int i;
 
     for (i = 0; i < md->uuid_map_size; i++) {
-        if (uuid_equals(uuid, &md->uuid_map[i])) {
+        if (uct_cuda_ipc_uuid_equals(uuid, &md->uuid_map[i])) {
             *idx = i;
             return UCS_OK; /* found */
         }
@@ -107,7 +107,7 @@ static ucs_status_t get_unique_index_for_uuid(int* idx,
     }
 
     /* Add new mapping */
-    uuid_copy(&md->uuid_map[md->uuid_map_size], uuid);
+    uct_cuda_ipc_uuid_copy(&md->uuid_map[md->uuid_map_size], uuid);
     *idx = md->uuid_map_size++;
 
     return UCS_OK;
@@ -122,7 +122,7 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     int num_devices;
     char* accessible;
 
-    status = get_unique_index_for_uuid(&peer_idx, mdc->md, &rkey->uuid);
+    status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, &rkey->uuid);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
