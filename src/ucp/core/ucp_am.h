@@ -79,16 +79,20 @@ typedef struct {
 } ucp_am_unfinished_t;
 
 typedef struct {
-  ucs_list_link_t   list;       /* entry into list of unfinished AM's */
-  ucp_request_t    *req;        /* active message request */
-  uint64_t          msg_id;     /* way to match up all parts of AM */
+  ucs_list_link_t   list;                                  /* entry into list of unfinished AM's */
+  ucp_request_t    *req;                                   /* active message request */
+  uint64_t          msg_id;                                /* way to match up all parts of AM */
+  ucp_send_callback_t cb ;                                 /* callback to drive when the AM is complete */
+  ucp_am_rdma_header_t rdma_header ;                       /* What the client initially sends to the AM server */
+  ucp_am_rdma_completion_header_t rdma_completion_header ; /* What the client sents when RDMA is complete */
 } ucp_am_rdma_client_unfinished_t ;
 
 typedef struct {
-  ucs_list_link_t   list;       /* entry into list of unfinished AM's */
-  ucp_recv_desc_t  *all_data;   /* buffer for all parts of the AM */
-  uint64_t          msg_id;     /* way to match up all parts of AM */
-  size_t            total_size; /* size of data for AM */
+  ucs_list_link_t   list;                        /* entry into list of unfinished AM's */
+  ucp_recv_desc_t  *all_data;                    /* buffer for all parts of the AM */
+  uint64_t          msg_id;                      /* way to match up all parts of AM */
+  size_t            total_size;                  /* size of data for AM */
+  ucp_am_rdma_reply_header_t rdma_reply_header ; /* What the server sends to the client for an AM */
 } ucp_am_rdma_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);

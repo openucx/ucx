@@ -388,6 +388,14 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     return UCS_ERR_NO_PROGRESS;
 }
 
+ucs_status_t ucp_request_rdma_send_start(ucp_request_t *req,
+                                         uct_pending_callback_t func)
+{
+    req->send.uct.func = func;
+    UCS_PROFILE_REQUEST_EVENT(req, "start_rdma_contig_short", req->send.length);
+    return UCS_OK;
+}
+
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
     if (req->send.state.uct_comp.func) {

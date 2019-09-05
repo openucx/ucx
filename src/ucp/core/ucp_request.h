@@ -329,6 +329,8 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     const ucp_ep_msg_config_t* msg_config,
                                     const ucp_proto_t *proto);
 
+ucs_status_t ucp_request_rdma_send_start(ucp_request_t *req,
+                                         uct_pending_callback_t func) ;
 /* Fast-forward to data end */
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 
