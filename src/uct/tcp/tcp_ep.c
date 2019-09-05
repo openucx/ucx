@@ -726,11 +726,6 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
     ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
 }
 
-static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep)
-{
-    uct_tcp_ep_outstanding_dec(ep);
-}
-
 static inline unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -811,7 +806,7 @@ static inline unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             }
         } else if (hdr->am_id == UCT_TCP_EP_PUT_ACK_AM_ID) {
             ucs_assert(hdr->length == 0);
-            uct_tcp_ep_handle_put_ack(ep);
+            uct_tcp_ep_outstanding_dec(ep);
             handled++;
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
@@ -1027,15 +1022,14 @@ uct_tcp_ep_pending_put_ack_cb(uct_pending_req_t *self)
                                  uct_tcp_iface_t);
 
     status = uct_tcp_ep_am_prepare(iface, put_ack_req->ep, 0, &hdr);
-    if (ucs_likely(status == UCS_OK)) {
-        uct_tcp_ep_send_put_ack(iface, put_ack_req->ep, hdr);
-        ucs_free(put_ack_req);
-        return UCS_OK;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
-        return UCS_INPROGRESS;
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
-    return status;
+    uct_tcp_ep_send_put_ack(iface, put_ack_req->ep, hdr);
+    ucs_free(put_ack_req);
+
+    return UCS_OK;
 }
 
 static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
@@ -1053,28 +1047,31 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_am_prepare(iface, ep, 0, &hdr);
     if (ucs_likely(status == UCS_OK)) {
         uct_tcp_ep_send_put_ack(iface, ep, hdr);
+        return;
     } else if (status != UCS_ERR_NO_RESOURCE) {
         ucs_error("tcp_ep %p: failed to prepare AM data", ep);
         return;
-    } else {
-        /* There are no resources to send this PUT ACK message from
-         * this EP. Add request to a pending queue */
-        put_ack_req = ucs_calloc(1, sizeof(*put_ack_req),
-                                 "put ack pending req");
-        if (put_ack_req == NULL) {
-            ucs_error("tcp_ep %p: failed to allocate memory "
-                      "for a pending request", ep);
-            return;
-        }
+    }
 
-        put_ack_req->super.func = uct_tcp_ep_pending_put_ack_cb;
-        put_ack_req->ep         = ep;
+    ucs_assert(status == UCS_ERR_NO_RESOURCE);
+    
+    /* There are no resources to send this PUT ACK message from
+     * this EP. Add request to a pending queue */
+    put_ack_req = ucs_calloc(1, sizeof(*put_ack_req),
+                             "put ack pending req");
+    if (put_ack_req == NULL) {
+        ucs_error("tcp_ep %p: failed to allocate memory "
+                  "for a pending request", ep);
+        return;
+    }
 
-        status = uct_tcp_ep_pending_add(&ep->super.super,
-                                        &put_ack_req->super, 0);
-        if (ucs_likely(status != UCS_OK)) {
-            ucs_error("tcp_ep %p: failed to add a pending request", ep);
-        }
+    put_ack_req->super.func = uct_tcp_ep_pending_put_ack_cb;
+    put_ack_req->ep         = ep;
+
+    status = uct_tcp_ep_pending_add(&ep->super.super,
+                                    &put_ack_req->super, 0);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_error("tcp_ep %p: failed to add a pending request", ep);
     }
 }
 
@@ -1308,15 +1305,13 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
 
     if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
         /* Since EP has to wait for an acknowledgment for this PUT
-         * operation, pass NULL instead of the user's completion
-         * object and always return UCS_INPROGRESS. The completion
-         * will be updated upon receiving the PUT acknowledgment */
+         * operation, always return UCS_INPROGRESS */
         uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
                                          sizeof(put_req), comp);
         return UCS_INPROGRESS;
     }
 
-    status = UCS_OK;
+    ucs_assert(status == UCS_OK);
 
 out:
     uct_tcp_ep_ctx_reset(&ep->tx);
@@ -1351,10 +1346,13 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
-    if (ep->outstanding ||
-        (uct_tcp_ep_check_tx_res(ep) == UCS_ERR_NO_RESOURCE)) {
+    if (uct_tcp_ep_check_tx_res(ep) == UCS_ERR_NO_RESOURCE) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
         return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (ep->outstanding) {
+        return UCS_INPROGRESS;
     }
 
     UCT_TL_EP_STAT_FLUSH(&ep->super);
