@@ -935,6 +935,8 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     size_t length_to_copy = (rdma_hdr->total_size < UCP_AM_RDMA_IOVEC_0_MAX_SIZE)
                             ? rdma_hdr->total_size
                             : UCP_AM_RDMA_IOVEC_0_MAX_SIZE ;
+    ucp_request_t *req;
+    ucs_status_ptr_t ret ;
 
     ucs_print("AM RDMA ucp_am_rdma_handler") ;
     all_data = ucs_malloc(rdma_hdr->total_size + sizeof(ucp_recv_desc_t),
@@ -974,7 +976,15 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_list_add_head(&ep_ext->am.started_ams_rdma_server, &unfinished->list);
 
-    ucp_am_rdma_reply_contig_short(ep, &(unfinished->rdma_reply_header)) ;
+    req = ucp_request_get(ep->worker);
+    ucs_assert(req != NULL) ;
+
+    ucp_am_send_req_init(req, ep, &(unfinished->rdma_reply_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_reply_header_t), 0, 0);
+    status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
+    ucs_assert(status == UCS_OK) ;
+
+    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_reply_contig_short, ucp_am_rdma_callback) ;
+    ucp_print("AM RDMA reply ucp_am_send_rdma_req ret=%p", ret) ;
     return UCS_OK ;
 }
 
@@ -982,25 +992,32 @@ static void
 ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
 {
     ucp_request_t * req=((ucp_request_t *) request) - 1  ;
-    ucp_am_rdma_completion_header_t rdma_completion_header ;
     ucp_ep_h ep = req->send.ep ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_client_unfinished_t *unfinished ;
+    ucs_status_ptr_t ret ;
     ucs_assert(status == UCS_OK) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
         ep->worker, ep, ep_ext, req->send.am.message_id
         ) ;
     ucs_assert(unfinished != NULL) ;
 
-    rdma_completion_header.msg_id = req->send.am.message_id ;
-    rdma_completion_header.ep     = (uintptr_t) ep ;
-    rdma_completion_header.am_id  = req->send.am.am_id ;
+    unfinished->rdma_completion_header.msg_id = req->send.am.message_id ;
+    unfinished->rdma_completion_header.ep     = (uintptr_t) ep ;
+    unfinished->rdma_completion_header.am_id  = req->send.am.am_id ;
+
+    ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
+    status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
+
+    ucp_am_rdma_completion_contig_short(ep, &rdma_completion_header) ;
+    unfinished->cb(request, UCS_OK) ;
+
+    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
+    ucp_print("AM RDMA completion ucp_am_send_rdma_req ret=%p", ret) ;
 
     ucs_list_del(&unfinished->list);
     ucs_free(unfinished);
 
-    ucp_am_rdma_completion_contig_short(ep, &rdma_completion_header) ;
-    req->send.cb(req+1, UCS_OK) ;
 }
 
 static ucs_status_t
