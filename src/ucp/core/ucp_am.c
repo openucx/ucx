@@ -230,8 +230,8 @@ static ucs_status_t ucp_am_send_rdma_short(ucp_ep_h ep,
     ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
 
     ucs_warn("AM RDMA ucp_am_send_rdma_short header=0x%016lx", hdr.u64) ;
-    ucs_warn("AM RDMA ucp_am_send_rdma_short payload=(total_size=%lu,msg_id=0x%lx,ep=%lx,am_id=%u)",
-        payload->total_size, payload->msg_id, payload->ep, payload->am_id) ;
+    ucs_warn("AM RDMA ucp_am_send_rdma_short payload=(total_size=%lu,msg_id=0x%lx,ep_ptr=%lx,am_id=%u)",
+        payload->total_size, payload->msg_id, payload->ep_ptr, payload->am_id) ;
     ucs_log_flush() ;
 
     return uct_ep_am_short(am_ep, UCP_AM_ID_RDMA, hdr.u64,
@@ -931,11 +931,11 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_am_hdr_t *hdr              = (ucp_am_hdr_t *)am_data;
     ucs_warn("AM RDMA hdr=0x%016lx", *(unsigned long *)hdr) ;
     ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)(hdr+1);
-    ucs_warn("AM RDMA ucp_am_rdma_handler rdma_hdr=(total_size=%lu,msg_id=0x%lx,ep=%lx,am_id=%u)",
-        rdma_hdr->total_size, rdma_hdr->msg_id, rdma_hdr->ep, rdma_hdr->am_id) ;
+    ucs_warn("AM RDMA ucp_am_rdma_handler rdma_hdr=(total_size=%lu,msg_id=0x%lx,ep_ptr=%lx,am_id=%u)",
+        rdma_hdr->total_size, rdma_hdr->msg_id, rdma_hdr->ep_ptr, rdma_hdr->am_id) ;
     ucs_log_flush() ;
     ucp_ep_h ep                    = ucp_worker_get_ep_by_ptr(worker,
-                                                           rdma_hdr->ep);
+                                                           rdma_hdr->ep_ptr);
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_server_unfinished_t *unfinished;
     ucp_recv_desc_t *all_data;
@@ -1043,7 +1043,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_am_hdr_t *hdr           = (ucp_am_hdr_t *)am_data;
     ucp_am_rdma_reply_header_t *rdma_reply_hdr =
         (ucp_am_rdma_reply_header_t *)(hdr+1);
-    ucp_ep_h ep = (ucp_ep_h) (rdma_reply_hdr->ep) ;
+    ucp_ep_h ep = ucp_worker_get_ep_by_ptr(worker, rdma_reply_hdr->ep_ptr) ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
 
     ucp_am_rdma_client_unfinished_t *unfinished =
@@ -1076,7 +1076,7 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     void * hdr_end = hdr+1 ;
     ucp_am_rdma_completion_header_t *rdma_completion_hdr =
         (ucp_am_rdma_completion_header_t *)hdr_end;
-    ucp_ep_h ep = (ucp_ep_h) (rdma_completion_hdr->ep) ;
+    ucp_ep_h ep =ucp_worker_get_ep_by_ptr(worker,rdma_completion_hdr->ep_ptr) ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_server_unfinished_t *unfinished =
         ucp_am_rdma_server_find_unfinished(worker,
