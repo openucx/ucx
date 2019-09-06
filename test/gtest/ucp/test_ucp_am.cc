@@ -32,7 +32,7 @@ public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_AM;
+        params.features     = UCP_FEATURE_AM | UCP_FEATURE_RMA ;
         return params;
     }
 
