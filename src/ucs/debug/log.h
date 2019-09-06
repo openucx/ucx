@@ -150,6 +150,9 @@ const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
 const char *ucs_log_dump_hex(const void* data, size_t length, char *buf,
                              size_t max);
 
+const char *ucs_log_dump_hex_mline(const void* data, size_t length, char *buf,
+                                   size_t max, size_t per_line);
+
 /**
  * Add/remove logging handlers
  */

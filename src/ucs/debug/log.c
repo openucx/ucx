@@ -314,6 +314,30 @@ const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
     return buf;
 }
 
+const char * ucs_log_dump_hex_mline(const void* data, size_t length,
+                                    char *buf, size_t max, size_t per_line)
+{
+    void *p              = buf;
+    void *end_p          = UCS_PTR_BYTE_OFFSET(buf, max);
+    const void *end_data = UCS_PTR_BYTE_OFFSET(data, length);
+    size_t line;
+
+    if (max == 0) {
+        return buf;
+    }
+
+    while ((data < end_data) && (p < end_p)) {
+        line = ucs_min(per_line, UCS_PTR_BYTE_DIFF(data, end_data));
+        ucs_log_dump_hex(data, line, p, UCS_PTR_BYTE_DIFF(p, end_p));
+        p    = UCS_PTR_BYTE_OFFSET(p, strlen(p));
+        snprintf(p, UCS_PTR_BYTE_DIFF(p, end_p), "\n");
+        p    = UCS_PTR_BYTE_OFFSET(p, strlen(p));
+        data = UCS_PTR_BYTE_OFFSET(data, line);
+    }
+
+    return buf;
+}
+
 void ucs_log_early_init()
 {
     ucs_log_initialized      = 0;
