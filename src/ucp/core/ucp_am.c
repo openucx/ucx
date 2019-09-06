@@ -986,6 +986,8 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_assert(status == UCS_OK) ;
     status=ucp_rkey_pack(worker->context,memh,&packed_rkey, &packed_rkey_size);
     ucs_assert(status == UCS_OK) ;
+    ucs_warn("AM RDMA packed_rkey_size=%lu", packed_rkey_size) ;
+    ucs_log_flush() ;
     ucs_assert(packed_rkey_size <= UCP_PACKED_RKEY_MAX_SIZE);
     memcpy(&(unfinished->rdma_reply_header.rkey_buffer),packed_rkey,packed_rkey_size);
     ucp_rkey_buffer_release(packed_rkey) ;
