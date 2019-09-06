@@ -1009,7 +1009,7 @@ static inline void uct_tcp_ep_send_put_ack(uct_tcp_iface_t *iface,
 }
 
 static ucs_status_t
-uct_tcp_ep_pending_put_ack_cb(uct_pending_req_t *self)
+uct_tcp_ep_put_ack_handle_pending(uct_pending_req_t *self)
 {
     uct_tcp_am_hdr_t *hdr = NULL;
     uct_tcp_ep_put_ack_pending_req_t *put_ack_req;
@@ -1064,15 +1064,20 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
         return;
     }
 
-    put_ack_req->super.func = uct_tcp_ep_pending_put_ack_cb;
+    put_ack_req->super.func = uct_tcp_ep_put_ack_handle_pending;
     put_ack_req->ep         = ep;
 
-    status = uct_tcp_ep_pending_add(&ep->super.super,
-                                    &put_ack_req->super, 0);
+    status = uct_ep_pending_add(&ep->super.super,
+                                &put_ack_req->super, 0);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_error("tcp_ep %p: failed to add a pending request", ep);
         ucs_free(put_ack_req);
+        return;
     }
+
+    /* Coverity wrongly thinks that a pending request is not freed or
+     * pointed-to in "uct_tcp_pending_add" in case of success */
+    /* coverity[leaked_storage] */
 }
 
 ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
