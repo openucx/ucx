@@ -1071,6 +1071,7 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep,
                                     &put_ack_req->super, 0);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_error("tcp_ep %p: failed to add a pending request", ep);
+        ucs_free(put_ack_req);
     }
 }
 
