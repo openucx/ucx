@@ -649,7 +649,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     length = ucp_dt_iov_length(iovec, count);
     unfinished->rdma_header.total_size = length ;
     unfinished->rdma_header.msg_id     = req->send.am.message_id ;
-    unfinished->rdma_header.ep         = (uintptr_t) ep ;
+    unfinished->rdma_header.ep_ptr      = ucp_request_get_dest_ep_ptr(req) ;
     memcpy(unfinished->rdma_header.iovec_0, iovec[0].buffer, iovec[0].length) ;
     unfinished->rdma_header.am_id      = id ;
 
@@ -979,8 +979,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     memcpy(&(unfinished->rdma_reply_header.rkey_buffer),packed_rkey,packed_rkey_size);
     ucp_rkey_buffer_release(packed_rkey) ;
     unfinished->rdma_reply_header.msg_id = rdma_hdr->msg_id ;
-    unfinished->rdma_reply_header.ep = rdma_hdr->ep ;
-    unfinished->rdma_reply_header.am_id = rdma_hdr->am_id ;
+    unfinished->rdma_reply_header.am_id  = rdma_hdr->am_id ;
     unfinished->rdma_reply_header.address = (uintptr_t) (all_data+1) ;
 
     unfinished->all_data      = all_data;
@@ -995,6 +994,8 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_reply_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_reply_header_t), 0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
     ucs_assert(status == UCS_OK) ;
+
+    unfinished->rdma_reply_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
 
     ret = ucp_am_rdma_send_req(req, ucp_am_rdma_reply_contig_short, ucp_am_rdma_callback) ;
     ucs_warn("AM RDMA reply ucp_am_send_rdma_req ret=%p", ret) ;
@@ -1017,7 +1018,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucs_assert(unfinished != NULL) ;
 
     unfinished->rdma_completion_header.msg_id = req->send.am.message_id ;
-    unfinished->rdma_completion_header.ep     = (uintptr_t) ep ;
+    unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
     unfinished->rdma_completion_header.am_id  = req->send.am.am_id ;
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);

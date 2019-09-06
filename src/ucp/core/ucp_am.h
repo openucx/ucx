@@ -49,7 +49,7 @@ enum {
 typedef struct {
   size_t            total_size; /* length of buffer needed for all data */
   uint64_t          msg_id;     /* method to match parts of the same AM */
-  uintptr_t         ep;         /* end point ptr, used for maintaing list
+  uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
                                    of arrivals */
   char              iovec_0[UCP_AM_RDMA_IOVEC_0_MAX_SIZE] ; /* iovec[0] carried in request */
   uint16_t          am_id;      /* index into callback array */
@@ -57,7 +57,7 @@ typedef struct {
 
 typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
-  uintptr_t         ep;         /* end point ptr, used for maintaing list
+  uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
                                    of arrivals */
   uint16_t          am_id;      /* index into callback array */
   uintptr_t         address;     /* Address for RDMA */
@@ -66,7 +66,7 @@ typedef struct {
 
 typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
-  uintptr_t         ep;         /* end point ptr, used for maintaing list
+  uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
                                    of arrivals */
   uint16_t          am_id;      /* index into callback array */
 } UCS_S_PACKED ucp_am_rdma_completion_header_t ;
