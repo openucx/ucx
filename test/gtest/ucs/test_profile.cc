@@ -164,14 +164,25 @@ void test_profile::run_profiled_code(int num_iters)
     if (num_threads() == 1) {
         profile_thread_func(&param);
     } else {
-        pthread_t threads[num_threads()];
+        std::vector<pthread_t> threads;
+
         for (int i = 0; i < num_threads(); ++i) {
-            pthread_create(&threads[i], NULL, profile_thread_func,
-                           (void*)&param);
+            pthread_t profile_thread;
+            int ret = pthread_create(&profile_thread, NULL, profile_thread_func,
+                                     (void*)&param);
+            if (ret < 0) {
+                continue;
+            }
+
+            threads.push_back(profile_thread);
         }
-        for (int i = 0; i < num_threads(); ++i) {
+
+        while (!threads.empty()) {
+            pthread_t profile_thread = threads.front();
+            threads.erase(threads.begin());
+
             void *result;
-            pthread_join(threads[i], &result);
+            pthread_join(profile_thread, &result);
         }
     }
 }
