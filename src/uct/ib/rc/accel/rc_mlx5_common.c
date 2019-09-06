@@ -324,10 +324,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_OBJ_TYPE_LAST;
     qp = uct_dv_get_cmd_qp(iface->rx.srq.verbs.srq);
 #else
-    uct_ib_mlx5_md_t *md       = ucs_derived_of(iface->super.super.super.md,
-                                                uct_ib_mlx5_md_t);
-
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+    if (iface->rx.srq.type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         return uct_rc_mlx5_devx_create_cmd_qp(iface);
     } else {
         qp = uct_rc_mlx5_verbs_create_cmd_qp(iface);
