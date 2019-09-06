@@ -2547,7 +2547,7 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  * @ingroup UCT_RESOURCE
  * @brief Add a pending request to an endpoint.
  *
- *  Add a pending request to the endpoint pending queue. The request will be
+ * Add a pending request to the endpoint pending queue. The request will be
  * dispatched when the endpoint could potentially have additional send resources.
  *
  * @param [in]  ep    Endpoint to add the pending request to.
@@ -2556,7 +2556,8 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  *                    the "func" field.
  *                    After passed to the function, the request is owned by UCT,
  *                    until the callback is called and returns UCS_OK.
- * @param [in]  flags Reserved for future use.
+ * @param [in]  flags Flags that control pending request processing (currently only
+ *                    @ref UCT_CB_FLAG_ASYNC is supported).
  *
  * @return UCS_OK       - request added to pending queue
  *         UCS_ERR_BUSY - request was not added to pending queue, because send
