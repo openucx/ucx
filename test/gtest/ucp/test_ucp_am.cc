@@ -220,6 +220,28 @@ void test_ucp_am::do_send_process_data_iov_test()
 
     set_handlers(0);
 
+    /* Test flowing the active message over RDMA */
+    i = 32 ;
+
+    for (index = 0; index < i; index++) {
+        b1[index] = i * 2;
+        b2[index] = i * 2;
+    }
+
+    iovec[0].buffer = b1.data();
+    iovec[1].buffer = b2.data();
+
+    iovec[0].length = i;
+    iovec[1].length = i;
+
+    sstatus = ucp_am_rdma_send_nb(receiver().ep(), 0,
+                             iovec, 2, ucp_dt_make_iov(),
+                             (ucp_send_callback_t) ucs_empty_function, 0);
+    wait(sstatus);
+    EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
+    sent_ams++;
+
+    /* Test flowing active messages without RDMA */
     for (i = 1; i < size; i *= 2) {
         for (index = 0; index < i; index++) {
             b1[index] = i * 2;
