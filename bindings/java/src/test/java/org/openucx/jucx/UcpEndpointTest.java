@@ -315,8 +315,8 @@ public class UcpEndpointTest {
 
         int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
         for (int i = 0; i < numRequests; i++) {
-            ep.getNonBlocking(memory.getAddress() + i * blockSize, rkey,
-                   UcxUtils.getAddress(dst) + i * blockSize, blockSize, null);
+            ep.getNonBlockingImplicit(memory.getAddress() + i * blockSize, rkey,
+                UcxUtils.getAddress(dst) + i * blockSize, blockSize);
         }
 
         UcxRequest request = ep.flushNonBlocking(new UcxCallback() {
