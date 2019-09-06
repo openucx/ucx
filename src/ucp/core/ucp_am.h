@@ -42,7 +42,7 @@ typedef struct {
 } UCS_S_PACKED ucp_am_long_hdr_t;
 
 enum {
-  UCP_PACKED_RKEY_MAX_SIZE = 32 ,   /* Max supported size for a packed rkey */
+  UCP_PACKED_RKEY_MAX_SIZE = 128 ,   /* Max supported size for a packed rkey */
   UCP_AM_RDMA_IOVEC_0_MAX_SIZE = 32  /* Amount of iovec[0] carried in AM request */
 };
 
