@@ -907,9 +907,6 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
         uct_tcp_ep_am_send(iface, ep, hdr);
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
     } else {
-        offset = ((ep->tx.offset >= sizeof(*hdr)) ?
-                  (ep->tx.offset - sizeof(*hdr)) : 0);
-
         iov[0].iov_base = hdr;
         iov[0].iov_len  = sizeof(*hdr);
 
@@ -928,9 +925,12 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
             if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
                 /* Copy only user's header and payload to the TX buffer,
                  * TCP AM header is placed at the beginning of the buffer */
+                offset = ((ep->tx.offset >= sizeof(*hdr)) ?
+                          (ep->tx.offset - sizeof(*hdr)) : 0);
+
                 ucs_iov_copy(&iov[1], UCT_TCP_EP_AM_SHORTV_IOV_COUNT - 1,
                              offset, UCS_PTR_BYTE_OFFSET(hdr + 1, offset),
-                             (ep->tx.length - sizeof(*hdr)) - offset,
+                             ep->tx.length - sizeof(*hdr) - offset,
                              UCS_IOV_COPY_TO_BUF);
                 uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
                 return UCS_OK;
