@@ -214,6 +214,9 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
     hdr.am_hdr.flags  = 0;
     ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
     
+    ucs_warn("AM RDMA ucp_am_send_short header=0x%016lx", hdr.u64) ;
+    ucs_log_flush() ;
+
     return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE, hdr.u64, 
                            (void *)payload, length);
 }
