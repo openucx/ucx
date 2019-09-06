@@ -964,7 +964,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 
     unfinished           = ucs_malloc(sizeof(ucp_am_rdma_server_unfinished_t),
                                          "unfinished UCP AM rdma server");
-    ucs_assert(unfinished == NULL) ;
+    ucs_assert(unfinished != NULL) ;
 
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
