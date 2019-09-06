@@ -381,6 +381,9 @@ ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
+    /* BW is calculated as sum dedicated BW (doesn't depend from PPN) and
+     * (shared_BW) / PPN. In case if PPN == 2 then there is only one channel
+     * between EP and shared BW should not be divided by PPN */
     return bandwidth->dedicated +
            (bandwidth->shared / 
             ((context->config.est_num_ppn < 3) ? 1 : context->config.est_num_ppn));
