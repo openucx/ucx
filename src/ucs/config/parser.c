@@ -269,8 +269,7 @@ int ucs_config_sprintf_on_off_auto(char *buf, size_t max, void *src, const void 
     case UCS_CONFIG_OFF:
         return snprintf(buf, max, "off");
     default:
-        ucs_assertv(0, "incorrect on/off/auto value: %d", *(int*)src);
-        return snprintf(buf, max, "incorrect value: %d", *(int*)src);
+        return snprintf(buf, max, "%d", *(int*)src);
     }
 }
 
