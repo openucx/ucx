@@ -109,8 +109,8 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
 
         ret = fn_p(ep->remote_pid, local_iov, local_iov_it, &remote_iov, 1, 0);
         if (ret < 0) {
-            ucs_error("%s delivered %zu instead of %zu, error message %s",
-                      fn_name, delivered, length, strerror(errno));
+            ucs_error("%s delivered %zu instead of %zu, pid %d, error message %s",
+                      fn_name, delivered, length, ep->remote_pid, strerror(errno));
             return UCS_ERR_IO_ERROR;
         }
 
