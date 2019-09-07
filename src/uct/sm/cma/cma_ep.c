@@ -42,6 +42,38 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
                     (_rkey))
 
 static UCS_F_ALWAYS_INLINE
+ucs_status_t uct_cma_ep_do_zcopy(uct_cma_ep_t *ep, struct iovec *local_iov,
+                                 size_t local_iov_cnt, struct iovec *remote_iov,
+                                 ssize_t (*fn_p)(pid_t,
+                                                 const struct iovec *,
+                                                 unsigned long,
+                                                 const struct iovec *,
+                                                 unsigned long,
+                                                 unsigned long),
+                                 char *fn_name)
+{
+    size_t local_iov_idx = 0;
+    ssize_t ret;
+
+    do {
+        ret = fn_p(ep->remote_pid, &local_iov[local_iov_idx],
+                   local_iov_cnt - local_iov_idx, remote_iov, 1, 0);
+        if (ucs_unlikely(ret < 0)) {
+            ucs_error("%s failed to deliver %zu bytes, error message %s",
+                      fn_name, remote_iov->iov_len, strerror(errno));
+            return UCS_ERR_IO_ERROR;
+        }
+
+        ucs_iov_advance(local_iov, local_iov_cnt, &local_iov_idx, ret);
+        ucs_assert(ret <= remote_iov->iov_len);
+        remote_iov->iov_len  -= ret;
+        remote_iov->iov_base  = UCS_PTR_BYTE_OFFSET(remote_iov->iov_base, ret);
+    } while (remote_iov->iov_len);
+
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE
 ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                      const uct_iov_t *iov,
                                      size_t iovcnt,
@@ -56,17 +88,17 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                      char *fn_name)
 {
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
-    void *remote_ptr = UCS_PTR_BYTE_OFFSET(remote_addr, 0);
     size_t iov_idx   = 0;
-    size_t local_iov_idx;
-    ssize_t ret;
+    ucs_status_t status;
     size_t local_iov_cnt;
     size_t length;
     size_t cur_iov_cnt;
     struct iovec local_iov[UCT_SM_MAX_IOV];
     struct iovec remote_iov;
 
-    while (iovcnt - iov_idx) {
+    remote_iov.iov_base = UCS_PTR_BYTE_OFFSET(remote_addr, 0);
+
+    while (iov_idx < iovcnt) {
         cur_iov_cnt   = ucs_min(iovcnt - iov_idx, UCT_SM_MAX_IOV);
         local_iov_cnt = uct_iovec_fill_iov(local_iov, &iov[iov_idx],
                                            cur_iov_cnt, &length);
@@ -79,25 +111,13 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
             continue; /* Nothing to deliver */
         }
 
-        local_iov_idx = 0;
+        remote_iov.iov_len = length;
 
-        do {
-            remote_iov.iov_base = remote_ptr;
-            remote_iov.iov_len  = length;
-
-            ret = fn_p(ep->remote_pid, &local_iov[local_iov_idx],
-                       local_iov_cnt - local_iov_idx, &remote_iov, 1, 0);
-            if (ret < 0) {
-                ucs_error("%s failed to deliver %zu bytes, error message %s",
-                          fn_name, length, strerror(errno));
-                return UCS_ERR_IO_ERROR;
-            }
-
-            ucs_iov_advance(local_iov, local_iov_cnt, &local_iov_idx, ret);
-            ucs_assert(ret <= length);
-            length     -= ret;
-            remote_ptr  = UCS_PTR_BYTE_OFFSET(remote_ptr, ret);
-        } while (length);
+        status = uct_cma_ep_do_zcopy(ep, local_iov, local_iov_cnt,
+                                     &remote_iov, fn_p, fn_name);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return UCS_OK;
+        }
     }
 
     return UCS_OK;
