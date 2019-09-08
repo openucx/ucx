@@ -15,20 +15,7 @@ extern "C" {
 
 extern "C" {
 
-int UCS_F_NOINLINE my_cool_function(unsigned *lineno, void **address)
-{
-    int a;
-
-    a = 5;
-
-    ucs_compiler_fence();
-label1: *lineno = __LINE__;
-    ucs_compiler_fence();
-    *address = &&label1;
-
-    ++a;
-    return a;
-}
+void UCS_F_NOINLINE my_cool_function(unsigned *lineno) { *lineno = __LINE__; };
 
 }
 
@@ -61,16 +48,18 @@ UCS_TEST_F(test_debug, lookup_invalid) {
     EXPECT_EQ(UCS_ERR_NO_ELEM, status);
 }
 
-UCS_TEST_SKIP_COND_F(test_debug, lookup_address,
-                     BULLSEYE_ON) {
+UCS_TEST_SKIP_COND_F(test_debug, lookup_address, BULLSEYE_ON) {
     unsigned lineno;
-    void *address;
 
-    my_cool_function(&lineno, &address);
+    my_cool_function(&lineno);
 
     ucs_debug_address_info info;
-    ucs_status_t status = ucs_debug_lookup_address(address, &info);
+    ucs_status_t status = ucs_debug_lookup_address((void*)&my_cool_function,
+                                                   &info);
     ASSERT_UCS_OK(status);
+
+    UCS_TEST_MESSAGE << info.source_file << ":" << info.line_number <<
+                        " " << info.function << "()";
 
     EXPECT_NE(std::string::npos, std::string(info.file.path).find("gtest"));
 
