@@ -435,7 +435,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     struct ibv_qp_attr attr = {};
     int ret;
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
         return uct_dc_mlx5_iface_devx_create_dct(iface);
     }
 
@@ -560,7 +560,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
     ucs_status_t status;
 
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ) {
             status = uct_rc_mlx5_devx_init_rx_tm(&iface->super, &config->super,
                                                  1, UCT_DC_RNDV_HDR_LEN);
             if (status != UCS_OK) {
