@@ -45,6 +45,7 @@ UCS_TEST_F(test_type, status) {
     void *ptr = (void*)0xff00000000ul;
     EXPECT_TRUE(UCS_PTR_IS_PTR(ptr));
     EXPECT_FALSE(UCS_PTR_IS_PTR(NULL));
+    EXPECT_NE(UCS_OK, UCS_PTR_STATUS(ptr));
 }
 
 class test_init_once: public test_type {
