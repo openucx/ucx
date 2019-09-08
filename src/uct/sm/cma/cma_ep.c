@@ -60,7 +60,7 @@ ucs_status_t uct_cma_ep_do_zcopy(uct_cma_ep_t *ep, struct iovec *local_iov,
                    local_iov_cnt - local_iov_idx, remote_iov, 1, 0);
         if (ucs_unlikely(ret < 0)) {
             ucs_error("%s(pid=%d length=%zu) returned %zd: %m",
-                      fn_name, ep->remote_pid, length, ret);
+                      fn_name, ep->remote_pid, remote_iov->iov_len, ret);
             return UCS_ERR_IO_ERROR;
         }
 
