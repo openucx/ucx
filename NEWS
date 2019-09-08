@@ -7,6 +7,11 @@
 ##
 #
 
+## 1.6.1-rc2 (September 10, 2019)
+Bugfixes:
+- Multiple clang static checker fixes
+- Fix mem type support with generic datatype
+
 ## 1.6.1-rc1 (August 13, 2019)
 Features:
 - Add Bull Atos HCA device IDs
