@@ -1,5 +1,5 @@
 /*
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -142,6 +142,11 @@ int ucs_config_sprintf_bool(char *buf, size_t max, void *src, const void *arg);
 int ucs_config_sscanf_ternary(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_ternary(char *buf, size_t max, void *src, const void *arg);
 
+int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg);
+
+int ucs_config_sscanf_on_off_auto(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_on_off_auto(char *buf, size_t max, void *src, const void *arg);
+
 int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_enum(char *buf, size_t max, void *src, const void *arg);
 void ucs_config_help_enum(char *buf, size_t max, const void *arg);
@@ -237,6 +242,14 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_TERNARY    {ucs_config_sscanf_ternary,   ucs_config_sprintf_ternary, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
                                     ucs_config_help_generic,     "<yes|no|try>"}
+
+#define UCS_CONFIG_TYPE_ON_OFF     {ucs_config_sscanf_on_off,    ucs_config_sprintf_on_off_auto, \
+                                    ucs_config_clone_int,        ucs_config_release_nop, \
+                                    ucs_config_help_generic,     "<on|off>"}
+
+#define UCS_CONFIG_TYPE_ON_OFF_AUTO {ucs_config_sscanf_on_off_auto, ucs_config_sprintf_on_off_auto, \
+                                     ucs_config_clone_int,          ucs_config_release_nop, \
+                                     ucs_config_help_generic,       "<on|off|auto>"}
 
 #define UCS_CONFIG_TYPE_ENUM(t)    {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
