@@ -66,7 +66,10 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
             return;
         }
 
-        consumed -= iov[i].iov_len;
+        consumed        -= iov[i].iov_len;
+        iov[i].iov_base  = UCS_PTR_BYTE_OFFSET(iov[i].iov_base,
+                                               iov[i].iov_len);
+        iov[i].iov_len   = 0;
     }
 
     ucs_assert(!consumed && (i == iov_cnt));

@@ -49,8 +49,8 @@ ucs_status_t uct_cma_ep_do_zcopy(uct_cma_ep_t *ep, struct iovec *local_iov,
                                  size_t local_iov_cnt, struct iovec *remote_iov,
                                  uct_cma_ep_zcopy_fn_t fn_p, const char *fn_name)
 {
-    size_t local_iov_idx = 0;
-    size_t UCS_V_UNUSED remove_iov_idx;
+    size_t local_iov_idx               = 0;
+    size_t UCS_V_UNUSED remove_iov_idx = 0;
     ssize_t ret;
 
     do {
