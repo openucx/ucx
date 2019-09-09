@@ -113,7 +113,7 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
         status = uct_cma_ep_do_zcopy(ep, local_iov, local_iov_cnt,
                                      &remote_iov, fn_p, fn_name);
         if (ucs_unlikely(status != UCS_OK)) {
-            return UCS_OK;
+            return status;
         }
     }
 
