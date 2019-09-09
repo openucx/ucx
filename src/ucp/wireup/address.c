@@ -60,9 +60,14 @@ typedef struct {
 
 /* In unified mode we pack resource index instead of iface attrs to the address,
  * so the peer can get all attrs from the local device with the same resource
- * index. Also we send latency overhead because it depends on device NUMA
- * locality, which may be different on peers (processes which do address pack
- * and address unpack).
+ * index.
+ * Also we send information which depends on device NUMA locality,
+ * which may be different on peers (processes which do address pack
+ * and address unpack):
+ * - latency overhead
+ * - Indication whether resource can be used for atomics or not (packed to the
+ *   signed bit of lat_ovh).
+ *
  * TODO: Revise/fix this when NUMA locality is exposed in UCP.
  * */
 typedef struct {
@@ -334,8 +339,9 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
          * from its local iface. Also send latency overhead, because it
          * depends on device NUMA locality. */
         unified            = ptr;
-        unified->lat_ovh   = iface_attr->latency.overhead;
         unified->rsc_index = index;
+        unified->lat_ovh   = enable_atomics ? -iface_attr->latency.overhead :
+                                               iface_attr->latency.overhead;
 
         return sizeof(*unified);
     }
@@ -392,7 +398,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
          * (not all iface attrs). */
         unified               = ptr;
         rsc_idx               = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
-        iface_attr->lat_ovh   = unified->lat_ovh;
+        iface_attr->lat_ovh   = fabs(unified->lat_ovh);
         wiface                = ucp_worker_iface(worker, rsc_idx);
 
         /* Just take the rest of iface attrs from the local resource. */
@@ -400,7 +406,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->priority  = wiface->attr.priority;
         iface_attr->overhead  = wiface->attr.overhead;
         iface_attr->bandwidth = wiface->attr.bandwidth;
-        if (worker->atomic_tls & UCS_BIT(rsc_idx)) {
+        if (signbit(unified->lat_ovh)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
             iface_attr->atomic.atomic32.fop_flags = wiface->attr.cap.atomic32.fop_flags;
             iface_attr->atomic.atomic64.op_flags  = wiface->attr.cap.atomic64.op_flags;

@@ -50,23 +50,6 @@ extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved) {
     }
 }
 
-/**
- * Throw a Java exception by name. Similar to SignalError.
- */
-JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *env, const char *msg)
-{
-    jclass cls = env->FindClass("org/openucx/jucx/UcxException");
-    ucs_error("JUCX: %s", msg);
-    if (cls != 0) { /* Otherwise an exception has already been thrown */
-        env->ThrowNew(cls, msg);
-    }
-}
-
-void JNU_ThrowExceptionByStatus(JNIEnv *env, ucs_status_t status)
-{
-    JNU_ThrowException(env, ucs_status_string(status));
-}
-
 bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  socklen_t& sa_len)
 {
     jfieldID field;

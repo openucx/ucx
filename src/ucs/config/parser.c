@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -234,6 +234,45 @@ int ucs_config_sprintf_ternary(char *buf, size_t max, void *src, const void *arg
     }
 }
 
+int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg)
+{
+    if (!strcasecmp(buf, "on") || !strcmp(buf, "1")) {
+        *(int*)dest = UCS_CONFIG_ON;
+        return 1;
+    } else if (!strcasecmp(buf, "off") || !strcmp(buf, "0")) {
+        *(int*)dest = UCS_CONFIG_OFF;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int ucs_config_sscanf_on_off_auto(const char *buf, void *dest, const void *arg)
+{
+    if (!strcasecmp(buf, "try")   ||
+        !strcasecmp(buf, "maybe") ||
+        !strcasecmp(buf, "auto")) {
+        *(int*)dest = UCS_CONFIG_AUTO;
+        return 1;
+    } else {
+        return ucs_config_sscanf_on_off(buf, dest, arg);
+    }
+}
+
+int ucs_config_sprintf_on_off_auto(char *buf, size_t max, void *src, const void *arg)
+{
+    switch (*(int*)src) {
+    case UCS_CONFIG_AUTO:
+        return snprintf(buf, max, "auto");
+    case UCS_CONFIG_ON:
+        return snprintf(buf, max, "on");
+    case UCS_CONFIG_OFF:
+        return snprintf(buf, max, "off");
+    default:
+        return snprintf(buf, max, "%d", *(int*)src);
+    }
+}
+
 int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg)
 {
     int i;
@@ -276,12 +315,16 @@ void ucs_config_help_enum(char *buf, size_t max, const void *arg)
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
     char *str = strdup(buf);
-    char *p;
+    char *p, *saveptr;
     int ret, i;
+
+    if (str == NULL) {
+        return 0;
+    }
 
     ret = 1;
     *((unsigned*)dest) = 0;
-    p = strtok(str, ",");
+    p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
         i = __find_string_in_list(p, (const char**)arg);
         if (i < 0) {
@@ -289,7 +332,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
             break;
         }
         *((unsigned*)dest) |= UCS_BIT(i);
-        p = strtok(NULL, ",");
+        p = strtok_r(NULL, ",", &saveptr);
     }
 
     free(str);
