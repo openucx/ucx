@@ -287,57 +287,6 @@ overflow:
     return buf;
 }
 
-
-const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
-                              size_t max)
-{
-    static const char hexchars[] = "0123456789abcdef";
-    char *p, *endp;
-    uint8_t value;
-    size_t i;
-
-    p    = buf;
-    endp = buf + max - 2;
-
-    i = 0;
-    while ((p < endp) && (i < length)) {
-        if (((i % 4) == 0) && (i > 0)) {
-            *(p++) = ':';
-        }
-        value = *(const uint8_t*)(UCS_PTR_BYTE_OFFSET(data, i));
-        p[0] = hexchars[value / 16];
-        p[1] = hexchars[value % 16];
-        p += 2;
-        ++i;
-    }
-    *p = 0;
-    return buf;
-}
-
-const char * ucs_log_dump_hex_mline(const void* data, size_t length,
-                                    char *buf, size_t max, size_t per_line)
-{
-    void *p              = buf;
-    void *end_p          = UCS_PTR_BYTE_OFFSET(buf, max);
-    const void *end_data = UCS_PTR_BYTE_OFFSET(data, length);
-    size_t line;
-
-    if (max == 0) {
-        return buf;
-    }
-
-    while ((data < end_data) && (p < end_p)) {
-        line = ucs_min(per_line, UCS_PTR_BYTE_DIFF(data, end_data));
-        ucs_log_dump_hex(data, line, p, UCS_PTR_BYTE_DIFF(p, end_p));
-        p    = UCS_PTR_BYTE_OFFSET(p, strlen(p));
-        snprintf(p, UCS_PTR_BYTE_DIFF(p, end_p), "\n");
-        p    = UCS_PTR_BYTE_OFFSET(p, strlen(p));
-        data = UCS_PTR_BYTE_OFFSET(data, line);
-    }
-
-    return buf;
-}
-
 void ucs_log_early_init()
 {
     ucs_log_initialized      = 0;

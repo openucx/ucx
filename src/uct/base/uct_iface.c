@@ -64,10 +64,10 @@ static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
     char dump_str[(dump_len * 4) + 1]; /* 1234:5678\n\0 */
 
     ucs_warn("got active message id %d, but no handler installed", id);
-    ucs_warn("payload:\n%s", ucs_log_dump_hex_mline(data,
-                                                    ucs_min(length, dump_len),
-                                                    dump_str, sizeof(dump_str),
-                                                    16));
+    ucs_warn("payload:\n%s", ucs_str_dump_hex(data,
+                                              ucs_min(length, dump_len),
+                                              dump_str, sizeof(dump_str),
+                                              16));
 
     return UCS_OK;
 }
