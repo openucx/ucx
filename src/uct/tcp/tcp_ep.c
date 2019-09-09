@@ -1252,16 +1252,21 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
     status = uct_tcp_ep_am_sendv(iface, ep, 0, hdr,
                                  iface->config.rx_seg_size,
                                  header, ctx->iov, ctx->iov_cnt);
-    if (ucs_likely((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS))) {
-        UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
-
-        if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-            uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, header,
-                                             header_length, comp);
-            return UCS_INPROGRESS;
-        }
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        goto out;
     }
 
+    UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, hdr->length);
+
+    if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
+        uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, header,
+                                         header_length, comp);
+        return UCS_INPROGRESS;
+    }
+
+    ucs_assert(status == UCS_OK);
+
+out:
     uct_tcp_ep_ctx_reset(&ep->tx);
     return status;
 }
@@ -1309,8 +1314,6 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
     uct_tcp_ep_outstanding_inc(ep);
 
     if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-        /* Since EP has to wait for an acknowledgment for this PUT
-         * operation, always return UCS_INPROGRESS */
         uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
                                          sizeof(put_req), comp);
         return UCS_INPROGRESS;
