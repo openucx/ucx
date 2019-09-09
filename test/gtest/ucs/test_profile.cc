@@ -13,7 +13,7 @@ extern "C" {
 
 #include <pthread.h>
 #include <fstream>
-
+#include <queue>
 
 #if HAVE_PROFILING
 
@@ -164,22 +164,20 @@ void test_profile::run_profiled_code(int num_iters)
     if (num_threads() == 1) {
         profile_thread_func(&param);
     } else {
-        std::vector<pthread_t> threads;
+        std::queue<pthread_t> threads;
 
         for (int i = 0; i < num_threads(); ++i) {
             pthread_t profile_thread;
             int ret = pthread_create(&profile_thread, NULL, profile_thread_func,
                                      (void*)&param);
-            if (ret < 0) {
-                continue;
-            }
+            ASSERT_EQ(0, ret);
 
-            threads.push_back(profile_thread);
+            threads.push(profile_thread);
         }
 
         while (!threads.empty()) {
             pthread_t profile_thread = threads.front();
-            threads.erase(threads.begin());
+            threads.pop();
 
             void *result;
             pthread_join(profile_thread, &result);
