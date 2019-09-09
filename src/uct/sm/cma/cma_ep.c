@@ -14,6 +14,9 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/iovec.h>
 
+typedef ssize_t (*uct_cma_ep_zcopy_fn_t)(pid_t, const struct iovec *,
+                                         unsigned long, const struct iovec *,
+                                         unsigned long, unsigned long);
 
 static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
 {
@@ -44,15 +47,10 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
 static UCS_F_ALWAYS_INLINE
 ucs_status_t uct_cma_ep_do_zcopy(uct_cma_ep_t *ep, struct iovec *local_iov,
                                  size_t local_iov_cnt, struct iovec *remote_iov,
-                                 ssize_t (*fn_p)(pid_t,
-                                                 const struct iovec *,
-                                                 unsigned long,
-                                                 const struct iovec *,
-                                                 unsigned long,
-                                                 unsigned long),
-                                 char *fn_name)
+                                 uct_cma_ep_zcopy_fn_t fn_p, const char *fn_name)
 {
     size_t local_iov_idx = 0;
+    size_t UCS_V_UNUSED remove_iov_idx;
     ssize_t ret;
 
     do {
@@ -64,10 +62,9 @@ ucs_status_t uct_cma_ep_do_zcopy(uct_cma_ep_t *ep, struct iovec *local_iov,
             return UCS_ERR_IO_ERROR;
         }
 
-        ucs_iov_advance(local_iov, local_iov_cnt, &local_iov_idx, ret);
         ucs_assert(ret <= remote_iov->iov_len);
-        remote_iov->iov_len  -= ret;
-        remote_iov->iov_base  = UCS_PTR_BYTE_OFFSET(remote_iov->iov_base, ret);
+        ucs_iov_advance(local_iov, local_iov_cnt, &local_iov_idx, ret);
+        ucs_iov_advance(remote_iov, 1, &remove_iov_idx, ret);
     } while (remote_iov->iov_len);
 
     return UCS_OK;
@@ -85,7 +82,7 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                                      const struct iovec *,
                                                      unsigned long,
                                                      unsigned long),
-                                     char *fn_name)
+                                     const char *fn_name)
 {
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
     size_t iov_idx   = 0;
