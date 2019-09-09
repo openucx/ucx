@@ -289,7 +289,8 @@ ucs_profile_thread_context_t* ucs_profile_thread_init()
     ctx->pthread_id = pthread_self();
 
     ucs_debug("profiling context %p: start on thread 0x%lx tid %d mode %d",
-              ctx, pthread_self(), ucs_get_tid(), ucs_global_opts.profile_mode);
+              ctx, (unsigned long)pthread_self(), ucs_get_tid(), 
+              ucs_global_opts.profile_mode);
 
     /* Initialize log mode */
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {

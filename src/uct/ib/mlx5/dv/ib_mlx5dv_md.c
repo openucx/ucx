@@ -325,14 +325,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
-    /* TODO temorarily disabled, pending resolution
-     * of RM 1860351 "ODP support for QP created via DEVX" */
-#if HAVE_DEVX_ODP_QP
     status = uct_ib_mlx5_devx_check_odp(md, cap);
     if (status != UCS_OK) {
         goto err_free;
     }
-#endif
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
@@ -409,6 +405,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags |= UCT_IB_MLX5_MD_FLAG_DEVX;
+    md->flags |= md_config->devx_objs << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS;
     *p_md = &md->super;
     return status;
 

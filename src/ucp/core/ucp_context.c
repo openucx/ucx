@@ -1289,8 +1289,6 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         context->config.est_num_ppn = 1;
     }
 
-    context->config.est_num_ppn = 1;
-
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
         context->mt_lock.mt_type = mt_type;
