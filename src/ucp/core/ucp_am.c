@@ -285,7 +285,12 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
 static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+    ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)req->send.buffer ;
+    ucs_warn("AM RDMA ucp_am_rdma_contig_short ep_ptr now=%lu", ep_ptr) ;
+    rdma_hdr->ep_ptr = ep_ptr ;
     ucs_status_t status = ucp_am_send_rdma_short(req->send.ep,req->send.buffer) ;
+    ucs_warn("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
