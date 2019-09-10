@@ -981,6 +981,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
     map_params.address    = all_data + 1 ;
     map_params.length     = rdma_hdr->total_size ;
+    ucs_warn("AM RDMA map_params.length=%lu", map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&memh) ;
     ucs_assert(status == UCS_OK) ;
     status=ucp_rkey_pack(worker->context,memh,&packed_rkey, &packed_rkey_size);
