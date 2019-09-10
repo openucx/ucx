@@ -147,9 +147,6 @@ void ucs_log_cleanup();
 
 const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
 
-const char *ucs_log_dump_hex(const void* data, size_t length, char *buf,
-                             size_t max);
-
 /**
  * Add/remove logging handlers
  */
