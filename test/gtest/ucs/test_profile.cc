@@ -172,7 +172,7 @@ void test_profile::run_profiled_code(int num_iters)
             ret = pthread_create(&profile_thread, NULL, profile_thread_func,
                                  (void*)&param);
             if (ret < 0) {
-                UCS_TEST_MESSAGE << "pthread_create failed:" << strerror(errno);
+                ADD_FAILURE() << "pthread_create failed:" << strerror(errno);
                 goto out;
             }
 
@@ -184,15 +184,11 @@ out:
             void *result;
             ret = pthread_join(threads.back(), &result);
             if (ret < 0) {
-                UCS_TEST_MESSAGE << "pthread_join failed:" << strerror(errno);
+                ADD_FAILURE() << "pthread_join failed:" << strerror(errno);
             }
 
             threads.pop_back();
         }
-    }
-
-    if (ret < 0) {
-        UCS_TEST_ABORT("Failed to run profiled code");
     }
 }
 
