@@ -71,28 +71,42 @@ AC_DEFUN([CHECK_SPECIFIC_ATTRIBUTE], [
 	AC_DEFINE_UNQUOTED([HAVE_ATTRIBUTE_[$2]], [$ucx_cv_attribute_[$1]], [Check attribute [$1]])
 ])
 
+
 #
-# Check if compiler supports a given feaure
-# Usage: COMPILER_OPTION([name], [doc], [flag], [default: yes|no], [program])
+#  Enable/disable turning on machine-specific optimizations
 #
-AC_DEFUN([COMPILER_OPTION],
+AC_ARG_ENABLE(optimizations,
+              AC_HELP_STRING([--enable-optimizations],
+                             [Enable non-portable machine-specific CPU optimizations, default: NO]),
+              [],
+              [enable_optimizations=no])
+
+
+#
+# Check if compiler supports a given CPU optimization flag, and if yes - add it
+# to BASE_CFLAGS substitution, and OPT_CFLAGS C define.
+#
+# Usage: COMPILER_CPU_OPTIMIZATION([name], [doc], [flag], [program])
+#
+AC_DEFUN([COMPILER_CPU_OPTIMIZATION],
 [
     AC_ARG_WITH([$1],
                 [AC_HELP_STRING([--with-$1], [Use $2 compiler option.])],
                 [],
-                [with_$1=$4])
+                [with_$1=$enable_optimizations])
    
     AS_IF([test "x$with_$1" != "xno"],
           [SAVE_CFLAGS="$CFLAGS"
            CFLAGS="$BASE_CFLAGS $CFLAGS $3"
            AC_MSG_CHECKING([$3])
-           CHECK_CROSS_COMP([AC_LANG_SOURCE([$5])],
+           CHECK_CROSS_COMP([AC_LANG_SOURCE([$4])],
                             [AC_MSG_RESULT([yes])
-			     # TODO: Add CPU UARCH detector and validator in UCX init.
-			     # As for now we will avoid passing this information to
-			     # library.
-			     AS_IF([test "x$1" != "xmcpu" -a "x$1" != "xmarch"],
-                             [OPT_CFLAGS="$OPT_CFLAGS|$1"],[])],
+                             # TODO: Add CPU UARCH detector and validator in UCX init.
+                             # As for now we will avoid passing this information to
+                             # library.
+                             BASE_CFLAGS="$BASE_CFLAGS $3"
+                             AS_IF([test "x$1" != "xmcpu" -a "x$1" != "xmarch"],
+                                   [OPT_CFLAGS="$OPT_CFLAGS|$1"])],
                             [AC_MSG_RESULT([no])])
            CFLAGS="$SAVE_CFLAGS"])
 ])
@@ -149,8 +163,8 @@ AC_DEFUN([DETECT_UARCH],
           ax_arch="armv8.2-a" ;;
         esac
         ;;
-      *) ax_cpu="native"
-         ;;
+      *)
+        ;;
     esac 
 ])
 
@@ -267,46 +281,46 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-fmax-type-align=$UCX_ALLOC_ALIGN],
 
 
 #
-#  Enable/disable turning on machine-specific optimizations
-#
-AC_ARG_ENABLE(optimizations,
-        AC_HELP_STRING([--enable-optimizations], [Enable machine-specific optimizations, default: NO]),
-        [],
-        [enable_optimizations=no])
-
-
-#
 # SSE/AVX
 #
-COMPILER_OPTION([avx], [AVX], [-mavx], [$enable_optimizations],
-                [#include <immintrin.h>
-                 int main() { return _mm256_testz_si256(_mm256_set1_epi32(1), _mm256_set1_epi32(3)); }])
+COMPILER_CPU_OPTIMIZATION([avx], [AVX], [-mavx],
+                          [#include <immintrin.h>
+                           int main() {
+                               return _mm256_testz_si256(_mm256_set1_epi32(1), _mm256_set1_epi32(3));
+                           }
+                          ])
 AS_IF([test "x$with_avx" != xyes],
-      [COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [$enable_optimizations],
-                       [#include <smmintrin.h>
-                       int main() { return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3)); }])
-       COMPILER_OPTION([sse42], [SSE 4.2], [-msse4.2], [$enable_optimizations],
-                       [#include <popcntintrin.h>
-                        int main() { return _mm_popcnt_u32(0x101) - 2; }])
+      [COMPILER_CPU_OPTIMIZATION([sse41], [SSE 4.1], [-msse4.1],
+                                 [#include <smmintrin.h>
+                                  int main() {
+                                      return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3));
+                                  }
+                                 ])
+       COMPILER_CPU_OPTIMIZATION([sse42], [SSE 4.2], [-msse4.2],
+                                 [#include <popcntintrin.h>
+                                  int main() { return _mm_popcnt_u32(0x101) - 2;
+                                  }])
       ])
 
 
 DETECT_UARCH()
 
+
 #
 # CPU tuning
 #
 AS_IF([test "x$ax_cpu" != "x"],
-      [COMPILER_OPTION([mcpu], [CPU Model], [-mcpu=$ax_cpu], [$enable_optimizations],
-		 [int main() { return 0;}])
+      [COMPILER_CPU_OPTIMIZATION([mcpu], [CPU Model], [-mcpu=$ax_cpu],
+                                 [int main() { return 0;}])
       ])
+
 
 # 
 # Architecture tuning
 # 
 AS_IF([test "x$ax_arch" != "x"],
-      [COMPILER_OPTION([march], [architecture tuning], [-march=$ax_arch], [$enable_optimizations],
-		 [int main() { return 0;}])
+      [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$ax_arch],
+                                 [int main() { return 0;}])
       ])
 
 
@@ -315,6 +329,25 @@ AS_IF([test "x$ax_arch" != "x"],
 #
 CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
                          [int foo (int arg) __attribute__ ((optimize("O0")));])
+
+
+#
+# Compile code with frame pointer. Optimizations usually omit the frame pointer,
+# but if we are profiling the code with callgraph we need it.
+# This option may affect perofrmance so it is off by default.
+#
+AC_ARG_ENABLE([frame-pointer],
+    AS_HELP_STRING([--enable-frame-pointer],
+                   [Compile with frame pointer, useful for profiling, default: NO]),
+    [],
+    [enable_frame_pointer=no])
+AS_IF([test "x$enable_frame_pointer" = xyes],
+      [ADD_COMPILER_FLAG_IF_SUPPORTED([-fno-omit-frame-pointer],
+                                      [-fno-omit-frame-pointer],
+                                      [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                                      [AS_MESSAGE([compiling with frame pointer])],
+                                      [AS_MESSAGE([compiling with frame pointer is not supported])])],
+      [:])
 
 
 #
@@ -379,5 +412,4 @@ BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_srcdir}/src"
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}"
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}/src"
-AC_MSG_NOTICE([Common preprocessor flags: ${BASE_CPPFLAGS}])
 AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
