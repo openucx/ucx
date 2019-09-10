@@ -77,7 +77,7 @@ AC_DEFUN([CHECK_SPECIFIC_ATTRIBUTE], [
 #
 AC_ARG_ENABLE(optimizations,
               AC_HELP_STRING([--enable-optimizations],
-                             [Enable machine-specific optimizations, default: NO]),
+                             [Enable non-portable machine-specific CPU optimizations, default: NO]),
               [],
               [enable_optimizations=no])
 
