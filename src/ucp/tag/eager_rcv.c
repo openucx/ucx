@@ -253,9 +253,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
-                 (arg, data, length, tl_flags, stag, imm),
+                 (arg, data, length, tl_flags, stag, imm, context),
                  void *arg, void *data, size_t length, unsigned tl_flags,
-                 uct_tag_t stag, uint64_t imm)
+                 uct_tag_t stag, uint64_t imm, void **context)
 {
     /* Align data with AM protocol. We should add tag before the data. */
     ucp_worker_iface_t *wiface = arg;
