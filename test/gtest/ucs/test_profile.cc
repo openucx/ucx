@@ -156,6 +156,7 @@ int test_profile::num_threads() const
 
 void test_profile::run_profiled_code(int num_iters)
 {
+    int ret;
     thread_param param;
 
     param.iters = num_iters;
@@ -168,19 +169,18 @@ void test_profile::run_profiled_code(int num_iters)
 
         for (int i = 0; i < num_threads(); ++i) {
             pthread_t profile_thread;
-            int ret = pthread_create(&profile_thread, NULL, profile_thread_func,
-                                     (void*)&param);
+            ret = pthread_create(&profile_thread, NULL, profile_thread_func,
+                                 (void*)&param);
             ASSERT_EQ(0, ret);
 
             threads.push(profile_thread);
         }
 
         while (!threads.empty()) {
-            pthread_t profile_thread = threads.front();
-            threads.pop();
-
             void *result;
-            pthread_join(profile_thread, &result);
+            ret = pthread_join(threads.front(), &result);
+            ASSERT_EQ(0, ret);
+            threads.pop();
         }
     }
 }
