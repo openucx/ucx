@@ -156,7 +156,7 @@ int test_profile::num_threads() const
 
 void test_profile::run_profiled_code(int num_iters)
 {
-    int ret;
+    int ret = 0;
     thread_param param;
 
     param.iters = num_iters;
@@ -165,23 +165,34 @@ void test_profile::run_profiled_code(int num_iters)
     if (num_threads() == 1) {
         profile_thread_func(&param);
     } else {
-        std::queue<pthread_t> threads;
+        std::vector<pthread_t> threads;
 
         for (int i = 0; i < num_threads(); ++i) {
             pthread_t profile_thread;
             ret = pthread_create(&profile_thread, NULL, profile_thread_func,
                                  (void*)&param);
-            ASSERT_EQ(0, ret);
+            if (ret < 0) {
+                UCS_TEST_MESSAGE << "pthread_create failed:" << strerror(errno);
+                goto out;
+            }
 
-            threads.push(profile_thread);
+            threads.push_back(profile_thread);
         }
 
+out:
         while (!threads.empty()) {
             void *result;
-            ret = pthread_join(threads.front(), &result);
-            ASSERT_EQ(0, ret);
-            threads.pop();
+            ret = pthread_join(threads.back(), &result);
+            if (ret < 0) {
+                UCS_TEST_MESSAGE << "pthread_join failed:" << strerror(errno);
+            }
+
+            threads.pop_back();
         }
+    }
+
+    if (ret < 0) {
+        UCS_TEST_ABORT("Failed to run profiled code");
     }
 }
 
