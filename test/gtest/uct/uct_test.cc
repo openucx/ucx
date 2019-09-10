@@ -335,17 +335,10 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 void uct_test::init() {
 }
 
-int uct_test::get_entity_index(entity *ent) {
-    int index = 0;
+int uct_test::get_entity_index(const entity *ent) const {
 
-    FOR_EACH_ENTITY(iter) {
-        if (ent == *iter) {
-            return index;
-        }
-        index++;
-    }
-
-    return -1;
+    return std::distance(m_entities.begin(),
+                         std::find(m_entities.begin(), m_entities.end(), ent));
 }
 
 void uct_test::cleanup() {
@@ -664,6 +657,12 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     index_m_entities = 0;
     client_arg.self  = NULL;
     client_arg.ent   = NULL;
+}
+
+uct_test::entity::server_cb_arg_t::server_cb_arg_t(uct_test *s, int client_idx)
+{
+    self         = s;
+    client_index = client_idx;
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,

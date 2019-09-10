@@ -117,6 +117,9 @@ protected:
         struct server_cb_arg_t {
             uct_test *self;
             int      client_index;
+
+            virtual ~server_cb_arg_t() {};
+            server_cb_arg_t(uct_test *self, int client_index);
         };
 
         entity(const resource& resource, uct_iface_config_t *iface_config,
@@ -200,6 +203,8 @@ protected:
         size_t                   max_conn_priv;
         int                      index_m_entities;
         client_cb_arg_t          client_arg;
+        /* 'key' in this map is the index of the client's entity in the m_entites
+         * storage. 'value' is the server's endpoint to this client entity */
         std::map<int, uct_ep_h>  map_of_clients;
 
 
@@ -328,7 +333,7 @@ protected:
     bool get_config(const std::string& name, std::string& value) const;
     void stats_activate();
     void stats_restore();
-    int get_entity_index(entity *ent);
+    int get_entity_index(const entity *ent) const;
 
     virtual bool has_transport(const std::string& tl_name) const;
     virtual bool has_ud() const;
