@@ -20,8 +20,7 @@ enum {
 
     /* Tag Matching address. It additionaly contains QP number which
      * is used for hardware offloads. */
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM,
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_LAST
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
 };
 
 
@@ -458,15 +457,19 @@ static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->cq[dir].cq_sn++;
 }
 
-static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
-                                                  uct_iface_addr_t *addr)
+static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
                                                        uct_rc_mlx5_iface_common_t);
 
-    *(uint8_t*)addr = UCT_RC_MLX5_TM_ENABLED(iface) ?
-                      UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
-                      UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+    return UCT_RC_MLX5_TM_ENABLED(iface) ?  UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
+                                            UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+}
+
+static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
+                                                  uct_iface_addr_t *addr)
+{
+    *(uint8_t*)addr = uct_rc_mlx5_iface_get_address_type(tl_iface);
 
     return UCS_OK;
 }
@@ -475,12 +478,7 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
                                    const uct_iface_addr_t *iface_addr)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
-                                                       uct_rc_mlx5_iface_common_t);
-
-    uint8_t my_type = UCT_RC_MLX5_TM_ENABLED(iface) ?
-                      UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
-                      UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+    uint8_t my_type = uct_rc_mlx5_iface_get_address_type(tl_iface);
 
     if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
         return 0;
