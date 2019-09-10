@@ -618,11 +618,16 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-
     ucs_assert(UCP_DT_IS_IOV(datatype)) ;
     ucs_assert(count == 2) ; /* We only handle length 2 iovecs */
     iovec = (ucp_dt_iov_t *) payload ;
+    if ( iovec[1].length == 0 )
+      {
+        return ucp_am_send_nb(ep, id, payload, count, datatype, cb, flags) ;
+      }
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
     /* And the first element of the iovec must fit in the header */
     ucs_assert(iovec[0].length <= UCP_AM_RDMA_IOVEC_0_MAX_SIZE) ;
 
