@@ -103,9 +103,10 @@ typedef enum {
  */
 typedef void *ucs_status_ptr_t;
 
-#define UCS_PTR_STATUS(_ptr)       ((ucs_status_t)(intptr_t)(_ptr))
 #define UCS_PTR_IS_ERR(_ptr)       (((uintptr_t)(_ptr)) >= ((uintptr_t)UCS_ERR_LAST))
 #define UCS_PTR_IS_PTR(_ptr)       (((uintptr_t)(_ptr) - 1) < ((uintptr_t)UCS_ERR_LAST - 1))
+#define UCS_PTR_RAW_STATUS(_ptr)   ((ucs_status_t)(intptr_t)(_ptr))
+#define UCS_PTR_STATUS(_ptr)       (UCS_PTR_IS_PTR(_ptr) ? UCS_INPROGRESS : UCS_PTR_RAW_STATUS(_ptr))
 #define UCS_STATUS_PTR(_status)    ((void*)(intptr_t)(_status))
 #define UCS_STATUS_IS_ERR(_status) ((_status) < 0)
 
