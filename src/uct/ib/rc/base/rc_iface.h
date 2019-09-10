@@ -88,16 +88,6 @@
 
 
 enum {
-    UCT_RC_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionaly contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_IFACE_ADDR_TYPE_TM,
-    UCT_RC_IFACE_ADDR_TYPE_LAST
-};
-
-
-enum {
     UCT_RC_IFACE_STAT_RX_COMPLETION,
     UCT_RC_IFACE_STAT_TX_COMPLETION,
     UCT_RC_IFACE_STAT_NO_CQE,
@@ -308,13 +298,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
                                 size_t tag_max_iov, size_t tag_min_hdr);
-
-ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
-                                      uct_iface_addr_t *addr);
-
-int uct_rc_iface_is_reachable(const uct_iface_h tl_iface,
-                              const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr);
 
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num);

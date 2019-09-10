@@ -15,6 +15,16 @@
 #include "rc_mlx5.inl"
 
 
+enum {
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
+
+    /* Tag Matching address. It additionaly contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM,
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_LAST
+};
+
+
 /**
  * RC mlx5 interface configuration
  */
@@ -153,6 +163,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline, 0);
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
     iface_attr->ep_addr_len     = sizeof(uct_rc_mlx5_ep_address_t);
+    iface_attr->iface_addr_len  = sizeof(uint8_t);
     return UCS_OK;
 }
 
@@ -447,6 +458,38 @@ static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->cq[dir].cq_sn++;
 }
 
+static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
+                                                  uct_iface_addr_t *addr)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
+                                                       uct_rc_mlx5_iface_common_t);
+
+    *(uint8_t*)addr = UCT_RC_MLX5_TM_ENABLED(iface) ?
+                      UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
+                      UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+
+    return UCS_OK;
+}
+
+int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
+                                   const uct_device_addr_t *dev_addr,
+                                   const uct_iface_addr_t *iface_addr)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
+                                                       uct_rc_mlx5_iface_common_t);
+
+    uint8_t my_type = UCT_RC_MLX5_TM_ENABLED(iface) ?
+                      UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
+                      UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+
+    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+        return 0;
+    }
+
+    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
+}
+
+
 static int uct_rc_mlx5_iface_srq_topo(uct_rc_mlx5_iface_common_t *iface,
                                       uct_md_h md,
                                       uct_rc_mlx5_iface_common_config_t *mlx5_config)
@@ -676,9 +719,9 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_query              = uct_rc_mlx5_iface_query,
-    .iface_get_address        = uct_rc_iface_get_address,
+    .iface_get_address        = uct_rc_mlx5_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_rc_iface_is_reachable
+    .iface_is_reachable       = uct_rc_mlx5_iface_is_reachable
     },
     .create_cq                = uct_ib_mlx5_create_cq,
     .arm_cq                   = uct_rc_mlx5_iface_arm_cq,
