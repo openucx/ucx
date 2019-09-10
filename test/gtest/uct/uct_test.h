@@ -115,11 +115,11 @@ protected:
         };
 
         struct server_cb_arg_t {
-            uct_test *self;
-            int      client_index;
+            uct_test *m_test;
+            int      m_client_index;
 
             virtual ~server_cb_arg_t() {};
-            server_cb_arg_t(uct_test *self, int client_index);
+            server_cb_arg_t(uct_test *test, int client_index);
         };
 
         entity(const resource& resource, uct_iface_config_t *iface_config,

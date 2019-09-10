@@ -659,10 +659,11 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     client_arg.ent   = NULL;
 }
 
-uct_test::entity::server_cb_arg_t::server_cb_arg_t(uct_test *s, int client_idx)
+uct_test::entity::server_cb_arg_t::server_cb_arg_t(uct_test *test,
+                                                   int client_index) :
+                                                   m_test(test),
+                                                   m_client_index(client_index)
 {
-    self         = s;
-    client_index = client_idx;
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,

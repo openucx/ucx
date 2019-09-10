@@ -474,22 +474,22 @@ protected:
     static void
     server_connect_cb(uct_ep_h ep, void *arg, ucs_status_t status) {
          uct_test::entity::server_cb_arg_t *cb_arg = (uct_test::entity::server_cb_arg_t*)arg;
-         test_uct_cm_sockaddr *self = (test_uct_cm_sockaddr *)cb_arg->self;
+         test_uct_cm_sockaddr *self = dynamic_cast<test_uct_cm_sockaddr *>(cb_arg->m_test);
 
          self->m_cm_state |= TEST_CM_STATE_SERVER_CONNECTED;
-         self->m_server->map_of_clients[cb_arg->client_index] = ep;
+         self->m_server->map_of_clients[cb_arg->m_client_index] = ep;
          self->m_server_connect_cb_cnt++;
     }
 
     static void
     server_disconnect_cb(uct_ep_h ep, void *arg) {
         uct_test::entity::server_cb_arg_t *cb_arg = (uct_test::entity::server_cb_arg_t*)arg;
-        test_uct_cm_sockaddr *self = (test_uct_cm_sockaddr *)cb_arg->self;
+        test_uct_cm_sockaddr *self = dynamic_cast<test_uct_cm_sockaddr *>(cb_arg->m_test);
 
         self->m_server->disconnect(ep);
         self->m_cm_state |= TEST_CM_STATE_SERVER_DISCONNECTED;
-        self->m_server->map_of_clients.erase(cb_arg->client_index);
-        delete(cb_arg);
+        self->m_server->map_of_clients.erase(cb_arg->m_client_index);
+        delete cb_arg;
         self->m_server_disconnect_cnt++;
     }
 
@@ -498,7 +498,7 @@ protected:
                       const uct_cm_remote_data_t *remote_data,
                       ucs_status_t status) {
         uct_test::entity::client_cb_arg_t *cb_arg = (uct_test::entity::client_cb_arg_t*)arg;
-        test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(cb_arg->self);
+        test_uct_cm_sockaddr *self = dynamic_cast<test_uct_cm_sockaddr *>(cb_arg->self);
 
         if (status == UCS_ERR_REJECTED) {
             self->m_cm_state |= TEST_CM_STATE_CLIENT_GOT_REJECT;
@@ -532,7 +532,7 @@ protected:
     static void
     client_disconnect_cb(uct_ep_h ep, void *arg) {
         uct_test::entity::client_cb_arg_t *cb_arg = (uct_test::entity::client_cb_arg_t*)arg;
-        test_uct_cm_sockaddr *self = (test_uct_cm_sockaddr *)cb_arg->self;
+        test_uct_cm_sockaddr *self = dynamic_cast<test_uct_cm_sockaddr *>(cb_arg->self);
 
         if (self->m_server_start_disconnect) {
             client_do_disconnect(self, ep, 1);
@@ -544,7 +544,7 @@ protected:
     static void
     client_disconnect_server_started_cb(uct_ep_h ep, void *arg) {
         uct_test::entity::client_cb_arg_t *cb_arg = (uct_test::entity::client_cb_arg_t*)arg;
-        test_uct_cm_sockaddr *self = (test_uct_cm_sockaddr *)cb_arg->self;
+        test_uct_cm_sockaddr *self = dynamic_cast<test_uct_cm_sockaddr *>(cb_arg->self);
 
         client_do_disconnect(self, ep, 1);
     }
