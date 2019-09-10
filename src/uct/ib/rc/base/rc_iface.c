@@ -881,7 +881,6 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
 
     if (iface->config.fence) {
-        iface->tx.fi.fence_flag = 1;
         iface->tx.fi.fence_beat++;
     }
 

@@ -472,7 +472,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_mlx5_iface_common_config_t *mlx5_config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
-    uct_ib_device_t *dev;
     ucs_status_t status;
 
     uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
@@ -484,7 +483,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rc_config, init_attr);
 
-    dev                              = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode               = mlx5_config->super.mmio_mode;
     self->tx.bb_max                  = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
 
@@ -517,7 +515,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
-    self->super.config.fence       = uct_ib_device_has_pci_atomics(dev);
+    self->super.config.fence       = 1; /* used for RDMA_READ/WRITE */
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
 
