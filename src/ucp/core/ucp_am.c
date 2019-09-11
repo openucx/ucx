@@ -979,7 +979,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_assert(unfinished != NULL) ;
 
     ucs_warn("AM RDMA will call am_id=%u", rdma_hdr->am_id ) ;
-    unfinshed->am_id = rdma_hdr -> am_id ;
+    unfinished->am_id = rdma_hdr -> am_id ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
@@ -1060,7 +1060,6 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
 
     unfinished->rdma_completion_header.msg_id = req->send.am.message_id ;
     unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
-    unfinished->rdma_completion_header.am_id  = req->send.am.am_id ;
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
@@ -1124,7 +1123,6 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     {
         unfinished->rdma_completion_header.msg_id = req->send.am.message_id ;
         unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
-        unfinished->rdma_completion_header.am_id  = req->send.am.am_id ;
 
         ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
         status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
@@ -1171,8 +1169,8 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     uint16_t am_id ;
     ucp_recv_desc_t *all_data ;
     size_t total_size ;
-    ucs_assert(unfinsished != NULL) ;
-    am_id = unfinshed->am_id;
+    ucs_assert(unfinished != NULL) ;
+    am_id = unfinished->am_id;
     ucs_warn("AM RDMA ucp_am_rdma_completion_handler") ;
     ucs_log_flush() ;
     ucs_assert(unfinished != NULL ) ;
