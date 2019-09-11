@@ -1027,6 +1027,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucs_status_ptr_t ret ;
     ucs_status_t local_status ;
     ucs_assert(status == UCS_OK) ;
+    ucs_warn("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p", request,req) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
         ep->worker, ep, ep_ext, req->send.am.message_id
         ) ;
@@ -1073,7 +1074,8 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_status_t status ;
     ucp_mem_map_params_t map_params ;
     ucs_assert(unfinished != NULL) ;
-    ucs_warn("AM RDMA ucp_am_rdma_reply_handler") ;
+    ucp_request_t *req = unfinished->req ;
+    ucs_warn("AM RDMA ucp_am_rdma_reply_handler req=%p", req ) ;
     ucs_log_flush() ;
 
     iovec=unfinished->iovec ;
