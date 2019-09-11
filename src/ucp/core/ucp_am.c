@@ -1074,7 +1074,10 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_status_t status ;
     ucp_mem_map_params_t map_params ;
     ucs_status_ptr_t sptr ;
+    ucs_status_ptr_r ret ;
     ucp_request_t *req ;
+    ucs_status_t local_status ;
+    ucp_request_t *req2 ;
     ucs_assert(unfinished != NULL) ;
     req = unfinished->req ;
     ucs_warn("AM RDMA ucp_am_rdma_reply_handler req=%p", req ) ;
@@ -1109,7 +1112,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
         local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
         ucs_assert(local_status == UCS_OK) ;
 
-        unfinished->cb(request, UCS_OK) ;
+        unfinished->cb(req+1, UCS_OK) ;
 
         ucs_list_del(&unfinished->list);
         ucs_free(unfinished);
@@ -1119,7 +1122,8 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     {
         ucs_warn("AM RDMA rdma issued, sptr=%p", sptr ) ;
         ucs_assert(!UCS_PTR_IS_ERR(sptr)) ;
-        sptr->send.am.message_id = req->send.am.message_id ;
+        req2 = (ucp_request_t *) sptr ;
+        req2->send.am.message_id = req->send.am.message_id ;
     }
     return UCS_OK ;
 }
