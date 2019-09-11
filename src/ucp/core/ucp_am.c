@@ -1019,6 +1019,27 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 }
 
 static void
+ucp_am_rdma_completed_callback(void *request, ucs_status_t status)
+{
+    ucp_request_t * req=((ucp_request_t *) request) - 1  ;
+    ucp_ep_h ep = req->send.ep ;
+    ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
+    ucp_am_rdma_client_unfinished_t *unfinished ;
+
+    ucs_warn("AM RDMA completed callback request=%p status=%d", request, status) ;
+    ucs_log_flush() ;
+
+    unfinished = ucp_am_rdma_client_find_unfinished(
+        ep->worker, ep, ep_ext, req->send.am.message_id
+        ) ;
+    ucs_assert(unfinished != NULL) ;
+
+    ucs_list_del(&unfinished->list);
+    ucs_free(unfinished);
+
+}
+
+static void
 ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
 {
     ucp_request_t * req=((ucp_request_t *) request) - 1  ;
@@ -1027,6 +1048,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_am_rdma_client_unfinished_t *unfinished ;
     ucs_status_ptr_t ret ;
     ucs_status_t local_status ;
+    ucp_request_t *original_req ;
     ucs_assert(status == UCS_OK) ;
     ucs_warn("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p", request,req) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
@@ -1041,17 +1063,16 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
 
-    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
+    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_completed_callback) ;
     ucs_warn("AM RDMA completion ucp_am_send_rdma_req ret=%p", ret) ;
     ucs_log_flush() ;
 
     local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
     ucs_assert(local_status == UCS_OK) ;
 
-    unfinished->cb(request, UCS_OK) ;
+    original_req = unfinished->req ;
 
-    ucs_list_del(&unfinished->list);
-    ucs_free(unfinished);
+    unfinished->cb(original_req+1, UCS_OK) ;
 
 }
 
