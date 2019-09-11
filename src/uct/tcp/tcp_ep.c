@@ -463,32 +463,6 @@ void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep)
     }
 }
 
-/* Fill iovec data structure by data provided in uct_iov_t.
- * The function avoids copying IOVs with zero length.
- * @return Number of elements in io_vec[].
- */
-static inline size_t
-uct_tcp_ep_iovec_fill_iov(struct iovec *io_vec, const uct_iov_t *iov,
-                          size_t iovcnt, size_t *total_length)
-{
-    size_t iov_it, io_vec_it = 0;
-
-    *total_length = 0;
-
-    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-        io_vec[io_vec_it].iov_len = uct_iov_get_length(&iov[iov_it]);
-
-        /* Avoid zero length elements in resulted iov_vec */
-        if (io_vec[io_vec_it].iov_len != 0) {
-            io_vec[io_vec_it].iov_base = iov[iov_it].buffer;
-            *total_length += io_vec[io_vec_it].iov_len;
-            ++io_vec_it;
-        }
-    }
-
-    return io_vec_it;
-}
-
 static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
                                            uct_tcp_ep_ctx_t *ctx)
 {
@@ -1016,8 +990,8 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
     }
 
     /* User-defined payload */
-    ctx->iov_cnt += uct_tcp_ep_iovec_fill_iov(&ctx->iov[ctx->iov_cnt], iov,
-                                              iovcnt, &ep->tx.length);
+    ctx->iov_cnt += uct_iovec_fill_iov(&ctx->iov[ctx->iov_cnt], iov,
+                                       iovcnt, &ep->tx.length);
     hdr->length   = ep->tx.length + header_length;
 
     status = uct_tcp_ep_am_sendv(iface, ep, 0, hdr,
