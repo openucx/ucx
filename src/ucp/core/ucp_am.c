@@ -950,7 +950,6 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_am_rdma_server_unfinished_t *unfinished;
     ucp_recv_desc_t *all_data;
     ucp_mem_map_params_t map_params ;
-    ucp_mem_h memh ;
     ucs_status_t status ;
     void * packed_rkey ;
     size_t packed_rkey_size ;
@@ -982,9 +981,9 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     map_params.address    = all_data + 1 ;
     map_params.length     = rdma_hdr->total_size ;
     ucs_warn("AM RDMA map_params.length=%lu", map_params.length) ;
-    status=ucp_mem_map(worker->context,&map_params,&memh) ;
+    status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
-    status=ucp_rkey_pack(worker->context,memh,&packed_rkey, &packed_rkey_size);
+    status=ucp_rkey_pack(worker->context,unfinished->memh,&packed_rkey, &packed_rkey_size);
     ucs_assert(status == UCS_OK) ;
     ucs_warn("AM RDMA packed_rkey_size=%lu", packed_rkey_size) ;
     ucs_log_flush() ;
@@ -1024,6 +1023,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_client_unfinished_t *unfinished ;
     ucs_status_ptr_t ret ;
+    ucs_status_t local_status ;
     ucs_assert(status == UCS_OK) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
         ep->worker, ep, ep_ext, req->send.am.message_id
@@ -1040,6 +1040,9 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
     ucs_warn("AM RDMA completion ucp_am_send_rdma_req ret=%p", ret) ;
     ucs_log_flush() ;
+
+    local_status = ucp_mem_numap(ep->worker->context,unfinished->memh) ;
+    ucs_assert(local_status == UCS_OK) ;
 
     unfinished->cb(request, UCS_OK) ;
 
@@ -1066,6 +1069,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_dt_iov_t *iovec ;
     ucp_rkey_h rkey ;
     ucs_status_t status ;
+    ucp_mem_map_params_t map_params ;
     ucs_assert(unfinished != NULL) ;
     ucp_request_t *req = unfinished->req ;
     ucs_warn("AM RDMA ucp_am_rdma_reply_handler") ;
@@ -1073,6 +1077,13 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
 
     iovec=req->send.buffer ;
     status=ucp_ep_rkey_unpack(ep, rdma_reply_hdr->rkey_buffer, &rkey) ;
+    ucs_assert(status == UCS_OK) ;
+    map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
+    map_params.address    = iovec[1].buffer ;
+    map_params.length     = iovec[1].length ;
+    ucs_warn("AM RDMA map_params.length=%lu", map_params.length) ;
+    status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
     ucp_put_nb(ep, iovec[1].buffer,iovec[1].length,
         rdma_reply_hdr->address+iovec[0].length,rkey,
@@ -1105,6 +1116,9 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_status_t status ;
     all_data = unfinished->all_data ;
     total_size = unfinished->total_size ;
+
+    starus = ucs_mem_unmap(worker->context, unfinished->memh) ;
+    ucs_assert(status == UCS_OK) ;
 
     ucs_list_del(&unfinished->list);
     ucs_free(unfinished);
