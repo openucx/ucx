@@ -8,6 +8,7 @@
 #include "uct/api/uct_def.h"
 
 #include <ucs/stats/stats.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <common/test_helpers.h>
 #include <algorithm>
@@ -236,11 +237,13 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        /* If rdmacm/sockcm is tested, make sure that this is an IPoIB or RoCE or ethernet interface */
-        if ((!strcmp(md_rsc.rsc_desc.md_name, "rdmacm") &&
-            !ucs::is_rdmacm_netdev(ifa->ifa_name)) ||
-            (!strcmp(md_rsc.rsc_desc.md_name, "sockcm") &&
-            !ucs::is_sockcm_netdev(ifa->ifa_name))) {
+        if (!ucs_netif_is_active(ifa->ifa_name)) {
+            continue;
+        }
+
+        /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
+        if (!strcmp(md_rsc.rsc_desc.md_name, "rdmacm") &&
+            !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
             continue;
         }
 

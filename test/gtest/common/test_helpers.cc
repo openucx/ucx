@@ -471,27 +471,6 @@ bool is_rdmacm_netdev(const char *ifa_name) {
     return strstr(guid_buf, "0000:0000:0000:0000") == NULL;
 }
 
-bool is_sockcm_netdev(const char *ifa_name) {
-    char file_name[PATH_MAX];
-    char s[4];
-    FILE *fp;
-
-    snprintf(file_name, PATH_MAX, "/sys/class/net/%s/type", ifa_name);
-    fp = fopen(file_name, "r");
-    if (fp == NULL) {
-        return false;
-    }
-
-    /* 772 indicates lo device which is not a sockcm device interface */
-    if (!strcmp("772", fgets(s, 4, fp))) {
-        fclose(fp);
-        return false;
-    } else {
-        fclose(fp);
-        return true;
-    }
-}
-
 uint16_t get_port() {
     int sock_fd, ret;
     ucs_status_t status;
