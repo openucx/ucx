@@ -1073,8 +1073,10 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_rkey_h rkey ;
     ucs_status_t status ;
     ucp_mem_map_params_t map_params ;
+    ucs_status_ptr_t sptr ;
+    ucp_request_t *req ;
     ucs_assert(unfinished != NULL) ;
-    ucp_request_t *req = unfinished->req ;
+    req = unfinished->req ;
     ucs_warn("AM RDMA ucp_am_rdma_reply_handler req=%p", req ) ;
     ucs_log_flush() ;
 
@@ -1088,9 +1090,37 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_warn("AM RDMA map_params.length=%lu", map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
-    ucp_put_nb(ep, iovec[1].buffer,iovec[1].length,
+    sptr = ucp_put_nb(ep, iovec[1].buffer,iovec[1].length,
         rdma_reply_hdr->address+iovec[0].length,rkey,
         ucp_am_rdma_completion_callback) ;
+    if (sptr == UCS_OK)
+    {
+        unfinished->rdma_completion_header.msg_id = req->send.am.message_id ;
+        unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+        unfinished->rdma_completion_header.am_id  = req->send.am.am_id ;
+
+        ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
+        status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
+
+        ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
+        ucs_warn("AM RDMA completed immediately ion ucp_am_send_rdma_req ret=%p", ret) ;
+        ucs_log_flush() ;
+
+        local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
+        ucs_assert(local_status == UCS_OK) ;
+
+        unfinished->cb(request, UCS_OK) ;
+
+        ucs_list_del(&unfinished->list);
+        ucs_free(unfinished);
+
+    }
+    else
+    {
+        ucs_warn("AM RDMA rdma issued, sptr=%p", sptr ) ;
+        ucs_assert(!UCS_PTR_IS_ERR(sptr)) ;
+        sptr->send.am.message_id = req->send.am.message_id ;
+    }
     return UCS_OK ;
 }
 
