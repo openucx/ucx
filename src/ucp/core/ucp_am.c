@@ -649,6 +649,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         goto out ;
     }
 
+    unfinished->iovec = iovec ;
+
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_header_t), flags, id);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
@@ -1075,7 +1077,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_warn("AM RDMA ucp_am_rdma_reply_handler") ;
     ucs_log_flush() ;
 
-    iovec=req->send.buffer ;
+    iovec=unfinished->iovec ;
     status=ucp_ep_rkey_unpack(ep, rdma_reply_hdr->rkey_buffer, &rkey) ;
     ucs_assert(status == UCS_OK) ;
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |

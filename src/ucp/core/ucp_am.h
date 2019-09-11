@@ -82,6 +82,7 @@ typedef struct {
   ucs_list_link_t   list;                                  /* entry into list of unfinished AM's */
   ucp_request_t    *req;                                   /* active message request */
   uint64_t          msg_id;                                /* way to match up all parts of AM */
+  ucp_dt_iov_t     *iovec ;                                /* iovec to be sent */
   ucp_mem_h         memh;                                  /* memory handle for mapping to the adapter */
   ucp_send_callback_t cb ;                                 /* callback to drive when the AM is complete */
   ucp_am_rdma_header_t rdma_header ;                       /* What the client initially sends to the AM server */
