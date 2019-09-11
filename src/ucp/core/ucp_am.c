@@ -1041,7 +1041,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucs_warn("AM RDMA completion ucp_am_send_rdma_req ret=%p", ret) ;
     ucs_log_flush() ;
 
-    local_status = ucp_mem_numap(ep->worker->context,unfinished->memh) ;
+    local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
     ucs_assert(local_status == UCS_OK) ;
 
     unfinished->cb(request, UCS_OK) ;
@@ -1117,7 +1117,7 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     all_data = unfinished->all_data ;
     total_size = unfinished->total_size ;
 
-    starus = ucs_mem_unmap(worker->context, unfinished->memh) ;
+    status = ucs_mem_unmap(worker->context, unfinished->memh) ;
     ucs_assert(status == UCS_OK) ;
 
     ucs_list_del(&unfinished->list);
