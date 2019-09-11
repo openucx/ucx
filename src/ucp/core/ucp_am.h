@@ -66,9 +66,8 @@ typedef struct {
 
 typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
-  uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
+  uintptr_t         ep_ptr;     /* end point ptr, used for maintaing list
                                    of arrivals */
-  uint16_t          am_id;      /* index into callback array */
 } UCS_S_PACKED ucp_am_rdma_completion_header_t ;
 
 typedef struct {
@@ -96,6 +95,7 @@ typedef struct {
   size_t            total_size;                  /* size of data for AM */
   ucp_mem_h         memh;                        /* memory handle for mapping to the adapter */
   ucp_am_rdma_reply_header_t rdma_reply_header ; /* What the server sends to the client for an AM */
+  uint16_t          am_id ;                      /* active message function index */
 } ucp_am_rdma_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);

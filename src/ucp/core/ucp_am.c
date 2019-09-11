@@ -978,6 +978,8 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
                                          "unfinished UCP AM rdma server");
     ucs_assert(unfinished != NULL) ;
 
+    ucs_warn("AM RDMA will call am_id=%u", rdma_hdr->am_id ) ;
+    unfinshed->am_id = rdma_hdr -> am_id ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
@@ -1166,9 +1168,11 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
                                            ep,
                                            ep_ext,
                                            rdma_completion_hdr->msg_id);
-    uint16_t am_id  = rdma_completion_hdr->am_id;
+    uint16_t am_id ;
     ucp_recv_desc_t *all_data ;
     size_t total_size ;
+    ucs_assert(unfinsished != NULL) ;
+    am_id = unfinshed->am_id;
     ucs_warn("AM RDMA ucp_am_rdma_completion_handler") ;
     ucs_log_flush() ;
     ucs_assert(unfinished != NULL ) ;
