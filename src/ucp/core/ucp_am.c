@@ -1074,7 +1074,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_status_t status ;
     ucp_mem_map_params_t map_params ;
     ucs_status_ptr_t sptr ;
-    ucs_status_ptr_r ret ;
+    ucs_status_ptr_t ret ;
     ucp_request_t *req ;
     ucs_status_t local_status ;
     ucp_request_t *req2 ;
