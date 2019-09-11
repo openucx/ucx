@@ -101,40 +101,58 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
-    char str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr src_addr = { 0 };
+    char dest_str[UCS_SOCKADDR_STRING_LEN];
+    char src_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
-    size_t addr_size;
+    size_t dest_addr_size;
+    socklen_t src_addr_size;
+    int UCS_V_UNUSED conn_errno;
     int ret;
 
-    status = ucs_sockaddr_sizeof(dest_addr, &addr_size);
+    status = ucs_sockaddr_sizeof(dest_addr, &dest_addr_size);
     if (status != UCS_OK) {
         return status;
     }
 
+    src_addr_size = sizeof(src_addr);
+
     do {
-        ret = connect(fd, dest_addr, addr_size);
+        ret = connect(fd, dest_addr, dest_addr_size);
+
+        /* Save errno to separate variable to not override it
+         * when calling getsockname() below */
+        conn_errno = 0;
+
         if (ret < 0) {
             if (errno == EINPROGRESS) {
                 status = UCS_INPROGRESS;
-                goto out;
+                break;
             }
 
             if (errno == EISCONN) {
                 status = UCS_ERR_ALREADY_EXISTS;
-                goto out;
+                break;
             }
 
             if (errno != EINTR) {
                 ucs_error("connect(fd=%d, dest_addr=%s) failed: %m", fd,
-                          ucs_sockaddr_str(dest_addr, str, UCS_SOCKADDR_STRING_LEN));
+                          ucs_sockaddr_str(dest_addr, dest_str, UCS_SOCKADDR_STRING_LEN));
                 return UCS_ERR_UNREACHABLE;
             }
         }
     } while ((ret < 0) && (errno == EINTR));
 
-out:
-    ucs_debug("connect(fd=%d, dest_addr=%s): %m", fd,
-              ucs_sockaddr_str(dest_addr, str, UCS_SOCKADDR_STRING_LEN));
+    ret = getsockname(fd, &src_addr, &src_addr_size);
+    if (ret < 0) {
+        ucs_debug("getsockname(fd=%d) failed: %m", fd);
+    }
+
+    ucs_debug("connect(fd=%d, src_addr=%s dest_addr=%s): %s", fd,
+              ((ret < 0) ? "-p" :
+               ucs_sockaddr_str(&src_addr, src_str, UCS_SOCKADDR_STRING_LEN)),
+              ucs_sockaddr_str(dest_addr, dest_str, UCS_SOCKADDR_STRING_LEN),
+              strerror(conn_errno));
     return status;
 }
 
@@ -189,7 +207,7 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
     }
 
     if ((err_cb == NULL) || (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
-        ucs_error("%s(fd=%d) failed: %d", name, fd, io_errno);
+        ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
     }
 
     return UCS_ERR_IO_ERROR;
