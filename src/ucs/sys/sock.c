@@ -476,7 +476,7 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
 
 ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen)
 {
-    ucs_status_t status    = UCS_ERR_NO_DEVICE;
+    ucs_status_t status = UCS_ERR_NO_DEVICE;
     struct ifaddrs *ifa;
     struct ifaddrs* ifaddrs;
     struct sockaddr *sa;

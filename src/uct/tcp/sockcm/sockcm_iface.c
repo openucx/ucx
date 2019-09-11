@@ -395,8 +395,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_iface_t)
     while (!ucs_list_is_empty(&self->used_sock_ids_list)) {
         sock_id_ctx = ucs_list_extract_head(&self->used_sock_ids_list,
                                             uct_sockcm_ctx_t, list);
-        ucs_debug("cleaning client fd = %d", sock_id_ctx->sock_fd);
-        ucs_async_remove_handler(sock_id_ctx->sock_fd, 0);
+        ucs_debug("cleaning server fd = %d", sock_id_ctx->sock_fd);
+        ucs_async_remove_handler(sock_id_ctx->sock_fd, 1);
         uct_sockcm_ep_put_sock_id(sock_id_ctx);
     }
 
