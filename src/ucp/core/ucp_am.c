@@ -1117,7 +1117,7 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     all_data = unfinished->all_data ;
     total_size = unfinished->total_size ;
 
-    status = ucs_mem_unmap(worker->context, unfinished->memh) ;
+    status = ucp_mem_unmap(worker->context, unfinished->memh) ;
     ucs_assert(status == UCS_OK) ;
 
     ucs_list_del(&unfinished->list);
