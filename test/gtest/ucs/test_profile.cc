@@ -13,7 +13,6 @@ extern "C" {
 
 #include <pthread.h>
 #include <fstream>
-#include <queue>
 
 #if HAVE_PROFILING
 
@@ -156,7 +155,7 @@ int test_profile::num_threads() const
 
 void test_profile::run_profiled_code(int num_iters)
 {
-    int ret = 0;
+    int ret;
     thread_param param;
 
     param.iters = num_iters;
@@ -172,19 +171,18 @@ void test_profile::run_profiled_code(int num_iters)
             ret = pthread_create(&profile_thread, NULL, profile_thread_func,
                                  (void*)&param);
             if (ret < 0) {
-                ADD_FAILURE() << "pthread_create failed:" << strerror(errno);
-                goto out;
+                ADD_FAILURE() << "pthread_create failed: " << strerror(errno);
+                break;
             }
 
             threads.push_back(profile_thread);
         }
 
-out:
         while (!threads.empty()) {
             void *result;
             ret = pthread_join(threads.back(), &result);
             if (ret < 0) {
-                ADD_FAILURE() << "pthread_join failed:" << strerror(errno);
+                ADD_FAILURE() << "pthread_join failed: " << strerror(errno);
             }
 
             threads.pop_back();
