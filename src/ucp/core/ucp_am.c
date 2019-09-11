@@ -790,6 +790,7 @@ ucp_am_rdma_client_find_unfinished(ucp_worker_h worker, ucp_ep_h ep,
                                    uint64_t msg_id)
 {
     ucp_am_rdma_client_unfinished_t *unfinished;
+    ucs_warn("AM RDMA looking for msg_id=%lu", msg_id) ;
     /* TODO make this hash table for faster lookup */
     ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rdma_client, list) {
         if (unfinished->msg_id == msg_id) {
@@ -1122,7 +1123,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     {
         ucs_warn("AM RDMA rdma issued, sptr=%p", sptr ) ;
         ucs_assert(!UCS_PTR_IS_ERR(sptr)) ;
-        req2 = (ucp_request_t *) sptr ;
+        req2 = ((ucp_request_t *) sptr)-1 ;
         req2->send.am.message_id = req->send.am.message_id ;
     }
     return UCS_OK ;
