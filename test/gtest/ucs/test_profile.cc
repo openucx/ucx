@@ -14,7 +14,6 @@ extern "C" {
 #include <pthread.h>
 #include <fstream>
 
-
 #if HAVE_PROFILING
 
 class scoped_profile {
@@ -156,6 +155,7 @@ int test_profile::num_threads() const
 
 void test_profile::run_profiled_code(int num_iters)
 {
+    int ret;
     thread_param param;
 
     param.iters = num_iters;
@@ -164,14 +164,28 @@ void test_profile::run_profiled_code(int num_iters)
     if (num_threads() == 1) {
         profile_thread_func(&param);
     } else {
-        pthread_t threads[num_threads()];
+        std::vector<pthread_t> threads;
+
         for (int i = 0; i < num_threads(); ++i) {
-            pthread_create(&threads[i], NULL, profile_thread_func,
-                           (void*)&param);
+            pthread_t profile_thread;
+            ret = pthread_create(&profile_thread, NULL, profile_thread_func,
+                                 (void*)&param);
+            if (ret < 0) {
+                ADD_FAILURE() << "pthread_create failed: " << strerror(errno);
+                break;
+            }
+
+            threads.push_back(profile_thread);
         }
-        for (int i = 0; i < num_threads(); ++i) {
+
+        while (!threads.empty()) {
             void *result;
-            pthread_join(threads[i], &result);
+            ret = pthread_join(threads.back(), &result);
+            if (ret < 0) {
+                ADD_FAILURE() << "pthread_join failed: " << strerror(errno);
+            }
+
+            threads.pop_back();
         }
     }
 }
