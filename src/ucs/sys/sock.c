@@ -145,8 +145,7 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
     } while ((ret < 0) && (errno == EINTR));
 
     src_addr_size = sizeof(src_addr);
-
-    ret = getsockname(fd, (struct sockaddr*)&src_addr, &src_addr_size);
+    ret           = getsockname(fd, (struct sockaddr*)&src_addr, &src_addr_size);
     if (ret < 0) {
         ucs_debug("getsockname(fd=%d) failed: %m", fd);
     }
