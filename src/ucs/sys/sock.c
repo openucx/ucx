@@ -115,8 +115,6 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
         return status;
     }
 
-    src_addr_size = sizeof(src_addr);
-
     do {
         ret = connect(fd, dest_addr, dest_addr_size);
 
