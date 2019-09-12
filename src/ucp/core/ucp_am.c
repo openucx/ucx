@@ -1088,6 +1088,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_completed_callback) ;
     UCP_AM_DEBUG("AM RDMA completion ucp_am_send_rdma_req ret=%p", ret) ;
 
+    ucp_rkey_destroy(unfinished->rkey) ;
 
     local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
     ucs_assert(local_status == UCS_OK) ;
@@ -1114,7 +1115,6 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
             worker,ep,ep_ext,rdma_reply_hdr->msg_id
             ) ;
     ucp_dt_iov_t *iovec ;
-    ucp_rkey_h rkey ;
     ucs_status_t status ;
     ucp_mem_map_params_t map_params ;
     ucs_status_ptr_t sptr ;
@@ -1128,7 +1128,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
 
 
     iovec=unfinished->iovec ;
-    status=ucp_ep_rkey_unpack(ep, rdma_reply_hdr->rkey_buffer, &rkey) ;
+    status=ucp_ep_rkey_unpack(ep, rdma_reply_hdr->rkey_buffer, &(unfinished->rkey)) ;
     ucs_assert(status == UCS_OK) ;
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
@@ -1138,7 +1138,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
     sptr = ucp_put_nb(ep, iovec[1].buffer,iovec[1].length,
-        rdma_reply_hdr->address+iovec[0].length,rkey,
+        rdma_reply_hdr->address+iovec[0].length,unfinished->rkey,
         ucp_am_rdma_completion_callback) ;
     if (sptr == UCS_OK)
     {
@@ -1151,6 +1151,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
         ret = ucp_am_rdma_send_req(req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
         UCP_AM_DEBUG("AM RDMA completed immediately ion ucp_am_send_rdma_req ret=%p", ret) ;
 
+        ucp_rkey_destroy(unfinished->rkey) ;
 
         local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
         ucs_assert(local_status == UCS_OK) ;
