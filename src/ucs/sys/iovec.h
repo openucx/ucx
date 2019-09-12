@@ -4,11 +4,15 @@
  * See file LICENSE for terms.
  */
 
+#ifndef UCS_IOVEC_H
+#define UCS_IOVEC_H
+
 #include <ucs/debug/assert.h>
 
 #include <stdint.h>
 #include <sys/uio.h>
 
+BEGIN_C_DECLS
 
 /* A direction for copying a data to/from an array of iovec elements */
 typedef enum ucs_iov_copy_direction {
@@ -54,3 +58,7 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
  * @return The maximum number of IOVs.
  */
 size_t ucs_iov_get_max();
+
+END_C_DECLS
+
+#endif

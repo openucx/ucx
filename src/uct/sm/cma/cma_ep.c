@@ -11,9 +11,12 @@
 #include <sys/uio.h>
 
 #include "cma_ep.h"
-#include <uct/sm/base/sm_iface.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/iovec.h>
 
+typedef ssize_t (*uct_cma_ep_zcopy_fn_t)(pid_t, const struct iovec *,
+                                         unsigned long, const struct iovec *,
+                                         unsigned long, unsigned long);
 
 static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
 {
@@ -42,6 +45,32 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
                     (_rkey))
 
 static UCS_F_ALWAYS_INLINE
+ucs_status_t uct_cma_ep_do_zcopy(uct_cma_ep_t *ep, struct iovec *local_iov,
+                                 size_t local_iov_cnt, struct iovec *remote_iov,
+                                 uct_cma_ep_zcopy_fn_t fn_p, const char *fn_name)
+{
+    size_t local_iov_idx               = 0;
+    size_t UCS_V_UNUSED remove_iov_idx = 0;
+    ssize_t ret;
+
+    do {
+        ret = fn_p(ep->remote_pid, &local_iov[local_iov_idx],
+                   local_iov_cnt - local_iov_idx, remote_iov, 1, 0);
+        if (ucs_unlikely(ret < 0)) {
+            ucs_error("%s(pid=%d length=%zu) returned %zd: %m",
+                      fn_name, ep->remote_pid, remote_iov->iov_len, ret);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        ucs_assert(ret <= remote_iov->iov_len);
+        ucs_iov_advance(local_iov, local_iov_cnt, &local_iov_idx, ret);
+        ucs_iov_advance(remote_iov, 1, &remove_iov_idx, ret);
+    } while (remote_iov->iov_len);
+
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE
 ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                      const uct_iov_t *iov,
                                      size_t iovcnt,
@@ -53,69 +82,40 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                                      const struct iovec *,
                                                      unsigned long,
                                                      unsigned long),
-                                     char *fn_name)
+                                     const char *fn_name)
 {
-    ssize_t ret;
-    ssize_t delivered = 0;
-    size_t iov_it;
-    size_t iov_it_length;
-    size_t iov_slice_length;
-    size_t iov_slice_delivered;
-    size_t local_iov_it;
-    size_t length = 0;
+    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
+    size_t iov_idx   = 0;
+    ucs_status_t status;
+    size_t local_iov_cnt;
+    size_t length;
+    size_t cur_iov_cnt;
     struct iovec local_iov[UCT_SM_MAX_IOV];
     struct iovec remote_iov;
-    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
 
-    do {
-        iov_it_length = 0;
-        local_iov_it = 0;
-        for (iov_it = 0; iov_it < ucs_min(UCT_SM_MAX_IOV, iovcnt); ++iov_it) {
-            iov_slice_delivered = 0;
+    remote_iov.iov_base = UCS_PTR_BYTE_OFFSET(remote_addr, 0);
 
-            /* Get length of the particular iov element */
-            iov_slice_length = uct_iov_get_length(iov + iov_it);
+    while (iov_idx < iovcnt) {
+        cur_iov_cnt   = ucs_min(iovcnt - iov_idx, UCT_SM_MAX_IOV);
+        local_iov_cnt = uct_iovec_fill_iov(local_iov, &iov[iov_idx],
+                                           cur_iov_cnt, &length);
+        ucs_assert(local_iov_cnt <= cur_iov_cnt);
 
-            /* Skip the iov element if no data */
-            if (!iov_slice_length) {
-                continue;
-            }
-            iov_it_length += iov_slice_length;
+        iov_idx += cur_iov_cnt;
+        ucs_assert(iov_idx <= iovcnt);
 
-            if (iov_it_length <= delivered) {
-                continue; /* Skip the iov element if transferred already */
-            } else {
-                /* Let's assume the iov element buffer can be delivered partially */
-                if ((iov_it_length - delivered) < iov_slice_length) {
-                    iov_slice_delivered = iov_slice_length - (iov_it_length - delivered);
-                }
-            }
-
-            local_iov[local_iov_it].iov_base = (void *)((char *)iov[iov_it].buffer +
-                                                        iov_slice_delivered);
-            local_iov[local_iov_it].iov_len  = iov_slice_length - iov_slice_delivered;
-            ++local_iov_it;
-        }
-        if (!delivered) {
-            length = iov_it_length; /* Keep total length of the iov buffers */
+        if (!length) {
+            continue; /* Nothing to deliver */
         }
 
-        if(!length) {
-            return UCS_OK; /* Nothing to deliver */
+        remote_iov.iov_len = length;
+
+        status = uct_cma_ep_do_zcopy(ep, local_iov, local_iov_cnt,
+                                     &remote_iov, fn_p, fn_name);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
         }
-
-        remote_iov.iov_base = (void *)(remote_addr + delivered);
-        remote_iov.iov_len  = length - delivered;
-
-        ret = fn_p(ep->remote_pid, local_iov, local_iov_it, &remote_iov, 1, 0);
-        if (ret < 0) {
-            ucs_error("%s delivered %zu instead of %zu, pid %d, error message %s",
-                      fn_name, delivered, length, ep->remote_pid, strerror(errno));
-            return UCS_ERR_IO_ERROR;
-        }
-
-        delivered += ret;
-    } while (delivered < length);
+    }
 
     return UCS_OK;
 }

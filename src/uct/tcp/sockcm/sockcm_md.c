@@ -44,29 +44,12 @@ ucs_status_t uct_sockcm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static int uct_sockcm_is_addr_accessible(int sock_id, struct sockaddr *addr,
-                                         size_t addrlen)
-{
-    char host[UCS_SOCKADDR_STRING_LEN];
-    char serv[UCS_SOCKADDR_STRING_LEN];
-    int ret = -1;
-
-    ret = getnameinfo(addr, addrlen, host, UCS_SOCKADDR_STRING_LEN, serv,
-                      UCS_SOCKADDR_STRING_LEN, NI_NAMEREQD);
-    if (0 != ret) {
-        ucs_debug("getnameinfo error : %s\n", gai_strerror(ret));
-        return 0;
-    }
-
-    return 1;
-}
-
 int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                       uct_sockaddr_accessibility_t mode)
 {
     struct sockaddr *param_sockaddr = NULL;
     int is_accessible               = 0;
-    int sock_id                     = -1;
+    int sock_fd                     = -1;
     size_t sockaddr_len             = 0;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
@@ -77,8 +60,8 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         return 0;
     }
 
-    sock_id = socket(param_sockaddr->sa_family, SOCK_STREAM, 0);
-    if (-1 == sock_id) {
+    sock_fd = socket(param_sockaddr->sa_family, SOCK_STREAM, 0);
+    if (-1 == sock_fd) {
         return 0;
     }
 
@@ -90,7 +73,7 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
         ucs_debug("addr_len = %ld", (long int) sockaddr_len);
 
-        if (bind(sock_id, param_sockaddr, sockaddr_len)) {
+        if (bind(sock_fd, param_sockaddr, sockaddr_len)) {
             ucs_debug("bind(addr = %s) failed: %m",
                       ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
@@ -98,15 +81,12 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         }
 
         if (ucs_sockaddr_is_inaddr_any(param_sockaddr)) {
+            is_accessible = 1;
             goto out_print;
         }
     }
 
-    is_accessible = uct_sockcm_is_addr_accessible(sock_id, param_sockaddr,
-                                                  sockaddr_len);
-    if (!is_accessible) {
-        goto out_destroy_id;
-    }
+    is_accessible = 1; /* if UCT_SOCKADDR_ACC_REMOTE == mode*/
 
  out_print:
     ucs_debug("address %s is accessible from sockcm_md %p with mode: %d",
@@ -115,10 +95,9 @@ int uct_sockcm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
               ucs_derived_of(md, uct_sockcm_md_t), mode);
 
  out_destroy_id:
-    close(sock_id);
+    close(sock_fd);
 
-    /* return is_accessible;  // WILL ADD THIS IN FOLLOW-UP PR */
-    return 0;
+    return is_accessible;
 }
 
 static ucs_status_t

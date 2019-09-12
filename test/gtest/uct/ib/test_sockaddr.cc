@@ -297,7 +297,7 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
 UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
-    m_connect_addr.set_port(1);
+    m_connect_addr.set_port(htons(1));
     err_count = 0;
 
     /* wrap errors now since the client will try to connect to a non existing port */
@@ -787,7 +787,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
     /* Listen */
     cm_start_listen();
 
-    m_connect_addr.set_port(1);
+    m_connect_addr.set_port(htons(1));
 
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);

@@ -271,6 +271,23 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4k",
     }
 }
 
+// Check that worker will not try to connect tag offload capable iface with
+// the peer which does not support tag offload (e.g CX-5 and CX-4). In this
+// case connection attempt should fail (due to peer unreachable) or some other
+// transport should be selected (if available). Otherwise connect can hang,
+// because some transports (e.g. rcx) have different ep address type for
+// interfaces which support tag_offload.
+UCS_TEST_P(test_ucp_tag_offload, connect)
+{
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "n"));
+
+    entity *e = create_entity(true);
+    // Should be:
+    // - either complete ok
+    // - or force skipping the test (because peer is unreachable)
+    e->connect(&receiver(), get_ep_params());
+}
+
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload)
 

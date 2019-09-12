@@ -11,6 +11,8 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
 
 #include <unistd.h>
 #include <errno.h>
@@ -101,52 +103,70 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
-    char str[UCS_SOCKADDR_STRING_LEN];
+    char dest_str[UCS_SOCKADDR_STRING_LEN];
+    char src_str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr_storage src_addr;
     ucs_status_t status;
-    size_t addr_size;
+    size_t dest_addr_size;
+    socklen_t src_addr_size;
+    int UCS_V_UNUSED conn_errno;
     int ret;
 
-    status = ucs_sockaddr_sizeof(dest_addr, &addr_size);
+    status = ucs_sockaddr_sizeof(dest_addr, &dest_addr_size);
     if (status != UCS_OK) {
         return status;
     }
 
     do {
-        ret = connect(fd, dest_addr, addr_size);
+        ret = connect(fd, dest_addr, dest_addr_size);
+
+        /* Save errno to separate variable to not override it
+         * when calling getsockname() below */
+        conn_errno = errno;
+
         if (ret < 0) {
             if (errno == EINPROGRESS) {
                 status = UCS_INPROGRESS;
-                goto out;
+                break;
             }
 
             if (errno == EISCONN) {
                 status = UCS_ERR_ALREADY_EXISTS;
-                goto out;
+                break;
             }
 
             if (errno != EINTR) {
                 ucs_error("connect(fd=%d, dest_addr=%s) failed: %m", fd,
-                          ucs_sockaddr_str(dest_addr, str, UCS_SOCKADDR_STRING_LEN));
+                          ucs_sockaddr_str(dest_addr, dest_str,
+                                           UCS_SOCKADDR_STRING_LEN));
                 return UCS_ERR_UNREACHABLE;
             }
         }
     } while ((ret < 0) && (errno == EINTR));
 
-out:
-    ucs_debug("connect(fd=%d, dest_addr=%s): %m", fd,
-              ucs_sockaddr_str(dest_addr, str, UCS_SOCKADDR_STRING_LEN));
+    src_addr_size = sizeof(src_addr);
+    ret           = getsockname(fd, (struct sockaddr*)&src_addr, &src_addr_size);
+    if (ret < 0) {
+        ucs_debug("getsockname(fd=%d) failed: %m", fd);
+    }
+
+    ucs_debug("connect(fd=%d, src_addr=%s dest_addr=%s): %s", fd,
+              ((ret < 0) ? "-" :
+               ucs_sockaddr_str((struct sockaddr*)&src_addr, src_str,
+                                UCS_SOCKADDR_STRING_LEN)),
+              ucs_sockaddr_str(dest_addr, dest_str, UCS_SOCKADDR_STRING_LEN),
+              strerror(conn_errno));
     return status;
 }
 
 int ucs_socket_is_connected(int fd)
 {
-    struct sockaddr sock_addr = { 0 };
+    struct sockaddr_storage addr;
     socklen_t sock_addr_len;
     int ret;
 
-    sock_addr_len = sizeof(sock_addr);
-
-    ret = getpeername(fd, &sock_addr, &sock_addr_len);
+    sock_addr_len = sizeof(addr);
+    ret = getpeername(fd, (struct sockaddr *)&addr, &sock_addr_len);
     if (ret < 0) {
         if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
             ucs_error("getpeername(fd=%d) failed: %m", fd);
@@ -189,7 +209,7 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
     }
 
     if ((err_cb == NULL) || (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
-        ucs_error("%s(fd=%d) failed: %d", name, fd, io_errno);
+        ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
     }
 
     return UCS_ERR_IO_ERROR;
@@ -471,4 +491,53 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
 
     memcpy(dst_addr, src_addr, size);
     return UCS_OK;
+}
+
+ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen)
+{
+    ucs_status_t status = UCS_ERR_NO_DEVICE;
+    struct ifaddrs *ifa;
+    struct ifaddrs* ifaddrs;
+    struct sockaddr *sa;
+    struct sockaddr *my_addr;
+    socklen_t sockaddr_len;
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
+
+    sockaddr_len = sizeof(struct sockaddr_storage);
+    my_addr      = ucs_alloca(sockaddr_len);
+
+    if (getsockname(fd, my_addr, &sockaddr_len)) {
+        ucs_warn("getsockname error: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* port number is not important, so we assign zero because sockaddr
+     * structures returned by getifaddrs have ports assigned to zero */
+    if (UCS_OK != ucs_sockaddr_set_port(my_addr, 0)) {
+        ucs_warn("sockcm doesn't support unknown address family");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_debug("check ifname for socket on %s", 
+              ucs_sockaddr_str(my_addr, str_local_addr, UCS_SOCKADDR_STRING_LEN));
+
+    if (getifaddrs(&ifaddrs)) {
+        ucs_warn("getifaddrs error: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        sa = (struct sockaddr*) ifa->ifa_addr;
+        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) && 
+            (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
+            ucs_debug("matching ip found iface on %s", ifa->ifa_name);
+            ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);
+            status = UCS_OK;
+            break;
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+
+    return status;
 }
