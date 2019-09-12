@@ -1283,7 +1283,7 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
     UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, put_req.length);
 
     /* Increment ep::outstanding in order to ensure returning
-     * UCS_ERR_NO_RESOURCE from flush functions and do progressing.
+     * UCS_INPROGRESS from flush functions and do progressing.
      * It has to be decremented upon PUT ACK message receiving */
     uct_tcp_ep_outstanding_inc(ep);
 
