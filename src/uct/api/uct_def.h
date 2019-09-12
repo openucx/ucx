@@ -523,25 +523,25 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  * @param [in]     data    Points to the received unexpected data.
  * @param [in]     length  Length of data.
  * @param [in]     flags   Mask with @ref uct_cb_param_flags flags. If it
- *                         contains @ref UCT_CB_PARAM_FLAG_DESC value, it means
+ *                         contains @ref UCT_CB_PARAM_FLAG_DESC value, this means
  *                         @a data is part of a descriptor which must be released
- *                         later by @ref uct_iface_release_desc by the user if
+ *                         later using @ref uct_iface_release_desc by the user if
  *                         the callback returns @ref UCS_INPROGRESS.
  * @param [in]     stag    Tag from sender.
  * @param [in]     imm     Immediate data from sender.
- * @param [inout]  context User defined context for the message. Should be
- *                         initialized by the user when first fragment of the
- *                         message arrives. Then UCT will provide this value for
- *                         all other fragments of this message in the subsequent
- *                         calls of @ref uct_tag_unexp_eager_cb_t. No need to
- *                         initialize the value in case of single fragment
- *                         message (i.e. @a flags contains
+ * @param [inout]  context Storage for a per-message user-defined context. For
+ *                         example, it can be initialized to a user-defined value
+ *                         when the first fragment arrives with the flag
+ *                         UCT_CB_PARAM_FLAG_FIRST, and this value will be available
+ *                         for all subsequent fragments of the same message.
+ *                         No need to initialize the value in case of single
+ *                         fragment message (i.e. @a flags contains
  *                         @ref UCT_CB_PARAM_FLAG_FIRST, but does not contain
  *                         @ref UCT_CB_PARAM_FLAG_MORE).
  *
  * @retval UCS_OK          - data descriptor was consumed, and can be released
  *                           by the caller.
- * @retval UCS_INPROGRESS  - data descriptor is owned by the callee, and would be
+ * @retval UCS_INPROGRESS  - data descriptor is owned by the callee, and will be
  *                           released later.
  */
 typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
