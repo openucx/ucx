@@ -820,6 +820,22 @@ ucp_am_rdma_client_find_unfinished(ucp_worker_h worker, ucp_ep_h ep,
     return NULL;
 }
 
+static ucp_am_rdma_client_unfinished_t *
+ucp_am_rdma_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext)
+{
+    ucp_am_rdma_client_unfinished_t *unfinished;
+    UCP_AM_DEBUG("AM RDMA showing unfinished AMs") ;
+    /* TODO make this hash table for faster lookup */
+    ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rdma_client, list) {
+        UCP_AM_DEBUG("AM RDMA msg_id=0x%016lx", unfinished->)
+        if (unfinished->msg_id == msg_id) {
+            return unfinished;
+        }
+    }
+
+    return NULL;
+}
+
 static ucp_am_rdma_server_unfinished_t *
 ucp_am_rdma_server_find_unfinished(ucp_worker_h worker, ucp_ep_h ep,
                                    ucp_ep_ext_proto_t *ep_ext,
