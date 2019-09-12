@@ -529,9 +529,14 @@ ucp_am_rdma_send_req(ucp_request_t *req, uct_pending_callback_t func,
      * Otherwise, return the request.
      */
     status = ucp_request_send(req, 0);
-    if (! (req->flags & UCP_REQUEST_FLAG_COMPLETED)) {
-        ucp_request_set_callback(req, send.cb, cb);
+    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        ucs_trace_req("releasing send request %p, returning status %s", req,
+                      ucs_status_string(status));
+        ucp_request_put(req);
+        return UCS_STATUS_PTR(status);
     }
+
+    ucp_request_set_callback(req, send.cb, cb);
 
     return req + 1;
 }
@@ -611,6 +616,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
                  ucp_send_callback_t cb, unsigned flags)
 {
     ucs_status_ptr_t ret;
+    ucp_request_t *original_req ;
     ucp_request_t *req;
     size_t length;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
@@ -641,13 +647,19 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     /* And the first element of the iovec must fit in the header */
     ucs_assert(iovec[0].length <= UCP_AM_RDMA_IOVEC_0_MAX_SIZE) ;
 
+    original_req = ucp_request_get(ep->worker);
+    if (ucs_unlikely(original_req == NULL)) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out ;
+    }
+
     req = ucp_request_get(ep->worker);
     if (ucs_unlikely(req == NULL)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out ;
     }
 
-    unfinished           = ucs_malloc(sizeof(ucp_am_rdma_client_unfinished_t),
+   unfinished           = ucs_malloc(sizeof(ucp_am_rdma_client_unfinished_t),
                                          "unfinished UCP AM rdma client");
     if (ucs_unlikely(unfinished == NULL)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
@@ -670,7 +682,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     memcpy(unfinished->rdma_header.iovec_0, iovec[0].buffer, iovec[0].length) ;
     unfinished->rdma_header.am_id      = id ;
 
-    unfinished->req      = req;
+    unfinished->req      = original_req;
     unfinished->msg_id   = req->send.am.message_id;
     unfinished->cb       = cb ;
 
@@ -680,10 +692,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     UCP_AM_DEBUG("AM RDMA ucp_am_send_rdma_req ret=%p", ret) ;
 
 
-    ret = req + 1 ;
+    ret = original_req + 1 ;
 
  out:
      UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_send_nb returns %p", ret) ;
      return ret;
 
 }
