@@ -101,7 +101,7 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
-    struct sockaddr src_addr = { 0 };
+    struct sockaddr_storage src_addr = { 0 };
     char dest_str[UCS_SOCKADDR_STRING_LEN];
     char src_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
@@ -122,7 +122,7 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 
         /* Save errno to separate variable to not override it
          * when calling getsockname() below */
-        conn_errno = 0;
+        conn_errno = errno;
 
         if (ret < 0) {
             if (errno == EINPROGRESS) {
@@ -137,20 +137,24 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 
             if (errno != EINTR) {
                 ucs_error("connect(fd=%d, dest_addr=%s) failed: %m", fd,
-                          ucs_sockaddr_str(dest_addr, dest_str, UCS_SOCKADDR_STRING_LEN));
+                          ucs_sockaddr_str(dest_addr, dest_str,
+                                           UCS_SOCKADDR_STRING_LEN));
                 return UCS_ERR_UNREACHABLE;
             }
         }
     } while ((ret < 0) && (errno == EINTR));
 
-    ret = getsockname(fd, &src_addr, &src_addr_size);
+    src_addr_size = sizeof(src_addr);
+
+    ret = getsockname(fd, (struct sockaddr*)&src_addr, &src_addr_size);
     if (ret < 0) {
         ucs_debug("getsockname(fd=%d) failed: %m", fd);
     }
 
     ucs_debug("connect(fd=%d, src_addr=%s dest_addr=%s): %s", fd,
-              ((ret < 0) ? "-p" :
-               ucs_sockaddr_str(&src_addr, src_str, UCS_SOCKADDR_STRING_LEN)),
+              ((ret < 0) ? "-" :
+               ucs_sockaddr_str((struct sockaddr*)&src_addr, src_str,
+                                UCS_SOCKADDR_STRING_LEN)),
               ucs_sockaddr_str(dest_addr, dest_str, UCS_SOCKADDR_STRING_LEN),
               strerror(conn_errno));
     return status;
