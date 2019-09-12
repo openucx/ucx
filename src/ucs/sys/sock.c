@@ -101,9 +101,9 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
-    struct sockaddr_storage src_addr = { 0 };
     char dest_str[UCS_SOCKADDR_STRING_LEN];
     char src_str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr_storage src_addr;
     ucs_status_t status;
     size_t dest_addr_size;
     socklen_t src_addr_size;
