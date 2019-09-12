@@ -441,7 +441,8 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
                      !check_caps(UCT_MD_FLAG_SOCKADDR)) {
     ucs_sock_addr_t sock_addr;
     struct ifaddrs *ifaddr, *ifa;
-    int found_ipoib = 0;
+    bool found_rdma = false;
+    bool found_ip   = false;
 
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
 
@@ -449,6 +450,12 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
             sock_addr.addr = ifa->ifa_addr;
+
+            if (!ucs_netif_is_active(ifa->ifa_name)) {
+                continue;
+            }
+
+            found_ip = true;
 
             if (GetParam().md_name == "rdmacm") {
                 if (ucs::is_rdmacm_netdev(ifa->ifa_name)) {
@@ -458,7 +465,7 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
                                                               UCT_SOCKADDR_ACC_LOCAL));
                     ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
                                                               UCT_SOCKADDR_ACC_REMOTE));
-                    found_ipoib = 1;
+                    found_rdma = true;
                 }
             } else {
                 UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
@@ -471,8 +478,13 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
         }
     }
 
-    if ((GetParam().md_name == "rdmacm") && !found_ipoib) {
-        UCS_TEST_MESSAGE << "Cannot find an IPoIB interface with an IPv4 address on the host";
+    if (GetParam().md_name == "rdmacm") {
+        if (!found_rdma) {
+            UCS_TEST_MESSAGE <<
+                "Cannot find an IPoIB/RoCE interface with an IPv4 address on the host";
+        }
+    } else if (!found_ip) {
+        UCS_TEST_MESSAGE << "Cannot find an IPv4/IPv6 interface on the host";
     }
 
     freeifaddrs(ifaddr);
@@ -489,6 +501,7 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
                    cuda_ipc, \
                    ib, \
                    ugni, \
+                   sockcm, \
                    rdmacm \
                    )
 

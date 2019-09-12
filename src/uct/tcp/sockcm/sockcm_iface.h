@@ -14,6 +14,11 @@
         (UCT_SOCKCM_PRIV_DATA_LEN - sizeof(ssize_t))
 
 
+typedef enum uct_sockcm_iface_notify {
+    UCT_SOCKCM_IFACE_NOTIFY_ACCEPT = 0,
+    UCT_SOCKCM_IFACE_NOTIFY_REJECT
+} uct_sockcm_iface_notify_t;
+
 typedef struct uct_sockcm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;
