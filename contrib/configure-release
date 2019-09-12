@@ -6,13 +6,12 @@
 #
 
 #
-# UCX build for maximal performance.
+# UCX build for maximal performance while maintaining portability.
 # No extra debugging or profiling code.
 #
 
 basedir=$(cd $(dirname $0) && pwd)
 $basedir/../configure \
-	--enable-optimizations \
 	--disable-logging \
 	--disable-debug \
 	--disable-assertions \

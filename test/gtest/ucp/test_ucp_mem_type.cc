@@ -96,6 +96,7 @@ public:
         m_recv_buffer.reset();
     }
 
+    static const uint64_t SEED = 0x1111111111111111lu;
 protected:
     size_t                     m_size;
     ucs::auto_ptr<mem_buffer>  m_send_buffer, m_recv_buffer;
@@ -109,7 +110,11 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
     EXPECT_EQ(mem_type(), ucp_memory_type_detect(receiver().ucph(),
                                                  m_recv_buffer->ptr(), m_size));
 
+    mem_buffer::pattern_fill(m_send_buffer->ptr(), m_size, SEED, mem_type());
+
     for (int i = 0; i < 3; ++i) {
+        mem_buffer::pattern_fill(m_recv_buffer->ptr(), m_size, 0, mem_type());
+
         void *sreq = ucp_tag_send_nb(sender().ep(), m_send_buffer->ptr(), m_size,
                                      ucp_dt_make_contig(1), 1,
                                      (ucp_send_callback_t)ucs_empty_function);
@@ -118,6 +123,8 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
                                      (ucp_tag_recv_callback_t)ucs_empty_function);
         wait(sreq);
         wait(rreq);
+
+        mem_buffer::pattern_check(m_recv_buffer->ptr(), m_size, SEED, mem_type());
     }
 }
 

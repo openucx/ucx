@@ -75,10 +75,6 @@ ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
                                      (ucp_send_callback_t) ucs_empty_function,
                                      0);
         EXPECT_FALSE(UCS_PTR_IS_ERR(self->reply));
-        
-        if (UCS_PTR_STATUS(self->reply) == UCS_OK) {
-            self->reply = NULL;
-        }
     }
     
     return self->am_handler(self, data, length, flags);

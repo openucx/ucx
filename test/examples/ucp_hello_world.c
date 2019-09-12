@@ -205,7 +205,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         fprintf(stderr, "unable to send UCX address message\n");
         free(msg);
         goto err_ep;
-    } else if (UCS_PTR_STATUS(request) != UCS_OK) {
+    } else if (UCS_PTR_IS_PTR(request)) {
         wait(ucp_worker, request);
         request->completed = 0; /* Reset request state before recycling it */
         ucp_request_release(request);
@@ -258,6 +258,8 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         free(msg);
         goto err_ep;
     } else {
+        /* ucp_tag_msg_recv_nb() cannot return NULL */
+        assert(UCS_PTR_IS_PTR(request));
         wait(ucp_worker, request);
         request->completed = 0;
         ucp_request_release(request);
@@ -335,6 +337,8 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         free(msg);
         goto err;
     } else {
+        /* ucp_tag_msg_recv_nb() cannot return NULL */
+        assert(UCS_PTR_IS_PTR(request));
         wait(ucp_worker, request);
         request->completed = 0;
         ucp_request_release(request);
@@ -381,7 +385,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         fprintf(stderr, "unable to send UCX data message\n");
         free(msg);
         goto err_ep;
-    } else if (UCS_PTR_STATUS(request) != UCS_OK) {
+    } else if (UCS_PTR_IS_PTR(request)) {
         printf("UCX data message was scheduled for send\n");
         wait(ucp_worker, request);
         request->completed = 0;

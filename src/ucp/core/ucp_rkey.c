@@ -15,6 +15,7 @@
 #include <ucp/rma/rma.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/string.h>
 #include <inttypes.h>
 
 
@@ -95,8 +96,8 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
         }
 
         ucs_trace("rkey[%d]=%s for md[%d]=%s", uct_memh_index,
-                  ucs_log_dump_hex(p, md_size, buf, sizeof(buf)), md_index,
-                  context->tl_mds[md_index].rsc.md_name);
+                  ucs_str_dump_hex(p, md_size, buf, sizeof(buf), SIZE_MAX),
+                  md_index, context->tl_mds[md_index].rsc.md_name);
 
         ++uct_memh_index;
         p += md_size;
@@ -314,7 +315,7 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
          snprintf(p, endp - p, "%d:", md_index);
          p += strlen(p);
 
-         ucs_log_dump_hex(rkey_buffer, md_size, p, endp - p);
+         ucs_str_dump_hex(rkey_buffer, md_size, p, endp - p, SIZE_MAX);
          p += strlen(p);
 
          rkey_buffer += md_size;

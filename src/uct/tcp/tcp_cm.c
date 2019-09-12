@@ -424,11 +424,7 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
     }
 
     if (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
-        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_ACK);
-        if (status != UCS_OK) {
-            goto err;
-        }
-        return 1;
+        return 0;
     }
 
     ucs_assertv(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)),
