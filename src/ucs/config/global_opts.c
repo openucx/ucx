@@ -21,7 +21,7 @@
 
 ucs_global_opts_t ucs_global_opts = {
     .log_level             = UCS_LOG_LEVEL_WARN,
-    .log_print_enable      = 1,
+    .log_print_enable      = 0,
     .log_file              = "",
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
