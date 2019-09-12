@@ -669,6 +669,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     unfinished->iovec = iovec ;
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_header_t), flags, id);
+    original_req->send.am.message_id = req->send.am.message_id ;
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
         ret = UCS_STATUS_PTR(status);
@@ -1072,7 +1073,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucs_status_t local_status ;
     ucp_request_t *original_req ;
     ucs_assert(status == UCS_OK) ;
-    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p", request,req) ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p message_id=0x%16lx", request,req,req->send.am.message_id) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
         ep->worker, ep, ep_ext, req->send.am.message_id
         ) ;
