@@ -157,33 +157,34 @@ static void uct_sockcm_iface_recv_handler(int fd, void *arg)
 
     /* attempt another receive only if initial receive was not successful */
     recv_len = sizeof(uct_sockcm_conn_param_t) - sock_id_ctx->recv_len;
+    if (recv_len == 0) {
+        goto out_remove_handler;
+    }
 
-    status = ucs_socket_recv_nb(sock_id_ctx->sock_fd, 
-                                (char *) &sock_id_ctx->conn_param + sock_id_ctx->recv_len,
+    status = ucs_socket_recv_nb(sock_id_ctx->sock_fd,
+                                UCS_PTR_BYTE_OFFSET(&sock_id_ctx->conn_param,
+                                                    sock_id_ctx->recv_len),
                                 &recv_len, NULL, NULL);
-    if (status == UCS_ERR_CANCELED || status == UCS_ERR_IO_ERROR) {
+    if ((status == UCS_ERR_CANCELED) || (status == UCS_ERR_IO_ERROR)) {
         ucs_warn("recv failed in recv handler");
         /* TODO: clean up resources allocated for client endpoint? */
         return;
     }
 
     sock_id_ctx->recv_len += ((UCS_ERR_NO_PROGRESS == status) ? 0 : recv_len);
-    ucs_debug("recv_handler: recv len = %ld ctx->recv_len = %ld\n", recv_len, sock_id_ctx->recv_len);
-
     if (sock_id_ctx->recv_len != sizeof(uct_sockcm_conn_param_t)) {
         /* handler should be notified when remaining pieces show up */
         return;
     }
 
-    ucs_assert(sizeof(uct_sockcm_conn_param_t) == sock_id_ctx->recv_len);
-
-    status = ucs_async_modify_handler(fd, 0);
-    if (status != UCS_OK) {
-        ucs_debug("Unable to modify handler");
+    if (UCS_OK != uct_sockcm_iface_process_conn_req((uct_sockcm_ctx_t*)arg)) {
+        ucs_error("unable to process connection request");
     }
 
-    if (UCS_OK != uct_sockcm_iface_process_conn_req((uct_sockcm_ctx_t *) arg)) {
-        ucs_error("Unable to process connection request");
+out_remove_handler:
+    status = ucs_async_modify_handler(fd, 0);
+    if (status != UCS_OK) {
+        ucs_debug("unable to modify handler");
     }
 }
 
@@ -198,20 +199,18 @@ static void uct_sockcm_iface_event_handler(int fd, void *arg)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
-    addrlen = sizeof(struct sockaddr);
-    do {
-        accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr,
-                           &addrlen);
-        if (accept_fd == -1) {
-             if ((errno == EAGAIN) || (errno == EINTR)) {
-                  ucs_debug("accept() busy: %m");
-             } else {
-                  /* accept failed here, let the client try again */
-                  ucs_warn("accept() failed with non-recoverable error %m");
-                  return;
-             }
-        }
-    } while (accept_fd == -1);
+    addrlen   = sizeof(struct sockaddr);
+    accept_fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
+    if (accept_fd == -1) {
+         if ((errno == EAGAIN) || (errno == EINTR)) {
+              ucs_debug("accept(fd=%d) failed: %m", iface->listen_fd);
+         } else {
+              /* accept failed here, let the client try again */
+              ucs_warn("accept(fd=%d) failed with non-recoverable error %m",
+                       iface->listen_fd);
+         }
+         return;
+    }
 
     ucs_debug("sockcm_iface %p: accepted connection from %s at fd %d %m", iface,
               ucs_sockaddr_str(&peer_addr, ip_port_str,
