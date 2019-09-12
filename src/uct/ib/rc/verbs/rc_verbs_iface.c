@@ -39,10 +39,6 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
-  {"FENCE", "y",
-   "Request IB fence when API fence requested.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, fence), UCS_CONFIG_TYPE_BOOL},
-
   {NULL}
 };
 
@@ -216,7 +212,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
-    self->super.config.fence         = config->fence;
+    /* TODO: for now only weak fence is supported by verbs */
+    self->super.config.fence         = config->super.super.fence != UCT_RC_FENCE_NONE;
 
     self->super.progress = uct_rc_verbs_iface_progress;
 

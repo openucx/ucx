@@ -44,7 +44,6 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
-    int                                fence;
 } uct_rc_verbs_iface_config_t;
 
 

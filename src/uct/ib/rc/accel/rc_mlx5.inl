@@ -440,8 +440,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         /* Set RDMA segment */
         fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq,
                                       (opcode_flags == MLX5_OPCODE_RDMA_READ) ?
-                                      UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC :
-                                      UCT_IB_MLX5_WQE_CTRL_FENCE_PUT);
+                                      iface->config.atomic_fence :
+                                      iface->config.put_fence);
 
         ucs_assert(length <= UCT_IB_MAX_MESSAGE_SIZE);
 
@@ -461,8 +461,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     case MLX5_OPCODE_ATOMIC_FA:
     case MLX5_OPCODE_ATOMIC_CS:
-        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq,
-                                      UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC);
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq, iface->config.atomic_fence);
         ucs_assert(length == sizeof(uint64_t));
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
@@ -481,8 +480,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case MLX5_OPCODE_ATOMIC_MASKED_CS:
-        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq,
-                                      UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC);
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq, iface->config.atomic_fence);
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
@@ -520,8 +518,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
      case MLX5_OPCODE_ATOMIC_MASKED_FA:
-        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq,
-                                      UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC);
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq, iface->config.atomic_fence);
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
@@ -631,8 +628,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 #endif
 
     case MLX5_OPCODE_RDMA_READ:
-        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq,
-                                      UCT_IB_MLX5_WQE_CTRL_FENCE_ATOMIC);
+        fm_ce_se |= uct_rc_mlx5_ep_fm(iface, txwq, iface->config.atomic_fence);
         /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */

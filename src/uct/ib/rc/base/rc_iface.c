@@ -17,6 +17,13 @@
 #include <ucs/type/class.h>
 
 
+static const char *uct_ib_fence_values[] = {
+    [UCT_RC_FENCE_NONE]   = "none",
+    [UCT_RC_FENCE_WEAK]   = "weak",
+    [UCT_RC_FENCE_STRONG] = "strong",
+    [UCT_RC_FENCE_LAST]   = NULL
+};
+
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),
@@ -41,7 +48,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
   {"RNR_TIMEOUT", "1ms",
    "RNR timeout",
-   ucs_offsetof(uct_rc_iface_common_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
 
   {"RNR_RETRY_COUNT", "7",
    "RNR retries",
@@ -67,6 +74,11 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Enable out-of-order RDMA data placement",
    ucs_offsetof(uct_rc_iface_common_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
 #endif
+
+  {"FENCE", "weak",
+   "Request IB fence type when API fence requested.",
+   ucs_offsetof(uct_rc_iface_common_config_t, fence),
+                UCS_CONFIG_TYPE_ENUM(uct_ib_fence_values)},
 
   {NULL}
 };

@@ -424,9 +424,9 @@ uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
     /* a call to iface_fence increases beat, so if endpoint beat is not in
      * sync with iface beat it means the endpoint did not post any WQE with
      * fence flag yet */
-    fence          = (fi->fence_beat != iface->tx.fi.fence_beat);
+    fence          = flag * !!(fi->fence_beat != iface->tx.fi.fence_beat);
     fi->fence_beat = iface->tx.fi.fence_beat;
-    return fence ? flag : 0;
+    return fence;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

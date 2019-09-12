@@ -136,12 +136,24 @@ typedef struct uct_rc_fc_request {
 } uct_rc_fc_request_t;
 
 
+/**
+ * RC fence type.
+ */
+typedef enum uct_rc_fence {
+    UCT_RC_FENCE_NONE,
+    UCT_RC_FENCE_WEAK,
+    UCT_RC_FENCE_STRONG,
+    UCT_RC_FENCE_LAST
+} uct_rc_fence_t;
+
+
 /* Common configuration used for rc verbs, rcx and dc transports */
 typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
     uct_ib_mtu_t             path_mtu;
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
+    int                      fence;
 
     struct {
         double               timeout;
