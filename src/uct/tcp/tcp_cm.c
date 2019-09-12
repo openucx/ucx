@@ -427,8 +427,10 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
         return 0;
     }
 
-    ucs_assertv(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)),
-                "ep %p mustn't have TX cap", ep);
+    ucs_assertv((ep->conn_state != UCT_TCP_EP_CONN_STATE_ACCEPTING) ||
+                !(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)),
+                "ep %p (connection state - %s) mustn't have TX cap",
+                ep, uct_tcp_ep_cm_state[ep->conn_state].name);
 
     if (!uct_tcp_ep_is_self(ep) &&
         (peer_ep = uct_tcp_cm_search_ep(iface, &ep->peer_addr,
