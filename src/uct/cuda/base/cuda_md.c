@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -18,7 +19,8 @@ ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t le
                                               ucs_memory_type_t *mem_type_p)
 {
     CUmemorytype memType = 0;
-    uint32_t isManaged = 0;
+    uint32_t isManaged   = 0;
+    unsigned value       = 1;
     void *attrdata[] = {(void *)&memType, (void *)&isManaged};
     CUpointer_attribute attributes[2] = {CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                          CU_POINTER_ATTRIBUTE_IS_MANAGED};
@@ -35,6 +37,11 @@ ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t le
             *mem_type_p = UCS_MEMORY_TYPE_CUDA_MANAGED;
         } else {
             *mem_type_p = UCS_MEMORY_TYPE_CUDA;
+            cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                           (CUdeviceptr)addr);
+            if (cu_err != CUDA_SUCCESS) {
+                return UCS_ERR_INVALID_ADDR;
+            }
         }
         return UCS_OK;
     }
