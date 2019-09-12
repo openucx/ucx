@@ -167,7 +167,6 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     }
 
     iface_attr->latency.growth += 1e-9;            /* 1 ns per each extra QP */
-    iface_attr->iface_addr_len  = sizeof(uint8_t); /* overwrite */
     iface_attr->overhead        = 75e-9;           /* Software overhead */
 
     return UCS_OK;
@@ -390,9 +389,9 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
-    .iface_get_address        = uct_rc_iface_get_address,
+    .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_rc_iface_is_reachable,
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
     },
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
