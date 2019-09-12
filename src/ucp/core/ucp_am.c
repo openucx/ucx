@@ -312,7 +312,9 @@ static ucs_status_t ucp_am_rdma_reply_contig_short(uct_pending_req_t *self)
 static ucs_status_t ucp_am_rdma_completion_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_contig_short req=%p",req) ;
     ucs_status_t status = ucp_am_send_rdma_completion_short(req->send.ep,req->send.buffer) ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_contig_short status=%d", status) ;
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
