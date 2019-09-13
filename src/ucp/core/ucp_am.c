@@ -22,7 +22,7 @@
 #include <ucp/dt/dt.inl>
 #include <ucp/rma/rma.h>
 
-#define UCP_AM_DEBUG ucs_print
+#define UCP_AM_DEBUG ucs_warn
 
 void ucp_am_ep_init(ucp_ep_h ep)
 {
