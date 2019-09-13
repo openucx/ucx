@@ -673,7 +673,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     unfinished->iovec = iovec ;
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_header_t), flags, id);
-    original_req->send.am.message_id = req->send.am.message_id ;
+    original_req->send.am.message_id = ep->worker->am_messsage_id ;
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
         ret = UCS_STATUS_PTR(status);
@@ -682,7 +682,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
 
     length = ucp_dt_iov_length(iovec, count);
     unfinished->rdma_header.total_size = length ;
-    unfinished->rdma_header.msg_id     = req->send.am.message_id ;
+    unfinished->rdma_header.msg_id     = original_req->send.am.message_id ;
     unfinished->rdma_header.ep_ptr      = ucp_request_get_dest_ep_ptr(req) ;
     memcpy(unfinished->rdma_header.iovec_0, iovec[0].buffer, iovec[0].length) ;
     unfinished->rdma_header.am_id      = id ;
@@ -814,7 +814,7 @@ ucp_am_rdma_client_find_unfinished(ucp_worker_h worker, ucp_ep_h ep,
                                    uint64_t msg_id)
 {
     ucp_am_rdma_client_unfinished_t *unfinished;
-    UCP_AM_DEBUG("AM RDMA looking for msg_id=%lu", msg_id) ;
+    UCP_AM_DEBUG("AM RDMA looking for msg_id=0x%016lx", msg_id) ;
     /* TODO make this hash table for faster lookup */
     ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rdma_client, list) {
         if (unfinished->msg_id == msg_id) {
@@ -1090,7 +1090,7 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucs_status_t local_status ;
     ucp_request_t *original_req ;
     ucs_assert(status == UCS_OK) ;
-    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p message_id=0x%16lx", request,req,req->send.am.message_id) ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p message_id=0x%016lx", request,req,req->send.am.message_id) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
         ep->worker, ep, ep_ext, req->send.am.message_id
         ) ;
@@ -1113,6 +1113,15 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     original_req = unfinished->req ;
 
     unfinished->cb(original_req+1, UCS_OK) ;
+
+    if ( ret == UCS_OK )
+      {
+        /* AM was issued synchronously; free storage */
+        UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completion_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
+
+        ucs_list_del(&unfinished->list);
+        ucs_free(unfinished);
+      }
 
 }
 
