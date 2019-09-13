@@ -690,6 +690,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     unfinished->req      = original_req;
     unfinished->msg_id   = req->send.am.message_id;
     unfinished->cb       = cb ;
+    UCP_AM_DEBUG("AM_RDMA unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
 
     ucs_list_add_head(&ep_ext->am.started_ams_rdma_client, &unfinished->list);
 
@@ -831,7 +832,7 @@ ucp_am_rdma_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext)
     UCP_AM_DEBUG("AM RDMA showing unfinished AMs") ;
     /* TODO make this hash table for faster lookup */
     ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rdma_client, list) {
-        UCP_AM_DEBUG("AM RDMA msg_id=0x%016lx", unfinished->msg_id ) ;
+        UCP_AM_DEBUG("AM RDMA unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id ) ;
     }
 }
 
@@ -1069,6 +1070,7 @@ ucp_am_rdma_completed_callback(void *request, ucs_status_t status)
         ep->worker, ep, ep_ext, req->send.am.message_id
         ) ;
     ucs_assert(unfinished != NULL) ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_completed_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
 
     ucs_list_del(&unfinished->list);
     ucs_free(unfinished);
