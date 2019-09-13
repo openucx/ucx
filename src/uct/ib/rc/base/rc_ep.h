@@ -424,7 +424,7 @@ uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
     /* a call to iface_fence increases beat, so if endpoint beat is not in
      * sync with iface beat it means the endpoint did not post any WQE with
      * fence flag yet */
-    fence          = flag * !!(fi->fence_beat != iface->tx.fi.fence_beat);
+    fence          = flag * (fi->fence_beat != iface->tx.fi.fence_beat);
     fi->fence_beat = iface->tx.fi.fence_beat;
     return fence;
 }
@@ -434,9 +434,8 @@ uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
-    /* in case PCI Atomics are enabled atomic/read operation on target
-     * are unordered according to PCI specification so we need to
-     * request atomic fence for next such operation */
+    /* in case if fence is requested and enabled by configuration
+     * we need to schedule fence for next RDMA operation */
     if (fence && iface->config.fence) {
         fi->fence_beat = iface->tx.fi.fence_beat - 1;
     }
