@@ -1090,7 +1090,10 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     unsigned i, num_uct_components;
     uct_device_type_t dev_type;
     ucs_status_t status;
+    ucs_memory_type_t mem_type;
     unsigned max_mds;
+    int md_index;
+    int found;
 
     context->tl_cmpts         = NULL;
     context->num_cmpts        = 0;
@@ -1181,6 +1184,25 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                              &tl_cfg_mask, config);
         if (status != UCS_OK) {
             goto err_free_resources;
+        }
+    }
+
+    /* Check if mem type support is requested w/o its basic detection TLS */
+    for (md_index = 0; md_index < context->num_mds; md_index++) {
+        mem_type = context->tl_mds[md_index].attr.cap.access_mem_type;
+        if (!UCP_MEM_IS_HOST(mem_type)) {
+            for (i = 0, found = 0; i < context->num_mem_type_detect_mds; ++i) {
+                if (context->tl_mds[context->mem_type_detect_mds[i]].
+                    attr.cap.access_mem_type == mem_type) {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (found == 0) {
+                ucs_warn("%s memory type supported but is not detectable",
+                         ucs_memory_type_names[mem_type]);
+            }
         }
     }
 
