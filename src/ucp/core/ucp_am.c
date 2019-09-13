@@ -35,6 +35,9 @@ void ucp_am_ep_init(ucp_ep_h ep)
     }
 }
 
+static void
+ucp_am_rdma_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext) ;
+
 void ucp_am_ep_cleanup(ucp_ep_h ep)
 {
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
@@ -48,6 +51,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
                           &ep_ext->am.started_ams_rdma_client))) {
             ucs_warn("worker : %p not all UCP active messages have been"
                      "run to completion (rdma client)", ep->worker);
+            ucp_am_rdma_client_show_unfinished(ep) ;
         }
         if (ucs_unlikely(!ucs_list_is_empty(
                           &ep_ext->am.started_ams_rdma_server))) {
@@ -820,20 +824,15 @@ ucp_am_rdma_client_find_unfinished(ucp_worker_h worker, ucp_ep_h ep,
     return NULL;
 }
 
-static ucp_am_rdma_client_unfinished_t *
+static void
 ucp_am_rdma_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext)
 {
     ucp_am_rdma_client_unfinished_t *unfinished;
     UCP_AM_DEBUG("AM RDMA showing unfinished AMs") ;
     /* TODO make this hash table for faster lookup */
     ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rdma_client, list) {
-        UCP_AM_DEBUG("AM RDMA msg_id=0x%016lx", unfinished->)
-        if (unfinished->msg_id == msg_id) {
-            return unfinished;
-        }
+        UCP_AM_DEBUG("AM RDMA msg_id=0x%016lx", unfinished->mag_id ) ;
     }
-
-    return NULL;
 }
 
 static ucp_am_rdma_server_unfinished_t *
