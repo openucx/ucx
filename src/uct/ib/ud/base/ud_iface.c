@@ -449,8 +449,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         self->async.slow_tick = ucs_time_from_sec(config->slow_timer_tick);
     }
 
-    if (config->slow_timer_backoff <= 0.) {
-        ucs_error("The slow timer back off should be > 0 (%lf)",
+    if (config->slow_timer_backoff < 1.0) {
+        ucs_error("The slow timer back off must be >= 1.0 (%lf)",
                   config->slow_timer_backoff);
         return UCS_ERR_INVALID_PARAM;
     } else {
@@ -567,11 +567,12 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
     {"SLOW_TIMER_TICK", "100ms", "Initial timeout for retransmissions",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_tick), UCS_CONFIG_TYPE_TIME},
-    {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
+    {"SLOW_TIMER_BACKOFF", "2.0",
+     "Timeout multiplier for resending trigger (must be >= 1)",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
                   UCS_CONFIG_TYPE_DOUBLE},
     {"ETH_DGID_CHECK", "y",
-     "Enable checking destination GID for incoming packets of Ethernet network\n"
+     "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
      ucs_offsetof(uct_ud_iface_config_t, dgid_check), UCS_CONFIG_TYPE_BOOL},
     {NULL}

@@ -116,6 +116,27 @@ UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
     EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
 
+UCS_TEST_P(test_ud_slow_timer, backoff_config) {
+    /* 1 is a valid back off value */
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config,
+                  "UD_SLOW_TIMER_BACKOFF", "1"));
+    entity *e = uct_test::create_entity(0);
+    m_entities.push_back(e);
+
+    {
+        /* iface creation should fail with back off value less than 1 */
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config,
+                      "UD_SLOW_TIMER_BACKOFF", "0.95"));
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        uct_iface_h iface;
+        ucs_status_t status = uct_iface_open(e->md(), e->worker(),
+                                             &e->iface_params(),
+                                             m_iface_config, &iface);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        EXPECT_EQ(NULL, iface);
+    }
+}
+
 #if UCT_UD_EP_DEBUG_HOOKS
 /* no traffic - no ticks */
 UCS_TEST_P(test_ud_slow_timer, tick1) {
