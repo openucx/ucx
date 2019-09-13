@@ -688,7 +688,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     unfinished->rdma_header.am_id      = id ;
 
     unfinished->req      = original_req;
-    unfinished->msg_id   = req->send.am.message_id;
+    unfinished->msg_id   = original_req->send.am.message_id;
     unfinished->cb       = cb ;
     UCP_AM_DEBUG("AM_RDMA unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
 
