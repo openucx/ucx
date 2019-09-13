@@ -293,9 +293,10 @@ static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
     uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
     ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)req->send.buffer ;
-    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_contig_short ep_ptr now=%lu", ep_ptr) ;
+    ucs_status_t status ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
     rdma_hdr->ep_ptr = ep_ptr ;
-    ucs_status_t status = ucp_am_send_rdma_short(req->send.ep,req->send.buffer) ;
+    status = ucp_am_send_rdma_short(req->send.ep,req->send.buffer) ;
     UCP_AM_DEBUG("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
@@ -306,7 +307,13 @@ static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
 static ucs_status_t ucp_am_rdma_reply_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = ucp_am_send_rdma_reply_short(req->send.ep,req->send.buffer) ;
+    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+    ucp_am_rdma_reply_header_t *rdma_reply_hdr = (ucp_am_rdma_reply_header_t *)req->send.buffer ;
+    ucs_status_t status ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
+    rdma_reply_hdr->ep_ptr = ep_ptr ;
+    status = ucp_am_send_rdma_reply_short(req->send.ep,req->send.buffer) ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
@@ -979,7 +986,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_am_hdr_t *hdr              = (ucp_am_hdr_t *)am_data;
     UCP_AM_DEBUG("AM RDMA hdr=0x%016lx", *(unsigned long *)hdr) ;
     ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)(hdr+1);
-    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_handler rdma_hdr=(total_size=%lu,msg_id=0x%lx,ep_ptr=%lx,am_id=%u)",
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_handler rdma_hdr=(total_size=%lu,msg_id=0x%lx,ep_ptr=0x%016lx,am_id=%u)",
         rdma_hdr->total_size, rdma_hdr->msg_id, rdma_hdr->ep_ptr, rdma_hdr->am_id) ;
 
     ucp_ep_h ep                    = ucp_worker_get_ep_by_ptr(worker,
