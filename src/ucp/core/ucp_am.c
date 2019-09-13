@@ -51,7 +51,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
                           &ep_ext->am.started_ams_rdma_client))) {
             ucs_warn("worker : %p not all UCP active messages have been"
                      "run to completion (rdma client)", ep->worker);
-            ucp_am_rdma_client_show_unfinished(ep) ;
+            ucp_am_rdma_client_show_unfinished(ep_ext) ;
         }
         if (ucs_unlikely(!ucs_list_is_empty(
                           &ep_ext->am.started_ams_rdma_server))) {
@@ -831,7 +831,7 @@ ucp_am_rdma_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext)
     UCP_AM_DEBUG("AM RDMA showing unfinished AMs") ;
     /* TODO make this hash table for faster lookup */
     ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rdma_client, list) {
-        UCP_AM_DEBUG("AM RDMA msg_id=0x%016lx", unfinished->mag_id ) ;
+        UCP_AM_DEBUG("AM RDMA msg_id=0x%016lx", unfinished->msg_id ) ;
     }
 }
 
