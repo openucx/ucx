@@ -119,6 +119,9 @@ ucs_status_t uct_rc_verbs_ep_atomic64_fetch(uct_ep_h tl_ep, uct_atomic_op_t opco
                                             uint64_t remote_addr, uct_rkey_t rkey,
                                             uct_completion_t *comp);
 
+ucs_status_t uct_rc_verbs_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
+                                         unsigned flags);
+
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp);
 

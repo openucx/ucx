@@ -982,6 +982,20 @@ ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
                              &iface->super.super, status);
 }
 
+ucs_status_t uct_rc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
+                                        unsigned flags)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
+
+    if (uct_rc_ep_has_tx_resources(ep) &&
+        uct_rc_iface_has_tx_resources(iface)) {
+        return UCS_ERR_BUSY;
+    }
+
+    return uct_rc_ep_pending_add(tl_ep, n, flags);
+}
+
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);

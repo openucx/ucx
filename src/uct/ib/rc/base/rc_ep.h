@@ -416,6 +416,12 @@ uct_rc_fc_req_moderation(uct_rc_fc_t *fc, uct_rc_iface_t *iface)
             UCT_RC_EP_FC_FLAG_SOFT_REQ : 0;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_fm_reset(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi)
+{
+    fi->fence_beat = iface->tx.fi.fence_beat;
+}
+
 static UCS_F_ALWAYS_INLINE int
 uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
 {
@@ -424,9 +430,18 @@ uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
     /* a call to iface_fence increases beat, so if endpoint beat is not in
      * sync with iface beat it means the endpoint did not post any WQE with
      * fence flag yet */
-    fence          = (fi->fence_beat != iface->tx.fi.fence_beat) ? flag : 0;
-    fi->fence_beat = iface->tx.fi.fence_beat;
+    fence = (fi->fence_beat != iface->tx.fi.fence_beat) ? flag : 0;
+    uct_rc_ep_fm_reset(iface, fi);
     return fence;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_is_fence(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi)
+{
+    /* a call to iface_fence increases beat, so if endpoint beat is not in
+     * sync with iface beat it means the endpoint did not post any WQE with
+     * fence flag yet */
+    return fi->fence_beat != iface->tx.fi.fence_beat;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

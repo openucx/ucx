@@ -221,10 +221,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
         self->super.config.fence_mode = UCT_RC_FENCE_MODE_NONE;
     } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_STRONG) {
-        /* TODO: for now strong fence mode is not supported by verbs */
-        ucs_error("fence mode 'strong' is not supported by verbs");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
+        self->super.config.fence_mode = UCT_RC_FENCE_MODE_STRONG;
     } else {
         ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
         status = UCS_ERR_INVALID_PARAM;
@@ -351,6 +348,31 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsign
     return count;
 }
 
+static ucs_status_t uct_rc_verbs_iface_fence(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    ucs_status_t status;
+    unsigned count;
+    uct_rc_ep_t *ep;
+
+    count = 0;
+    ucs_list_for_each(ep, &iface->ep_list, list) {
+        status = uct_ep_fence(&ep->super.super, 0);
+        if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
+            ++count;
+        } else if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (count != 0) {
+        return UCS_INPROGRESS;
+    }
+
+    UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
+    return UCS_OK;
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super,
@@ -384,7 +406,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_atomic_cswap32        = (void*)ucs_empty_function_return_unsupported,
     .ep_atomic32_post         = (void*)ucs_empty_function_return_unsupported,
     .ep_atomic32_fetch        = (void*)ucs_empty_function_return_unsupported,
-    .ep_pending_add           = uct_rc_ep_pending_add,
+    .ep_pending_add           = uct_rc_verbs_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_verbs_ep_flush,
     .ep_fence                 = uct_rc_verbs_ep_fence,
@@ -393,7 +415,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_get_address           = uct_rc_verbs_ep_get_address,
     .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
-    .iface_fence              = uct_rc_iface_fence,
+    .iface_fence              = uct_rc_verbs_iface_fence,
     .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
