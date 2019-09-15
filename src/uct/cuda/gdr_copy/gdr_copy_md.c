@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2017-2019.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -61,6 +62,7 @@ static ucs_status_t uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
 
     packed->vaddr   = mem_hndl->info.va;
     packed->bar_ptr = mem_hndl->bar_ptr;
+    packed->mh      = mem_hndl->mh;
 
     return UCS_OK;
 }
@@ -80,6 +82,7 @@ static ucs_status_t uct_gdr_copy_rkey_unpack(uct_component_t *component,
 
     key->vaddr      = packed->vaddr;
     key->bar_ptr    = packed->bar_ptr;
+    key->mh         = packed->mh;
 
     *handle_p = NULL;
     *rkey_p   = (uintptr_t)key;
