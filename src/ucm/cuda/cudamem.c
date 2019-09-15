@@ -67,8 +67,14 @@ UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 static void ucm_cuda_set_ptr_attr(CUdeviceptr dptr)
 {
     unsigned int value = 1;
+    CUresult ret;
+    const char *cu_err_str;
 
-    cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, dptr);
+    ret = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, dptr);
+    if (ret != CUDA_SUCCESS) {
+        cuGetErrorString(ret, &cu_err_str);
+        ucm_warn("cuPointerSetAttribute(%p) failed: %s", (void *) dptr, cu_err_str);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void

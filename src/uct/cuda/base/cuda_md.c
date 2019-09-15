@@ -11,6 +11,7 @@
 #include "cuda_md.h"
 
 #include <ucs/sys/module.h>
+#include <ucs/debug/log.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 
@@ -25,6 +26,7 @@ ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t le
     CUpointer_attribute attributes[2] = {CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                          CU_POINTER_ATTRIBUTE_IS_MANAGED};
     CUresult cu_err;
+    const char *cu_err_str;
 
     if (addr == NULL) {
         *mem_type_p = UCS_MEMORY_TYPE_HOST;
@@ -40,7 +42,8 @@ ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, void *addr, size_t le
             cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
                                            (CUdeviceptr)addr);
             if (cu_err != CUDA_SUCCESS) {
-                return UCS_ERR_INVALID_ADDR;
+                cuGetErrorString(cu_err, &cu_err_str);
+                ucs_warn("cuPointerSetAttribute(%p) error: %s", (void*) addr, cu_err_str);
             }
         }
         return UCS_OK;
