@@ -689,6 +689,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     }
 
     length = ucp_dt_iov_length(iovec, count);
+    UCP_AM_DEBUG("AM RDMA count=%lu iovec[0].length=%lu iovec[1].length=%lu length=%lu", count, iovec[0].length, iovec[1].length, length) ;
     unfinished->rdma_header.total_size = length ;
     unfinished->rdma_header.msg_id     = original_req->send.am.message_id ;
     unfinished->rdma_header.ep_ptr      = ucp_request_get_dest_ep_ptr(req) ;
