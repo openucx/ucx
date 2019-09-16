@@ -162,7 +162,7 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
 static size_t 
 ucp_am_rdma_bcopy_pack_args_single_reply(void *dest, void *arg)
 {
-    ucp_am_rdma_reply_hdr_t *reply_hdr = dest;
+    ucp_am_rdma_reply_header_t *reply_hdr = dest;
     ucp_request_t *req = arg;
     size_t length;
 
@@ -326,21 +326,23 @@ static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
     return status ;
 }
 
-static ucs_status_t ucp_am_rdma_reply_contig_short(uct_pending_req_t *self)
-{
-    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
-    ucp_am_rdma_reply_header_t *rdma_reply_hdr = (ucp_am_rdma_reply_header_t *)req->send.buffer ;
-    ucs_status_t status ;
-    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
-    rdma_reply_hdr->ep_ptr = ep_ptr ;
-    status = ucp_am_send_rdma_reply_short(req->send.ep,req->send.buffer) ;
-    UCP_AM_DEBUG("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return status ;
-}
+/*
+ * static ucs_status_t ucp_am_rdma_reply_contig_short(uct_pending_req_t *self)
+ * {
+ *   ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+ *   uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+ *   ucp_am_rdma_reply_header_t *rdma_reply_hdr = (ucp_am_rdma_reply_header_t *)req->send.buffer ;
+ *   ucs_status_t status ;
+ *   UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
+ *   rdma_reply_hdr->ep_ptr = ep_ptr ;
+ *   status = ucp_am_send_rdma_reply_short(req->send.ep,req->send.buffer) ;
+ *   UCP_AM_DEBUG("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
+ *   if (ucs_likely(status == UCS_OK)) {
+ *       ucp_request_complete_send(req, UCS_OK);
+ *   }
+ *   return status ;
+ *}
+ */
 
 static ucs_status_t ucp_am_rdma_completion_contig_short(uct_pending_req_t *self)
 {
@@ -391,7 +393,7 @@ static ucs_status_t ucp_am_rdma_bcopy_single_reply(uct_pending_req_t *self)
 
     status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RDMA_REPLY,
                                     ucp_am_rdma_bcopy_pack_args_single_reply);
-    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_bcopy_single_reply status=%lu", status);
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_bcopy_single_reply status=%d", status);
     if (status == UCS_OK) {
         ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
