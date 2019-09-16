@@ -1180,7 +1180,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_worker_h worker         = (ucp_worker_h)am_arg;
     ucp_am_hdr_t *hdr           = (ucp_am_hdr_t *)am_data;
     ucp_am_rdma_reply_header_t *rdma_reply_hdr =
-        (ucp_am_rdma_reply_header_t *)(hdr+1);
+        (ucp_am_rdma_reply_header_t *)hdr;
     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_handler worker=%p am_length=%lu sizeof(ucp_am_rdma_reply_header_t)=%lu",
         worker, am_length, sizeof(ucp_am_rdma_reply_header_t)) ;
     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_handler msg_id=0x%016lx ep_ptr=0x%016lx am_id=%u address=0x%016lx",
