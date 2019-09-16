@@ -698,14 +698,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out ;
     }
+    UCP_AM_DEBUG("ucp_am_rdma_send_nb original_req=%p", original_req) ;
 
     req = ucp_request_get(ep->worker);
     if (ucs_unlikely(req == NULL)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out ;
     }
+    UCP_AM_DEBUG("ucp_am_rdma_send_nb req=%p", req) ;
 
-   unfinished           = ucs_malloc(sizeof(ucp_am_rdma_client_unfinished_t),
+
+    unfinished           = ucs_malloc(sizeof(ucp_am_rdma_client_unfinished_t),
                                          "unfinished UCP AM rdma client");
     if (ucs_unlikely(unfinished == NULL)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
@@ -1087,6 +1090,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 
     req = ucp_request_get(ep->worker);
     ucs_assert(req != NULL) ;
+    UCP_AN_DEBUG("AM RDMA ucp_am_rdma_handler req=%p", req) ;
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_reply_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_reply_header_t), 0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
