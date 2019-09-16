@@ -160,6 +160,28 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
 }
 
 static size_t 
+ucp_am_rdma_bcopy_pack_args_single_reply(void *dest, void *arg)
+{
+    ucp_am_rdma_reply_hdr_t *reply_hdr = dest;
+    ucp_request_t *req = arg;
+    size_t length;
+
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_bcopy_pack_args_single_reply dest=%p arg=%p", dest, arg) ;
+    ucs_assert(req->send.state.dt.offset == 0);
+
+    length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
+                         UCS_MEMORY_TYPE_HOST, reply_hdr,
+                         req->send.buffer,
+                         &req->send.state.dt, req->send.length);
+    reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
+
+    UCP_AM_DEBUG("AM RDMA length=%lu req->send.length=%lu", length, req->send.length) ;
+    ucs_assert(length == req->send.length);
+
+    return length;
+}
+
+static size_t
 ucp_am_bcopy_pack_args_first(void *dest, void *arg)
 {
     ucp_am_long_hdr_t *hdr = dest;
@@ -354,6 +376,22 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
     
     status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY, 
                                     ucp_am_bcopy_pack_args_single_reply);
+    if (status == UCS_OK) {
+        ucp_request_send_generic_dt_finish(req);
+        ucp_request_complete_send(req, UCS_OK);
+    }
+
+    return status;
+}
+
+static ucs_status_t ucp_am_rdma_bcopy_single_reply(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
+
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RDMA_REPLY,
+                                    ucp_am_rdma_bcopy_pack_args_single_reply);
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_bcopy_single_reply status=%lu", status);
     if (status == UCS_OK) {
         ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
@@ -1059,7 +1097,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 
     unfinished->rdma_reply_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
 
-    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_reply_contig_short, ucp_am_rdma_callback) ;
+    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_bcopy_single_reply, ucp_am_rdma_callback) ;
     UCP_AM_DEBUG("AM RDMA reply ucp_am_send_rdma_req ret=%p", ret) ;
 
     return UCS_OK ;
