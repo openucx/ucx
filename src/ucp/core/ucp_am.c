@@ -171,7 +171,7 @@ ucp_am_rdma_bcopy_pack_args_single_reply(void *dest, void *arg)
     memcpy(reply_hdr, req->send.buffer, sizeof(ucp_am_rdma_reply_header_t)) ;
     reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_bcopy_pack_args_single_reply msg_id=0x%016lx ep_ptr=0x%016lx am_id=%u address=0x%016lx",
-        reply_hdr->msg_id, reply_hdr->ep_ptr, reply_hdr->am_id reply_hdr->address) ;
+        reply_hdr->msg_id, reply_hdr->ep_ptr, reply_hdr->am_id, reply_hdr->address) ;
 
     return sizeof(ucp_am_rdma_reply_header_t);
 }
