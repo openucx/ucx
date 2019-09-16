@@ -1183,7 +1183,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
         (ucp_am_rdma_reply_header_t *)(hdr+1);
     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_handler worker=%p", worker) ;
     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_reply_handler msg_id=0x%016lx ep_ptr=0x%016lx am_id=%u address=0x%016lx",
-        reply_hdr->msg_id, reply_hdr->ep_ptr, reply_hdr->am_id, reply_hdr->address) ;
+        rdma_reply_hdr->msg_id, rdma_reply_hdr->ep_ptr, rdma_reply_hdr->am_id, rdma_reply_hdr->address) ;
     ucp_ep_h ep = ucp_worker_get_ep_by_ptr(worker, rdma_reply_hdr->ep_ptr) ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
 
