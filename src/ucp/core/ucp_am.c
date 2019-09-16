@@ -266,21 +266,21 @@ static ucs_status_t ucp_am_send_rdma_short(ucp_ep_h ep,
                            (void *)payload, sizeof(ucp_am_rdma_header_t));
 }
 
-static ucs_status_t ucp_am_send_rdma_reply_short(ucp_ep_h ep,
-                                     const ucp_am_rdma_reply_header_t *payload)
-{
-    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
-    ucp_am_hdr_t hdr;
-
-    hdr.am_hdr.am_id  = 0;
-    hdr.am_hdr.length = sizeof(ucp_am_rdma_reply_header_t);
-    hdr.am_hdr.flags  = 0;
-    ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
-
-    return uct_ep_am_short(am_ep, UCP_AM_ID_RDMA_REPLY, hdr.u64,
-                         (void *)payload, sizeof(ucp_am_rdma_reply_header_t));
-}
-
+/* static ucs_status_t ucp_am_send_rdma_reply_short(ucp_ep_h ep,
+ *                                    const ucp_am_rdma_reply_header_t *payload)
+ * {
+ *   uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
+ *   ucp_am_hdr_t hdr;
+ *
+ *   hdr.am_hdr.am_id  = 0;
+ *   hdr.am_hdr.length = sizeof(ucp_am_rdma_reply_header_t);
+ *   hdr.am_hdr.flags  = 0;
+ *   ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
+ *
+ *   return uct_ep_am_short(am_ep, UCP_AM_ID_RDMA_REPLY, hdr.u64,
+ *                        (void *)payload, sizeof(ucp_am_rdma_reply_header_t));
+ * }
+ */
 static ucs_status_t ucp_am_send_rdma_completion_short(ucp_ep_h ep,
                                 const ucp_am_rdma_completion_header_t *payload)
 {
