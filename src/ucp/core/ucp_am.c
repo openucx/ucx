@@ -1090,7 +1090,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 
     req = ucp_request_get(ep->worker);
     ucs_assert(req != NULL) ;
-    UCP_AN_DEBUG("AM RDMA ucp_am_rdma_handler req=%p", req) ;
+    UCP_AM_DEBUG("AM RDMA ucp_am_rdma_handler req=%p", req) ;
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_reply_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_reply_header_t), 0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
