@@ -1108,7 +1108,8 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     char *p, *end;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_unpack(worker, msg + 1, -1, &unpacked_address);
+    status = ucp_address_unpack(worker, msg + 1, ~UCP_ADDRESS_PACK_FLAG_TRACE,
+                                &unpacked_address);
     if (status != UCS_OK) {
         strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);
         unpacked_address.uuid          = 0;

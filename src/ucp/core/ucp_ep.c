@@ -430,7 +430,8 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
 
     if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                     UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR |
+                     UCP_ADDRESS_PACK_FLAG_TRACE;
     } else {
         addr_flags = -1;
     }
