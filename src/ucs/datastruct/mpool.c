@@ -86,6 +86,7 @@ ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
 
     ucs_debug("mpool %s: align %u, maxelems %u, elemsize %u",
               ucs_mpool_name(mp), mp->data->alignment, max_elems, mp->data->elem_size);
+    ucs_trace("ucs_mpool_init mpool %s at address %p",ucs_mpool_name(mp), mp) ;
     return UCS_OK;
 
 err_strdup:
@@ -100,6 +101,8 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
     ucs_mpool_elem_t *elem, *next_elem;
     ucs_mpool_data_t *data = mp->data;
     void *obj;
+
+    ucs_trace("ucs_mpool_cleanup mpool %s at address %p",ucs_mpool_name(mp), mp) ;
 
     /* Cleanup all elements in the freelist and set their header to NULL to mark
      * them as released for the leak check.
