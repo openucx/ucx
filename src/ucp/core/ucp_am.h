@@ -80,6 +80,7 @@ typedef struct {
 typedef struct {
   ucs_list_link_t   list;                                  /* entry into list of unfinished AM's */
   ucp_request_t    *req;                                   /* active message request */
+  ucp_request_t    *completion_req;                        /* request for issuing the completion active message */
   uint64_t          msg_id;                                /* way to match up all parts of AM */
   ucp_dt_iov_t     *iovec ;                                /* iovec to be sent */
   ucp_mem_h         memh;                                  /* memory handle for mapping to the adapter */
