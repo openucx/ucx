@@ -5,7 +5,10 @@
 * See file LICENSE for terms.
 */
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+#  define _GNU_SOURCE
+#endif
+
 #include "cma_md.h"
 
 #include <ucs/debug/log.h>
@@ -136,13 +139,13 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close              = (void*)ucs_empty_function,
+        .close              = (uct_md_close_func_t)ucs_empty_function,
         .query              = uct_cma_md_query,
-        .mem_alloc          = (void*)ucs_empty_function_return_success,
-        .mem_free           = (void*)ucs_empty_function_return_success,
-        .mkey_pack          = (void*)ucs_empty_function_return_success,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_success,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
+        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_reg            = uct_cma_mem_reg,
-        .mem_dereg          = (void*)ucs_empty_function_return_success,
+        .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_success,
         .detect_memory_type = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {

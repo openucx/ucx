@@ -397,6 +397,13 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1215],
                                [],
                                [])
 
+# Use of a const variable in a constant expression is nonstandard in C
+ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1901],
+                               [--diag_suppress 1901],
+                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                               [],
+                               [])
+
 
 #
 # Set C++ optimization/debug flags to be the same as for C

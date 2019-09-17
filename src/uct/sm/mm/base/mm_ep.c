@@ -270,13 +270,14 @@ retry:
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
         base_address = uct_mm_ep_attach_remote_seg(ep, iface, elem);
-        length       = pack_cb(base_address + elem->desc_offset, arg);
+        length       = pack_cb(UCS_PTR_BYTE_OFFSET(base_address, elem->desc_offset), arg);
 
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length;
 
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           base_address + elem->desc_offset, length, "TX: AM_BCOPY");
+                           UCS_PTR_BYTE_OFFSET(base_address, elem->desc_offset),
+                           length, "TX: AM_BCOPY");
 
         UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
     }
@@ -316,8 +317,9 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                      iface->config.fifo_elem_size - sizeof(uct_mm_fifo_element_t),
                      "am_short");
 
-    return uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface, id, length,
-                                    header, payload, NULL, NULL, 0);
+    return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface,
+                                                  id, length, header, payload,
+                                                  NULL, NULL, 0);
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,

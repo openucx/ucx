@@ -495,7 +495,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
         alloc_methods_bitmap |= UCS_BIT(method);
     }
 
-    self->config.failure_level = config->failure;
+    self->config.failure_level = (ucs_log_level_t)config->failure;
     self->config.max_num_eps   = config->max_num_eps;
 
     return UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,

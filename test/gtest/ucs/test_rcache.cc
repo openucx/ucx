@@ -123,7 +123,7 @@ protected:
                 region->super.super.end - region->super.super.start);
         EXPECT_EQ(uint32_t(MAGIC), region->magic);
         region->magic = 0;
-        uint32_t prev = ucs_atomic_fadd32(&m_reg_count, -1);
+        uint32_t prev = ucs_atomic_fsub32(&m_reg_count, 1);
         EXPECT_GT(prev, 0u);
     }
 
