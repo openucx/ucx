@@ -1184,8 +1184,8 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_request_free(request) ;
 
     ucs_trace("AM RDMA driving callback cb=%p original_req=%p", cb, original_req) ;
-    original_req->flags |= UCP_REQUEST_FLAG_COMPLETED ;
-    cb(original_req+1, UCS_OK) ;
+    original_req->send.cb = cb ;
+    ucp_request_complete(original_req, send.cb, UCS_OK) ;
 
 }
 
@@ -1244,7 +1244,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
         status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
 
         ret = ucp_am_rdma_send_req(unfinished->completion_req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
-        ucs_trace("AM RDMA completed immediately ion ucp_am_send_rdma_req ret=%p", ret) ;
+        ucs_trace("AM RDMA completed immediately in ucp_am_send_rdma_req ret=%p", ret) ;
 
         ucp_rkey_destroy(unfinished->rkey) ;
 
