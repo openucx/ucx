@@ -166,7 +166,6 @@ ucp_am_rdma_bcopy_pack_args_single_reply(void *dest, void *arg)
     ucp_request_t *req = arg;
 
     UCP_AM_DEBUG("AM RDMA ucp_am_rdma_bcopy_pack_args_single_reply dest=%p arg=%p", dest, arg) ;
-    ucs_assert(req->send.state.dt.offset == 0);
 
     memcpy(reply_hdr, req->send.buffer, sizeof(ucp_am_rdma_reply_header_t)) ;
     reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
