@@ -1257,7 +1257,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
         ucs_free(unfinished);
 
         ucs_trace("AM RDMA driving callback cb=%p req=%p", cb, req) ;
-        ucp_request_set_callback(req, send.cb. cb) ;
+        ucp_request_set_callback(req, send.cb, cb) ;
         ucp_request_complete(req, send.cb, UCS_OK) ;
 
     }
