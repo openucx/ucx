@@ -63,6 +63,7 @@
     { \
         (_req)->status = (_status); \
         if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
+            ucs_trace_req("Driving callback"); \
             (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
         } \
         if (ucs_unlikely(((_req)->flags  |= UCP_REQUEST_FLAG_COMPLETED) & \
