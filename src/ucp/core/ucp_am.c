@@ -1172,6 +1172,8 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
         ucs_free(unfinished);
       }
 
+    UCP_AM_DEBUG("AM RDMA driving callback cb=%p original_req=%p", cb, original_req) ;
+    original_req->flags |= UCP_REQUEST_FLAG_COMPLETED ;
     cb(original_req+1, UCS_OK) ;
 
 }
