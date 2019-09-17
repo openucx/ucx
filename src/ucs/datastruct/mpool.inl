@@ -78,7 +78,8 @@ static inline void ucs_mpool_put_inline(void *obj)
 
     elem = ucs_mpool_obj_to_elem(obj);
     mp   = elem->mpool;
-    ucs_trace("Returning obj=%p to mpool=%p (%s)", obj, mp, ucs_mpool_name(mp)) ;
+    ucs_trace("Returning obj=%p to mpool=%p", obj, mp) ;
+    ucs_trace("Returning obj=%p to mpool name=%s", obj, ucs_mpool_name(mp)) ;
     ucs_mpool_add_to_freelist(mp, elem,
                               ENABLE_DEBUG_DATA && ucs_global_opts.mpool_fifo);
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
