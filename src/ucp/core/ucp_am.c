@@ -686,6 +686,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         return ucp_am_send_nb(ep, id, payload, count, datatype, cb, flags) ;
       }
 
+    ucs_trace("AM RDMA First byte of payload is %u", *(char *)(iovec[1].buffer)) ;
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     /* And the first element of the iovec must fit in the header */
@@ -1229,6 +1230,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
     map_params.address    = iovec[1].buffer ;
     map_params.length     = iovec[1].length ;
+    ucs_trace("AM RDMA First byte of payload is %u going to address 0x%lx", *(char *)(iovec[1].buffer), rdma_reply_hdr->address+iovec[0].length) ;
     ucs_trace("AM RDMA map_params.length=%lu", map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
@@ -1290,6 +1292,7 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     uint16_t am_id ;
     ucp_recv_desc_t *all_data ;
     size_t total_size ;
+    char * payload ;
     ucs_assert(unfinished != NULL) ;
     am_id = unfinished->am_id;
     ucs_trace("AM RDMA ucp_am_rdma_completion_handler") ;
@@ -1298,12 +1301,15 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_status_t status ;
     all_data = unfinished->all_data ;
     total_size = unfinished->total_size ;
+    payload = (char *) (all_data+1) ;
 
     status = ucp_mem_unmap(worker->context, unfinished->memh) ;
     ucs_assert(status == UCS_OK) ;
 
     ucs_list_del(&unfinished->list);
     ucs_free(unfinished);
+
+    ucs_trace("AM RDMA payload+32=%p *(payload+32)=%u", payload+32, *(payload+32));
 
     if (ucs_unlikely((am_id >= worker->am_cb_array_len) ||
                      (worker->am_cbs[am_id].cb == NULL))) {
@@ -1315,7 +1321,7 @@ ucp_am_rdma_completion_handler(void *am_arg, void *am_data, size_t am_length,
 
 
     status = worker->am_cbs[am_id].cb(worker->am_cbs[am_id].context,
-                                      all_data + 1,
+                                      payload,
                                       total_size,
                                       NULL,
                                       UCP_CB_PARAM_FLAG_DATA);
