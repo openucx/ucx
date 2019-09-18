@@ -548,20 +548,22 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
     ucs_status_t status;
 
     status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
-    if (UCS_PTR_IS_ERR(status)) {
+    if (UCS_STATUS_IS_ERR(status)) {
         return status;
     } else if (status == UCS_INPROGRESS) {
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTING);
         uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
-    } else if (status == UCS_OK) {
-        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
-        if (status != UCS_OK) {
-            return status;
-        }
 
-        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_WAITING_ACK);
-        uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
+        return UCS_OK;
     }
+
+    status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_WAITING_ACK);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
 
     return UCS_OK;
 }
