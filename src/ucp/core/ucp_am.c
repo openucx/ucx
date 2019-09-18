@@ -1062,6 +1062,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
         return UCS_ERR_NO_MEMORY;
     }
 
+    memset(all_data+1, 0xff, rdma_hdr->total_size) ;
     memcpy(all_data+1, &(rdma_hdr->iovec_0), length_to_copy) ;
 
     all_data->flags = UCP_RECV_DESC_FLAG_MALLOC;
