@@ -45,6 +45,11 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Give higher priority to the default network interface on the host",
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
 
+  {"CONN_NB", "n",
+   "Enables non-blocking connection establishment. It may improve strartup "
+   "time, but can lead to connection resets due to high load on TCP/IP stack",
+   ucs_offsetof(uct_tcp_iface_config_t, conn_nb), UCS_CONFIG_TYPE_BOOL},
+
   {"MAX_POLL", UCS_PP_MAKE_STRING(UCT_TCP_MAX_EVENTS),
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
@@ -469,6 +474,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.zcopy.max_hdr  = self->config.tx_seg_size -
                                   self->config.zcopy.hdr_offset;
     self->config.prefer_default = config->prefer_default;
+    self->config.conn_nb        = config->conn_nb;
     self->config.max_poll       = config->max_poll;
     self->sockopt.nodelay       = config->sockopt_nodelay;
     self->sockopt.sndbuf        = config->sockopt_sndbuf;

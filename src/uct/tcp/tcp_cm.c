@@ -518,12 +518,21 @@ unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep, void *pkt, uint32_t lengt
 
 unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep)
 {
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
     ucs_status_t status;
 
     if (!ucs_socket_is_connected(ep->fd)) {
         ucs_error("tcp_ep %p: connection establishment for "
                   "socket fd %d was unsuccessful", ep, ep->fd);
         goto err;
+    }
+
+    if (!iface->config.conn_nb) {
+        status = ucs_sys_fcntl_modfl(ep->fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
@@ -545,6 +554,8 @@ err:
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
 {
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
     ucs_status_t status;
 
     status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
@@ -558,6 +569,13 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
     }
 
     ucs_assert(status == UCS_OK);
+
+    if (!iface->config.conn_nb) {
+        status = ucs_sys_fcntl_modfl(ep->fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
     if (status != UCS_OK) {

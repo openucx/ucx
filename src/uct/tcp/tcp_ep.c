@@ -171,9 +171,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
 
-    status = ucs_sys_fcntl_modfl(self->fd, O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto err_cleanup;
+    if (iface->config.conn_nb || (dest_addr == NULL)) {
+        status = ucs_sys_fcntl_modfl(self->fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            goto err_cleanup;
+        }
     }
 
     status = uct_tcp_iface_set_sockopt(iface, self->fd);
