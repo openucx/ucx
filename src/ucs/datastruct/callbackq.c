@@ -5,6 +5,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/type/spinlock.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
