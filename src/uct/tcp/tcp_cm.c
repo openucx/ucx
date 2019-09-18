@@ -545,31 +545,29 @@ err:
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
 {
-    uct_tcp_ep_conn_state_t new_conn_state;
-    uint32_t req_events;
     ucs_status_t status;
 
     status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
-    if (status == UCS_INPROGRESS) {
-        new_conn_state  = UCT_TCP_EP_CONN_STATE_CONNECTING;
-        req_events      = UCS_EVENT_SET_EVWRITE;
-        status          = UCS_OK;
-    } else if (status == UCS_OK) {
-        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
-        if (status != UCS_OK) {
-            return status;
-        }
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
+    } else if (status == UCS_INPROGRESS) {
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTING);
+        uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
 
-        new_conn_state  = UCT_TCP_EP_CONN_STATE_WAITING_ACK;
-        req_events      = UCS_EVENT_SET_EVREAD;
-    } else {
-        new_conn_state  = UCT_TCP_EP_CONN_STATE_CLOSED;
-        req_events      = 0;
+        return UCS_OK;
     }
 
-    uct_tcp_cm_change_conn_state(ep, new_conn_state);
-    uct_tcp_ep_mod_events(ep, req_events, 0);
-    return status;
+    ucs_assert(status == UCS_OK);
+
+    status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_WAITING_ACK);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
+
+    return UCS_OK;
 }
 
 /* This function is called from async thread */
