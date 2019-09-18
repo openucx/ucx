@@ -227,7 +227,8 @@ typedef struct ucp_worker {
     ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
     ucs_list_link_t               all_eps;       /* List of all endpoints */
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
-    ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
+    ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,
+                                                    one for each resource */
     unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
     uint64_t                      scalable_tl_bitmap; /* Map of scalable tl resources */
@@ -271,7 +272,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
-                                   ucp_worker_iface_t *wiface);
+                                   ucp_worker_iface_t **wiface);
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t *wiface);
@@ -312,7 +313,7 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
 ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
+    return worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
 }
 
 static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
