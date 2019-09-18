@@ -557,6 +557,8 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
         return UCS_OK;
     }
 
+    ucs_assert(status == UCS_OK);
+
     status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
     if (status != UCS_OK) {
         return status;
