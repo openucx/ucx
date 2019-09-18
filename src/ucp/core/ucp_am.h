@@ -43,7 +43,8 @@ typedef struct {
 
 enum {
   UCP_PACKED_RKEY_MAX_SIZE = 256 ,   /* Max supported size for a packed rkey */
-  UCP_AM_RDMA_IOVEC_0_MAX_SIZE = 32  /* Amount of iovec[0] carried in AM request */
+  UCP_AM_RDMA_IOVEC_0_MAX_SIZE = 32, /* Amount of iovec[0] carried in AM request */
+  UCP_AM_RDMA_THRESHOLD = 4096       /* If iovec[1] is shorter than this, use the non-RDMA path */
 };
 
 typedef struct {

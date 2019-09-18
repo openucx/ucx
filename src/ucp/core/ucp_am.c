@@ -678,11 +678,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    ucs_assert(UCP_DT_IS_IOV(datatype)) ;
-    ucs_assert(count == 2) ; /* We only handle length 2 iovecs */
     iovec = (ucp_dt_iov_t *) payload ;
-    if ( iovec[1].length == 0 )
+    if ( !UCP_DT_IS_IOV(datatype) || count != 2 || iovec[1].length < UCP_AM_RDMA_THRESHOLD )
       {
+        ucs_trace("Call unsuitable for AM over RDMA, using regular AM") ;
         return ucp_am_send_nb(ep, id, payload, count, datatype, cb, flags) ;
       }
 
