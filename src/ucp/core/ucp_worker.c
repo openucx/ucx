@@ -915,6 +915,7 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
                 /* Ifaces should not be initialized yet, just close it
                  * (no need for cleanup) */
                 ucp_worker_uct_iface_close(wiface);
+                ucs_free(wiface);
             }
         }
     }
