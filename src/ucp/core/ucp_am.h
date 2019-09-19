@@ -83,6 +83,7 @@ typedef struct {
 
 typedef struct {
   ucs_list_link_t   list;                                  /* entry into list of unfinished AM's */
+  ucs_status_t      status;                                /* status of the rdma */
   ucp_request_t    *req;                                   /* active message request */
   ucp_request_t    *completion_req;                        /* request for issuing the completion active message */
   uint64_t          msg_id;                                /* way to match up all parts of AM */
