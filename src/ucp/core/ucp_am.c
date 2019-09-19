@@ -681,7 +681,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     iovec = (ucp_dt_iov_t *) payload ;
     if ( !UCP_DT_IS_IOV(datatype) || count != 2 || iovec[1].length < UCP_AM_RDMA_THRESHOLD )
       {
-        ucs_trace("Call unsuitable for AM over RDMA, using regular AM") ;
+        ucs_trace("AM RDMA Call unsuitable for AM over RDMA, using regular AM") ;
         return ucp_am_send_nb(ep, id, payload, count, datatype, cb, flags) ;
       }
 
@@ -1052,6 +1052,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
                             : UCP_AM_RDMA_IOVEC_0_MAX_SIZE ;
     ucp_request_t *req;
     ucs_status_ptr_t ret ;
+    char * payload ;
 
     ucs_trace("AM RDMA ucp_am_rdma_handler") ;
 
@@ -1061,8 +1062,10 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    memset(all_data+1, 0xff, rdma_hdr->total_size) ;
-    memcpy(all_data+1, &(rdma_hdr->iovec_0), length_to_copy) ;
+    payload = (char *) (all_data+1) ;
+    ucs_trace("AM RDMA payload+32=%p", payload+32) ;
+    memset(payload, 0xff, rdma_hdr->total_size) ;
+    memcpy(payload, &(rdma_hdr->iovec_0), length_to_copy) ;
 
     all_data->flags = UCP_RECV_DESC_FLAG_MALLOC;
 
@@ -1075,7 +1078,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
-    map_params.address    = all_data + 1 ;
+    map_params.address    = payload ;
     map_params.length     = rdma_hdr->total_size ;
     ucs_trace("AM RDMA map_params.length=%lu", map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
@@ -1089,7 +1092,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_rkey_buffer_release(packed_rkey) ;
     unfinished->rdma_reply_header.msg_id = rdma_hdr->msg_id ;
     unfinished->rdma_reply_header.am_id  = rdma_hdr->am_id ;
-    unfinished->rdma_reply_header.address = (uintptr_t) (all_data+1) ;
+    unfinished->rdma_reply_header.address = (uintptr_t) payload ;
 
     unfinished->all_data      = all_data;
     unfinished->msg_id        = rdma_hdr->msg_id;
