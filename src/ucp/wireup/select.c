@@ -1285,16 +1285,16 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
 static UCS_F_NOINLINE void
 ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
                               ucp_ep_h ep, const ucp_ep_params_t *params,
-                              unsigned ep_init_flags, unsigned address_count,
-                              const ucp_address_entry_t *address_list,
+                              unsigned ep_init_flags,
+                              const ucp_unpacked_address_t *remote_address,
                               uint64_t tl_bitmap)
 {
     select_params->ep            = ep;
     select_params->ep_params     = params;
     select_params->ep_init_flags = ep_init_flags;
     select_params->tl_bitmap     = tl_bitmap;
-    select_params->address_list  = address_list;
-    select_params->address_count = address_count;
+    select_params->address_list  = remote_address->address_list;
+    select_params->address_count = remote_address->address_count;
     select_params->allow_am      = ucp_wireup_allow_am_emulation_layer(params,
                                                                        ep_init_flags);
     /* If we are using reduced TL bitmap, don't show errors */
@@ -1445,13 +1445,11 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     key->am_bw_lanes[0] = key->am_lane;
 }
 
-ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep,
-                                     const ucp_ep_params_t *ep_params,
-                                     unsigned ep_init_flags,
-                                     unsigned address_count,
-                                     const ucp_address_entry_t *address_list,
-                                     uint8_t *addr_indices,
-                                     ucp_ep_config_key_t *key)
+ucs_status_t
+ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *ep_params,
+                        unsigned ep_init_flags,
+                        const ucp_unpacked_address_t *remote_address,
+                        uint8_t *addr_indices, ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker = ep->worker;
     ucp_wireup_select_context_t select_ctx;
@@ -1460,8 +1458,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep,
 
     if (worker->scalable_tl_bitmap) {
         ucp_wireup_select_params_init(&select_params, ep, ep_params,
-                                      ep_init_flags, address_count,
-                                      address_list, worker->scalable_tl_bitmap);
+                                      ep_init_flags, remote_address,
+                                      worker->scalable_tl_bitmap);
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                          &select_ctx);
         if (status == UCS_OK) {
@@ -1474,7 +1472,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep,
     }
 
     ucp_wireup_select_params_init(&select_params, ep, ep_params, ep_init_flags,
-                                  address_count, address_list, UINT64_MAX);
+                                  remote_address, UINT64_MAX);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      &select_ctx);
     if (status != UCS_OK) {
@@ -1496,17 +1494,16 @@ static double ucp_wireup_aux_score_func(ucp_context_h context,
             iface_attr->overhead + remote_iface_attr->overhead));
 }
 
-ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
-                                             const ucp_ep_params_t *ep_params,
-                                             const ucp_address_entry_t *address_list,
-                                             unsigned address_count,
-                                             ucp_wireup_select_info_t *select_info)
+ucs_status_t
+ucp_wireup_select_aux_transport(ucp_ep_h ep, const ucp_ep_params_t *ep_params,
+                                const ucp_unpacked_address_t *remote_address,
+                                ucp_wireup_select_info_t *select_info)
 {
     ucp_wireup_criteria_t criteria = {0};
     ucp_wireup_select_params_t select_params;
 
-    ucp_wireup_select_params_init(&select_params, ep, ep_params, 0, address_count,
-                                  address_list, UINT64_MAX);
+    ucp_wireup_select_params_init(&select_params, ep, ep_params, 0,
+                                  remote_address, UINT64_MAX);
     ucp_wireup_fill_aux_criteria(&criteria, ep_params);
     return ucp_wireup_select_transport(&select_params, &criteria,
                                        UINT64_MAX, UINT64_MAX, UINT64_MAX,

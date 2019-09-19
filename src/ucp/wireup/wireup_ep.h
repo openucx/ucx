@@ -69,16 +69,15 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
  */
 ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
                                    ucp_rsc_index_t rsc_index, int connect_aux,
-                                   unsigned address_count,
-                                   const ucp_address_entry_t *address_list);
+                                   const ucp_unpacked_address_t *remote_address);
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params);
 
-ucs_status_t ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
-                                       const ucp_ep_params_t *params,
-                                       unsigned address_count,
-                                       const ucp_address_entry_t *address_list);
+ucs_status_t
+ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
+                          const ucp_ep_params_t *params,
+                          const ucp_unpacked_address_t *remote_address);
 
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 

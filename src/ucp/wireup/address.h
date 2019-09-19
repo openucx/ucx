@@ -89,6 +89,13 @@ struct ucp_unpacked_address {
 };
 
 
+/* Iterate over entries in an unpacked address */
+#define ucp_unpacked_address_for_each(_elem, _unpacked_address) \
+    for (_elem = (_unpacked_address)->address_list; \
+         _elem < (_unpacked_address)->address_list + (_unpacked_address)->address_count; \
+         ++_elem)
+
+
 /**
  * Pack multiple addresses into a buffer, of resources specified in rsc_bitmap.
  * For every resource in rcs_bitmap:

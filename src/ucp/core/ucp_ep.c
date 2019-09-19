@@ -174,9 +174,7 @@ ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
         goto err_delete;
     }
 
-    status = ucp_wireup_ep_connect_aux(wireup_ep, params,
-                                       remote_address->address_count,
-                                       remote_address->address_list);
+    status = ucp_wireup_ep_connect_aux(wireup_ep, params, remote_address);
     if (status != UCS_OK) {
         goto err_destroy_wireup_ep;
     }
@@ -343,9 +341,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, params, ep_init_flags,
-                                   remote_address->address_count,
-                                   remote_address->address_list, addr_indices);
+    status = ucp_wireup_init_lanes(ep, params, ep_init_flags, remote_address,
+                                   addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }

@@ -404,9 +404,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     EXPECT_LE(unpacked_address.address_count,
               static_cast<unsigned>(sender().ucph()->num_tls));
 
-    for (const ucp_address_entry_t *ae = unpacked_address.address_list;
-         ae < unpacked_address.address_list + unpacked_address.address_count;
-         ++ae) {
+    const ucp_address_entry_t *ae;
+    ucp_unpacked_address_for_each(ae, &unpacked_address) {
         unpacked_dev_priorities.insert(ae->iface_attr.priority);
     }
 
