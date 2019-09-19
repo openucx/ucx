@@ -731,7 +731,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     length = ucp_dt_iov_length(iovec, count);
     ucs_trace("AM RDMA count=%lu iovec[0].length=%lu iovec[1].length=%lu length=%lu", count, iovec[0].length, iovec[1].length, length) ;
     unfinished->rdma_header.total_size = length ;
-    unfinished->rdma_header.msg_id     = original_req->send.am.message_id ;
+    unfinished->rdma_header.msg_id     = unfinished->msg_id ;
     unfinished->rdma_header.ep_ptr      = ucp_request_get_dest_ep_ptr(req) ;
     memcpy(unfinished->rdma_header.iovec_0, iovec[0].buffer, iovec[0].length) ;
     unfinished->rdma_header.am_id      = id ;
@@ -771,7 +771,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         ucs_trace("ucp_am_rdma_send_nb original_req=%p", original_req) ;
 
         ucp_am_send_req_init(original_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), flags, id);
-        original_req->send.am.message_id = ep->worker->am_message_id ;
+        original_req->send.am.message_id = unfinished->msg_id ;
         unfinished->req            = original_req;
         ret = original_req + 1 ;
       }
