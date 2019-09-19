@@ -177,7 +177,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
 
-    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2rts, qpc);
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(iface->super.config.max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
@@ -195,4 +195,75 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 
     return UCS_OK;
 }
+
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_2rts_qp(uct_rc_mlx5_iface_common_t *iface,
+                                      uct_ib_mlx5_qp_t *qp)
+{
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    void *qpc;
+    int ret;
+
+    ucs_assert(qp->type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.config.rnr_retry);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, iface->super.config.timeout);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.config.exp_backoff);
+
+    ret = mlx5dv_devx_qp_modify(qp->verbs.qp, in, sizeof(in), out, sizeof(out));
+    if (ret) {
+        ucs_error("mlx5dv_devx_qp_modify(2RTS) failed, syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(rtr2rts_qp_out, out, syndrome));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_update_qp(uct_rc_mlx5_iface_common_t *iface,
+                                        uct_ib_mlx5_qp_t *qp)
+{
+    uint32_t in_q[UCT_IB_MLX5DV_ST_SZ_DW(query_qp_in)] = {};
+    uint32_t out_q[UCT_IB_MLX5DV_ST_SZ_DW(query_qp_out)] = {};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(rts2rts_qp_in)] = {};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(rts2rts_qp_out)] = {};
+    void *qpc;
+    int ret;
+
+    ucs_assert(qp->type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
+    UCT_IB_MLX5DV_SET(query_qp_in, in_q, opcode, UCT_IB_MLX5_CMD_OP_QUERY_QP);
+    UCT_IB_MLX5DV_SET(query_qp_in, in_q, qpn, qp->qp_num);
+
+    ret = mlx5dv_devx_qp_query(qp->verbs.qp, in_q, sizeof(in_q), out_q, sizeof(out_q));
+    if (ret) {
+        ucs_error("mlx5dv_devx_qp_query() failed, syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(query_qp_out, out_q, syndrome));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    UCT_IB_MLX5DV_SET(rts2rts_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_RTS2RTS_QP);
+    UCT_IB_MLX5DV_SET(rts2rts_qp_in, in, qpn, qp->qp_num);
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rts2rts_qp_in, in, qpc);
+    memcpy(qpc, UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out_q, qpc), UCT_IB_MLX5DV_ST_SZ_BYTES(qpc));
+
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.config.exp_backoff);
+
+    ret = mlx5dv_devx_qp_modify(qp->verbs.qp, in, sizeof(in), out, sizeof(out));
+    if (ret) {
+        ucs_error("mlx5dv_devx_qp_modify(exp_backoff) failed, syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(rts2rts_qp_out, out, syndrome));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 

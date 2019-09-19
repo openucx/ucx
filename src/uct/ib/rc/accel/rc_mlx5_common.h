@@ -584,13 +584,33 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr);
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_2rts_qp(uct_rc_mlx5_iface_common_t *iface,
+                                      uct_ib_mlx5_qp_t *qp);
 
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_update_qp(uct_rc_mlx5_iface_common_t *iface,
+                                        uct_ib_mlx5_qp_t *qp);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_common_devx_2rts_qp(uct_rc_mlx5_iface_common_t *iface,
+                                      uct_ib_mlx5_qp_t *qp)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_common_devx_update_qp(uct_rc_mlx5_iface_common_t *iface,
+                                        uct_ib_mlx5_qp_t *qp)
 {
     return UCS_ERR_UNSUPPORTED;
 }

@@ -732,7 +732,8 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
-                                     struct ibv_ah_attr *ah_attr)
+                                     struct ibv_ah_attr *ah_attr,
+                                     int rtr_only)
 {
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
@@ -774,6 +775,10 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     if (ret) {
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
+    }
+
+    if (rtr_only) {
+        return UCS_OK;
     }
 
     qp_attr.qp_state              = IBV_QPS_RTS;

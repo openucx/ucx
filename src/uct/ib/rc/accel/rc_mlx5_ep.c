@@ -620,9 +620,24 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
+    int devx_2rts = md->flags & UCT_IB_MLX5_MD_FLAG_DEVX;
+    ucs_status_t status;
+
     switch (qp->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
+        status = uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
+                                         ah_attr, devx_2rts);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (devx_2rts) {
+            return uct_rc_mlx5_iface_common_devx_2rts_qp(iface, qp);
+        }
+
+        return UCS_OK;
+
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num, ah_attr);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:

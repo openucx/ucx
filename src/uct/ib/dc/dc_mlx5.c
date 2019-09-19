@@ -369,6 +369,8 @@ err_qp:
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     struct ibv_qp_attr attr;
     long attr_mask;
 
@@ -420,6 +422,11 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     if (ibv_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
         ucs_error("ibv_modify_qp(DCI, RTS) failed : %m");
         return UCS_ERR_IO_ERROR;
+    }
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_rc_mlx5_iface_common_devx_update_qp(&iface->super,
+                                                       &dci->txwq.super);
     }
 
     return UCS_OK;
