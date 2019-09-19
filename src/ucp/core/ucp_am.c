@@ -743,7 +743,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     memcpy(unfinished->rdma_header.iovec_0, iovec[0].buffer, iovec[0].length) ;
     unfinished->rdma_header.am_id      = id ;
     unfinished->rdma_header.iovec_0_length = iovec[0].length ;
-    unfinished->rdma_header.iovec_1_first_byte = *(((char*)iovec[1].buffer)+1) ;
+    unfinished->rdma_header.iovec_1_first_byte = *((char*)iovec[1].buffer) ;
     unfinished->rdma_header.iovec_1_last_byte = *(((char*)iovec[1].buffer)+iovec[1].length-1) ;
     ucs_trace("AM RDMA msg_id=0x%016lx iovec_0_length=%lu iovec_1_first_byte=%d iovec_1_last_byte=%d",
         unfinished->rdma_header.msg_id,unfinished->rdma_header.iovec_0_length,
