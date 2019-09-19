@@ -38,6 +38,11 @@
  *     EMPTY.
  *   * If the address list is empty, then it will contain only a single md_index
  *     which equals to UCP_NULL_RESOURCE.
+ *   * For non-unified mode, ep address contains length with flags. Multiple ep
+ *     addresses could be present and the last one is marked with the flag
+ *     UCP_ADDRESS_FLAG_LAST. For unified mode, there could not be more than one
+ *     ep address.
+ *   * For any mode, ep address is followed by a lane index.
  */
 
 
@@ -186,9 +191,8 @@ out:
 }
 
 static ucs_status_t
-ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap,
-                           uint64_t flags,
-                           ucp_address_packed_device_t **devices_p,
+ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
+                           uint64_t flags, ucp_address_packed_device_t **devices_p,
                            ucp_rsc_index_t *num_devices_p)
 {
     ucp_context_h context = worker->context;
@@ -196,6 +200,8 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap,
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t num_devices;
     ucp_rsc_index_t rsc_index;
+    ucp_lane_index_t lane;
+    unsigned num_ep_addrs;
 
     devices = ucs_calloc(context->num_tls, sizeof(*devices), "packed_devices");
     if (devices == NULL) {
@@ -212,11 +218,23 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap,
 
         dev = ucp_address_get_device(context, rsc_index, devices, &num_devices);
 
-        if (ucp_worker_iface_is_tl_p2p(iface_attr) &&
-            (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR)) {
-            /* ep address (its length will be packed in non-unified mode only) */
-            dev->tl_addrs_size += iface_attr->ep_addr_len;
-            dev->tl_addrs_size += !ucp_worker_unified_mode(worker);
+        if ((flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) &&
+            ucp_worker_iface_is_tl_p2p(iface_attr)) {
+            /* Each lane which matches the resource index adds an ep address
+             * entry. The length and flags is packed in non-unified mode only.
+             */
+            ucs_assert(ep != NULL);
+            num_ep_addrs = 0;
+            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+                if (ucp_ep_get_rsc_index(ep, lane) == rsc_index) {
+                    dev->tl_addrs_size += !ucp_worker_unified_mode(worker);
+                    dev->tl_addrs_size += iface_attr->ep_addr_len;
+                }
+            }
+            if (ucp_worker_unified_mode(worker)) {
+                ucs_assertv(num_ep_addrs <= 1,
+                            "unexpected multiple ep addresses in unified mode");
+            }
         }
 
         dev->tl_addrs_size += sizeof(uint16_t); /* tl name checksum */
@@ -287,27 +305,6 @@ static void ucp_address_memcheck(ucp_context_h context, void *ptr, size_t size,
                   UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
                   UCS_PTR_BYTE_DIFF(ptr, undef_ptr));
     }
-}
-
-static ucs_status_t
-ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
-                            uct_ep_addr_t *addr)
-{
-    ucp_lane_index_t lane;
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_ep_get_rsc_index(ep, lane) == tl_index) {
-            /*
-             * If this is a wireup endpoint, it will return the underlying next_ep
-             * address, and the length will be correct because the resource index
-             * is of the next_ep.
-             */
-            return uct_ep_get_address(ep->uct_eps[lane], addr);
-        }
-    }
-
-    ucs_bug("provided ucp_ep without required transport");
-    return UCS_ERR_INVALID_ADDR;
 }
 
 static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
@@ -515,11 +512,14 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_context_h context       = worker->context;
     uint64_t md_flags_pack_mask = (UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC);
     const ucp_address_packed_device_t *dev;
+    void *tl_flags_ptr, *ep_flags_ptr;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t md_index;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
+    ucp_lane_index_t lane;
     uint64_t dev_tl_bitmap;
+    unsigned num_ep_addrs;
     ucs_status_t status;
     size_t iface_addr_len;
     size_t ep_addr_len;
@@ -527,7 +527,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     unsigned index;
     int attr_len;
     void *ptr;
-    void *flags_ptr;
 
     ptr   = buffer;
     index = 0;
@@ -610,8 +609,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 iface_addr_len = 0;
             }
 
-            flags_ptr = ucp_address_iface_flags_ptr(worker, ptr, attr_len);
-            ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
+            tl_flags_ptr = ucp_address_iface_flags_ptr(worker, ptr, attr_len);
+            ptr          = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
 
             /* Pack iface address */
             ptr = ucp_address_pack_length(worker, ptr, iface_addr_len);
@@ -628,24 +627,48 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             /* cppcheck-suppress internalAstError */
             if (rsc_index == ucs_ilog2(dev->tl_bitmap)) {
-                *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_LAST;
+                *(uint8_t*)tl_flags_ptr |= UCP_ADDRESS_FLAG_LAST;
             }
 
-            /* Pack ep address if present */
-            if (ucp_worker_iface_is_tl_p2p(iface_attr) &&
-                (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR)) {
-                ucs_assert(ep != NULL);
-                ep_addr_len           = iface_attr->ep_addr_len;
-                *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_HAVE_EP_ADDR;
+            /* Pack ep address if present: iterate over all lanes which use the
+             * current resource (rsc_index) and pack their addresses. The last
+             * one is marked with UCP_ADDRESS_FLAG_LAST in its length field.
+             */
+            num_ep_addrs = 0;
+            if ((flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) &&
+                ucp_worker_iface_is_tl_p2p(iface_attr)) {
 
-                ptr    = ucp_address_pack_length(worker, ptr, ep_addr_len);
-                status = ucp_address_pack_ep_address(ep, rsc_index, ptr);
-                if (status != UCS_OK) {
-                    return status;
+                ucs_assert(ep != NULL);
+                ep_addr_len = iface_attr->ep_addr_len;
+
+                for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+                    if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
+                        continue;
+                    }
+
+                    /* pack ep address length and save pointer to flags */
+                    ep_flags_ptr = ptr;
+                    ptr          = ucp_address_pack_length(worker, ptr,
+                                                           ep_addr_len);
+
+                    /* pack ep address */
+                    status = uct_ep_get_address(ep->uct_eps[lane], ptr);
+                    if (status != UCS_OK) {
+                        return status;
+                    }
+
+                    ucp_address_memcheck(context, ptr, ep_addr_len, rsc_index);
+                    ptr            = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
+
+                    ++num_ep_addrs;
                 }
 
-                ucp_address_memcheck(context, ptr, ep_addr_len, rsc_index);
-                ptr = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
+                if (num_ep_addrs > 0) {
+                    *(uint8_t*)tl_flags_ptr |= UCP_ADDRESS_FLAG_HAVE_EP_ADDR;
+                    if (!ucp_worker_unified_mode(worker)) {
+                        *(uint8_t*)ep_flags_ptr |= UCP_ADDRESS_FLAG_LAST;
+                    }
+                }
             }
 
             /* Save the address index of this transport */
@@ -655,11 +678,11 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             if (flags & UCP_ADDRESS_PACK_FLAG_TRACE) {
                 ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT" "
-                          "md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
+                          "eps %u md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
                           "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
                           index,
                           UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
-                          md_flags, iface_attr->cap.flags,
+                          num_ep_addrs, md_flags, iface_attr->cap.flags,
                           iface_attr->bandwidth.dedicated,
                           iface_attr->bandwidth.shared,
                           iface_attr->overhead,
@@ -670,7 +693,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                           iface_attr->cap.atomic64.op_flags,
                           iface_attr->cap.atomic64.fop_flags);
             }
-
             ++index;
         }
     }
@@ -696,7 +718,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     /* Collect all devices we want to pack */
-    status = ucp_address_gather_devices(worker, tl_bitmap, flags, &devices,
+    status = ucp_address_gather_devices(worker, ep, tl_bitmap, flags, &devices,
                                         &num_devices);
     if (status != UCS_OK) {
         goto out;
@@ -739,6 +761,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                 ucp_unpacked_address_t *unpacked_address)
 {
     ucp_address_entry_t *address_list, *address;
+    ucp_address_entry_ep_addr_t *ep_addr;
     int last_dev, last_tl, last_ep_addr;
     const uct_device_addr_t *dev_addr;
     ucp_rsc_index_t dev_index;
@@ -796,7 +819,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                                   &iface_addr_len, 0, &last_tl);
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
 
-            if (*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAVE_EP_ADDR) {
+            last_ep_addr = !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAVE_EP_ADDR);
+            while (!last_ep_addr) {
                 ptr = ucp_address_unpack_length(worker, flags_ptr, ptr,
                                                 &ep_addr_len, 1, &last_ep_addr);
                 ucs_assert(flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR);
@@ -864,23 +888,27 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr       = ucp_address_unpack_length(worker, flags_ptr, ptr,
                                                   &iface_addr_len, 0, &last_tl);
             address->iface_addr = (iface_addr_len > 0) ? ptr : NULL;
+            address->num_ep_addrs = 0;
             ptr                 = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
 
-            if (*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAVE_EP_ADDR) {
-                ptr              = ucp_address_unpack_length(worker, flags_ptr,
-                                                             ptr, &ep_addr_len,
-                                                             1, &last_ep_addr);
-                address->ep_addr = ptr;
-                ptr              = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
-            } else {
-                address->ep_addr = NULL;
+            last_ep_addr = !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAVE_EP_ADDR);
+            while (!last_ep_addr) {
+                ucs_assert(address->num_ep_addrs < UCP_MAX_LANES);
+                ep_addr       = &address->ep_addrs[address->num_ep_addrs++];
+
+                ptr           = ucp_address_unpack_length(worker, flags_ptr, ptr,
+                                                          &ep_addr_len, 1,
+                                                          &last_ep_addr);
+
+                ep_addr->addr = ptr;
+                ptr           = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
             }
 
             if (flags & UCP_ADDRESS_PACK_FLAG_TRACE) {
                 ucs_trace("unpack addr[%d] : "
-                          "md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
+                          "eps %u md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
                           "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
-                          (int)(address - address_list),
+                          (int)(address - address_list), address->num_ep_addrs,
                           address->md_flags, address->iface_attr.cap_flags,
                           address->iface_attr.bandwidth.dedicated,
                           address->iface_attr.bandwidth.shared,

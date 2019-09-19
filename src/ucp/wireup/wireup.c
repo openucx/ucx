@@ -233,8 +233,9 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
         }
 
         address = &address_list[tli[lane]];
+        ucs_assert(address->num_ep_addrs <= 1);
         status = uct_ep_connect_to_ep(ep->uct_eps[lane], address->dev_addr,
-                                      address->ep_addr);
+                                      address->ep_addrs[0].addr);
         if (status != UCS_OK) {
             return status;
         }
