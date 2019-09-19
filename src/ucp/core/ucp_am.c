@@ -339,7 +339,10 @@ static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
 static ucs_status_t ucp_am_rdma_completion_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+    ucp_am_rdma_completion_header_t *rdma_completion_hdr = (ucp_am_rdma_completion_header_t *)req->send.buffer ;
     ucs_trace("AM RDMA ucp_am_rdma_completion_contig_short req=%p",req) ;
+    rdma_completion_hdr->ep_ptr = ep_ptr ;
     ucs_status_t status = ucp_am_send_rdma_completion_short(req->send.ep,req->send.buffer) ;
     ucs_trace("AM RDMA ucp_am_rdma_completion_contig_short status=%d", status) ;
     if (ucs_likely(status == UCS_OK)) {
@@ -1282,9 +1285,8 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
     if (sptr == UCS_OK)
     {
         unfinished->rdma_completion_header.msg_id = unfinished->msg_id ;
-        unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
 
-        ucp_am_send_req_init(req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
+        ucp_am_send_req_init(unfinished->completion_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
         status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
 
         ret = ucp_am_rdma_send_req(unfinished->completion_req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_callback) ;
