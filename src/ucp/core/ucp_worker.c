@@ -817,6 +817,8 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
     uint64_t test_flags;
     double latency_iter, latency_cur, bw_cur;
 
+    ucs_assert(wiface != NULL);
+
     latency_cur = ucp_worker_iface_latency(worker, wiface);
     bw_cur      = ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth);
 
@@ -1140,6 +1142,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
     ucs_status_t status;
+
+    ucs_assert(wiface != NULL);
 
     /* Set wake-up handlers */
     if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
