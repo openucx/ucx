@@ -1404,8 +1404,7 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
 static UCS_F_NOINLINE void
 ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                            ucp_wireup_select_context_t *select_ctx,
-                           uint8_t *addr_indices,
-                           ucp_ep_config_key_t *key)
+                           unsigned *addr_indices, ucp_ep_config_key_t *key)
 {
     ucp_ep_h ep           = select_params->ep;
     ucp_worker_h worker   = ep->worker;
@@ -1494,7 +1493,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         const ucp_unpacked_address_t *remote_address,
-                        uint8_t *addr_indices, ucp_ep_config_key_t *key)
+                        unsigned *addr_indices, ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker = ep->worker;
     ucp_wireup_select_context_t select_ctx;

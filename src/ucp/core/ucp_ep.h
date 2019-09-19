@@ -406,7 +406,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
-                                 const uint8_t *addr_indices,
+                                 const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max);

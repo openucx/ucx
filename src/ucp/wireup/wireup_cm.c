@@ -43,7 +43,7 @@ static ucs_status_t ucp_cm_ep_client_do_initial_config(ucp_ep_h ucp_ep,
     void *ucp_addr;
     size_t ucp_addr_size;
     ucp_unpacked_address_t unpacked_addr;
-    uint8_t addr_indices[UCP_MAX_RESOURCES];
+    unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
 
     ucs_assert_always(wireup_ep != NULL);
