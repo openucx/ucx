@@ -97,7 +97,8 @@ static ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
         }
 
         md->peer_accessible_cache = ucs_realloc(md->peer_accessible_cache,
-                                                new_cache_size);
+                                                new_cache_size,
+                                                "uct_cuda_ipc_peer_accessible_cache");
         if (md->peer_accessible_cache == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
@@ -269,7 +270,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     UCS_STATIC_ASSERT(sizeof(md->peer_accessible_cache[0]) == sizeof(char));
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
-    md = ucs_calloc(1, sizeof(uct_cuda_ipc_md_t));
+    md = ucs_calloc(1, sizeof(uct_cuda_ipc_md_t), "uct_cuda_ipc_md");
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
