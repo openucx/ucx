@@ -719,7 +719,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
 
     ucp_am_send_req_init(req, ep, &(unfinished->rdma_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_header_t), flags, id);
     ucp_am_send_req_init(completion_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), flags, id);
-    original_req->send.am.message_id = ep->worker->am_message_id ;
     req->send.am.message_id = ep->worker->am_message_id ;
     completion_req->send.am.message_id = ep->worker->am_message_id ;
     unfinished->msg_id   =ep->worker->am_message_id ;
@@ -772,6 +771,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         ucs_trace("ucp_am_rdma_send_nb original_req=%p", original_req) ;
 
         ucp_am_send_req_init(original_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), flags, id);
+        original_req->send.am.message_id = ep->worker->am_message_id ;
         unfinished->req            = original_req;
         ret = original_req + 1 ;
       }
