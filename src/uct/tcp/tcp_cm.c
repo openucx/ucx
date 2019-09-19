@@ -24,6 +24,8 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
 
     switch(ep->conn_state) {
     case UCT_TCP_EP_CONN_STATE_CONNECTING:
+        ucs_assertv(iface->config.conn_nb, "ep=%p", ep);
+        /* Fall through */
     case UCT_TCP_EP_CONN_STATE_WAITING_ACK:
         if (old_conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
             uct_tcp_iface_outstanding_inc(iface);
@@ -42,7 +44,7 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                    (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ));
         if ((old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
             (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ) ||
-            /* it may happen when a peer is going to use this EP with socket
+            /* It may happen when a peer is going to use this EP with socket
              * from accepted connection in case of handling simultaneous
              * connection establishment */
             (old_conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING)) {
