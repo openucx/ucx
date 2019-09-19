@@ -535,6 +535,24 @@ static inline unsigned uct_tcp_ep_sendv(uct_tcp_ep_t *ep, size_t *sent_length)
     return (*sent_length > 0);
 }
 
+void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno)
+{
+    /* check whether this is possible somaxconn or syn/netdev backlog
+     * exceeded reason or not - such error may happen only when
+     * connection to remote peer and limits are not big enough */
+    if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
+        ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED) ||
+         /* connection establishment procedure timed out */
+         (io_errno == ETIMEDOUT))) {
+        ucs_error("try to increase \"net.core.somaxconn\", "
+                  "\"net.core.netdev_max_backlog\", "
+                  "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
+                  "on the remote node");
+    }
+}
+
 static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
 {
     uct_tcp_ep_t *ep                    = (uct_tcp_ep_t*)arg;
@@ -555,6 +573,8 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
                                    str_remote_addr, UCS_SOCKADDR_STRING_LEN));
         return UCS_OK;
     }
+
+    uct_tcp_ep_dropped_connect_print_error(ep, io_errno);
 
     return UCS_ERR_NO_PROGRESS;
 }
