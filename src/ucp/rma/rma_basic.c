@@ -25,6 +25,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
     ucs_status_t status;
     ssize_t packed_len;
 
+    ucs_trace("req=%p rkey=%p ep=%p", req, rkey, ep) ;
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
