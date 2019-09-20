@@ -47,16 +47,23 @@ enum {
   UCP_AM_RDMA_THRESHOLD = 65536      /* If iovec[1] is shorter than this, use the non-RDMA path */
 };
 
+/* Set UCP_AM_RDMA_VERIFY to 1 if you want the receiver of an AM RDMA to check that the RDMA was performed OK */
+/* #define UCP_AM_RDMA_VERIFY 1 */
+
 typedef struct {
   size_t            total_size; /* length of buffer needed for all data */
   uint64_t          msg_id;     /* method to match parts of the same AM */
   uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
                                    of arrivals */
+#if defined(UCP_AM_RDMA_VERIFY)
   size_t            iovec_0_length ; /* Amount of data transferred by iovec[0], for checking */
+#endif
   char              iovec_0[UCP_AM_RDMA_IOVEC_0_MAX_SIZE] ; /* iovec[0] carried in request */
   uint16_t          am_id;      /* index into callback array */
+#if defined(UCP_AM_RDMA_VERIFY)
   char              iovec_1_first_byte; /* First byte of iovec[1], fro checking */
   char              iovec_1_last_byte; /* Last byte of iovec[1], for checking */
+#endif
 } UCS_S_PACKED ucp_am_rdma_header_t ;
 
 typedef struct {
@@ -101,11 +108,15 @@ typedef struct {
   uint64_t          msg_id;                      /* way to match up all parts of AM */
   size_t            total_size;                  /* size of data for AM */
   ucp_mem_h         memh;                        /* memory handle for mapping to the adapter */
+#if defined(UCP_AM_RDMA_VERIFY)
   size_t            iovec_0_length;              /* Amount of data transferred by iovec[0], for checking */
+#endif
   ucp_am_rdma_reply_header_t rdma_reply_header ; /* What the server sends to the client for an AM */
   uint16_t          am_id ;                      /* active message function index */
+#if defined(UCP_AM_RDMA_VERIFY)
   char              iovec_1_first_byte;          /* First byte of iovec[1], fro checking */
   char              iovec_1_last_byte;           /* Last byte of iovec[1], for checking */
+#endif
 } ucp_am_rdma_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);
