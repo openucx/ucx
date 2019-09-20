@@ -46,7 +46,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
 
   {"CONN_NB", "n",
-   "Enables non-blocking connection establishment. It may improve strartup "
+   "Enables non-blocking connection establishment. It may improve startup "
    "time, but can lead to connection resets due to high load on TCP/IP stack",
    ucs_offsetof(uct_tcp_iface_config_t, conn_nb), UCS_CONFIG_TYPE_BOOL},
 

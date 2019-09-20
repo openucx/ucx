@@ -171,7 +171,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
 
-    if (iface->config.conn_nb || (dest_addr == NULL)) {
+    /* Make a socket non-blocking if an EP is created during accepting
+     * a connection or non-blocking connection mode is requested */
+    if ((dest_addr == NULL) || iface->config.conn_nb) {
         status = ucs_sys_fcntl_modfl(self->fd, O_NONBLOCK, 0);
         if (status != UCS_OK) {
             goto err_cleanup;
@@ -537,9 +539,8 @@ static inline unsigned uct_tcp_ep_sendv(uct_tcp_ep_t *ep, size_t *sent_length)
 
 void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno)
 {
-    /* check whether this is possible somaxconn or syn/netdev backlog
-     * exceeded reason or not - such error may happen only when
-     * connection to remote peer and limits are not big enough */
+    /* if connection establishment failes, the system limits
+     * may not be big enough */
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
