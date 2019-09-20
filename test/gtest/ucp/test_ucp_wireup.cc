@@ -968,9 +968,14 @@ public:
         return result;
     }
 
-    bool context_has_tls(ucp_context_h ctx, const std::string& tl)
+    bool context_has_tls(ucp_context_h ctx, const std::string& tl,
+                         ucp_rsc_index_t md_idx)
     {
         for (ucp_rsc_index_t idx = 0; idx < ctx->num_tls; ++idx) {
+            if (ctx->tl_rscs[idx].md_index != md_idx) {
+                continue;
+            }
+
             if (!strcmp(ctx->tl_rscs[idx].tl_rsc.tl_name, tl.c_str())) {
                 return true;
             }
@@ -979,11 +984,20 @@ public:
         return false;
     }
 
-    bool worker_has_tls(ucp_worker_h worker, const std::string& tl)
+    bool worker_has_tls(ucp_worker_h worker, const std::string& tl,
+                        ucp_rsc_index_t md_idx)
     {
+        ucp_context_h ctx = worker->context;
+
         for (unsigned i = 0; i < worker->num_ifaces; ++i) {
             ucp_worker_iface_t *wiface = worker->ifaces[i];
-            char* name = worker->context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
+            ucp_rsc_index_t md_idx_it  = ctx->tl_rscs[wiface->rsc_index].md_index;
+
+            if (md_idx_it != md_idx) {
+                continue;
+            }
+
+            char* name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
             if (!strcmp(name, tl.c_str())) {
                 return true;
             }
@@ -998,13 +1012,16 @@ public:
         ucp_context_h ctx   = e->ucph();
         ucp_worker_h worker = e->worker();
 
-        if (!(context_has_tls(ctx, better_tl) && context_has_tls(ctx, tl))) {
-            return;
-        }
+        for (ucp_rsc_index_t i = 0; i < ctx->num_mds; ++i) {
+            if (!(context_has_tls(ctx, better_tl, i) &&
+                  context_has_tls(ctx, tl, i))) {
+               continue;
+            }
 
-        ASSERT_TRUE(ctx->num_tls > worker->num_ifaces);
-        EXPECT_TRUE(worker_has_tls(worker, better_tl));
-        EXPECT_FALSE(worker_has_tls(worker, tl));
+            ASSERT_TRUE(ctx->num_tls > worker->num_ifaces);
+            EXPECT_TRUE(worker_has_tls(worker, better_tl, i));
+            EXPECT_FALSE(worker_has_tls(worker, tl, i));
+        }
     }
 };
 
