@@ -1194,13 +1194,13 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_send_callback_t cb ;
 
     ucs_assert(status == UCS_OK) ;
-    ucs_trace("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p message_id=0x%016lx", request,req,req->send.am.message_id) ;
+    ucs_trace("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p message_id=0x%016lx", request,req,req->send.rma.message_id) ;
     unfinished = ucp_am_rdma_client_find_unfinished(
-        ep->worker, ep, ep_ext, req->send.am.message_id
+        ep->worker, ep, ep_ext, req->send.rma.message_id
         ) ;
     ucs_assert(unfinished != NULL) ;
 
-    unfinished->rdma_completion_header.msg_id = req->send.am.message_id ;
+    unfinished->rdma_completion_header.msg_id = unfinished->msg_id ;
     unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
 
     ucp_am_send_req_init(unfinished->completion_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
@@ -1326,7 +1326,7 @@ ucp_am_rdma_reply_handler(void *am_arg, void *am_data, size_t am_length,
         ucs_trace("AM RDMA rdma issued, sptr=%p", sptr ) ;
         ucs_assert(!UCS_PTR_IS_ERR(sptr)) ;
         req2 = ((ucp_request_t *) sptr)-1 ;
-        req2->send.am.message_id = unfinished->msg_id ;
+        req2->send.rma.message_id = unfinished->msg_id ;
     }
     return UCS_OK ;
 }
