@@ -48,7 +48,7 @@ enum {
 };
 
 /* Set UCP_AM_RDMA_VERIFY to 1 if you want the receiver of an AM RDMA to check that the RDMA was performed OK */
-/* #define UCP_AM_RDMA_VERIFY 1 */
+#define UCP_AM_RDMA_VERIFY 1
 
 typedef struct {
   size_t            total_size; /* length of buffer needed for all data */
