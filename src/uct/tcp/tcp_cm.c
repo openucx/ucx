@@ -24,6 +24,8 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
 
     switch(ep->conn_state) {
     case UCT_TCP_EP_CONN_STATE_CONNECTING:
+        ucs_assertv(iface->config.conn_nb, "ep=%p", ep);
+        /* Fall through */
     case UCT_TCP_EP_CONN_STATE_WAITING_ACK:
         if (old_conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
             uct_tcp_iface_outstanding_inc(iface);
@@ -42,7 +44,7 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                    (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ));
         if ((old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
             (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ) ||
-            /* it may happen when a peer is going to use this EP with socket
+            /* It may happen when a peer is going to use this EP with socket
              * from accepted connection in case of handling simultaneous
              * connection establishment */
             (old_conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING)) {
@@ -92,13 +94,7 @@ static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg, int io_errno)
 {
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
-    /* check whether this is possible somaxconn exceeded reason or not */
-    if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
-        ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED))) {
-        ucs_error("try to increase \"net.core.somaxconn\" on the remote node");
-    }
+    uct_tcp_ep_dropped_connect_print_error(ep, io_errno);
 
     /* always want to print the default error */
     return UCS_ERR_NO_PROGRESS;
@@ -545,6 +541,8 @@ err:
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
 {
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
     ucs_status_t status;
 
     status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
@@ -558,6 +556,13 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
     }
 
     ucs_assert(status == UCS_OK);
+
+    if (!iface->config.conn_nb) {
+        status = ucs_sys_fcntl_modfl(ep->fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
     if (status != UCS_OK) {
