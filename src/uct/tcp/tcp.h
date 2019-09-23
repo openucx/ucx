@@ -293,6 +293,7 @@ typedef struct uct_tcp_iface {
         struct sockaddr_in        ifaddr;            /* Network address */
         struct sockaddr_in        netmask;           /* Network address mask */
         int                       prefer_default;    /* Prefer default gateway */
+        int                       conn_nb;           /* Use non-blocking connect() */
         unsigned                  max_poll;          /* Number of events to poll per socket*/
     } config;
 
@@ -314,6 +315,7 @@ typedef struct uct_tcp_iface_config {
     size_t                        max_iov;
     size_t                        sendv_thresh;
     int                           prefer_default;
+    int                           conn_nb;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
@@ -347,6 +349,8 @@ size_t uct_tcp_iface_get_max_zcopy_header(const uct_tcp_iface_t *iface);
 void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
+
+void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,

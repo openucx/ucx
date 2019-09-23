@@ -172,9 +172,13 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
 
-    status = ucs_sys_fcntl_modfl(self->fd, O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto err_cleanup;
+    /* Make a socket non-blocking if an EP is created during accepting
+     * a connection or non-blocking connection mode is requested */
+    if ((dest_addr == NULL) || iface->config.conn_nb) {
+        status = ucs_sys_fcntl_modfl(self->fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            goto err_cleanup;
+        }
     }
 
     status = uct_tcp_iface_set_sockopt(iface, self->fd);
@@ -556,6 +560,23 @@ static inline unsigned uct_tcp_ep_sendv(uct_tcp_ep_t *ep, size_t *sent_length)
     return (*sent_length > 0);
 }
 
+void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno)
+{
+    /* if connection establishment failes, the system limits
+     * may not be big enough */
+    if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
+        ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED) ||
+         /* connection establishment procedure timed out */
+         (io_errno == ETIMEDOUT))) {
+        ucs_error("try to increase \"net.core.somaxconn\", "
+                  "\"net.core.netdev_max_backlog\", "
+                  "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
+                  "on the remote node");
+    }
+}
+
 static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
 {
     uct_tcp_ep_t *ep                    = (uct_tcp_ep_t*)arg;
@@ -576,6 +597,8 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
                                    str_remote_addr, UCS_SOCKADDR_STRING_LEN));
         return UCS_OK;
     }
+
+    uct_tcp_ep_dropped_connect_print_error(ep, io_errno);
 
     return UCS_ERR_NO_PROGRESS;
 }
