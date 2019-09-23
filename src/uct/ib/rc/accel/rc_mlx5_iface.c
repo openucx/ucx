@@ -515,26 +515,27 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_tm;
     }
 
-    self->super.config.fence       = rc_config->fence != UCT_RC_FENCE_NONE;
+    self->super.config.fence_mode  = (uct_rc_fence_mode_t)rc_config->fence_mode;
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
 
-    switch (self->super.config.fence) {
-    case UCT_RC_FENCE_WEAK:
-        self->config.atomic_fence = UCT_IB_MLX5_WQE_CTRL_FENCE_WEAK;
-        self->config.put_fence    = 0;
+    switch (self->super.config.fence_mode) {
+    case UCT_RC_FENCE_MODE_WEAK:
+        self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+        self->config.put_fence_flag    = 0;
         break;
-    case UCT_RC_FENCE_STRONG:
-        self->config.atomic_fence = UCT_IB_MLX5_WQE_CTRL_FENCE_STRONG;
-        self->config.put_fence    = UCT_IB_MLX5_WQE_CTRL_FENCE_STRONG;
+    case UCT_RC_FENCE_MODE_STRONG:
+        self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+        self->config.put_fence_flag    = UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+        break;
+    case UCT_RC_FENCE_MODE_NONE:
+        self->config.atomic_fence_flag = 0;
+        self->config.put_fence_flag    = 0;
         break;
     default:
-        ucs_error("incorrect fence value: %d", self->super.config.fence);
-        /* Fall thru */
-    case UCT_RC_FENCE_NONE:
-        self->config.atomic_fence = 0;
-        self->config.put_fence    = 0;
-        break;
+        ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
+        status = UCS_ERR_INVALID_PARAM;
+        goto cleanup_tm;
     }
 
     /* By default set to something that is always in cache */

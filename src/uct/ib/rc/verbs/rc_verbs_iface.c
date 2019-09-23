@@ -213,7 +213,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
     /* TODO: for now only weak fence is supported by verbs */
-    self->super.config.fence         = config->super.super.fence != UCT_RC_FENCE_NONE;
+    self->super.config.fence_mode    = config->super.super.fence_mode !=
+                                       UCT_RC_FENCE_MODE_NONE;
 
     self->super.progress = uct_rc_verbs_iface_progress;
 

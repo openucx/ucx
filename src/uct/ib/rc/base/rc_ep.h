@@ -417,14 +417,14 @@ uct_rc_fc_req_moderation(uct_rc_fc_t *fc, uct_rc_iface_t *iface)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_atomic_fence(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
+uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
 {
     int fence;
 
     /* a call to iface_fence increases beat, so if endpoint beat is not in
      * sync with iface beat it means the endpoint did not post any WQE with
      * fence flag yet */
-    fence          = flag * (fi->fence_beat != iface->tx.fi.fence_beat);
+    fence          = (fi->fence_beat != iface->tx.fi.fence_beat) ? flag : 0;
     fi->fence_beat = iface->tx.fi.fence_beat;
     return fence;
 }
@@ -436,7 +436,7 @@ uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
 
     /* in case if fence is requested and enabled by configuration
      * we need to schedule fence for next RDMA operation */
-    if (fence && iface->config.fence) {
+    if (fence && (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE)) {
         fi->fence_beat = iface->tx.fi.fence_beat - 1;
     }
 

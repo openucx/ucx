@@ -326,8 +326,8 @@ typedef struct uct_rc_mlx5_iface_common {
     } dm;
 #endif
     struct {
-        uint8_t atomic_fence;
-        uint8_t put_fence;
+        uint8_t atomic_fence_flag;
+        uint8_t put_fence_flag;
     } config;
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;

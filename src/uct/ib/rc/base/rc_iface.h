@@ -139,12 +139,12 @@ typedef struct uct_rc_fc_request {
 /**
  * RC fence type.
  */
-typedef enum uct_rc_fence {
-    UCT_RC_FENCE_NONE,
-    UCT_RC_FENCE_WEAK,
-    UCT_RC_FENCE_STRONG,
-    UCT_RC_FENCE_LAST
-} uct_rc_fence_t;
+typedef enum uct_rc_fence_mode {
+    UCT_RC_FENCE_MODE_NONE,
+    UCT_RC_FENCE_MODE_WEAK,
+    UCT_RC_FENCE_MODE_STRONG,
+    UCT_RC_FENCE_MODE_LAST
+} uct_rc_fence_mode_t;
 
 
 /* Common configuration used for rc verbs, rcx and dc transports */
@@ -153,7 +153,7 @@ typedef struct uct_rc_iface_common_config {
     uct_ib_mtu_t             path_mtu;
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
-    int                      fence;
+    int                      fence_mode;
 
     struct {
         double               timeout;
@@ -254,7 +254,7 @@ struct uct_rc_iface {
 #if UCS_ENABLE_ASSERT
         int                  tx_cq_len;
 #endif
-        int                  fence;
+        uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
 
         /* Atomic callbacks */
