@@ -36,10 +36,11 @@ struct ucp_wireup_ep {
     uct_ep_h                  sockaddr_ep;   /**< Used for client-server wireup */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     ucp_rsc_index_t           sockaddr_rsc_index; /**< Index of sockaddr transport */
-    ucp_worker_iface_t        *sockaddr_tl_wiface; /**< selected iface for transport lanes */
+    ucp_ep_params_t           ucp_ep_params; /**< UCP EP paramters */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
+    char                      dev_name[UCT_DEVICE_NAME_MAX];
 };
 
 
@@ -69,13 +70,8 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
 ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
                                    ucp_rsc_index_t rsc_index, int connect_aux,
                                    unsigned address_count,
-                                   const ucp_address_entry_t *address_list);
-
-ucs_status_t ucp_wireup_ep_cm_connect_to_sockaddr(uct_ep_h uct_ep,
-                                                  const ucp_ep_params_t *params);
-
-ssize_t ucp_wireup_sockaddr_cm_priv_pack_cb(void *arg, const char *dev_name,
-                                            void *priv_data);
+                                   const ucp_address_entry_t *address_list,
+                                   unsigned addr_index);
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params);
@@ -102,5 +98,11 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
 ucs_status_t ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep,
                                          const uct_device_addr_t *dev_addr,
                                          const uct_ep_addr_t *ep_addr);
+
+void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
+                            int is_wireup_ep_connected, const char *info);
+
+unsigned ucp_wireup_sockaddr_ep_init_flags(ucp_worker_h worker,
+                                           const ucp_ep_params_t *params);
 
 #endif

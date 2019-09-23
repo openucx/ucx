@@ -40,6 +40,7 @@ enum {
     UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2),
     UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3),
     UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4),
+    UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS = UCS_BIT(5),
     UCP_ADDRESS_PACK_FLAG_TRACE       = UCS_BIT(16) /* show debug prints of pack/unpack */
 };
 
@@ -131,5 +132,14 @@ ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
                                 uint64_t flags,
                                 ucp_unpacked_address_t *unpacked_address);
 
+
+int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
+                                ucp_rsc_index_t index,
+                                const uct_iface_attr_t *iface_attr,
+                                int enable_atomics);
+
+int ucp_address_unpack_iface_attr(ucp_worker_t *worker,
+                                  ucp_address_iface_attr_t *iface_attr,
+                                  const void *ptr);
 
 #endif

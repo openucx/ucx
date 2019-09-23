@@ -335,6 +335,8 @@ const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_c
 const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
                               char *str, size_t max_str_len);
 
+uint64_t ucp_context_tl_bitmap(ucp_context_h context, const char *dev_name);
+
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 

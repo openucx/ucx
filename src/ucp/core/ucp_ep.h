@@ -17,6 +17,7 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/debug/assert.h>
 
+
 #define UCP_MAX_IOV                16UL
 
 
@@ -81,7 +82,11 @@ enum {
  */
 enum {
     UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0),  /**< Endpoint for local mem type transfers */
-    UCP_EP_CREATE_AM_LANE              = UCS_BIT(1)   /**< Endpoint requires an AM lane */
+    UCP_EP_CREATE_AM_LANE              = UCS_BIT(1),  /**< Endpoint requires an AM lane */
+    UCP_EP_INIT_CM_WIREUP_CLIENT       = UCS_BIT(2),  /**< Endpoint wireup protocol is based on CM,
+                                                           client side */
+    UCP_EP_INIT_CM_WIREUP_SERVER       = UCS_BIT(3)   /**< Endpoint wireup protocol is based on CM,
+                                                           client side */
 };
 
 
@@ -391,6 +396,7 @@ typedef struct ucp_conn_request {
         uct_iface_h             iface;
     } uct;
     uct_conn_request_h          uct_req;
+    char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
     ucp_wireup_sockaddr_data_t  client_data;
     /* packed worker address follows */
@@ -468,10 +474,13 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
-ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
-
 void ucp_ep_sockaddr_disconnect_cb(uct_ep_h ep, void *arg);
 
-void ucp_ep_sockaddr_cm_wireup_complete(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
+
+uct_ep_h ucp_ep_get_cm_ep(ucp_ep_h ep);
+
+ucs_status_t ucp_ep_cm_connect_start(uct_ep_h uct_ep,
+                                     const ucp_ep_params_t *params);
 
 #endif

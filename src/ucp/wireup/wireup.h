@@ -78,6 +78,8 @@ typedef struct ucp_wireup_msg {
 
 
 typedef struct {
+    uint8_t         reachable;
+    uint8_t         priority;
     ucp_rsc_index_t rsc_index;
     unsigned        addr_index;
     double          score;
@@ -113,12 +115,14 @@ int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                   unsigned ep_init_flags, unsigned address_count,
+                                   unsigned ep_init_flags,
+                                   unsigned address_count,
                                    const ucp_address_entry_t *address_list,
                                    uint8_t *addr_indices);
 
 ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                     unsigned ep_init_flags, unsigned address_count,
+                                     unsigned ep_init_flags,
+                                     unsigned address_count,
                                      const ucp_address_entry_t *address_list,
                                      uint8_t *addr_indices,
                                      ucp_ep_config_key_t *key);
@@ -131,6 +135,16 @@ int ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr);
 int ucp_wireup_is_rsc_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index);
 
 void ucp_wireup_remote_connected(ucp_ep_h ep);
+
+uint64_t ucp_ep_get_context_features(ucp_ep_h ep);
+
+ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                     ucp_lane_index_t lane,
+                                     unsigned address_count,
+                                     const ucp_address_entry_t *address_list,
+                                     unsigned addr_index);
+
+ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep);
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {

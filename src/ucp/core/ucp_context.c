@@ -723,6 +723,28 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
     return str;
 }
 
+uint64_t ucp_context_tl_bitmap(ucp_context_h context, const char *dev_name)
+{
+    uint64_t        tl_bitmap;
+    ucp_rsc_index_t tl_idx;
+
+    if (dev_name == NULL) {
+        return context->tl_bitmap;
+    }
+
+    tl_bitmap = 0;
+
+    for (tl_idx = 0; tl_idx < context->num_tls; ++tl_idx) {
+        if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
+            continue;
+        }
+
+        tl_bitmap |= UCS_BIT(tl_idx);
+    }
+
+    return tl_bitmap;
+}
+
 static const char* ucp_feature_flag_str(unsigned feature_flag)
 {
     switch (feature_flag) {

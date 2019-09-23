@@ -219,11 +219,4 @@ static inline ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.cm_lane;
 }
 
-static inline uct_ep_h ucp_ep_get_cm_ep(ucp_ep_h ep)
-{
-    const ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
-
-    return (lane == UCP_NULL_LANE) ? NULL : ep->uct_eps[lane];
-}
-
 #endif

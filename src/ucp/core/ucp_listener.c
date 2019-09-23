@@ -254,6 +254,8 @@ ucp_listener_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_conn_request->listener     = ucp_listener;
     ucp_conn_request->uct.listener = listener;
     ucp_conn_request->uct_req      = conn_request;
+    strncpy(ucp_conn_request->dev_name, local_dev_name, UCT_DEVICE_NAME_MAX);
+    ucp_conn_request->dev_name[UCT_DEVICE_NAME_MAX - 1] = '\0';
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
     memcpy(&ucp_conn_request->client_data, remote_data->conn_priv_data,

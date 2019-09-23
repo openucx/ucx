@@ -605,8 +605,8 @@ out:
     return UCS_OK;
 }
 
-static void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane,
-                                   uct_ep_h uct_ep, const char *info)
+void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
+                            int is_wireup_ep_connected, const char *info)
 {
     /* If ep already exists, it's a wireup proxy, and we need to update its
      * next_ep instead of replacing it.
@@ -619,7 +619,9 @@ static void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane,
         ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p%s", ep, lane,
                   ep->uct_eps[lane], uct_ep, info);
         ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
-        ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
+        if (is_wireup_ep_connected) {
+            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
+        }
     }
 }
 
@@ -635,22 +637,150 @@ static uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
     }
 }
 
-static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
-                                            const ucp_ep_params_t *params,
-                                            ucp_lane_index_t lane,
-                                            unsigned address_count,
-                                            const ucp_address_entry_t *address_list,
-                                            unsigned addr_index)
+static ssize_t ucp_sockaddr_cm_server_priv_pack_cb(void *arg,
+                                                   const char *dev_name,
+                                                   void *priv_data)
+{
+    ucp_wireup_sockaddr_data_t *sa_data = priv_data;
+    ucp_ep_h ep                         = arg;
+    ucp_worker_h worker                 = ep->worker;
+    ucp_ep_config_key_t key             = ucp_ep_config(ep)->key;
+    uint64_t tl_bitmap                  = 0;
+    ucp_wireup_ep_t *wireup_ep;
+    uct_cm_attr_t cm_attr;
+    void* ucp_addr;
+    size_t ucp_addr_size;
+    ucp_rsc_index_t lane;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (lane != ucp_ep_get_cm_lane(ep)) {
+            tl_bitmap |= UCS_BIT(ucp_ep_config(ep)->key.lanes[lane].rsc_index);
+        }
+    }
+
+    /* make sure that all lanes are created on correct device */
+    ucs_assert((tl_bitmap & ucp_context_tl_bitmap(worker->context, dev_name)) ==
+               tl_bitmap);
+
+    status = ucp_address_pack(worker, ep, tl_bitmap,
+                              UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                              UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
+                              UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS,
+                              NULL, &ucp_addr_size, &ucp_addr);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(worker->cms[/*cm_idx = */ 0].cm, &cm_attr);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (cm_attr.max_conn_priv < (sizeof(*sa_data) + ucp_addr_size)) {
+        status = UCS_ERR_BUFFER_TOO_SMALL;
+        goto free_addr;
+    }
+
+    sa_data->ep_ptr    = (uintptr_t)ep;
+    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
+    sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_CM_ADDR;
+    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+
+free_addr:
+    ucs_free(ucp_addr);
+out:
+    if (status != UCS_OK) {
+        wireup_ep = (ucp_wireup_ep_t *)ep->uct_eps[key.wireup_lane];
+        ucp_worker_set_ep_failed(worker, ep, &wireup_ep->super.super,
+                                 key.wireup_lane, status);
+    }
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
+}
+
+static void
+ucp_ep_sockaddr_server_connect_cb(uct_ep_h ep, void *arg, ucs_status_t status)
+{
+    ucp_ep_h         ucp_ep = arg;
+    ucp_lane_index_t wireup_idx;
+
+    if (status != UCS_OK) {
+        wireup_idx = ucp_ep_config(ucp_ep)->key.wireup_lane;
+        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
+                                 ucp_ep->uct_eps[wireup_idx], wireup_idx,
+                                 status);
+        return;
+    }
+
+    ucp_wireup_remote_connected(ucp_ep);
+    ucp_ep_flush_state_reset(ucp_ep);
+}
+
+ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                     ucp_lane_index_t lane,
+                                     unsigned address_count,
+                                     const ucp_address_entry_t *address_list,
+                                     unsigned addr_index)
 {
     ucp_worker_h worker          = ep->worker;
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
     ucp_lane_index_t proxy_lane  = ucp_ep_get_proxy_lane(ep, lane);
     ucp_worker_iface_t *wiface   = ucp_worker_iface(worker, rsc_index);
+    unsigned ep_init_flags       = ucp_wireup_sockaddr_ep_init_flags(worker,
+                                                                     params);
+    int connect_aux;
     uct_ep_params_t uct_ep_params;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_trace("ep %p: connect lane[%d]", ep, lane);
+
+    if ((lane == ucp_ep_get_cm_lane(ep)) &&
+        (ep_init_flags & UCP_EP_INIT_CM_WIREUP_SERVER)) {
+        ucs_assert(wiface == NULL);
+        ucs_assert(ep->uct_eps[lane] == NULL);
+        /* create a server side CM endpoint */
+        ucs_trace("ep %p: uct_ep[%d]", ep, lane);
+        uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
+                                   UCT_EP_PARAM_FIELD_CONN_REQUEST          |
+                                   UCT_EP_PARAM_FIELD_USER_DATA             |
+                                   UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
+                                   UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
+                                   UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
+                                   UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
+
+        uct_ep_params.user_data                  = ep;
+        uct_ep_params.conn_request               = params->conn_request->uct_req;
+        uct_ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
+        uct_ep_params.sockaddr_pack_cb           = ucp_sockaddr_cm_server_priv_pack_cb;
+        uct_ep_params.sockaddr_connect_cb.server = ucp_ep_sockaddr_server_connect_cb;
+        uct_ep_params.disconnect_cb              = ucp_ep_sockaddr_disconnect_cb;
+
+        ucs_assertv_always(ucp_worker_num_cm_cmpts(worker) == 1,
+                           "multiple CMs are not supported");
+        uct_ep_params.cm = worker->cms[0].cm;
+
+        status = uct_ep_create(&uct_ep_params, &uct_ep);
+        if (status == UCS_OK) {
+            ucp_wireup_assign_lane(ep, lane, uct_ep, 0, "");
+        }
+        return status;
+    }
+
+    if ((lane == ucp_ep_get_cm_lane(ep)) &&
+        (ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT)) {
+        ucs_assert(wiface == NULL);
+        ucs_assert(ucp_ep_get_cm_wireup_ep(ep) != NULL);
+
+        uct_ep = ucp_ep_get_cm_ep(ep);
+        ucp_wireup_ep_disown(&ucp_ep_get_cm_wireup_ep(ep)->super.super, uct_ep);
+        ucp_wireup_assign_lane(ep, lane, uct_ep, 1, "");
+        return UCS_OK;
+    }
 
     /*
      * if the selected transport can be connected directly to the remote
@@ -675,7 +805,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
                 return status;
             }
 
-            ucp_wireup_assign_lane(ep, lane, uct_ep, "");
+            ucp_wireup_assign_lane(ep, lane, uct_ep, 1, "");
         }
 
         ucp_worker_iface_progress_ep(wiface);
@@ -691,9 +821,6 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
         /* For now, p2p transports have no reason to have proxy */
         ucs_assert_always(proxy_lane == UCP_NULL_LANE);
 
-        /* If ep already exists, it's a wireup proxy, and we need to start
-         * auxiliary wireup.
-         */
         if (ep->uct_eps[lane] == NULL) {
             status = ucp_wireup_ep_create(ep, &uct_ep);
             if (status != UCS_OK) {
@@ -705,13 +832,15 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             ep->uct_eps[lane] = uct_ep;
         } else {
             uct_ep = ep->uct_eps[lane];
+            ucs_assert(ucp_wireup_ep_test(uct_ep));
         }
 
         ucs_trace("ep %p: connect uct_ep[%d]=%p to addr[%d] wireup", ep, lane,
                   uct_ep, addr_index);
+        connect_aux = !ep_init_flags && (lane == ucp_ep_get_wireup_msg_lane(ep));
         status = ucp_wireup_ep_connect(ep->uct_eps[lane], params, rsc_index,
-                                       lane == ucp_ep_get_wireup_msg_lane(ep),
-                                       address_count, address_list);
+                                       connect_aux, address_count, address_list,
+                                       addr_index);
         if (status != UCS_OK) {
             return status;
         }
@@ -724,7 +853,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
     return UCS_ERR_UNREACHABLE;
 }
 
-static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
+ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
 {
     ucp_lane_index_t lane, proxy_lane;
     uct_iface_attr_t *iface_attr;
@@ -773,7 +902,7 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
         ucs_trace("ep %p: lane[%d]=%p proxy_lane=%d", ep, lane, ep->uct_eps[lane],
                   proxy_lane);
 
-        ucp_wireup_assign_lane(ep, lane, signaling_ep, " (signaling proxy)");
+        ucp_wireup_assign_lane(ep, lane, signaling_ep, 1, " (signaling proxy)");
     }
 
     return UCS_OK;
@@ -931,10 +1060,22 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     ucp_wireup_print_config(worker->context, &ucp_ep_config(ep)->key, str,
                             addr_indices, UCS_LOG_LEVEL_DEBUG);
 
-    /* establish connections on all underlying endpoints */
+    /* establish connections on all underlying transport endpoints */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_ep_get_cm_lane(ep) == lane) {
+            continue;
+        }
+
         status = ucp_wireup_connect_lane(ep, params, lane, address_count,
                                          address_list, addr_indices[lane]);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) {
+        status = ucp_wireup_connect_lane(ep, params, ucp_ep_get_cm_lane(ep),
+                                         0, NULL, -1);
         if (status != UCS_OK) {
             return status;
         }
@@ -945,8 +1086,12 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         return status;
     }
 
-    /* If we don't have a p2p transport, we're connected */
-    if (!ucp_ep_config(ep)->p2p_lanes) {
+    /*
+     * If this is a server side of CM wireup or we don't have a p2p transport,
+     * we are connected. Otherwise, we need wireup msg protocol
+     */
+    if (!ucp_ep_config(ep)->p2p_lanes || (ep_init_flags &
+                                          UCP_EP_INIT_CM_WIREUP_SERVER)) {
         ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
     }
 

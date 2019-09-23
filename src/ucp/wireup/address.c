@@ -50,7 +50,7 @@ typedef struct {
 } ucp_address_packed_device_t;
 
 
-typedef struct {
+typedef struct ucp_address_packed_iface_attr {
     float            overhead;
     float            bandwidth;
     float            lat_ovh;
@@ -310,10 +310,10 @@ ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
     return UCS_ERR_INVALID_ADDR;
 }
 
-static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
-                                       ucp_rsc_index_t index,
-                                       const uct_iface_attr_t *iface_attr,
-                                       int enable_atomics)
+int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
+                                ucp_rsc_index_t index,
+                                const uct_iface_attr_t *iface_attr,
+                                int enable_atomics)
 {
     ucp_address_packed_iface_attr_t  *packed;
     ucp_address_unified_iface_attr_t *unified;
@@ -376,10 +376,9 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     return sizeof(*packed);
 }
 
-static int
-ucp_address_unpack_iface_attr(ucp_worker_t *worker,
-                              ucp_address_iface_attr_t *iface_attr,
-                              const void *ptr)
+int ucp_address_unpack_iface_attr(ucp_worker_t *worker,
+                                  ucp_address_iface_attr_t *iface_attr,
+                                  const void *ptr)
 {
     const ucp_address_packed_iface_attr_t *packed;
     const ucp_address_unified_iface_attr_t *unified;
@@ -528,6 +527,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     int attr_len;
     void *ptr;
     void *flags_ptr;
+    int enable_amo;
 
     ptr   = buffer;
     index = 0;
@@ -585,6 +585,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             wiface     = ucp_worker_iface(worker, rsc_index);
             iface_attr = &wiface->attr;
+            enable_amo = (worker->atomic_tls & UCS_BIT(rsc_index)) ||
+                         (flags & UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS);
 
             if (!ucp_worker_iface_can_connect(iface_attr)) {
                 return UCS_ERR_INVALID_ADDR;
@@ -596,8 +598,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                       context->tl_rscs[rsc_index].tl_name_csum);
 
             /* Transport information */
-            attr_len = ucp_address_pack_iface_attr(worker, ptr, rsc_index, iface_attr,
-                                                   worker->atomic_tls & UCS_BIT(rsc_index));
+            attr_len = ucp_address_pack_iface_attr(worker, ptr, rsc_index,
+                                                   iface_attr, enable_amo);
             if (attr_len < 0) {
                 return UCS_ERR_INVALID_ADDR;
             }

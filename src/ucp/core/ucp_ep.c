@@ -295,24 +295,34 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
 
     /* all operations will use the first lane, which is a stub endpoint */
     key.num_lanes             = 1;
+    if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
+        key.cm_lane           = 0;
+        key.wireup_lane       = UCP_NULL_LANE;
+        key.am_lane           = UCP_NULL_LANE;
+    } else {
+        key.cm_lane           = UCP_NULL_LANE;
+        key.wireup_lane       = 0;
+        key.am_lane           = 0; /* TODO: actually, this is a bug, the fix
+                                    *       requires request reconfiguration
+                                    *       when wireup is done but keep it for
+                                    *       now to avoid regressions */
+    }
+    /* all other lanes should be initialized when remote info is available */
     key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
     key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
-    key.am_lane               = 0;
-    key.wireup_lane           = 0;
-    key.tag_lane              = UCP_NULL_LANE; /* should be initialized only if
-                                                  HW TM is supported */
-    key.am_bw_lanes[0]        = 0;
-    key.rma_lanes[0]          = 0;
+    key.tag_lane              = UCP_NULL_LANE;
+    key.am_bw_lanes[0]        = UCP_NULL_LANE;
+    key.rma_lanes[0]          = UCP_NULL_LANE;
     key.rma_bw_lanes[0]       = UCP_NULL_LANE;
-    key.amo_lanes[0]          = 0;
+    key.amo_lanes[0]          = UCP_NULL_LANE;
 
     status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    ep->am_lane               = 0;
-    ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+    ep->am_lane  = key.wireup_lane;
+    ep->flags   |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
     if (status != UCS_OK) {
@@ -398,11 +408,12 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_cleanup_lanes;
     }
 
-    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-        status = ucp_wireup_ep_cm_connect_to_sockaddr(ep->uct_eps[0], params);
+    if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
+        status = ucp_ep_cm_connect_start(ep->uct_eps[0], params);
     } else {
         status = ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
     }
+
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
@@ -418,44 +429,16 @@ err:
     return status;
 }
 
-void ucp_ep_sockaddr_cm_wireup_complete(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
-{
-    ucp_lane_index_t wireup_idx = ucp_ep_config(ucp_ep)->key.wireup_lane;
-    ucp_wireup_ep_t  *wireup_ep = (ucp_wireup_ep_t*)ucp_ep->uct_eps[wireup_idx];
-
-    ucp_wireup_ep_disown(&wireup_ep->super.super, uct_ep);
-    ucp_wireup_remote_connected(ucp_ep);
-    ucp_ep_add_connected_lane(ucp_ep, uct_ep);
-    ucp_ep_flush_state_reset(ucp_ep);
-}
-
-static void
-ucp_ep_sockaddr_server_connect_cb(uct_ep_h ep, void *arg, ucs_status_t status)
-{
-    ucp_ep_h         ucp_ep = arg;
-    ucp_lane_index_t wireup_idx;
-
-    if (status != UCS_OK) {
-        wireup_idx = ucp_ep_config(ucp_ep)->key.wireup_lane;
-        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
-                                 ucp_ep->uct_eps[wireup_idx], wireup_idx,
-                                 status);
-        return;
-    }
-
-    ucp_ep_sockaddr_cm_wireup_complete(ucp_ep, ep);
-}
-
 static ucs_status_t
 ucp_ep_sockaddr_server_create_connected(ucp_worker_h worker,
                                         const ucp_ep_params_t *params,
-                                        const ucp_unpacked_address_t *remote_address,
+                                        const ucp_unpacked_address_t *remote_addr,
                                         ucp_ep_h *ep_p)
 {
-    ucp_ep_h ep;
-    ucp_wireup_ep_t *wireup_ep;
-    uct_ep_params_t uct_ep_params;
+    unsigned ep_init_flags = ucp_wireup_sockaddr_ep_init_flags(worker, params);
     char peer_name[UCS_SOCKADDR_STRING_LEN];
+    ucp_ep_h ep;
+    ucp_lane_index_t lane_idx;
     ucs_status_t status;
 
     UCS_STATIC_ASSERT(UCS_SOCKADDR_STRING_LEN <= UCP_WORKER_NAME_MAX);
@@ -470,79 +453,23 @@ ucp_ep_sockaddr_server_create_connected(ucp_worker_h worker,
                  params->conn_request->client_data.ep_ptr);
     }
 
-    status = ucp_ep_new(worker, peer_name, "conn_request on uct_listener", &ep);
+    status = ucp_ep_create_to_worker_addr(worker, params, remote_addr,
+                                          ep_init_flags,
+                                          "conn_request on uct_listener", &ep);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
-    if (status != UCS_OK) {
-        goto err_del_ep;
-    }
-
-    status = ucp_ep_adjust_params(ep, params);
-    if (status != UCS_OK) {
-        goto err_del_ep;
-    }
-
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
-                               UCT_EP_PARAM_FIELD_CONN_REQUEST          |
-                               UCT_EP_PARAM_FIELD_USER_DATA             |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
-
-    uct_ep_params.user_data                  = ep;
-    uct_ep_params.conn_request               = params->conn_request->uct_req;
-    uct_ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
-    uct_ep_params.sockaddr_pack_cb           = ucp_wireup_sockaddr_cm_priv_pack_cb;
-    uct_ep_params.sockaddr_connect_cb.server = ucp_ep_sockaddr_server_connect_cb;
-    uct_ep_params.disconnect_cb              = ucp_ep_sockaddr_disconnect_cb;
-
-    ucs_assertv_always(ucp_worker_num_cm_cmpts(worker) == 1,
-                       "multiple CMs are not supported");
-    uct_ep_params.cm = worker->cms[0].cm;
-    status = uct_ep_create(&uct_ep_params, &wireup_ep->sockaddr_ep);
-    if (status != UCS_OK) {
-        goto err_del_ep;
-    }
-
-    ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
-
-    ucs_assert(remote_address->address_count == 1);
-    if (ucp_worker_iface_is_tl_p2p(&wireup_ep->sockaddr_tl_wiface->attr)) {
-        ucs_assert(wireup_ep->super.uct_ep != NULL);
-        status = ucp_wireup_ep_connect_to_ep(&wireup_ep->super.super,
-                                             remote_address->address_list[0].dev_addr,
-                                             remote_address->address_list[0].ep_addr);
-    } else {
-        uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                                   UCT_EP_PARAM_FIELD_DEV_ADDR |
-                                   UCT_EP_PARAM_FIELD_IFACE_ADDR;
-        uct_ep_params.iface      = wireup_ep->sockaddr_tl_wiface->iface;
-        uct_ep_params.dev_addr   = remote_address->address_list[0].dev_addr;
-        uct_ep_params.iface_addr = remote_address->address_list[0].iface_addr;
-
-        status = uct_ep_create(&uct_ep_params, &wireup_ep->super.uct_ep);
-        if (status == UCS_OK) {
-            wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
+        if (ucp_wireup_ep_test(ep->uct_eps[lane_idx])) {
+            ((ucp_wireup_ep_t *)ep->uct_eps[lane_idx])->flags |=
+                    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
         }
     }
 
-    if (status != UCS_OK) {
-        goto err_del_ep;
-    }
-
     ucp_listener_schedule_accept_cb(ep);
-
     *ep_p = ep;
-
-    return status;
-
-err_del_ep:
-    ucp_ep_destroy_internal(ep);
-    return status;
+    return UCS_OK;
 }
 
 /**
@@ -556,6 +483,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     ucp_ep_params_t        params;
     ucp_unpacked_address_t remote_address;
     uint64_t               addr_flags;
+    unsigned               i;
     ucs_status_t           status;
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -603,8 +531,10 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         break;
     case UCP_WIREUP_SOCKADDR_CD_CM_ADDR:
         ucs_assert(ucp_worker_sockaddr_is_cm_proto(worker));
-        ucs_assert(remote_address.address_count == 1);
-        remote_address.address_list[0].dev_addr = conn_request->remote_dev_addr;
+        for (i = 0; i < remote_address.address_count; ++i) {
+            remote_address.address_list[i].dev_addr =
+                    conn_request->remote_dev_addr;
+        }
         params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST;
         params.conn_request = conn_request;
         status = ucp_ep_sockaddr_server_create_connected(worker, &params,
@@ -1016,6 +946,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->am_lane          != key2->am_lane)                                  ||
         (key1->tag_lane         != key2->tag_lane)                                 ||
         (key1->wireup_lane      != key2->wireup_lane)                              ||
+        (key1->cm_lane          != key2->cm_lane)                                  ||
         (key1->err_mode         != key2->err_mode)                                 ||
         (key1->status           != key2->status))
     {
@@ -1874,28 +1805,335 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     return zcopy_thresh;
 }
 
-ucs_status_t ucp_ep_add_connected_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
-{
-    ucp_ep_config_key_t new_key;
-
-    if (ucp_ep_get_cm_lane(ucp_ep) != UCP_NULL_LANE) {
-        return UCS_ERR_ALREADY_EXISTS;
-    }
-
-    ucs_assert(ucp_ep_get_cm_ep(ucp_ep) == NULL);
-
-    new_key = ucp_ep_config(ucp_ep)->key;
-    if (new_key.num_lanes == UCP_MAX_LANES) {
-        return UCS_ERR_EXCEEDS_LIMIT;
-    }
-
-    new_key.cm_lane                  = new_key.num_lanes++;
-    ucp_ep->uct_eps[new_key.cm_lane] = uct_ep;
-    return ucp_worker_get_ep_config(ucp_ep->worker, &new_key, 0,
-                                    &ucp_ep->cfg_index);
-}
-
 void ucp_ep_sockaddr_disconnect_cb(uct_ep_h ep, void *arg)
 {
     ucs_error("UCP close protocol is not implemented");
+}
+
+ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
+{
+    const ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+
+    if (lane == UCP_NULL_LANE) {
+        return NULL;
+    }
+
+    return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
+           (ucp_wireup_ep_t *)ep->uct_eps[lane] : NULL;
+}
+
+uct_ep_h ucp_ep_get_cm_ep(ucp_ep_h ep)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucp_lane_index_t lane;
+
+    if (wireup_ep != NULL) {
+        return wireup_ep->sockaddr_ep;
+    }
+
+    lane = ucp_ep_get_cm_lane(ep);
+    return (lane != UCP_NULL_LANE) ? ep->uct_eps[lane] : NULL;
+}
+
+static void
+ucp_wireup_sockaddr_client_connect_cb(uct_ep_h ep, void *arg,
+                                      const uct_cm_remote_data_t *remote_data,
+                                      ucs_status_t status)
+{
+    ucp_ep_h                   ucp_ep     = (ucp_ep_h)arg;
+    ucp_worker_h               worker     = ucp_ep->worker;
+    ucp_wireup_ep_t            *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
+    ucp_ep_config_key_t        key;
+    ucp_unpacked_address_t     addr;
+    ucp_wireup_sockaddr_data_t *wireup_data;
+    uint8_t                    *addr_indices;
+    ucp_ep_params_t            ucp_ep_params;
+    unsigned                   addr_idx;
+    ucp_lane_index_t           lane;
+
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucp_ep_params = wireup_ep->ucp_ep_params;
+    wireup_data   = (ucp_wireup_sockaddr_data_t *)remote_data->conn_priv_data;
+    ucp_ep_update_dest_ep_ptr(ucp_ep, wireup_data->ep_ptr);
+    status = ucp_address_unpack(worker, wireup_data + 1,
+                                UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                                UCP_ADDRESS_PACK_FLAG_EP_ADDR, &addr);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (addr.address_count == 0) {
+        status = UCS_ERR_UNREACHABLE;
+        goto free_addr_list;
+    }
+
+    for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
+        addr.address_list[addr_idx].dev_addr = remote_data->dev_addr;
+    }
+
+    addr_indices = ucs_malloc(addr.address_count, "CM client address indices");
+    if (addr_indices == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto free_addr_list;
+    }
+
+    /* re-configure lanes according to real remote address  */
+    ucp_ep_config_key_reset(&key);
+    status = ucp_wireup_select_lanes(ucp_ep, &ucp_ep_params,
+                                     ucp_wireup_sockaddr_ep_init_flags(worker,
+                                                                &ucp_ep_params),
+                                     addr.address_count, addr.address_list,
+                                     addr_indices, &key);
+    if (status != UCS_OK) {
+        goto free_addr_indices;
+    }
+
+    status = ucp_worker_get_ep_config(worker, &key, 0, &ucp_ep->cfg_index);
+    if (status != UCS_OK) {
+        goto free_addr_indices;
+    }
+
+    /* establish connections on all underlying endpoints */
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        status = ucp_wireup_connect_lane(ucp_ep, &ucp_ep_params, lane,
+                                         addr.address_count, addr.address_list,
+                                         addr_indices[lane]);
+        if (status != UCS_OK) {
+            goto free_addr_indices;
+        }
+    }
+
+    status = ucp_wireup_resolve_proxy_lanes(ucp_ep);
+    if (status != UCS_OK) {
+        goto free_addr_indices;
+    }
+
+    ucp_wireup_remote_connected(ucp_ep);
+    ucp_ep_flush_state_reset(ucp_ep);
+free_addr_indices:
+    ucs_free(addr_indices);
+free_addr_list:
+    ucs_free(addr.address_list);
+out:
+    if (status != UCS_OK) {
+        ucp_worker_set_ep_failed(worker, ucp_ep,
+                                 wireup_ep ? &wireup_ep->super.super : ep,
+                                 ucp_ep_get_cm_lane(ucp_ep), status);
+    }
+}
+
+static ucs_status_t ucp_ep_cm_preinit_client_lanes(ucp_ep_h ucp_ep,
+                                                   const char *dev_name,
+                                                   unsigned ep_init_flags,
+                                                   ucp_ep_config_key_t *key)
+{
+    ucp_worker_h worker      = ucp_ep->worker;
+    uint64_t tl_bitmap       = ucp_context_tl_bitmap(worker->context,
+                                                     dev_name);
+    uint64_t addr_pack_flags = UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
+                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  |
+                               UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS;
+    ucp_wireup_ep_t *wireup_ep;
+    void *ucp_addr;
+    size_t ucp_addr_size;
+    ucp_unpacked_address_t unpacked_addr;
+    uint8_t *addr_indices;
+    ucp_lane_index_t lane_idx;
+    ucs_status_t status;
+
+    wireup_ep = (ucp_wireup_ep_t *)ucp_ep->uct_eps[key->cm_lane];
+
+    /* Construct dummy address for lanes selection */
+    status = ucp_address_pack(worker, NULL, tl_bitmap, addr_pack_flags, NULL,
+                              &ucp_addr_size, &ucp_addr);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucp_address_unpack(worker, ucp_addr, addr_pack_flags,
+                                &unpacked_addr);
+    if (status != UCS_OK) {
+        goto free_addr;
+    }
+
+    addr_indices = (uint8_t *)ucs_malloc(unpacked_addr.address_count *
+                                         sizeof(uint8_t), "dummy addr indices");
+    if (addr_indices == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto free_addr_indicies;
+    }
+
+    status = ucp_wireup_select_lanes(ucp_ep, &wireup_ep->ucp_ep_params,
+                                     ep_init_flags, unpacked_addr.address_count,
+                                     unpacked_addr.address_list, addr_indices,
+                                     key);
+    if (status != UCS_OK) {
+        goto free_addr_indicies;
+    }
+
+    status = ucp_worker_get_ep_config(worker, key, 0, &ucp_ep->cfg_index);
+    if (status != UCS_OK) {
+        goto free_addr_indicies;
+    }
+
+    ucp_ep->am_lane = key->am_lane;
+
+    /* 0-lane is a CM lane */
+    for (lane_idx = 1; lane_idx < ucp_ep_num_lanes(ucp_ep); ++lane_idx) {
+        status = ucp_wireup_ep_create(ucp_ep, &ucp_ep->uct_eps[lane_idx]);
+        if (status != UCS_OK) {
+            goto err_cleanup_lanes;
+        }
+    }
+
+    if (status == UCS_OK) {
+        goto free_addr_indicies;
+    }
+
+err_cleanup_lanes:
+    for (lane_idx = 1; (lane_idx < ucp_ep_num_lanes(ucp_ep)) &&
+                       (ucp_ep->uct_eps[lane_idx] != NULL); ++lane_idx) {
+        uct_ep_destroy(ucp_ep->uct_eps[lane_idx]);
+    }
+free_addr_indicies:
+    ucs_free(addr_indices);
+free_addr:
+    ucs_free(unpacked_addr.address_list);
+out:
+    return status;
+}
+
+static ssize_t ucp_sockaddr_cm_client_priv_pack_cb(void *arg,
+                                                   const char *dev_name,
+                                                   void *priv_data)
+{
+    ucp_wireup_sockaddr_data_t *sa_data = priv_data;
+    ucp_ep_h ep                         = arg;
+    ucp_worker_h worker                 = ep->worker;
+    ucp_ep_config_key_t key             = ucp_ep_config(ep)->key;
+    uint64_t tl_bitmap;
+    ucp_wireup_ep_t *wireup_ep;
+    unsigned ep_init_flags;
+    uct_ep_h tl_ep;
+    uct_cm_attr_t cm_attr;
+    uct_ep_params_t tl_ep_params;
+    void* ucp_addr;
+    size_t ucp_addr_size;
+    ucs_status_t status;
+    ucp_lane_index_t lane_idx;
+    ucp_rsc_index_t rsc_idx;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    strncpy(wireup_ep->dev_name, dev_name, UCT_DEVICE_NAME_MAX);
+    wireup_ep->dev_name[UCT_DEVICE_NAME_MAX - 1] = '\0';
+
+    ep_init_flags = ucp_wireup_sockaddr_ep_init_flags(worker,
+                                                      &wireup_ep->ucp_ep_params);
+    status        = ucp_ep_cm_preinit_client_lanes(ep, dev_name, ep_init_flags,
+                                                   &key);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(worker->cms[/*cm_idx = */ 0].cm, &cm_attr);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    tl_bitmap = 0;
+    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
+        if (lane_idx == ucp_ep_get_cm_lane(ep)) {
+            continue;
+        }
+
+        rsc_idx = ucp_ep_get_rsc_index(ep, lane_idx);
+        if (rsc_idx == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        tl_bitmap |= UCS_BIT(rsc_idx);
+        if (ucp_worker_iface_is_tl_p2p(ucp_ep_get_iface_attr(ep, lane_idx))) {
+            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+            tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
+            status = uct_ep_create(&tl_ep_params, &tl_ep);
+            if (status != UCS_OK) {
+                goto out;
+            }
+
+            ucp_wireup_assign_lane(ep, lane_idx, tl_ep, 0, "sockaddr TL lane");
+        } else {
+            ucs_assert(ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags &
+                       UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+        }
+    }
+
+    status = ucp_address_pack(worker, ep, tl_bitmap,
+                              UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                              UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
+                              UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS, NULL,
+                              &ucp_addr_size, &ucp_addr);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (cm_attr.max_conn_priv < (sizeof(*sa_data) + ucp_addr_size)) {
+        status = UCS_ERR_BUFFER_TOO_SMALL;
+        goto free_addr;
+    }
+
+    sa_data->ep_ptr    = (uintptr_t)ep;
+    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
+    sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_CM_ADDR;
+    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+
+free_addr:
+    ucs_free(ucp_addr);
+out:
+    if (status != UCS_OK) {
+        ucp_worker_set_ep_failed(worker, ep, &wireup_ep->super.super,
+                                 key.wireup_lane, status);
+    }
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
+}
+
+ucs_status_t ucp_ep_cm_connect_start(uct_ep_h uct_ep,
+                                     const ucp_ep_params_t *params)
+{
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker        = ucp_ep->worker;
+    uct_ep_params_t cm_lane_params;
+    ucs_status_t status;
+
+    wireup_ep->ucp_ep_params  = *params;
+    cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
+                                UCT_EP_PARAM_FIELD_USER_DATA             |
+                                UCT_EP_PARAM_FIELD_SOCKADDR              |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
+
+    cm_lane_params.user_data                  = ucp_ep;
+    cm_lane_params.sockaddr                   = &params->sockaddr;
+    cm_lane_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
+    cm_lane_params.sockaddr_pack_cb           = ucp_sockaddr_cm_client_priv_pack_cb;
+    cm_lane_params.sockaddr_connect_cb.client = ucp_wireup_sockaddr_client_connect_cb;
+    cm_lane_params.disconnect_cb              = ucp_ep_sockaddr_disconnect_cb;
+
+    ucs_assert_always(ucp_worker_num_cm_cmpts(worker) == 1);
+    cm_lane_params.cm = worker->cms[0].cm;
+    status = uct_ep_create(&cm_lane_params, &wireup_ep->sockaddr_ep);
+
+    /* TODO: move to later phase (connect_cb) */
+    ucp_ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+
+    return status;
 }
