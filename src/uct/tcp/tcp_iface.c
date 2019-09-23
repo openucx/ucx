@@ -264,6 +264,7 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
                 ucs_error("accept() failed: %m");
                 uct_tcp_iface_listen_close(iface);
             }
+
             return;
         }
 

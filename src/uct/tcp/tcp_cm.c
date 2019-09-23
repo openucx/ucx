@@ -585,6 +585,16 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
     ucs_status_t status;
     uct_tcp_ep_t *ep;
 
+    if (!ucs_socket_is_connected(fd)) {
+        ucs_warn("tcp_iface %p: connection establishment for socket fd %d "
+                 "from %s to %s was unsuccessful", iface, fd,
+                 ucs_sockaddr_str((const struct sockaddr*)&peer_addr,
+                                  str_remote_addr, UCS_SOCKADDR_STRING_LEN),
+                 ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                  str_local_addr, UCS_SOCKADDR_STRING_LEN));
+        return UCS_ERR_UNREACHABLE;
+    }
+
     status = uct_tcp_ep_init(iface, fd, NULL, &ep);
     if (status != UCS_OK) {
         return status;

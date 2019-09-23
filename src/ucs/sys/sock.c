@@ -101,14 +101,31 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
+static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
+{
+    struct sockaddr_storage sock_addr = {0}; /* Suppress Clang false-positive */
+    socklen_t addr_size;
+    int ret;
+
+    addr_size = sizeof(sock_addr);
+    ret       = getsockname(fd, (struct sockaddr*)&sock_addr,
+                            &addr_size);
+    if (ret < 0) {
+        ucs_debug("getsockname(fd=%d) failed: %m", fd);
+        ucs_strncpy_safe(str, "-", max_size);
+        return str;
+    }
+
+    return ucs_sockaddr_str((const struct sockaddr*)&sock_addr,
+                            str, max_size);
+}
+
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
     char dest_str[UCS_SOCKADDR_STRING_LEN];
     char src_str[UCS_SOCKADDR_STRING_LEN];
-    struct sockaddr_storage src_addr;
     ucs_status_t status;
     size_t dest_addr_size;
-    socklen_t src_addr_size;
     int UCS_V_UNUSED conn_errno;
     int ret;
 
@@ -144,29 +161,25 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
         }
     } while ((ret < 0) && (errno == EINTR));
 
-    src_addr_size = sizeof(src_addr);
-    ret           = getsockname(fd, (struct sockaddr*)&src_addr, &src_addr_size);
-    if (ret < 0) {
-        ucs_debug("getsockname(fd=%d) failed: %m", fd);
-    }
-
     ucs_debug("connect(fd=%d, src_addr=%s dest_addr=%s): %s", fd,
-              ((ret < 0) ? "-" :
-               ucs_sockaddr_str((struct sockaddr*)&src_addr, src_str,
-                                UCS_SOCKADDR_STRING_LEN)),
+              ucs_socket_getname_str(fd, src_str, UCS_SOCKADDR_STRING_LEN),
               ucs_sockaddr_str(dest_addr, dest_str, UCS_SOCKADDR_STRING_LEN),
               strerror(conn_errno));
+
     return status;
 }
 
 int ucs_socket_is_connected(int fd)
 {
-    struct sockaddr_storage addr;
-    socklen_t sock_addr_len;
+    struct sockaddr_storage peer_addr = {0}; /* Suppress Clang false-positive */
+    char peer_str[UCS_SOCKADDR_STRING_LEN];
+    char local_str[UCS_SOCKADDR_STRING_LEN];
+    socklen_t peer_addr_len;
     int ret;
 
-    sock_addr_len = sizeof(addr);
-    ret = getpeername(fd, (struct sockaddr *)&addr, &sock_addr_len);
+    peer_addr_len = sizeof(peer_addr);
+    ret           = getpeername(fd, (struct sockaddr*)&peer_addr,
+                                &peer_addr_len);
     if (ret < 0) {
         if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
             ucs_error("getpeername(fd=%d) failed: %m", fd);
@@ -174,6 +187,11 @@ int ucs_socket_is_connected(int fd)
 
         return 0;
     }
+
+    ucs_debug("[%s]<->[%s] is a connected pair",
+              ucs_socket_getname_str(fd, local_str, UCS_SOCKADDR_STRING_LEN),
+              ucs_sockaddr_str((const struct sockaddr*)&peer_addr, peer_str,
+                               UCS_SOCKADDR_STRING_LEN));
 
     return 1;
 }
