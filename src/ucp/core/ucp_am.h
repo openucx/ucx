@@ -55,9 +55,9 @@ typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
   uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
                                    of arrivals */
-#if defined(UCP_AM_RDMA_VERIFY)
+  char              rkey_buffer[UCP_PACKED_RKEY_MAX_SIZE] ; /* Packed remote key */
+  uintptr_t         address;     /* Address for RDMA */
   size_t            iovec_0_length ; /* Amount of data transferred by iovec[0], for checking */
-#endif
   char              iovec_0[UCP_AM_RDMA_IOVEC_0_MAX_SIZE] ; /* iovec[0] carried in request */
   uint16_t          am_id;      /* index into callback array */
 #if defined(UCP_AM_RDMA_VERIFY)
@@ -65,15 +65,6 @@ typedef struct {
   char              iovec_1_last_byte; /* Last byte of iovec[1], for checking */
 #endif
 } UCS_S_PACKED ucp_am_rdma_header_t ;
-
-typedef struct {
-  uint64_t          msg_id;     /* method to match parts of the same AM */
-  uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
-                                   of arrivals */
-  uint16_t          am_id;      /* index into callback array */
-  uintptr_t         address;     /* Address for RDMA */
-  char              rkey_buffer[UCP_PACKED_RKEY_MAX_SIZE] ; /* Packed remote key */
-} UCS_S_PACKED ucp_am_rdma_reply_header_t ;
 
 typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
@@ -99,7 +90,6 @@ typedef struct {
   ucp_rkey_h        rkey;                                  /* remote memory key */
   ucp_send_callback_t cb ;                                 /* callback to drive when the AM is complete */
   ucp_am_rdma_header_t rdma_header ;                       /* What the client initially sends to the AM server */
-  ucp_am_rdma_completion_header_t rdma_completion_header ; /* What the client sents when RDMA is complete */
 } ucp_am_rdma_client_unfinished_t ;
 
 typedef struct {
@@ -111,7 +101,7 @@ typedef struct {
 #if defined(UCP_AM_RDMA_VERIFY)
   size_t            iovec_0_length;              /* Amount of data transferred by iovec[0], for checking */
 #endif
-  ucp_am_rdma_reply_header_t rdma_reply_header ; /* What the server sends to the client for an AM */
+  ucp_am_rdma_completion_header_t rdma_completion_header ; /* What the client sents when RDMA is complete */
   uint16_t          am_id ;                      /* active message function index */
 #if defined(UCP_AM_RDMA_VERIFY)
   char              iovec_1_first_byte;          /* First byte of iovec[1], fro checking */
