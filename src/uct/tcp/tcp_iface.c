@@ -247,8 +247,6 @@ static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
-    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
-    char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
     uct_tcp_iface_t *iface = arg;
     struct sockaddr_in peer_addr;
     socklen_t addrlen;
@@ -262,28 +260,11 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 
         fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
         if (fd < 0) {
-            if (errno == ECONNABORTED) {
-                ucs_warn("peer destroyed a connection right after it was established");
-                return;
-            }
-
             if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
                 ucs_error("accept() failed: %m");
                 uct_tcp_iface_listen_close(iface);
             }
 
-            return;
-        }
-
-        ucs_assert(addrlen == sizeof(peer_addr));
-
-        if (!ucs_socket_is_connected(fd)) {
-            ucs_warn("connection from %s to %s wasn't really established",
-                     ucs_sockaddr_str((const struct sockaddr*)&peer_addr,
-                                      str_remote_addr, UCS_SOCKADDR_STRING_LEN),
-                     ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
-                                      str_local_addr, UCS_SOCKADDR_STRING_LEN));
-            close(fd);
             return;
         }
 

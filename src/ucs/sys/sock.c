@@ -103,7 +103,7 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
 {
-    struct sockaddr_storage sock_addr = {0};
+    struct sockaddr_storage sock_addr;
     socklen_t addr_size;
     int ret;
 
@@ -112,7 +112,7 @@ static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
                             &addr_size);
     if (ret < 0) {
         ucs_debug("getsockname(fd=%d) failed: %m", fd);
-        ucs_strncpy_zero(str, "-", max_size);
+        ucs_strncpy_safe(str, "-", max_size);
         return str;
     }
 
@@ -171,7 +171,7 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 
 int ucs_socket_is_connected(int fd)
 {
-    struct sockaddr_storage peer_addr = {0};
+    struct sockaddr_storage peer_addr;
     char peer_str[UCS_SOCKADDR_STRING_LEN];
     char local_str[UCS_SOCKADDR_STRING_LEN];
     socklen_t peer_addr_len;
