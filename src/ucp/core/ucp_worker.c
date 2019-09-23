@@ -1365,7 +1365,10 @@ static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
     ucp_rsc_index_t iface_id;
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        accumulated_flags |= worker->ifaces[iface_id].attr.cap.flags;
+        accumulated_flags |=
+            (ucp_is_scalable_transport(worker->context,
+                                       worker->ifaces[iface_id].attr.max_num_eps) ?
+             worker->ifaces[iface_id].attr.cap.flags : 0);
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
