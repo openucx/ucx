@@ -959,7 +959,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         tl_bitmap          = UCS_MASK(context->num_tls);
     }
 
-    worker->ifaces = ucs_calloc(worker->num_ifaces, sizeof(ucp_worker_iface_t*),
+    worker->ifaces = ucs_calloc(worker->num_ifaces, sizeof(*worker->ifaces),
                                 "ucp ifaces array");
     if (worker->ifaces == NULL) {
         return UCS_ERR_NO_MEMORY;
@@ -1055,7 +1055,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
-    wiface = ucs_calloc(1, sizeof(ucp_worker_iface_t), "ucp_iface");
+    wiface = ucs_calloc(1, sizeof(*wiface), "ucp_iface");
     if (wiface == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -1129,10 +1129,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
 err_close_iface:
     uct_iface_close(wiface->iface);
-
 err_free_iface:
     ucs_free(wiface);
-
     return status;
 }
 

@@ -1034,13 +1034,13 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
     check_unified_ifaces(&sender(), "rc_mlx5", "rc");
     check_unified_ifaces(&sender(), "ud_mlx5", "ud");
 
-    // Rc and dc has similar capabilities, but rc has better latency while
+    // RC and DC has similar capabilities, but RC has better latency while
     // estimated number of endpoints is relatively small.
-    // sender() is created with 1 ep, so rc should be selected over dc.
+    // sender() is created with 1 ep, so RC should be selected over DC.
     check_unified_ifaces(&sender(), "rc_mlx5", "dc_mlx5");
 
-    // Set some big enough number of endpoints for dc to be more performance
-    // efficient than rc. Now check that dc is selected over rc.
+    // Set some big enough number of endpoints for DC to be more performance
+    // efficient than RC. Now check that DC is selected over RC.
     modify_config("NUM_EPS", "1000");
     entity *e = create_entity();
     check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");

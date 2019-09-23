@@ -358,7 +358,7 @@ ucp_listen_on_iface(ucp_listener_h listener,
         }
 
         tmp = ucs_realloc(listener->wifaces,
-                          sizeof(ucp_worker_iface_t*) * (sockaddr_tls + 1),
+                          sizeof(*tmp) * (sockaddr_tls + 1),
                           "listener wifaces");
         if (tmp == NULL) {
             ucs_error("failed to allocate listener wifaces");
