@@ -15,6 +15,10 @@ enum uct_rdmacm_process_event_flags {
 };
 
 static ucs_config_field_t uct_rdmacm_iface_config_table[] = {
+    {"", "", NULL,
+     ucs_offsetof(uct_rdmacm_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
     {"BACKLOG", "1024",
      "Maximum number of pending connections for an rdma_cm_id.",
      ucs_offsetof(uct_rdmacm_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
