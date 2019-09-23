@@ -1094,7 +1094,7 @@ protected:
 
             close();
 
-            return (m_lib = m_loader(m_name.c_str(), RTLD_NOW));
+            return (m_lib = m_loader(m_name.empty() ? NULL : m_name.c_str(), RTLD_NOW));
         }
 
         void attach(void *lib)
@@ -1236,6 +1236,14 @@ public:
         lib2.attach(load(get_lib_path_do_load_sub_rpath().c_str(), loader));
         ASSERT_TRUE(lib2);
     }
+
+    void test_dlopen_null(loader_t loader)
+    {
+        library lib(loader);
+
+        lib.open();
+        ASSERT_TRUE(lib);
+    }
 };
 
 UCS_TEST_F(malloc_hook_dlopen, indirect_dlopen) {
@@ -1252,6 +1260,14 @@ UCS_TEST_F(malloc_hook_dlopen, rpath_dlopen) {
 
 UCS_TEST_F(malloc_hook_dlopen, rpath_ucm_dlopen) {
     test_rpath_dlopen(ucm_dlopen);
+}
+
+UCS_TEST_F(malloc_hook_dlopen, ucm_dlopen_null_dlopen) {
+    test_dlopen_null(dlopen);
+}
+
+UCS_TEST_F(malloc_hook_dlopen, ucm_dlopen_null_ucm_dlopen) {
+    test_dlopen_null(ucm_dlopen);
 }
 
 UCS_MT_TEST_F(malloc_hook_dlopen, dlopen_mt_with_memtype, 2) {

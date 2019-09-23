@@ -46,7 +46,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
 
     {"NUM_DCI", "8",
      "Number of DC initiator QPs (DCI) used by the interface "
-     "(up to " UCS_PP_QUOTE(UCT_DC_MLX5_IFACE_MAX_DCIS) ").",
+     "(up to " UCS_PP_MAKE_STRING(UCT_DC_MLX5_IFACE_MAX_DCIS) ").",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
     {"TX_POLICY", "dcs_quota",

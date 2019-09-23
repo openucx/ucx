@@ -64,8 +64,9 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         log_lvl = iface->super.super.config.failure_level;
     }
 
-    ucs_log(log_lvl, "send completion with error: %s",
-            ibv_wc_status_str(wc->status));
+    ucs_log(log_lvl,
+            "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
+            ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
 }
 
 static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
@@ -110,8 +111,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         }
 
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i], &ep->super.txqp);
-        ucs_trace_poll("rc_verbs iface %p tx_wc: ep %p qpn 0x%x count %d",
-                       iface, ep, wc[i].qp_num, count);
+        ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
+                       iface, wc[i].wr_id, ep, wc[i].qp_num, count);
         uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         iface->super.tx.cq_available += count;
 

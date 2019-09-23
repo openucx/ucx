@@ -384,6 +384,11 @@ void *ucm_dlopen(const char *filename, int flag)
         goto fallback_load_lib;
     }
 
+    if (filename == NULL) {
+        /* return handle to main program */
+        goto fallback_load_lib;
+    }
+
     /* failed to open module directly, try to use RPATH from from caller
      * to locate requested module */
     if (filename[0] == '/') { /* absolute path - fallback to legacy mode */

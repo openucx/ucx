@@ -25,6 +25,8 @@
 
 BEGIN_C_DECLS
 
+#define UCT_UD_MIN_TIMER_TIMER_BACKOFF 1.0
+
 /** @file ud_iface.h */
 
 enum {
