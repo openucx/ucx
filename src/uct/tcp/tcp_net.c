@@ -25,7 +25,7 @@ typedef ssize_t (*uct_tcp_io_func_t)(int fd, void *data, size_t size, int flags)
 
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
-                                double *bandwidth_p, size_t *mtu_p)
+                                double *bandwidth_p)
 {
     struct ethtool_cmd edata;
     uint32_t speed_mbps;
@@ -34,6 +34,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
     size_t ll_headers;
     int speed_known;
     short ether_type;
+    size_t mtu;
 
     memset(&ifr, 0, sizeof(ifr));
 
@@ -68,9 +69,9 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
 
     status = ucs_netif_ioctl(if_name, SIOCGIFMTU, &ifr);
     if (status == UCS_OK) {
-        *mtu_p = ifr.ifr_mtu;
+        mtu = ifr.ifr_mtu;
     } else {
-        *mtu_p = 1500;
+        mtu = 1500;
     }
 
     switch (ether_type) {
@@ -100,7 +101,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
     /* https://w3.siemens.com/mcms/industrial-communication/en/rugged-communication/Documents/AN8.pdf */
     *latency_p   = 576.0 / (speed_mbps * 1e6) + 5.2e-6;
     *bandwidth_p = (speed_mbps * 1e6) / 8 *
-                   (*mtu_p - 40) / (*mtu_p + ll_headers); /* TCP/IP header is 40 bytes */
+                   (mtu - 40) / (mtu + ll_headers); /* TCP/IP header is 40 bytes */
     return UCS_OK;
 }
 

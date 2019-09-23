@@ -111,12 +111,11 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     size_t am_buf_size     = iface->config.tx_seg_size - sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
-    size_t mtu;
 
     uct_base_iface_query(&iface->super, attr);
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
-                                &attr->bandwidth.shared, &mtu);
+                                &attr->bandwidth.shared);
     if (status != UCS_OK) {
         return status;
     }
@@ -142,7 +141,6 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                                         sizeof(uct_tcp_am_hdr_t);
         attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;
         attr->cap.am.opt_zcopy_align  = 512;
-        attr->cap.am.align_mtu        = mtu;
         attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
 
         /* PUT */
@@ -151,7 +149,6 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
                                          UCT_TCP_EP_PUT_SERVICE_LENGTH;
         attr->cap.put.opt_zcopy_align  = 512;
-        attr->cap.put.align_mtu        = mtu;
         attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
     }
 

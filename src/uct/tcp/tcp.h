@@ -40,7 +40,7 @@
 
 /* Length of a data that is used by PUT protocol */
 #define UCT_TCP_EP_PUT_SERVICE_LENGTH        (sizeof(uct_tcp_am_hdr_t) + \
-                                              sizeof(uct_tcp_ep_put_req_t))
+                                              sizeof(uct_tcp_ep_put_hdr_t))
 
 
 /**
@@ -203,28 +203,34 @@ typedef enum uct_tcp_ep_am_id {
 /**
  * TCP PUT request header
  */
-typedef struct uct_tcp_ep_put_req {
+typedef struct uct_tcp_ep_put_hdr {
     uint64_t                      addr;        /* Address of a remote memory buffer */
     size_t                        length;      /* Length of a remote memory buffer */
-} UCS_S_PACKED uct_tcp_ep_put_req_t;
+} UCS_S_PACKED uct_tcp_ep_put_hdr_t;
 
 
 /**
- * TCP PUT ack message pending request
+ * TCP PUT completion
  */
-typedef struct uct_tcp_ep_put_ack_pending_req {
-    uct_pending_req_t             super;     /* UCT pending request super */
-    uct_tcp_ep_t                  *ep;       /* TCP Endpoint that handles a PUT request */
-} uct_tcp_ep_put_ack_pending_req_t;
+typedef struct uct_tcp_ep_put_completion {
+    uct_completion_t              *comp;           /* User's completion passed to
+                                                    * uct_ep_flush */
+    unsigned                      wait_put_ack_sn; /* Sequence number of the last unacked
+                                                    * PUT operations that was in-progress
+                                                    * when uct_ep_flush was called */
+    ucs_queue_elem_t              elem;
+} uct_tcp_ep_put_completion_t;
 
 
 /**
  * TCP endpoint communication context
  */
 typedef struct uct_tcp_ep_ctx {
-    void                          *buf;      /* Partial send/recv data */
-    size_t                        length;    /* How much data in the buffer */
-    size_t                        offset;    /* Next offset to send/recv */
+    unsigned                      acked_put_sn;   /* Sequence number of last acked PUT */
+    unsigned                      unacked_put_sn; /* Sequence number of last unacked PUT */
+    void                          *buf;           /* Partial send/recv data */
+    size_t                        length;         /* How much data in the buffer */
+    size_t                        offset;         /* Next offset to send/recv */
 } uct_tcp_ep_ctx_t;
 
 
@@ -246,17 +252,21 @@ typedef struct uct_tcp_ep_zcopy_tx {
  */
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    uint8_t                       ctx_caps;    /* Which contexts are supported */
-    uint16_t                      outstanding; /* Number of outstanding operations that wait
-                                                * for acknowledge from a peer and don't consume
-                                                * a TX buffer (e.g. PUT Zcopy operation) */
-    int                           fd;          /* Socket file descriptor */
-    uct_tcp_ep_conn_state_t       conn_state;  /* State of connection with peer */
-    int                           events;      /* Current notifications */
-    uct_tcp_ep_ctx_t              tx;          /* TX resources */
-    uct_tcp_ep_ctx_t              rx;          /* RX resources */
-    struct sockaddr_in            peer_addr;   /* Remote iface addr */
-    ucs_queue_head_t              pending_q;   /* Pending operations */
+    uint8_t                       ctx_caps;         /* Which contexts are supported */
+    int                           fd;               /* Socket file descriptor */
+    uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
+    int                           events;           /* Current notifications */
+    unsigned                      outstanding_puts; /* Number of outstanding PUT Zcopy operations
+                                                     * that wait for acknowledge from a peer and
+                                                     * don't consume a TX buffer */
+    uct_tcp_ep_ctx_t              tx;               /* TX resources */
+    uct_tcp_ep_ctx_t              rx;               /* RX resources */
+    struct sockaddr_in            peer_addr;        /* Remote iface addr */
+    ucs_queue_head_t              pending_q;        /* Pending operations */
+    ucs_queue_head_t              put_comp_q;       /* PUT operations that are still in-progress
+                                                     * and user's completion should be called
+                                                     * when PUT ACK received for them as a part
+                                                     * of uct_ep_flush handling */
     ucs_list_link_t               list;
 };
 
@@ -277,6 +287,7 @@ typedef struct uct_tcp_iface {
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
                                                       * are in progress */
+
     struct {
         size_t                    tx_seg_size;       /* TX AM buffer size */
         size_t                    rx_seg_size;       /* RX AM buffer size */
@@ -328,9 +339,10 @@ typedef struct uct_tcp_iface_config {
 extern uct_component_t uct_tcp_component;
 extern const char *uct_tcp_address_type_names[];
 extern const uct_tcp_cm_state_t uct_tcp_ep_cm_state[];
+extern const uct_tcp_ep_progress_t uct_tcp_ep_progress_rx_cb[];
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
-                                double *bandwidth_p, size_t *mtu_p);
+                                double *bandwidth_p);
 
 ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
                                   struct sockaddr_in *netmask);
@@ -383,8 +395,6 @@ unsigned uct_tcp_ep_is_self(const uct_tcp_ep_t *ep);
 void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
-
-unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove);
 
@@ -447,6 +457,12 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
 static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 {
     return uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
+}
+
+static inline unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
+{
+    return uct_tcp_ep_progress_rx_cb[!!(ep->ctx_caps &
+                                        UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))](ep);
 }
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
