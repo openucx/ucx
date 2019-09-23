@@ -32,43 +32,44 @@ struct uct_md_config {
 };
 
 
-    typedef void (*uct_md_close_func_t)(uct_md_h md);
+typedef void (*uct_md_close_func_t)(uct_md_h md);
 
-    typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
-                                                uct_md_attr_t *md_attr);
+typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
+                                            uct_md_attr_t *md_attr);
 
-    typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
-                                                    size_t *length_p,
-                                                    void **address_p,
-                                                    unsigned flags,
-                                                    const char *alloc_name,
-                                                    uct_mem_h *memh_p);
+typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
+                                                size_t *length_p,
+                                                void **address_p,
+                                                unsigned flags,
+                                                const char *alloc_name,
+                                                uct_mem_h *memh_p);
 
-    typedef ucs_status_t (*uct_md_mem_free_func_t)(uct_md_h md, uct_mem_h memh);
-    typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
-                                                     uct_mem_h memh,
-                                                     void *addr,
-                                                     size_t length,
-                                                     unsigned advice);
+typedef ucs_status_t (*uct_md_mem_free_func_t)(uct_md_h md, uct_mem_h memh);
 
-    typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
-                                                  size_t length,
-                                                  unsigned flags,
-                                                  uct_mem_h *memh_p);
+typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
+                                                 uct_mem_h memh,
+                                                 void *addr,
+                                                 size_t length,
+                                                 unsigned advice);
 
-    typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
+typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
+                                              size_t length,
+                                              unsigned flags,
+                                              uct_mem_h *memh_p);
 
-    typedef ucs_status_t (*uct_md_mkey_pack_func_t)(uct_md_h md, uct_mem_h memh,
-                                                    void *rkey_buffer);
+typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
 
-    typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
-                                                        const ucs_sock_addr_t *sockaddr,
-                                                        uct_sockaddr_accessibility_t mode);
+typedef ucs_status_t (*uct_md_mkey_pack_func_t)(uct_md_h md, uct_mem_h memh,
+                                                void *rkey_buffer);
 
-    typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
-                                                             void *addr,
-                                                             size_t length,
-                                                             ucs_memory_type_t *mem_type_p);
+typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
+                                                    const ucs_sock_addr_t *sockaddr,
+                                                    uct_sockaddr_accessibility_t mode);
+
+typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
+                                                         void *addr,
+                                                         size_t length,
+                                                         ucs_memory_type_t *mem_type_p);
 
 
 /**
