@@ -1076,6 +1076,9 @@ ucp_am_rdma_completion_callback(void *request, ucs_status_t status)
     ucp_request_free(request) ;
 }
 
+static void
+ucp_am_rdma_get_completion_callback(void *request, ucs_status_t status) ;
+
 static ucs_status_t
 ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
                     unsigned am_flags)
@@ -1216,7 +1219,6 @@ ucp_am_rdma_completed_callback(void *request, ucs_status_t status)
     ucp_ep_h ep = req->send.ep ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rdma_client_unfinished_t *unfinished ;
-    ucp_request_t *original_req ;
 
     ucs_trace("AM RDMA completed callback request=%p status=%d", request, status) ;
 
@@ -1225,18 +1227,10 @@ ucp_am_rdma_completed_callback(void *request, ucs_status_t status)
         ep->worker, ep, ep_ext, req->send.am.message_id
         ) ;
     ucs_assert(unfinished != NULL) ;
-    original_req = unfinished->req ;
-    ucs_trace("AM RDMA ucp_am_rdma_completed_callback unfinished=%p msg_id=0x%016lx original_req=%p", unfinished, unfinished->msg_id, original_req) ;
-    if ( original_req != NULL )
-      {
-        ucs_list_del(&unfinished->list);
-        ucs_free(unfinished);
-      }
-    else
-      {
-        ucs_trace("AM RDMA synchronous completion, status=%d", status) ;
-        unfinished->status = status ;
-      }
+    ucs_trace("AM RDMA ucp_am_rdma_completed_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
+
+    ucs_list_del(&unfinished->list);
+    ucs_free(unfinished);
 
     ucp_request_free(request) ;
 
