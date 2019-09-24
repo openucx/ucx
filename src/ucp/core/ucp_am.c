@@ -784,6 +784,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
         ucs_trace("ucp_am_rdma_send_nb original_req=%p", original_req) ;
 
         original_req->send.am.message_id = unfinished->msg_id ;
+        original_req->flags = 0 ;
         unfinished->req            = original_req;
         ret = original_req + 1 ;
       }
