@@ -29,7 +29,7 @@
 pthread_mutex_t ucm_reloc_get_orig_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 #else
 pthread_mutex_t ucm_reloc_get_orig_lock;
-static void ucm_reloc_get_orig_lock_init(void) __attribute__((constructor(0)));
+static void ucm_reloc_get_orig_lock_init(void) __attribute__((constructor(101)));
 static void ucm_reloc_get_orig_lock_init(void)
 {
 	pthread_mutexattr_t attr;
