@@ -238,25 +238,26 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
                            (void *)payload, length);
 }
 
-static ucs_status_t ucp_am_send_rdma_short(ucp_ep_h ep,
-                                      const ucp_am_rdma_header_t *payload)
-{
-    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
-    ucp_am_hdr_t hdr;
-
-    hdr.am_hdr.am_id  = 0;
-    hdr.am_hdr.length = sizeof(ucp_am_rdma_header_t);
-    hdr.am_hdr.flags  = 0;
-    ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
-
-    ucs_trace("AM RDMA ucp_am_send_rdma_short header=0x%016lx", hdr.u64) ;
-    ucs_trace("AM RDMA ucp_am_send_rdma_short payload=(total_size=%lu,msg_id=0x%lx,ep_ptr=%lx,am_id=%u)",
-        payload->total_size, payload->msg_id, payload->ep_ptr, payload->am_id) ;
-
-
-    return uct_ep_am_short(am_ep, UCP_AM_ID_RDMA, hdr.u64,
-                           (void *)payload, sizeof(ucp_am_rdma_header_t));
-}
+/* static ucs_status_t ucp_am_send_rdma_short(ucp_ep_h ep,
+ *                                      const ucp_am_rdma_header_t *payload)
+ * {
+ *    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
+ *    ucp_am_hdr_t hdr;
+ *
+ *    hdr.am_hdr.am_id  = 0;
+ *    hdr.am_hdr.length = sizeof(ucp_am_rdma_header_t);
+ *    hdr.am_hdr.flags  = 0;
+ *    ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
+ *
+ *    ucs_trace("AM RDMA ucp_am_send_rdma_short header=0x%016lx", hdr.u64) ;
+ *    ucs_trace("AM RDMA ucp_am_send_rdma_short payload=(total_size=%lu,msg_id=0x%lx,ep_ptr=%lx,am_id=%u)",
+ *        payload->total_size, payload->msg_id, payload->ep_ptr, payload->am_id) ;
+ *
+ *
+ *    return uct_ep_am_short(am_ep, UCP_AM_ID_RDMA, hdr.u64,
+ *                           (void *)payload, sizeof(ucp_am_rdma_header_t));
+ * }
+ */
 
 /* static ucs_status_t ucp_am_send_rdma_reply_short(ucp_ep_h ep,
  *                                    const ucp_am_rdma_reply_header_t *payload)
@@ -1251,6 +1252,7 @@ ucp_am_rdma_get_completion_callback(void *request, ucs_status_t status)
     char payload_data_first ;
     char payload_data_last ;
 #endif
+    ucp_request_t *completion_req ;
 
     ucs_assert(status == UCS_OK) ;
     ucs_trace("AM RDMA ucp_am_rdma_get_completion_callback request=%p req=%p", request,req) ;
@@ -1272,10 +1274,13 @@ ucp_am_rdma_get_completion_callback(void *request, ucs_status_t status)
     unfinished->rdma_completion_header.msg_id = unfinished->msg_id ;
     unfinished->rdma_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
 
-    ucp_am_send_req_init(unfinished->completion_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
+    completion_req = ucp_request_get(ep->worker) ;
+    ucs_assert(completion_req != NULL) ;
+
+    ucp_am_send_req_init(completion_req, ep, &(unfinished->rdma_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rdma_completion_header_t), 0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
 
-    ret = ucp_am_rdma_send_req(unfinished->completion_req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_completed_callback) ;
+    ret = ucp_am_rdma_send_req(completion_req, ucp_am_rdma_completion_contig_short, ucp_am_rdma_completed_callback) ;
     ucs_trace("AM RDMA completion ucp_am_send_rdma_req ret=%p", ret) ;
 
     ucp_rkey_destroy(unfinished->rkey) ;
