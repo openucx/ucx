@@ -66,8 +66,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_knem_iface_t, uct_iface_t);
 static uct_iface_ops_t uct_knem_iface_ops = {
     .ep_put_zcopy             = uct_knem_ep_put_zcopy,
     .ep_get_zcopy             = uct_knem_ep_get_zcopy,
-    .ep_pending_add           = (void*)ucs_empty_function_return_busy,
-    .ep_pending_purge         = (void*)ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_sm_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_knem_ep_t),
@@ -80,7 +80,7 @@ static uct_iface_ops_t uct_knem_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_iface_t),
     .iface_query              = uct_knem_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_get_address        = (void*)ucs_empty_function_return_success,
+    .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_success,
     .iface_is_reachable       = uct_sm_iface_is_reachable
 };
 

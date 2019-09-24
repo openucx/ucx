@@ -32,34 +32,60 @@ struct uct_md_config {
 };
 
 
+typedef void (*uct_md_close_func_t)(uct_md_h md);
+
+typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
+                                            uct_md_attr_t *md_attr);
+
+typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
+                                                size_t *length_p,
+                                                void **address_p,
+                                                unsigned flags,
+                                                const char *alloc_name,
+                                                uct_mem_h *memh_p);
+
+typedef ucs_status_t (*uct_md_mem_free_func_t)(uct_md_h md, uct_mem_h memh);
+
+typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
+                                                 uct_mem_h memh,
+                                                 void *addr,
+                                                 size_t length,
+                                                 unsigned advice);
+
+typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
+                                              size_t length,
+                                              unsigned flags,
+                                              uct_mem_h *memh_p);
+
+typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
+
+typedef ucs_status_t (*uct_md_mkey_pack_func_t)(uct_md_h md, uct_mem_h memh,
+                                                void *rkey_buffer);
+
+typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
+                                                    const ucs_sock_addr_t *sockaddr,
+                                                    uct_sockaddr_accessibility_t mode);
+
+typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
+                                                         void *addr,
+                                                         size_t length,
+                                                         ucs_memory_type_t *mem_type_p);
+
+
 /**
  * Memory domain operations
  */
 struct uct_md_ops {
-    void         (*close)(uct_md_h md);
-
-    ucs_status_t (*query)(uct_md_h md, uct_md_attr_t *md_attr);
-
-    ucs_status_t (*mem_alloc)(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, const char *alloc_name,
-                              uct_mem_h *memh_p);
-
-    ucs_status_t (*mem_free)(uct_md_h md, uct_mem_h memh);
-    ucs_status_t (*mem_advise)(uct_md_h md, uct_mem_h memh, void *addr,
-                               size_t length, unsigned advice);
-
-    ucs_status_t (*mem_reg)(uct_md_h md, void *address, size_t length,
-                            unsigned flags, uct_mem_h *memh_p);
-
-    ucs_status_t (*mem_dereg)(uct_md_h md, uct_mem_h memh);
-
-    ucs_status_t (*mkey_pack)(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
-
-    int          (*is_sockaddr_accessible)(uct_md_h md, const ucs_sock_addr_t *sockaddr,
-                                           uct_sockaddr_accessibility_t mode);
-
-    ucs_status_t (*detect_memory_type)(uct_md_h md, void *addr, size_t length,
-                                       ucs_memory_type_t *mem_type_p);
+    uct_md_close_func_t                  close;
+    uct_md_query_func_t                  query;
+    uct_md_mem_alloc_func_t              mem_alloc;
+    uct_md_mem_free_func_t               mem_free;
+    uct_md_mem_advise_func_t             mem_advise;
+    uct_md_mem_reg_func_t                mem_reg;
+    uct_md_mem_dereg_func_t              mem_dereg;
+    uct_md_mkey_pack_func_t              mkey_pack;
+    uct_md_is_sockaddr_accessible_func_t is_sockaddr_accessible;
+    uct_md_detect_memory_type_func_t     detect_memory_type;
 };
 
 

@@ -76,7 +76,7 @@ void uct_worker_progress_remove(uct_priv_worker_t *worker, uct_worker_progress_t
 {
     UCS_ASYNC_BLOCK(worker->async);
     ucs_assert(prog->refcount > 0);
-    if (ucs_atomic_fadd32(&prog->refcount, -1) == 1) {
+    if (ucs_atomic_fsub32(&prog->refcount, 1) == 1) {
         ucs_callbackq_remove(&worker->super.progress_q, prog->id);
         prog->id = UCS_CALLBACKQ_ID_NULL;
     }

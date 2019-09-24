@@ -224,7 +224,7 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
     ucs_rcache_region_trace(rcache, region, lock ? "put" : "put_nolock");
 
     ucs_assert(region->refcount > 0);
-    if (ucs_unlikely(ucs_atomic_fadd32(&region->refcount, (uint32_t)-1) == 1)) {
+    if (ucs_unlikely(ucs_atomic_fsub32(&region->refcount, 1) == 1)) {
         if (lock) {
             pthread_rwlock_wrlock(&rcache->lock);
         }

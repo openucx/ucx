@@ -366,7 +366,7 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
             return UCS_ERR_INVALID_PARAM;
         }
 
-        rkey_buffer += UCT_COMPONENT_NAME_MAX;
+        rkey_buffer = UCS_PTR_BYTE_OFFSET(rkey_buffer, UCT_COMPONENT_NAME_MAX);
     }
 
     return component->rkey_unpack(component, rkey_buffer, &rkey_ob->rkey,
