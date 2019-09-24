@@ -950,3 +950,103 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 /* Test all available ib transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               ib, "ib")
+
+
+class test_ucp_wireup_unified : public test_ucp_wireup {
+public:
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        ucp_params_t tmp_ctx_params = ctx_params;
+
+        tmp_ctx_params.features = UCP_FEATURE_TAG;
+
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/uni",
+                                     tls, TEST_TAG | UNIFIED_MODE, result);
+        return result;
+    }
+
+    bool context_has_tls(ucp_context_h ctx, const std::string& tl,
+                         ucp_rsc_index_t md_idx)
+    {
+        for (ucp_rsc_index_t idx = 0; idx < ctx->num_tls; ++idx) {
+            if (ctx->tl_rscs[idx].md_index != md_idx) {
+                continue;
+            }
+
+            if (!strcmp(ctx->tl_rscs[idx].tl_rsc.tl_name, tl.c_str())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool worker_has_tls(ucp_worker_h worker, const std::string& tl,
+                        ucp_rsc_index_t md_idx)
+    {
+        ucp_context_h ctx = worker->context;
+
+        for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+            ucp_worker_iface_t *wiface = worker->ifaces[i];
+            ucp_rsc_index_t md_idx_it  = ctx->tl_rscs[wiface->rsc_index].md_index;
+
+            if (md_idx_it != md_idx) {
+                continue;
+            }
+
+            char* name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
+            if (!strcmp(name, tl.c_str())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void check_unified_ifaces(entity *e,
+                              const std::string& better_tl,
+                              const std::string& tl)
+    {
+        ucp_context_h ctx   = e->ucph();
+        ucp_worker_h worker = e->worker();
+
+        for (ucp_rsc_index_t i = 0; i < ctx->num_mds; ++i) {
+            if (!(context_has_tls(ctx, better_tl, i) &&
+                  context_has_tls(ctx, tl, i))) {
+               continue;
+            }
+
+            ASSERT_TRUE(ctx->num_tls > worker->num_ifaces);
+            EXPECT_TRUE(worker_has_tls(worker, better_tl, i));
+            EXPECT_FALSE(worker_has_tls(worker, tl, i));
+        }
+    }
+};
+
+
+UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
+{
+    // Accelerated transports have better performance charasteristics than their
+    // verbs counterparts. Check that corresponding verbs transports are not used
+    // by workers in unified mode.
+    check_unified_ifaces(&sender(), "rc_mlx5", "rc");
+    check_unified_ifaces(&sender(), "ud_mlx5", "ud");
+
+    // RC and DC has similar capabilities, but RC has better latency while
+    // estimated number of endpoints is relatively small.
+    // sender() is created with 1 ep, so RC should be selected over DC.
+    check_unified_ifaces(&sender(), "rc_mlx5", "dc_mlx5");
+
+    // Set some big enough number of endpoints for DC to be more performance
+    // efficient than RC. Now check that DC is selected over RC.
+    modify_config("NUM_EPS", "1000");
+    entity *e = create_entity();
+    check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, ud, "ud")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc_dc, "rc,dc")
+
