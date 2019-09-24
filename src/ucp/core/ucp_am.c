@@ -158,19 +158,19 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
 }
 
 static size_t 
-ucp_am_rdma_bcopy_pack_args_single_reply(void *dest, void *arg)
+ucp_am_rdma_bcopy_pack_args_single(void *dest, void *arg)
 {
-    ucp_am_rdma_reply_header_t *reply_hdr = dest;
+    ucp_am_rdma_header_t *rdma_hdr = dest;
     ucp_request_t *req = arg;
 
-    ucs_trace("AM RDMA ucp_am_rdma_bcopy_pack_args_single_reply dest=%p arg=%p", dest, arg) ;
+    ucs_trace("AM RDMA ucp_am_rdma_bcopy_pack_args_single dest=%p arg=%p", dest, arg) ;
 
-    memcpy(reply_hdr, req->send.buffer, sizeof(ucp_am_rdma_reply_header_t)) ;
+    memcpy(rdma_hdr, req->send.buffer, sizeof(ucp_am_rdma_header_t)) ;
     reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
     ucs_trace("AM RDMA ucp_am_rdma_bcopy_pack_args_single_reply msg_id=0x%016lx ep_ptr=0x%016lx am_id=%u address=0x%016lx",
         reply_hdr->msg_id, reply_hdr->ep_ptr, reply_hdr->am_id, reply_hdr->address) ;
 
-    return sizeof(ucp_am_rdma_reply_header_t);
+    return sizeof(ucp_am_rdma_header_t);
 }
 
 static size_t
@@ -670,6 +670,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
     ucp_dt_iov_t *iovec ;
     ucs_status_t status ;
     ucp_mem_map_params_t map_params ;
+    ucp_worker_h worker = ep->worker ;
+    void *packed_rkey ;
+    size_t packed_rkey_size ;
 
     ucs_trace("AM RDMA am_id=%u", id) ;
 
@@ -722,6 +725,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
 
     length = ucp_dt_iov_length(iovec, count);
     ucs_trace("AM RDMA count=%lu iovec[0].length=%lu iovec[1].length=%lu length=%lu", count, iovec[0].length, iovec[1].length, length) ;
+    unfinished->rdma_header.address    = (uintptr_t) iovec[1].buffer ;
     unfinished->rdma_header.total_size = length ;
     unfinished->rdma_header.msg_id     = unfinished->msg_id ;
     unfinished->rdma_header.ep_ptr      = ucp_request_get_dest_ep_ptr(req) ;
@@ -737,8 +741,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
 #endif
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
-    map_params.address    = payload ;
-    map_params.length     = rdma_hdr->total_size ;
+    map_params.address    = iovec[1].buffer ;
+    map_params.length     = iovec[1].length ;
     ucs_trace("AM RDMA map_params.length=%lu", map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
@@ -755,7 +759,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rdma_send_nb,
 
     ucs_list_add_head(&ep_ext->am.started_ams_rdma_client, &unfinished->list);
 
-    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_contig_short, ucp_am_rdma_callback) ;
+    ret = ucp_am_rdma_send_req(req, ucp_am_rdma_bcopy_single, ucp_am_rdma_callback) ;
     ucs_trace("AM RDMA ucp_am_send_rdma_req ret=%p", ret) ;
 
 
@@ -922,7 +926,7 @@ ucp_am_rdma_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext)
 static ucp_am_rdma_server_unfinished_t *
 ucp_am_rdma_server_find_unfinished(ucp_ep_h ep,
                                    ucp_ep_ext_proto_t *ep_ext,
-                                   ucp_request_t *request))
+                                   ucp_request_t *request)
 {
     ucp_am_rdma_server_unfinished_t *unfinished;
     /* TODO make this hash table for faster lookup */
