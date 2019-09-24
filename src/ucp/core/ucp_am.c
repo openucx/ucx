@@ -1087,7 +1087,7 @@ ucp_am_rdma_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_worker_h worker            = (ucp_worker_h)am_arg;
     ucp_am_hdr_t *hdr              = (ucp_am_hdr_t *)am_data;
     ucs_trace("AM RDMA hdr=0x%016lx", *(unsigned long *)hdr) ;
-    ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)(hdr+1);
+    ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)(hdr);
     ucs_trace("AM RDMA ucp_am_rdma_handler rdma_hdr=(total_size=%lu,msg_id=0x%lx,ep_ptr=0x%016lx,am_id=%u)",
         rdma_hdr->total_size, rdma_hdr->msg_id, rdma_hdr->ep_ptr, rdma_hdr->am_id) ;
 
