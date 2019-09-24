@@ -285,7 +285,7 @@ static void ucp_address_memcheck(ucp_context_h context, void *ptr, size_t size,
         ucs_error(UCT_TL_RESOURCE_DESC_FMT
                   " address contains undefined bytes at offset %zd",
                   UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
-                  undef_ptr - ptr);
+                  UCS_PTR_BYTE_DIFF(ptr, undef_ptr));
     }
 }
 
