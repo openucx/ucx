@@ -302,21 +302,22 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
     return status;
 }
 
-static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
-{
-    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
-    ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)req->send.buffer ;
-    ucs_status_t status ;
-    ucs_trace("AM RDMA ucp_am_rdma_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
-    rdma_hdr->ep_ptr = ep_ptr ;
-    status = ucp_am_send_rdma_short(req->send.ep,req->send.buffer) ;
-    ucs_trace("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return status ;
-}
+/* static ucs_status_t ucp_am_rdma_contig_short(uct_pending_req_t *self)
+ * {
+ *    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+ *    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+ *    ucp_am_rdma_header_t *rdma_hdr = (ucp_am_rdma_header_t *)req->send.buffer ;
+ *    ucs_status_t status ;
+ *    ucs_trace("AM RDMA ucp_am_rdma_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
+ *    rdma_hdr->ep_ptr = ep_ptr ;
+ *    status = ucp_am_send_rdma_short(req->send.ep,req->send.buffer) ;
+ *    ucs_trace("AM RDMA ucp_am_send_rdma_short returns %d", status) ;
+ *    if (ucs_likely(status == UCS_OK)) {
+ *        ucp_request_complete_send(req, UCS_OK);
+ *    }
+ *    return status ;
+ * }
+ */
 
 /*
  * static ucs_status_t ucp_am_rdma_reply_contig_short(uct_pending_req_t *self)
@@ -1258,7 +1259,7 @@ ucp_am_rdma_get_completion_callback(void *request, ucs_status_t status)
 #endif
 
     ucs_assert(status == UCS_OK) ;
-    ucs_trace("AM RDMA ucp_am_rdma_completion_callback request=%p req=%p", request,req) ;
+    ucs_trace("AM RDMA ucp_am_rdma_get_completion_callback request=%p req=%p", request,req) ;
     unfinished = ucp_am_rdma_server_find_unfinished(
         ep, ep_ext, request
         ) ;
@@ -1289,7 +1290,7 @@ ucp_am_rdma_get_completion_callback(void *request, ucs_status_t status)
     ucs_assert(local_status == UCS_OK) ;
 
     /* Drive the AM function  */
-    status = worker->am_cbs[unfinshed->am_id].cb(worker->am_cbs[rdma_hdr->am_id].context,
+    status = worker->am_cbs[unfinished->am_id].cb(worker->am_cbs[unfinished->am_id].context,
                                       payload,
                                       unfinished->total_size,
                                       NULL,
