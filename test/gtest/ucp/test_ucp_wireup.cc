@@ -962,13 +962,8 @@ class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
         sender().connect(&receiver(), get_ep_params());
         for (ucp_lane_index_t lane = 0;
              lane < ucp_ep_num_lanes(sender().ep()); lane++) {
-            uct_iface_attr_t iface_attr;
-
-            if (!get_iface_attr(sender().ep(), lane, &iface_attr)) {
-                continue;
-            }
-
-            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
+            if (ucp_ep_get_iface_attr(sender().ep(), lane)->cap.flags &
+                UCT_IFACE_FLAG_ATOMIC_DEVICE) {
                 device_atomics_cnt++;
             }
         }
@@ -990,48 +985,22 @@ protected:
 
         for (ucp_lane_index_t lane = 0; lane < UCP_MAX_LANES; ++lane) {
             if (ep_config->key.amo_lanes[lane] != UCP_NULL_LANE) {
-                uct_iface_attr_t *iface_attr =
-                    ucp_worker_iface_get_attr(ep->worker,
-                                              ep_config->key.lanes[lane].rsc_index);
-
-                return (iface_attr->cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE);
+                return (ucp_ep_get_iface_attr(ep, lane)->cap.flags &
+                        UCT_IFACE_FLAG_ATOMIC_DEVICE);
             }
         }
 
         return false;
     }
 
-    bool get_iface_attr(ucp_ep_h ep, ucp_lane_index_t lane,
-                        uct_iface_attr_t *iface_attr) {
-        uct_ep_h uct_ep = ep->uct_eps[lane];
-        if (uct_ep == NULL) {
-            return false;
-        }
-
-        if (ucp_wireup_ep_test(uct_ep) || ucp_proxy_ep_test(uct_ep)) {
-            ucp_proxy_ep_t *proxy_ep = ucs_derived_of(uct_ep,
-                                                      ucp_proxy_ep_t);
-            uct_ep = proxy_ep->uct_ep;
-        }
-
-        ucs_status_t status = uct_iface_query(uct_ep->iface, iface_attr);
-        ASSERT_UCS_OK(status);
-
-        return true;
-    }
-
     size_t get_min_max_num_eps(ucp_ep_h ep) {
         size_t min_max_num_eps = UCS_ULUNITS_INF;
 
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
-            uct_iface_attr_t iface_attr;
+            uct_iface_attr_t *iface_attr = ucp_ep_get_iface_attr(ep, lane);
 
-            if (!get_iface_attr(ep, lane, &iface_attr)) {
-                continue;
-            }
-
-            if (iface_attr.max_num_eps < min_max_num_eps) {
-                min_max_num_eps = iface_attr.max_num_eps;
+            if (iface_attr->max_num_eps < min_max_num_eps) {
+                min_max_num_eps = iface_attr->max_num_eps;
             }
         }
 
@@ -1045,8 +1014,6 @@ protected:
         UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
         modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
 
-        std::vector<ucp_ep_h> sender_eps;
-
         // Create new entity and add to to the end of vector
         // (thus it will be receiver without any connections)
         create_entity(false);
@@ -1058,17 +1025,13 @@ protected:
             params.transports.push_back(*i);
             create_entity(true, params);
             sender().connect(&receiver(), get_ep_params());
-            sender_eps.push_back(sender().ep());
+
+            EXPECT_EQ(should_use_device_amo, use_device_amo(sender().ep()));
 
             size_t max_num_eps = get_min_max_num_eps(sender().ep());
             if (max_num_eps < min_max_num_eps) {
                 min_max_num_eps = max_num_eps;
             }
-        }
-
-        for (std::vector<ucp_ep_h>::const_iterator i = sender_eps.begin();
-             i != sender_eps.end(); ++i) {
-            EXPECT_EQ(should_use_device_amo, use_device_amo(*i));
         }
 
         test_ucp_wireup::cleanup();
@@ -1077,6 +1040,7 @@ protected:
     }
 
 public:
+
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = test_ucp_wireup::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
