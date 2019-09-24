@@ -1255,8 +1255,8 @@ ucp_am_rdma_get_completion_callback(void *request, ucs_status_t status)
 #endif
     ucp_request_t *completion_req ;
 
+    ucs_trace("AM RDMA ucp_am_rdma_get_completion_callback request=%p req=%p status=%d", request,req,status) ;
     ucs_assert(status == UCS_OK) ;
-    ucs_trace("AM RDMA ucp_am_rdma_get_completion_callback request=%p req=%p", request,req) ;
     unfinished = ucp_am_rdma_server_find_unfinished(
         ep, ep_ext, request
         ) ;
