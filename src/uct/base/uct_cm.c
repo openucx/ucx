@@ -85,7 +85,7 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
     self->iface.md                = NULL;
     self->iface.am->arg           = NULL;
     self->iface.am->flags         = 0;
-    self->iface.am->cb            = (void *)ucs_empty_function_return_unsupported;
+    self->iface.am->cb            = (uct_am_callback_t)ucs_empty_function_return_unsupported;
     self->iface.am_tracer         = NULL;
     self->iface.am_tracer_arg     = NULL;
     self->iface.err_handler       = NULL;

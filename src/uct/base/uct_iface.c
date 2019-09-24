@@ -64,11 +64,9 @@ static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
     char dump_str[(dump_len * 4) + 1]; /* 1234:5678\n\0 */
 
     ucs_warn("got active message id %d, but no handler installed", id);
-    ucs_warn("payload:\n%s", ucs_str_dump_hex(data,
-                                              ucs_min(length, dump_len),
-                                              dump_str, sizeof(dump_str),
-                                              16));
-
+    ucs_warn("payload %zu of %zu bytes:\n%s", ucs_min(length, dump_len), length,
+             ucs_str_dump_hex(data, ucs_min(length, dump_len),
+                              dump_str, sizeof(dump_str), 16));
     return UCS_OK;
 }
 
@@ -495,7 +493,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
         alloc_methods_bitmap |= UCS_BIT(method);
     }
 
-    self->config.failure_level = config->failure;
+    self->config.failure_level = (ucs_log_level_t)config->failure;
     self->config.max_num_eps   = config->max_num_eps;
 
     return UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,

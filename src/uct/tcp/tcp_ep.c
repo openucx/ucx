@@ -443,10 +443,12 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
             status = ucs_event_set_del(iface->event_set, ep->fd);
         } else if (old_events != 0) {
             status = ucs_event_set_mod(iface->event_set, ep->fd,
-                                       ep->events, (void *)ep);
+                                       (ucs_event_set_type_t)ep->events,
+                                       (void *)ep);
         } else {
             status = ucs_event_set_add(iface->event_set, ep->fd,
-                                       ep->events, (void *)ep);
+                                       (ucs_event_set_type_t)ep->events,
+                                       (void *)ep);
         }
         if (status != UCS_OK) {
             ucs_fatal("unable to modify event set for tcp_ep %p (fd=%d)", ep,
@@ -495,7 +497,7 @@ static inline unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep, size_t *sent_length)
     *sent_length = ep->tx.length - ep->tx.offset;
     ucs_assert(*sent_length > 0);
 
-    status = ucs_socket_send_nb(ep->fd, ep->tx.buf + ep->tx.offset,
+    status = ucs_socket_send_nb(ep->fd, UCS_PTR_BYTE_OFFSET(ep->tx.buf, ep->tx.offset),
                                 sent_length, NULL, NULL);
     if (status != UCS_OK) {
         return 0;
@@ -586,8 +588,8 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 
     ucs_assertv(recv_length, "ep=%p", ep);
 
-    status = ucs_socket_recv_nb(ep->fd, ep->rx.buf + ep->rx.length, &recv_length,
-                                uct_tcp_ep_io_err_handler_cb, ep);
+    status = ucs_socket_recv_nb(ep->fd, UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.length),
+                                &recv_length, uct_tcp_ep_io_err_handler_cb, ep);
     if (status != UCS_OK) {
         if (status == UCS_ERR_NO_PROGRESS) {
             /* If no data were read to the allocated buffer,
@@ -688,7 +690,7 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         ucs_assert(ep->rx.buf != NULL);
 
         /* do partial receive of the remaining user data */
-        hdr         = ep->rx.buf + ep->rx.offset;
+        hdr         = UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset);
         recv_length = hdr->length - (ep->rx.length - ep->rx.offset - sizeof(*hdr));
     }
 
@@ -701,14 +703,15 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
         remainder = ep->rx.length - ep->rx.offset;
         if (remainder < sizeof(*hdr)) {
             /* Move the partially received hdr to the beginning of the buffer */
-            memmove(ep->rx.buf, ep->rx.buf + ep->rx.offset, remainder);
+            memmove(ep->rx.buf, UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset),
+                    remainder);
             ep->rx.offset = 0;
             ep->rx.length = remainder;
             handled++;
             goto out;
         }
 
-        hdr = ep->rx.buf + ep->rx.offset;
+        hdr = UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset);
         ucs_assert(hdr->length <= (iface->config.rx_seg_size -
                                    sizeof(uct_tcp_am_hdr_t)));
 
@@ -786,8 +789,8 @@ uct_tcp_ep_set_outstanding_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
         /* if the user's header wasn't sent completely, copy it to
          * the EP TX buffer (after Zcopy context and IOVs) for
          * retransmission. iov_len is already set to the proper value */
-        ctx->iov[1].iov_base = ep->tx.buf +
-                               iface->config.zcopy.hdr_offset;
+        ctx->iov[1].iov_base = UCS_PTR_BYTE_OFFSET(ep->tx.buf,
+                                                   iface->config.zcopy.hdr_offset);
         memcpy(ctx->iov[1].iov_base, header, header_length);
     }
 
@@ -1052,7 +1055,7 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                               void *arg)
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
-    uct_pending_req_priv_queue_t *priv;
+    uct_pending_req_priv_queue_t UCS_V_UNUSED *priv;
 
     uct_pending_queue_purge(priv, &ep->pending_q, 1, cb, arg);
 }

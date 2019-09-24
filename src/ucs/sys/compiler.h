@@ -80,7 +80,7 @@
  */
 #define UCS_CACHELINE_PADDING(...) \
     char UCS_PP_APPEND_UNIQUE_ID(pad)[UCS_SYS_CACHE_LINE_SIZE - \
-                                      UCS_CACHELINE_PADDING_MISALIGN(__VA_ARGS__)];
+                                      UCS_CACHELINE_PADDING_MISALIGN(__VA_ARGS__)]
 #define UCS_CACHELINE_PADDING_SIZEOF(_, _x) \
     + sizeof(_x)
 #define UCS_CACHELINE_PADDING_MISALIGN(...) \

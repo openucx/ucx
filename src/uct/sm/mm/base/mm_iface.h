@@ -182,7 +182,7 @@ static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems
    fifo_ctl = uct_mm_set_fifo_ctl(mem_region);
 
    /* initiate the pointer to the beginning of the first FIFO element */
-   *fifo_elems = (void*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
+   *fifo_elems = UCS_PTR_BYTE_OFFSET(fifo_ctl, UCT_MM_FIFO_CTL_SIZE_ALIGNED);
 }
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_iface_t, uct_iface_t, uct_md_h, uct_worker_h,

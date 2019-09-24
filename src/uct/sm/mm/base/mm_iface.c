@@ -75,7 +75,7 @@ void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     void *mm_desc;
 
-    mm_desc = desc - sizeof(uct_mm_recv_desc_t);
+    mm_desc = UCS_PTR_BYTE_OFFSET(desc, -sizeof(uct_mm_recv_desc_t));
     ucs_mpool_put(mm_desc);
 }
 
@@ -186,9 +186,10 @@ ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
                                  return UCS_ERR_NO_RESOURCE);
     }
 
-    fifo_elem_p->desc_mmid   = desc->key;
-    fifo_elem_p->desc_offset = iface->rx_headroom +
-                               (ptrdiff_t) ((void*) (desc + 1) - desc->base_address);
+    fifo_elem_p->desc_mmid            = desc->key;
+    fifo_elem_p->desc_offset          = UCS_PTR_BYTE_DIFF(desc->base_address,
+                                                          desc + 1) +
+                                        iface->rx_headroom;
     fifo_elem_p->desc_chunk_base_addr = desc->base_address;
     fifo_elem_p->desc_mpool_size      = desc->mpool_length;
 
@@ -209,10 +210,11 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
                                         elem->length, 0);
     } else {
         /* read bcopy messages from the receive descriptors */
-        VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
+        VALGRIND_MAKE_MEM_DEFINED(UCS_PTR_BYTE_OFFSET(elem->desc_chunk_base_addr,
+                                                      elem->desc_offset),
                                   elem->length);
 
-        data = elem->desc_chunk_base_addr + elem->desc_offset;
+        data = UCS_PTR_BYTE_OFFSET(elem->desc_chunk_base_addr, elem->desc_offset);
 
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                            elem->am_id, data, elem->length, "RX: AM_BCOPY");
@@ -338,7 +340,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_fence              = uct_sm_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
-    .iface_progress           = (void*)uct_mm_iface_progress,
+    .iface_progress           = (uct_iface_progress_func_t)uct_mm_iface_progress,
     .iface_event_fd_get       = uct_mm_iface_event_fd_get,
     .iface_event_arm          = uct_mm_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
@@ -368,7 +370,7 @@ static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems
 
     for (i = 0; i < num_elems; i++) {
         fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(iface, iface->recv_fifo_elements, i);
-        desc = UCT_MM_IFACE_GET_DESC_START(iface, fifo_elem_p);
+        desc        = UCT_MM_IFACE_GET_DESC_START(iface, fifo_elem_p);
         ucs_mpool_put(desc);
     }
 }

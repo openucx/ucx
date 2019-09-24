@@ -326,7 +326,7 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     }
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        wiface = &worker->ifaces[iface_id];
+        wiface = worker->ifaces[iface_id];
         if (wiface->iface == NULL) {
             continue;
         }

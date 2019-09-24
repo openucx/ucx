@@ -223,7 +223,7 @@ ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
     /* rkey stores offset from the remote va */
     *laddr_p = (void *)(raddr + (uint64_t)rkey);
     if ((*laddr_p < mm_desc->address) ||
-        (*laddr_p >= mm_desc->address + mm_desc->length)) {
+        (*laddr_p >= UCS_PTR_BYTE_OFFSET(mm_desc->address, mm_desc->length))) {
        return UCS_ERR_INVALID_ADDR;
     }
     return UCS_OK;

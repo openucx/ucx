@@ -69,7 +69,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_ep_t *ep)
     if (conn_param.length < 0) {
         ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "
                   "private data. status: %s",
-                  iface, ep, ucs_status_string(conn_param.length));
+                  iface, ep, ucs_status_string((ucs_status_t)conn_param.length));
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
