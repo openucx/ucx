@@ -83,9 +83,7 @@ typedef struct {
   ucs_list_link_t   list;                                  /* entry into list of unfinished AM's */
   ucs_status_t      status;                                /* status of the rdma */
   ucp_request_t    *req;                                   /* active message request */
-  ucp_request_t    *completion_req;                        /* request for issuing the completion active message */
   uint64_t          msg_id;                                /* way to match up all parts of AM */
-  ucp_dt_iov_t     *iovec ;                                /* iovec to be sent */
   ucp_mem_h         memh;                                  /* memory handle for mapping to the adapter */
   ucp_rkey_h        rkey;                                  /* remote memory key */
   ucp_send_callback_t cb ;                                 /* callback to drive when the AM is complete */
@@ -98,6 +96,8 @@ typedef struct {
   uint64_t          msg_id;                      /* way to match up all parts of AM */
   size_t            total_size;                  /* size of data for AM */
   ucp_mem_h         memh;                        /* memory handle for mapping to the adapter */
+  ucp_rkey_h        rkey;                        /* key for remote memory */
+  ucp_request_t     request;                     /* request for completion AM */
 #if defined(UCP_AM_RDMA_VERIFY)
   size_t            iovec_0_length;              /* Amount of data transferred by iovec[0], for checking */
 #endif

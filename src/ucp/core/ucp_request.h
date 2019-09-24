@@ -130,7 +130,6 @@ struct ucp_request {
                 struct {
                     uint64_t      remote_addr; /* Remote address */
                     ucp_rkey_h    rkey;     /* Remote memory key */
-                    uint64_t      message_id ; /* Message ID of active message that this rma is working for */
                 } rma;
 
                 struct {
