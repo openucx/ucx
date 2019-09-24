@@ -212,11 +212,14 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
-    /* TODO: for now only weak fence is supported by verbs */
-    self->super.config.fence_mode    = config->super.super.fence_mode !=
-                                       UCT_RC_FENCE_MODE_NONE;
+    /* TODO: for now fence is not supported by verbs */
+    if (config->super.super.fence_mode != UCT_RC_FENCE_MODE_NONE) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
 
-    self->super.progress = uct_rc_verbs_iface_progress;
+    self->super.config.fence_mode    = config->super.super.fence_mode;
+    self->super.progress             = uct_rc_verbs_iface_progress;
 
     memset(self->inl_sge, 0, sizeof(self->inl_sge));
     uct_rc_am_hdr_fill(&self->am_inl_hdr.rc_hdr, 0);

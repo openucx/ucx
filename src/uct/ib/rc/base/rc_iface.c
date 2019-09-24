@@ -17,7 +17,7 @@
 #include <ucs/type/class.h>
 
 
-static const char *uct_rc_fence_values[] = {
+static const char *uct_rc_fence_mode_values[] = {
     [UCT_RC_FENCE_MODE_NONE]   = "none",
     [UCT_RC_FENCE_MODE_WEAK]   = "weak",
     [UCT_RC_FENCE_MODE_STRONG] = "strong",
@@ -75,14 +75,14 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
 #endif
 
-  {"FENCE", "weak",
+  {"FENCE", "none",
    "IB fence type when API fence requested:\n"
-   "  none   - ignore fence requests\n"
-   "  weak   - process fence requests for atomic/rdma_read operations only\n"
-   "  strong - process fence requests for all atomics and rdma_read/write\n"
-   "           operations, the most intrusive mode",
+   "  none   - fence is a no-op\n"
+   "  weak   - fence makes sure remote reads are ordered with respect to remote writes\n"
+   "  strong - fence make sure that subsequent remote operations start only after\n"
+   "           previous remote operations complete",
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
-                UCS_CONFIG_TYPE_ENUM(uct_rc_fence_values)},
+                UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
   {NULL}
 };
