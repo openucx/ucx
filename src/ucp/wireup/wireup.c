@@ -743,6 +743,10 @@ ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
         (ep_init_flags & UCP_EP_INIT_CM_WIREUP_SERVER)) {
         ucs_assert(wiface == NULL);
         ucs_assert(ep->uct_eps[lane] == NULL);
+        ucs_assert_always((params->field_mask &
+                           UCP_EP_PARAM_FIELD_CONN_REQUEST) &&
+                          (params->conn_request != NULL));
+
         /* create a server side CM endpoint */
         ucs_trace("ep %p: uct_ep[%d]", ep, lane);
         uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
@@ -802,6 +806,8 @@ ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
                                        UCT_EP_PARAM_FIELD_DEV_ADDR |
                                        UCT_EP_PARAM_FIELD_IFACE_ADDR;
             uct_ep_params.iface      = wiface->iface;
+            ucs_assert_always((addr_index < address_count) &&
+                              (address_list != NULL));
             uct_ep_params.dev_addr   = address_list[addr_index].dev_addr;
             uct_ep_params.iface_addr = address_list[addr_index].iface_addr;
             status = uct_ep_create(&uct_ep_params, &uct_ep);

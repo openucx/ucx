@@ -299,7 +299,11 @@ ucp_wireup_select_transport(ucp_wireup_select_ctx_t *select_ctx,
     unsigned addr_index;
     ucp_wireup_select_info_t sinfo;
 
-    sinfo.reachable     = 0;
+    /*
+     * sinfo.reachable = 0;
+     * everything else is needed to suppress compiler warnings
+     */
+    memset(&sinfo, 0, sizeof(sinfo));
 
     p                   = tls_info;
     endp                = tls_info + sizeof(tls_info) - 1;
@@ -796,7 +800,7 @@ static ucs_status_t ucp_wireup_add_cm_lane(ucp_wireup_select_ctx_t *select_ctx)
     }
 
     select_info.reachable  = 1;  /**< UCT CM provides reachability by its API
-                                     CBs */
+                                      CBs */
     select_info.priority   = 0;  /**< Currently we have only 1 CM
                                       implementation */
     select_info.rsc_index  = UCP_NULL_RESOURCE; /**< RSC doesn't matter for CM */
