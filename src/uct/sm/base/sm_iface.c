@@ -15,6 +15,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/type/init_once.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -43,15 +44,17 @@ uct_sm_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
 
 static uint64_t uct_sm_iface_get_user_ns_id()
 {
+    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
+    static uint64_t ns_id       = 0;
     struct stat file_stat;
 
-    if (stat("/proc/self/ns/user", &file_stat) != 0) {
-        /* namespaces are not supported or another issue.
-         * assuming that no namespaces are used */
-        return 0;
+    UCS_INIT_ONCE(&once) {
+        if (stat("/proc/self/ns/user", &file_stat) == 0) {
+            ns_id = file_stat.st_ino;
+        }
     }
 
-    return file_stat.st_ino;
+    return ns_id;
 }
 
 static uint64_t uct_sm_iface_machine_guid()
