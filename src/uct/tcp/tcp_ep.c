@@ -1290,7 +1290,7 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
                                       /* Set a payload length directly to the
                                        * TX length, since PUT Zcopy doesn't
                                        * set the payload length to TCP AM hdr */
-                                      &put_req.length, &ctx);
+                                      &ep->tx.length, &ctx);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
@@ -1298,7 +1298,7 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
     ctx->super.am_id  = UCT_TCP_EP_PUT_REQ_AM_ID;
     ctx->super.length = sizeof(put_req);
     put_req.addr      = remote_addr;
-    ep->tx.length     = put_req.length;
+    put_req.length    = ep->tx.length;
 
     status = uct_tcp_ep_am_sendv(iface, ep, 0, &ctx->super, UCT_TCP_EP_PUT_ZCOPY_MAX,
                                  &put_req, ctx->iov, ctx->iov_cnt);
