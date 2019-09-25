@@ -18,7 +18,11 @@ enum uct_sockcm_process_event_flags {
     UCT_SOCKCM_PROCESS_EVENT_ACK_EVENT_FLAG       = UCS_BIT(1)
 };
 
-static ucs_config_field_t uct_sockcm_iface_config_table[] = {
+static ucs_config_field_t uct_sockcm_iface_config_table[] = {    
+    {"", "", NULL,
+     ucs_offsetof(uct_sockcm_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
     {"BACKLOG", "1024",
      "Maximum number of pending connections for a listening socket.",
      ucs_offsetof(uct_sockcm_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
@@ -125,15 +129,15 @@ static uct_iface_ops_t uct_sockcm_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
     .iface_accept             = uct_sockcm_iface_accept,
     .iface_reject             = uct_sockcm_iface_reject,
-    .iface_progress_enable    = (void*)ucs_empty_function_return_success,
-    .iface_progress_disable   = (void*)ucs_empty_function_return_success,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function_return_success,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function_return_success,
     .iface_progress           = ucs_empty_function_return_zero,
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sockcm_iface_t),
     .iface_query              = uct_sockcm_iface_query,
-    .iface_is_reachable       = (void*)ucs_empty_function_return_zero,
-    .iface_get_device_address = (void*)ucs_empty_function_return_success,
+    .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_sockcm_iface_get_address
 };
 

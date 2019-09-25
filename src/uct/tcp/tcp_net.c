@@ -49,7 +49,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
         speed_mbps = edata.speed;
 #endif
 #if HAVE_DECL_SPEED_UNKNOWN
-        speed_known = speed_mbps != SPEED_UNKNOWN;
+        speed_known = speed_mbps != (uint32_t)SPEED_UNKNOWN;
 #else
         speed_known = (speed_mbps != 0) && ((uint16_t)speed_mbps != (uint16_t)-1);
 #endif

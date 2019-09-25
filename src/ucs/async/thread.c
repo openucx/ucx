@@ -59,7 +59,7 @@ static void ucs_async_thread_hold(ucs_async_thread_t *thread)
 
 static void ucs_async_thread_put(ucs_async_thread_t *thread)
 {
-    if (ucs_atomic_fadd32(&thread->refcnt, (uint32_t)-1) == 1) {
+    if (ucs_atomic_fsub32(&thread->refcnt, 1) == 1) {
         ucs_event_set_cleanup(thread->event_set);
         ucs_async_pipe_destroy(&thread->wakeup);
         ucs_timerq_cleanup(&thread->timerq);

@@ -144,7 +144,7 @@ static ucs_async_handler_t *ucs_async_handler_extract(int id)
 /* decrement reference count and release the handler if reached 0 */
 static void ucs_async_handler_put(ucs_async_handler_t *handler)
 {
-    if (ucs_atomic_fadd32(&handler->refcount, (uint32_t)-1) > 1) {
+    if (ucs_atomic_fsub32(&handler->refcount, 1) > 1) {
         return;
     }
 
@@ -384,7 +384,7 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
 
     /* Limit amount of handlers per context */
     if (async != NULL) {
-        if (ucs_atomic_fadd32(&async->num_handlers, +1) >= ucs_global_opts.async_max_events) {
+        if (ucs_atomic_fadd32(&async->num_handlers, 1) >= ucs_global_opts.async_max_events) {
             status = UCS_ERR_EXCEEDS_LIMIT;
             goto err_dec_num_handlers;
         }

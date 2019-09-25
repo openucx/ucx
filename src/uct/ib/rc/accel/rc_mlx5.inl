@@ -987,6 +987,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     uint64_t           imm_data;
     ucs_status_t       status;
     unsigned           flags;
+    void               *dummy_ctx;
 
     tmh = uct_rc_mlx5_iface_common_data(iface, cqe,
                                         byte_len, &flags);
@@ -995,7 +996,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
                    !UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe))) {
         status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                           tmh + 1, byte_len - sizeof(*tmh),
-                                          flags, tmh->tag, 0);
+                                          flags | UCT_CB_PARAM_FLAG_FIRST,
+                                          tmh->tag, 0, &dummy_ctx);
 
         uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc,
                                          status, ntohs(cqe->wqe_counter));
@@ -1017,7 +1019,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         } else {
             status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                               tmh + 1, byte_len - sizeof(*tmh),
-                                              flags, tmh->tag, imm_data);
+                                              flags | UCT_CB_PARAM_FLAG_FIRST,
+                                              tmh->tag, imm_data, &dummy_ctx);
 
             UCT_RC_MLX5_TM_STAT(iface, RX_EAGER_UNEXP);
         }

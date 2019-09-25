@@ -126,13 +126,13 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
 {
     UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_cma_ep_put_zcopy");
 
-    int ret = uct_cma_ep_common_zcopy(tl_ep,
-                                      iov,
-                                      iovcnt,
-                                      remote_addr,
-                                      comp,
-                                      process_vm_writev,
-                                      "process_vm_writev");
+    ucs_status_t ret = uct_cma_ep_common_zcopy(tl_ep,
+                                               iov,
+                                               iovcnt,
+                                               remote_addr,
+                                               comp,
+                                               process_vm_writev,
+                                               "process_vm_writev");
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
@@ -147,13 +147,13 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
 {
     UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_cma_ep_get_zcopy");
 
-    int ret = uct_cma_ep_common_zcopy(tl_ep,
-                                      iov,
-                                      iovcnt,
-                                      remote_addr,
-                                      comp,
-                                      process_vm_readv,
-                                      "process_vm_readv");
+    ucs_status_t ret = uct_cma_ep_common_zcopy(tl_ep,
+                                               iov,
+                                               iovcnt,
+                                               remote_addr,
+                                               comp,
+                                               process_vm_readv,
+                                               "process_vm_readv");
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));

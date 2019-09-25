@@ -430,7 +430,8 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
 
     if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                     UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR |
+                     UCP_ADDRESS_PACK_FLAG_TRACE;
     } else {
         addr_flags = -1;
     }
@@ -899,6 +900,7 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
     uct_iface_attr_t *iface_attr;
+    ucp_worker_iface_t *wiface;
     int i;
 
     memset(params, 0, sizeof(*params));
@@ -919,7 +921,8 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
                 params->latency      += ucp_tl_iface_latency(context, iface_attr);
             }
         }
-        params->bw += ucp_tl_iface_bandwidth(context, &worker->ifaces[rsc_index].attr.bandwidth);
+        wiface      = ucp_worker_iface(worker, rsc_index);
+        params->bw += ucp_tl_iface_bandwidth(context, &wiface->attr.bandwidth);
     }
 }
 

@@ -950,3 +950,212 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 /* Test all available ib transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               ib, "ib")
+
+class test_ucp_wireup_unified : public test_ucp_wireup {
+public:
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        ucp_params_t tmp_ctx_params = ctx_params;
+
+        tmp_ctx_params.features = UCP_FEATURE_TAG;
+
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/uni",
+                                     tls, TEST_TAG | UNIFIED_MODE, result);
+        return result;
+    }
+
+    bool context_has_tls(ucp_context_h ctx, const std::string& tl,
+                         ucp_rsc_index_t md_idx)
+    {
+        for (ucp_rsc_index_t idx = 0; idx < ctx->num_tls; ++idx) {
+            if (ctx->tl_rscs[idx].md_index != md_idx) {
+                continue;
+            }
+
+            if (!strcmp(ctx->tl_rscs[idx].tl_rsc.tl_name, tl.c_str())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool worker_has_tls(ucp_worker_h worker, const std::string& tl,
+                        ucp_rsc_index_t md_idx)
+    {
+        ucp_context_h ctx = worker->context;
+
+        for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+            ucp_worker_iface_t *wiface = worker->ifaces[i];
+            ucp_rsc_index_t md_idx_it  = ctx->tl_rscs[wiface->rsc_index].md_index;
+
+            if (md_idx_it != md_idx) {
+                continue;
+            }
+
+            char* name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
+            if (!strcmp(name, tl.c_str())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void check_unified_ifaces(entity *e,
+                              const std::string& better_tl,
+                              const std::string& tl)
+    {
+        ucp_context_h ctx   = e->ucph();
+        ucp_worker_h worker = e->worker();
+
+        for (ucp_rsc_index_t i = 0; i < ctx->num_mds; ++i) {
+            if (!(context_has_tls(ctx, better_tl, i) &&
+                  context_has_tls(ctx, tl, i))) {
+               continue;
+            }
+
+            ASSERT_TRUE(ctx->num_tls > worker->num_ifaces);
+            EXPECT_TRUE(worker_has_tls(worker, better_tl, i));
+            EXPECT_FALSE(worker_has_tls(worker, tl, i));
+        }
+    }
+};
+
+
+UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
+{
+    // Accelerated transports have better performance charasteristics than their
+    // verbs counterparts. Check that corresponding verbs transports are not used
+    // by workers in unified mode.
+    check_unified_ifaces(&sender(), "rc_mlx5", "rc");
+    check_unified_ifaces(&sender(), "ud_mlx5", "ud");
+
+    // RC and DC has similar capabilities, but RC has better latency while
+    // estimated number of endpoints is relatively small.
+    // sender() is created with 1 ep, so RC should be selected over DC.
+    check_unified_ifaces(&sender(), "rc_mlx5", "dc_mlx5");
+
+    // Set some big enough number of endpoints for DC to be more performance
+    // efficient than RC. Now check that DC is selected over RC.
+    modify_config("NUM_EPS", "1000");
+    entity *e = create_entity();
+    check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, ud, "ud")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc_dc, "rc,dc")
+
+class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
+    void init() {
+        size_t device_atomics_cnt = 0;
+
+        test_ucp_wireup::init();
+        sender().connect(&receiver(), get_ep_params());
+        for (ucp_lane_index_t lane = 0;
+             lane < ucp_ep_num_lanes(sender().ep()); lane++) {
+            if (ucp_ep_get_iface_attr(sender().ep(), lane)->cap.flags &
+                UCT_IFACE_FLAG_ATOMIC_DEVICE) {
+                device_atomics_cnt++;
+            }
+        }
+        test_ucp_wireup::cleanup();
+
+        if (!device_atomics_cnt) {
+            UCS_TEST_SKIP_R("there are no TLs that support device atomics");
+        }
+    }
+
+    void cleanup() {
+        /* do nothing */
+    }
+
+protected:
+
+    bool use_device_amo(ucp_ep_h ep) {
+        ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+
+        for (ucp_lane_index_t lane = 0; lane < UCP_MAX_LANES; ++lane) {
+            if (ep_config->key.amo_lanes[lane] != UCP_NULL_LANE) {
+                return (ucp_ep_get_iface_attr(ep, lane)->cap.flags &
+                        UCT_IFACE_FLAG_ATOMIC_DEVICE);
+            }
+        }
+
+        return false;
+    }
+
+    size_t get_min_max_num_eps(ucp_ep_h ep) {
+        size_t min_max_num_eps = UCS_ULUNITS_INF;
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+            uct_iface_attr_t *iface_attr = ucp_ep_get_iface_attr(ep, lane);
+
+            if (iface_attr->max_num_eps < min_max_num_eps) {
+                min_max_num_eps = iface_attr->max_num_eps;
+            }
+        }
+
+        return min_max_num_eps;
+    }
+
+    size_t test_wireup_fallback_amo(const std::vector<std::string> &tls,
+                                    size_t est_num_eps, bool should_use_device_amo) {
+        size_t min_max_num_eps = UCS_ULUNITS_INF;
+
+        UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
+        modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
+
+        // Create new entity and add to to the end of vector
+        // (thus it will be receiver without any connections)
+        create_entity(false);
+
+        ucp_test_param params = GetParam();
+        for (std::vector<std::string>::const_iterator i = tls.begin();
+             i != tls.end(); ++i) {
+            params.transports.clear();
+            params.transports.push_back(*i);
+            create_entity(true, params);
+            sender().connect(&receiver(), get_ep_params());
+
+            EXPECT_EQ(should_use_device_amo, use_device_amo(sender().ep()));
+
+            size_t max_num_eps = get_min_max_num_eps(sender().ep());
+            if (max_num_eps < min_max_num_eps) {
+                min_max_num_eps = max_num_eps;
+            }
+        }
+
+        test_ucp_wireup::cleanup();
+
+        return min_max_num_eps;
+    }
+
+public:
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_wireup::get_ctx_params();
+        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
+        params.features    |= (UCP_FEATURE_AMO32 |
+                               UCP_FEATURE_AMO64);
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
+    std::vector<std::string> tls;
+
+    /* the 1st peer support RC only (device atomics) */
+    tls.push_back("rc");
+    /* the 2nd peer support RC and SHM (device and CPU atomics) */
+    tls.push_back("rc,shm");
+    
+    size_t min_max_num_eps = test_wireup_fallback_amo(tls, 1, 1);
+    test_wireup_fallback_amo(tls, min_max_num_eps + 1, 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback_amo,
+                              shm_rc, "shm,rc_x,rc_v")

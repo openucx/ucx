@@ -293,6 +293,8 @@ process to map the memory of another process into its virtual address space.
 
 
 %changelog
+* Sun Sep 22 2019 Yossi Itigin <yosefe@mellanox.com> 1.8.0-1
+- Bump version to 1.8.0
 * Sun Mar 24 2019 Yossi Itigin <yosefe@mellanox.com> 1.7.0-1
 - Bump version to 1.7.0
 * Thu Jan 24 2019 Yossi Itigin <yosefe@mellanox.com> 1.6.0-1

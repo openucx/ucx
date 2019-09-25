@@ -29,7 +29,7 @@ static void *ucm_bistro_page_align_ptr(void *ptr)
 static ucs_status_t ucm_bistro_protect(void *addr, size_t len, int prot)
 {
     void *aligned = ucm_bistro_page_align_ptr(addr);
-    size_t size   = addr - aligned + len;
+    size_t size   = UCS_PTR_BYTE_DIFF(aligned, addr) + len;
     int res;
 
     res = mprotect(aligned, size, prot) ? UCS_ERR_INVALID_PARAM : UCS_OK;
