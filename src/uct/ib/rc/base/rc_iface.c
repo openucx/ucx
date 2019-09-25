@@ -79,7 +79,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "IB fence type when API fence requested:\n"
    "  none   - fence is a no-op\n"
    "  weak   - fence makes sure remote reads are ordered with respect to remote writes\n"
-   "  strong - fence make sure that subsequent remote operations start only after\n"
+   "  strong - fence makes sure that subsequent remote operations start only after\n"
    "           previous remote operations complete",
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
                 UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
