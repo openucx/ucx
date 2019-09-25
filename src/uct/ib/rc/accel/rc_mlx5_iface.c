@@ -472,6 +472,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_mlx5_iface_common_config_t *mlx5_config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
+    uct_ib_device_t *dev;
     ucs_status_t status;
 
     uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
@@ -483,6 +484,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rc_config, init_attr);
 
+    dev                              = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode               = mlx5_config->super.mmio_mode;
     self->tx.bb_max                  = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
 
@@ -519,18 +521,29 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
 
-    switch (self->super.config.fence_mode) {
+    switch (rc_config->fence_mode) {
     case UCT_RC_FENCE_MODE_WEAK:
         self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
         self->config.put_fence_flag    = 0;
+        self->super.config.fence_mode  = UCT_RC_FENCE_MODE_WEAK;
         break;
     case UCT_RC_FENCE_MODE_STRONG:
         self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
         self->config.put_fence_flag    = UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+        self->super.config.fence_mode  = UCT_RC_FENCE_MODE_STRONG;
         break;
+    case UCT_RC_FENCE_MODE_AUTO:
+        if (uct_ib_device_has_pci_atomics(dev)) {
+            self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+            self->config.put_fence_flag    = 0;
+            self->super.config.fence_mode  = UCT_RC_FENCE_MODE_WEAK;
+            break;
+        }
+        /* Fall thru */
     case UCT_RC_FENCE_MODE_NONE:
         self->config.atomic_fence_flag = 0;
         self->config.put_fence_flag    = 0;
+        self->super.config.fence_mode  = UCT_RC_FENCE_MODE_NONE;
         break;
     default:
         ucs_error("incorrect fence value: %d", self->super.config.fence_mode);

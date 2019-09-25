@@ -143,6 +143,7 @@ typedef enum uct_rc_fence_mode {
     UCT_RC_FENCE_MODE_NONE,
     UCT_RC_FENCE_MODE_WEAK,
     UCT_RC_FENCE_MODE_STRONG,
+    UCT_RC_FENCE_MODE_AUTO,
     UCT_RC_FENCE_MODE_LAST
 } uct_rc_fence_mode_t;
 
