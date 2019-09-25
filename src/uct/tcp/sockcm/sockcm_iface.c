@@ -18,7 +18,11 @@ enum uct_sockcm_process_event_flags {
     UCT_SOCKCM_PROCESS_EVENT_ACK_EVENT_FLAG       = UCS_BIT(1)
 };
 
-static ucs_config_field_t uct_sockcm_iface_config_table[] = {
+static ucs_config_field_t uct_sockcm_iface_config_table[] = {    
+    {"", "", NULL,
+     ucs_offsetof(uct_sockcm_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
     {"BACKLOG", "1024",
      "Maximum number of pending connections for a listening socket.",
      ucs_offsetof(uct_sockcm_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},

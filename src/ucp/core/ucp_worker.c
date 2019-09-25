@@ -1353,8 +1353,10 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
         score = ucp_wireup_amo_score_func(context, md_attr, iface_attr,
                                           &dummy_iface_attr);
-        if ((score > best_score) ||
-            ((score == best_score) && (priority > best_priority)))
+        if (ucp_is_scalable_transport(worker->context,
+                                      iface_attr->max_num_eps) &&
+            ((score > best_score) ||
+             ((score == best_score) && (priority > best_priority))))
         {
             best_rsc      = rsc;
             best_score    = score;
@@ -1388,7 +1390,10 @@ static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
     ucp_rsc_index_t iface_id;
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        accumulated_flags |= worker->ifaces[iface_id]->attr.cap.flags;
+        if (ucp_is_scalable_transport(worker->context,
+                                      worker->ifaces[iface_id]->attr.max_num_eps)) {
+            accumulated_flags |= worker->ifaces[iface_id]->attr.cap.flags;
+        }
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
