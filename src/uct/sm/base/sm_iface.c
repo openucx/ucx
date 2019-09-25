@@ -16,6 +16,9 @@
 #include <ucs/sys/sys.h>
 #include <ucs/arch/cpu.h>
 
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 ucs_config_field_t uct_sm_iface_config_table[] = {
     {"", "", NULL,
@@ -38,17 +41,35 @@ uct_sm_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
                                       num_tl_devices_p);
 }
 
+static uint64_t uct_sm_iface_get_user_ns_id()
+{
+    struct stat file_stat;
+
+    if (stat("/proc/self/ns/user", &file_stat) != 0) {
+        /* namespaces are not supported or another issue.
+         * assuming that no namespaces are used */
+        return 0;
+    }
+
+    return file_stat.st_ino;
+}
+
+static uint64_t uct_sm_iface_machine_guid()
+{
+    return ucs_machine_guid() ^ uct_sm_iface_get_user_ns_id();
+}
+
 ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr)
 {
-    *(uint64_t*)addr = ucs_machine_guid();
+    *(uint64_t*)addr = uct_sm_iface_machine_guid();
     return UCS_OK;
 }
 
 int uct_sm_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr)
 {
-    return ucs_machine_guid() == *(const uint64_t*)dev_addr;
+    return uct_sm_iface_machine_guid() == *(const uint64_t*)dev_addr;
 }
 
 ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags)
