@@ -585,8 +585,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             wiface     = ucp_worker_iface(worker, rsc_index);
             iface_attr = &wiface->attr;
-            enable_amo = (worker->atomic_tls & UCS_BIT(rsc_index)) ||
-                         (flags & UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS);
+            enable_amo = !(flags & UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO) &&
+                         (worker->atomic_tls & UCS_BIT(rsc_index));
 
             if (!ucp_worker_iface_can_connect(iface_attr)) {
                 return UCS_ERR_INVALID_ADDR;

@@ -668,7 +668,7 @@ static ssize_t ucp_sockaddr_cm_server_priv_pack_cb(void *arg,
     status = ucp_address_pack(worker, ep, tl_bitmap,
                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                               UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
-                              UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS,
+                              UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO,
                               NULL, &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;

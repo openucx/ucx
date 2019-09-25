@@ -1935,7 +1935,7 @@ static ucs_status_t ucp_ep_cm_preinit_client_lanes(ucp_ep_h ucp_ep,
                                                      dev_name);
     uint64_t addr_pack_flags = UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
                                UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  |
-                               UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS;
+                               UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO;
     ucp_wireup_ep_t *wireup_ep;
     void *ucp_addr;
     size_t ucp_addr_size;
@@ -2077,7 +2077,7 @@ static ssize_t ucp_sockaddr_cm_client_priv_pack_cb(void *arg,
     status = ucp_address_pack(worker, ep, tl_bitmap,
                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                               UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
-                              UCP_ADDRESS_PACK_FLAG_IGNORE_WORKER_AMO_TLS, NULL,
+                              UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO, NULL,
                               &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;
@@ -2098,7 +2098,7 @@ free_addr:
 out:
     if (status != UCS_OK) {
         ucp_worker_set_ep_failed(worker, ep, &wireup_ep->super.super,
-                                 key.wireup_lane, status);
+                                 ucp_ep_get_cm_lane(ep), status);
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
