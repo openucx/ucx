@@ -2029,6 +2029,7 @@ static ssize_t ucp_sockaddr_cm_client_priv_pack_cb(void *arg,
     UCS_ASYNC_BLOCK(&worker->async);
 
     wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucs_assert_always(wireup_ep != NULL);
     strncpy(wireup_ep->dev_name, dev_name, UCT_DEVICE_NAME_MAX);
     wireup_ep->dev_name[UCT_DEVICE_NAME_MAX - 1] = '\0';
 

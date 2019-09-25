@@ -765,10 +765,13 @@ ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
         uct_ep_params.cm = worker->cms[0].cm;
 
         status = uct_ep_create(&uct_ep_params, &uct_ep);
-        if (status == UCS_OK) {
-            ucp_wireup_assign_lane(ep, lane, uct_ep, 0, "");
+        if (status != UCS_OK) {
+            /* coverity[leaked_storage] */
+            return status;
         }
-        return status;
+
+        ucp_wireup_assign_lane(ep, lane, uct_ep, 0, "server side cm lane");
+        return UCS_OK;
     }
 
     if ((lane == ucp_ep_get_cm_lane(ep)) &&
@@ -778,9 +781,11 @@ ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
 
         uct_ep = ucp_ep_get_cm_ep(ep);
         ucp_wireup_ep_disown(&ucp_ep_get_cm_wireup_ep(ep)->super.super, uct_ep);
-        ucp_wireup_assign_lane(ep, lane, uct_ep, 1, "");
+        ucp_wireup_assign_lane(ep, lane, uct_ep, 1, "server side cm lane");
         return UCS_OK;
     }
+
+    ucs_assert_always(lane != ucp_ep_get_cm_lane(ep));
 
     /*
      * if the selected transport can be connected directly to the remote
