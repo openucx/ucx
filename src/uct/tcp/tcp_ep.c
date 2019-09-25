@@ -1280,8 +1280,7 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
     uct_tcp_ep_t *ep             = ucs_derived_of(uct_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface       = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
     uct_tcp_ep_zcopy_tx_t *ctx   = NULL;
-    /* Suppressing Cppcheck warning */
-    uct_tcp_ep_put_hdr_t put_req = {0};
+    uct_tcp_ep_put_hdr_t put_req = {0}; /* Suppress Cppcheck false-positive */
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(sizeof(put_req) + uct_iov_total_length(iov, iovcnt), 0,
