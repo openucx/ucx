@@ -218,7 +218,8 @@ typedef struct uct_tcp_ep_put_completion {
     unsigned                      wait_put_ack_sn; /* Sequence number of the last unacked
                                                     * PUT operations that was in-progress
                                                     * when uct_ep_flush was called */
-    ucs_queue_elem_t              elem;
+    ucs_queue_elem_t              elem;            /* Elemnt to insert completion into
+                                                    * TCP EP PUT operation pending queue */
 } uct_tcp_ep_put_completion_t;
 
 
@@ -256,9 +257,6 @@ struct uct_tcp_ep {
     int                           fd;               /* Socket file descriptor */
     uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
     int                           events;           /* Current notifications */
-    unsigned                      outstanding_puts; /* Number of outstanding PUT Zcopy operations
-                                                     * that wait for acknowledge from a peer and
-                                                     * don't consume a TX buffer */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
     uct_tcp_ep_ctx_t              rx;               /* RX resources */
     struct sockaddr_in            peer_addr;        /* Remote iface addr */
@@ -267,7 +265,7 @@ struct uct_tcp_ep {
                                                      * and user's completion should be called
                                                      * when PUT ACK received for them as a part
                                                      * of uct_ep_flush handling */
-    ucs_list_link_t               list;
+    ucs_list_link_t               list;             /* List element to insert into TCP EP list */
 };
 
 
