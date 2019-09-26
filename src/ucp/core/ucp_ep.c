@@ -491,7 +491,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucs_status_t       status;
 
     /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, &conn_request->client_data, &ep);
+    status = ucp_ep_create_accept(worker, &conn_request->sockaddr_data, &ep);
     if (status != UCS_OK) {
         goto out;
     }
