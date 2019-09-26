@@ -61,7 +61,12 @@ typedef enum uct_tcp_ep_ctx_type {
     /* - Zcopy TX operation is in progress on a given EP. */
     UCT_TCP_EP_CTX_TYPE_ZCOPY_TX,
     /* - PUT RX operation is in progress on a given EP. */
-    UCT_TCP_EP_CTX_TYPE_PUT_RX
+    UCT_TCP_EP_CTX_TYPE_PUT_RX,
+    /* - PUT TX operation is waiting for an ACK on a given EP */
+    UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK,
+    /* - PUT RX operation is waiting for resources to send an ACK
+     *   for received PUT operations on a given EP */
+    UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK
 } uct_tcp_ep_ctx_type_t;
 
 
@@ -206,6 +211,7 @@ typedef enum uct_tcp_ep_am_id {
 typedef struct uct_tcp_ep_put_hdr {
     uint64_t                      addr;        /* Address of a remote memory buffer */
     size_t                        length;      /* Length of a remote memory buffer */
+    unsigned                      sn;          /* equence number of the current PUT operation */
 } UCS_S_PACKED uct_tcp_ep_put_hdr_t;
 
 
@@ -218,7 +224,7 @@ typedef struct uct_tcp_ep_put_completion {
     unsigned                      wait_put_ack_sn; /* Sequence number of the last unacked
                                                     * PUT operations that was in-progress
                                                     * when uct_ep_flush was called */
-    ucs_queue_elem_t              elem;            /* Elemnt to insert completion into
+    ucs_queue_elem_t              elem;            /* Element to insert completion into
                                                     * TCP EP PUT operation pending queue */
 } uct_tcp_ep_put_completion_t;
 
@@ -227,8 +233,8 @@ typedef struct uct_tcp_ep_put_completion {
  * TCP endpoint communication context
  */
 typedef struct uct_tcp_ep_ctx {
-    unsigned                      acked_put_sn;   /* Sequence number of last acked PUT */
-    unsigned                      unacked_put_sn; /* Sequence number of last unacked PUT */
+    unsigned                      put_sn;         /* Sequence number of last sent
+                                                   * or received PUT operation */
     void                          *buf;           /* Partial send/recv data */
     size_t                        length;         /* How much data in the buffer */
     size_t                        offset;         /* Next offset to send/recv */
