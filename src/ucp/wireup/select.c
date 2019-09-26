@@ -233,6 +233,49 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
     return 0;
 }
 
+static void
+ucp_wireup_update_select_info(ucp_context_h context, uct_md_attr_t *md_attr,
+                              uint8_t rsc_index,
+                              const uct_iface_attr_t *iface_attr,
+                              const ucp_address_iface_attr_t *addr_iface_attr,
+                              unsigned addr_index,
+                              const ucp_wireup_criteria_t *criteria,
+                              ucp_wireup_select_info_t *select_info)
+{
+    double score     = criteria->calc_score(context, md_attr,
+                                            iface_attr,
+                                            addr_iface_attr);
+    uint8_t priority = iface_attr->priority + addr_iface_attr->priority;
+    int update;
+
+    ucs_assert(score >= 0.0);
+
+    if (select_info->reachable) {
+        /* Comparing score with the current best score */
+        update = (ucp_score_cmp(score, select_info->score) > 0);
+        if (!update) {
+            /* Comparing priority with the priority of the current
+             * best transport (if the scores are equal) */
+            update = (!ucp_score_cmp(score, select_info->score) &&
+                      (priority > select_info->priority));
+        }
+    } else {
+        update = 1;
+    }
+
+    ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%u] : %s score %.2f priority %d",
+              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
+              addr_index, criteria->title, score, priority);
+
+    if (update) {
+        select_info->rsc_index  = rsc_index;
+        select_info->score      = score;
+        select_info->priority   = priority;
+        select_info->addr_index = addr_index;
+        select_info->reachable  = 1;
+    }
+}
+
 /**
  * Select a local and remote transport
  */
@@ -245,42 +288,38 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
                             int show_error,
                             ucp_wireup_select_info_t *select_info)
 {
-    ucp_ep_h ep           = select_params->ep;
-    ucp_worker_h worker   = ep->worker;
-    ucp_context_h context = worker->context;
-    const ucp_address_entry_t *address_list;
-    unsigned address_count;
+    ucp_ep_h ep                          = select_params->ep;
+    ucp_worker_h worker                  = ep->worker;
+    ucp_context_h context                = worker->context;
+    const ucp_address_entry_t *addr_list = select_params->address_list;
+    unsigned addr_count                  = select_params->address_count;
+    unsigned addr_index;
     uct_tl_resource_desc_t *resource;
     const ucp_address_entry_t *ae;
-    ucp_rsc_index_t rsc_index, best_rsc_index;
-    double score, best_score;
+    ucp_rsc_index_t rsc_index;
     char tls_info[256];
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
     uint64_t addr_index_map;
-    unsigned addr_index, best_dst_addr_index;
-    int reachable;
-    int found;
-    uint8_t priority, best_score_priority;
+    ucp_wireup_select_info_t sinfo;
 
-    found               = 0;
-    best_score          = 0.0;
-    best_rsc_index      = 0;
-    best_dst_addr_index = 0;
-    best_score_priority = 0;
-    p                   = tls_info;
-    endp                = tls_info + sizeof(tls_info) - 1;
-    tls_info[0]         = '\0';
-    tl_bitmap          &= select_params->tl_bitmap;
-    show_error          = (select_params->show_error && show_error);
-    address_list        = select_params->address_list;
-    address_count       = select_params->address_count;
+    /*
+     * sinfo.reachable = 0;
+     * everything else is needed to suppress compiler warnings
+     */
+    memset(&sinfo, 0, sizeof(sinfo));
+
+    p            = tls_info;
+    endp         = tls_info + sizeof(tls_info) - 1;
+    tls_info[0]  = '\0';
+    tl_bitmap   &= select_params->tl_bitmap;
+    show_error   = (select_params->show_error && show_error);
 
     /* Check which remote addresses satisfy the criteria */
     addr_index_map = 0;
-    for (ae = address_list; ae < address_list + address_count; ++ae) {
-        addr_index = ae - address_list;
+    for (ae = addr_list; ae < addr_list + addr_count; ++ae) {
+        addr_index = ae - addr_list;
         if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
             ucs_trace("addr[%d]: not in use, because on device[%d]",
                       addr_index, ae->dev_index);
@@ -289,7 +328,8 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             ucs_trace("addr[%d]: not in use, because on md[%d]", addr_index,
                       ae->md_index);
             continue;
-        } else if (!ucs_test_all_flags(ae->md_flags, criteria->remote_md_flags)) {
+        } else if (!ucs_test_all_flags(ae->md_flags,
+                                       criteria->remote_md_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->md_flags,
@@ -383,46 +423,23 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             continue;
         }
 
-        reachable = 0;
-
-        for (ae = address_list; ae < address_list + address_count; ++ae) {
-            if (!(addr_index_map & UCS_BIT(ae - address_list)) ||
+        for (ae = addr_list; ae < addr_list + addr_count; ++ae) {
+            addr_index = ae - addr_list;
+            if (!(addr_index_map & UCS_BIT(addr_index)) ||
                 !ucp_wireup_is_reachable(worker, rsc_index, ae))
             {
                 /* Must be reachable device address, on same transport */
                 continue;
             }
 
-            reachable = 1;
-
-            score = criteria->calc_score(context, md_attr, iface_attr,
-                                         &ae->iface_attr);
-            ucs_assert(score >= 0.0);
-
-            priority = iface_attr->priority + ae->iface_attr.priority;
-
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f priority %d",
-                      UCT_TL_RESOURCE_DESC_ARG(resource), ae - address_list,
-                      criteria->title, score, priority);
-
-            if (!found ||
-                /* Comparing score with the current best score */
-                (ucp_score_cmp(score, best_score) > 0) ||
-                /* Comparing priority with the priority of the current best
-                 * transport (if the scores are equal) */
-                ((ucp_score_cmp(score, best_score) == 0) &&
-                 (priority > best_score_priority))) {
-                best_rsc_index      = rsc_index;
-                best_dst_addr_index = ae - address_list;
-                best_score          = score;
-                best_score_priority = priority;
-                found               = 1;
-            }
+            ucp_wireup_update_select_info(context, md_attr, rsc_index,
+                                          iface_attr, &ae->iface_attr,
+                                          addr_index, criteria, &sinfo);
         }
 
         /* If a local resource cannot reach any of the remote addresses,
          * generate debug message. */
-        if (!reachable) {
+        if (!sinfo.reachable) {
             snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - %s, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource),
                      ucs_status_string(UCS_ERR_UNREACHABLE));
@@ -435,11 +452,7 @@ out:
         *(p - 2) = '\0'; /* trim last "," */
     }
 
-    select_info->rsc_index   = best_rsc_index;
-    select_info->addr_index  = best_dst_addr_index;
-    select_info->score       = best_score;
-
-    if (!found) {
+    if (!sinfo.reachable) {
         if (show_error) {
             ucs_error("no %s transport to %s: %s", criteria->title,
                       ucp_ep_peer_name(ep), tls_info);
@@ -450,11 +463,12 @@ out:
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
               " -> '%s' address[%d],md[%d] score %.2f", ep, criteria->title,
-              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[best_rsc_index].tl_rsc),
-              context->tl_rscs[best_rsc_index].md_index,
-              ucp_ep_peer_name(ep), best_dst_addr_index,
-              address_list[best_dst_addr_index].md_index, best_score);
+              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sinfo.rsc_index].tl_rsc),
+              context->tl_rscs[sinfo.rsc_index].md_index, ucp_ep_peer_name(ep),
+              sinfo.addr_index, addr_list[sinfo.addr_index].md_index,
+              sinfo.score);
 
+    *select_info = sinfo;
     return UCS_OK;
 }
 
