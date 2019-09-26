@@ -232,8 +232,9 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
                 }
             }
             if (ucp_worker_unified_mode(worker)) {
-                ucs_assertv(num_ep_addrs <= 1,
-                            "unexpected multiple ep addresses in unified mode");
+                ucs_assertv_always(
+                    num_ep_addrs <= 1,
+                    "unexpected multiple ep addresses in unified mode");
             }
         }
 
@@ -658,7 +659,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                     }
 
                     ucp_address_memcheck(context, ptr, ep_addr_len, rsc_index);
-                    ptr            = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
+                    ptr = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
 
                     ++num_ep_addrs;
                 }
@@ -887,19 +888,17 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
             ptr       = ucp_address_unpack_length(worker, flags_ptr, ptr,
                                                   &iface_addr_len, 0, &last_tl);
-            address->iface_addr = (iface_addr_len > 0) ? ptr : NULL;
+            address->iface_addr   = (iface_addr_len > 0) ? ptr : NULL;
             address->num_ep_addrs = 0;
-            ptr                 = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
+            ptr                   = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
 
             last_ep_addr = !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAVE_EP_ADDR);
             while (!last_ep_addr) {
                 ucs_assert(address->num_ep_addrs < UCP_MAX_LANES);
                 ep_addr       = &address->ep_addrs[address->num_ep_addrs++];
-
                 ptr           = ucp_address_unpack_length(worker, flags_ptr, ptr,
                                                           &ep_addr_len, 1,
                                                           &last_ep_addr);
-
                 ep_addr->addr = ptr;
                 ptr           = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
             }
