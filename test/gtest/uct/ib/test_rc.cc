@@ -454,18 +454,18 @@ ucs_status_t test_rc_mp_xrq::unexp_handler(unsigned flags, uint64_t imm,
         *context         = self;
         m_first_received = true;
 
-        // First message should contain valid immediate value
-        EXPECT_EQ(reinterpret_cast<uint64_t>(this), imm);
     } else {
         // Check that the correct message context is passed with all fragments
         EXPECT_EQ(self, *context);
-
-        // Immediate value is passed with the first message only
-        EXPECT_EQ(0ul, imm);
     }
 
     if (!(flags & UCT_CB_PARAM_FLAG_MORE)) {
+        // Last message should contain valid immediate value
+        EXPECT_EQ(reinterpret_cast<uint64_t>(this), imm);
         m_last_received = true;
+    } else {
+        // Immediate value is passed with the last message only
+        EXPECT_EQ(0ul, imm);
     }
 
     return UCS_OK;
