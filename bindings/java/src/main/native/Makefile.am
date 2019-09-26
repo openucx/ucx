@@ -3,6 +3,8 @@
 # See file LICENSE for terms.
 #
 
+if HAVE_JAVA
+
 topdir=$(abs_top_builddir)
 java_build_dir=$(builddir)/build-java
 javadir=$(top_srcdir)/bindings/java
@@ -70,3 +72,5 @@ test:
 	$(MVNCMD) test
 docs:
 	$(MVNCMD) javadoc:javadoc
+
+endif
