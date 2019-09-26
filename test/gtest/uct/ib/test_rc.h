@@ -14,7 +14,9 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/base/rc_iface.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#if IBV_HW_TM
+#  include <uct/ib/rc/accel/rc_mlx5_common.h>
+#endif
 }
 
 

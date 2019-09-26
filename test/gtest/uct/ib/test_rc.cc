@@ -499,7 +499,7 @@ UCS_TEST_P(test_rc_mp_xrq, config)
 
     // With MP XRQ segment size should be equal to MTU, because HW generates
     // CQE per each received MTU
-    int mtu = uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super.super)->active_mtu);
+    size_t mtu = uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super.super)->active_mtu);
     EXPECT_EQ(mtu, iface->super.super.config.seg_size);
 
     const uct_iface_attr *attrs = &sender().iface_attr();
