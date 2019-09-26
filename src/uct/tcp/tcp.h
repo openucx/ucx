@@ -211,7 +211,7 @@ typedef enum uct_tcp_ep_am_id {
 typedef struct uct_tcp_ep_put_hdr {
     uint64_t                      addr;        /* Address of a remote memory buffer */
     size_t                        length;      /* Length of a remote memory buffer */
-    unsigned                      sn;          /* equence number of the current PUT operation */
+    uint32_t                      sn;          /* equence number of the current PUT operation */
 } UCS_S_PACKED uct_tcp_ep_put_hdr_t;
 
 
@@ -221,7 +221,7 @@ typedef struct uct_tcp_ep_put_hdr {
 typedef struct uct_tcp_ep_put_completion {
     uct_completion_t              *comp;           /* User's completion passed to
                                                     * uct_ep_flush */
-    unsigned                      wait_put_ack_sn; /* Sequence number of the last unacked
+    uint32_t                      wait_put_ack_sn; /* Sequence number of the last unacked
                                                     * PUT operations that was in-progress
                                                     * when uct_ep_flush was called */
     ucs_queue_elem_t              elem;            /* Element to insert completion into
@@ -233,7 +233,7 @@ typedef struct uct_tcp_ep_put_completion {
  * TCP endpoint communication context
  */
 typedef struct uct_tcp_ep_ctx {
-    unsigned                      put_sn;         /* Sequence number of last sent
+    uint32_t                      put_sn;         /* Sequence number of last sent
                                                    * or received PUT operation */
     void                          *buf;           /* Partial send/recv data */
     size_t                        length;         /* How much data in the buffer */

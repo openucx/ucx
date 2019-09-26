@@ -467,7 +467,7 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
 }
 
 static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
-                                             unsigned acked_put_sn)
+                                             uint32_t acked_put_sn)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
@@ -484,7 +484,8 @@ static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
         put_comp = ucs_queue_head_elem_non_empty(&ep->put_comp_q,
                                                  uct_tcp_ep_put_completion_t,
                                                  elem);
-        if (put_comp->wait_put_ack_sn > acked_put_sn) {
+        if (UCS_CIRCULAR_COMPARE32(put_comp->wait_put_ack_sn,
+                                   >, acked_put_sn)) {
             break;
         }
 
@@ -842,8 +843,8 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
                 goto out;
             }
         } else if (hdr->am_id == UCT_TCP_EP_PUT_ACK_AM_ID) {
-            ucs_assert(hdr->length == sizeof(unsigned));
-            uct_tcp_ep_handle_put_ack(ep, *(unsigned*)(hdr + 1));
+            ucs_assert(hdr->length == sizeof(uint32_t));
+            uct_tcp_ep_handle_put_ack(ep, *(uint32_t*)(hdr + 1));
             handled++;
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
@@ -1043,7 +1044,7 @@ static ucs_status_t uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep)
      * the last received sequence number == ep::rx::put_sn */
     ucs_assertv(hdr != NULL, "ep=%p", ep);
     hdr->length           = sizeof(ep->rx.put_sn);
-    *(unsigned*)(hdr + 1) = ep->rx.put_sn;
+    *(uint32_t*)(hdr + 1) = ep->rx.put_sn;
     uct_tcp_ep_am_send(iface, ep, hdr);
 
     return UCS_OK;
