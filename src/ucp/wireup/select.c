@@ -1303,6 +1303,8 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_info_t am_info;
     ucs_status_t status;
 
+    memset(select_ctx, 0, sizeof(*select_ctx));
+
     status = ucp_wireup_add_rma_lanes(select_params, select_ctx);
     if (status != UCS_OK) {
         return status;
@@ -1454,7 +1456,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep,
         ucp_wireup_select_params_init(&select_params, ep, ep_params,
                                       ep_init_flags, address_count,
                                       address_list, worker->scalable_tl_bitmap);
-        memset(&select_ctx, 0, sizeof(select_ctx));
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                          &select_ctx);
         if (status == UCS_OK) {
@@ -1468,7 +1469,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep,
 
     ucp_wireup_select_params_init(&select_params, ep, ep_params, ep_init_flags,
                                   address_count, address_list, -1);
-    memset(&select_ctx, 0, sizeof(select_ctx));
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      &select_ctx);
     if (status != UCS_OK) {
