@@ -152,13 +152,8 @@ public:
     typedef void (test_rc_mp_xrq::*send_func)(mapped_buffer*);
 
     virtual void init();
-
     test_rc_mp_xrq();
-
-    uct_rc_mlx5_iface_common_t* rc_mlx5_iface(entity &e) {
-        return ucs_derived_of(e.iface(), uct_rc_mlx5_iface_common_t);
-    }
-
+    uct_rc_mlx5_iface_common_t* rc_mlx5_iface(entity &e);
     void send_eager_bcopy(mapped_buffer *buf);
     void send_eager_zcopy(mapped_buffer *buf);
     void send_rndv_zcopy(mapped_buffer *buf);
@@ -178,12 +173,8 @@ public:
                                    uint64_t remote_addr, size_t length,
                                    const void *rkey_buf);
 
-
 protected:
-    bool             m_first_received;
-    bool             m_last_received;
-    uct_completion_t m_uct_comp;
-    static size_t    m_rx_counter;
+    static size_t m_rx_counter;
 
     uct_test::entity& sender() {
         return **m_entities.begin();
@@ -195,7 +186,10 @@ protected:
 
 private:
     ucs_status_t unexp_handler(unsigned flags, uint64_t imm, void **context);
-    size_t m_max_hdr;
+    size_t           m_max_hdr;
+    bool             m_first_received;
+    bool             m_last_received;
+    uct_completion_t m_uct_comp;
 };
 #endif
 

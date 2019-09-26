@@ -321,9 +321,14 @@ size_t test_rc_mp_xrq::m_rx_counter = 0;
 test_rc_mp_xrq::test_rc_mp_xrq() : m_first_received(false),
                                    m_last_received(false)
 {
-    m_max_hdr = sizeof(ibv_tmh) + sizeof(ibv_rvh);
+    m_max_hdr        = sizeof(ibv_tmh) + sizeof(ibv_rvh);
     m_uct_comp.count = 512; // We do not need completion func to be invoked
     m_uct_comp.func  = NULL;
+}
+
+uct_rc_mlx5_iface_common_t* test_rc_mp_xrq::rc_mlx5_iface(entity &e)
+{
+    return ucs_derived_of(e.iface(), uct_rc_mlx5_iface_common_t);
 }
 
 void test_rc_mp_xrq::init()
@@ -332,11 +337,11 @@ void test_rc_mp_xrq::init()
                                              "RC_TM_MP_NUM_STRIDES", "8");
     ucs_status_t status2 = uct_config_modify(m_iface_config,
                                              "RC_TM_ENABLE", "y");
-    uct_test::init();
-
     if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
         UCS_TEST_SKIP_R("No MP XRQ support");
     }
+
+    uct_test::init();
 
     uct_iface_params params;
     params.field_mask  = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
@@ -412,8 +417,9 @@ void test_rc_mp_xrq::send_rndv_request(mapped_buffer *buf)
 void test_rc_mp_xrq::test_common(send_func sfunc, size_t num_segs,
                                  size_t exp_segs, bool exp_val)
 {
-    size_t size  = rc_mlx5_iface(sender())->super.super.config.seg_size * num_segs - m_max_hdr;
-    m_rx_counter = 0;
+    size_t seg_size = rc_mlx5_iface(sender())->super.super.config.seg_size;
+    size_t size     = (seg_size * num_segs) - m_max_hdr;
+    m_rx_counter    = 0;
 
     EXPECT_TRUE(size <= sender().iface_attr().cap.tag.eager.max_bcopy);
     mapped_buffer buf(size, SEND_SEED, sender());
@@ -514,8 +520,8 @@ UCS_TEST_P(test_rc_mp_xrq, config)
 
     // Maximal AM size should not exceed segment size, so it would always
     // arrive in one-fragment packet (with header it should be strictly less)
-    EXPECT_TRUE(attrs->cap.am.max_bcopy < iface->super.super.config.seg_size);
-    EXPECT_TRUE(attrs->cap.am.max_zcopy < iface->super.super.config.seg_size);
+    EXPECT_LT(attrs->cap.am.max_bcopy, iface->super.super.config.seg_size);
+    EXPECT_LT(attrs->cap.am.max_zcopy, iface->super.super.config.seg_size);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, am)
