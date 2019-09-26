@@ -494,12 +494,12 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
                                                 void *priv_data)
 {
-    ucp_wireup_client_data_t *client_data = priv_data;
-    ucp_wireup_ep_t *wireup_ep            = arg;
-    ucp_ep_h ucp_ep                       = wireup_ep->super.ucp_ep;
-    ucp_rsc_index_t sockaddr_rsc          = wireup_ep->sockaddr_rsc_index;
-    ucp_worker_h worker                   = ucp_ep->worker;
-    ucp_context_h context                 = worker->context;
+    ucp_wireup_sockaddr_data_t *client_data = priv_data;
+    ucp_wireup_ep_t *wireup_ep              = arg;
+    ucp_ep_h ucp_ep                         = wireup_ep->super.ucp_ep;
+    ucp_rsc_index_t sockaddr_rsc            = wireup_ep->sockaddr_rsc_index;
+    ucp_worker_h worker                     = ucp_ep->worker;
+    ucp_context_h context                   = worker->context;
     size_t address_length, conn_priv_len;
     ucp_address_t *worker_address, *rsc_address;
     uct_iface_attr_t *attrs;

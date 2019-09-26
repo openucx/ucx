@@ -67,7 +67,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 {
     ucp_conn_request_h               conn_request = arg;
     ucp_listener_h                   listener     = conn_request->listener;
-    const ucp_wireup_client_data_t   *client_data = &conn_request->client_data;
+    const ucp_wireup_sockaddr_data_t *client_data = &conn_request->client_data;
     ucp_worker_h                     worker       = listener->worker;
     ucp_ep_h                         ep;
     ucs_status_t                     status;

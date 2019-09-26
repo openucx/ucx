@@ -417,7 +417,7 @@ err:
  * Create an endpoint on the server side connected to the client endpoint.
  */
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_client_data_t *client_data,
+                                  const ucp_wireup_sockaddr_data_t *client_data,
                                   ucp_ep_h *ep_p)
 {
     ucp_ep_params_t        params;
