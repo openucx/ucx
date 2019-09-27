@@ -8,6 +8,8 @@
 CC = $(MPICC)
 LD = $(MPICC)
 
+if HAVE_MPICC
+
 # Test application for memory hooks when running with MPI
 # (some MPIs have hooks of their own and we make sure ours still work)
 noinst_PROGRAMS       = test_memhooks shmem_pingpong
@@ -29,3 +31,5 @@ libtest_memhooks_la_LDFLAGS = -rpath /nowhere  # Force shared library
 # SHMEM ping-pong test
 shmem_pingpong_LDFLAGS = -loshmem
 shmem_pingpong_SOURCES = shmem_pingpong.c
+
+endif
