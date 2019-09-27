@@ -13,6 +13,7 @@
 
 #include <ucp/stream/stream.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/wireup/wireup_cm.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
@@ -243,7 +244,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
     uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
                                   UCT_LISTENER_PARAM_FIELD_USER_DATA;
-    uct_params.conn_request_cb  = (void *)0xdeadbeaf; /* TODO: ucp_listener_conn_request_cb; */
+    uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
 
     listener->num_tls           = 0;

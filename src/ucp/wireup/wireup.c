@@ -604,8 +604,8 @@ out:
     return UCS_OK;
 }
 
-static void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane,
-                                   uct_ep_h uct_ep, const char *info)
+void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
+                            const char *info)
 {
     /* If ep already exists, it's a wireup proxy, and we need to update its
      * next_ep instead of replacing it.

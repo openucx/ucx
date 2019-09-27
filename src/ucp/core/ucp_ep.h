@@ -82,7 +82,11 @@ enum {
  */
 enum {
     UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0),  /**< Endpoint for local mem type transfers */
-    UCP_EP_CREATE_AM_LANE              = UCS_BIT(1)   /**< Endpoint requires an AM lane */
+    UCP_EP_CREATE_AM_LANE              = UCS_BIT(1),  /**< Endpoint requires an AM lane */
+    UCP_EP_INIT_CM_WIREUP_CLIENT       = UCS_BIT(2),  /**< Endpoint wireup protocol is based on CM,
+                                                           client side */
+    UCP_EP_INIT_CM_WIREUP_SERVER       = UCS_BIT(3)   /**< Endpoint wireup protocol is based on CM,
+                                                           server side */
 };
 
 
@@ -110,6 +114,7 @@ typedef struct ucp_ep_config_key {
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
     ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
+    ucp_lane_index_t       cm_lane;      /* Lane for holding a CM connection */
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
@@ -463,5 +468,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            double bandwidth);
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+
+ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
 #endif
