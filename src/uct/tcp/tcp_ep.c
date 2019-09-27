@@ -484,7 +484,7 @@ static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
         put_comp = ucs_queue_head_elem_non_empty(&ep->put_comp_q,
                                                  uct_tcp_ep_put_completion_t,
                                                  elem);
-        if (UCS_CIRCULAR_COMPARE32(put_comp->wait_put_ack_sn,
+        if (UCS_CIRCULAR_COMPARE32(put_comp->wait_put_sn,
                                    >, acked_put_sn)) {
             break;
         }
@@ -1342,8 +1342,8 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                 return UCS_ERR_NO_MEMORY;
             }
 
-            put_comp->wait_put_ack_sn = ep->tx.put_sn;
-            put_comp->comp            = comp;
+            put_comp->wait_put_sn = ep->tx.put_sn;
+            put_comp->comp        = comp;
             ucs_queue_push(&ep->put_comp_q, &put_comp->elem);
         }
 

@@ -221,7 +221,7 @@ typedef struct uct_tcp_ep_put_hdr {
 typedef struct uct_tcp_ep_put_completion {
     uct_completion_t              *comp;           /* User's completion passed to
                                                     * uct_ep_flush */
-    uint32_t                      wait_put_ack_sn; /* Sequence number of the last unacked
+    uint32_t                      wait_put_sn;     /* Sequence number of the last unacked
                                                     * PUT operations that was in-progress
                                                     * when uct_ep_flush was called */
     ucs_queue_elem_t              elem;            /* Element to insert completion into
@@ -267,10 +267,8 @@ struct uct_tcp_ep {
     uct_tcp_ep_ctx_t              rx;               /* RX resources */
     struct sockaddr_in            peer_addr;        /* Remote iface addr */
     ucs_queue_head_t              pending_q;        /* Pending operations */
-    ucs_queue_head_t              put_comp_q;       /* PUT operations that are still in-progress
-                                                     * and user's completion should be called
-                                                     * when PUT ACK received for them as a part
-                                                     * of uct_ep_flush handling */
+    ucs_queue_head_t              put_comp_q;       /* Flush completions waiting for
+                                                     * outstanding PUTs acknowledgment */
     ucs_list_link_t               list;             /* List element to insert into TCP EP list */
 };
 
