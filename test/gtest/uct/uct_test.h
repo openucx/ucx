@@ -31,6 +31,11 @@
     } while (_res == UCS_ERR_NO_RESOURCE)
 
 
+#define FOR_EACH_ENTITY(_iter) \
+    for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
+         _iter != m_entities.end(); ++_iter) \
+
+
 /* Testing resource */
 struct resource {
     virtual ~resource() {};
