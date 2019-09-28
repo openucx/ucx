@@ -640,7 +640,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 ucp_worker_iface_is_tl_p2p(iface_attr)) {
 
                 ucs_assert(ep != NULL);
-                ep_addr_len = iface_attr->ep_addr_len;
+                ep_addr_len  = iface_attr->ep_addr_len;
+                ep_flags_ptr = NULL;
 
                 for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
                     if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
@@ -665,6 +666,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 }
 
                 if (num_ep_addrs > 0) {
+                    ucs_assert(ep_flags_ptr != NULL);
                     *(uint8_t*)tl_flags_ptr |= UCP_ADDRESS_FLAG_HAVE_EP_ADDR;
                     if (!ucp_worker_unified_mode(worker)) {
                         *(uint8_t*)ep_flags_ptr |= UCP_ADDRESS_FLAG_LAST;
