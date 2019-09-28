@@ -87,6 +87,9 @@ class uct_test : public testing::TestWithParam<const resource*>,
 public:
     UCS_TEST_BASE_IMPL;
 
+    /* we return a vector of pointers to allow test fixtures to extend the
+     * resource structure.
+     */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
     uct_test();

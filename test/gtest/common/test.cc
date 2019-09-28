@@ -88,7 +88,7 @@ void test_base::get_config(const std::string& name, std::string& value, size_t m
                                        max);
     if (status != UCS_OK) {
         GTEST_FAIL() << "Invalid UCS configuration for " << name
-                     << ", error message: " << ucs_status_string(status)
+                     << ": " << ucs_status_string(status)
                      << "(" << status << ")";
     }
 }
