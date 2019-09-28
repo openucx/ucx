@@ -14,6 +14,9 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/base/rc_iface.h>
+#if IBV_HW_TM
+#  include <uct/ib/rc/accel/rc_mlx5_common.h>
+#endif
 }
 
 
@@ -139,6 +142,56 @@ protected:
     static const uint8_t FLUSH_AM_ID = 1;
     static uint32_t m_am_rx_count;
 };
+
+
+#if IBV_HW_TM
+class test_rc_mp_xrq : public uct_test {
+public:
+    static const uint64_t SEND_SEED = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t AM_ID     = 1;
+    typedef void (test_rc_mp_xrq::*send_func)(mapped_buffer*);
+
+    virtual void init();
+    test_rc_mp_xrq();
+    uct_rc_mlx5_iface_common_t* rc_mlx5_iface(entity &e);
+    void send_eager_bcopy(mapped_buffer *buf);
+    void send_eager_zcopy(mapped_buffer *buf);
+    void send_rndv_zcopy(mapped_buffer *buf);
+    void send_rndv_request(mapped_buffer *buf);
+    void test_common(send_func sfunc, size_t num_segs, size_t exp_segs = 1,
+                     bool exp_val = true);
+
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags);
+
+    static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
+                                    unsigned flags, uct_tag_t stag,
+                                    uint64_t imm, void **context);
+
+    static ucs_status_t unexp_rndv(void *arg, unsigned flags, uint64_t stag,
+                                   const void *header, unsigned header_length,
+                                   uint64_t remote_addr, size_t length,
+                                   const void *rkey_buf);
+
+protected:
+    static size_t m_rx_counter;
+
+    uct_test::entity& sender() {
+        return **m_entities.begin();
+    }
+
+    uct_test::entity& receiver() {
+        return **(m_entities.end() - 1);
+    }
+
+private:
+    ucs_status_t unexp_handler(unsigned flags, uint64_t imm, void **context);
+    size_t           m_max_hdr;
+    bool             m_first_received;
+    bool             m_last_received;
+    uct_completion_t m_uct_comp;
+};
+#endif
 
 
 #if ENABLE_STATS
