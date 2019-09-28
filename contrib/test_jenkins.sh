@@ -821,7 +821,7 @@ run_ucx_perftest() {
 	ip_ifaces=$(get_active_ip_ifaces)
 
 	# shared memory, IB devices, IP ifaces
-	devices="posix $(get_active_ib_devices) ${ip_ifaces}"
+	devices="memory $(get_active_ib_devices) ${ip_ifaces}"
 
 	# Run on all devices
 	my_devices=$(get_my_tasks $devices)
@@ -831,9 +831,9 @@ run_ucx_perftest() {
 			opt_transports="-b $ucx_inst_ptest/transports"
 			tls=`awk '{print $3 }' $ucx_inst_ptest/transports | tr '\n' ',' | sed -r 's/,$//; s/mlx5/x/g'`
 			dev=$ucx_dev
-		elif [[ $ucx_dev =~ posix ]]; then
-			opt_transports="-x mm"
-			tls="mm"
+		elif [[ $ucx_dev =~ memory ]]; then
+			opt_transports="-x posix"
+			tls="shm"
 			dev="all"
 		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
 			opt_transports="-x tcp"
@@ -919,10 +919,10 @@ run_ucx_perftest() {
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
-			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY "$ucx_perftest" "$ucp_test_args"
+			$MPIRUN -np 2 $AFFINITY "$ucx_perftest" "$ucp_test_args"
 		else
-			export UCX_TLS=self,mm,cma,cuda_copy
+			export UCX_TLS=self,shm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 			unset UCX_TLS
 
