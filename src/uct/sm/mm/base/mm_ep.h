@@ -14,7 +14,13 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 
 
-struct uct_mm_ep {
+#define UCT_MM_BASE_ADDRESS_HASH_SIZE    64
+
+
+/**
+ * MM transport endpoint
+ */
+typedef struct uct_mm_ep {
     uct_base_ep_t       super;
 
     /* Remote peer */
@@ -38,7 +44,8 @@ struct uct_mm_ep {
 
     /* Remote peer */
     uct_mm_remote_seg_t  mapped_desc; /* pointer to the descriptor of the destination's shared_mem (FIFO) */
-};
+} uct_mm_ep_t;
+
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t,const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
