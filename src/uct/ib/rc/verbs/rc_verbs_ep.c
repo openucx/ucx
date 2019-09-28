@@ -35,8 +35,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                                                  IBV_SEND_SIGNALED);
     }
     if (wr->opcode == IBV_WR_RDMA_READ) {
-        send_flags |= uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
-                                             IBV_SEND_FENCE);
+        send_flags |= uct_rc_ep_fm(&iface->super, &ep->fi, IBV_SEND_FENCE);
     }
 
     wr->send_flags = send_flags;
@@ -122,8 +121,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                           result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
                                 rkey, desc, IBV_SEND_SIGNALED |
-                                uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
-                                                       IBV_SEND_FENCE));
+                                uct_rc_ep_fm(&iface->super, &ep->fi, IBV_SEND_FENCE));
     return UCS_INPROGRESS;
 }
 

@@ -39,10 +39,6 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
-  {"FENCE", "y",
-   "Request IB fence when API fence requested.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, fence), UCS_CONFIG_TYPE_BOOL},
-
   {NULL}
 };
 
@@ -216,9 +212,24 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
-    self->super.config.fence         = config->fence;
+    self->super.config.fence_mode    = config->super.super.fence_mode;
+    self->super.progress             = uct_rc_verbs_iface_progress;
 
-    self->super.progress = uct_rc_verbs_iface_progress;
+    if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
+        (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {
+        self->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
+    } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
+        self->super.config.fence_mode = UCT_RC_FENCE_MODE_NONE;
+    } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_STRONG) {
+        /* TODO: for now strong fence mode is not supported by verbs */
+        ucs_error("fence mode 'strong' is not supported by verbs");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    } else {
+        ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
 
     memset(self->inl_sge, 0, sizeof(self->inl_sge));
     uct_rc_am_hdr_fill(&self->am_inl_hdr.rc_hdr, 0);
