@@ -529,15 +529,24 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  *                         the callback returns @ref UCS_INPROGRESS.
  * @param [in]     stag    Tag from sender.
  * @param [in]     imm     Immediate data from sender.
- * @param [inout]  context Storage for a per-message user-defined context. For
- *                         example, it can be initialized to a user-defined value
- *                         when the first fragment arrives with the flag
- *                         UCT_CB_PARAM_FLAG_FIRST, and this value will be available
- *                         for all subsequent fragments of the same message.
- *                         No need to initialize the value in case of single
- *                         fragment message (i.e. @a flags contains
- *                         @ref UCT_CB_PARAM_FLAG_FIRST, but does not contain
- *                         @ref UCT_CB_PARAM_FLAG_MORE).
+ *
+ * @param [inout]  context Storage for a per-message user-defined context. In
+ *                         this context, the message is defined by the sender
+ *                         side as a single call to uct_ep_tag_eager_short/bcopy/zcopy.
+ *                         On the transport level the message can be fragmented
+ *                         and delivered to the target over multiple fragments.
+ *                         The fragments will preserve the original order of the
+ *                         message. Each fragment will result in invocation of
+ *                         the above callback. The user can use
+ *                         UCT_CB_PARAM_FLAG_FIRST to identify the first fragment,
+ *                         allocate the context object and use the context as a
+ *                         token that is set by the user and passed to subsequent
+ *                         callbacks of the same message. The user is responsible
+ *                         for allocation and release of the context.
+ *
+ * @note No need to allocate the context in the case of a single fragment message
+ *       (i.e. @a flags contains @ref UCT_CB_PARAM_FLAG_FIRST, but does not
+ *       contain @ref UCT_CB_PARAM_FLAG_MORE).
  *
  * @retval UCS_OK          - data descriptor was consumed, and can be released
  *                           by the caller.
