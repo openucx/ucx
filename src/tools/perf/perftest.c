@@ -365,6 +365,14 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
+    printf("     -m <mem type>  memory type of messages\n");
+    printf("                        host - system memory(default)\n");
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
+        printf("                        cuda - NVIDIA GPU memory\n");
+    }
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
+        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
+    }
     printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%zu)\n",
                                 ctx->params.warmup_iter);
@@ -421,14 +429,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
-    printf("     -m <mem type>  memory type of messages\n");
-    printf("                        host - system memory(default)\n");
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
-        printf("                        cuda - NVIDIA GPU memory\n");
-    }
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
-        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
-    }
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -1377,7 +1377,7 @@ static ucs_status_t check_system(struct perftest_context *ctx)
         }
         if (count > 2) {
             ucs_warn("CPU affinity is not set (bound to %u cpus)."
-                            " Performance may be impacted.", count);
+                     " Performance may be impacted.", count);
         }
     }
 

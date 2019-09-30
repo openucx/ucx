@@ -153,7 +153,6 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_component_t *component,
     ucs_status_t status;
 
     status = uct_cuda_ipc_is_peer_accessible(com, packed);
-
     if (status != UCS_OK) {
         return status;
     }
@@ -211,6 +210,7 @@ static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t leng
                                          unsigned flags, uct_mem_h *memh_p)
 {
     uct_cuda_ipc_key_t *key;
+    ucs_status_t status;
 
     key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
     if (NULL == key) {
@@ -218,9 +218,10 @@ static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t leng
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (UCS_OK != uct_cuda_ipc_mem_reg_internal(md, address, length, 0, key)) {
+    status = uct_cuda_ipc_mem_reg_internal(md, address, length, 0, key);
+    if (status != UCS_OK) {
         ucs_free(key);
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
     *memh_p = key;
 

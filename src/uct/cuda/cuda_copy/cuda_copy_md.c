@@ -11,6 +11,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <uct/cuda/base/cuda_iface.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 
@@ -63,11 +64,11 @@ static ucs_status_t uct_cuda_copy_rkey_release(uct_component_t *component,
 static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t length,
                                           unsigned flags, uct_mem_h *memh_p)
 {
-    cudaError_t cuerr = cudaSuccess;
     CUmemorytype memType;
     CUresult result;
+    ucs_status_t status;
 
-    if(address == NULL) {
+    if (address == NULL) {
         *memh_p = address;
         return UCS_OK;
     }
@@ -80,9 +81,10 @@ static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t len
         return UCS_OK;
     }
 
-    cuerr = cudaHostRegister(address, length, cudaHostRegisterPortable);
-    if (cuerr != cudaSuccess) {
-        return UCS_ERR_IO_ERROR;
+    status = UCT_CUDA_FUNC(cudaHostRegister(address, length,
+                                            cudaHostRegisterPortable));
+    if (status != UCS_OK) {
+        return status;
     }
 
     *memh_p = address;
@@ -92,14 +94,15 @@ static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t len
 static ucs_status_t uct_cuda_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
     void *address = (void *)memh;
-    cudaError_t cuerr;
+    ucs_status_t status;
 
     if (address == NULL) {
         return UCS_OK;
     }
-    cuerr = cudaHostUnregister(address);
-    if (cuerr != cudaSuccess) {
-        return UCS_ERR_IO_ERROR;
+
+    status = UCT_CUDA_FUNC(cudaHostUnregister(address));
+    if (status != UCS_OK) {
+        return status;
     }
 
     return UCS_OK;

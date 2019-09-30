@@ -106,6 +106,10 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
 
+    if (!size) {
+        return;
+    }
+
     start = ucs_align_down_pow2((uintptr_t)address,        UCS_PGT_ADDR_ALIGN);
     end   = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
 

@@ -58,6 +58,7 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 static ucs_status_t uct_cuda_ipc_open_memhandle(CUipcMemHandle memh,
                                                 CUdeviceptr *mapped_addr)
 {
+    const char *cu_err_str;
     CUresult cuerr;
 
     cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
@@ -66,6 +67,10 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(CUipcMemHandle memh,
         if (cuerr == CUDA_ERROR_ALREADY_MAPPED) {
             return UCS_ERR_ALREADY_EXISTS;
         }
+
+        cuGetErrorString(cuerr, &cu_err_str);
+        ucs_error("cuIpcOpenMemHandle() failed: %s", cu_err_str);
+
         return UCS_ERR_INVALID_PARAM;
     }
 
