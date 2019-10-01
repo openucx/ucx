@@ -228,12 +228,26 @@ uint64_t mem_buffer::pat(uint64_t prev) {
     return (prev << 1) | (__builtin_parityl(prev & polynom) & 1);
 }
 
-mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)) {
+void mem_buffer::create(void *ptr, size_t size, ucs_memory_type_t mem_type,
+                        bool external_mem) {
+    m_ptr          = ptr;
+    m_size         = size;
+    m_mem_type     = mem_type;
+    m_external_mem = external_mem;
+}
+
+mem_buffer::mem_buffer(void *ptr, size_t size, ucs_memory_type_t mem_type) {
+    create(ptr, size, mem_type, true);
+}
+
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) {
+    create(allocate(size, mem_type), size, mem_type, false);
 }
 
 mem_buffer::~mem_buffer() {
-    release(ptr(), mem_type());
+    if (!m_external_mem) {
+        release(ptr(), mem_type());
+    }
 }
 
 ucs_memory_type_t mem_buffer::mem_type() const {
@@ -244,3 +258,10 @@ void *mem_buffer::ptr() const {
     return m_ptr;
 }
 
+size_t mem_buffer::size() const {
+    return m_size;
+}
+
+bool mem_buffer::external_mem() const {
+    return m_external_mem;
+}

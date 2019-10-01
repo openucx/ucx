@@ -59,6 +59,7 @@ public:
     /* return the string name of a memory type */
     static std::string mem_type_name(ucs_memory_type_t mem_type);
 
+    mem_buffer(void *ptr, size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     ~mem_buffer();
 
@@ -66,13 +67,22 @@ public:
 
     void *ptr() const;
 
+    size_t size() const;
+
+    bool external_mem() const;
+
 private:
     static void abort_wrong_mem_type(ucs_memory_type_t mem_type);
 
     static uint64_t pat(uint64_t prev);
 
+    void create(void *ptr, size_t size, ucs_memory_type_t mem_type,
+                bool external_mem);
+
     ucs_memory_type_t m_mem_type;
     void              *m_ptr;
+    size_t            m_size;
+    bool              m_external_mem;
 };
 
 
