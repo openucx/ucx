@@ -69,8 +69,8 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
         return;
     }
 
-    ucs_assert((start % ucs_get_page_size()) == 0);
-    ucs_assert((end   % ucs_get_page_size()) == 0);
+    ucs_assert((start % UCS_PGT_ADDR_ALIGN) == 0);
+    ucs_assert((end   % UCS_PGT_ADDR_ALIGN) == 0);
 
     region->super.start = start;
     region->super.end   = end;
@@ -101,14 +101,13 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                       size_t size, ucs_memory_type_t mem_type,
                       ucs_memtype_cache_action_t action)
 {
-    const size_t page_size = ucs_get_page_size();
     ucs_memtype_cache_region_t *region, *tmp;
     UCS_LIST_HEAD(region_list);
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
 
-    start = ucs_align_down_pow2((uintptr_t)address,        page_size);
-    end   = ucs_align_up_pow2  ((uintptr_t)address + size, page_size);
+    start = ucs_align_down_pow2((uintptr_t)address,        UCS_PGT_ADDR_ALIGN);
+    end   = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
 
     pthread_rwlock_wrlock(&memtype_cache->lock);
 
