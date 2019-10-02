@@ -332,6 +332,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
+        /* TODO: check if need to check for XRQ (not RQ) MP support */
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
+    }
+
     status = uct_ib_mlx5_devx_check_odp(md, cap);
     if (status != UCS_OK) {
         goto err_free;

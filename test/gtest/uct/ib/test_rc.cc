@@ -332,15 +332,21 @@ uct_rc_mlx5_iface_common_t* test_rc_mp_xrq::rc_mlx5_iface(entity &e)
     return ucs_derived_of(e.iface(), uct_rc_mlx5_iface_common_t);
 }
 
+void test_rc_mp_xrq::set_env_var_or_skip(void *config, const char *var,
+                                         const char *val)
+{
+    ucs_status_t status = uct_config_modify(config, var, val);
+    if (status != UCS_OK) {
+        ucs_warn("%s", ucs_status_string(status));
+        UCS_TEST_SKIP_R(std::string("Can't set ") + var);
+    }
+}
+
 void test_rc_mp_xrq::init()
 {
-    ucs_status_t status1 = uct_config_modify(m_iface_config,
-                                             "RC_TM_MP_NUM_STRIDES", "8");
-    ucs_status_t status2 = uct_config_modify(m_iface_config,
-                                             "RC_TM_ENABLE", "y");
-    if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
-        UCS_TEST_SKIP_R("No MP XRQ support");
-    }
+    set_env_var_or_skip(m_iface_config, "RC_TM_NUM_STRIDES", "8");
+    set_env_var_or_skip(m_iface_config, "RC_TM_ENABLE", "y");
+    set_env_var_or_skip(m_md_config, "MLX5_DEVX_OBJECTS", "dct,dcsrq,rcsrq,rcqp");
 
     uct_test::init();
 
@@ -366,6 +372,10 @@ void test_rc_mp_xrq::init()
 
     entity *receiver = uct_test::create_entity(params);
     m_entities.push_back(receiver);
+
+    if (!UCT_RC_MLX5_MP_ENABLED(rc_mlx5_iface(test_rc_mp_xrq::sender()))) {
+        UCS_TEST_SKIP_R("No MP XRQ support");
+    }
 
     sender->connect(0, *receiver, 0);
 
@@ -459,8 +469,8 @@ ucs_status_t test_rc_mp_xrq::handle_uct_desc(void *data, unsigned flags)
 ucs_status_t test_rc_mp_xrq::am_handler(void *arg, void *data, size_t length,
                                         unsigned flags)
 {
-   // These flags are intended for tag offload only
-   EXPECT_FALSE(flags & (UCT_CB_PARAM_FLAG_MORE | UCT_CB_PARAM_FLAG_FIRST));
+   EXPECT_TRUE(flags & UCT_CB_PARAM_FLAG_FIRST);
+   EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_MORE);
 
    m_rx_counter++;
 
@@ -514,7 +524,7 @@ ucs_status_t test_rc_mp_xrq::unexp_rndv(void *arg, unsigned flags,
                                         uint64_t remote_addr, size_t length,
                                         const void *rkey_buf)
 {
-    EXPECT_TRUE(flags & UCT_CB_PARAM_FLAG_FIRST);
+    EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_FIRST);
     EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_MORE);
 
     m_rx_counter++;
@@ -537,8 +547,10 @@ UCS_TEST_P(test_rc_mp_xrq, config)
     const uct_iface_attr *attrs = &sender().iface_attr();
 
     // Max tag bcopy is limited by tag tx memory pool
-    EXPECT_EQ(UCT_RC_MLX5_TAG_BCOPY_MAX - sizeof(ibv_tmh),
+    EXPECT_EQ(iface->tm.max_bcopy - sizeof(ibv_tmh),
               attrs->cap.tag.eager.max_bcopy);
+    EXPECT_GT(attrs->cap.tag.eager.max_bcopy,
+              iface->super.super.config.seg_size);
 
     // Max tag zcopy is limited by maximal IB message size
     EXPECT_EQ(uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz - sizeof(ibv_tmh),
@@ -607,8 +619,7 @@ UCS_TEST_P(test_rc_mp_xrq, rndv_request)
     test_common(&test_rc_mp_xrq::send_rndv_request, 1, 1, false);
 }
 
-// !! Do not instantiate test_rc_mp_xrq now, until MP XRQ support is upstreamed
-//_UCT_INSTANTIATE_TEST_CASE(test_rc_mp_xrq, rc_mlx5)
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mp_xrq, rc_mlx5)
 #endif
 
 
