@@ -91,6 +91,16 @@ static void uct_sockcm_change_state(uct_sockcm_ep_t *ep,
                                                uct_sockcm_iface_t);
 
     pthread_mutex_lock(&ep->ops_mutex);
+    ucs_debug("changing ep with status %s from state %d to state %d, status %s",
+              ucs_status_string(ep->status), ep->conn_state, conn_state,
+              ucs_status_string(status));
+    if ((ep->status != UCS_OK) && (ep->conn_state ==
+                                   UCT_SOCKCM_EP_CONN_STATE_CLOSED)) {
+        /* Do not handle failure twice for closed EP */
+        pthread_mutex_unlock(&ep->ops_mutex);
+        return;
+    }
+
     ep->status     = status;
     ep->conn_state = conn_state;
 
@@ -191,7 +201,7 @@ static void uct_sockcm_ep_event_handler(int fd, void *arg)
         break;
     case UCT_SOCKCM_EP_CONN_STATE_CLOSED:
     default:
-        ucs_debug("handling closed/default state");
+        ucs_debug("handling closed/default state, ep %p fd %d", ep, fd);
         uct_sockcm_change_state(ep, UCT_SOCKCM_EP_CONN_STATE_CLOSED,
                                 UCS_ERR_IO_ERROR);
         break;
