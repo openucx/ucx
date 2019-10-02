@@ -440,7 +440,7 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
                                            uct_rc_iface_t);
 
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
-    /* Reset CI to prevent cq_available overrun on ep_destoroy */
+    /* Reset CI to prevent cq_available overrun on ep_destroy */
     ep->txcnt.ci = ep->txcnt.pi;
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
 
