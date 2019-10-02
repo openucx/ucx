@@ -451,6 +451,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
         ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
         ucp_ep_flush_state_reset(*ep_p);
+        ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
         break;
     case UCP_WIREUP_SA_DATA_PARTIAL_ADDR:
         status = ucp_ep_create_sockaddr_aux(worker, ep_init_flags,
@@ -459,6 +460,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
             goto out_free_address;
         }
 
+        ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
         /* the server's ep should be aware of the sent address from the client */
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
         /* NOTE: protect union */
@@ -487,8 +489,6 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                   sa_data->addr_mode);
     }
 
-    ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
-
 out_free_address:
     ucs_free(remote_addr.address_list);
 out:
@@ -513,6 +513,10 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
         goto out_ep_destroy;
     }
 
+    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+        goto out;
+    }
+
     if (ep->flags & UCP_EP_FLAG_LISTENER) {
         status = ucp_wireup_send_pre_request(ep);
     } else {
@@ -523,23 +527,31 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     }
 
     if (status == UCS_OK) {
-        *ep_p = ep;
         goto out;
     }
 
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
-    if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
-        if (status == UCS_OK) {
+    if (status == UCS_OK) {
+        if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
             status = uct_iface_accept(conn_request->uct.iface,
                                       conn_request->uct_req);
+        }
+    } else {
+        if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+            uct_listener_reject(conn_request->uct.listener,
+                                conn_request->uct_req);
         } else {
             uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
         }
     }
 
     ucs_free(params->conn_request);
+
+    if (status == UCS_OK) {
+        *ep_p = ep;
+    }
 
     return status;
 }
@@ -1800,4 +1812,26 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 
     return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
            ucs_derived_of(ep->uct_eps[lane], ucp_wireup_ep_t) : NULL;
+}
+
+uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
+{
+    uint64_t tl_bitmap = 0;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_idx;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (lane == ucp_ep_get_cm_lane(ep)) {
+            continue;
+        }
+
+        rsc_idx = ucp_ep_get_rsc_index(ep, lane);
+        if (rsc_idx == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        tl_bitmap |= UCS_BIT(rsc_idx);
+    }
+
+    return tl_bitmap;
 }
