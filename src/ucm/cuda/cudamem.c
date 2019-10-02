@@ -99,6 +99,32 @@ ucm_dispatch_mem_type_free(void *addr, size_t length, ucs_memory_type_t mem_type
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
+static ucs_memory_type_t ucm_cuda_get_mem_type(void *ptr)
+{
+    struct cudaPointerAttributes ptr_attrs;
+    ucs_memory_type_t mem_type;
+    cudaError_t cu_err;
+
+    cu_err = cudaPointerGetAttributes(&ptr_attrs, ptr);
+    if (cu_err != cudaSuccess) {
+        return UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    }
+
+#if defined(HAVE_STRUCT_CUDAPOINTERATTRIBUTES_TYPE)
+    mem_type = ((ptr_attrs.type == cudaMemoryTypeManaged) ?               
+                UCS_MEMORY_TYPE_CUDA_MANAGED :
+                UCS_MEMORY_TYPE_CUDA);
+#elif defined(HAVE_STRUCT_CUDAPOINTERATTRIBUTES_ISMANAGED)
+    mem_type = (ptr_attrs.isManaged ?
+                UCS_MEMORY_TYPE_CUDA_MANAGED :
+                UCS_MEMORY_TYPE_CUDA);
+#else
+    mem_type = UCS_MEMORY_TYPE_CUDA;
+#endif
+
+    return mem_type;
+}
+
 static void ucm_cudafree_dispatch_events(void *dptr)
 {
     CUresult ret;
@@ -116,7 +142,8 @@ static void ucm_cudafree_dispatch_events(void *dptr)
     }
     ucs_assert(dptr == (void *)pbase);
 
-    ucm_dispatch_mem_type_free((void *)dptr, psize, UCS_MEMORY_TYPE_CUDA);
+    ucm_dispatch_mem_type_free((void *)dptr, psize,
+                               ucm_cuda_get_mem_type(dptr));
 }
 
 CUresult ucm_cuMemFree(CUdeviceptr dptr)

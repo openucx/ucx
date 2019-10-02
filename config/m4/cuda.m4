@@ -57,6 +57,12 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                       [AC_MSG_ERROR([CUDA support is requested but cuda packages cannot be found])],
                       [AC_MSG_WARN([CUDA not found])])])
 
+         AC_CHECK_MEMBERS([struct cudaPointerAttributes.type,
+                           struct cudaPointerAttributes.isManaged],
+                          [], [AC_MSG_NOTICE([UCX will be unable to check CUDA memory type for a given pointer])],
+                          [[#include <cuda.h>
+                            #include <cuda_runtime.h>]])
+
         ]) # "x$with_cuda" = "xno"
 
         cuda_checked=yes
