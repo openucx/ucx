@@ -1147,20 +1147,27 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_handler") ;
 
-    all_data = ucs_malloc(rendezvous_hdr->total_size + sizeof(ucp_recv_desc_t),
-                          "ucp recv desc for rendezvous AM");
-    if (ucs_unlikely(all_data == NULL)) {
-        return UCS_ERR_NO_MEMORY;
+    if (ucs_unlikely((rendezvous_hdr-am_id >= worker->am_rendezvous_cb_array_len) ||
+                     (worker->am_rendezvous_cbs[rendezvous_hdr-am_id].cb == NULL))) {
+        ucs_warn("UCP Active Message rendezvous was received with id : %u, but there"
+                 "is no registered callback for that id", rendezvous_hdr-am_id);
+        return UCS_OK;
     }
 
-    payload = (char *) (all_data+1) ;
-    ucs_trace("AM RENDEZVOUS payload+32=%p", payload+32) ;
-#if defined(UCP_AM_RENDEZVOUS_VERIFY)
-    memset(payload, 0xff, rendezvous_hdr->total_size) ;
-#endif
-    memcpy(payload, &(rendezvous_hdr->iovec_0), length_to_copy) ;
-
-    all_data->flags = UCP_RECV_DESC_FLAG_MALLOC;
+//    all_data = ucs_malloc(rendezvous_hdr->total_size + sizeof(ucp_recv_desc_t),
+//                          "ucp recv desc for rendezvous AM");
+//    if (ucs_unlikely(all_data == NULL)) {
+//        return UCS_ERR_NO_MEMORY;
+//    }
+//
+//    payload = (char *) (all_data+1) ;
+//    ucs_trace("AM RENDEZVOUS payload+32=%p", payload+32) ;
+//#if defined(UCP_AM_RENDEZVOUS_VERIFY)
+//    memset(payload, 0xff, rendezvous_hdr->total_size) ;
+//#endif
+//    memcpy(payload, &(rendezvous_hdr->iovec_0), length_to_copy) ;
+//
+//    all_data->flags = UCP_RECV_DESC_FLAG_MALLOC;
 
     unfinished           = ucs_malloc(sizeof(ucp_am_rendezvous_server_unfinished_t),
                                          "unfinished UCP AM rendezvous server");
@@ -1168,6 +1175,15 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_trace("AM RENDEZVOUS will call am_id=%u", rendezvous_hdr->am_id ) ;
     unfinished->am_id = rendezvous_hdr -> am_id ;
+
+    unfinished->recv.iovec_max_length = 1 ;
+    status = worker->am_rendezvous_cbs[rendezvous_hdr ->am_id].cb(worker->am_rendezvous_cbs[rendezvous_hdr ->am_id].context,
+                                      rendezvous_hdr->iovec_0,
+                                      rendezvous_hdr->iovec_0_length,
+                                      NULL,
+                                      0,
+                                      &(unfinished->recv));
+
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
