@@ -1181,6 +1181,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
                                       rendezvous_hdr->iovec_0_length,
                                       NULL,
                                       0,
+                                      rendezvous_hdr->total_size-rendezvous_hdr->iovec_0_length,
                                       &(unfinished->recv));
 
     ucs_assert(unfinished->recv.iovec_length == 1) ;

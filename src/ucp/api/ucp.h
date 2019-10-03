@@ -2257,7 +2257,7 @@ typedef struct ucp_am_rendezvous_recv {
   } ucp_am_rendezvous_recv_t ;
 
 typedef ucs_status_t (*ucp_am_rendezvous_callback_t)(void *arg, void *data, size_t length,
-                                          ucp_ep_h reply_ep, unsigned flags, ucp_am_rendezvous_recv_t *recv);
+                                          ucp_ep_h reply_ep, unsigned flags, size_t remaining_length, ucp_am_rendezvous_recv_t *recv);
 
 ucs_status_t ucp_worker_set_am_rendezvous_handler(ucp_worker_h worker, uint16_t id,
                                        ucp_am_rendezvous_callback_t cb, void *arg,
