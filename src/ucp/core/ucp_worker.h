@@ -199,7 +199,7 @@ typedef struct ucp_worker_am_entry {
 } ucp_worker_am_entry_t;
 
 typedef struct ucp_worker_am_rendezvous_entry {
-    ucp_am_callback_t     cb;
+    ucp_am_rendezvous_callback_t     cb;
     void                 *context;
     uint32_t              flags;
     size_t                iovec_size;

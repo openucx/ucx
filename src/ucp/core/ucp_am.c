@@ -139,7 +139,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_rendezvous_handler,
     worker->am_rendezvous_cbs[id].flags   = flags;
     if ( params->field_mask & UCP_AM_RENDEZVOUS_FIELD_IOVEC_SIZE )
       {
-        ucs_asserf(params->iovec_size == 1) ; /* Only support cnotiguous at the moment */
+        ucs_assert(params->iovec_size == 1) ; /* Only support cnotiguous at the moment */
       }
     worker->am_rendezvous_cbs[id].iovec_size =  1 ;
 
@@ -1131,10 +1131,8 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
                                                            rendezvous_hdr->ep_ptr);
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rendezvous_server_unfinished_t *unfinished;
-    ucp_recv_desc_t *all_data;
     ucp_mem_map_params_t map_params ;
     ucs_status_t status ;
-    size_t length_to_copy = rendezvous_hdr->iovec_0_length ;
     ucp_request_t *req;
     ucs_status_ptr_t ret ;
     ucs_status_ptr_t sptr ;
@@ -1148,7 +1146,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_handler") ;
 
-    if (ucs_unlikely((rendezvous_hdr-am_id >= worker->am_rendezvous_cb_array_len) ||
+    if (ucs_unlikely((rendezvous_hdr->am_id >= worker->am_rendezvous_cb_array_len) ||
                      (worker->am_rendezvous_cbs[rendezvous_hdr-am_id].cb == NULL))) {
         ucs_warn("UCP Active Message rendezvous was received with id : %u, but there"
                  "is no registered callback for that id", rendezvous_hdr-am_id);
@@ -1186,7 +1184,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
                                       &(unfinished->recv));
 
     ucs_assert(unfinished->recv.iovec_length == 1) ;
-    ucs_assert(rendezvous_header.iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_header.total_length ) ;
+    ucs_assert(rendezvous_hdr.iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_hdr.total_length ) ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
