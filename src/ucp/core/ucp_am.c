@@ -1244,6 +1244,11 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
         ucs_assert(local_status == UCS_OK) ;
 
         /* Drive the AM data function  */
+        if (unfinished->recv.data_fn )
+          {
+            unfinished->recv.data_fn(unfinished->recv.iovec[0].buffer, NULL,unfinished->recv.iovec[0].length, unfinished->recv.data_cookie ) ;
+          }
+        /* Drive the AM completion function */
         status = unfinished->recv.local_fn(worker->am_rendezvous_cbs[rendezvous_hdr->am_id].context,
                                           unfinished->recv.cookie,
                                           unfinished->recv.iovec,
