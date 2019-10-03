@@ -374,21 +374,21 @@ enum {
 };
 
 
-typedef struct ucp_wireup_client_data {
-    uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
+typedef struct ucp_wireup_sockaddr_data {
+    uintptr_t                 ep_ptr;        /**< Endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SOCKADDR_CD_xx */
     /* packed worker address follows */
-} UCS_S_PACKED ucp_wireup_client_data_t;
+} UCS_S_PACKED ucp_wireup_sockaddr_data_t;
 
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
     uct_conn_request_h          uct_req;
     uct_iface_h                 uct_iface;
-    ucp_wireup_client_data_t    client_data;
+    ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
 
@@ -418,7 +418,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const char *message, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_client_data_t *client_data,
+                                  const ucp_wireup_sockaddr_data_t *client_data,
                                   ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,

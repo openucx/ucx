@@ -417,7 +417,7 @@ err:
  * Create an endpoint on the server side connected to the client endpoint.
  */
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_client_data_t *client_data,
+                                  const ucp_wireup_sockaddr_data_t *sa_data,
                                   ucp_ep_h *ep_p)
 {
     ucp_ep_params_t        params;
@@ -426,9 +426,9 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     ucs_status_t           status;
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    params.err_mode   = client_data->err_mode;
+    params.err_mode   = sa_data->err_mode;
 
-    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
+    if (sa_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR |
                      UCP_ADDRESS_PACK_FLAG_TRACE;
@@ -436,13 +436,13 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         addr_flags = -1;
     }
 
-    status = ucp_address_unpack(worker, client_data + 1, addr_flags,
+    status = ucp_address_unpack(worker, sa_data + 1, addr_flags,
                                 &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
 
-    switch (client_data->addr_mode) {
+    switch (sa_data->addr_mode) {
     case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
@@ -471,10 +471,10 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         return UCS_ERR_NOT_IMPLEMENTED;
     default:
         ucs_fatal("client data contains invalid address mode %d",
-                  client_data->addr_mode);
+                  sa_data->addr_mode);
     }
 
-    ucp_ep_update_dest_ep_ptr(*ep_p, client_data->ep_ptr);
+    ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
 
 out_free_address:
     ucs_free(remote_address.address_list);
@@ -491,7 +491,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucs_status_t       status;
 
     /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, &conn_request->client_data, &ep);
+    status = ucp_ep_create_accept(worker, &conn_request->sa_data, &ep);
     if (status != UCS_OK) {
         goto out;
     }
