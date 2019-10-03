@@ -1687,6 +1687,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     if (context->config.features & UCP_FEATURE_AM){
         worker->am_cbs            = NULL;
         worker->am_cb_array_len   = 0;
+        worker->am_rendezvous_cbs            = NULL;
+        worker->am_rendezvous_cb_array_len   = 0;
     }
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
@@ -1845,6 +1847,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     ucs_free(worker->am_cbs);
+    ucs_free(worker->am_rendezvous_cbs);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
     ucp_worker_close_cms(worker);

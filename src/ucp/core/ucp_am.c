@@ -124,7 +124,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_rendezvous_handler,
 
     if (id >= worker->am_rendezvous_cb_array_len) {
         num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
-        worker->am_cbs = ucs_realloc(worker->am_rendezvous_cbs, num_entries *
+        worker->am_rendezvous_cbs = ucs_realloc(worker->am_rendezvous_cbs, num_entries *
                                      sizeof(ucp_worker_am_rendezvous_entry_t),
                                      "UCP AM rendezvous callback array");
         memset(worker->am_rendezvous_cbs + worker->am_rendezvous_cb_array_len,
