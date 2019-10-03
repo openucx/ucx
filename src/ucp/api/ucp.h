@@ -2246,15 +2246,15 @@ typedef struct ucp_am_rendezvous_params {
   size_t iovec_size ;
 } ucp_am_rendezvous_params_t ;
 
-typedef ucs_status_t (*ucp_am_data_function_t)(void *data_cookie, ucp_dt_iovec_t *iovec, size_t iovec_length) ;
+typedef ucs_status_t (*ucp_am_data_function_t)(void *data_cookie, ucp_dt_iov_t *iovec, size_t iovec_length) ;
 
-typedef struct ucp_am_rendezvous_recv_t {
+typedef struct ucp_am_rendezvous_recv {
     ucp_am_data_function_t data_fn ;
     void * data_cookie ;
     size_t iovec_max_length ;
     size_t iovec_length ;
-    ucp_dt_iovec_t iovec[1] ;
-  } ;
+    ucp_dt_iov_t iovec[1] ;
+  } ucp_am_rendezvous_recv_t ;
 
 typedef ucs_status_t (*ucp_am_rendezvous_callback_t)(void *arg, void *data, size_t length,
                                           ucp_ep_h reply_ep, unsigned flags, ucp_am_rendezvous_recv_t *recv);
