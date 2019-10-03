@@ -95,8 +95,9 @@ uct_sockcm_ep_conn_state_str(uct_sockcm_ep_conn_state_t state)
         return "UCT_SOCKCM_EP_CONN_STATE_CLOSED";
     case UCT_SOCKCM_EP_CONN_STATE_CONNECTED:
         return "UCT_SOCKCM_EP_CONN_STATE_CONNECTED";
+    default:
+        ucs_fatal("invaild sockcm endpoint state %d", state);
     }
-    ucs_fatal("invaild sockcm endpoint state %d", state);
 }
 
 static void uct_sockcm_change_state(uct_sockcm_ep_t *ep,
