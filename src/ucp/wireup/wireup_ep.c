@@ -494,12 +494,12 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
                                                 void *priv_data)
 {
-    ucp_wireup_sockaddr_data_t *sockaddr_data = priv_data;
-    ucp_wireup_ep_t *wireup_ep                = arg;
-    ucp_ep_h ucp_ep                           = wireup_ep->super.ucp_ep;
-    ucp_rsc_index_t sockaddr_rsc              = wireup_ep->sockaddr_rsc_index;
-    ucp_worker_h worker                       = ucp_ep->worker;
-    ucp_context_h context                     = worker->context;
+    ucp_wireup_sockaddr_data_t *sa_data = priv_data;
+    ucp_wireup_ep_t *wireup_ep          = arg;
+    ucp_ep_h ucp_ep                     = wireup_ep->super.ucp_ep;
+    ucp_rsc_index_t sockaddr_rsc        = wireup_ep->sockaddr_rsc_index;
+    ucp_worker_h worker                 = ucp_ep->worker;
+    ucp_context_h context               = worker->context;
     size_t address_length, conn_priv_len;
     ucp_address_t *worker_address, *rsc_address;
     uct_iface_attr_t *attrs;
@@ -513,11 +513,11 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
         goto err;
     }
 
-    conn_priv_len = sizeof(*sockaddr_data) + address_length;
+    conn_priv_len = sizeof(*sa_data) + address_length;
 
     /* pack client data */
-    sockaddr_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
-    sockaddr_data->ep_ptr   = (uintptr_t)ucp_ep;
+    sa_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
+    sa_data->ep_ptr   = (uintptr_t)ucp_ep;
 
     attrs = ucp_worker_iface_get_attr(worker, sockaddr_rsc);
 
@@ -533,7 +533,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        conn_priv_len = sizeof(*sockaddr_data) + address_length;
+        conn_priv_len = sizeof(*sa_data) + address_length;
 
         /* check the private data length limitation again, now with partial
          * resources packed (and not the entire worker address) */
@@ -551,8 +551,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        sockaddr_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR;
-        memcpy(sockaddr_data + 1, rsc_address, address_length);
+        sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR;
+        memcpy(sa_data + 1, rsc_address, address_length);
         ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
 
         ucs_free(rsc_address);
@@ -565,8 +565,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                                     sizeof(aux_tls_str)),
                   address_length, conn_priv_len);
     } else {
-        sockaddr_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_FULL_ADDR;
-        memcpy(sockaddr_data + 1, worker_address, address_length);
+        sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_FULL_ADDR;
+        memcpy(sa_data + 1, worker_address, address_length);
     }
 
     ucp_worker_release_address(worker, worker_address);

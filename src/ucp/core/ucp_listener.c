@@ -65,10 +65,10 @@ void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
 
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
-    ucp_conn_request_h               conn_request   = arg;
-    const ucp_wireup_sockaddr_data_t *sockaddr_data = &conn_request->sockaddr_data;
-    ucp_listener_h                   listener       = conn_request->listener;
-    ucp_worker_h                     worker         = listener->worker;
+    ucp_conn_request_h               conn_request = arg;
+    const ucp_wireup_sockaddr_data_t *sa_data     = &conn_request->sa_data;
+    ucp_listener_h                   listener     = conn_request->listener;
+    ucp_worker_h                     worker       = listener->worker;
     ucp_ep_h                         ep;
     ucs_status_t                     status;
 
@@ -81,7 +81,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, sockaddr_data, &ep);
+    status = ucp_ep_create_accept(worker, sa_data, &ep);
 
     if (status != UCS_OK) {
         goto out;
@@ -148,7 +148,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucs_trace("listener %p: got connection request", listener);
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
-    conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sockaddr_data) +
+    conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
                               length, "accept connection request");
     if (conn_request == NULL) {
         ucs_error("failed to allocate connect request, "
@@ -161,7 +161,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     conn_request->listener  = listener;
     conn_request->uct_req   = uct_req;
     conn_request->uct_iface = tl_iface;
-    memcpy(&conn_request->sockaddr_data, conn_priv_data, length);
+    memcpy(&conn_request->sa_data, conn_priv_data, length);
 
     uct_worker_progress_register_safe(listener->worker->uct,
                                       ucp_listener_conn_request_progress,

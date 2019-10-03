@@ -388,7 +388,7 @@ typedef struct ucp_conn_request {
     ucp_listener_h              listener;
     uct_conn_request_h          uct_req;
     uct_iface_h                 uct_iface;
-    ucp_wireup_sockaddr_data_t  sockaddr_data;
+    ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
 
