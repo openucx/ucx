@@ -412,6 +412,9 @@ ucs_status_t ucs_pgtable_insert(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
         /* coverity[large_shift] */
         address += 1ul << order;
     }
+
+    ucs_assert(address >= end);
+
     ++pgtable->num_regions;
 
     ucs_pgtable_trace(pgtable, "insert");

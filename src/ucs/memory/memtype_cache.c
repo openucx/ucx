@@ -44,13 +44,21 @@ static void ucs_memtype_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
     ucs_free(dir);
 }
 
-/*
- * - Lock must be held in write mode
- * - start, end must be aligned to page size
- */
+static inline void ucs_memtype_cache_calc_region(const void *address,
+                                                 size_t size,
+                                                 ucs_pgt_addr_t *start,
+                                                 ucs_pgt_addr_t *end)
+{
+    const size_t page_size = ucs_get_page_size();
+
+    *start = ucs_align_down_pow2((uintptr_t)address,        page_size);
+    *end   = ucs_align_up_pow2  ((uintptr_t)address + size, page_size);
+}
+
+/* Lock must be held in write mode */
 static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
                                      ucs_pgt_addr_t start, ucs_pgt_addr_t end,
-                                     ucs_memory_type_t mem_type)
+                                     ucs_memory_type_t mem_type, size_t ref_cnt)
 {
     ucs_memtype_cache_region_t *region;
     ucs_status_t status;
@@ -69,12 +77,12 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
         return;
     }
 
-    ucs_assert((start % ucs_get_page_size()) == 0);
-    ucs_assert((end   % ucs_get_page_size()) == 0);
-
-    region->super.start = start;
-    region->super.end   = end;
-    region->mem_type    = mem_type;
+    ucs_memtype_cache_calc_region((void*)start, end - start,
+                                  &region->super.start, &region->super.end);
+    region->buf_start = start;
+    region->buf_end   = end;
+    region->mem_type  = mem_type;
+    region->ref_cnt   = ref_cnt;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert, &memtype_cache->pgtable,
                               &region->super);
@@ -101,18 +109,19 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                       size_t size, ucs_memory_type_t mem_type,
                       ucs_memtype_cache_action_t action)
 {
-    const size_t page_size = ucs_get_page_size();
+    size_t ref_cnt = 0;
     ucs_memtype_cache_region_t *region, *tmp;
     UCS_LIST_HEAD(region_list);
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
 
-    start = ucs_align_down_pow2((uintptr_t)address,        page_size);
-    end   = ucs_align_up_pow2  ((uintptr_t)address + size, page_size);
+    ucs_memtype_cache_calc_region(address, size, &start, &end);
 
     pthread_rwlock_wrlock(&memtype_cache->lock);
 
-    /* find and remove all regions which intersect with new one */
+    /* find and remove all regions which intersect with new one
+     * (two regions are considred as intersected ones if they
+     *  have at least one intersected page) */
     ucs_pgtable_search_range(&memtype_cache->pgtable, start, end - 1,
                              ucs_memtype_cache_region_collect_callback,
                              &region_list);
@@ -122,27 +131,84 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
             ucs_error("failed to remove address:%p from memtype_cache", address);
             goto out_unlock;
         }
+
         ucs_trace("memtype_cache: removed 0x%lx..0x%lx mem_type %d",
                   region->super.start, region->super.end, region->mem_type);
+        /* since Page Table can map only one region to a page, MemType Cache
+         * doesn't support merging regions with different memory types */
+        ucs_assert((region->mem_type == UCS_MEMORY_TYPE_LAST) ||
+                   (mem_type == region->mem_type));
     }
+
+    /* we have to use real buffer start/end addresses
+     * when handling set_memtype/remove events */
+    start = (uintptr_t)address;
+    end   = start + size;
 
     if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
-        ucs_memtype_cache_insert(memtype_cache, start, end, mem_type);
+        /* merge found regions into signle one (if any):
+         * - calculate start/end of the region constructed
+         *   after merging all regions which intersect with
+         *   new one
+         * - free old region objects
+         * - create and insert the new region */
+
+        ucs_list_for_each_safe(region, tmp, &region_list, list) {
+            if ((mem_type != UCS_MEMORY_TYPE_LAST) &&
+                (region->mem_type == UCS_MEMORY_TYPE_LAST)) {
+                continue;
+            }
+
+            /* find smallest start address */
+            start = ((region->buf_start < start) ? region->buf_start : start);
+
+            /* find biggest end address */
+            end = ((region->buf_end > end) ? region->buf_end : end);
+
+            ref_cnt += region->ref_cnt;
+
+            /* free and remove from the list regions that don't
+             * have UCS_MEMORY_TYPE_LAST type when the inserted
+             * region has non-UCS_MEMORY_TYPE_LAST type */
+            ucs_list_del(&region->list);
+            ucs_free(region);
+        }
+
+        ucs_memtype_cache_insert(memtype_cache, start, end,
+                                 mem_type, ref_cnt + 1);
+
+        /* align inserted start/end pointers to not insert the same page twice */
+        ucs_memtype_cache_calc_region((void*)start, end - start, &start, &end);
+
+        /* if `region_list` is not empty, then slice those regions
+         * with UCS_MEMORY_TYPE_LAST type by the new region below */
     }
 
-    /* slice old regions by the new region, to preserve the previous memory type
-     * of the non-overlapping parts
-     */
+    /* slice old regions by the new region, to preserve
+     * previous memory type of the non-overlapping parts */
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        if (start > region->super.start) {
-            /* create previous region */
-            ucs_memtype_cache_insert(memtype_cache, region->super.start, start,
-                                     region->mem_type);
+        if ((mem_type != UCS_MEMORY_TYPE_LAST) &&
+            (region->mem_type != UCS_MEMORY_TYPE_LAST)) {
+            region->ref_cnt--;
         }
-        if (end < region->super.end) {
+
+        /* since we merge only regions with intersected pages
+         * (they have at least one shared page - the last page
+         *  of one region and the first page of another one),
+         * we have to preserve all remaining regions with all
+         * their pages */
+
+        if ((start > region->buf_start) && (region->ref_cnt > 0)) {
+            /* create previous region */
+            ucs_memtype_cache_insert(memtype_cache, region->buf_start,
+                                     start, region->mem_type,
+                                     region->ref_cnt);
+        }
+
+        if ((end < region->buf_end) && (region->ref_cnt > 0)) {
             /* create next region */
-            ucs_memtype_cache_insert(memtype_cache, end, region->super.end,
-                                     region->mem_type);
+            ucs_memtype_cache_insert(memtype_cache, end, region->buf_end,
+                                     region->mem_type, region->ref_cnt);
         }
 
         ucs_free(region);

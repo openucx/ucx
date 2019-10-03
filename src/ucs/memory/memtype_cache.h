@@ -22,9 +22,12 @@ typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
 
 
 struct ucs_memtype_cache_region {
-    ucs_pgt_region_t    super;    /**< Base class - page table region */
-    ucs_list_link_t     list;     /**< List element */
-    ucs_memory_type_t   mem_type; /**< Memory type the address belongs to */
+    ucs_pgt_region_t    super;     /**< Base class - page table region */
+    ucs_memory_type_t   mem_type;  /**< Memory type the address belongs to */
+    ucs_pgt_addr_t      buf_start; /**< Real buffer's start address */
+    ucs_pgt_addr_t      buf_end;   /**< Real buffer's end address */
+    size_t              ref_cnt;   /**< How much buffers are merged into this region */
+    ucs_list_link_t     list;      /**< List element */
 };
 
 
