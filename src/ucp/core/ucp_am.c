@@ -1243,10 +1243,11 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
         ucs_assert(local_status == UCS_OK) ;
 
         /* Drive the AM data function  */
-        status = unfinished->recv.data_fn(worker->am_rendezvous_cbs[rendezvous_hdr->am_id].context,
+        status = unfinished->recv.local_fn(worker->am_rendezvous_cbs[rendezvous_hdr->am_id].context,
+                                          unfinised->recv.cookie,
                                           unfinished->recv.iovec,
                                           1);
-        ucs_trace("AM RENDEZVOUS data_fn returns %d", status) ;
+        ucs_trace("AM RENDEZVOUS local_fn returns %d", status) ;
 //        if (status != UCS_INPROGRESS) {
 //            ucs_free(all_data);
 //        }
@@ -1346,8 +1347,9 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
     local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
     ucs_assert(local_status == UCS_OK) ;
 
-    /* Drive the AM data function  */
-    status = unfinished->recv.data_fn(worker->am_rendezvous_cbs[unfinished->am_id].context,
+    /* Drive the AM local function  */
+    status = unfinished->recv.local_fn(worker->am_rendezvous_cbs[unfinished->am_id].context,
+                                      unfinished0>recv.cookie,
                                       unfinished->recv.iovec,
                                       1);
     ucs_trace("AM RENDEZVOUS data_fn returns %d", status) ;
