@@ -1147,9 +1147,9 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_handler") ;
 
     if (ucs_unlikely((rendezvous_hdr->am_id >= worker->am_rendezvous_cb_array_len) ||
-                     (worker->am_rendezvous_cbs[rendezvous_hdr-am_id].cb == NULL))) {
+                     (worker->am_rendezvous_cbs[rendezvous_hdr->am_id].cb == NULL))) {
         ucs_warn("UCP Active Message rendezvous was received with id : %u, but there"
-                 "is no registered callback for that id", rendezvous_hdr-am_id);
+                 "is no registered callback for that id", rendezvous_hdr->am_id);
         return UCS_OK;
     }
 
@@ -1184,7 +1184,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
                                       &(unfinished->recv));
 
     ucs_assert(unfinished->recv.iovec_length == 1) ;
-    ucs_assert(rendezvous_hdr.iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_hdr.total_length ) ;
+    ucs_assert(rendezvous_hdr->iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_hdr->total_length ) ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
