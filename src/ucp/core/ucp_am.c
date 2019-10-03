@@ -1184,7 +1184,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
                                       &(unfinished->recv));
 
     ucs_assert(unfinished->recv.iovec_length == 1) ;
-    ucs_assert(rendezvous_hdr->iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_hdr->total_length ) ;
+    ucs_assert(rendezvous_hdr->iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_hdr->total_size ) ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
