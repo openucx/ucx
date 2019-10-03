@@ -66,6 +66,8 @@ public:
 
     void *ptr() const;
 
+    size_t size() const;
+
 private:
     static void abort_wrong_mem_type(ucs_memory_type_t mem_type);
 
@@ -73,6 +75,7 @@ private:
 
     ucs_memory_type_t m_mem_type;
     void              *m_ptr;
+    size_t            m_size;
 };
 
 
