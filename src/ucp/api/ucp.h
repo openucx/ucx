@@ -2237,6 +2237,28 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
                                 ucp_datatype_t datatype,
                                 ucp_send_callback_t cb, unsigned flags);
 
+typedef struct ucp_am_rendezvous_params {
+  uint64_t field_mask ;
+  size_t iovec_size ;
+} ucp_am_rendezvous_params_t ;
+
+typedef ucs_status_t (*ucp_am_data_function_t)(void *data_cookie, ucp_dt_iovec_t *iovec, size_t iovec_length) ;
+
+typedef struct ucp_am_rendezvous_recv_t {
+    ucp_am_data_function_t data_fn ;
+    void * data_cookie ;
+    size_t iovec_max_length ;
+    size_t iovec_length ;
+    ucp_dt_iovec_t iovec[1] ;
+  } ;
+
+typedef ucs_status_t (*ucp_am_rendezvous_callback_t)(void *arg, void *data, size_t length,
+                                          ucp_ep_h reply_ep, unsigned flags, ucp_am_rendezvous_recv_t *recv);
+
+ucs_status_t ucp_worker_set_am_rendezvous_handler(ucp_worker_h worker, uint16_t id,
+                                       ucp_am_rendezvous_callback_t cb, void *arg,
+                                       uint32_t flags, const ucp_am_rendezvous_params_t *params );
+
 /**
  * @ingroup UCP_COMM
  * @brief Send Active Message with transfer using RENDEZVOUS
