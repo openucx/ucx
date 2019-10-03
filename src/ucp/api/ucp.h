@@ -2237,6 +2237,10 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
                                 ucp_datatype_t datatype,
                                 ucp_send_callback_t cb, unsigned flags);
 
+enum ucp_am_rendezvous_params_field {
+  UCP_AM_RENDEZVOUS_FIELD_IOVEC_SIZE = UCS_BIT(0)  /* Max size of the iovec returned by the initial AM */
+};
+
 typedef struct ucp_am_rendezvous_params {
   uint64_t field_mask ;
   size_t iovec_size ;

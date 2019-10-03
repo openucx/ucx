@@ -111,6 +111,41 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
     return UCS_OK;
 }
 
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_rendezvous_handler,
+                 (worker, id, cb, arg, flags, params),
+                 ucp_worker_h worker, uint16_t id,
+                 ucp_am_rendezvous_callback_t cb, void *arg,
+                 uint32_t flags, const ucp_am_rendezvous_params_t *params)
+{
+    size_t num_entries;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
+                                    return UCS_ERR_INVALID_PARAM);
+
+    if (id >= worker->am_rendezvous_cb_array_len) {
+        num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
+        worker->am_cbs = ucs_realloc(worker->am_rendezvous_cbs, num_entries *
+                                     sizeof(ucp_worker_am_rendezvous_entry_t),
+                                     "UCP AM rendezvous callback array");
+        memset(worker->am_rendezvous_cbs + worker->am_rendezvous_cb_array_len,
+               0, (num_entries - worker->am_rendezvous_cb_array_len)
+               * sizeof(ucp_worker_am_rendezvous_entry_t));
+
+        worker->am_rendezvous_cb_array_len = num_entries;
+    }
+
+    worker->am_rendezvous_cbs[id].cb      = cb;
+    worker->am_rendezvous_cbs[id].context = arg;
+    worker->am_rendezvous_cbs[id].flags   = flags;
+    if ( params->field_mask & UCP_AM_RENDEZVOUS_FIELD_IOVEC_SIZE )
+      {
+        ucs_asserf(params->iovec_size == 1) ; /* Only support cnotiguous at the moment */
+      }
+    worker->am_rendezvous_cbs[id].iovec_size =  1 ;
+
+    return UCS_OK;
+}
+
 static size_t 
 ucp_am_bcopy_pack_args_single(void *dest, void *arg)
 {

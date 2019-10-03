@@ -41,10 +41,6 @@ typedef struct {
     uint16_t          am_id;      /* index into callback array */
 } UCS_S_PACKED ucp_am_long_hdr_t;
 
-enum ucp_am_rendezvous_params_field {
-  UCP_AM_RENDEZVOUS_FIELD_IOVEC_SIZE = UCS_BIT(0)  /* Max size of the iovec returned by the initial AM */
-};
-
 enum {
   UCP_PACKED_RKEY_MAX_SIZE = 256 ,   /* Max supported size for a packed rkey */
   UCP_AM_RENDEZVOUS_IOVEC_0_MAX_SIZE = 32, /* Amount of iovec[0] carried in AM request */
@@ -113,6 +109,7 @@ typedef struct {
   char              iovec_1_first_byte;          /* First byte of iovec[1], fro checking */
   char              iovec_1_last_byte;           /* Last byte of iovec[1], for checking */
 #endif
+  ucp_am_rendezvous_recv_t recv ;                /* Items filled in by initial application AM */
 } ucp_am_rendezvous_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);
