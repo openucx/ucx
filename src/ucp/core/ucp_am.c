@@ -1137,10 +1137,11 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
     size_t length_to_copy = rendezvous_hdr->iovec_0_length ;
     ucp_request_t *req;
     ucs_status_ptr_t ret ;
-    char * payload ;
     ucs_status_ptr_t sptr ;
     ucs_status_t local_status ;
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
+    char * payload_data_first_address ;
+    char * payload_data_last_address ;
     char payload_data_first ;
     char payload_data_last ;
 #endif
@@ -1184,23 +1185,30 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
                                       0,
                                       &(unfinished->recv));
 
+    ucs_assert(unfinished->recv.iovec_length == 1) ;
+    ucs_assert(rendezvous_header.iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_header.total_length ) ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
-    map_params.address    = payload + rendezvous_hdr->iovec_0_length ;
-    map_params.length     = rendezvous_hdr->total_size - rendezvous_hdr->iovec_0_length ;
+    map_params.address    = unfinished->recv.iovec[0].buffer ;
+    map_params.length     = unfinished->recv.iovec[0].length ;
     ucs_trace("AM RENDEZVOUS map_params=(address=%p, length=%lu)", map_params.address, map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
     unfinished->rendezvous_completion_header.msg_id = rendezvous_hdr->msg_id ;
 
-    unfinished->all_data      = all_data;
+//    unfinished->all_data      = all_data;
     unfinished->msg_id        = rendezvous_hdr->msg_id;
     unfinished->total_size    = rendezvous_hdr->total_size;
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
     unfinished->iovec_0_length = rendezvous_hdr->iovec_0_length ;
     unfinished->iovec_1_first_byte = rendezvous_hdr->iovec_1_first_byte ;
     unfinished->iovec_1_last_byte = rendezvous_hdr->iovec_1_last_byte ;
+    payload_data_first_address = unfinished->recv.iovec[0].buffer ;
+    payload_data_last_address = unfinished->recv.iovec[0].buffer + unfinished->recv.iovec[0].length - 1 ;
+    /* Mark the payload area so we will be able to check whether the data transfer overwrites it */
+    *payload_data_first_address = rendezvous_hdr->iovec_1_first_byte ^ 0xff ;
+    *payload_data_last_address = rendezvous_hdr->iovec_1_last_byte ^ 0xff ;
 #endif
 
     ucs_list_add_head(&ep_ext->am.started_ams_rendezvous_server, &unfinished->list);
@@ -1208,15 +1216,15 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
     status=ucp_ep_rkey_unpack(ep, rendezvous_hdr->rkey_buffer, &(unfinished->rkey)) ;
     ucs_assert(status == UCS_OK) ;
 
-    sptr = ucp_get_nb(ep, payload + rendezvous_hdr->iovec_0_length,rendezvous_hdr->total_size - rendezvous_hdr->iovec_0_length,
+    sptr = ucp_get_nb(ep, unfinished->recv.iovec[0].buffer,unfinished->recv.iovec[0].length,
         rendezvous_hdr->address,unfinished->rkey,
         ucp_am_rendezvous_get_completion_callback) ;
     if (sptr == UCS_OK)
     {
         /* RENDEZVOUS completed synchronoulsly */
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-         payload_data_first = payload[unfinished->iovec_0_length] ;
-         payload_data_last = payload[unfinished->total_size-1] ;
+         payload_data_first = *payload_data_first_address ;
+         payload_data_last = *payload_data_last_address ;
          ucs_trace("AM RENDEZVOUS payload msg_id=0x%016lx first=%d last=%d expected first=%d last=%d",
              unfinished->msg_id, payload_data_first, payload_data_last, unfinished->iovec_1_first_byte, unfinished->iovec_1_last_byte) ;
 
@@ -1236,16 +1244,14 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
         local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
         ucs_assert(local_status == UCS_OK) ;
 
-        /* Drive the AM function  */
-        status = worker->am_cbs[rendezvous_hdr->am_id].cb(worker->am_cbs[rendezvous_hdr->am_id].context,
-                                          payload,
-                                          rendezvous_hdr->total_size,
-                                          NULL,
-                                          UCP_CB_PARAM_FLAG_DATA);
-
-        if (status != UCS_INPROGRESS) {
-            ucs_free(all_data);
-        }
+        /* Drive the AM data function  */
+        status = unfinished->recv.data_fn(worker->am_rendezvous_cbs[rendezvous_hdr->am_id].context,
+                                          unfinished->recv.iovec,
+                                          1);
+        ucs_trace("AM RENDEZVOUS data_fn returns %d", status) ;
+//        if (status != UCS_INPROGRESS) {
+//            ucs_free(all_data);
+//        }
 
         if ( ret == UCS_OK )
         {
@@ -1300,7 +1306,8 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
     ucs_status_ptr_t ret ;
     ucs_status_t local_status ;
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-    char *payload ;
+    char * payload_data_first_address ;
+    char * payload_data_last_address ;
     char payload_data_first ;
     char payload_data_last ;
 #endif
@@ -1314,9 +1321,10 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
     ucs_assert(unfinished != NULL) ;
 
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-    payload = (char *)(unfinished->all_data+1) ;
-    payload_data_first = payload[unfinished->iovec_0_length] ;
-    payload_data_last = payload[unfinished->total_size-1] ;
+    payload_data_first_address = unfinished->recv.iovec[0].buffer ;
+    payload_data_last_address = unfinished->recv.iovec[0].buffer + unfinished->recv.iovec[0].length - 1 ;
+    payload_data_first = *payload_data_first_address ;
+    payload_data_last = *payload_data_last_address ;
     ucs_trace("AM RENDEZVOUS payload msg_id=0x%016lx first=%d last=%d expected first=%d last=%d",
         unfinished->msg_id, payload_data_first, payload_data_last, unfinished->iovec_1_first_byte, unfinished->iovec_1_last_byte) ;
 
@@ -1340,16 +1348,21 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
     local_status = ucp_mem_unmap(ep->worker->context,unfinished->memh) ;
     ucs_assert(local_status == UCS_OK) ;
 
-    /* Drive the AM function  */
-    status = worker->am_cbs[unfinished->am_id].cb(worker->am_cbs[unfinished->am_id].context,
-                                      payload,
-                                      unfinished->total_size,
-                                      NULL,
-                                      UCP_CB_PARAM_FLAG_DATA);
-
-    if (status != UCS_INPROGRESS) {
-        ucs_free(unfinished->all_data);
-    }
+    /* Drive the AM data function  */
+    status = unfinished->recv.data_fn(worker->am_rendezvous_cbs[unfinished->am_id].context,
+                                      unfinished->recv.iovec,
+                                      1);
+    ucs_trace("AM RENDEZVOUS data_fn returns %d", status) ;
+//    /* Drive the AM function  */
+//    status = worker->am_cbs[unfinished->am_id].cb(worker->am_cbs[unfinished->am_id].context,
+//                                      payload,
+//                                      unfinished->total_size,
+//                                      NULL,
+//                                      UCP_CB_PARAM_FLAG_DATA);
+//
+//    if (status != UCS_INPROGRESS) {
+//        ucs_free(unfinished->all_data);
+//    }
 
     if ( ret == UCS_OK )
       {
