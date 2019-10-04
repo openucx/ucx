@@ -20,6 +20,8 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/arch/bitops.h>
 
+#include <ucp/api/ucpx.h>
+
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
  * use for its own needs. This size does not include ucp_recv_desc_t length,
