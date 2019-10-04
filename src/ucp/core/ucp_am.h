@@ -44,7 +44,7 @@ typedef struct {
 enum {
   UCP_PACKED_RKEY_MAX_SIZE = 256 ,   /* Max supported size for a packed rkey */
   UCP_AM_RENDEZVOUS_IOVEC_0_MAX_SIZE = 32, /* Amount of iovec[0] carried in AM request */
-  UCP_AM_RENDEZVOUS_THRESHOLD = 1048576      /* If iovec[1] is shorter than this, use the non-RENDEZVOUS path */
+  UCP_AM_RENDEZVOUS_THRESHOLD = 4096      /* If iovec[1] is shorter than this, use the non-RENDEZVOUS path */
 };
 
 
