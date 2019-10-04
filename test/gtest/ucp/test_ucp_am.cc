@@ -161,7 +161,7 @@ ucs_status_t test_ucp_am_base::am_rendezvous_completion_handler(test_ucp_am_base
     std::vector<char> cmp(length, (char)length);
     std::vector<char> databuf(length, 'r');
 
-    memcpy(&databuf[0], me->am_rendezvous_buffer_0, length);
+    memcpy(&cmp[0], me->am_rendezvous_buffer_0, length);
     memcpy(&databuf[0], me->am_rendezvous_buffer_1, length);
 
     EXPECT_EQ(cmp, databuf);
