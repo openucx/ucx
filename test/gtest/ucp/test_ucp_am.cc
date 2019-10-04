@@ -13,6 +13,8 @@
 #include "ucp_datatype.h"
 #include "ucp_test.h"
 
+#include <ucp/api/ucpx.h>
+
 #define NUM_MESSAGES 17
 
 #define UCP_REALLOC_ID 1000
