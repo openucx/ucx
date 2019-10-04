@@ -99,7 +99,7 @@ typedef struct {
   size_t            total_size;                  /* size of data for AM */
   ucp_mem_h         memh;                        /* memory handle for mapping to the adapter */
   ucp_rkey_h        rkey;                        /* key for remote memory */
-  ucp_request_t     *get_request l               /* request for rdma get */
+  ucp_request_t     *get_request ;               /* request for rdma get */
   ucp_request_t     *completion_request;         /* request for completion AM */
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
   size_t            iovec_0_length;              /* Amount of data transferred by iovec[0], for checking */
