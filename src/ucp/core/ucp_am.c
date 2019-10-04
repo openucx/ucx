@@ -1289,7 +1289,7 @@ ucp_am_rendezvous_completed_callback(void *request, ucs_status_t status)
 
 
     unfinished = ucp_am_rendezvous_server_find_unfinished(
-        ep->worker, ep, ep_ext, request
+        ep, ep_ext, request
         ) ;
     ucs_assert(unfinished != NULL) ;
     ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completed_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
