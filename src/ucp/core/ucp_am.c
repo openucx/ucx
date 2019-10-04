@@ -22,6 +22,8 @@
 #include <ucp/dt/dt.inl>
 #include <ucp/rma/rma.h>
 
+#include <ucp/api/ucpx.h>
+
 void ucp_am_ep_init(ucp_ep_h ep)
 {
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
