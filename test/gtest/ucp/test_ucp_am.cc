@@ -43,6 +43,13 @@ public:
                                           ucp_ep_h reply_ep,
                                           unsigned flags);
 
+    static ucs_status_t ucp_process_am_rendezvous_cb(void *arg, void *data,
+                                          size_t length,
+                                          ucp_ep_h reply_ep,
+                                          unsigned flags,
+                                          size_t remaining_length,
+                                          ucp_am_rendezvous_recv_t *recv);
+
     static ucs_status_t ucp_process_reply_cb(void *arg, void *data,
                                              size_t length,
                                              ucp_ep_h reply_ep,
@@ -50,6 +57,15 @@ public:
 
     ucs_status_t am_handler(test_ucp_am_base *me, void *data,
                             size_t  length, unsigned flags);
+
+    ucs_status_t am_rendezvous_handler(test_ucp_am_base *me, void *data,
+                            size_t  length, unsigned flags,
+                            size_t remaining_length, ucp_am_rendezvous_recv_t *recv );
+
+    static ucs_status_t ucp_process_am_rendezvous_completion_handler (
+        void *arg, void *cookie, ucp_dt_iov_t *iovec, size_t iovec_length) ;
+
+    ucs_status_t am_rendezvous_completion_handler(test_ucp_am_base *me) ;
 };
 
 ucs_status_t test_ucp_am_base::ucp_process_reply_cb(void *arg, void *data,
@@ -80,6 +96,17 @@ ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
     return self->am_handler(self, data, length, flags);
 }
 
+ucs_status_t ucp_process_am_rendezvous_cb(void *arg, void *data,
+                                      size_t length,
+                                      ucp_ep_h reply_ep,
+                                      unsigned flags,
+                                      size_t remaining_length,
+                                      ucp_am_rendezvous_recv_t *recv)
+  {
+    test_ucp_am_base *self = reinterpret_cast<test_ucp_am_base*>(arg);
+    return self->am_rendezvous_handler(self, data, length, flags, remaining_length, recv)
+  }
+
 ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
                                           size_t length, unsigned flags)
 {
@@ -100,6 +127,33 @@ ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
     me->recv_ams++;
     return status;
 }
+
+ucs_status_t test_ucp_am_base::am_rendezvous_handler(test_ucp_am_base *me, void *data,
+                        size_t  length, unsigned flags,
+                        size_t remaining_length, ucp_am_rendezvous_recv_t *recv )
+  {
+    recv->local_fn        = test_ucp_am_base::ucp_process_am_rendezvous_completion_handler ;
+    recv->cookie          = me ;
+    recv->data_fn         = NULL ;
+    recv->data_cookie     = NULL ;
+    recv->iovec_length    = 1 ;
+    recv->iovec[0].buffer = me->am_rendezvous_buffer ;
+    recv->iovec[0].length = remaining_length ;
+    return UCS_OK ;
+  }
+
+ucs_status_t test_ucp_am_base::ucp_process_am_rendezvous_completion_handler (
+    void *arg, void *cookie, ucp_dt_iov_t *iovec, size_t iovec_length)
+  {
+    test_ucp_am_base *self = reinterpret_cast<test_ucp_am_base*>(arg);
+    return self->am_rendezvous_completion_handler(self);
+  }
+
+ucs_status_t test_ucp_am_base::am_rendezvous_completion_handler(test_ucp_am_base *me)
+  {
+    me->recv_ams++;
+    return UCS_OK ;
+  }
 
 class test_ucp_am : public test_ucp_am_base {
 public:
@@ -143,6 +197,12 @@ void test_ucp_am::set_handlers(uint16_t am_id)
     ucp_worker_set_am_handler(receiver().worker(), am_id,
                               ucp_process_am_cb, this,
                               UCP_AM_FLAG_WHOLE_MSG);
+    ucp_worker_set_am_rendezvous_handler(sender().worker(), am_id,
+                              ucp_process_am_rendezvous_cb, this,
+                              0);
+    ucp_worker_set_am_rendezvous_handler(receiver().worker(), am_id,
+                              ucp_process_am_rendezvous_cb, this,
+                              0);
 }
 
 void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
