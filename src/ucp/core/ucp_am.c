@@ -754,6 +754,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
     ucp_am_send_req_init(req, ep, &(unfinished->rendezvous_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rendezvous_header_t), flags, id);
     req->send.am.message_id = ep->worker->am_message_id ;
     unfinished->msg_id   =ep->worker->am_message_id ;
+    ucs_trace("AM RENDEZVOUS msg_id=0x%016lx", unfinished->msg_id) ;
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
         ret = UCS_STATUS_PTR(status);
@@ -802,7 +803,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
 
     if ( unfinished->status != UCS_INPROGRESS)
       {
-        ucs_trace("AM RENDEZVOUS synchronous completion, status=%d",unfinished->status ) ;
+        ucs_trace("AM RENDEZVOUS synchronous completion, status=%d msg_id=0x%016lx",unfinished->status, unfinished->msg_id ) ;
         ret = UCS_STATUS_PTR(unfinished->status) ;
 
         ucs_list_del(&unfinished->list);
