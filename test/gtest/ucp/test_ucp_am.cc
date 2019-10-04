@@ -28,7 +28,9 @@ public:
     void *reply;
     void *for_release[NUM_MESSAGES];
     int release;
-    char am_rendezvous_buffer[32] ;
+    size_t am_rendezvous_length ;
+    char am_rendezvous_buffer_0[32] ;
+    char am_rendezvous_buffer_1[32] ;
 
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -133,12 +135,15 @@ ucs_status_t test_ucp_am_base::am_rendezvous_handler(test_ucp_am_base *me, void 
                         size_t  length, unsigned flags,
                         size_t remaining_length, ucp_am_rendezvous_recv_t *recv )
   {
+    assert(length <= 32) ;
+    me->am_rendezvous_length = length ;
+    memcpy(me->am_rendezvous_buffer_0, data, length ;
     recv->local_fn        = test_ucp_am_base::ucp_process_am_rendezvous_completion_handler ;
     recv->cookie          = me ;
     recv->data_fn         = NULL ;
     recv->data_cookie     = NULL ;
     recv->iovec_length    = 1 ;
-    recv->iovec[0].buffer = me->am_rendezvous_buffer ;
+    recv->iovec[0].buffer = me->am_rendezvous_buffer_1 ;
     recv->iovec[0].length = remaining_length ;
     return UCS_OK ;
   }
@@ -152,6 +157,14 @@ ucs_status_t test_ucp_am_base::ucp_process_am_rendezvous_completion_handler (
 
 ucs_status_t test_ucp_am_base::am_rendezvous_completion_handler(test_ucp_am_base *me)
   {
+    size_t length = me->am_rendezvous_length ;
+    std::vector<char> cmp(length, (char)length);
+    std::vector<char> databuf(length, 'r');
+
+    memcpy(&databuf[0], me->am_rendezvous_buffer_0, length);
+    memcpy(&databuf[0], me->am_rendezvous_buffer_1, length);
+
+    EXPECT_EQ(cmp, databuf);
     me->recv_ams++;
     return UCS_OK ;
   }
@@ -306,6 +319,9 @@ void test_ucp_am::do_send_process_data_iov_test()
     EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
     sent_ams++;
 
+    while (sent_ams != recv_ams) {
+        progress();
+    }
     /* Test flowing active messages without RDMA */
     for (i = 1; i < size; i *= 2) {
         for (index = 0; index < i; index++) {
@@ -327,6 +343,9 @@ void test_ucp_am::do_send_process_data_iov_test()
         sent_ams++;
     }
 
+    while (sent_ams != recv_ams) {
+        progress();
+    }
     /* Test flowing the active message over RDMA with the endpoints connected */
     i = 32 ;
 
