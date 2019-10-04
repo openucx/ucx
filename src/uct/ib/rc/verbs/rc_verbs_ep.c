@@ -16,13 +16,13 @@
 #include <uct/ib/base/ib_log.h>
 
 #define UCT_RC_VERBS_CHECK_FENCE(_iface, _ep) \
-    if (((_iface)->super.config.fence_mode == UCT_RC_FENCE_MODE_STRONG) && \
-        (uct_rc_txqp_available(&(_ep)->super.txqp) != (_iface)->config.tx_max_wr) && \
-        uct_rc_ep_is_fence(&(_iface)->super, &(_ep)->fi)) { \
-            return UCS_ERR_NO_RESOURCE; \
-        } else { \
-            uct_rc_ep_fm_reset(&(_iface)->super, &(_ep)->fi); \
-        }
+    do { \
+        ucs_status_t _stat; \
+        _stat = uct_rc_verbs_ep_is_fence(_iface, _ep); \
+        if (_stat != UCS_OK) { \
+            return _stat; \
+        } \
+    } while (0)
 
 #define UCT_RC_VERBS_CHECK_RES(_iface, _ep) \
     UCT_RC_CHECK_RES(&(_iface)->super, &(_ep)->super) \
@@ -36,6 +36,59 @@
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 {
     txcnt->pi = txcnt->ci = 0;
+}
+
+static ucs_status_t
+uct_rc_verbs_ep_is_fence(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep)
+{
+    ucs_status_t status;
+
+    if (iface->super.config.fence_mode != UCT_RC_FENCE_MODE_STRONG) {
+        return UCS_OK;
+    }
+
+    if (!uct_rc_ep_is_fence(&iface->super, &ep->fi)) {
+        return UCS_OK;
+    }
+    
+    if (iface->super.tx.fi.fence_beat - ep->fi.fence_beat == UCT_RC_FENCE_INPROGRESS) {
+        /* flush op is posted */
+        if (uct_rc_txqp_available(&ep->super.txqp) != iface->config.tx_max_wr) {
+            /* not all outstanding ops are completed */
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            /* fence is completed */
+            uct_rc_ep_fm_reset(&iface->super, &ep->fi);
+            return UCS_OK;
+        }
+    }
+
+    /* iface is scheduled and no flush request is posted.
+     * schedule flush operation */
+    status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, 0);
+    if (status == UCS_OK) {
+        /* no entries in queue - nothing to fence */
+        uct_rc_ep_fm_reset(&iface->super, &ep->fi);
+        return UCS_OK;
+    }
+    
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucs_assert(status == UCS_INPROGRESS);
+    if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
+        /* there are un-signalled entries and we may post signal entry */
+        status = uct_rc_verbs_ep_put_short(&ep->super.super.super, NULL, 0, 0, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    /* ok, queue is not empty & there are no un-signalled entries
+     * or last entry scheduled as "signalled" */
+    ep->fi.fence_beat = iface->super.tx.fi.fence_beat - UCT_RC_FENCE_INPROGRESS;
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -153,7 +206,12 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_VERBS_CHECK_FENCE(iface, ep);
+    if ((buffer != NULL) || length || rkey) {
+        UCT_RC_VERBS_CHECK_FENCE(iface, ep);
+    } else {
+        /* "flush" operation - check for EP/IFACE resources only */
+        UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    }
 
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
@@ -384,9 +442,6 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_OK;
     }
 
-    /* reset fence mode */
-    uct_rc_ep_fm_reset(&iface->super, &ep->fi);
-
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
     if (status != UCS_INPROGRESS) {
         return status;
@@ -407,23 +462,9 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    ucs_status_t status;
 
     if (uct_rc_ep_is_fence(&iface->super, &ep->fi)) {
         return UCS_OK;
-    }
-
-    status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
-    if (status == UCS_OK) {
-        UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
-        return UCS_OK;
-    } else if (status != UCS_ERR_NO_RESOURCE) {
-        if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-            status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
     }
 
     return uct_rc_ep_fence(tl_ep, &ep->fi, 1);

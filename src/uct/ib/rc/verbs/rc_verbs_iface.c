@@ -348,31 +348,6 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsign
     return count;
 }
 
-static ucs_status_t uct_rc_verbs_iface_fence(uct_iface_h tl_iface, unsigned flags)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    ucs_status_t status;
-    unsigned count;
-    uct_rc_ep_t *ep;
-
-    count = 0;
-    ucs_list_for_each(ep, &iface->ep_list, list) {
-        status = uct_ep_fence(&ep->super.super, 0);
-        if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
-            ++count;
-        } else if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    if (count != 0) {
-        return UCS_INPROGRESS;
-    }
-
-    UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
-    return UCS_OK;
-}
-
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super,
@@ -415,7 +390,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_get_address           = uct_rc_verbs_ep_get_address,
     .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
-    .iface_fence              = uct_rc_verbs_iface_fence,
+    .iface_fence              = uct_rc_iface_fence,
     .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,

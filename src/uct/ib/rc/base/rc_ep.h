@@ -14,6 +14,8 @@
 
 
 #define RC_UNSIGNALED_INF UINT16_MAX
+#define UCT_RC_FENCE_SCHEDULED  2
+#define UCT_RC_FENCE_INPROGRESS 1
 
 enum {
     UCT_RC_FC_STAT_NO_CRED,
@@ -423,25 +425,22 @@ uct_rc_ep_fm_reset(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
-{
-    int fence;
-
-    /* a call to iface_fence increases beat, so if endpoint beat is not in
-     * sync with iface beat it means the endpoint did not post any WQE with
-     * fence flag yet */
-    fence = (fi->fence_beat != iface->tx.fi.fence_beat) ? flag : 0;
-    uct_rc_ep_fm_reset(iface, fi);
-    return fence;
-}
-
-static UCS_F_ALWAYS_INLINE int
 uct_rc_ep_is_fence(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi)
 {
     /* a call to iface_fence increases beat, so if endpoint beat is not in
      * sync with iface beat it means the endpoint did not post any WQE with
      * fence flag yet */
     return fi->fence_beat != iface->tx.fi.fence_beat;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
+{
+    int fence;
+
+    fence = uct_rc_ep_is_fence(iface, fi) ? flag : 0;
+    uct_rc_ep_fm_reset(iface, fi);
+    return fence;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -452,7 +451,7 @@ uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
     /* in case if fence is requested and enabled by configuration
      * we need to schedule fence for next RDMA operation */
     if (fence && (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE)) {
-        fi->fence_beat = iface->tx.fi.fence_beat - 1;
+        fi->fence_beat = iface->tx.fi.fence_beat - UCT_RC_FENCE_SCHEDULED;
     }
 
     UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));

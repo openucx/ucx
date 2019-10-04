@@ -207,7 +207,8 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_pending_req_arb_group_push(&ep->arb_group, n);
     UCT_TL_EP_STAT_PEND(&ep->super);
 
-    if (uct_rc_ep_has_tx_resources(ep)) {
+    if (uct_rc_ep_has_tx_resources(ep) &&
+        !uct_rc_iface_has_tx_resources(iface)) {
         /* If we have ep (but not iface) resources, we need to schedule the ep */
         ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
     }
