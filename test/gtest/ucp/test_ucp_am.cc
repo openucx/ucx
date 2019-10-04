@@ -97,7 +97,7 @@ ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
     return self->am_handler(self, data, length, flags);
 }
 
-ucs_status_t ucp_process_am_rendezvous_cb(void *arg, void *data,
+ucs_status_t test_ucp_am_base::ucp_process_am_rendezvous_cb(void *arg, void *data,
                                       size_t length,
                                       ucp_ep_h reply_ep,
                                       unsigned flags,
