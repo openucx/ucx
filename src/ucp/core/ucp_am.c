@@ -1283,13 +1283,13 @@ ucp_am_rendezvous_completed_callback(void *request, ucs_status_t status)
     ucp_request_t * req=((ucp_request_t *) request) - 1  ;
     ucp_ep_h ep = req->send.ep ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
-    ucp_am_rendezvous_client_unfinished_t *unfinished ;
+    ucp_am_rendezvous_server_unfinished_t *unfinished ;
 
     ucs_trace("AM RENDEZVOUS completed callback request=%p status=%d", request, status) ;
 
 
-    unfinished = ucp_am_rendezvous_client_find_unfinished(
-        ep->worker, ep, ep_ext, req->send.am.message_id
+    unfinished = ucp_am_rendezvous_server_find_unfinished(
+        ep->worker, ep, ep_ext, request
         ) ;
     ucs_assert(unfinished != NULL) ;
     ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completed_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
