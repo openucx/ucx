@@ -28,6 +28,7 @@ public:
     void *reply;
     void *for_release[NUM_MESSAGES];
     int release;
+    char am_rendezvous_buffer[32] ;
 
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -104,7 +105,7 @@ ucs_status_t ucp_process_am_rendezvous_cb(void *arg, void *data,
                                       ucp_am_rendezvous_recv_t *recv)
   {
     test_ucp_am_base *self = reinterpret_cast<test_ucp_am_base*>(arg);
-    return self->am_rendezvous_handler(self, data, length, flags, remaining_length, recv)
+    return self->am_rendezvous_handler(self, data, length, flags, remaining_length, recv) ;
   }
 
 ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
@@ -191,6 +192,8 @@ void test_ucp_am::set_reply_handlers()
 
 void test_ucp_am::set_handlers(uint16_t am_id)
 {
+    ucp_am_rendezvous_params_t params ;
+    params.field_mask = 0 ;
     ucp_worker_set_am_handler(sender().worker(), am_id,
                               ucp_process_am_cb, this,
                               UCP_AM_FLAG_WHOLE_MSG);
@@ -199,10 +202,12 @@ void test_ucp_am::set_handlers(uint16_t am_id)
                               UCP_AM_FLAG_WHOLE_MSG);
     ucp_worker_set_am_rendezvous_handler(sender().worker(), am_id,
                               ucp_process_am_rendezvous_cb, this,
-                              0);
+                              0,
+                              &params);
     ucp_worker_set_am_rendezvous_handler(receiver().worker(), am_id,
                               ucp_process_am_rendezvous_cb, this,
-                              0);
+                              0,
+                              &params);
 }
 
 void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
