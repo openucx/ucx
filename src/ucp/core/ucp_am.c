@@ -124,7 +124,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_rendezvous_handler,
 
     if (id >= worker->am_rendezvous_cb_array_len) {
         num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
-        worker->am_rendezvous_cbs = ucs_realloc(worker->am_rendezvous_cbs, num_entries *
+        worker->am_rendezvous_cbs = ucs_realloc(worker->am_rendezvous_cbs,
+                                     num_entries *
                                      sizeof(ucp_worker_am_rendezvous_entry_t),
                                      "UCP AM rendezvous callback array");
         memset(worker->am_rendezvous_cbs + worker->am_rendezvous_cb_array_len,
@@ -139,7 +140,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_rendezvous_handler,
     worker->am_rendezvous_cbs[id].flags   = flags;
     if ( params->field_mask & UCP_AM_RENDEZVOUS_FIELD_IOVEC_SIZE )
       {
-        ucs_assert(params->iovec_size == 1) ; /* Only support cnotiguous at the moment */
+        /* Only support contiguous at the moment */
+        ucs_assert(params->iovec_size == 1) ;
       }
     worker->am_rendezvous_cbs[id].iovec_size =  1 ;
 
@@ -198,12 +200,18 @@ ucp_am_rendezvous_bcopy_pack_args_single(void *dest, void *arg)
     ucp_am_rendezvous_header_t *rendezvous_hdr = dest;
     ucp_request_t *req = arg;
 
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_bcopy_pack_args_single dest=%p arg=%p", dest, arg) ;
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_bcopy_pack_args_single dest=%p arg=%p"
+        , dest, arg) ;
 
-    memcpy(rendezvous_hdr, req->send.buffer, sizeof(ucp_am_rendezvous_header_t)) ;
+    memcpy(rendezvous_hdr, req->send.buffer,
+           sizeof(ucp_am_rendezvous_header_t)) ;
     rendezvous_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_bcopy_pack_args_single_reply msg_id=0x%016lx ep_ptr=0x%016lx am_id=%u address=0x%016lx",
-        rendezvous_hdr->msg_id, rendezvous_hdr->ep_ptr, rendezvous_hdr->am_id, rendezvous_hdr->address) ;
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_bcopy_pack_args_single_reply"
+        "msg_id=0x%016lx ep_ptr=0x%016lx am_id=%u address=0x%016lx",
+        rendezvous_hdr->msg_id, rendezvous_hdr->ep_ptr,
+        rendezvous_hdr->am_id, rendezvous_hdr->address) ;
 
     return sizeof(ucp_am_rendezvous_header_t);
 }
@@ -273,44 +281,8 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
                            (void *)payload, length);
 }
 
-/* static ucs_status_t ucp_am_send_rendezvous_short(ucp_ep_h ep,
- *                                      const ucp_am_rendezvous_header_t *payload)
- * {
- *    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
- *    ucp_am_hdr_t hdr;
- *
- *    hdr.am_hdr.am_id  = 0;
- *    hdr.am_hdr.length = sizeof(ucp_am_rendezvous_header_t);
- *    hdr.am_hdr.flags  = 0;
- *    ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
- *
- *    ucs_trace("AM RENDEZVOUS ucp_am_send_rendezvous_short header=0x%016lx", hdr.u64) ;
- *    ucs_trace("AM RENDEZVOUS ucp_am_send_rendezvous_short payload=(total_size=%lu,msg_id=0x%lx,ep_ptr=%lx,am_id=%u)",
- *        payload->total_size, payload->msg_id, payload->ep_ptr, payload->am_id) ;
- *
- *
- *    return uct_ep_am_short(am_ep, UCP_AM_ID_RENDEZVOUS, hdr.u64,
- *                           (void *)payload, sizeof(ucp_am_rendezvous_header_t));
- * }
- */
-
-/* static ucs_status_t ucp_am_send_rendezvous_reply_short(ucp_ep_h ep,
- *                                    const ucp_am_rendezvous_reply_header_t *payload)
- * {
- *   uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
- *   ucp_am_hdr_t hdr;
- *
- *   hdr.am_hdr.am_id  = 0;
- *   hdr.am_hdr.length = sizeof(ucp_am_rendezvous_reply_header_t);
- *   hdr.am_hdr.flags  = 0;
- *   ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
- *
- *   return uct_ep_am_short(am_ep, UCP_AM_ID_RENDEZVOUS_REPLY, hdr.u64,
- *                        (void *)payload, sizeof(ucp_am_rendezvous_reply_header_t));
- * }
- */
 static ucs_status_t ucp_am_send_rendezvous_completion_short(ucp_ep_h ep,
-                                const ucp_am_rendezvous_completion_header_t *payload)
+                     const ucp_am_rendezvous_completion_header_t *payload)
 {
     uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
     ucp_am_hdr_t hdr;
@@ -321,7 +293,7 @@ static ucs_status_t ucp_am_send_rendezvous_completion_short(ucp_ep_h ep,
     ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
 
     return uct_ep_am_short(am_ep, UCP_AM_ID_RENDEZVOUS_COMPLETION, hdr.u64,
-                          (void *)payload, sizeof(ucp_am_rendezvous_completion_header_t));
+              (void *)payload, sizeof(ucp_am_rendezvous_completion_header_t));
 }
 
 static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
@@ -338,50 +310,23 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
     return status;
 }
 
-/* static ucs_status_t ucp_am_rendezvous_contig_short(uct_pending_req_t *self)
- * {
- *    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
- *    uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
- *    ucp_am_rendezvous_header_t *rendezvous_hdr = (ucp_am_rendezvous_header_t *)req->send.buffer ;
- *    ucs_status_t status ;
- *    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
- *    rendezvous_hdr->ep_ptr = ep_ptr ;
- *    status = ucp_am_send_rendezvous_short(req->send.ep,req->send.buffer) ;
- *    ucs_trace("AM RENDEZVOUS ucp_am_send_rendezvous_short returns %d", status) ;
- *    if (ucs_likely(status == UCS_OK)) {
- *        ucp_request_complete_send(req, UCS_OK);
- *    }
- *    return status ;
- * }
- */
-
-/*
- * static ucs_status_t ucp_am_rendezvous_reply_contig_short(uct_pending_req_t *self)
- * {
- *   ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
- *   uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
- *   ucp_am_rendezvous_reply_header_t *rendezvous_reply_hdr = (ucp_am_rendezvous_reply_header_t *)req->send.buffer ;
- *   ucs_status_t status ;
- *   ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_reply_contig_short ep_ptr now=0x%016lx", ep_ptr) ;
- *   rendezvous_reply_hdr->ep_ptr = ep_ptr ;
- *   status = ucp_am_send_rendezvous_reply_short(req->send.ep,req->send.buffer) ;
- *   ucs_trace("AM RENDEZVOUS ucp_am_send_rendezvous_short returns %d", status) ;
- *   if (ucs_likely(status == UCS_OK)) {
- *       ucp_request_complete_send(req, UCS_OK);
- *   }
- *   return status ;
- *}
- */
-
-static ucs_status_t ucp_am_rendezvous_completion_contig_short(uct_pending_req_t *self)
+static ucs_status_t ucp_am_rendezvous_completion_contig_short(
+                       uct_pending_req_t *self
+                     )
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
     uintptr_t ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
-    ucp_am_rendezvous_completion_header_t *rendezvous_completion_hdr = (ucp_am_rendezvous_completion_header_t *)req->send.buffer ;
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completion_contig_short req=%p",req) ;
+    ucp_am_rendezvous_completion_header_t *rendezvous_completion_hdr =
+        (ucp_am_rendezvous_completion_header_t *)req->send.buffer ;
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_completion_contig_short req=%p",
+        req) ;
     rendezvous_completion_hdr->ep_ptr = ep_ptr ;
-    ucs_status_t status = ucp_am_send_rendezvous_completion_short(req->send.ep,req->send.buffer) ;
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completion_contig_short status=%d", status) ;
+    ucs_status_t status =
+        ucp_am_send_rendezvous_completion_short(req->send.ep,req->send.buffer) ;
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_completion_contig_short status=%d",
+        status) ;
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
@@ -425,7 +370,9 @@ static ucs_status_t ucp_am_rendezvous_bcopy_single(uct_pending_req_t *self)
 
     status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RENDEZVOUS,
                                     ucp_am_rendezvous_bcopy_pack_args_single);
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_bcopy_single status=%d", status);
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_bcopy_single status=%d",
+        status);
     if (status == UCS_OK) {
         ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
@@ -484,7 +431,8 @@ static ucs_status_t ucp_am_zcopy_single(uct_pending_req_t *self)
     hdr.am_hdr.flags  = req->send.am.flags;
     
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE, &hdr,
-                                  sizeof(hdr), ucp_proto_am_zcopy_req_complete);
+                                  sizeof(hdr),
+                                  ucp_proto_am_zcopy_req_complete);
 }
 
 static ucs_status_t ucp_am_zcopy_single_reply(uct_pending_req_t *self)
@@ -580,7 +528,8 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     }
 
     /* Start the request.
-     * If it is completed immediately, release the request and return the status.
+     * If it is completed immediately, release the request and
+     * return the status.
      * Otherwise, return the request.
      */
     status = ucp_request_send(req, 0);
@@ -608,7 +557,8 @@ ucp_am_rendezvous_send_req(ucp_request_t *req, uct_pending_callback_t func,
     }
 
     /* Start the request.
-     * If it is completed immediately, release the request and return the status.
+     * If it is completed immediately, release the request and
+     * return the status.
      * Otherwise, return the request.
      */
     status = ucp_request_send(req, 0);
@@ -636,7 +586,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb,
     size_t length;
     
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
-                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+                                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
 
     if (ucs_unlikely((flags != 0) && !(flags & UCP_AM_SEND_REPLY))) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
@@ -722,13 +672,19 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
     }
 
     iovec = (ucp_dt_iov_t *) payload ;
-    if ( !UCP_DT_IS_IOV(datatype) || count != 2 || iovec[1].length < UCP_AM_RENDEZVOUS_THRESHOLD )
+    if ( !UCP_DT_IS_IOV(datatype)
+        || count != 2
+        || iovec[1].length < UCP_AM_RENDEZVOUS_THRESHOLD )
       {
-        ucs_trace("AM RENDEZVOUS Call unsuitable for AM over RENDEZVOUS, using regular AM") ;
+        ucs_trace(
+       "AM RENDEZVOUS Call unsuitable for AM over RENDEZVOUS, using regular AM"
+            ) ;
         return ucp_am_send_nb(ep, id, payload, count, datatype, cb, flags) ;
       }
 
-    ucs_trace("AM RENDEZVOUS First byte of payload is %u", *(char *)(iovec[1].buffer)) ;
+    ucs_trace(
+        "AM RENDEZVOUS First byte of payload is %u",
+        *(char *)(iovec[1].buffer)) ;
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     /* And the first element of the iovec must fit in the header */
@@ -741,8 +697,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
     }
     ucs_trace("ucp_am_rendezvous_send_nb req=%p", req) ;
 
-    unfinished           = ucs_malloc(sizeof(ucp_am_rendezvous_client_unfinished_t),
-                                         "unfinished UCP AM rendezvous client");
+    unfinished      = ucs_malloc(sizeof(ucp_am_rendezvous_client_unfinished_t),
+                                    "unfinished UCP AM rendezvous client");
     if (ucs_unlikely(unfinished == NULL)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out ;
@@ -751,7 +707,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
     unfinished->status = UCS_INPROGRESS ;
     unfinished->req   = NULL ;
 
-    ucp_am_send_req_init(req, ep, &(unfinished->rendezvous_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rendezvous_header_t), flags, id);
+    ucp_am_send_req_init(req, ep, &(unfinished->rendezvous_header),
+        UCP_DATATYPE_CONTIG, sizeof(ucp_am_rendezvous_header_t),
+        flags, id);
     req->send.am.message_id = ep->worker->am_message_id ;
     unfinished->msg_id   =ep->worker->am_message_id ;
     ucs_trace("AM RENDEZVOUS msg_id=0x%016lx", unfinished->msg_id) ;
@@ -762,20 +720,31 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
     }
 
     length = ucp_dt_iov_length(iovec, count);
-    ucs_trace("AM RENDEZVOUS count=%lu iovec[0].length=%lu iovec[1].length=%lu length=%lu", count, iovec[0].length, iovec[1].length, length) ;
+    ucs_trace(
+ "AM RENDEZVOUS count=%lu iovec[0].length=%lu iovec[1].length=%lu length=%lu",
+       count, iovec[0].length, iovec[1].length, length) ;
     unfinished->rendezvous_header.address    = (uintptr_t) iovec[1].buffer ;
     unfinished->rendezvous_header.total_size = length ;
     unfinished->rendezvous_header.msg_id     = unfinished->msg_id ;
-    unfinished->rendezvous_header.ep_ptr      = ucp_request_get_dest_ep_ptr(req) ;
-    memcpy(unfinished->rendezvous_header.iovec_0, iovec[0].buffer, iovec[0].length) ;
+    unfinished->rendezvous_header.ep_ptr     =
+        ucp_request_get_dest_ep_ptr(req) ;
+    memcpy(unfinished->rendezvous_header.iovec_0,
+        iovec[0].buffer,
+        iovec[0].length) ;
     unfinished->rendezvous_header.am_id      = id ;
     unfinished->rendezvous_header.iovec_0_length = iovec[0].length ;
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-    unfinished->rendezvous_header.iovec_1_first_byte = *((char*)iovec[1].buffer) ;
-    unfinished->rendezvous_header.iovec_1_last_byte = *(((char*)iovec[1].buffer)+iovec[1].length-1) ;
-    ucs_trace("AM RENDEZVOUS msg_id=0x%016lx iovec_0_length=%lu iovec_1_first_byte=%d iovec_1_last_byte=%d",
-        unfinished->rendezvous_header.msg_id,unfinished->rendezvous_header.iovec_0_length,
-        unfinished->rendezvous_header.iovec_1_first_byte,unfinished->rendezvous_header.iovec_1_last_byte) ;
+    unfinished->rendezvous_header.iovec_1_first_byte =
+        *((char*)iovec[1].buffer) ;
+    unfinished->rendezvous_header.iovec_1_last_byte =
+        *(((char*)iovec[1].buffer)+iovec[1].length-1) ;
+    ucs_trace(
+        "AM RENDEZVOUS msg_id=0x%016lx iovec_0_length=%lu"
+        " iovec_1_first_byte=%d iovec_1_last_byte=%d",
+        unfinished->rendezvous_header.msg_id,
+        unfinished->rendezvous_header.iovec_0_length,
+        unfinished->rendezvous_header.iovec_1_first_byte,
+        unfinished->rendezvous_header.iovec_1_last_byte) ;
 #endif
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
@@ -784,26 +753,36 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_rendezvous_send_nb,
     ucs_trace("AM RENDEZVOUS map_params.length=%lu", map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
-    status=ucp_rkey_pack(worker->context,unfinished->memh,&packed_rkey, &packed_rkey_size);
+    status=ucp_rkey_pack(worker->context,
+                         unfinished->memh,&packed_rkey,
+                         &packed_rkey_size);
     ucs_assert(status == UCS_OK) ;
     ucs_trace("AM RENDEZVOUS packed_rkey_size=%lu", packed_rkey_size) ;
 
     ucs_assert(packed_rkey_size <= UCP_PACKED_RKEY_MAX_SIZE);
-    memcpy(&(unfinished->rendezvous_header.rkey_buffer),packed_rkey,packed_rkey_size);
+    memcpy(&(unfinished->rendezvous_header.rkey_buffer),
+           packed_rkey,
+           packed_rkey_size);
     ucp_rkey_buffer_release(packed_rkey) ;
 
     unfinished->cb             = cb ;
-    ucs_trace("AM_RENDEZVOUS unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
+    ucs_trace("AM_RENDEZVOUS unfinished=%p msg_id=0x%016lx",
+        unfinished,
+        unfinished->msg_id) ;
 
-    ucs_list_add_head(&ep_ext->am.started_ams_rendezvous_client, &unfinished->list);
+    ucs_list_add_head(&ep_ext->am.started_ams_rendezvous_client,
+                      &unfinished->list);
 
-    ret = ucp_am_rendezvous_send_req(req, ucp_am_rendezvous_bcopy_single, ucp_am_rendezvous_callback) ;
+    ret = ucp_am_rendezvous_send_req(req, ucp_am_rendezvous_bcopy_single,
+                                     ucp_am_rendezvous_callback) ;
     ucs_trace("AM RENDEZVOUS ucp_am_send_rendezvous_req ret=%p", ret) ;
 
 
     if ( unfinished->status != UCS_INPROGRESS)
       {
-        ucs_trace("AM RENDEZVOUS synchronous completion, status=%d msg_id=0x%016lx",unfinished->status, unfinished->msg_id ) ;
+        ucs_trace(
+            "AM RENDEZVOUS synchronous completion, status=%d msg_id=0x%016lx",
+            unfinished->status, unfinished->msg_id ) ;
         ret = UCS_STATUS_PTR(unfinished->status) ;
 
         ucs_list_del(&unfinished->list);
@@ -941,7 +920,9 @@ ucp_am_rendezvous_client_find_unfinished(ucp_worker_h worker, ucp_ep_h ep,
     ucp_am_rendezvous_client_unfinished_t *unfinished;
     ucs_trace("AM RENDEZVOUS looking for msg_id=0x%016lx", msg_id) ;
     /* TODO make this hash table for faster lookup */
-    ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rendezvous_client, list) {
+    ucs_list_for_each(unfinished,
+                      &ep_ext->am.started_ams_rendezvous_client,
+                      list) {
         if (unfinished->msg_id == msg_id) {
             return unfinished;
         }
@@ -956,8 +937,11 @@ ucp_am_rendezvous_client_show_unfinished(ucp_ep_ext_proto_t *ep_ext)
     ucp_am_rendezvous_client_unfinished_t *unfinished;
     ucs_trace("AM RENDEZVOUS showing unfinished AMs") ;
     /* TODO make this hash table for faster lookup */
-    ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rendezvous_client, list) {
-        ucs_trace("AM RENDEZVOUS unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id ) ;
+    ucs_list_for_each(unfinished,
+                      &ep_ext->am.started_ams_rendezvous_client,
+                      list) {
+        ucs_trace("AM RENDEZVOUS unfinished=%p msg_id=0x%016lx",
+            unfinished, unfinished->msg_id ) ;
     }
 }
 
@@ -968,7 +952,9 @@ ucp_am_rendezvous_server_find_unfinished(ucp_ep_h ep,
 {
     ucp_am_rendezvous_server_unfinished_t *unfinished;
     /* TODO make this hash table for faster lookup */
-    ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rendezvous_server, list) {
+    ucs_list_for_each(unfinished,
+                      &ep_ext->am.started_ams_rendezvous_server,
+                      list) {
         if (unfinished->get_request == request) {
             return unfinished;
         }
@@ -984,7 +970,9 @@ ucp_am_rendezvous_server_find_unfinished_completion(ucp_ep_h ep,
 {
     ucp_am_rendezvous_server_unfinished_t *unfinished;
     /* TODO make this hash table for faster lookup */
-    ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rendezvous_server, list) {
+    ucs_list_for_each(unfinished,
+                      &ep_ext->am.started_ams_rendezvous_server,
+                      list) {
         if (unfinished->completion_request == request) {
             return unfinished;
         }
@@ -1049,7 +1037,8 @@ ucp_am_long_handler_common(void *am_arg, void *am_data, size_t am_length,
      * have arrived. If any messages have arrived,
      * we copy ourselves into the buffer and leave
      */
-    unfinished = ucp_am_find_unfinished(worker, ep, ep_ext, long_hdr, am_length);
+    unfinished =
+        ucp_am_find_unfinished(worker, ep, ep_ext, long_hdr, am_length);
     
     if (unfinished) {
         return ucp_am_handle_unfinished(worker, unfinished, 
@@ -1118,10 +1107,13 @@ ucp_am_rendezvous_completion_callback(void *request, ucs_status_t status)
     ucp_request_t * req=((ucp_request_t *) request) - 1  ;
     ucp_ep_h ep = req->send.ep ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
-    ucp_am_rendezvous_server_unfinished_t *unfinished = ucp_am_rendezvous_server_find_unfinished( ep,
+    ucp_am_rendezvous_server_unfinished_t *unfinished =
+        ucp_am_rendezvous_server_find_unfinished( ep,
         ep_ext,
         request) ;
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completion_callback request=%p status=%d", request, status) ;
+    ucs_trace(
+    "AM RENDEZVOUS ucp_am_rendezvous_completion_callback request=%p status=%d",
+        request, status) ;
     ucs_assert(status == UCS_OK) ;
     ucs_assert(unfinished != NULL ) ;
 
@@ -1140,12 +1132,16 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_worker_h worker            = (ucp_worker_h)am_arg;
     ucp_am_hdr_t *hdr              = (ucp_am_hdr_t *)am_data;
     ucs_trace("AM RENDEZVOUS hdr=0x%016lx", *(unsigned long *)hdr) ;
-    ucp_am_rendezvous_header_t *rendezvous_hdr = (ucp_am_rendezvous_header_t *)(hdr);
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_handler rendezvous_hdr=(total_size=%lu,msg_id=0x%lx,ep_ptr=0x%016lx,am_id=%u)",
-        rendezvous_hdr->total_size, rendezvous_hdr->msg_id, rendezvous_hdr->ep_ptr, rendezvous_hdr->am_id) ;
+    ucp_am_rendezvous_header_t *rendezvous_hdr =
+        (ucp_am_rendezvous_header_t *)(hdr);
+    ucs_trace(
+       "AM RENDEZVOUS ucp_am_rendezvous_handler "
+       "rendezvous_hdr=(total_size=%lu,msg_id=0x%lx,ep_ptr=0x%016lx,am_id=%u)",
+        rendezvous_hdr->total_size, rendezvous_hdr->msg_id,
+        rendezvous_hdr->ep_ptr, rendezvous_hdr->am_id) ;
 
-    ucp_ep_h ep                    = ucp_worker_get_ep_by_ptr(worker,
-                                                           rendezvous_hdr->ep_ptr);
+    ucp_ep_h ep  = ucp_worker_get_ep_by_ptr(worker,
+                                            rendezvous_hdr->ep_ptr);
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rendezvous_server_unfinished_t *unfinished;
     ucp_mem_map_params_t map_params ;
@@ -1163,57 +1159,48 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_handler") ;
 
-    if (ucs_unlikely((rendezvous_hdr->am_id >= worker->am_rendezvous_cb_array_len) ||
-                     (worker->am_rendezvous_cbs[rendezvous_hdr->am_id].cb == NULL))) {
-        ucs_warn("UCP Active Message rendezvous was received with id : %u, but there"
-                 "is no registered callback for that id", rendezvous_hdr->am_id);
+    if (ucs_unlikely(
+        (rendezvous_hdr->am_id >= worker->am_rendezvous_cb_array_len) ||
+                     (worker->am_rendezvous_cbs[rendezvous_hdr->am_id].cb == NULL)
+                     )) {
+        ucs_warn(
+           "UCP Active Message rendezvous was received with id : %u, but there"
+           "is no registered callback for that id", rendezvous_hdr->am_id);
         return UCS_OK;
     }
 
-//    all_data = ucs_malloc(rendezvous_hdr->total_size + sizeof(ucp_recv_desc_t),
-//                          "ucp recv desc for rendezvous AM");
-//    if (ucs_unlikely(all_data == NULL)) {
-//        return UCS_ERR_NO_MEMORY;
-//    }
-//
-//    payload = (char *) (all_data+1) ;
-//    ucs_trace("AM RENDEZVOUS payload+32=%p", payload+32) ;
-//#if defined(UCP_AM_RENDEZVOUS_VERIFY)
-//    memset(payload, 0xff, rendezvous_hdr->total_size) ;
-//#endif
-//    memcpy(payload, &(rendezvous_hdr->iovec_0), length_to_copy) ;
-//
-//    all_data->flags = UCP_RECV_DESC_FLAG_MALLOC;
-
-    unfinished           = ucs_malloc(sizeof(ucp_am_rendezvous_server_unfinished_t),
-                                         "unfinished UCP AM rendezvous server");
+    unfinished  = ucs_malloc(sizeof(ucp_am_rendezvous_server_unfinished_t),
+                                  "unfinished UCP AM rendezvous server");
     ucs_assert(unfinished != NULL) ;
 
     ucs_trace("AM RENDEZVOUS will call am_id=%u", rendezvous_hdr->am_id ) ;
     unfinished->am_id = rendezvous_hdr -> am_id ;
 
     unfinished->recv.iovec_max_length = 1 ;
-    status = worker->am_rendezvous_cbs[rendezvous_hdr ->am_id].cb(worker->am_rendezvous_cbs[rendezvous_hdr ->am_id].context,
+    status = worker->am_rendezvous_cbs[rendezvous_hdr ->am_id].cb(
+           worker->am_rendezvous_cbs[rendezvous_hdr ->am_id].context,
                                       rendezvous_hdr->iovec_0,
                                       rendezvous_hdr->iovec_0_length,
                                       NULL,
                                       0,
-                                      rendezvous_hdr->total_size-rendezvous_hdr->iovec_0_length,
+           rendezvous_hdr->total_size-rendezvous_hdr->iovec_0_length,
                                       &(unfinished->recv));
 
     ucs_assert(unfinished->recv.iovec_length == 1) ;
-    ucs_assert(rendezvous_hdr->iovec_0_length + unfinished->recv.iovec[0].length == rendezvous_hdr->total_size ) ;
+    ucs_assert(rendezvous_hdr->iovec_0_length
+        + unfinished->recv.iovec[0].length
+        == rendezvous_hdr->total_size ) ;
 
     map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH ;
     map_params.address    = unfinished->recv.iovec[0].buffer ;
     map_params.length     = unfinished->recv.iovec[0].length ;
-    ucs_trace("AM RENDEZVOUS map_params=(address=%p, length=%lu)", map_params.address, map_params.length) ;
+    ucs_trace("AM RENDEZVOUS map_params=(address=%p, length=%lu)",
+        map_params.address, map_params.length) ;
     status=ucp_mem_map(worker->context,&map_params,&(unfinished->memh)) ;
     ucs_assert(status == UCS_OK) ;
     unfinished->rendezvous_completion_header.msg_id = rendezvous_hdr->msg_id ;
 
-//    unfinished->all_data      = all_data;
     unfinished->msg_id        = rendezvous_hdr->msg_id;
     unfinished->total_size    = rendezvous_hdr->total_size;
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
@@ -1221,8 +1208,11 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
     unfinished->iovec_1_first_byte = rendezvous_hdr->iovec_1_first_byte ;
     unfinished->iovec_1_last_byte = rendezvous_hdr->iovec_1_last_byte ;
     payload_data_first_address = unfinished->recv.iovec[0].buffer ;
-    payload_data_last_address = unfinished->recv.iovec[0].buffer + unfinished->recv.iovec[0].length - 1 ;
-    /* Mark the payload area so we will be able to check whether the data transfer overwrites it */
+    payload_data_last_address = unfinished->recv.iovec[0].buffer
+        + unfinished->recv.iovec[0].length - 1 ;
+    /* Mark the payload area so we will be able to check
+     * that the data transfer overwrites it
+     */
     *payload_data_first_address = rendezvous_hdr->iovec_1_first_byte ^ 0xff ;
     *payload_data_last_address = rendezvous_hdr->iovec_1_last_byte ^ 0xff ;
 #endif
@@ -1241,19 +1231,29 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
          payload_data_first = *payload_data_first_address ;
          payload_data_last = *payload_data_last_address ;
-         ucs_trace("AM RENDEZVOUS payload msg_id=0x%016lx first=%d last=%d expected first=%d last=%d",
-             unfinished->msg_id, payload_data_first, payload_data_last, unfinished->iovec_1_first_byte, unfinished->iovec_1_last_byte) ;
+         ucs_trace(
+             "AM RENDEZVOUS payload msg_id=0x%016lx"
+             " first=%d last=%d expected first=%d last=%d",
+             unfinished->msg_id, payload_data_first, payload_data_last,
+             unfinished->iovec_1_first_byte, unfinished->iovec_1_last_byte) ;
 
          ucs_assert(payload_data_first == unfinished->iovec_1_first_byte ) ;
          ucs_assert(payload_data_last == unfinished->iovec_1_last_byte) ;
 #endif
         req = ucp_request_get(ep->worker) ;
         ucs_assert(req != NULL) ;
-        ucp_am_send_req_init(req, ep, &(unfinished->rendezvous_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rendezvous_completion_header_t), 0, 0);
+        ucp_am_send_req_init(req, ep,
+            &(unfinished->rendezvous_completion_header),
+            UCP_DATATYPE_CONTIG,
+            sizeof(ucp_am_rendezvous_completion_header_t), 0, 0);
         status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
 
-        ret = ucp_am_rendezvous_send_req(req, ucp_am_rendezvous_completion_contig_short, ucp_am_rendezvous_completion_callback) ;
-        ucs_trace("AM RENDEZVOUS completed immediately in ucp_am_rendezvous_handler ret=%p", ret) ;
+        ret = ucp_am_rendezvous_send_req(req,
+            ucp_am_rendezvous_completion_contig_short,
+            ucp_am_rendezvous_completion_callback) ;
+        ucs_trace(
+    "AM RENDEZVOUS completed immediately in ucp_am_rendezvous_handler ret=%p",
+            ret) ;
         unfinished->completion_request = ret ;
 
         ucp_rkey_destroy(unfinished->rkey) ;
@@ -1264,22 +1264,25 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
         /* Drive the AM data function  */
         if (unfinished->recv.data_fn )
           {
-            unfinished->recv.data_fn(unfinished->recv.iovec[0].buffer, NULL,unfinished->recv.iovec[0].length, unfinished->recv.data_cookie ) ;
+            unfinished->recv.data_fn(unfinished->recv.iovec[0].buffer,
+                NULL,
+                unfinished->recv.iovec[0].length,
+                unfinished->recv.data_cookie ) ;
           }
         /* Drive the AM completion function */
-        status = unfinished->recv.local_fn(worker->am_rendezvous_cbs[rendezvous_hdr->am_id].context,
+        status = unfinished->recv.local_fn(
+                  worker->am_rendezvous_cbs[rendezvous_hdr->am_id].context,
                                           unfinished->recv.cookie,
                                           unfinished->recv.iovec,
                                           1);
         ucs_trace("AM RENDEZVOUS local_fn returns %d", status) ;
-//        if (status != UCS_INPROGRESS) {
-//            ucs_free(all_data);
-//        }
 
         if ( ret == UCS_OK )
         {
            /* Reply AM completed synchronously as well */
-            ucs_trace("AM RENDEZVOUS reply completed immediately in ucp_am_rendezvous_handler") ;
+            ucs_trace(
+      "AM RENDEZVOUS reply completed immediately in ucp_am_rendezvous_handler"
+                ) ;
             ucs_list_del(&unfinished->list);
             ucs_free(unfinished);
 
@@ -1302,14 +1305,18 @@ ucp_am_rendezvous_completed_callback(void *request, ucs_status_t status)
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rendezvous_server_unfinished_t *unfinished ;
 
-    ucs_trace("AM RENDEZVOUS completed callback request=%p status=%d", request, status) ;
+    ucs_trace("AM RENDEZVOUS completed callback request=%p status=%d",
+        request, status) ;
 
 
     unfinished = ucp_am_rendezvous_server_find_unfinished_completion(
         ep, ep_ext, request
         ) ;
     ucs_assert(unfinished != NULL) ;
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completed_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_completed_callback"
+        " unfinished=%p msg_id=0x%016lx",
+        unfinished, unfinished->msg_id) ;
 
     ucs_list_del(&unfinished->list);
     ucs_free(unfinished);
@@ -1336,7 +1343,10 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
 #endif
     ucp_request_t *completion_req ;
 
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_get_completion_callback request=%p req=%p status=%d", request,req,status) ;
+    ucs_trace(
+        "AM RENDEZVOUS ucp_am_rendezvous_get_completion_callback"
+        " request=%p req=%p status=%d",
+        request,req,status) ;
     ucs_assert(status == UCS_OK) ;
     unfinished = ucp_am_rendezvous_server_find_unfinished(
         ep, ep_ext, request
@@ -1345,26 +1355,40 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
 
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
     payload_data_first_address = unfinished->recv.iovec[0].buffer ;
-    payload_data_last_address = unfinished->recv.iovec[0].buffer + unfinished->recv.iovec[0].length - 1 ;
+    payload_data_last_address = unfinished->recv.iovec[0].buffer
+                               + unfinished->recv.iovec[0].length
+                               - 1 ;
     payload_data_first = *payload_data_first_address ;
     payload_data_last = *payload_data_last_address ;
-    ucs_trace("AM RENDEZVOUS payload msg_id=0x%016lx first=%d last=%d expected first=%d last=%d",
-        unfinished->msg_id, payload_data_first, payload_data_last, unfinished->iovec_1_first_byte, unfinished->iovec_1_last_byte) ;
+    ucs_trace(
+        "AM RENDEZVOUS payload"
+        " msg_id=0x%016lx first=%d last=%d expected first=%d last=%d",
+        unfinished->msg_id, payload_data_first, payload_data_last,
+        unfinished->iovec_1_first_byte, unfinished->iovec_1_last_byte) ;
 
     ucs_assert(payload_data_first == unfinished->iovec_1_first_byte ) ;
     ucs_assert(payload_data_last == unfinished->iovec_1_last_byte) ;
 #endif
     unfinished->rendezvous_completion_header.msg_id = unfinished->msg_id ;
-    unfinished->rendezvous_completion_header.ep_ptr = ucp_request_get_dest_ep_ptr(req) ;
+    unfinished->rendezvous_completion_header.ep_ptr =
+        ucp_request_get_dest_ep_ptr(req) ;
 
     completion_req = ucp_request_get(ep->worker) ;
     ucs_assert(completion_req != NULL) ;
 
-    ucp_am_send_req_init(completion_req, ep, &(unfinished->rendezvous_completion_header), UCP_DATATYPE_CONTIG, sizeof(ucp_am_rendezvous_completion_header_t), 0, 0);
+    ucp_am_send_req_init(completion_req, ep,
+        &(unfinished->rendezvous_completion_header),
+        UCP_DATATYPE_CONTIG,
+        sizeof(ucp_am_rendezvous_completion_header_t),
+        0, 0);
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
 
-    ret = ucp_am_rendezvous_send_req(completion_req, ucp_am_rendezvous_completion_contig_short, ucp_am_rendezvous_completed_callback) ;
-    ucs_trace("AM RENDEZVOUS completion ucp_am_send_rendezvous_req ret=%p", ret) ;
+    ret = ucp_am_rendezvous_send_req(completion_req,
+        ucp_am_rendezvous_completion_contig_short,
+        ucp_am_rendezvous_completed_callback) ;
+    ucs_trace(
+        "AM RENDEZVOUS completion ucp_am_send_rendezvous_req ret=%p",
+        ret) ;
     unfinished->completion_request = ret ;
 
     ucp_rkey_destroy(unfinished->rkey) ;
@@ -1375,29 +1399,27 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
     /* Drive the AM data function  */
     if (unfinished->recv.data_fn )
       {
-        unfinished->recv.data_fn(unfinished->recv.iovec[0].buffer, NULL,unfinished->recv.iovec[0].length, unfinished->recv.data_cookie ) ;
+        unfinished->recv.data_fn(
+            unfinished->recv.iovec[0].buffer,
+            NULL,
+            unfinished->recv.iovec[0].length,
+            unfinished->recv.data_cookie ) ;
       }
     /* Drive the AM local function  */
-    status = unfinished->recv.local_fn(worker->am_rendezvous_cbs[unfinished->am_id].context,
+    status = unfinished->recv.local_fn(
+         worker->am_rendezvous_cbs[unfinished->am_id].context,
                                       unfinished->recv.cookie,
                                       unfinished->recv.iovec,
                                       1);
     ucs_trace("AM RENDEZVOUS local_fn returns %d", status) ;
-//    /* Drive the AM function  */
-//    status = worker->am_cbs[unfinished->am_id].cb(worker->am_cbs[unfinished->am_id].context,
-//                                      payload,
-//                                      unfinished->total_size,
-//                                      NULL,
-//                                      UCP_CB_PARAM_FLAG_DATA);
-//
-//    if (status != UCS_INPROGRESS) {
-//        ucs_free(unfinished->all_data);
-//    }
 
     if ( ret == UCS_OK )
       {
         /* AM was issued synchronously; free storage */
-        ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completion_callback unfinished=%p msg_id=0x%016lx", unfinished, unfinished->msg_id) ;
+        ucs_trace(
+            "AM RENDEZVOUS ucp_am_rendezvous_completion_callback"
+            " unfinished=%p msg_id=0x%016lx",
+            unfinished, unfinished->msg_id) ;
 
         ucs_list_del(&unfinished->list);
         ucs_free(unfinished);
@@ -1408,7 +1430,8 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
 }
 
 static ucs_status_t
-ucp_am_rendezvous_completion_handler(void *am_arg, void *am_data, size_t am_length,
+ucp_am_rendezvous_completion_handler(void *am_arg, void *am_data,
+                               size_t am_length,
                                unsigned am_flags)
 {
     ucp_worker_h worker         = (ucp_worker_h)am_arg;
@@ -1416,7 +1439,9 @@ ucp_am_rendezvous_completion_handler(void *am_arg, void *am_data, size_t am_leng
     void * hdr_end = hdr+1 ;
     ucp_am_rendezvous_completion_header_t *rendezvous_completion_hdr =
         (ucp_am_rendezvous_completion_header_t *)hdr_end;
-    ucp_ep_h ep =ucp_worker_get_ep_by_ptr(worker,rendezvous_completion_hdr->ep_ptr) ;
+    ucp_ep_h ep =ucp_worker_get_ep_by_ptr(
+        worker,rendezvous_completion_hdr->ep_ptr
+        ) ;
     ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
     ucp_am_rendezvous_client_unfinished_t *unfinished =
         ucp_am_rendezvous_client_find_unfinished(worker,
@@ -1431,7 +1456,9 @@ ucp_am_rendezvous_completion_handler(void *am_arg, void *am_data, size_t am_leng
 
     status = ucp_mem_unmap(worker->context, unfinished->memh) ;
     ucs_assert(status == UCS_OK) ;
-    ucs_trace("AM RENDEZVOUS ucp_am_rendezvous_completion_handler unfinished=%p req=%p", unfinished, req) ;
+    ucs_trace(
+    "AM RENDEZVOUS ucp_am_rendezvous_completion_handler unfinished=%p req=%p",
+        unfinished, req) ;
 
     if ( req != NULL)
       {
