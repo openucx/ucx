@@ -969,7 +969,23 @@ ucp_am_rendezvous_server_find_unfinished(ucp_ep_h ep,
     ucp_am_rendezvous_server_unfinished_t *unfinished;
     /* TODO make this hash table for faster lookup */
     ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rendezvous_server, list) {
-        if (unfinished->request == request) {
+        if (unfinished->get_request == request) {
+            return unfinished;
+        }
+    }
+
+    return NULL;
+}
+
+static ucp_am_rendezvous_server_unfinished_t *
+ucp_am_rendezvous_server_find_unfinished_completion(ucp_ep_h ep,
+                                   ucp_ep_ext_proto_t *ep_ext,
+                                   ucp_request_t *request)
+{
+    ucp_am_rendezvous_server_unfinished_t *unfinished;
+    /* TODO make this hash table for faster lookup */
+    ucs_list_for_each(unfinished, &ep_ext->am.started_ams_rendezvous_server, list) {
+        if (unfinished->completion_request == request) {
             return unfinished;
         }
     }
@@ -1238,6 +1254,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
 
         ret = ucp_am_rendezvous_send_req(req, ucp_am_rendezvous_completion_contig_short, ucp_am_rendezvous_completion_callback) ;
         ucs_trace("AM RENDEZVOUS completed immediately in ucp_am_rendezvous_handler ret=%p", ret) ;
+        unfinished->completion_request = ret ;
 
         ucp_rkey_destroy(unfinished->rkey) ;
 
@@ -1271,7 +1288,7 @@ ucp_am_rendezvous_handler(void *am_arg, void *am_data, size_t am_length,
     }
     else
     {
-         unfinished->request = sptr ;
+         unfinished->get_request = sptr ;
     }
 
     return UCS_OK ;
@@ -1288,7 +1305,7 @@ ucp_am_rendezvous_completed_callback(void *request, ucs_status_t status)
     ucs_trace("AM RENDEZVOUS completed callback request=%p status=%d", request, status) ;
 
 
-    unfinished = ucp_am_rendezvous_server_find_unfinished(
+    unfinished = ucp_am_rendezvous_server_find_unfinished_completion(
         ep, ep_ext, request
         ) ;
     ucs_assert(unfinished != NULL) ;
