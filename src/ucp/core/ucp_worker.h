@@ -254,8 +254,10 @@ typedef struct ucp_worker {
 
     ucp_worker_am_entry_t        *am_cbs;          /*array of callbacks and their data */
     size_t                        am_cb_array_len; /*len of callback array */
-    ucp_worker_am_rendezvous_entry_t        *am_rendezvous_cbs;          /*array of callbacks and their data */
-    size_t                        am_rendezvous_cb_array_len; /*len of callback array */
+    /*array of callbacks and their data */
+    ucp_worker_am_rendezvous_entry_t        *am_rendezvous_cbs;
+    /*len of callback array */
+    size_t                        am_rendezvous_cb_array_len;
 
     ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
     unsigned                      ep_config_max;   /* Maximal number of configurations */

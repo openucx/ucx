@@ -45,13 +45,19 @@ typedef struct {
 
 enum {
   UCP_PACKED_RKEY_MAX_SIZE = 256 ,   /* Max supported size for a packed rkey */
-  UCP_AM_RENDEZVOUS_IOVEC_0_MAX_SIZE = 32, /* Amount of iovec[0] carried in AM request */
-  UCP_AM_RENDEZVOUS_THRESHOLD = 1      /* If iovec[1] is shorter than this, use the non-RENDEZVOUS path */
+  UCP_AM_RENDEZVOUS_IOVEC_0_MAX_SIZE = 32, /* Amount of iovec[0] carried in
+                                            * AM request
+                                            */
+  UCP_AM_RENDEZVOUS_THRESHOLD = 1      /* If iovec[1] is shorter than this,
+                                        * use the non-RENDEZVOUS path
+                                        */
 };
 
 
 
-/* Set UCP_AM_RENDEZVOUS_VERIFY to 1 if you want the receiver of an AM RENDEZVOUS to check that the RENDEZVOUS was performed OK */
+/* Set UCP_AM_RENDEZVOUS_VERIFY to 1 if you want the receiver of an
+ * AM RENDEZVOUS to check that the RENDEZVOUS was performed OK
+ */
 #define UCP_AM_RENDEZVOUS_VERIFY 1
 
 typedef struct {
@@ -59,14 +65,23 @@ typedef struct {
   uint64_t          msg_id;     /* method to match parts of the same AM */
   uintptr_t         ep_ptr;         /* end point ptr, used for maintaing list
                                    of arrivals */
-  char              rkey_buffer[UCP_PACKED_RKEY_MAX_SIZE] ; /* Packed remote key */
+  char              rkey_buffer[UCP_PACKED_RKEY_MAX_SIZE] ; /* Packed
+                                                             * remote key
+                                                             */
   uintptr_t         address;     /* Address for RENDEZVOUS */
-  size_t            iovec_0_length ; /* Amount of data transferred by iovec[0], for checking */
-  char              iovec_0[UCP_AM_RENDEZVOUS_IOVEC_0_MAX_SIZE] ; /* iovec[0] carried in request */
+  size_t            iovec_0_length ; /* Amount of data transferred
+                                      * by iovec[0]
+                                      */
+  /* iovec[0] carried in request */
+  char              iovec_0[UCP_AM_RENDEZVOUS_IOVEC_0_MAX_SIZE] ;
   uint16_t          am_id;      /* index into callback array */
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-  char              iovec_1_first_byte; /* First byte of iovec[1], fro checking */
-  char              iovec_1_last_byte; /* Last byte of iovec[1], for checking */
+  char              iovec_1_first_byte; /* First byte of iovec[1],
+                                         * for checking
+                                         */
+  char              iovec_1_last_byte; /* Last byte of iovec[1],
+                                        * for checking
+                                        */
 #endif
 } UCS_S_PACKED ucp_am_rendezvous_header_t ;
 
@@ -84,35 +99,45 @@ typedef struct {
 } ucp_am_unfinished_t;
 
 typedef struct {
-  ucs_list_link_t   list;                                  /* entry into list of unfinished AM's */
-  ucs_status_t      status;                                /* status of the rendezvous */
-  ucp_request_t    *req;                                   /* active message request */
-  uint64_t          msg_id;                                /* way to match up all parts of AM */
-  ucp_mem_h         memh;                                  /* memory handle for mapping to the adapter */
-  ucp_rkey_h        rkey;                                  /* remote memory key */
-  ucp_send_callback_t cb ;                                 /* callback to drive when the AM is complete */
-  ucp_am_rendezvous_header_t rendezvous_header ;                       /* What the client initially sends to the AM server */
+  ucs_list_link_t   list;   /* entry into list of unfinished AM's */
+  ucs_status_t      status; /* status of the rendezvous */
+  ucp_request_t    *req;    /* active message request */
+  uint64_t          msg_id; /* way to match up all parts of AM */
+  ucp_mem_h         memh;   /* memory handle for mapping to the adapter */
+  ucp_rkey_h        rkey;   /* remote memory key */
+  ucp_send_callback_t cb ;  /* callback to drive when the AM is complete */
+  /* What the client initially sends to the AM server */
+  ucp_am_rendezvous_header_t rendezvous_header ;
 } ucp_am_rendezvous_client_unfinished_t ;
 
 typedef struct {
-  ucs_list_link_t   list;                        /* entry into list of unfinished AM's */
-  ucp_recv_desc_t  *all_data;                    /* buffer for all parts of the AM */
-  uint64_t          msg_id;                      /* way to match up all parts of AM */
-  size_t            total_size;                  /* size of data for AM */
-  ucp_mem_h         memh;                        /* memory handle for mapping to the adapter */
-  ucp_rkey_h        rkey;                        /* key for remote memory */
-  ucp_request_t     *get_request ;               /* request for rdma get */
-  ucp_request_t     *completion_request;         /* request for completion AM */
+  ucs_list_link_t   list;          /* entry into list of unfinished AM's */
+  ucp_recv_desc_t  *all_data;      /* buffer for all parts of the AM */
+  uint64_t          msg_id;        /* way to match up all parts of AM */
+  size_t            total_size;    /* size of data for AM */
+  ucp_mem_h         memh;        /* memory handle for mapping to the adapter */
+  ucp_rkey_h        rkey;          /* key for remote memory */
+  ucp_request_t     *get_request ; /* request for rdma get */
+  ucp_request_t     *completion_request; /* request for completion AM */
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-  size_t            iovec_0_length;              /* Amount of data transferred by iovec[0], for checking */
+  size_t            iovec_0_length; /* Amount of data transferred by iovec[0],
+                                     * for checking
+                                     * */
 #endif
-  ucp_am_rendezvous_completion_header_t rendezvous_completion_header ; /* What the client sents when RENDEZVOUS is complete */
-  uint16_t          am_id ;                      /* active message function index */
+  /* What the client sents when RENDEZVOUS is complete */
+  ucp_am_rendezvous_completion_header_t rendezvous_completion_header ;
+  uint16_t          am_id ;       /* active message function index */
 #if defined(UCP_AM_RENDEZVOUS_VERIFY)
-  char              iovec_1_first_byte;          /* First byte of iovec[1], fro checking */
-  char              iovec_1_last_byte;           /* Last byte of iovec[1], for checking */
+  char              iovec_1_first_byte; /* First byte of iovec[1],
+                                         * for checking
+                                         */
+  char              iovec_1_last_byte;  /* Last byte of iovec[1],
+                                         * for checking
+                                         */
 #endif
-  ucp_am_rendezvous_recv_t recv ;                /* Items filled in by initial application AM */
+  ucp_am_rendezvous_recv_t recv ;  /* Items filled in by
+                                    * initial application AM
+                                    */
 } ucp_am_rendezvous_server_unfinished_t ;
 
 void ucp_am_ep_init(ucp_ep_h ep);
