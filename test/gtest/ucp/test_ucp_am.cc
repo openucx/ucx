@@ -137,7 +137,7 @@ ucs_status_t test_ucp_am_base::am_rendezvous_handler(test_ucp_am_base *me, void 
   {
     assert(length <= 32) ;
     me->am_rendezvous_length = length ;
-    memcpy(me->am_rendezvous_buffer_0, data, length ;
+    memcpy(me->am_rendezvous_buffer_0, data, length) ;
     recv->local_fn        = test_ucp_am_base::ucp_process_am_rendezvous_completion_handler ;
     recv->cookie          = me ;
     recv->data_fn         = NULL ;
