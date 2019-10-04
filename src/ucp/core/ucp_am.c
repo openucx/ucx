@@ -1365,6 +1365,7 @@ ucp_am_rendezvous_get_completion_callback(void *request, ucs_status_t status)
 
     ret = ucp_am_rendezvous_send_req(completion_req, ucp_am_rendezvous_completion_contig_short, ucp_am_rendezvous_completed_callback) ;
     ucs_trace("AM RENDEZVOUS completion ucp_am_send_rendezvous_req ret=%p", ret) ;
+    unfinished->completion_request = ret ;
 
     ucp_rkey_destroy(unfinished->rkey) ;
 
