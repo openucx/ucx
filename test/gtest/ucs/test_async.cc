@@ -600,7 +600,7 @@ UCS_TEST_P(test_async, warn_block) {
         if (!m_warnings.empty()) {
             UCS_TEST_MESSAGE << "< " << m_warnings.back() << " >";
         }
-        EXPECT_GE((m_warnings.size() - warn_count), 1);
+        EXPECT_GE((m_warnings.size() - warn_count), 1ul);
     }
 }
 
