@@ -418,12 +418,16 @@ enum ucp_am_cb_flags {
  * @brief Flags for sending a UCP Active Message.
  *
  * Flags dictate the behavior of ucp_am_send_nb
- * currently the only flag tells UCP to pass in
+ * UCP_AM_SEND_REPLY tells UCP to pass in
  * the sending endpoint to the call
  * back so a reply can be defined.
+ * UCP_AM_SEND_RENDEZVOUS tells UCP to
+ * use 'rendezvous' protocol if UCP considers it
+ * appropriate.
  */
 enum ucp_send_am_flags {
-    UCP_AM_SEND_REPLY = UCS_BIT(0)
+    UCP_AM_SEND_REPLY      = UCS_BIT(0),
+    UCP_AM_SEND_RENDEZVOUS = UCS_BIT(1)
 };
 
 
@@ -2178,37 +2182,6 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
  */
 void ucp_rkey_destroy(ucp_rkey_h rkey);
 
-
-/**
- * @ingroup UCP_WORKER
- * @brief Add user defined callback for Active Message.
- *
- * This routine installs a user defined callback to handle incoming Active
- * Messages with a specific id. This callback is called whenever an Active 
- * Message that was sent from the remote peer by @ref ucp_am_send_nb is 
- * received on this worker.
- *
- * @param [in]  worker      UCP worker on which to set the Active Message 
- *                          handler.
- * @param [in]  id          Active Message id.
- * @param [in]  cb          Active Message callback. NULL to clear.
- * @param [in]  arg         Active Message argument, which will be passed
- *                          in to every invocation of the callback as the
- *                          arg argument.
- * @param [in]  flags       Dictates how an Active Message is handled on the
- *                          remote endpoint. Currently only
- *                          UCP_AM_FLAG_WHOLE_MSG is supported, which
- *                          indicates the callback will not be invoked
- *                          until all data has arrived.
- *
- * @return error code if the worker does not support Active Messages or
- *         requested callback flags.
- */
-ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
-                                       ucp_am_callback_t cb, void *arg,
-                                       uint32_t flags);
-
-
 /**
  * @ingroup UCP_COMM
  * @brief Send Active Message.
@@ -2225,7 +2198,7 @@ ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  cb          Callback that is invoked upon completion of the 
  *                          data transfer if it is not completed immediately.
- * @param [in]  flags       For Future use.
+ * @param [in]  flags       See @ref ucp_send_am_flags .
  *
  * @return NULL             Active Message was sent immediately.
  * @return UCS_PTR_IS_ERR(_ptr) Error sending Active Message.
@@ -3135,6 +3108,188 @@ ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
                                      ucp_send_callback_t cb);
 
 
+/**
+ * @brief UCP active message rendezvous parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_params_t are
+ * present. It is used to enable backward compatibility support.
+ */
+enum ucp_am_params_field {
+  UCP_AM_PARAMS_FIELD_FLAGS      = UCS_BIT(0), /**< Flags field */
+                                               /** Max size of the
+                                                * iovec returned by
+                                                * the initial AM
+                                                */
+  UCP_AM_PARAMS_FIELD_IOVEC_SIZE = UCS_BIT(1)
+};
+
+/**
+ * @brief Tuning parameters for the UCP active message.
+ *
+ * The structure defines the parameters that are used for the
+ * UCP active message function
+ */
+typedef struct ucp_am_params {
+  uint64_t field_mask;
+  uint64_t flags;
+
+                  /** Number of elements that the ucp library should
+                   *  allocate in the 'iovec 'for the callback to
+                   *  fill in.
+                   */
+  size_t   iovec_size;
+} ucp_am_params_t;
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Completion callback for data arrivals.
+ *
+ * This callback routine is invoked whenever the @ref ucp_tag_send_nb
+ * The ucp library will drive a function on the arrival of each fragment
+ * of data from the initiator.
+ *
+ * @param [out} target    Where the data should be placed. NULL if no copying
+ *                        needed.
+ * @param [in}  source    Where the data currently is
+ * @param [in]  bytes     How much data has just arrived
+ * @param [in]  cookie    Data cookie from the ucp_am_recv structure
+ */
+typedef void (*ucp_am_data_function_t)(void *target, void *source,
+                                       size_t bytes, void *cookie);
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Completion callback for transfer from initiator complete.
+ *
+ * The ucp library will drive a function when the transfer from the
+ * initiator is complete.
+ *
+ * @param [in}  arg             Request structure
+ * @param [in}  cookie          Cookie from the ucp_am_recv structure
+ * @param [in]  iovec           Description of the received data
+ * @param [in]  iovec_length    Number of elements in iovec
+ */
+typedef ucs_status_t (*ucp_am_local_function_t)(void *arg, void *cookie,
+                                                ucp_dt_iov_t *iovec,
+	                                            size_t iovec_length);
+/**
+ * @brief UCP active message rendezvous redeive parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_am_recv are
+ * present. It is used to enable backward compatibility support.
+ */
+enum ucp_am_params_recv {
+  UCP_AM_PARAMS_RECV_FIELD_FLAGS      = UCS_BIT(0) /**< Flags field */
+};
+/*
+ * Structure for communication between the active message
+ * callback and the ucp library. The ucp library sets up 'iovec_max_length'
+ * to indicate the length of the iovec in this structure; the remaining
+ * fields are set by the callback to indicate what should happen
+ * with the remaining data from the initiator. In the initial implementation,
+ * iovec_max_length is always 1.
+ */
+typedef struct ucp_am_recv {
+	uint64_t                field_mask;
+	uint64_t                flags;
+    /** Function to be driven when data transfer is complete */
+    ucp_am_local_function_t local_fn;
+    /** Argument to be passed to local_fn */
+    void                   *cookie;
+    /** Function to be driven when each fragment of data transfer is complete
+     *  In the initial implementation, all data is transferred in one fragment,
+     *  so the data_fn is called once just before the local_fn .
+     */
+    ucp_am_data_function_t  data_fn;
+    /** Argument to be passed to data_fn */
+    void                   *data_cookie;
+    /** Size of iovec allocated by the ucp library */
+    size_t                  iovec_max_length;
+    /** Size of iovec filled in by the callback */
+    size_t                  iovec_length;
+    /** iovec indicating where the data from the initiator is to be placed */
+    ucp_dt_iov_t           *iovec_ptr;
+  } ucp_am_recv_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming Active Message.
+ *
+ * If the UCP_AM_SEND_RENDEZVOUS flag is set, and the AM is for an iovec with
+ * exactly 2 elements, and the first element length does not exceed a
+ * threshold (32 bytes in the initial implementation), then the AM gets
+ * carried partially by RDMA. The first element of the iovec
+ * is carried in the initial packet from the initiator. The
+ * second element of the iovec, nominally the bulk data, is carried by the
+ * target issuing an RDMA 'get'.
+ *
+ * When the callback is called, @a flags indicates how @a data should be handled.
+ *
+ * @param [in]  arg      User-defined argument.
+ * @param [in]  data     Points to the received data for iovec[0].
+ * @param [in]  length   Length of data for iovec[0].
+ * @param [in]  reply_ep If the Active Message is sent with the
+ *                       UCP_AM_SEND_REPLY flag, the sending ep
+ *                       will be passed in. If not, NULL will be passed.
+ * @param [in]  flags    If this flag is set to UCP_CB_PARAM_FLAG_DATA,
+ *                       the callback can return UCS_INPROGRESS and
+ *                       data will persist after the callback returns.
+ * @param [in]  remaining_length Length of data which has not yet been
+ *                       transferred
+ * @param [out] recv     Struture passed to the ucp library to control
+ *                       placement of the remaining data
+ *
+ * @return UCS_OK        @a data will not persist after the callback returns.
+ *
+ * @return UCS_INPROGRESS Can only be returned if flags is set to
+ *                        UCP_CB_PARAM_FLAG_DATA. If UCP_INPROGRESS
+ *                        is returned, data will persist after the
+ *                        callback has returned. To free the memory,
+ *                        a pointer to the data must be passed into
+ *                        @ref ucp_am_data_release.
+ *
+ * @return UCS_ERR_NO_MEMORY Callback was unable to allocate memory for
+ *                        Active Message to be received into
+ *
+ *
+ * @note This callback should be set and released
+ *       by @ref ucp_worker_set_am_rndv_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_am_rndv_callback_t)(void *arg, void *data,
+                                               size_t length,
+                                               ucp_ep_h reply_ep,
+                                               unsigned flags,
+                                               size_t remaining_length,
+                                               ucp_am_recv_t *recv);
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Add user defined callback for Active Message.
+ *
+ * This routine installs a user defined callback to handle incoming Active
+ * Messages with a specific id. This callback is called whenever an Active
+ * Message that was sent from the remote peer by @ref ucp_am_send_nb
+ * is received on this worker
+ *
+ * @param [in]  worker      UCP worker on which to set the Active Message
+ *                          handler.
+ * @param [in]  params      Tuning parameters for the active message
+ * @param [in]  id          Active Message id.
+ * @param [in]  cb          Active Message callback. NULL to clear.
+ * @param [in]  arg         Active Message argument, which will be passed
+ *                          in to every invocation of the callback as the
+ *                          arg argument.
+ *
+ * @return error code if the worker does not support Active Messages or
+ *         requested callback flags.
+ */
+ucs_status_t ucp_worker_set_am_rndv_handler(ucp_worker_h worker,
+                                            const ucp_am_params_t *params,
+                                            uint16_t id,
+                                            ucp_am_callback_t cb,
+                                            void *arg);
 /**
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.

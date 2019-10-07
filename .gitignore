@@ -85,3 +85,4 @@ GTAGS
 *.swp
 compile_commands.json
 docs/_build
+/Debug/

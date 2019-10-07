@@ -64,10 +64,11 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release,
     ucp_recv_desc_release(rdesc);
 }
 
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
                  (worker, id, cb, arg, flags),
-                 ucp_worker_h worker, uint16_t id, 
-                 ucp_am_callback_t cb, void *arg, 
+                 ucp_worker_h worker, uint16_t id,
+                 ucp_am_callback_t cb, void *arg,
                  uint32_t flags)
 {
     size_t num_entries;
@@ -77,13 +78,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
 
     if (id >= worker->am_cb_array_len) {
         num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
-        worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries * 
+        worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries *
                                      sizeof(ucp_worker_am_entry_t),
                                      "UCP AM callback array");
-        memset(worker->am_cbs + worker->am_cb_array_len, 
+        memset(worker->am_cbs + worker->am_cb_array_len,
                0, (num_entries - worker->am_cb_array_len)
                * sizeof(ucp_worker_am_entry_t));
-        
+
         worker->am_cb_array_len = num_entries;
     }
 

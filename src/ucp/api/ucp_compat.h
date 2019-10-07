@@ -498,6 +498,34 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  */
 ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Add user defined callback for Active Message.
+ *
+ * This routine installs a user defined callback to handle incoming Active
+ * Messages with a specific id. This callback is called whenever an Active
+ * Message that was sent from the remote peer by @ref ucp_am_send_nb is
+ * received on this worker.
+ *
+ * @param [in]  worker      UCP worker on which to set the Active Message
+ *                          handler.
+ * @param [in]  id          Active Message id.
+ * @param [in]  cb          Active Message callback. NULL to clear.
+ * @param [in]  arg         Active Message argument, which will be passed
+ *                          in to every invocation of the callback as the
+ *                          arg argument.
+ * @param [in]  flags       Dictates how an Active Message is handled on the
+ *                          remote endpoint. Currently only
+ *                          UCP_AM_FLAG_WHOLE_MSG is supported, which
+ *                          indicates the callback will not be invoked
+ *                          until all data has arrived.
+ *
+ * @return error code if the worker does not support Active Messages or
+ *         requested callback flags.
+ */
+ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
+                                       ucp_am_callback_t cb, void *arg,
+                                       uint32_t flags);
 
 END_C_DECLS
 

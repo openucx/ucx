@@ -470,7 +470,6 @@ typedef enum ucp_wakeup_event_types {
                                               ones. */
 } ucp_wakeup_event_t;
 
-
 /**
  * @ingroup UCP_ENDPOINT
  * @brief Callback to process incoming Active Message.
@@ -502,9 +501,9 @@ typedef enum ucp_wakeup_event_types {
  *       by @ref ucp_worker_set_am_handler function.
  *
  */
-typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
+typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data,
+		                                  size_t length,
                                           ucp_ep_h reply_ep, unsigned flags);
-
 
 /**
  * @ingroup UCP_ENDPOINT
