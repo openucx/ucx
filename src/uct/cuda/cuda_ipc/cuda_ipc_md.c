@@ -137,7 +137,7 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
         CUresult result = cuIpcOpenMemHandle(&rkey->d_mapped,
                                              rkey->ph,
                                              CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-        *accessible = (result != CUDA_SUCCESS && result != CUDA_ERROR_ALREADY_MAPPED)
+        *accessible = ((result != CUDA_SUCCESS) && (result != CUDA_ERROR_ALREADY_MAPPED))
                     ? 0 : 1;
     }
 
@@ -148,10 +148,10 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_component_t *component,
                                              const void *rkey_buffer,
                                              uct_rkey_t *rkey_p, void **handle_p)
 {
-    uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
+    uct_cuda_ipc_component_t *com = ucs_derived_of(component, uct_cuda_ipc_component_t);
+    uct_cuda_ipc_key_t *packed    = (uct_cuda_ipc_key_t *) rkey_buffer;
     uct_cuda_ipc_key_t *key;
     ucs_status_t status;
-    uct_cuda_ipc_component_t *com = ucs_derived_of(component, uct_cuda_ipc_component_t);
 
     status = uct_cuda_ipc_is_peer_accessible(com, packed);
 
@@ -239,14 +239,8 @@ static void uct_cuda_ipc_md_close(uct_md_h uct_md)
 {
     uct_cuda_ipc_md_t *md = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
 
-    if (md->uuid_map) {
-        ucs_free(md->uuid_map);
-    }
-
-    if (md->peer_accessible_cache) {
-        ucs_free(md->peer_accessible_cache);
-    }
-
+    ucs_free(md->uuid_map);
+    ucs_free(md->peer_accessible_cache);
     ucs_free(md);
 }
 

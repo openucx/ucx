@@ -29,8 +29,8 @@ typedef struct uct_cuda_ipc_md {
  * @brief cuda ipc component extension
  */
 typedef struct uct_cuda_ipc_component {
-    struct uct_component  super;
-    uct_cuda_ipc_md_t*	  md;
+    uct_component_t    super;
+    uct_cuda_ipc_md_t* md;
 } uct_cuda_ipc_component_t;
 
 extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
