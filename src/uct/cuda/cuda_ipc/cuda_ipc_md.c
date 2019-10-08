@@ -278,6 +278,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map          = ucs_malloc(md->uuid_map_capacity * sizeof(CUuuid),
                                        "uct_cuda_ipc_uuid_map");
     if (md->uuid_map == NULL) {
+        free(md);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -285,6 +286,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->peer_accessible_cache = ucs_malloc(num_devices * md->uuid_map_capacity,
                                            "uct_cuda_ipc_peer_accessible_cache");
     if (md->peer_accessible_cache == NULL) {
+        free(md->uuid_map);
+        free(md);
         return UCS_ERR_NO_MEMORY;
     }
 
