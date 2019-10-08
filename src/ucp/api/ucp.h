@@ -3222,7 +3222,7 @@ typedef struct ucp_am_rendezvous_recv {
    *                       UCP_AM_SEND_REPLY flag, the sending ep
    *                       will be passed in. If not, NULL will be passed.
    * @param [in]  flags    0.
-   * @parame[out] recv     Struture passed to the ucp library to control
+   * @param [out] recv     Struture passed to the ucp library to control
    *                       placement of the remaining data
    *
    * @return UCS_OK        @a data will not persist after the callback returns.
