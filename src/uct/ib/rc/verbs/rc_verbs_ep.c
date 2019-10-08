@@ -63,32 +63,20 @@ uct_rc_verbs_ep_is_fence(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep)
         }
     }
 
-    /* iface is scheduled and no flush request is posted.
+    /* fence is scheduled and no flush request is posted.
      * schedule flush operation */
-    status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, 0);
+    status = uct_rc_verbs_ep_flush(&ep->super.super.super, 0, NULL);
     if (status == UCS_OK) {
         /* no entries in queue - nothing to fence */
         uct_rc_ep_fm_reset(&iface->super, &ep->fi);
-        return UCS_OK;
-    }
-    
-    if (status == UCS_ERR_NO_RESOURCE) {
+    } else if (status == UCS_INPROGRESS) {
+        /* ok, queue is not empty & there are no un-signalled entries
+        * or last entry scheduled as "signalled" */
+        ep->fi.fence_beat = iface->super.tx.fi.fence_beat - UCT_RC_FENCE_INPROGRESS;
         return UCS_ERR_NO_RESOURCE;
     }
 
-    ucs_assert(status == UCS_INPROGRESS);
-    if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        /* there are un-signalled entries and we may post signal entry */
-        status = uct_rc_verbs_ep_put_short(&ep->super.super.super, NULL, 0, 0, 0);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    /* ok, queue is not empty & there are no un-signalled entries
-     * or last entry scheduled as "signalled" */
-    ep->fi.fence_beat = iface->super.tx.fi.fence_beat - UCT_RC_FENCE_INPROGRESS;
-    return UCS_ERR_NO_RESOURCE;
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
