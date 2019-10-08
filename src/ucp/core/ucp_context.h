@@ -387,7 +387,7 @@ ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwid
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
 {
     return (context->memtype_cache &&
-            !context->memtype_cache->pgtable.num_regions);
+            ucs_memtype_cache_is_empty(context->memtype_cache));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
@@ -401,7 +401,7 @@ ucp_memory_type_detect(ucp_context_h context, void *address, size_t length)
     }
 
     if (ucs_likely(context->memtype_cache != NULL)) {
-        if (!context->memtype_cache->pgtable.num_regions) {
+        if (ucs_memtype_cache_is_empty(context->memtype_cache)) {
             return UCS_MEMORY_TYPE_HOST;
         }
 

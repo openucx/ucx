@@ -10,27 +10,30 @@
 #include "memory_type.h"
 
 #include <ucs/datastruct/pgtable.h>
-#include <ucs/datastruct/list.h>
+#include <ucs/datastruct/queue_types.h>
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
 
 
 BEGIN_C_DECLS
 
-typedef struct ucs_memtype_cache         ucs_memtype_cache_t;
-typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
-
+typedef struct ucs_memtype_cache_region      ucs_memtype_cache_region_t;
+typedef struct ucs_memtype_cache             ucs_memtype_cache_t;
 
 struct ucs_memtype_cache_region {
-    ucs_pgt_region_t    super;    /**< Base class - page table region */
-    ucs_list_link_t     list;     /**< List element */
-    ucs_memory_type_t   mem_type; /**< Memory type the address belongs to */
+    uint8_t                         color;    /**< Color field */
+    ucs_memory_type_t               mem_type; /**< Memory type the address belongs to */
+    ucs_queue_elem_t                elem;     /**< Queue elem */
+    void                            *address; /**< Starting address of a region */
+    size_t                          size;     /**< Size of a region */
+    struct ucs_memtype_cache_region *left;    /**< Left successor */
+    struct ucs_memtype_cache_region *right;   /**< Right successor */
 };
 
 
 struct ucs_memtype_cache {
-    pthread_rwlock_t      lock;       /**< protests the page table */
-    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
+    pthread_rwlock_t           lock;  /**< Protects the page table */
+    ucs_memtype_cache_region_t *rbtree; /**< RB tree to hold the regions */
 };
 
 
@@ -48,6 +51,9 @@ ucs_status_t ucs_memtype_cache_create(ucs_memtype_cache_t **memtype_cache_p);
  * @param [in]  memtype_cache       Memtype cache to destroy.
  */
 void ucs_memtype_cache_destroy(ucs_memtype_cache_t *memtype_cache);
+
+
+int ucs_memtype_cache_is_empty(ucs_memtype_cache_t *memtype_cache);
 
 
 /**
