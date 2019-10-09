@@ -184,28 +184,37 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                       unsigned length, uint64_t remote_addr,
-                                       uct_rkey_t rkey)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_verbs_ep_put_inline(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep,
+                           const void *buffer, unsigned length,
+                           uint64_t remote_addr, uct_rkey_t rkey)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-
-    UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
-
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    if ((buffer != NULL) || length || rkey) {
-        UCT_RC_VERBS_CHECK_FENCE(iface, ep);
-    } else {
-        /* "flush" operation - check for EP/IFACE resources only */
-        UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    }
-
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
                               IBV_SEND_INLINE | IBV_SEND_SIGNALED, INT_MAX);
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_verbs_ep_no_op(uct_ep_h tl_ep)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    return uct_rc_verbs_ep_put_inline(iface, ep, NULL, 0, 0, 0);
+}
+
+ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
+                                       unsigned length, uint64_t remote_addr,
+                                       uct_rkey_t rkey)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
+    UCT_RC_VERBS_CHECK_RES(iface, ep);
+    return uct_rc_verbs_ep_put_inline(iface, ep, buffer, length, remote_addr, rkey);
 }
 
 ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
@@ -436,7 +445,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+        status = uct_rc_verbs_ep_no_op(tl_ep);
         if (status != UCS_OK) {
             return status;
         }
