@@ -175,10 +175,10 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  */
 #define ucs_list_for_each_safe(_elem, _telem, _head, _member) \
     for (_elem = ucs_container_of((_head)->next, typeof(*_elem), _member), \
-        _telem = ucs_container_of(_elem->_member.next, typeof(*_elem), _member); \
-        &_elem->_member != (_head); \
-        _elem = _telem, \
-        _telem = ucs_container_of(_telem->_member.next, typeof(*_telem), _member))
+         _telem = ucs_container_of((_elem)->_member.next, typeof(*_elem), _member); \
+         &(_elem)->_member != (_head); \
+         _elem = _telem, \
+         _telem = ucs_container_of((_telem)->_member.next, typeof(*_telem), _member))
 
 /**
  * Extract list head
