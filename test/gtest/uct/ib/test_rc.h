@@ -158,8 +158,9 @@ public:
     void send_eager_zcopy(mapped_buffer *buf);
     void send_rndv_zcopy(mapped_buffer *buf);
     void send_rndv_request(mapped_buffer *buf);
+    void send_am_bcopy(mapped_buffer *buf);
     void test_common(send_func sfunc, size_t num_segs, size_t exp_segs = 1,
-                     bool exp_val = true);
+                     bool is_eager = true);
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
                                    unsigned flags);
@@ -174,7 +175,9 @@ public:
                                    const void *rkey_buf);
 
 protected:
-    static size_t m_rx_counter;
+    static size_t      m_rx_counter;
+    std::vector<void*> m_uct_descs;
+    bool               m_hold_uct_desc;
 
     uct_test::entity& sender() {
         return **m_entities.begin();
@@ -185,7 +188,10 @@ protected:
     }
 
 private:
-    ucs_status_t unexp_handler(unsigned flags, uint64_t imm, void **context);
+    ucs_status_t unexp_handler(void *data, unsigned flags, uint64_t imm,
+                               void **context);
+    ucs_status_t handle_uct_desc(void *data, unsigned flags);
+    void set_env_var_or_skip(void *config, const char *var, const char *val);
     size_t           m_max_hdr;
     bool             m_first_received;
     bool             m_last_received;

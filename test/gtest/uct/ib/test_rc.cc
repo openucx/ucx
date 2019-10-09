@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -318,7 +318,8 @@ UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control)
 
 size_t test_rc_mp_xrq::m_rx_counter = 0;
 
-test_rc_mp_xrq::test_rc_mp_xrq() : m_first_received(false),
+test_rc_mp_xrq::test_rc_mp_xrq() : m_hold_uct_desc(false),
+                                   m_first_received(false),
                                    m_last_received(false)
 {
     m_max_hdr        = sizeof(ibv_tmh) + sizeof(ibv_rvh);
@@ -367,6 +368,8 @@ void test_rc_mp_xrq::init()
     m_entities.push_back(receiver);
 
     sender->connect(0, *receiver, 0);
+
+    uct_iface_set_am_handler(receiver->iface(), AM_ID, am_handler, this, 0);
 }
 
 void test_rc_mp_xrq::send_eager_bcopy(mapped_buffer *buf)
@@ -414,22 +417,43 @@ void test_rc_mp_xrq::send_rndv_request(mapped_buffer *buf)
     ASSERT_UCS_OK(uct_ep_tag_rndv_request(sender().ep(0), 0x11, hdr, size, 0));
 }
 
-void test_rc_mp_xrq::test_common(send_func sfunc, size_t num_segs,
-                                 size_t exp_segs, bool exp_val)
+void test_rc_mp_xrq::send_am_bcopy(mapped_buffer *buf)
 {
-    size_t seg_size = rc_mlx5_iface(sender())->super.super.config.seg_size;
-    size_t size     = (seg_size * num_segs) - m_max_hdr;
-    m_rx_counter    = 0;
+    ssize_t len = uct_ep_am_bcopy(sender().ep(0), AM_ID, mapped_buffer::pack,
+                                  reinterpret_cast<void*>(buf), 0);
+
+    EXPECT_EQ(buf->length(), static_cast<size_t>(len));
+}
+
+void test_rc_mp_xrq::test_common(send_func sfunc, size_t num_segs,
+                                 size_t exp_segs, bool is_eager)
+{
+    size_t seg_size  = rc_mlx5_iface(sender())->super.super.config.seg_size;
+    size_t seg_num   = is_eager ? num_segs : 1;
+    size_t exp_val   = is_eager ? exp_segs : 1;
+    size_t size      = (seg_size * seg_num) - m_max_hdr;
+    m_rx_counter     = 0;
+    m_first_received = m_last_received = false;
 
     EXPECT_TRUE(size <= sender().iface_attr().cap.tag.eager.max_bcopy);
     mapped_buffer buf(size, SEND_SEED, sender());
 
     (this->*sfunc)(&buf);
 
-    wait_for_value(&m_rx_counter, exp_segs, true);
-    EXPECT_EQ(exp_segs, m_rx_counter);
-    EXPECT_EQ(exp_val, m_first_received);
-    EXPECT_EQ(exp_val, m_last_received);
+    wait_for_value(&m_rx_counter, exp_val, true);
+    EXPECT_EQ(exp_val, m_rx_counter);
+    EXPECT_EQ(is_eager, m_first_received); // relevant for eager only
+    EXPECT_EQ(is_eager, m_last_received);  // relevant for eager only
+}
+
+ucs_status_t test_rc_mp_xrq::handle_uct_desc(void *data, unsigned flags)
+{
+    if ((flags & UCT_CB_PARAM_FLAG_DESC) && m_hold_uct_desc) {
+        m_uct_descs.push_back(data);
+        return UCS_INPROGRESS;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t test_rc_mp_xrq::am_handler(void *arg, void *data, size_t length,
@@ -440,11 +464,12 @@ ucs_status_t test_rc_mp_xrq::am_handler(void *arg, void *data, size_t length,
 
    m_rx_counter++;
 
-   return UCS_OK;
+   test_rc_mp_xrq *self = reinterpret_cast<test_rc_mp_xrq*>(arg);
+   return self->handle_uct_desc(data, flags);
 }
 
-ucs_status_t test_rc_mp_xrq::unexp_handler(unsigned flags, uint64_t imm,
-                                           void **context)
+ucs_status_t test_rc_mp_xrq::unexp_handler(void *data, unsigned flags,
+                                           uint64_t imm, void **context)
 {
     void *self = reinterpret_cast<void*>(this);
 
@@ -468,7 +493,8 @@ ucs_status_t test_rc_mp_xrq::unexp_handler(unsigned flags, uint64_t imm,
         EXPECT_EQ(0ul, imm);
     }
 
-    return UCS_OK;
+
+    return handle_uct_desc(data, flags);
 }
 
 ucs_status_t test_rc_mp_xrq::unexp_eager(void *arg, void *data, size_t length,
@@ -479,7 +505,7 @@ ucs_status_t test_rc_mp_xrq::unexp_eager(void *arg, void *data, size_t length,
 
     m_rx_counter++;
 
-    return self->unexp_handler(flags, imm, context);
+    return self->unexp_handler(data, flags, imm, context);
 }
 
 ucs_status_t test_rc_mp_xrq::unexp_rndv(void *arg, unsigned flags,
@@ -524,51 +550,61 @@ UCS_TEST_P(test_rc_mp_xrq, config)
     EXPECT_LT(attrs->cap.am.max_zcopy, iface->super.super.config.seg_size);
 }
 
+UCS_TEST_P(test_rc_mp_xrq, desc_release)
+{
+    m_hold_uct_desc = true; // We want to "hold" UCT memory descriptors
+    std::pair<send_func, bool> sfuncs[5] = {
+              std::make_pair(&test_rc_mp_xrq::send_eager_bcopy,  true),
+              std::make_pair(&test_rc_mp_xrq::send_eager_zcopy,  true),
+              std::make_pair(&test_rc_mp_xrq::send_rndv_zcopy,   false),
+              std::make_pair(&test_rc_mp_xrq::send_rndv_request, false),
+              std::make_pair(&test_rc_mp_xrq::send_am_bcopy,     false)
+    };
+
+    for (int i = 0; i < 5; ++i) {
+        test_common(sfuncs[i].first, 3, 3, sfuncs[i].second);
+    }
+
+    for (ucs::ptr_vector<void>::const_iterator iter = m_uct_descs.begin();
+         iter != m_uct_descs.end(); ++iter)
+    {
+        uct_iface_release_desc(*iter);
+    }
+}
+
 UCS_TEST_P(test_rc_mp_xrq, am)
 {
-    size_t size  = sender().iface_attr().cap.am.max_bcopy;
-    m_rx_counter = 0;
-
-    uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, NULL, 0);
-    mapped_buffer buf(size, SEND_SEED, sender());
-    ssize_t len = uct_ep_am_bcopy(sender().ep(0), AM_ID, mapped_buffer::pack,
-                                  reinterpret_cast<void*>(&buf), 0);
-
-    EXPECT_EQ(buf.length(), static_cast<size_t>(len));
-    wait_for_value(&m_rx_counter, 1ul, true);
-    EXPECT_EQ(1ul, m_rx_counter);
+    test_common(&test_rc_mp_xrq::send_am_bcopy, 1, 1, false);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, bcopy_eager_only)
 {
-    test_common(static_cast<send_func>(&test_rc_mp_xrq::send_eager_bcopy), 1);
+    test_common(&test_rc_mp_xrq::send_eager_bcopy, 1);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, zcopy_eager_only)
 {
-    test_common(static_cast<send_func>(&test_rc_mp_xrq::send_eager_zcopy), 1);
+    test_common(&test_rc_mp_xrq::send_eager_zcopy, 1);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, bcopy_eager)
 {
-    test_common(static_cast<send_func>(&test_rc_mp_xrq::send_eager_bcopy), 5, 5);
+    test_common(&test_rc_mp_xrq::send_eager_bcopy, 5, 5);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, zcopy_eager)
 {
-    test_common(static_cast<send_func>(&test_rc_mp_xrq::send_eager_zcopy), 5, 5);
+    test_common(&test_rc_mp_xrq::send_eager_zcopy, 5, 5);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, rndv_zcopy)
 {
-    test_common(static_cast<send_func>(&test_rc_mp_xrq::send_rndv_zcopy),
-                5, 1, false);
+    test_common(&test_rc_mp_xrq::send_rndv_zcopy, 1, 1, false);
 }
 
 UCS_TEST_P(test_rc_mp_xrq, rndv_request)
 {
-    test_common(static_cast<send_func>(&test_rc_mp_xrq::send_rndv_request),
-                1, 1, false);
+    test_common(&test_rc_mp_xrq::send_rndv_request, 1, 1, false);
 }
 
 // !! Do not instantiate test_rc_mp_xrq now, until MP XRQ support is upstreamed
