@@ -238,7 +238,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_cancel, (worker, req, mode),
     }
 }
 
-static UCS_F_ALWAYS_INLINE int
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_offload_do_post(ucp_request_t *req)
 {
     ucp_worker_t *worker   = req->recv.worker;
@@ -466,7 +466,7 @@ ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data,
                                             req->send.tag.tag, imm_data,
                                             pack_cb, req, 0);
     if (packed_len < 0) {
-        return packed_len;
+        return (ucs_status_t)packed_len;
     }
     return UCS_OK;
 }

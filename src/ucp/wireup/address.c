@@ -676,8 +676,9 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     }
 
 out:
-    ucs_assertv(buffer + size == ptr, "buffer=%p size=%zu ptr=%p ptr-buffer=%zd",
-                buffer, size, ptr, ptr - buffer);
+    ucs_assertv(UCS_PTR_BYTE_OFFSET(buffer, size) == ptr,
+                "buffer=%p size=%zu ptr=%p ptr-buffer=%zd",
+                buffer, size, ptr, UCS_PTR_BYTE_DIFF(buffer, ptr));
     return UCS_OK;
 }
 

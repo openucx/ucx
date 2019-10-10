@@ -185,7 +185,7 @@ ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, ssize_t offset,
     ucs_assert(offset <= rdesc->length);
 
     if (ucs_unlikely(offset < 0)) {
-        return offset;
+        return (ucs_status_t)offset;
     } else if (ucs_likely(offset == rdesc->length)) {
         ucp_stream_rdesc_dequeue_and_release(rdesc, ep_ext);
     } else {
@@ -500,8 +500,8 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     p = buffer + strlen(buffer);
 
     ucs_assert(hdr->ep_ptr != 0);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + hdr_len,
-                     length - hdr_len);
+    ucp_dump_payload(worker->context, p, buffer + max - p,
+                     UCS_PTR_BYTE_OFFSET(data, hdr_len), length - hdr_len);
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_STREAM_DATA, ucp_stream_am_handler,
