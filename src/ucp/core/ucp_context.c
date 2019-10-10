@@ -1626,3 +1626,25 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
     /* Memory type not detected by any memtype MD - assume it is host memory */
     return UCS_MEMORY_TYPE_HOST;
 }
+
+uint64_t ucp_context_tl_bitmap(ucp_context_h context, const char *dev_name)
+{
+    uint64_t        tl_bitmap;
+    ucp_rsc_index_t tl_idx;
+
+    if (dev_name == NULL) {
+        return context->tl_bitmap;
+    }
+
+    tl_bitmap = 0;
+
+    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+        if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
+            continue;
+        }
+
+        tl_bitmap |= UCS_BIT(tl_idx);
+    }
+
+    return tl_bitmap;
+}

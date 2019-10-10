@@ -17,6 +17,7 @@
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -56,10 +57,17 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
+    ucp_lane_index_t i;
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
+    for (i = 0; i < UCP_MAX_LANES; ++i) {
+        key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
+        key->lanes[i].proxy_lane   = UCP_NULL_LANE;
+        key->lanes[i].dst_md_index = UCP_MAX_MDS;
+    }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
+    key->cm_lane          = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
@@ -292,26 +300,21 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_params(&key, params);
 
-    /* all operations will use the first lane, which is a stub endpoint */
     key.num_lanes             = 1;
-    key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
-    key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
-    key.am_lane               = 0;
-    key.wireup_lane           = 0;
-    key.tag_lane              = UCP_NULL_LANE; /* should be initialized only if
-                                                  HW TM is supported */
-    key.am_bw_lanes[0]        = 0;
-    key.rma_lanes[0]          = 0;
-    key.rma_bw_lanes[0]       = 0;
-    key.amo_lanes[0]          = 0;
-
+    if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
+        key.cm_lane           = 0;
+    } else {
+        /* all operations will use the first lane, which is a stub endpoint */
+        key.wireup_lane       = 0;
+        key.am_lane           = 0;
+    }
     status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    ep->am_lane               = 0;
-    ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+    ep->am_lane = key.wireup_lane;
+    ep->flags  |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
     if (status != UCS_OK) {
@@ -397,7 +400,9 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_cleanup_lanes;
     }
 
-    status = ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
+    status = ucp_worker_sockaddr_is_cm_proto(ep->worker) ?
+             ucp_ep_client_cm_connect_start(ep, params) :
+             ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
@@ -864,6 +869,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->am_lane          != key2->am_lane)                                  ||
         (key1->tag_lane         != key2->tag_lane)                                 ||
         (key1->wireup_lane      != key2->wireup_lane)                              ||
+        (key1->cm_lane          != key2->cm_lane)                                  ||
         (key1->err_mode         != key2->err_mode)                                 ||
         (key1->status           != key2->status))
     {
@@ -1720,4 +1726,16 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     }
 
     return zcopy_thresh;
+}
+
+ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
+{
+    const ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+
+    if (lane == UCP_NULL_LANE) {
+        return NULL;
+    }
+
+    return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
+           (ucp_wireup_ep_t *)ep->uct_eps[lane] : NULL;
 }
