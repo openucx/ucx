@@ -220,7 +220,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 /**
  * Instantiate the parameterized test case a combination of transports.
  *
- * @param _test_case   Test case class, derived from uct_test.
+ * @param _test_case   Test case class, derived from ucp_test.
  * @param _name        Instantiation name.
  * @param ...          Transport names.
  */
@@ -235,7 +235,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 /**
  * Instantiate the parameterized test case for all transport combinations.
  *
- * @param _test_case  Test case class, derived from uct_test.
+ * @param _test_case  Test case class, derived from ucp_test.
  */
 #define UCP_INSTANTIATE_TEST_CASE(_test_case) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,    "dc_x") \
