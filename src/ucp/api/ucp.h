@@ -3229,7 +3229,7 @@ typedef struct ucp_am_rendezvous_recv {
    *
    *
    * @note This callback should be set and released
-   *       by @ref ucp_worker_set_am_rendezvous handler function.
+   *       by @ref ucp_worker_set_am_rendezvous_handler function.
    *
    */
 typedef ucs_status_t (*ucp_am_rendezvous_callback_t)(
