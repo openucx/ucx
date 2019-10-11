@@ -105,7 +105,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ep->worker                      = worker;
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
-    ep->conn_sn                     = -1;
+    ep->conn_sn                     = (ucp_ep_conn_sn_t)-1;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
     ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
@@ -253,13 +253,14 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         }
 
         status = ucp_address_pack(worker, NULL,
-                                  context->mem_type_access_tls[mem_type], -1,
-                                  NULL, &address_length, &address_buffer);
+                                  context->mem_type_access_tls[mem_type],
+                                  UINT64_MAX, NULL, &address_length,
+                                  &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer, -1, &local_address);
+        status = ucp_address_unpack(worker, address_buffer, UINT64_MAX, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -438,7 +439,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR |
                      UCP_ADDRESS_PACK_FLAG_TRACE;
     } else {
-        addr_flags = -1;
+        addr_flags = UINT64_MAX;
     }
 
     status = ucp_address_unpack(worker, sa_data + 1, addr_flags,
@@ -553,7 +554,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(worker, params->address, -1, &remote_address);
+    status = ucp_address_unpack(worker, params->address, UINT64_MAX, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1116,7 +1117,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     if (iface_attr->cap.flags & bcopy_flag) {
         config->max_bcopy = max_bcopy;
     } else {
-        config->max_bcopy = -1;
+        config->max_bcopy = SIZE_MAX;
     }
 
     md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -1209,7 +1210,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
+    for (mem_type = UCS_MEMORY_TYPE_HOST; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }

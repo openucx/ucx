@@ -206,7 +206,7 @@ ucp_atomic_fetch_b(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode, uint64_t value,
     void *request;
 
     request = ucp_atomic_fetch_nb(ep, opcode, value, result, size, remote_addr,
-                                  rkey, (void*)ucs_empty_function);
+                                  rkey, (ucp_send_callback_t)ucs_empty_function);
     return ucp_rma_wait(ep->worker, request, op_name);
 }
 

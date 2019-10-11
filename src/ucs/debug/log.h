@@ -29,8 +29,8 @@ BEGIN_C_DECLS
 #define ucs_log(_level, _fmt, ...) \
     do { \
         if (ucs_log_is_enabled(_level)) { \
-            ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, (_level), \
-                             _fmt, ## __VA_ARGS__); \
+            ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, \
+                             (ucs_log_level_t)(_level), _fmt, ## __VA_ARGS__); \
         } \
     } while (0)
 
