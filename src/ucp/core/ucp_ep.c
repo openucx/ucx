@@ -1082,9 +1082,25 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
               config->tag.rndv.rma_thresh, config->tag.rndv_send_nbr.rma_thresh);
 }
 
-static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_short,
-                                             ssize_t max_short, int num_mem_type_mds)
+/* Maximal Eager short limit has to be set during EP initialization
+ * as it is not updated during UCP Send operations as other limits
+ * due to performance reasons */
+static void
+ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_short,
+                                 size_t rndv_thresh, size_t zcopy_thresh,
+                                 int should_adjust_by_zcopy,
+                                 ssize_t max_short, int num_mem_type_mds)
 {
+    /* Adjust maximal short by ZCOPY protocol threshold */
+    if (should_adjust_by_zcopy && (max_short > 0)) {
+        max_short = ucs_min(max_short, zcopy_thresh);
+    }
+
+    /* Adjust maximal short by RNDV protocol threshold */
+    if (max_short > 0) {
+        max_short = ucs_min(max_short, rndv_thresh);
+    }
+
     if (!num_mem_type_mds) {
         max_eager_short->memtype_off = max_short;
     }
@@ -1146,9 +1162,6 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->zcopy_auto_thresh    = 0;
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
                 ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
-        /* adjust max_short if zcopy_thresh is set externally */
-        config->max_short = ucs_min(config->max_short,
-                                    (ssize_t)config->zcopy_thresh[0]);
     }
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
@@ -1236,11 +1249,15 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->am_u.reply_proto            = &ucp_am_reply_proto;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
-
-    config->tag.offload.max_eager_short.memtype_on   = -1;
-    config->tag.offload.max_eager_short.memtype_off  = -1;
-    config->tag.max_eager_short.memtype_on           = -1;
-    config->tag.max_eager_short.memtype_off          = -1;
+    
+    config->tag.offload.max_eager_short.memtype_on           = -1;
+    config->tag.offload.max_eager_short.memtype_off          = -1;
+    config->tag.offload.max_eager_send_nbr_short.memtype_on  = -1;
+    config->tag.offload.max_eager_send_nbr_short.memtype_off = -1;
+    config->tag.max_eager_short.memtype_on                   = -1;
+    config->tag.max_eager_short.memtype_off                  = -1;
+    config->tag.max_eager_send_nbr_short.memtype_on          = -1;
+    config->tag.max_eager_send_nbr_short.memtype_off         = -1;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
         rsc_index = config->key.lanes[lane].rsc_index;
@@ -1311,10 +1328,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
-            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
-                                             config->tag.eager.max_short,
-                                             context->num_mem_type_detect_mds);
-
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
 
@@ -1325,9 +1338,29 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                               UCT_IFACE_FLAG_TAG_RNDV_ZCOPY,
                                               max_rndv_thresh);
             }
+
+            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
+                                             ucs_min(max_am_rndv_thresh,
+                                                     max_rndv_thresh),
+                                             config->tag.eager.zcopy_thresh[0],
+                                             /* adjust max_short if zcopy_thresh
+                                              * is set externally */
+                                             !config->tag.eager.zcopy_auto_thresh,
+                                             config->tag.eager.max_short,
+                                             context->num_mem_type_detect_mds);
+
+            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_send_nbr_short,
+                                             ucs_min(max_rndv_thresh,
+                                                     max_am_rndv_thresh),
+                                             config->tag.eager.zcopy_thresh[0],
+                                             /* don't adjust max_short for
+                                              * ucp_tag_send_nbr() */ 0,
+                                             config->tag.eager.max_short,
+                                             context->num_mem_type_detect_mds);
         }
     }
 
+    /* Configuration for active messages */
     if (config->key.am_lane != UCP_NULL_LANE) {
         lane        = config->key.am_lane;
         rsc_index   = config->key.lanes[lane].rsc_index;
@@ -1362,10 +1395,25 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                               config->key.rma_bw_lanes,
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
-                config->tag.eager                      = config->am;
-                config->tag.lane                       = lane;
+                config->tag.eager = config->am;
+                config->tag.lane  = lane;
 
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
+                                                 ucs_min(config->tag.rndv.am_thresh,
+                                                         config->tag.rndv.rma_thresh),
+                                                 config->tag.eager.zcopy_thresh[0],
+                                                 /* adjust max_short if zcopy_thresh
+                                                  * is set externally */
+                                                 !config->tag.eager.zcopy_auto_thresh,
+                                                 config->tag.eager.max_short,
+                                                 context->num_mem_type_detect_mds);
+
+                ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_send_nbr_short,
+                                                 ucs_min(config->tag.rndv_send_nbr.am_thresh,
+                                                         config->tag.rndv_send_nbr.rma_thresh),
+                                                 config->tag.eager.zcopy_thresh[0],
+                                                 /* don't adjust max_short for
+                                                  * ucp_tag_send_nbr() */ 0,
                                                  config->tag.eager.max_short,
                                                  context->num_mem_type_detect_mds);
             }
@@ -1623,6 +1671,8 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     ucp_context_h context = worker->context;
     char lane_info[128]   = {0};
     const ucp_ep_msg_config_t *tag_config;
+    const ucp_memtype_thresh_t *max_eager_short;
+    const ucp_memtype_thresh_t *max_eager_send_nbr_short;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
 
@@ -1634,24 +1684,32 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     fprintf(stream, "#\n");
 
     if (context->config.features & UCP_FEATURE_TAG) {
-         tag_config = (ucp_ep_is_tag_offload_enabled((ucp_ep_config_t *)config)) ?
-                       &config->tag.eager : &config->am;
-         ucp_ep_config_print_tag_proto(stream, "tag_send",
-                                       tag_config->max_short,
-                                       tag_config->zcopy_thresh[0],
-                                       config->tag.rndv.rma_thresh,
-                                       config->tag.rndv.am_thresh);
-         ucp_ep_config_print_tag_proto(stream, "tag_send_nbr",
-                                       tag_config->max_short,
-                                       /* disable zcopy */
-                                       config->tag.rndv_send_nbr.rma_thresh,
-                                       config->tag.rndv_send_nbr.rma_thresh,
-                                       config->tag.rndv_send_nbr.am_thresh);
-         ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
-                                       tag_config->max_short,
-                                       tag_config->sync_zcopy_thresh[0],
-                                       config->tag.rndv.rma_thresh,
-                                       config->tag.rndv.am_thresh);
+        if (ucp_ep_is_tag_offload_enabled((ucp_ep_config_t *)config)) {
+            tag_config               = &config->tag.eager;
+            max_eager_short          = &config->tag.offload.max_eager_short;
+            max_eager_send_nbr_short = &config->tag.offload.max_eager_send_nbr_short;
+        } else {
+            tag_config               = &config->am;
+            max_eager_short          = &config->tag.max_eager_short;
+            max_eager_send_nbr_short = &config->tag.max_eager_send_nbr_short;
+        }
+
+        ucp_ep_config_print_tag_proto(stream, "tag_send",
+                                      max_eager_short->memtype_on,
+                                      tag_config->zcopy_thresh[0],
+                                      config->tag.rndv.rma_thresh,
+                                      config->tag.rndv.am_thresh);
+        ucp_ep_config_print_tag_proto(stream, "tag_send_nbr",
+                                      max_eager_send_nbr_short->memtype_on,
+                                      /* disable zcopy */
+                                      config->tag.rndv_send_nbr.rma_thresh,
+                                      config->tag.rndv_send_nbr.rma_thresh,
+                                      config->tag.rndv_send_nbr.am_thresh);
+        ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
+                                      max_eager_short->memtype_on,
+                                      tag_config->sync_zcopy_thresh[0],
+                                      config->tag.rndv.rma_thresh,
+                                      config->tag.rndv.am_thresh);
      }
 
      if (context->config.features & UCP_FEATURE_RMA) {

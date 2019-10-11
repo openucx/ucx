@@ -404,8 +404,8 @@ static UCS_F_ALWAYS_INLINE ssize_t
 ucp_proto_get_short_max(const ucp_request_t *req,
                         const ucp_ep_msg_config_t *msg_config)
 {
-    return  (!UCP_DT_IS_CONTIG(req->send.datatype) ||
+    return (!UCP_DT_IS_CONTIG(req->send.datatype) ||
             (req->flags & UCP_REQUEST_FLAG_SYNC) ||
-            (!UCP_MEM_IS_HOST(req->send.mem_type))) ?
+            !UCP_MEM_IS_HOST(req->send.mem_type)) ?
            -1 : msg_config->max_short;
 }

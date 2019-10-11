@@ -21,13 +21,13 @@
 
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
+ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t dt_count,
                            size_t max_iov, size_t rndv_rma_thresh,
                            size_t rndv_am_thresh)
 {
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:
-        if ((count > max_iov) &&
+        if ((dt_count > max_iov) &&
             ucp_ep_is_tag_offload_enabled(ucp_ep_config(req->send.ep))) {
             /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
@@ -45,9 +45,31 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
     return SIZE_MAX;
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_get_zcopy_threshold(const ucp_request_t *req,
+                            const ucp_ep_msg_config_t *msg_config,
+                            size_t dt_count, size_t rndv_thresh,
+                            int enable_zcopy)
+{
+    return ((enable_zcopy ||
+             ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) ?
+            ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
+                                          rndv_thresh) : rndv_thresh);
+        
+}
+
+static UCS_F_ALWAYS_INLINE ssize_t
+ucp_tag_get_max_short(const ucp_request_t *req,
+                      const ucp_ep_msg_config_t *msg_config,
+                      size_t zcopy_thresh, size_t rndv_thresh)
+{
+    return ucs_min(ucs_min(ucp_proto_get_short_max(req, msg_config),
+                           (ssize_t)zcopy_thresh),
+                   (ssize_t)rndv_thresh);
+}
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
-                 const ucp_ep_msg_config_t* msg_config,
+                 const ucp_ep_msg_config_t *msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
                  ucp_send_callback_t cb, const ucp_proto_t *proto,
                  int enable_zcopy)
@@ -56,16 +78,12 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                                      msg_config->max_iov,
                                                      rndv_rma_thresh,
                                                      rndv_am_thresh);
-    ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
+    size_t zcopy_thresh = ucp_tag_get_zcopy_threshold(req, msg_config,
+                                                      dt_count, rndv_thresh,
+                                                      enable_zcopy);
+    ssize_t max_short   = ucp_tag_get_max_short(req, msg_config,
+                                                zcopy_thresh, rndv_thresh);
     ucs_status_t status;
-    size_t zcopy_thresh;
-
-    if (enable_zcopy || ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
-        zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
-                                                     rndv_thresh);
-    } else {
-        zcopy_thresh = rndv_thresh;
-    }
 
     ucs_trace_req("select tag request(%p) progress algorithm datatype=%lx "
                   "buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
@@ -149,13 +167,15 @@ ucp_tag_eager_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short
                         ssize_t length)
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
-            (length <= max_eager_short->memtype_on &&
+            ((length <= max_eager_short->memtype_on) &&
              ucp_memory_type_cache_is_empty(ep->worker->context)));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
-                    uintptr_t datatype, ucp_tag_t tag)
+                    uintptr_t datatype, ucp_tag_t tag,
+                    const ucp_memtype_thresh_t *tag_max_eager_short,
+                    const ucp_memtype_thresh_t *tag_offload_max_eager_short)
 {
     ucs_status_t status;
     size_t length;
@@ -166,13 +186,13 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
 
     length = ucp_contig_dt_length(datatype, count);
 
-    if (ucp_tag_eager_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short,
+    if (ucp_tag_eager_is_inline(ep, tag_max_eager_short,
                                 length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
                                  tag, buffer, length);
-    } else if (ucp_tag_eager_is_inline(ep, &ucp_ep_config(ep)->tag.offload.max_eager_short,
+    } else if (ucp_tag_eager_is_inline(ep, tag_offload_max_eager_short,
                                        length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
@@ -187,7 +207,6 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
 
     return status;
 }
-
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
                  (ep, buffer, count, datatype, tag, cb),
@@ -205,8 +224,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
     ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count,
-                              datatype, tag);
+    status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer,
+                              count, datatype, tag,
+                              &ucp_ep_config(ep)->tag.max_eager_short,
+                              &ucp_ep_config(ep)->tag.offload.max_eager_short);
     if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
         ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
         goto out;
@@ -245,8 +266,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
     ucs_trace_req("send_nbr buffer %p count %zu tag %"PRIx64" to %s req %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), request);
 
-    status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count,
-                              datatype, tag);
+    status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer,
+                              count, datatype, tag,
+                              &ucp_ep_config(ep)->tag.max_eager_send_nbr_short,
+                              &ucp_ep_config(ep)->tag.offload.max_eager_send_nbr_short);
     if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
         UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
         return status;

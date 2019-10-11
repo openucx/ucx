@@ -168,20 +168,21 @@ typedef struct ucp_ep_rma_config {
  * Configuration for AM and tag offload protocols
  */
 typedef struct ucp_ep_msg_config {
-        ssize_t            max_short;
-        size_t             max_bcopy;
-        size_t             max_zcopy;
-        size_t             max_iov;
+    /* maximal short value is not adjusted by rndv and zcopy thresholds */
+    ssize_t            max_short;
+    size_t             max_bcopy;
+    size_t             max_zcopy;
+    size_t             max_iov;
 
-        /* zero-copy threshold for operations which do not have to wait for remote side */
-        size_t             zcopy_thresh[UCP_MAX_IOV];
+    /* zero-copy threshold for operations which do not have to wait for remote side */
+    size_t             zcopy_thresh[UCP_MAX_IOV];
 
-        /* zero-copy threshold for mem type buffers */
-        size_t             mem_type_zcopy_thresh[UCS_MEMORY_TYPE_LAST];
+    /* zero-copy threshold for mem type buffers */
+    size_t             mem_type_zcopy_thresh[UCS_MEMORY_TYPE_LAST];
 
-        /* zero-copy threshold for operations which anyways have to wait for remote side */
-        size_t             sync_zcopy_thresh[UCP_MAX_IOV];
-        uint8_t            zcopy_auto_thresh; /* if != 0 the zcopy enabled */
+    /* zero-copy threshold for operations which anyways have to wait for remote side */
+    size_t             sync_zcopy_thresh[UCP_MAX_IOV];
+    uint8_t            zcopy_auto_thresh; /* if != 0 the zcopy enabled */
 } ucp_ep_msg_config_t;
 
 
@@ -189,8 +190,8 @@ typedef struct ucp_ep_msg_config {
  * Thresholds with and without non-host memory
  */
 typedef struct ucp_memtype_thresh {
-        ssize_t            memtype_on;
-        ssize_t            memtype_off;
+    ssize_t            memtype_on;
+    ssize_t            memtype_off;
 } ucp_memtype_thresh_t;
 
 
@@ -230,6 +231,9 @@ typedef struct ucp_ep_config {
         /* Maximal size for eager short. */
         ucp_memtype_thresh_t max_eager_short;
 
+        /* Maximal size for ucp_tag_send_nbr()'s eager short. */
+        ucp_memtype_thresh_t max_eager_send_nbr_short;
+
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
         ucp_ep_msg_config_t eager;
@@ -262,6 +266,9 @@ typedef struct ucp_ep_config {
         struct {
             /* Maximal size for eager short. */
             ucp_memtype_thresh_t max_eager_short;
+
+            /* Maximal size for ucp_tag_send_nbr()'s eager short. */
+            ucp_memtype_thresh_t max_eager_send_nbr_short;
 
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
