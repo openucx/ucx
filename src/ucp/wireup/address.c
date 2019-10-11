@@ -487,7 +487,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
          *   local iface attrs */
         unified   = flags_ptr;
         rsc_index = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
-        attr      = &ucp_worker_iface(worker, rsc_index)->attr;
+        attr      = ucp_worker_iface_get_attr(worker, rsc_index);
         if (is_ep_addr) {
             *addr_length = attr->ep_addr_len;
             *is_last     = 1; /* in unified mode, there's only 1 ep address */
