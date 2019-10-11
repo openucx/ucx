@@ -83,6 +83,13 @@ AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
 
 
 #
+# Force link_all_deplibs=yes for libtool, otherwise it will not
+# link against dependency libs
+#
+link_all_deplibs=yes
+
+
+#
 # Check if 'ln' supports creating relative links
 #
 AC_MSG_CHECKING([if ${LN_S} supports --relative])
