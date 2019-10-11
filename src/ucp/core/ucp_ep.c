@@ -254,8 +254,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL,
                                   context->mem_type_access_tls[mem_type],
-                                  UINT64_MAX, NULL, &address_length,
-                                  &address_buffer);
+                                  UCP_ADDRESS_PACK_FLAG_ALL,
+                                  NULL, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }

@@ -41,7 +41,13 @@ enum {
     UCP_ADDRESS_PACK_FLAG_IFACE_ADDR     = UCS_BIT(3),
     UCP_ADDRESS_PACK_FLAG_EP_ADDR        = UCS_BIT(4),
     UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO = UCS_BIT(5),
-    UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16) /* show debug prints of pack/unpack */
+    UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16), /* show debug prints of pack/unpack */
+    UCP_ADDRESS_PACK_FLAG_ALL            = UCP_ADDRESS_PACK_FLAG_WORKER_UUID |
+                                           UCP_ADDRESS_PACK_FLAG_WORKER_NAME |
+                                           UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
+                                           UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  |
+                                           UCP_ADDRESS_PACK_FLAG_EP_ADDR     |
+                                           UCP_ADDRESS_PACK_FLAG_TRACE
 };
 
 
