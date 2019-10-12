@@ -36,12 +36,10 @@ static ucs_status_t ucp_cm_preinit_client_lanes(ucp_ep_h ucp_ep)
 {
     ucp_worker_h worker        = ucp_ep->worker;
     ucp_ep_config_key_t key    = ucp_ep_config(ucp_ep)->key;
+    /* Do not pack HW AMO TLS because ucp_ep lanes are bound to specific device
+     * which may be different form worker->atomic_tls */
     uint64_t addr_pack_flags   = UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
-                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  |
-                                 /* Disable HW AMO because ucp_ep lanes are
-                                  * bound to specific device which may be
-                                  * different form worker->atomic_tls */
-                                 UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO;
+                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
     ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     void *ucp_addr;
     size_t ucp_addr_size;
@@ -186,9 +184,8 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
      * uct_cm_remote_data_t */
     status = ucp_address_pack(worker, ep, tl_bitmap,
                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                              UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
-                              UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO, NULL,
-                              &ucp_addr_size, &ucp_addr);
+                              UCP_ADDRESS_PACK_FLAG_EP_ADDR,
+                              NULL, &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;
     }

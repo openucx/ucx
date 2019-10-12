@@ -597,7 +597,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                       context->tl_rscs[rsc_index].tl_name_csum);
 
             /* Transport information */
-            enable_amo = !(flags & UCP_ADDRESS_PACK_FLAG_DISABLE_HW_AMO) &&
+            enable_amo = (flags & UCP_ADDRESS_PACK_FLAG_HW_AMO_TLS) &&
                          worker->atomic_tls & UCS_BIT(rsc_index);
             attr_len   = ucp_address_pack_iface_attr(worker, ptr, rsc_index,
                                                      iface_attr, enable_amo);
