@@ -47,8 +47,7 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
     *packed          = *mem_hndl;
     packed->d_mapped = 0;
 
-    return cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num) == CUDA_SUCCESS
-           ? UCS_OK : UCS_ERR_IO_ERROR;
+    return UCT_CUDADRV_FUNC(cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num));
 }
 
 static inline int uct_cuda_ipc_uuid_equals(const CUuuid* a, const CUuuid* b)

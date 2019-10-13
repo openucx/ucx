@@ -40,7 +40,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
          # Check cuda libraries
          AS_IF([test "x$cuda_happy" = "xyes"],
-                [AC_CHECK_LIB([cuda], [cuPointerGetAttribute],
+                [AC_CHECK_LIB([cuda], [cuDeviceGetUuid],
                               [CUDA_LDFLAGS="$CUDA_LDFLAGS -lcuda"], [cuda_happy="no"])])
          AS_IF([test "x$cuda_happy" = "xyes"],
                 [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
