@@ -556,7 +556,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
 
     rndv_mode = worker->context->config.ext.rndv_mode;
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
-        if (rndv_rts_hdr->address && (rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY)) {
+        if (rndv_rts_hdr->address &&
+            (rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY) &&
+            (rndv_rts_hdr->size >= ucp_ep_config(ep)->tag.rndv.min_get_zcopy)) {
             /* try to fetch the data with a get_zcopy operation */
             ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr);
             goto out;
