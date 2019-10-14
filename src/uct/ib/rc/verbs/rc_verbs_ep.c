@@ -38,7 +38,13 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
     txcnt->pi = txcnt->ci = 0;
 }
 
-static ucs_status_t
+static UCS_F_ALWAYS_INLINE int
+uct_rc_verbs_ep_fence_state(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep)
+{
+    return iface->super.tx.fi.fence_beat - ep->fi.fence_beat;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_ep_is_fence(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep)
 {
     ucs_status_t status;
@@ -51,7 +57,7 @@ uct_rc_verbs_ep_is_fence(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep)
         return UCS_OK;
     }
     
-    if (iface->super.tx.fi.fence_beat - ep->fi.fence_beat == UCT_RC_FENCE_INPROGRESS) {
+    if (uct_rc_verbs_ep_fence_state(iface, ep) == UCT_RC_FENCE_INPROGRESS) {
         /* flush op is posted */
         if (uct_rc_txqp_available(&ep->super.txqp) != iface->config.tx_max_wr) {
             /* not all outstanding ops are completed */
