@@ -1,5 +1,6 @@
 # See https://aka.ms/yaml
 
+pr: none
 trigger:
   tags:
     include:
