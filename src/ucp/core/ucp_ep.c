@@ -1739,5 +1739,5 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
     }
 
     return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
-           (ucp_wireup_ep_t *)ep->uct_eps[lane] : NULL;
+           ucs_derived_of(ep->uct_eps[lane], ucp_wireup_ep_t) : NULL;
 }
