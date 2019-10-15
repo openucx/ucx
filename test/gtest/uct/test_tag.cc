@@ -146,7 +146,7 @@ public:
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ctx.mbuf->ptr(),
                                 ctx.mbuf->length(), ctx.mbuf->memh(),
-                                sender().iface_attr().cap.tag.eager.max_iov);
+                                e.iface_attr().cap.tag.eager.max_iov);
 
         ucs_status_t status = uct_ep_tag_eager_zcopy(e.ep(0), ctx.tag,
                                                      ctx.imm_data, iov, iovcnt,

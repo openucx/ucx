@@ -518,7 +518,7 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_advice2uct(unsigned ucp_advice, unsigned *uct_advice) 
+static ucs_status_t ucp_advice2uct(unsigned ucp_advice, uct_mem_advice_t *uct_advice) 
 {
     switch(ucp_advice) {
     case UCP_MADV_NORMAL:
@@ -537,7 +537,7 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 {
     ucs_status_t status, tmp_status;
     int md_index;
-    unsigned uct_advice;
+    uct_mem_advice_t uct_advice;
     uct_mem_h uct_memh;
 
     if (!ucs_test_all_flags(params->field_mask,
@@ -548,7 +548,8 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     }
 
     if ((params->address < memh->address) ||
-        (params->address + params->length > memh->address + memh->length)) {
+        (UCS_PTR_BYTE_OFFSET(params->address, params->length) >
+         UCS_PTR_BYTE_OFFSET(memh->address, memh->length))) {
         return UCS_ERR_INVALID_PARAM;
     }
 

@@ -28,7 +28,7 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
     packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb,
                                      req, 0);
     if (packed_len < 0) {
-        return packed_len;
+        return (ucs_status_t)packed_len;
     }
 
     return UCS_OK;
@@ -92,9 +92,9 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                     continue;
                 }
                 ucs_assert(status == UCS_INPROGRESS);
-                return UCP_STATUS_PENDING_SWITCH;
+                return (ucs_status_t)UCP_STATUS_PENDING_SWITCH;
             } else {
-                return packed_len;
+                return (ucs_status_t)packed_len;
             }
         } else {
             return UCS_INPROGRESS;
@@ -126,7 +126,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
         } else {
             iov[0].memh = UCT_MEM_HANDLE_NULL;
         }
-        iov[0].buffer = (void *)src_iov + state->offset;
+        iov[0].buffer = UCS_PTR_BYTE_OFFSET(src_iov, state->offset);
         iov[0].length = length_max;
         iov[0].stride = 0;
         iov[0].count  = 1;
@@ -142,7 +142,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
         state->dt.iov.iov_offset    = 0;
         while ((dst_it < max_dst_iov) && (src_it < max_src_iov)) {
             if (src_iov[src_it].length) {
-                iov[dst_it].buffer  = src_iov[src_it].buffer + iov_offset;
+                iov[dst_it].buffer  = UCS_PTR_BYTE_OFFSET(src_iov[src_it].buffer, iov_offset);
                 iov[dst_it].length  = src_iov[src_it].length - iov_offset;
                 iov[dst_it].memh    = state->dt.iov.dt_reg[src_it].memh[0];
                 iov[dst_it].stride  = 0;

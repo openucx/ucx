@@ -1106,7 +1106,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     ucs_string_set_init(&avail_tls);
-    for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+    UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
+    for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
         ucs_string_set_init(&avail_devices[dev_type]);
     }
 
@@ -1205,7 +1206,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      * configuration, but are not available
      */
     if (config->warn_invalid_config) {
-        for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+        UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
+        for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
             ucp_report_unavailable(&config->devices[dev_type],
                                    dev_cfg_masks[dev_type],
                                    ucp_device_type_names[dev_type], " device",
@@ -1234,7 +1236,8 @@ err_free_resources:
 out_release_components:
     uct_release_component_list(uct_components);
 out_cleanup_avail_devices:
-    for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+    UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
+    for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
         ucs_string_set_cleanup(&avail_devices[dev_type]);
     }
     ucs_string_set_cleanup(&avail_tls);
@@ -1369,7 +1372,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                     !strcmp(method_name, uct_alloc_method_names[method]))
                 {
                     /* Found the allocation method in the internal name list */
-                    context->config.alloc_methods[i].method = method;
+                    context->config.alloc_methods[i].method = (uct_alloc_method_t)method;
                     strcpy(context->config.alloc_methods[i].cmpt_name, "");
                     ucs_debug("allocation method[%d] is '%s'", i, method_name);
                     break;
@@ -1625,4 +1628,26 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
 
     /* Memory type not detected by any memtype MD - assume it is host memory */
     return UCS_MEMORY_TYPE_HOST;
+}
+
+uint64_t ucp_context_tl_bitmap(ucp_context_h context, const char *dev_name)
+{
+    uint64_t        tl_bitmap;
+    ucp_rsc_index_t tl_idx;
+
+    if (dev_name == NULL) {
+        return context->tl_bitmap;
+    }
+
+    tl_bitmap = 0;
+
+    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+        if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
+            continue;
+        }
+
+        tl_bitmap |= UCS_BIT(tl_idx);
+    }
+
+    return tl_bitmap;
 }

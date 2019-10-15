@@ -150,11 +150,12 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
     hdr           = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
     priv_data_ret = cep->wireup.priv_pack_cb(cep->user_data, dev_name, hdr + 1);
 
-    if ((priv_data_ret < 0) || (priv_data_ret > uct_rdmacm_cm_get_max_conn_priv())) {
+    if ((priv_data_ret < 0) ||
+        (priv_data_ret > uct_rdmacm_cm_get_max_conn_priv())) {
         ucs_error("rdma_cm private data pack function on ep %p returned "
                   "%zd (max: %zu)", cep, priv_data_ret,
                    uct_rdmacm_cm_get_max_conn_priv());
-        status = UCS_ERR_INVALID_PARAM;
+        status = (priv_data_ret < 0) ? priv_data_ret : UCS_ERR_EXCEEDS_LIMIT;
         goto err;
     }
 

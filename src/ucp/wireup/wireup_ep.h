@@ -39,6 +39,8 @@ struct ucp_wireup_ep {
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
+    ucp_ep_params_t           ucp_ep_params; /**< UCP EP paramters */
+    char                      dev_name[UCT_DEVICE_NAME_MAX];
 };
 
 
@@ -91,5 +93,8 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
+
+unsigned ucp_wireup_sockaddr_ep_init_flags(ucp_worker_h worker,
+                                           const ucp_ep_params_t *params);
 
 #endif

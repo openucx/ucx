@@ -109,7 +109,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
                                  ucp_wireup_msg_pack, req, am_flags);
     if (packed_len < 0) {
         if (packed_len != UCS_ERR_NO_RESOURCE) {
-            ucs_error("failed to send wireup: %s", ucs_status_string(packed_len));
+            ucs_error("failed to send wireup: %s",
+                      ucs_status_string((ucs_status_t)packed_len));
         }
         return (ucs_status_t)packed_len;
     }
@@ -190,7 +191,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     /* pack all addresses */
     status = ucp_address_pack(ep->worker,
                               ucp_wireup_is_ep_needed(ep) ? ep : NULL,
-                              tl_bitmap, -1, order, &req->send.length,
+                              tl_bitmap, UINT64_MAX, order, &req->send.length,
                               &address);
     if (status != UCS_OK) {
         ucs_free(req);
@@ -208,7 +209,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
                                                                   tl_bitmap,
                                                                   rsc_index);
         } else {
-            req->send.wireup.tli[lane] = -1;
+            req->send.wireup.tli[lane] = UINT8_MAX;
         }
     }
 
@@ -578,7 +579,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    status = ucp_address_unpack(worker, msg + 1, -1, &remote_address);
+    status = ucp_address_unpack(worker, msg + 1, UINT64_MAX, &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -604,8 +605,8 @@ out:
     return UCS_OK;
 }
 
-static void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane,
-                                   uct_ep_h uct_ep, const char *info)
+void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
+                            const char *info)
 {
     /* If ep already exists, it's a wireup proxy, and we need to update its
      * next_ep instead of replacing it.
@@ -1000,7 +1001,7 @@ static void ucp_wireup_connect_remote_purge_cb(uct_pending_req_t *self, void *ar
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 {
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
-    uint64_t tl_bitmap = -1;  /* pack full worker address */
+    uint64_t tl_bitmap = UINT64_MAX;  /* pack full worker address */
     ucs_status_t status;
 
     ucs_assert(ep->flags & UCP_EP_FLAG_LISTENER);
@@ -1160,5 +1161,5 @@ int ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr)
            !(flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 }
 
-UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
+UCP_DEFINE_AM(UINT64_MAX, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
               ucp_wireup_msg_dump, UCT_CB_FLAG_ASYNC);

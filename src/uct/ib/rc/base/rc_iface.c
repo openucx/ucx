@@ -17,6 +17,14 @@
 #include <ucs/type/class.h>
 
 
+static const char *uct_rc_fence_mode_values[] = {
+    [UCT_RC_FENCE_MODE_NONE]   = "none",
+    [UCT_RC_FENCE_MODE_WEAK]   = "weak",
+    [UCT_RC_FENCE_MODE_STRONG] = "strong",
+    [UCT_RC_FENCE_MODE_AUTO]   = "auto",
+    [UCT_RC_FENCE_MODE_LAST]   = NULL
+};
+
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),
@@ -41,7 +49,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
   {"RNR_TIMEOUT", "1ms",
    "RNR timeout",
-   ucs_offsetof(uct_rc_iface_common_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_timeout), UCS_CONFIG_TYPE_TIME},
 
   {"RNR_RETRY_COUNT", "7",
    "RNR retries",
@@ -67,6 +75,16 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Enable out-of-order RDMA data placement",
    ucs_offsetof(uct_rc_iface_common_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
 #endif
+
+  {"FENCE", "auto",
+   "IB fence type when API fence requested:\n"
+   "  none   - fence is a no-op\n"
+   "  weak   - fence makes sure remote reads are ordered with respect to remote writes\n"
+   "  strong - fence makes sure that subsequent remote operations start only after\n"
+   "           previous remote operations complete\n"
+   "  auto   - select fence mode based on hardware capabilities",
+   ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
+                UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
   {NULL}
 };
@@ -860,8 +878,7 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
 
-    if (iface->config.fence) {
-        iface->tx.fi.fence_flag = 1;
+    if (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE) {
         iface->tx.fi.fence_beat++;
     }
 

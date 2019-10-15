@@ -325,7 +325,9 @@ ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 static UCS_F_ALWAYS_INLINE double
 ucp_worker_iface_bandwidth(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return ucp_tl_iface_bandwidth(worker->context, &ucp_worker_iface(worker, rsc_index)->attr.bandwidth);
+    uct_iface_attr_t *iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+
+    return ucp_tl_iface_bandwidth(worker->context, &iface_attr->bandwidth);
 }
 
 static UCS_F_ALWAYS_INLINE int
