@@ -97,7 +97,7 @@ static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtab
 
 UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                       (memtype_cache, address, size, mem_type, action),
-                      ucs_memtype_cache_t *memtype_cache, void *address,
+                      ucs_memtype_cache_t *memtype_cache, const void *address,
                       size_t size, ucs_memory_type_t mem_type,
                       ucs_memtype_cache_action_t action)
 {
@@ -152,8 +152,9 @@ out_unlock:
     pthread_rwlock_unlock(&memtype_cache->lock);
 }
 
-void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache, void *address,
-                              size_t size, ucs_memory_type_t mem_type)
+void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
+                              const void *address, size_t size,
+                              ucs_memory_type_t mem_type)
 {
     ucs_memtype_cache_update_internal(memtype_cache, address, size, mem_type,
                                       UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
@@ -194,7 +195,7 @@ static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
                  (memtype_cache, address, size, mem_type_p),
-                 ucs_memtype_cache_t *memtype_cache, void *address,
+                 ucs_memtype_cache_t *memtype_cache, const void *address,
                  size_t size, ucs_memory_type_t *mem_type_p)
 {
     const ucs_pgt_addr_t start = (uintptr_t)address;

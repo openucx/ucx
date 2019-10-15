@@ -2007,7 +2007,8 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @return UCS_OK               If memory type is succussfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
-ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
+ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
+                                       size_t length,
                                        ucs_memory_type_t *mem_type_p);
 
 
