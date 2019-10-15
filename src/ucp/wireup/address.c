@@ -487,7 +487,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
          *   local iface attrs */
         unified   = flags_ptr;
         rsc_index = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
-        attr      = &ucp_worker_iface(worker, rsc_index)->attr;
+        attr      = ucp_worker_iface_get_attr(worker, rsc_index);
         if (is_ep_addr) {
             *addr_length = attr->ep_addr_len;
             *is_last     = 1; /* in unified mode, there's only 1 ep address */
@@ -679,8 +679,9 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     }
 
 out:
-    ucs_assertv(buffer + size == ptr, "buffer=%p size=%zu ptr=%p ptr-buffer=%zd",
-                buffer, size, ptr, ptr - buffer);
+    ucs_assertv(UCS_PTR_BYTE_OFFSET(buffer, size) == ptr,
+                "buffer=%p size=%zu ptr=%p ptr-buffer=%zd",
+                buffer, size, ptr, UCS_PTR_BYTE_DIFF(buffer, ptr));
     return UCS_OK;
 }
 
