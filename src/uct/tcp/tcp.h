@@ -40,7 +40,7 @@
 
 /* Length of a data that is used by PUT protocol */
 #define UCT_TCP_EP_PUT_SERVICE_LENGTH        (sizeof(uct_tcp_am_hdr_t) + \
-                                              sizeof(uct_tcp_ep_put_hdr_t))
+                                              sizeof(uct_tcp_ep_put_req_hdr_t))
 
 
 /**
@@ -208,11 +208,19 @@ typedef enum uct_tcp_ep_am_id {
 /**
  * TCP PUT request header
  */
-typedef struct uct_tcp_ep_put_hdr {
+typedef struct uct_tcp_ep_put_req_hdr {
     uint64_t                      addr;        /* Address of a remote memory buffer */
     size_t                        length;      /* Length of a remote memory buffer */
-    uint32_t                      sn;          /* equence number of the current PUT operation */
-} UCS_S_PACKED uct_tcp_ep_put_hdr_t;
+    uint32_t                      sn;          /* Sequence number of the current PUT operation */
+} UCS_S_PACKED uct_tcp_ep_put_req_hdr_t;
+
+
+/**
+ * TCP PUT acknowledge header
+ */
+typedef struct uct_tcp_ep_put_ack_hdr {
+    uint32_t                      sn;          /* Sequence number of the last acked PUT operation */
+} UCS_S_PACKED uct_tcp_ep_put_ack_hdr_t;
 
 
 /**
