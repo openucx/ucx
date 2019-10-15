@@ -8,7 +8,7 @@ if HAVE_JAVA
 topdir=$(abs_top_builddir)
 java_build_dir=$(builddir)/build-java
 javadir=$(top_srcdir)/bindings/java
-MVNCMD=$(MVN) -B -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(java_build_dir)/.deps \
+MVNCMD=$(MVN) -B -T 1C -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(java_build_dir)/.deps \
               -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 BUILT_SOURCES = org_openucx_jucx_ucp_UcpConstants.h \
@@ -61,8 +61,8 @@ package:
 	$(MVNCMD) package -DskipTests
 
 # Maven install phase
-install-data-hook:
-	$(MVNCMD) install -DskipTests
+install-data-hook: package
+	cp -fp $(java_build_dir)/jucx-@VERSION@.jar @libdir@
 
 # Remove all compiled Java files
 clean-local:
