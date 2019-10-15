@@ -137,7 +137,7 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 
     status = req->func(req);
     if (status == UCS_OK) {
-        ucs_atomic_add32(&wireup_ep->pending_count, -1);
+        ucs_atomic_sub32(&wireup_ep->pending_count, 1);
         ucs_free(proxy_req);
     }
     return status;
@@ -151,7 +151,7 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
     ucp_request_t   *req;
 
-    ucs_atomic_add32(&wireup_ep->pending_count, -1);
+    ucs_atomic_sub32(&wireup_ep->pending_count, 1);
  
     if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
         req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
@@ -318,31 +318,31 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
 UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
-        .ep_connect_to_ep     = ucp_wireup_ep_connect_to_ep,
-        .ep_flush             = ucp_wireup_ep_flush,
-        .ep_destroy           = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
-        .ep_pending_add       = ucp_wireup_ep_pending_add,
-        .ep_pending_purge     = ucp_wireup_ep_pending_purge,
-        .ep_put_short         = (void*)ucs_empty_function_return_no_resource,
-        .ep_put_bcopy         = (void*)ucp_wireup_ep_bcopy_send_func,
-        .ep_put_zcopy         = (void*)ucs_empty_function_return_no_resource,
-        .ep_get_short         = (void*)ucs_empty_function_return_no_resource,
-        .ep_get_bcopy         = (void*)ucs_empty_function_return_no_resource,
-        .ep_get_zcopy         = (void*)ucs_empty_function_return_no_resource,
-        .ep_am_short          = (void*)ucs_empty_function_return_no_resource,
-        .ep_am_bcopy          = ucp_wireup_ep_am_bcopy,
-        .ep_am_zcopy          = (void*)ucs_empty_function_return_no_resource,
-        .ep_tag_eager_short   = (void*)ucs_empty_function_return_no_resource,
-        .ep_tag_eager_bcopy   = (void*)ucp_wireup_ep_bcopy_send_func,
-        .ep_tag_eager_zcopy   = (void*)ucs_empty_function_return_no_resource,
-        .ep_tag_rndv_zcopy    = (void*)ucs_empty_function_return_ptr_no_resource,
-        .ep_tag_rndv_request  = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic64_post     = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic64_fetch    = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_cswap64    = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic32_post     = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic32_fetch    = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_cswap32    = (void*)ucs_empty_function_return_no_resource
+        .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
+        .ep_flush            = ucp_wireup_ep_flush,
+        .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
+        .ep_pending_add      = ucp_wireup_ep_pending_add,
+        .ep_pending_purge    = ucp_wireup_ep_pending_purge,
+        .ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
+        .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_bcopy         = ucp_wireup_ep_am_bcopy,
+        .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
+        .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ptr_no_resource,
+        .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
@@ -480,7 +480,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     }
 
     if (found_supported_tl) {
-        status = ucp_address_pack(worker, NULL, tl_bitmap, -1, NULL,
+        status = ucp_address_pack(worker, NULL, tl_bitmap, UINT64_MAX, NULL,
                                   address_length_p, (void**)address_p);
     } else {
         ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
@@ -494,12 +494,12 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
                                                 void *priv_data)
 {
-    ucp_wireup_client_data_t *client_data = priv_data;
-    ucp_wireup_ep_t *wireup_ep            = arg;
-    ucp_ep_h ucp_ep                       = wireup_ep->super.ucp_ep;
-    ucp_rsc_index_t sockaddr_rsc          = wireup_ep->sockaddr_rsc_index;
-    ucp_worker_h worker                   = ucp_ep->worker;
-    ucp_context_h context                 = worker->context;
+    ucp_wireup_sockaddr_data_t *sa_data = priv_data;
+    ucp_wireup_ep_t *wireup_ep          = arg;
+    ucp_ep_h ucp_ep                     = wireup_ep->super.ucp_ep;
+    ucp_rsc_index_t sockaddr_rsc        = wireup_ep->sockaddr_rsc_index;
+    ucp_worker_h worker                 = ucp_ep->worker;
+    ucp_context_h context               = worker->context;
     size_t address_length, conn_priv_len;
     ucp_address_t *worker_address, *rsc_address;
     uct_iface_attr_t *attrs;
@@ -507,17 +507,17 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     uint64_t tl_bitmap;
     char aux_tls_str[64];
 
-    status = ucp_address_pack(worker, NULL, -1, -1, NULL, &address_length,
-                              (void**)&worker_address);
+    status = ucp_address_pack(worker, NULL, UINT64_MAX, UINT64_MAX, NULL,
+                              &address_length, (void**)&worker_address);
     if (status != UCS_OK) {
         goto err;
     }
 
-    conn_priv_len = sizeof(*client_data) + address_length;
+    conn_priv_len = sizeof(*sa_data) + address_length;
 
     /* pack client data */
-    client_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
-    client_data->ep_ptr   = (uintptr_t)ucp_ep;
+    sa_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
+    sa_data->ep_ptr   = (uintptr_t)ucp_ep;
 
     attrs = ucp_worker_iface_get_attr(worker, sockaddr_rsc);
 
@@ -526,13 +526,14 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
 
         /* since the full worker address is too large to fit into the trasnport's
          * private data, try to pack sockaddr aux tls to pass in the address */
-        status = ucp_wireup_ep_pack_sockaddr_aux_tls(worker, dev_name, &tl_bitmap,
-                                                     &rsc_address, &address_length);
+        status = ucp_wireup_ep_pack_sockaddr_aux_tls(worker, dev_name,
+                                                     &tl_bitmap, &rsc_address,
+                                                     &address_length);
         if (status != UCS_OK) {
             goto err_free_address;
         }
 
-        conn_priv_len = sizeof(*client_data) + address_length;
+        conn_priv_len = sizeof(*sa_data) + address_length;
 
         /* check the private data length limitation again, now with partial
          * resources packed (and not the entire worker address) */
@@ -550,8 +551,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR;
-        memcpy(client_data + 1, rsc_address, address_length);
+        sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR;
+        memcpy(sa_data + 1, rsc_address, address_length);
         ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
 
         ucs_free(rsc_address);
@@ -563,10 +564,9 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                   ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
                                     sizeof(aux_tls_str)),
                   address_length, conn_priv_len);
-
     } else {
-        client_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_FULL_ADDR;
-        memcpy(client_data + 1, worker_address, address_length);
+        sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_FULL_ADDR;
+        memcpy(sa_data + 1, worker_address, address_length);
     }
 
     ucp_worker_release_address(worker, worker_address);

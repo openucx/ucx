@@ -72,7 +72,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                                                                buffer, recv_len);
 
         status = ucp_dt_unpack_only(worker, buffer, count, datatype, mem_type,
-                                    (void*)(rdesc + 1) + hdr_len, recv_len, 1);
+                                    UCS_PTR_BYTE_OFFSET(rdesc + 1, hdr_len),
+                                    recv_len, 1);
         ucp_recv_desc_release(rdesc);
 
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {

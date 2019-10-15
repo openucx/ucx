@@ -13,6 +13,7 @@
 
 #include <ucp/stream/stream.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/wireup/wireup_cm.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
@@ -66,8 +67,8 @@ void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
     ucp_conn_request_h               conn_request = arg;
+    const ucp_wireup_sockaddr_data_t *sa_data     = &conn_request->sa_data;
     ucp_listener_h                   listener     = conn_request->listener;
-    const ucp_wireup_client_data_t   *client_data = &conn_request->client_data;
     ucp_worker_h                     worker       = listener->worker;
     ucp_ep_h                         ep;
     ucs_status_t                     status;
@@ -81,7 +82,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, client_data, &ep);
+    status = ucp_ep_create_accept(worker, sa_data, &ep);
 
     if (status != UCS_OK) {
         goto out;
@@ -148,7 +149,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucs_trace("listener %p: got connection request", listener);
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
-    conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, client_data) +
+    conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
                               length, "accept connection request");
     if (conn_request == NULL) {
         ucs_error("failed to allocate connect request, "
@@ -161,7 +162,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     conn_request->listener  = listener;
     conn_request->uct_req   = uct_req;
     conn_request->uct_iface = tl_iface;
-    memcpy(&conn_request->client_data, conn_priv_data, length);
+    memcpy(&conn_request->sa_data, conn_priv_data, length);
 
     uct_worker_progress_register_safe(listener->worker->uct,
                                       ucp_listener_conn_request_progress,
@@ -243,7 +244,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
     uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
                                   UCT_LISTENER_PARAM_FIELD_USER_DATA;
-    uct_params.conn_request_cb  = (void *)0xdeadbeaf; /* TODO: ucp_listener_conn_request_cb; */
+    uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
 
     listener->num_tls           = 0;

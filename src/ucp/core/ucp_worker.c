@@ -39,19 +39,6 @@ typedef enum ucp_worker_event_fd_op {
 } ucp_worker_event_fd_op_t;
 
 #if ENABLE_STATS
-static ucs_stats_class_t ucp_worker_stats_class = {
-    .name           = "ucp_worker",
-    .num_counters   = UCP_WORKER_STAT_LAST,
-    .counter_names  = {
-        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "rx_eager_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "rx_sync_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "rx_eager_chunk_exp",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "rx_eager_chunk_unexp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_EXP]          = "rx_rndv_rts_exp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp"
-    }
-};
-
 static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
     .name           = "tag_offload",
     .num_counters   = UCP_WORKER_STAT_TAG_OFFLOAD_LAST,
@@ -67,7 +54,20 @@ static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
         [UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NO_IFACE]   = "block_no_iface",
         [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR]     = "rx_unexp_egr",
         [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV]    = "rx_unexp_rndv",
-        [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV] = "rx_unexp_sw_rndv",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV] = "rx_unexp_sw_rndv"
+    }
+};
+
+static ucs_stats_class_t ucp_worker_stats_class = {
+    .name           = "ucp_worker",
+    .num_counters   = UCP_WORKER_STAT_LAST,
+    .counter_names  = {
+        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "rx_eager_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "rx_sync_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "rx_eager_chunk_exp",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "rx_eager_chunk_unexp",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_EXP]          = "rx_rndv_rts_exp",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp"
     }
 };
 #endif
@@ -241,7 +241,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
                                            const ucp_worker_params_t *params)
 {
     ucp_context_h context = worker->context;
-    ucp_wakeup_event_t events;
+    unsigned events;
     ucs_status_t status;
 
     if (!(context->config.features & UCP_FEATURE_WAKEUP)) {
@@ -1319,7 +1319,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     dummy_iface_attr.bandwidth.dedicated = 1e12;
     dummy_iface_attr.bandwidth.shared    = 0;
-    dummy_iface_attr.cap_flags           = -1;
+    dummy_iface_attr.cap_flags           = UINT64_MAX;
     dummy_iface_attr.overhead            = 0;
     dummy_iface_attr.priority            = 0;
     dummy_iface_attr.lat_ovh             = 0;
@@ -1734,7 +1734,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     status = ucs_mpool_init(&worker->rkey_mp, 0,
                             sizeof(ucp_rkey_t) +
                             sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, -1,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                             &ucp_rkey_mpool_ops, "ucp_rkeys");
     if (status != UCS_OK) {
         goto err_req_mp_cleanup;
@@ -1887,7 +1887,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
         /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set,
          * pack all tl adresses */
-        tl_bitmap = -1;
+        tl_bitmap = UINT64_MAX;
 
         if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
             if (attr->address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
@@ -1900,7 +1900,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
             }
         }
 
-        status = ucp_address_pack(worker, NULL, tl_bitmap, -1, NULL,
+        status = ucp_address_pack(worker, NULL, tl_bitmap, UINT64_MAX, NULL,
                                   &attr->address_length,
                                   (void**)&attr->address);
     }
@@ -2113,8 +2113,8 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    status = ucp_address_pack(worker, NULL, -1, -1, NULL, address_length_p,
-                              (void**)address_p);
+    status = ucp_address_pack(worker, NULL, UINT64_MAX, UINT64_MAX, NULL,
+                              address_length_p, (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 

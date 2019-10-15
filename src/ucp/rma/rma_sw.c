@@ -196,7 +196,7 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
     payload_len = packed_len - sizeof(ucp_rma_rep_hdr_t);
     ucs_assert(payload_len >= 0);
 
-    req->send.buffer += payload_len;
+    req->send.buffer  = UCS_PTR_BYTE_OFFSET(req->send.buffer, payload_len);
     req->send.length -= payload_len;
 
     if (req->send.length == 0) {
@@ -287,7 +287,8 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     }
 
     p = buffer + strlen(buffer);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + header_len,
+    ucp_dump_payload(worker->context, p, buffer + max - p,
+                     UCS_PTR_BYTE_OFFSET(data, header_len),
                      length - header_len);
 }
 

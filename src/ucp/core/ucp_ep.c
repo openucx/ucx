@@ -17,6 +17,7 @@
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -56,10 +57,17 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
+    ucp_lane_index_t i;
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
+    for (i = 0; i < UCP_MAX_LANES; ++i) {
+        key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
+        key->lanes[i].proxy_lane   = UCP_NULL_LANE;
+        key->lanes[i].dst_md_index = UCP_MAX_MDS;
+    }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
+    key->cm_lane          = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
@@ -97,7 +105,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ep->worker                      = worker;
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
-    ep->conn_sn                     = -1;
+    ep->conn_sn                     = (ucp_ep_conn_sn_t)-1;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
     ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
@@ -245,13 +253,14 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         }
 
         status = ucp_address_pack(worker, NULL,
-                                  context->mem_type_access_tls[mem_type], -1,
-                                  NULL, &address_length, &address_buffer);
+                                  context->mem_type_access_tls[mem_type],
+                                  UINT64_MAX, NULL, &address_length,
+                                  &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer, -1, &local_address);
+        status = ucp_address_unpack(worker, address_buffer, UINT64_MAX, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -292,26 +301,21 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_params(&key, params);
 
-    /* all operations will use the first lane, which is a stub endpoint */
     key.num_lanes             = 1;
-    key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
-    key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
-    key.am_lane               = 0;
-    key.wireup_lane           = 0;
-    key.tag_lane              = UCP_NULL_LANE; /* should be initialized only if
-                                                  HW TM is supported */
-    key.am_bw_lanes[0]        = 0;
-    key.rma_lanes[0]          = 0;
-    key.rma_bw_lanes[0]       = 0;
-    key.amo_lanes[0]          = 0;
-
+    if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
+        key.cm_lane           = 0;
+    } else {
+        /* all operations will use the first lane, which is a stub endpoint */
+        key.wireup_lane       = 0;
+        key.am_lane           = 0;
+    }
     status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    ep->am_lane               = 0;
-    ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+    ep->am_lane = key.wireup_lane;
+    ep->flags  |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
     if (status != UCS_OK) {
@@ -397,7 +401,9 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_cleanup_lanes;
     }
 
-    status = ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
+    status = ucp_worker_sockaddr_is_cm_proto(ep->worker) ?
+             ucp_ep_client_cm_connect_start(ep, params) :
+             ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
@@ -417,7 +423,7 @@ err:
  * Create an endpoint on the server side connected to the client endpoint.
  */
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_client_data_t *client_data,
+                                  const ucp_wireup_sockaddr_data_t *sa_data,
                                   ucp_ep_h *ep_p)
 {
     ucp_ep_params_t        params;
@@ -426,23 +432,23 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     ucs_status_t           status;
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    params.err_mode   = client_data->err_mode;
+    params.err_mode   = sa_data->err_mode;
 
-    if (client_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
+    if (sa_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR |
                      UCP_ADDRESS_PACK_FLAG_TRACE;
     } else {
-        addr_flags = -1;
+        addr_flags = UINT64_MAX;
     }
 
-    status = ucp_address_unpack(worker, client_data + 1, addr_flags,
+    status = ucp_address_unpack(worker, sa_data + 1, addr_flags,
                                 &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
 
-    switch (client_data->addr_mode) {
+    switch (sa_data->addr_mode) {
     case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
@@ -471,10 +477,10 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         return UCS_ERR_NOT_IMPLEMENTED;
     default:
         ucs_fatal("client data contains invalid address mode %d",
-                  client_data->addr_mode);
+                  sa_data->addr_mode);
     }
 
-    ucp_ep_update_dest_ep_ptr(*ep_p, client_data->ep_ptr);
+    ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
 
 out_free_address:
     ucs_free(remote_address.address_list);
@@ -491,7 +497,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucs_status_t       status;
 
     /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, &conn_request->client_data, &ep);
+    status = ucp_ep_create_accept(worker, &conn_request->sa_data, &ep);
     if (status != UCS_OK) {
         goto out;
     }
@@ -548,7 +554,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(worker, params->address, -1, &remote_address);
+    status = ucp_address_unpack(worker, params->address, UINT64_MAX, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -864,6 +870,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->am_lane          != key2->am_lane)                                  ||
         (key1->tag_lane         != key2->tag_lane)                                 ||
         (key1->wireup_lane      != key2->wireup_lane)                              ||
+        (key1->cm_lane          != key2->cm_lane)                                  ||
         (key1->err_mode         != key2->err_mode)                                 ||
         (key1->status           != key2->status))
     {
@@ -1110,7 +1117,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     if (iface_attr->cap.flags & bcopy_flag) {
         config->max_bcopy = max_bcopy;
     } else {
-        config->max_bcopy = -1;
+        config->max_bcopy = SIZE_MAX;
     }
 
     md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -1203,7 +1210,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
+    for (mem_type = UCS_MEMORY_TYPE_HOST; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }
@@ -1720,4 +1728,16 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     }
 
     return zcopy_thresh;
+}
+
+ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
+{
+    const ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+
+    if (lane == UCP_NULL_LANE) {
+        return NULL;
+    }
+
+    return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
+           (ucp_wireup_ep_t *)ep->uct_eps[lane] : NULL;
 }

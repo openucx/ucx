@@ -59,7 +59,7 @@ BEGIN_C_DECLS
  * @return Pointer to the desired element
  */
 #define ucs_strided_elem_get(_elem, _stride_idx, _wanted_idx) \
-    UCS_PTR_BYTE_OFFSET(_elem, UCS_STRIDED_ALLOC_STRIDE * \
+    UCS_PTR_BYTE_OFFSET(_elem, (ptrdiff_t)UCS_STRIDED_ALLOC_STRIDE * \
                         ((ptrdiff_t)(_wanted_idx) - (ptrdiff_t)(_stride_idx)))
 
 
