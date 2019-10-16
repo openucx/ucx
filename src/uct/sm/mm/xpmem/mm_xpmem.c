@@ -53,10 +53,12 @@ static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_
     void *start, *end;
 
     start = ucs_align_down_pow2_ptr(address, ucs_get_page_size());
-    end   = ucs_align_up_pow2_ptr(address + size, ucs_get_page_size());
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, size),
+                                  ucs_get_page_size());
     ucs_assert_always(start <= end);
 
-    segid = xpmem_make(start, end - start, XPMEM_PERMIT_MODE, (void*)0666);
+    segid = xpmem_make(start, UCS_PTR_BYTE_DIFF(start, end), XPMEM_PERMIT_MODE,
+                       (void*)0666);
     VALGRIND_MAKE_MEM_DEFINED(&segid, sizeof(segid));
     if (segid < 0) {
         ucs_error("Failed to register %p..%p with xpmem: %m",
@@ -117,11 +119,12 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
 
     VALGRIND_MAKE_MEM_DEFINED(address + offset, length);
 
-    *local_address = address + offset;
+    *local_address = UCS_PTR_BYTE_OFFSET(address, offset);
     *cookie        = addr.apid;
 
     ucs_trace("xpmem attached segment 0x%"PRIx64" apid 0x%llx %p..%p at %p (+%zd)",
-              mmid, addr.apid, remote_address, remote_address + length, address, offset);
+              mmid, addr.apid, remote_address,
+              UCS_PTR_BYTE_OFFSET(remote_address, length), address, offset);
     return UCS_OK;
 
 err_xattach:

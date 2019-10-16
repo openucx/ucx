@@ -838,7 +838,7 @@ uct_tcp_ep_am_send(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
 
     offset = uct_tcp_ep_send(ep);
     if (ucs_unlikely(offset < 0)) {
-        return offset;
+        return (ucs_status_t)offset;
     }
 
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
