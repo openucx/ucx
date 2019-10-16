@@ -1277,7 +1277,12 @@ static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
     ucs_trace("worker %p: using %s atomics on iface[%d]=" UCT_TL_RESOURCE_DESC_FMT,
               worker, mode, rsc_index,
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
-    worker->atomic_tls |= UCS_BIT(rsc_index);
+    if (!strcmp(mode, "device")) {
+        worker->device_amo_tls |= UCS_BIT(rsc_index);
+    } else {
+        ucs_assert(!strcmp(mode, "cpu"));
+        worker->cpu_amo_tls    |= UCS_BIT(rsc_index);
+    }
 }
 
 static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
@@ -1384,30 +1389,12 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     }
 }
 
-static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
-{
-    uint64_t accumulated_flags = 0;
-    ucp_rsc_index_t iface_id;
-
-    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        if (ucp_is_scalable_transport(worker->context,
-                                      worker->ifaces[iface_id]->attr.max_num_eps)) {
-            accumulated_flags |= worker->ifaces[iface_id]->attr.cap.flags;
-        }
-    }
-
-    if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
-        ucp_worker_init_device_atomics(worker);
-    } else {
-        ucp_worker_init_cpu_atomics(worker);
-    }
-}
-
 static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
 
-    worker->atomic_tls = 0;
+    worker->device_amo_tls = 0;
+    worker->cpu_amo_tls    = 0;
 
     if (context->config.features & UCP_FEATURE_AMO) {
         switch(context->config.ext.atomic_mode) {
@@ -1418,7 +1405,9 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
             ucp_worker_init_device_atomics(worker);
             break;
         case UCP_ATOMIC_MODE_GUESS:
-            ucp_worker_init_guess_atomics(worker);
+            /* init both and decide at lanes selection phase */
+            ucp_worker_init_cpu_atomics(worker);
+            ucp_worker_init_device_atomics(worker);
             break;
         default:
             ucs_fatal("unsupported atomic mode: %d",
@@ -1900,8 +1889,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
             }
         }
 
-        status = ucp_address_pack(worker, NULL, tl_bitmap, UINT64_MAX, NULL,
-                                  &attr->address_length, (void**)&attr->address);
+        status = ucp_address_pack(worker, NULL, tl_bitmap,
+                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                                  &attr->address_length,
+                                  (void**)&attr->address);
     }
 
     return status;
@@ -2127,14 +2118,36 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
 }
 
 
+static void ucp_worker_print_amo(ucp_context_h context, uint64_t amo_bitmap,
+                                 const char type[7], FILE *stream)
+{
+    ucp_rsc_index_t rsc_index;
+    int first;
+
+    /* shorter type should be padded by white spaces to align output */
+    ucs_assert(strlen(type) == 6);
+
+    fprintf(stream, "#          %s atomics: ", type);
+    first = 1;
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        if (amo_bitmap & UCS_BIT(rsc_index)) {
+            if (!first) {
+                fprintf(stream, ", ");
+            }
+            fprintf(stream, "%d:"UCT_TL_RESOURCE_DESC_FMT, rsc_index,
+                    UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
+            first = 0;
+        }
+    }
+    fprintf(stream, "\n");
+}
+
 void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 {
     ucp_context_h context = worker->context;
     ucp_address_t *address;
     size_t address_length;
     ucs_status_t status;
-    ucp_rsc_index_t rsc_index;
-    int first;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -2151,19 +2164,8 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     }
 
     if (context->config.features & UCP_FEATURE_AMO) {
-        fprintf(stream, "#                 atomics: ");
-        first = 1;
-        for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-            if (worker->atomic_tls & UCS_BIT(rsc_index)) {
-                if (!first) {
-                    fprintf(stream, ", ");
-                }
-                fprintf(stream, "%d:"UCT_TL_RESOURCE_DESC_FMT, rsc_index,
-                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
-                first = 0;
-            }
-        }
-        fprintf(stream, "\n");
+        ucp_worker_print_amo(context, worker->device_amo_tls, "device", stream);
+        ucp_worker_print_amo(context, worker->cpu_amo_tls,    "   cpu", stream);
     }
 
     fprintf(stream, "#\n");

@@ -1062,7 +1062,7 @@ class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
                 device_atomics_cnt++;
             }
         }
-        bool device_atomics_supported = sender().worker()->atomic_tls != 0;
+        bool device_atomics_supported = sender().worker()->device_amo_tls != 0;
 
         test_ucp_wireup::cleanup();
 

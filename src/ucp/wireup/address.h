@@ -35,14 +35,22 @@ enum {
 
 
 enum {
-    UCP_ADDRESS_PACK_FLAG_WORKER_UUID    = UCS_BIT(0),
-    UCP_ADDRESS_PACK_FLAG_WORKER_NAME    = UCS_BIT(1), /* valid only for debug build */
-    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR    = UCS_BIT(2),
-    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR     = UCS_BIT(3),
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR        = UCS_BIT(4),
-    UCP_ADDRESS_PACK_FLAG_HW_AMO_TLS     = UCS_BIT(5),
-    UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16), /* show debug prints of pack/unpack */
-    UCP_ADDRESS_PACK_FLAG_ALL            = UINT64_MAX
+    UCP_ADDRESS_PACK_FLAG_WORKER_UUID           = UCS_BIT(0),
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME           = UCS_BIT(1),  /* valid only for debug build */
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR           = UCS_BIT(2),
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR            = UCS_BIT(3),
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR               = UCS_BIT(4),
+    UCP_ADDRESS_PACK_FLAG_ENABLE_DEVICE_ATOMICS = UCS_BIT(5),  /* pack TLS which support device atomics in scope
+                                                                  of worker, this flag has higher priority than
+                                                                  @ref UCP_ADDRESS_PACK_FLAG_ENABLE_CPU_ATOMICS
+                                                                  if set both and ignored if worker does not have
+                                                                  device atomic TLS */
+    UCP_ADDRESS_PACK_FLAG_ENABLE_CPU_ATOMICS    = UCS_BIT(6),  /* pack TLS which support CPU atomics in scope of
+                                                                  worker, this flag has lower priority than
+                                                                  @ref UCP_ADDRESS_PACK_FLAG_ENABLE_DEVICE_ATOMICS
+                                                                  if set both */
+    UCP_ADDRESS_PACK_FLAG_TRACE                 = UCS_BIT(16), /* show debug prints of pack/unpack */
+    UCP_ADDRESS_PACK_FLAG_ALL                   = UINT64_MAX
 };
 
 

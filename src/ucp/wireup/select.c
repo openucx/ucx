@@ -880,7 +880,15 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
      * selected for atomics. Otherwise, the remote peer would not be able to
      * connect back on p2p transport.
      */
-    tl_bitmap = worker->atomic_tls;
+    if ((ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
+                          UCP_EP_INIT_CM_WIREUP_SERVER)) ||
+        (worker->device_amo_tls == 0)) {
+        /* Fallback to CPU AMO */
+        tl_bitmap = worker->cpu_amo_tls;
+    } else {
+        tl_bitmap = worker->device_amo_tls;
+    }
+
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         if (!ucp_worker_is_tl_p2p(worker, rsc_index)) {
             tl_bitmap |= UCS_BIT(rsc_index);

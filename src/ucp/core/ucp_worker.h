@@ -209,7 +209,8 @@ typedef struct ucp_worker {
     uct_worker_h                  uct;           /* UCT worker handle */
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucs_mpool_t                   rkey_mp;       /* Pool for small memory keys */
-    uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
+    uint64_t                      device_amo_tls;/* Which resources can be used for device atomics */
+    uint64_t                      cpu_amo_tls;   /* Which resources can be used for CPU atomics */
 
     int                           inprogress;
     char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
