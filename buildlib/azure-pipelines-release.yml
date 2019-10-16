@@ -16,7 +16,7 @@ stages:
   - stage: Release
     jobs:
       - job: release
-        displayName: Build tarball
+        displayName: build tarball and source rpm
         container: fedora
         steps:
           - bash: ./autogen.sh
