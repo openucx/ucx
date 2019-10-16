@@ -202,7 +202,7 @@ static uintptr_t virt_to_phys(uintptr_t address)
     fd = open(pagemap_file, O_RDONLY);
     if (fd < 0) {
         ucs_error("failed to open %s: %m", pagemap_file);
-        pa = -1;
+        pa = std::numeric_limits<uintptr_t>::max();
         goto out;
     }
 
@@ -210,7 +210,7 @@ static uintptr_t virt_to_phys(uintptr_t address)
     ret = lseek(fd, offset, SEEK_SET);
     if (ret != offset) {
         ucs_error("failed to seek in %s to offset %zu: %m", pagemap_file, offset);
-        pa = -1;
+        pa = std::numeric_limits<uintptr_t>::max();
         goto out_close;
     }
 
@@ -218,7 +218,7 @@ static uintptr_t virt_to_phys(uintptr_t address)
     if (ret != sizeof(entry)) {
         ucs_error("read from %s at offset %zu returned %ld: %m", pagemap_file,
                   offset, ret);
-        pa = -1;
+        pa = std::numeric_limits<uintptr_t>::max();
         goto out_close;
     }
 
@@ -226,7 +226,7 @@ static uintptr_t virt_to_phys(uintptr_t address)
         pfn = entry & ((1ULL << 54) - 1);
         pa = (pfn * page_size) | (address & (page_size - 1));
     } else {
-        pa = -1; /* Page not present */
+        pa = std::numeric_limits<uintptr_t>::max(); /* Page not present */
     }
 
 out_close:

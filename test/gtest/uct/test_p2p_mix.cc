@@ -18,7 +18,7 @@ uct_p2p_mix_test::uct_p2p_mix_test() : uct_p2p_test(0), m_send_size(0) {
 ucs_status_t uct_p2p_mix_test::am_callback(void *arg, void *data, size_t length,
                                            unsigned flags)
 {
-    ucs_atomic_add32(&am_pending, -1);
+    ucs_atomic_sub32(&am_pending, 1);
     return UCS_OK;
 }
 
