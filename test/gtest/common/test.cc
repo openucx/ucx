@@ -220,6 +220,7 @@ void test_base::SetUpProxy() {
     m_num_errors_before          = m_total_errors;
 
     m_errors.clear();
+    m_warnings.clear();
     m_num_log_handlers_before    = ucs_log_num_handlers();
     ucs_log_push_handler(count_warns_logger);
 
