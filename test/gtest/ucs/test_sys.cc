@@ -4,8 +4,6 @@
 * See file LICENSE for terms.
 */
 
-#define __STDC_LIMIT_MACROS // needed for SIZE_MAX
-
 #include <common/test.h>
 extern "C" {
 #include <ucs/sys/module.h>

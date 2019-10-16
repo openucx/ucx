@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
+#include <ucs/sys/math.h>
 
 
 /* Which iface flags would be packed in the address */
@@ -42,7 +43,7 @@ enum {
     UCP_ADDRESS_PACK_FLAG_EP_ADDR        = UCS_BIT(4),
     UCP_ADDRESS_PACK_FLAG_HW_AMO_TLS     = UCS_BIT(5),
     UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16), /* show debug prints of pack/unpack */
-    UCP_ADDRESS_PACK_FLAG_ALL            = UINT64_MAX
+    UCP_ADDRESS_PACK_FLAG_ALL            = (uint64_t)-1
 };
 
 
