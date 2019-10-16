@@ -12,10 +12,8 @@
 #include <ucs/async/async.h>
 
 
-/* Forward declarations */
+/* Forward declaration */
 static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep);
-static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep);
-static unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep);
 
 const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     [UCT_TCP_EP_CONN_STATE_CLOSED]      = {
@@ -42,11 +40,6 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
         .name        = "CONNECTED",
         .tx_progress = uct_tcp_ep_progress_data_tx
     }
-};
-
-const uct_tcp_ep_progress_t uct_tcp_ep_progress_rx_cb[] = {
-    uct_tcp_ep_progress_am_rx,
-    uct_tcp_ep_progress_put_rx
 };
 
 static inline int uct_tcp_ep_ctx_buf_empty(uct_tcp_ep_ctx_t *ctx)
@@ -785,7 +778,7 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
     ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
 }
 
-static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
+unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
@@ -915,7 +908,7 @@ err_no_res:
     return UCS_ERR_NO_RESOURCE;
 }
 
-static unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
+unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_ep_put_req_hdr_t *put_req;
     size_t recv_length;

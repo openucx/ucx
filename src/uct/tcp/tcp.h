@@ -374,6 +374,10 @@ void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno);
 
+unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep);
+
+unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep);
+
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
                              uct_tcp_ep_t **ep_p);
@@ -471,8 +475,11 @@ static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 
 static inline unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
 {
-    return uct_tcp_ep_progress_rx_cb[!!(ep->ctx_caps &
-                                        UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))](ep);
+    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))) {
+        return uct_tcp_ep_progress_am_rx(ep);
+    } else {
+        return uct_tcp_ep_progress_put_rx(ep);
+    }
 }
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
