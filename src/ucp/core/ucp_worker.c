@@ -1901,8 +1901,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
         }
 
         status = ucp_address_pack(worker, NULL, tl_bitmap, UINT64_MAX, NULL,
-                                  &attr->address_length,
-                                  (void**)&attr->address);
+                                  &attr->address_length, (void**)&attr->address);
     }
 
     return status;
@@ -2113,7 +2112,8 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    status = ucp_address_pack(worker, NULL, UINT64_MAX, UINT64_MAX, NULL,
+    status = ucp_address_pack(worker, NULL, UINT64_MAX,
+                              UCP_ADDRESS_PACK_FLAG_ALL, NULL,
                               address_length_p, (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);

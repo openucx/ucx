@@ -376,8 +376,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_pack(sender().worker(), NULL, -1, -1, order, &size,
-                              &buffer);
+    status = ucp_address_pack(sender().worker(), NULL, -1,
+                              UCP_ADDRESS_PACK_FLAG_ALL, order, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -425,8 +425,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
 
-    status = ucp_address_pack(sender().worker(), NULL, 0, -1, order, &size,
-                              &buffer);
+    status = ucp_address_pack(sender().worker(), NULL, 0,
+                              UCP_ADDRESS_PACK_FLAG_ALL, order, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -1054,17 +1054,19 @@ class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
         size_t device_atomics_cnt = 0;
 
         test_ucp_wireup::init();
-        sender().connect(&receiver(), get_ep_params());
-        for (ucp_lane_index_t lane = 0;
-             lane < ucp_ep_num_lanes(sender().ep()); lane++) {
-            if (ucp_ep_get_iface_attr(sender().ep(), lane)->cap.flags &
-                UCT_IFACE_FLAG_ATOMIC_DEVICE) {
+
+        for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
+            uct_iface_attr_t *attr = ucp_worker_iface_get_attr(sender().worker(),
+                                                               idx);
+            if (attr->cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
                 device_atomics_cnt++;
             }
         }
+        bool device_atomics_supported = sender().worker()->atomic_tls != 0;
+
         test_ucp_wireup::cleanup();
 
-        if (!device_atomics_cnt) {
+        if (!device_atomics_supported || !device_atomics_cnt) {
             UCS_TEST_SKIP_R("there are no TLs that support device atomics");
         }
     }
@@ -1152,7 +1154,7 @@ UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
     tls.push_back("rc");
     /* the 2nd peer support RC and SHM (device and CPU atomics) */
     tls.push_back("rc,shm");
-    
+
     size_t min_max_num_eps = test_wireup_fallback_amo(tls, 1, 1);
     test_wireup_fallback_amo(tls, min_max_num_eps + 1, 0);
 }
