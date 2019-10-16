@@ -142,7 +142,7 @@ ucs_status_t do_am_bcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
         uct_worker_progress(if_info->worker);
     } while (len == UCS_ERR_NO_RESOURCE);
     /* Negative len is an error code */
-    return (len >= 0) ? UCS_OK : len;
+    return (len >= 0) ? UCS_OK : (ucs_status_t)len;
 }
 
 /* Completion callback for am_zcopy */
@@ -552,6 +552,7 @@ int main(int argc, char **argv)
     cmd_args_t          cmd_args;
     iface_info_t        if_info;
     uct_ep_params_t     ep_params;
+    int                 res;
 
     /* Parse the command line */
     if (parse_cmd(argc, argv, &cmd_args)) {
@@ -597,11 +598,12 @@ int main(int argc, char **argv)
         }
     }
 
-    status = sendrecv(oob_sock, own_dev, if_info.iface_attr.device_addr_len,
-                      (void **)&peer_dev);
-    CHKERR_JUMP(0 != status, "device exchange", out_free_dev_addrs);
+    res = sendrecv(oob_sock, own_dev, if_info.iface_attr.device_addr_len,
+                   (void **)&peer_dev);
+    CHKERR_ACTION(0 != res, "device exchange",
+                  status = UCS_ERR_NO_MESSAGE; goto out_free_dev_addrs);
 
-    status = uct_iface_is_reachable(if_info.iface, peer_dev, NULL);
+    status = (ucs_status_t)uct_iface_is_reachable(if_info.iface, peer_dev, NULL);
     CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
 
     /* Get interface address */
@@ -609,8 +611,8 @@ int main(int argc, char **argv)
         status = uct_iface_get_address(if_info.iface, own_iface);
         CHKERR_JUMP(UCS_OK != status, "get interface address", out_free_if_addrs);
 
-        status = sendrecv(oob_sock, own_iface, if_info.iface_attr.iface_addr_len,
-                          (void **)&peer_iface);
+        status = (ucs_status_t)sendrecv(oob_sock, own_iface, if_info.iface_attr.iface_addr_len,
+                                        (void **)&peer_iface);
         CHKERR_JUMP(0 != status, "ifaces exchange", out_free_if_addrs);
     }
 
@@ -628,8 +630,8 @@ int main(int argc, char **argv)
         status = uct_ep_get_address(ep, own_ep);
         CHKERR_JUMP(UCS_OK != status, "get endpoint address", out_free_ep);
 
-        status = sendrecv(oob_sock, own_ep, if_info.iface_attr.ep_addr_len,
-                          (void **)&peer_ep);
+        status = (ucs_status_t)sendrecv(oob_sock, own_ep, if_info.iface_attr.ep_addr_len,
+                                        (void **)&peer_ep);
         CHKERR_JUMP(0 != status, "EPs exchange", out_free_ep);
 
         /* Connect endpoint to a remote endpoint */

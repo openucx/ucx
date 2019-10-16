@@ -125,8 +125,8 @@ void set_connect_addr(const char *address_str, struct sockaddr_in *connect_addr)
  * Initialize the client side. Create an endpoint from the client side to be
  * connected to the remote server (to the given IP).
  */
-static int start_client(ucp_worker_h ucp_worker, const char *ip,
-                        ucp_ep_h *client_ep)
+static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
+                                 ucp_ep_h *client_ep)
 {
     ucp_ep_params_t ep_params;
     struct sockaddr_in connect_addr;
@@ -447,8 +447,9 @@ static void server_conn_handle_cb(ucp_conn_request_h conn_request, void *arg)
 /**
  * Initialize the server side. The server starts listening on the set address.
  */
-static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
-                        ucp_listener_h *listener_p, const char *ip)
+static ucs_status_t start_server(ucp_worker_h ucp_worker,
+                                 ucx_server_ctx_t *context,
+                                 ucp_listener_h *listener_p, const char *ip)
 {
     struct sockaddr_in listen_addr;
     ucp_listener_params_t params;
