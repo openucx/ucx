@@ -212,7 +212,17 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
     uct_ep_params_t cm_lane_params;
     ucs_status_t status;
 
+    /* TODO: remove ucp_ep_params form wireup_ep */
     wireup_ep->ucp_ep_params  = *params;
+    /* reset pointers which can be inaccessible later */
+    wireup_ep->ucp_ep_params.address          = NULL;
+    wireup_ep->ucp_ep_params.err_handler.cb   = NULL;
+    wireup_ep->ucp_ep_params.err_handler.arg  = NULL;
+    wireup_ep->ucp_ep_params.user_data        = NULL;
+    wireup_ep->ucp_ep_params.sockaddr.addr    = NULL;
+    wireup_ep->ucp_ep_params.sockaddr.addrlen = 0;
+    wireup_ep->ucp_ep_params.conn_request     = NULL;
+
     cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
                                 UCT_EP_PARAM_FIELD_USER_DATA             |
                                 UCT_EP_PARAM_FIELD_SOCKADDR              |
