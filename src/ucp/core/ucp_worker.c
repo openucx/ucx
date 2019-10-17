@@ -1900,8 +1900,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
             }
         }
 
-        status = ucp_address_pack(worker, NULL, tl_bitmap, UINT64_MAX, NULL,
-                                  &attr->address_length, (void**)&attr->address);
+        status = ucp_address_pack(worker, NULL, tl_bitmap,
+                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                                  &attr->address_length,
+                                  (void**)&attr->address);
     }
 
     return status;
