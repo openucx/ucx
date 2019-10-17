@@ -1270,19 +1270,16 @@ out:
     return status;
 }
 
-static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
-                                        ucp_rsc_index_t rsc_index)
+static void ucp_worker_enable_atomic_tl(ucp_worker_h worker,
+                                        uint64_t *amo_bitmap,
+                                        ucp_rsc_index_t rsc_index,
+                                        const char *mode)
 {
     ucs_assert(rsc_index != UCP_NULL_RESOURCE);
     ucs_trace("worker %p: using %s atomics on iface[%d]=" UCT_TL_RESOURCE_DESC_FMT,
               worker, mode, rsc_index,
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
-    if (!strcmp(mode, "device")) {
-        worker->device_amo_tls |= UCS_BIT(rsc_index);
-    } else {
-        ucs_assert(!strcmp(mode, "cpu"));
-        worker->cpu_amo_tls    |= UCS_BIT(rsc_index);
-    }
+    (*amo_bitmap) |= UCS_BIT(rsc_index);
 }
 
 static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
@@ -1296,7 +1293,8 @@ static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface = worker->ifaces[iface_id];
         if (wiface->attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
-            ucp_worker_enable_atomic_tl(worker, "cpu", wiface->rsc_index);
+            ucp_worker_enable_atomic_tl(worker, &worker->cpu_amo_tls,
+                                        wiface->rsc_index, "cpu");
         }
     }
 }
@@ -1384,7 +1382,8 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
             !strncmp(rsc->tl_rsc.dev_name, best_rsc->tl_rsc.dev_name,
                      UCT_DEVICE_NAME_MAX))
         {
-            ucp_worker_enable_atomic_tl(worker, "device", rsc_index);
+            ucp_worker_enable_atomic_tl(worker, &worker->device_amo_tls,
+                                        rsc_index, "device");
         }
     }
 }
