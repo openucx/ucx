@@ -1,0 +1,42 @@
+# See https://aka.ms/yaml
+
+pr: none
+trigger:
+  tags:
+    include:
+      - v*
+
+resources:
+  containers:
+    - container: fedora
+      image: ucfconsort.azurecr.io/ucx/fedora:1
+      endpoint: ucfconsort_registry
+
+stages:
+  - stage: Release
+    jobs:
+      - job: release
+        displayName: build tarball and source rpm
+        container: fedora
+        steps:
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              gcc --version
+              ./contrib/configure-release
+              ./contrib/buildrpm.sh -s -t -b
+            displayName: Build tarball
+
+          - task: GithubRelease@0
+            displayName: Create GitHub Draft Release
+            inputs:
+              githubConnection: release
+              repositoryName: openucx/ucx
+              action: create
+              isDraft: true
+              addChangeLog: false
+              assets: |
+                ./ucx-*.tar.gz
+                ./rpm-dist/ucx-*.src.rpm
