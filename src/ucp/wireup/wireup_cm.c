@@ -67,7 +67,7 @@ static ucs_status_t ucp_cm_ep_client_do_initial_config(ucp_ep_h ucp_ep,
         goto free_ucp_addr;
     }
 
-    ucs_assert(unpacked_addr.address_count < UCP_MAX_RESOURCES);
+    ucs_assert(unpacked_addr.address_count <= UCP_MAX_RESOURCES);
     status = ucp_wireup_select_lanes(ucp_ep, &wireup_ep->ucp_ep_params,
                                      ucp_cm_ep_init_flags(worker,
                                                           &wireup_ep->ucp_ep_params),
