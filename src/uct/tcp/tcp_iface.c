@@ -28,7 +28,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Size of send copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
   
-  {"RX_SEG_SIZE", "128kb",
+  {"RX_SEG_SIZE", "64kb",
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -114,6 +114,12 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     uct_base_iface_query(&iface->super, attr);
 
+    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
+                                &attr->bandwidth.shared);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -127,25 +133,28 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.am.max_short = am_buf_size;
     attr->cap.am.max_bcopy = am_buf_size;
 
-    if (iface->config.zcopy.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT) {
+    if (iface->config.zcopy.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT) {
+        /* AM */
         attr->cap.am.max_iov          = iface->config.zcopy.max_iov -
-                                        UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT;
+                                        UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
         attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
                                         sizeof(uct_tcp_am_hdr_t);
         attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;
         attr->cap.am.opt_zcopy_align  = 512;
         attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
+
+        /* PUT */
+        attr->cap.put.max_iov          = iface->config.zcopy.max_iov -
+                                         UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
+        attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
+                                         UCT_TCP_EP_PUT_SERVICE_LENGTH;
+        attr->cap.put.opt_zcopy_align  = 512;
+        attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
     }
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
-                                &attr->bandwidth.shared, &attr->cap.am.align_mtu);
     attr->bandwidth.dedicated = 0;
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    attr->latency.growth  = 0;
-    attr->overhead        = 50e-6;  /* 50 usec */
+    attr->latency.growth      = 0;
+    attr->overhead            = 50e-6;  /* 50 usec */
 
     if (iface->config.prefer_default) {
         status = uct_tcp_netif_is_default(iface->if_name, &is_default);
@@ -226,17 +235,6 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
-{
-    iface->outstanding++;
-}
-
-void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
-{
-    ucs_assert(iface->outstanding > 0);
-    iface->outstanding--;
-}
-
 static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 {
     if (iface->listen_fd != -1) {
@@ -312,6 +310,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_am_short              = uct_tcp_ep_am_short,
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
     .ep_am_zcopy              = uct_tcp_ep_am_zcopy,
+    .ep_put_zcopy             = uct_tcp_ep_put_zcopy,
     .ep_pending_add           = uct_tcp_ep_pending_add,
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
@@ -457,14 +456,14 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
      * protocol and user's AM headers that use 1st and 2nd IOVs
      * correspondingly) and system constraints */
     self->config.zcopy.max_iov    = ucs_min(config->max_iov +
-                                            UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT,
+                                            UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT,
                                             ucs_iov_get_max());
     /* Use a remaining part of TX segment for AM Zcopy header */
-    self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_ctx_t) +
+    self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_tx_t) +
                                      sizeof(struct iovec) *
                                      self->config.zcopy.max_iov);
     if ((self->config.zcopy.hdr_offset > self->config.tx_seg_size) &&
-        (self->config.zcopy.max_iov > UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT)) {
+        (self->config.zcopy.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT)) {
         ucs_error("AM Zcopy context (%zu) must be <= TX segment size (%zu). "
                   "It can be adjusted by decreasing maximum IOV count (%zu)",
                   self->config.zcopy.hdr_offset, self->config.tx_seg_size,

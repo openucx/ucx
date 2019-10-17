@@ -26,13 +26,21 @@
  * where %s value can be -/Tx/Rx */
 #define UCT_TCP_EP_CTX_CAPS_STR_MAX           8
 
-/* How many IOVs are needed to keep AM Zcopy service data
- * (TCP protocol and user's AM headers) */
-#define UCT_TCP_EP_AM_ZCOPY_SERVICE_IOV_COUNT 2
+/* How many IOVs are needed to keep AM/PUT Zcopy service data
+ * (TCP protocol and user's AM (or PUT) headers) */
+#define UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT    2
 
 /* How many IOVs are needed to do AM Short
  * (TCP protocol and user's AM headers, payload) */
 #define UCT_TCP_EP_AM_SHORTV_IOV_COUNT        3
+
+/* Maximum size of a data that can be sent by PUT Zcopy
+ * operation */
+#define UCT_TCP_EP_PUT_ZCOPY_MAX              SIZE_MAX
+
+/* Length of a data that is used by PUT protocol */
+#define UCT_TCP_EP_PUT_SERVICE_LENGTH        (sizeof(uct_tcp_am_hdr_t) + \
+                                              sizeof(uct_tcp_ep_put_req_hdr_t))
 
 
 /**
@@ -49,9 +57,16 @@ typedef enum uct_tcp_ep_ctx_type {
      * free memory allocating for this EP. */
     UCT_TCP_EP_CTX_TYPE_RX,
 
-    /* Additional flags that controls EP behavior. */
-    /* AM Zcopy operation is in progress on a given EP. */
+    /* Additional flags that controls EP behavior: */
+    /* - Zcopy TX operation is in progress on a given EP. */
     UCT_TCP_EP_CTX_TYPE_ZCOPY_TX,
+    /* - PUT RX operation is in progress on a given EP. */
+    UCT_TCP_EP_CTX_TYPE_PUT_RX,
+    /* - PUT TX operation is waiting for an ACK on a given EP */
+    UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK,
+    /* - PUT RX operation is waiting for resources to send an ACK
+     *   for received PUT operations on a given EP */
+    UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK
 } uct_tcp_ep_ctx_type_t;
 
 
@@ -163,8 +178,8 @@ typedef enum uct_tcp_cm_conn_event {
  * TCP connection request packet
  */
 typedef struct uct_tcp_cm_conn_req_pkt {
-    uct_tcp_cm_conn_event_t       event;
-    struct sockaddr_in            iface_addr;
+    uct_tcp_cm_conn_event_t       event;      /* Connection event ID */
+    struct sockaddr_in            iface_addr; /* Socket address of UCT local iface */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
 
 
@@ -172,32 +187,79 @@ typedef struct uct_tcp_cm_conn_req_pkt {
  * TCP active message header
  */
 typedef struct uct_tcp_am_hdr {
-    uint8_t                       am_id;
-    uint32_t                      length;
+    uint8_t                       am_id;      /* UCT AM ID of an AM operation */
+    uint32_t                      length;     /* Length of data sent in an AM operation */
 } UCS_S_PACKED uct_tcp_am_hdr_t;
+
+
+/**
+ * AM IDs reserved for TCP protocols
+ */
+typedef enum uct_tcp_ep_am_id {
+    /* AM ID reserved for TCP internal Connection Manager messages */
+    UCT_TCP_EP_CM_AM_ID      = UCT_AM_ID_MAX,
+    /* AM ID reserved for TCP internal PUT REQ message */
+    UCT_TCP_EP_PUT_REQ_AM_ID = UCT_AM_ID_MAX + 1,
+    /* AM ID reserved for TCP internal PUT ACK message */
+    UCT_TCP_EP_PUT_ACK_AM_ID = UCT_AM_ID_MAX + 2
+} uct_tcp_ep_am_id_t;
+
+
+/**
+ * TCP PUT request header
+ */
+typedef struct uct_tcp_ep_put_req_hdr {
+    uint64_t                      addr;        /* Address of a remote memory buffer */
+    size_t                        length;      /* Length of a remote memory buffer */
+    uint32_t                      sn;          /* Sequence number of the current PUT operation */
+} UCS_S_PACKED uct_tcp_ep_put_req_hdr_t;
+
+
+/**
+ * TCP PUT acknowledge header
+ */
+typedef struct uct_tcp_ep_put_ack_hdr {
+    uint32_t                      sn;          /* Sequence number of the last acked PUT operation */
+} UCS_S_PACKED uct_tcp_ep_put_ack_hdr_t;
+
+
+/**
+ * TCP PUT completion
+ */
+typedef struct uct_tcp_ep_put_completion {
+    uct_completion_t              *comp;           /* User's completion passed to
+                                                    * uct_ep_flush */
+    uint32_t                      wait_put_sn;     /* Sequence number of the last unacked
+                                                    * PUT operations that was in-progress
+                                                    * when uct_ep_flush was called */
+    ucs_queue_elem_t              elem;            /* Element to insert completion into
+                                                    * TCP EP PUT operation pending queue */
+} uct_tcp_ep_put_completion_t;
 
 
 /**
  * TCP endpoint communication context
  */
 typedef struct uct_tcp_ep_ctx {
-    void                          *buf;      /* Partial send/recv data */
-    size_t                        length;    /* How much data in the buffer */
-    size_t                        offset;    /* Next offset to send/recv */
+    uint32_t                      put_sn;         /* Sequence number of last sent
+                                                   * or received PUT operation */
+    void                          *buf;           /* Partial send/recv data */
+    size_t                        length;         /* How much data in the buffer */
+    size_t                        offset;         /* Next offset to send/recv */
 } uct_tcp_ep_ctx_t;
 
 
 /**
- * TCP AM Zcopy communication context mapped to
+ * TCP AM/PUT Zcopy communication context mapped to
  * buffer from TCP EP context
  */
-typedef struct uct_tcp_ep_zcopy_ctx {
-    uct_tcp_am_hdr_t              super;
-    uct_completion_t              *comp;
-    size_t                        iov_index;
-    size_t                        iov_cnt;
-    struct iovec                  iov[0];
-} uct_tcp_ep_zcopy_ctx_t;
+typedef struct uct_tcp_ep_zcopy_tx {
+    uct_tcp_am_hdr_t              super;     /* UCT TCP AM header */
+    uct_completion_t              *comp;     /* Local UCT completion object */
+    size_t                        iov_index; /* Current IOV index */
+    size_t                        iov_cnt;   /* Number of IOVs that should be sent */
+    struct iovec                  iov[0];    /* IOVs that should be sent */
+} uct_tcp_ep_zcopy_tx_t;
 
 
 /**
@@ -205,15 +267,17 @@ typedef struct uct_tcp_ep_zcopy_ctx {
  */
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    uint8_t                       ctx_caps;    /* Which contexts are supported */
-    int                           fd;          /* Socket file descriptor */
-    uct_tcp_ep_conn_state_t       conn_state;  /* State of connection with peer */
-    int                           events;      /* Current notifications */
-    uct_tcp_ep_ctx_t              tx;          /* TX resources */
-    uct_tcp_ep_ctx_t              rx;          /* RX resources */
-    struct sockaddr_in            peer_addr;   /* Remote iface addr */
-    ucs_queue_head_t              pending_q;   /* Pending operations */
-    ucs_list_link_t               list;
+    uint8_t                       ctx_caps;         /* Which contexts are supported */
+    int                           fd;               /* Socket file descriptor */
+    uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
+    int                           events;           /* Current notifications */
+    uct_tcp_ep_ctx_t              tx;               /* TX resources */
+    uct_tcp_ep_ctx_t              rx;               /* RX resources */
+    struct sockaddr_in            peer_addr;        /* Remote iface addr */
+    ucs_queue_head_t              pending_q;        /* Pending operations */
+    ucs_queue_head_t              put_comp_q;       /* Flush completions waiting for
+                                                     * outstanding PUTs acknowledgment */
+    ucs_list_link_t               list;             /* List element to insert into TCP EP list */
 };
 
 
@@ -233,6 +297,7 @@ typedef struct uct_tcp_iface {
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
                                                       * are in progress */
+
     struct {
         size_t                    tx_seg_size;       /* TX AM buffer size */
         size_t                    rx_seg_size;       /* RX AM buffer size */
@@ -284,9 +349,10 @@ typedef struct uct_tcp_iface_config {
 extern uct_component_t uct_tcp_component;
 extern const char *uct_tcp_address_type_names[];
 extern const uct_tcp_cm_state_t uct_tcp_ep_cm_state[];
+extern const uct_tcp_ep_progress_t uct_tcp_ep_progress_rx_cb[];
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
-                                double *bandwidth_p, size_t *mtu_p);
+                                double *bandwidth_p);
 
 ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
                                   struct sockaddr_in *netmask);
@@ -302,15 +368,15 @@ size_t uct_tcp_iface_get_max_iov(const uct_tcp_iface_t *iface);
 
 size_t uct_tcp_iface_get_max_zcopy_header(const uct_tcp_iface_t *iface);
 
-void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface);
-
-void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface);
-
 void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno);
+
+unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep);
+
+unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
@@ -344,8 +410,6 @@ void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
-unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
-
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove);
 
 void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
@@ -361,6 +425,10 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
                                  unsigned header_length, const uct_iov_t *iov,
                                  size_t iovcnt, unsigned flags,
                                  uct_completion_t *comp);
+
+ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp);
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
                                     unsigned flags);
@@ -405,6 +473,25 @@ static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
     return uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
 }
 
+static inline unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
+{
+    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))) {
+        return uct_tcp_ep_progress_am_rx(ep);
+    } else {
+        return uct_tcp_ep_progress_put_rx(ep);
+    }
+}
+
+static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
+{
+    iface->outstanding++;
+}
+
+static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
+{
+    ucs_assert(iface->outstanding > 0);
+    iface->outstanding--;
+}
 
 /**
  * Query for active network devices under /sys/class/net, as determined by
