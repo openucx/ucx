@@ -248,8 +248,8 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_ep_t, const uct_ep_params_t *params)
     }
 
     UCT_SOCKCM_CB_FLAGS_CHECK((params->field_mask &
-			       UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ?
-			      params->sockaddr_cb_flags : 0);
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ?
+                              params->sockaddr_cb_flags : 0);
 
     self->pack_cb       = (params->field_mask &
                            UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
@@ -326,10 +326,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sockcm_ep_t)
 
     ucs_debug("sockcm_ep %p: destroying", self);
 
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+
     ucs_async_remove_handler(self->sock_id_ctx->sock_fd, 1);
     uct_sockcm_ep_put_sock_id(self->sock_id_ctx);
-
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
 
     uct_worker_progress_unregister_safe(&iface->super.worker->super,
                                         &self->slow_prog_id);
