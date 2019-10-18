@@ -1011,7 +1011,7 @@ int ucp_wireup_is_rsc_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index)
            (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SELF);
 }
 
-static ucs_status_t
+static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         const ucp_wireup_select_bw_info_t *bw_info,
                         uint64_t tl_bitmap,
@@ -1022,7 +1022,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_info_t sinfo = {0};
     const ucp_address_entry_t *ae;
     ucs_status_t status;
-    int num_lanes;
+    unsigned num_lanes;
     uint64_t local_dev_bitmap;
     uint64_t remote_dev_bitmap;
     ucp_md_map_t md_map;
@@ -1062,7 +1062,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    return UCS_OK;
+    return num_lanes;
 }
 
 static ucs_status_t
@@ -1128,19 +1128,45 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    return ucp_wireup_add_bw_lanes(select_params, &bw_info, UINT64_MAX, select_ctx);
+    /* don't check returned number of lanes from the function below,
+     * since we already have one AM BW lane - AM lane */
+    ucp_wireup_add_bw_lanes(select_params, &bw_info, UINT64_MAX, select_ctx);
+
+    return UCS_OK;
+}
+
+static uint64_t ucp_wireup_get_rma_bw_iface_flags(ucp_rndv_mode_t rndv_mode)
+{
+    switch (rndv_mode) {
+    case UCP_RNDV_MODE_AUTO:
+        return (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY);
+    case UCP_RNDV_MODE_GET_ZCOPY:
+        return UCT_IFACE_FLAG_GET_ZCOPY;
+    case UCP_RNDV_MODE_PUT_ZCOPY:
+        return UCT_IFACE_FLAG_PUT_ZCOPY;
+    default:
+        return 0;
+    }
 }
 
 static ucs_status_t
 ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_ep_h ep            = select_params->ep;
-    ucp_context_h context  = ep->worker->context;
-    unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
-                                                      select_ctx);
+    ucp_ep_h ep                  = select_params->ep;
+    ucp_context_h context        = ep->worker->context;
+    unsigned ep_init_flags       = ucp_wireup_ep_init_flags(select_params,
+                                                            select_ctx);
+    uint64_t iface_rma_flags     = 0;
+    ucp_rndv_mode_t rndv_modes[] = {
+        context->config.ext.rndv_mode,
+        UCP_RNDV_MODE_GET_ZCOPY,
+        UCP_RNDV_MODE_PUT_ZCOPY
+    };
+    size_t added_lanes;
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
+    uint8_t i;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         bw_info.criteria.remote_md_flags = 0;
@@ -1154,10 +1180,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info.criteria.title              = "high-bw remote memory access";
-    bw_info.criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY;
-    bw_info.criteria.local_iface_flags  = bw_info.criteria.remote_iface_flags |
-                                          UCT_IFACE_FLAG_PENDING;
+    bw_info.criteria.remote_iface_flags = 0;
+    bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_PENDING;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
     ucp_wireup_clean_amo_criteria(&bw_info.criteria);
@@ -1175,15 +1199,46 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.max_lanes         = context->config.ext.max_rndv_lanes;
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
+    /* First checked RNDV mode has to be a mode specified in config */
+    ucs_assert(rndv_modes[0] == context->config.ext.rndv_mode);
+
+    /* RNDV protocol can't mix different schemes, i.e. wireup has to
+     * select lanes with the same iface flags depends on a requested
+     * RNDV scheme.
+     * First of all, try to select lanes with RNDV scheme requested
+     * by user. If no lanes were selected and RNDV scheme in the
+     * configuration is AUTO, try other schemes. */
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
-    for (mem_type = UCS_MEMORY_TYPE_HOST; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (!context->mem_type_access_tls[mem_type]) {
-            continue;
+    for (i = 0; i < ucs_array_size(rndv_modes); i++) {
+        /* Remove the previous iface RMA flags */
+        bw_info.criteria.remote_iface_flags &= ~iface_rma_flags;
+        bw_info.criteria.local_iface_flags  &= ~iface_rma_flags;
+
+        iface_rma_flags = ucp_wireup_get_rma_bw_iface_flags(rndv_modes[i]);
+
+        /* Set the new iface RMA flags */
+        bw_info.criteria.remote_iface_flags |= iface_rma_flags;
+        bw_info.criteria.local_iface_flags  |= iface_rma_flags;
+
+        added_lanes = 0;
+
+        for (mem_type = UCS_MEMORY_TYPE_HOST;
+             mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+            if (!context->mem_type_access_tls[mem_type]) {
+                continue;
+            }
+
+            added_lanes += ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                                   context->mem_type_access_tls[mem_type],
+                                                   select_ctx);
         }
 
-        ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                context->mem_type_access_tls[mem_type],
-                                select_ctx);
+        if (added_lanes /* There are selected lanes */ ||
+            /* There are no selected lanes, but a user requested
+             * the exact RNDV scheme, so there is no other choice */
+            (context->config.ext.rndv_mode != UCP_RNDV_MODE_AUTO)) {
+            break;
+        }
     }
 
     return UCS_OK;
