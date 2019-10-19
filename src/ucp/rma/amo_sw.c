@@ -208,8 +208,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
                      (ucp_worker_iface_get_attr(worker,
                                                 amo_rsc_idx)->cap.flags &
                       UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
-        ucs_bug("worker %p: got AM with AMO request with enabled device atomic TLS 0x%"PRIx64,
-                worker, worker->atomic_tls);
+        ucs_error("Unsupported: got software atomic request while device atomics are selected on worker %p",
+                  worker);
         /* TODO: this situation will be possible then CM wireup is implemented
          *       and CM lane is bound to suboptimal device, then need to execute
          *       AMO on fastest resource from worker->atomic_tls using loopback
