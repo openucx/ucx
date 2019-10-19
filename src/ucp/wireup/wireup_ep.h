@@ -40,7 +40,6 @@ struct ucp_wireup_ep {
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
     ucp_ep_params_t           ucp_ep_params; /**< UCP EP paramters */
-    char                      dev_name[UCT_DEVICE_NAME_MAX];
 };
 
 

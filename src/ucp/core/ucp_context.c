@@ -1630,14 +1630,10 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
     return UCS_MEMORY_TYPE_HOST;
 }
 
-uint64_t ucp_context_tl_bitmap(ucp_context_h context, const char *dev_name)
+uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
 {
     uint64_t        tl_bitmap;
     ucp_rsc_index_t tl_idx;
-
-    if (dev_name == NULL) {
-        return context->tl_bitmap;
-    }
 
     tl_bitmap = 0;
 
