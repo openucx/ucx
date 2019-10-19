@@ -73,6 +73,7 @@ void *ucm_sys_malloc(size_t size)
     ptr = ucm_orig_mmap(NULL, sys_size, PROT_READ|PROT_WRITE,
                         MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) {
+        ucm_error("mmap(size=%zu) failed: %m", sys_size);
         return NULL;
     }
 
@@ -128,6 +129,8 @@ void *ucm_sys_realloc(void *ptr, size_t size)
 
     newptr = ucm_orig_mremap(oldptr, oldsize, sys_size, MREMAP_MAYMOVE);
     if (newptr == MAP_FAILED) {
+        ucm_error("mremap(oldptr=%p oldsize=%zu, newsize=%zu) failed: %m",
+                  oldptr, oldsize, sys_size);
         return NULL;
     }
 
