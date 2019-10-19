@@ -423,6 +423,6 @@ ucp_memory_type_detect(ucp_context_h context, void *address, size_t length)
     return ucp_memory_type_detect_mds(context, address, length);
 }
 
-uint64_t ucp_context_tl_bitmap(ucp_context_h context, const char *dev_name);
+uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
 
 #endif
