@@ -217,6 +217,8 @@ static ucs_status_t
 ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno,
                            ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
+    ucs_status_t status = UCS_ERR_IO_ERROR;
+
     if (io_retval == 0) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
@@ -226,11 +228,16 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
         return UCS_ERR_NO_PROGRESS;
     }
 
-    if ((err_cb == NULL) || (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
-        ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
+    if (err_cb != NULL) {
+        status = err_cb(err_cb_arg, io_errno);
+        if (status == UCS_OK) {
+            return UCS_ERR_NO_PROGRESS;
+        }
     }
 
-    return UCS_ERR_IO_ERROR;
+    ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
+
+    return status;
 }
 
 static inline ucs_status_t

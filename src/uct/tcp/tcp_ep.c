@@ -164,10 +164,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     uct_tcp_ep_ctx_init(&self->tx);
     uct_tcp_ep_ctx_init(&self->rx);
 
-    self->events     = 0;
-    self->fd         = fd;
-    self->ctx_caps   = 0;
-    self->conn_state = UCT_TCP_EP_CONN_STATE_CLOSED;
+    self->events        = 0;
+    self->conn_attempts = 0;
+    self->fd            = fd;
+    self->ctx_caps      = 0;
+    self->conn_state    = UCT_TCP_EP_CONN_STATE_CLOSED;
 
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
@@ -347,22 +348,34 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
                       UCS_ERR_UNREACHABLE);
 }
 
-static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
-                                                const struct sockaddr_in *dest_addr,
-                                                uct_tcp_ep_t **new_ep)
+static ucs_status_t
+uct_tcp_ep_create_socket_and_connect(uct_tcp_iface_t *iface,
+                                     const struct sockaddr_in *dest_addr,
+                                     uct_tcp_ep_t **ep_p)
 {
+    uct_tcp_ep_t *ep = NULL;
     ucs_status_t status;
-    uct_tcp_ep_t *ep;
     int fd;
+
+    /* if EP is already allocated, dest_addr can be NULL */
+    ucs_assert((*ep_p != NULL) || (dest_addr != NULL));
 
     status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_tcp_ep_init(iface, fd, dest_addr, &ep);
-    if (status != UCS_OK) {
-        goto err_close_fd;
+    if (*ep_p == NULL) {
+        status = uct_tcp_ep_init(iface, fd, dest_addr, &ep);
+        if (status != UCS_OK) {
+            goto err_close_fd;
+        }
+
+        /* EP is responsible for this socket fd from now */
+        fd = -1;
+    } else {
+        ep     = *ep_p;
+        ep->fd = fd;
     }
 
     status = uct_tcp_cm_conn_start(ep);
@@ -370,19 +383,39 @@ static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
         goto err_ep_destroy;
     }
 
-    status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_TX);
-    if (status != UCS_OK) {
-        goto err_ep_destroy;
-    }
-
-    *new_ep = ep;
+    *ep_p = ep;
 
     return UCS_OK;
 
 err_ep_destroy:
-    uct_tcp_ep_destroy_internal(&ep->super.super);
+    if (*ep_p == NULL) {
+        uct_tcp_ep_destroy_internal(&ep->super.super);
+    }
 err_close_fd:
-    close(fd);
+    uct_tcp_ep_close_fd(&fd);
+    return status;
+}
+
+static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
+                                                const struct sockaddr_in *dest_addr,
+                                                uct_tcp_ep_t **ep_p)
+{
+    ucs_status_t status;
+
+    status = uct_tcp_ep_create_socket_and_connect(iface, dest_addr, ep_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_tcp_ep_add_ctx_cap(*ep_p, UCT_TCP_EP_CTX_TYPE_TX);
+    if (status != UCS_OK) {
+        goto err_ep_destroy;
+    }
+
+    return UCS_OK;
+
+err_ep_destroy:
+    uct_tcp_ep_destroy_internal(&(*ep_p)->super.super);
     return status;
 }
 
@@ -591,9 +624,13 @@ static inline ssize_t uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
     return sent_length;
 }
 
-void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno)
+ucs_status_t uct_tcp_ep_handle_dropped_connect_error(uct_tcp_ep_t *ep, int io_errno)
 {
-    /* if connection establishment failes, the system limits
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    ucs_status_t status;
+
+    /* if connection establishment fails, the system limits
      * may not be big enough */
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
@@ -601,11 +638,27 @@ void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno)
         ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED) ||
          /* connection establishment procedure timed out */
          (io_errno == ETIMEDOUT))) {
-        ucs_error("try to increase \"net.core.somaxconn\", "
-                  "\"net.core.netdev_max_backlog\", "
-                  "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
-                  "on the remote node");
+        uct_tcp_ep_mod_events(ep, 0, ep->events);
+        uct_tcp_ep_close_fd(&ep->fd);
+
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
+
+        status = uct_tcp_ep_create_socket_and_connect(iface, NULL, &ep);
+        if (status != UCS_OK) {
+            ucs_error("try to increase \"net.core.somaxconn\", "
+                      "\"net.core.netdev_max_backlog\", "
+                      "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
+                      "on the remote node or increase %s%s%s=%u to do more "
+                      "more connection establishment attempts",
+                      UCS_CONFIG_PREFIX, UCT_TCP_CONFIG_PREFIX,
+                      UCT_TCP_CONFIG_MAX_CONN_ATTEMPTS,
+                      iface->config.max_conn_attempts);
+        }
+
+        return status;
     }
+
+    return UCS_ERR_IO_ERROR;
 }
 
 static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
@@ -629,9 +682,7 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
         return UCS_OK;
     }
 
-    uct_tcp_ep_dropped_connect_print_error(ep, io_errno);
-
-    return UCS_ERR_NO_PROGRESS;
+    return uct_tcp_ep_handle_dropped_connect_error(ep, io_errno);
 }
 
 static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
