@@ -1121,6 +1121,10 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
              msg->conn_sn);
     p += strlen(p);
 
+    if (unpacked_address.address_list == NULL) {
+        return; /* No addresses were unpacked */
+    }
+
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
         ucs_for_each_bit(tl, context->tl_bitmap) {
             rsc = &context->tl_rscs[tl];
@@ -1135,7 +1139,8 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         p += strlen(p);
 
         for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-            if (msg->tli[lane] == (ae - unpacked_address.address_list)) {
+            if (msg->tli[lane] ==
+                            ucp_unpacked_address_index(&unpacked_address, ae)) {
                 snprintf(p, end - p, "/lane[%d]", lane);
                 p += strlen(p);
             }

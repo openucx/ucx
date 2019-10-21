@@ -77,18 +77,17 @@ typedef struct {
  * Global parameters for lanes selection during UCP wireup procedure
  */
 typedef struct {
-    ucp_ep_h                  ep;                        /* UCP Endpoint */
-    const ucp_ep_params_t     *ep_params;                /* Tuning parameters for the
-                                                          * UCP endpoint */
-    unsigned                  ep_init_flags;             /* Endpoint init flags */
-    uint64_t                  tl_bitmap;                 /* TLs bitmap which can be selected */
-    const ucp_address_entry_t *address_list;             /* Array of remote addresses */
-    unsigned                  address_count;             /* Number of remote addresses */
-    int                       allow_am;                  /* Shows whether emulation over AM
-                                                          * is allowed or not for RMA/AMO */
-    int                       show_error;                /* Global flag that controls showing
-                                                          * errors from a selecting transport
-                                                          * procedure */
+    ucp_ep_h                      ep;               /* UCP Endpoint */
+    const ucp_ep_params_t         *ep_params;       /* Tuning parameters for the
+                                                     * UCP endpoint */
+    unsigned                      ep_init_flags;    /* Endpoint init flags */
+    uint64_t                      tl_bitmap;        /* TLs bitmap which can be selected */
+    const ucp_unpacked_address_t  *address;         /* Remote addresses */
+    int                           allow_am;         /* Shows whether emulation over AM
+                                                     * is allowed or not for RMA/AMO */
+    int                           show_error;       /* Global flag that controls showing
+                                                     * errors from a selecting transport
+                                                     * procedure */
 } ucp_wireup_select_params_t;
 
 /**
@@ -291,8 +290,6 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
     ucp_ep_h ep                          = select_params->ep;
     ucp_worker_h worker                  = ep->worker;
     ucp_context_h context                = worker->context;
-    const ucp_address_entry_t *addr_list = select_params->address_list;
-    unsigned addr_count                  = select_params->address_count;
     unsigned addr_index;
     uct_tl_resource_desc_t *resource;
     const ucp_address_entry_t *ae;
@@ -318,8 +315,8 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
 
     /* Check which remote addresses satisfy the criteria */
     addr_index_map = 0;
-    for (ae = addr_list; ae < addr_list + addr_count; ++ae) {
-        addr_index = ae - addr_list;
+    ucp_unpacked_address_for_each(ae, select_params->address) {
+        addr_index = ucp_unpacked_address_index(select_params->address, ae);
         if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
             ucs_trace("addr[%d]: not in use, because on device[%d]",
                       addr_index, ae->dev_index);
@@ -423,8 +420,8 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             continue;
         }
 
-        for (ae = addr_list; ae < addr_list + addr_count; ++ae) {
-            addr_index = ae - addr_list;
+        ucp_unpacked_address_for_each(ae, select_params->address) {
+            addr_index = ucp_unpacked_address_index(select_params->address, ae);
             if (!(addr_index_map & UCS_BIT(addr_index)) ||
                 !ucp_wireup_is_reachable(worker, rsc_index, ae))
             {
@@ -465,7 +462,8 @@ out:
               " -> '%s' address[%d],md[%d] score %.2f", ep, criteria->title,
               UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sinfo.rsc_index].tl_rsc),
               context->tl_rscs[sinfo.rsc_index].md_index, ucp_ep_peer_name(ep),
-              sinfo.addr_index, addr_list[sinfo.addr_index].md_index,
+              sinfo.addr_index,
+              select_params->address->address_list[sinfo.addr_index].md_index,
               sinfo.score);
 
     *select_info = sinfo;
@@ -583,13 +581,15 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
          * deactivate its interface and wait for signaled active message to wake up.
          * Use a proxy lane which would send the first active message as signaled to
          * make sure the remote interface will indeed wake up. */
-        remote_cap_flags = select_params->address_list[select_info->addr_index].iface_attr.cap_flags;
+        remote_cap_flags = select_params->address->address_list
+                                [select_info->addr_index].iface_attr.cap_flags;
         is_proxy         = ucp_wireup_is_lane_proxy(select_params->ep,
                                                     select_info->rsc_index,
                                                     remote_cap_flags);
     }
 
-    dst_md_index = select_params->address_list[select_info->addr_index].md_index;
+    dst_md_index = select_params->address->address_list
+                                [select_info->addr_index].md_index;
     ucp_wireup_add_lane_desc(select_info, dst_md_index,
                              usage, is_proxy, select_ctx);
 }
@@ -637,7 +637,8 @@ ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
                           uint64_t *tl_bitmap, uint64_t *remote_md_map)
 {
     ucp_context_h context         = sparams->ep->worker->context;
-    const ucp_address_entry_t *ae = &sparams->address_list[sinfo->addr_index];
+    const ucp_address_entry_t *ae = &sparams->address->
+                                        address_list[sinfo->addr_index];
     ucp_rsc_index_t md_index      = context->tl_rscs[sinfo->rsc_index].md_index;
     ucp_rsc_index_t dst_md_index  = ae->md_index;
     ucp_rsc_index_t i;
@@ -1051,7 +1052,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         num_lanes++;
 
         local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[sinfo.rsc_index].dev_index);
-        ae                 = &select_params->address_list[sinfo.addr_index];
+        ae                 = &select_params->address->address_list[sinfo.addr_index];
         remote_dev_bitmap &= ~UCS_BIT(ae->dev_index);
 
         if (ucp_wireup_is_rsc_self_or_shm(ep, sinfo.rsc_index)) {
@@ -1117,7 +1118,8 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
             rsc_index                  = select_ctx->lane_descs[lane_desc_idx].rsc_index;
             bw_info.md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
             bw_info.local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
-            bw_info.remote_dev_bitmap &= ~UCS_BIT(select_params->address_list[addr_index].dev_index);
+            bw_info.remote_dev_bitmap &= ~UCS_BIT(select_params->address->
+                                                  address_list[addr_index].dev_index);
             if (ucp_wireup_is_rsc_self_or_shm(ep, rsc_index)) {
                 /* if AM lane is SELF or SHMEM - then do not use more lanes */
                 return UCS_OK;
@@ -1293,8 +1295,7 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
     select_params->ep_params     = params;
     select_params->ep_init_flags = ep_init_flags;
     select_params->tl_bitmap     = tl_bitmap;
-    select_params->address_list  = remote_address->address_list;
-    select_params->address_count = remote_address->address_count;
+    select_params->address       = remote_address;
     select_params->allow_am      = ucp_wireup_allow_am_emulation_layer(params,
                                                                        ep_init_flags);
     /* If we are using reduced TL bitmap, don't show errors */
@@ -1420,7 +1421,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     /* Select lane for wireup messages */
     key->wireup_lane =
         ucp_wireup_select_wireup_msg_lane(worker, select_params->ep_params,
-                                          select_params->address_list,
+                                          select_params->address->address_list,
                                           select_ctx->lane_descs,
                                           key->num_lanes);
 

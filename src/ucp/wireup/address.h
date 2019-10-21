@@ -96,6 +96,11 @@ struct ucp_unpacked_address {
          ++_elem)
 
 
+/* Return the index of a specific entry in an unpacked address */
+#define ucp_unpacked_address_index(_unpacked_address, _ae) \
+    ((int)((_ae) - (_unpacked_address)->address_list))
+
+
 /**
  * Pack multiple addresses into a buffer, of resources specified in rsc_bitmap.
  * For every resource in rcs_bitmap:
