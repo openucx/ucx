@@ -46,13 +46,18 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
 
   {"CONN_NB", "n",
-   "Enables non-blocking connection establishment. It may improve startup "
+   "Enable non-blocking connection establishment. It may improve startup "
    "time, but can lead to connection resets due to high load on TCP/IP stack",
    ucs_offsetof(uct_tcp_iface_config_t, conn_nb), UCS_CONFIG_TYPE_BOOL},
 
   {"MAX_POLL", UCS_PP_MAKE_STRING(UCT_TCP_MAX_EVENTS),
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
+  {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "5",
+   "How many connection establishment attmepts should be done if dropped "
+   "connection was detected due to lack of system resources",
+   ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
 
   {"NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
@@ -471,14 +476,15 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->config.zcopy.max_hdr  = self->config.tx_seg_size -
-                                  self->config.zcopy.hdr_offset;
-    self->config.prefer_default = config->prefer_default;
-    self->config.conn_nb        = config->conn_nb;
-    self->config.max_poll       = config->max_poll;
-    self->sockopt.nodelay       = config->sockopt_nodelay;
-    self->sockopt.sndbuf        = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf        = config->sockopt_rcvbuf;
+    self->config.zcopy.max_hdr     = self->config.tx_seg_size -
+                                     self->config.zcopy.hdr_offset;
+    self->config.prefer_default    = config->prefer_default;
+    self->config.conn_nb           = config->conn_nb;
+    self->config.max_poll          = config->max_poll;
+    self->config.max_conn_retries  = config->max_conn_retries;
+    self->sockopt.nodelay          = config->sockopt_nodelay;
+    self->sockopt.sndbuf           = config->sockopt_sndbuf;
+    self->sockopt.rcvbuf           = config->sockopt_rcvbuf;
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
@@ -683,4 +689,5 @@ out:
 }
 
 UCT_TL_DEFINE(&uct_tcp_component, tcp, uct_tcp_query_devices, uct_tcp_iface_t,
-              "TCP_", uct_tcp_iface_config_table, uct_tcp_iface_config_t);
+              UCT_TCP_CONFIG_PREFIX, uct_tcp_iface_config_table,
+              uct_tcp_iface_config_t);
