@@ -138,14 +138,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                       uct_ib_mlx5_qpc_cs_res(attr->max_inl_resp));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, 2);
-    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, 7);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, 7);
 
     if (qp->devx.mem == NULL) {
-        UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, 1);
-        UCT_IB_MLX5DV_SET(qpc, qpc, offload_type, 1);
+        UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, true);
+        UCT_IB_MLX5DV_SET(qpc, qpc, offload_type, true);
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, md->zero_mem->umem_id);
     } else {
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem->umem_id);
@@ -166,9 +162,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
     UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
     UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->port);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
     ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2init, sizeof(in_2init),
                                  out_2init, sizeof(out_2init));
@@ -213,11 +209,42 @@ err:
 }
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
-                                        enum ibv_qp_state state)
+                                        const void *in, size_t inlen,
+                                        void *out, size_t outlen)
+{
+    int ret;
+
+    switch (qp->type) {
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+        ret = mlx5dv_devx_qp_modify(qp->verbs.qp, in, inlen, out, outlen);
+        if (ret) {
+            ucs_error("mlx5dv_devx_qp_modify(%x) failed, syndrome %x: %m",
+                      UCT_IB_MLX5DV_GET(modify_qp_in, in, opcode),
+                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+            return UCS_ERR_IO_ERROR;
+        }
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
+        ret = mlx5dv_devx_obj_modify(qp->devx.obj, in, inlen, out, outlen);
+        if (ret) {
+            ucs_error("mlx5dv_devx_obj_modify(%x) failed, syndrome %x: %m",
+                      UCT_IB_MLX5DV_GET(modify_qp_in, in, opcode),
+                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+            return UCS_ERR_IO_ERROR;
+        }
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
+                                              enum ibv_qp_state state)
 {
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(modify_qp_in)] = {};
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(modify_qp_out)] = {};
-    int ret;
 
     switch (state) {
     case IBV_QPS_ERR:
@@ -231,15 +258,7 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
     }
 
     UCT_IB_MLX5DV_SET(modify_qp_in, in, qpn, qp->qp_num);
-    ret = mlx5dv_devx_obj_modify(qp->devx.obj, in, sizeof(in),
-                                 out, sizeof(out));
-    if (ret) {
-        ucs_error("mlx5dv_devx_obj_modify(%d) failed, syndrome %x: %m", state,
-                  UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
+    return uct_ib_mlx5_devx_modify_qp(qp, in, sizeof(in), out, sizeof(out));
 }
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp)

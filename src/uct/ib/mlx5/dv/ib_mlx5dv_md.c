@@ -306,7 +306,14 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
             status = UCS_ERR_IO_ERROR;
         }
         goto err_free;
+    }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg) !=
+        UCT_IB_MLX5_LOG_MAX_MSG_SIZE) {
+        status = UCS_ERR_UNSUPPORTED;
+        ucs_debug("Unexpected QUERY_HCA_CAP.log_max_msg %d\n",
+                  UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg));
+        goto err_free;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {

@@ -255,6 +255,8 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
                                          uct_dc_dci_t *dci)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     ucs_status_t status;
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
@@ -265,7 +267,7 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->super,
                                            &iface->super.super.super);
-    status = uct_ib_modify_qp(dci->txwq.super.verbs.qp, IBV_QPS_RESET);
+    status = uct_ib_mlx5_modify_qp_state(md, &dci->txwq.super, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
                                          &iface->super.super.super);
 
@@ -369,8 +371,14 @@ err_qp:
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     struct ibv_qp_attr attr;
     long attr_mask;
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super);
+    }
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
     memset(&attr, 0, sizeof(attr));
