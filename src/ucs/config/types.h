@@ -10,6 +10,10 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <sys/socket.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define UCS_FPATH_MAX_LEN 256
 
 /**
  * Logging levels.
@@ -90,6 +94,25 @@ typedef enum {
     UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(3)
 } ucs_config_print_flags_t;
 
+/**
+ * Memory Unit type
+ */
+typedef enum {
+    UCS_MM_UNIT_CPU = 0, /* CPU Memory        */
+    UCS_MM_UNIT_CUDA,    /* NVIDIA GPU Memory */
+    UCS_MM_UNIT_LAST
+} ucs_mm_unit_enum_t;
+
+
+/**
+ * System device type
+ */
+typedef enum {
+    UCS_SYS_DEVICE_IB = 0, /* Infiniband Device */
+    UCS_SYS_DEVICE_CUDA,   /* NVIDIA GPU Device */
+    UCS_SYS_DEVICE_LAST
+} ucs_sys_device_enum_t;
+
 
 /**
  * Structure type for array configuration. Should be used inside the configuration
@@ -118,5 +141,25 @@ typedef struct ucs_sock_addr {
     const struct sockaddr   *addr;      /**< Pointer to socket address */
     socklen_t                addrlen;   /**< Address length */
 } ucs_sock_addr_t;
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Memory unit abstraction
+ */
+typedef struct ucs_mm_unit {
+    ucs_mm_unit_enum_t mm_unit_type;             /**< Type of memory unit */
+    unsigned int       id;                       /**< Index of the unit */
+    char               fpath[UCS_FPATH_MAX_LEN];
+} ucs_mm_unit_t;
+
+/**
+ * @ingroup UCS_RESOURCE
+ * System Device abstraction
+ */
+typedef struct ucs_sys_device {
+    ucs_sys_device_enum_t sys_dev_type;             /**< Type of system device*/
+    unsigned int          id;                       /**< Index of the unit */
+    char                  fpath[UCS_FPATH_MAX_LEN];
+} ucs_sys_device_t;
 
 #endif /* TYPES_H_ */

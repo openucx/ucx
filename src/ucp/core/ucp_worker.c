@@ -1626,6 +1626,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
+    int num_mm_units;
+    int num_sys_devices;
+    int xx;
+    ucs_mm_unit_t *mm_units;
+    ucs_sys_device_t *sys_devices;
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -1692,6 +1697,18 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
                       getpid());
+
+    ucs_sys_get_mm_units(&mm_units, &num_mm_units);
+    for (xx = 0; xx < num_mm_units; xx++) {
+        ucs_debug("mm_unit = %s", mm_units[xx].fpath);
+    }
+    ucs_sys_free_mm_units(mm_units);
+
+    ucs_sys_get_sys_devices(&sys_devices, &num_sys_devices);
+    for (xx = 0; xx < num_sys_devices; xx++) {
+        ucs_debug("sys_unit = %s", sys_devices[xx].fpath);
+    }
+    ucs_sys_free_sys_devices(sys_devices);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,

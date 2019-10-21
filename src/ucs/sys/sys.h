@@ -362,6 +362,45 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length);
  */
 void ucs_sys_free(void *ptr, size_t length);
 
+
+/**
+ * Detect memory nodes associated with the CPUs and GPUs on the system
+ * and return a list of such nodes
+ *
+ * @param [out] mm_units     Array of memory unit abstractions
+ * @param [out] num_mm_units Number of memory units detected in the system
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_get_mm_units(ucs_mm_unit_t **mm_units, int *num_mm_units);
+
+
+/**
+ * Release resources allocated for memory nodes associated with CPU/GPU
+ *
+ * @param [out] mm_units     Array of memory unit abstractions
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_free_mm_units(ucs_mm_unit_t *mm_units);
+
+/**
+ * Detect system devices such as HCAs, GPUs, and other PCIe devices
+ * and return a list of such devices
+ *
+ * @param [out] sys_devices     Array of system device abstractions
+ * @param [out] num_sys_devices Number of system deivces detected in the system
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_get_sys_devices(ucs_sys_device_t **sys_devices, int *num_sys_devices);
+
+
+/**
+ * Release resources allocated for system devices
+ *
+ * @param [out] sys_devices Array of system device abstractions
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_free_sys_devices(ucs_sys_device_t *sys_devices);
+
 END_C_DECLS
 
 #endif
