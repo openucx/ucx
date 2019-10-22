@@ -149,6 +149,7 @@ typedef struct ucs_sock_addr {
 typedef struct ucs_mm_unit {
     ucs_mm_unit_enum_t mm_unit_type;             /**< Type of memory unit */
     unsigned int       id;                       /**< Index of the unit */
+    unsigned int       bus_id;                   /**< bus ID of of the device if applicable*/
     char               fpath[UCS_FPATH_MAX_LEN];
 } ucs_mm_unit_t;
 
@@ -159,6 +160,7 @@ typedef struct ucs_mm_unit {
 typedef struct ucs_sys_device {
     ucs_sys_device_enum_t sys_dev_type;             /**< Type of system device*/
     unsigned int          id;                       /**< Index of the unit */
+    unsigned int          bus_id;                   /**< bus ID of of the device if applicable*/
     char                  fpath[UCS_FPATH_MAX_LEN];
 } ucs_sys_device_t;
 

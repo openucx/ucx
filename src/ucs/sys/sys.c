@@ -35,6 +35,10 @@
 #  include <sys/capability.h>
 #endif
 
+#include <numaif.h>
+#include <cuda.h>
+#include <math.h>
+
 /* Default huge page size is 2 MBytes */
 #define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_SMAPS_FILE     "/proc/self/smaps"
@@ -1140,10 +1144,51 @@ static ucs_status_t ucs_get_paths(char *dev_loc, char *match, int *num_devices, 
     return UCS_OK;
 }
 
-ucs_status_t ucs_release_paths(char *fpaths)
+static ucs_status_t ucs_release_paths(char *fpaths)
 {
     ucs_free(fpaths);
     return UCS_OK;
+}
+
+static int ucs_get_bus_id(char *name)
+{
+    char delim[] = ":";
+    char *rval   = NULL;
+    char *str    = NULL;
+    char *str_p  = NULL;
+    int count    = 0;
+    int bus_id   = 0;
+    size_t idx;
+    int value;
+    int pow_factor;
+    size_t len;
+
+    str = ucs_malloc(sizeof(char) * strlen(name), "ucs_get_bus_id str");
+    if (NULL == str) {
+        return -1;
+    }
+    str_p = str;
+    strcpy(str, name);
+
+    do {
+        rval = strtok(str, delim);
+        str = NULL;
+        count++;
+        if (count == 2) break; /* for 0000:0c:00.0 bus id = 0c */
+    } while (rval != NULL);
+
+    len = strlen(rval);
+    for (idx = 0; idx < len; idx++) {
+        pow_factor = pow(16, len - 1 - idx);
+        value = (rval[idx] >= 'a') ? ((rval[idx] - 'a') + 10) : (rval[idx] - '0');
+        value *= pow_factor;
+        bus_id += value;
+    }
+
+    ucs_debug("dev name = %s bus_id = %d", name, bus_id);
+    ucs_free(str_p);
+
+    return bus_id;
 }
 
 ucs_status_t ucs_sys_get_mm_units(ucs_mm_unit_t **mm_units, int *num_units)
@@ -1187,6 +1232,7 @@ ucs_status_t ucs_sys_get_mm_units(ucs_mm_unit_t **mm_units, int *num_units)
             src = (char *) mm_fpaths[mm_idx] + (i * UCS_FPATH_MAX_LEN);
             strcat(mm_unit_p->fpath, "/");
             strcat(mm_unit_p->fpath, src);
+            mm_unit_p->bus_id       = (mm_idx == UCS_MM_UNIT_CPU) ? -1 : ucs_get_bus_id(src);
             mm_unit_p->id           = mm_unit_idx++;
             mm_unit_p->mm_unit_type = mm_idx;
             mm_unit_p               = mm_unit_p + 1;
@@ -1249,6 +1295,7 @@ ucs_status_t ucs_sys_get_sys_devices(ucs_sys_device_t **sys_devices, int *num_un
             src = (char *) sys_fpaths[sys_idx] + (i * UCS_FPATH_MAX_LEN);
             strcat(sys_dev_p->fpath, "/");
             strcat(sys_dev_p->fpath, src);
+            sys_dev_p->bus_id       = ucs_get_bus_id(src);
             sys_dev_p->id           = sys_dev_idx++;
             sys_dev_p->sys_dev_type = sys_idx;
             sys_dev_p               = sys_dev_p + 1;
@@ -1268,4 +1315,71 @@ ucs_status_t ucs_sys_free_sys_devices(ucs_sys_device_t *sys_devices)
 {
     ucs_free(sys_devices);
     return UCS_OK;
+}
+
+int ucs_get_cpu_mm_index(void *ptr)
+{
+    int mm_index = -1;
+
+    get_mempolicy(&mm_index, NULL, 0, ptr, MPOL_F_NODE | MPOL_F_ADDR);
+    printf("mm_index = %d\n", mm_index);
+
+    /* this is a shortcut that works only if numa node 0, 1, ... n
+     * occupy the first n indices of mm_unit array
+     */
+    return mm_index;
+}
+
+static int ucs_get_mm_index(int bus_id, ucs_mm_unit_t *mm_units, int num_units)
+{
+    int i;
+
+    for (i = 0; i < num_units; i++) {
+        if (mm_units[i].bus_id == bus_id) {
+            return mm_units[i].id;
+        }
+    }
+
+    return -1;
+}
+
+int ucs_get_cuda_mm_index(void *ptr, ucs_mm_unit_t *mm_units, int num_units)
+{
+    int mm_index = -1;
+    int ordinal;
+    int bus_id;
+    char *cu_err_str;
+    CUresult cures;
+    CUdevice device;
+
+    cures = cuPointerGetAttribute(&ordinal, CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL, (CUdeviceptr) ptr);
+    if (CUDA_SUCCESS != cures) {
+        cuGetErrorString(cures, &cu_err_str);
+        ucs_error("cuPointerGetAttribute failed: %s", cu_err_str);
+        return mm_index;
+    }
+
+    cures = cuDeviceGet(&device, ordinal);
+    if (CUDA_SUCCESS != cures) {
+        cuGetErrorString(cures, &cu_err_str);
+        ucs_error("cuDeviceGet failed: %s", cu_err_str);
+        return mm_index;
+    }
+
+    cures = cuDeviceGetAttribute(&bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, device);
+    if (CUDA_SUCCESS != cures) {
+        cuGetErrorString(cures, &cu_err_str);
+        ucs_error("cuDeviceGetAttribute failed: %s", cu_err_str);
+        return mm_index;
+    }
+
+    mm_index = ucs_get_mm_index(bus_id, mm_units, num_units);
+    if (-1 == mm_index) {
+        ucs_warn("could not find bus id of cuda device in mm_units. Using 0 index");
+        mm_index = 0;
+    }
+
+    printf("mm_index = %d\n", mm_index);
+
+    return mm_index;
 }
