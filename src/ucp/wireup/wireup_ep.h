@@ -39,7 +39,7 @@ struct ucp_wireup_ep {
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
-    ucp_ep_params_t           ucp_ep_params; /**< UCP EP paramters */
+    unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
 };
 
 
@@ -61,12 +61,14 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
  * After this function is called, it would be possible to send wireup messages
  * on this endpoint, if connect_aux is 1.
  *
- * @param [in]  uct_ep       Stub endpoint to connect.
- * @param [in]  rsc_index    Resource of the real transport.
- * @param [in]  connect_aux  Whether to connect the auxiliary transport, for
- *                          sending
+ * @param [in]  uct_ep            Stub endpoint to connect.
+ * @param [in]  ucp_ep_init_flags Initial flags of UCP EP.
+ * @param [in]  rsc_index         Resource of the real transport.
+ * @param [in]  connect_aux       Whether to connect the auxiliary transport,
+ *                                for sending.
+ * @param [in]  remote_address    Remote address connect to.
  */
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
                                    ucp_rsc_index_t rsc_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address);
 
@@ -74,8 +76,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params);
 
 ucs_status_t
-ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
-                          const ucp_ep_params_t *params,
+ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address);
 
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);

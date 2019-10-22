@@ -93,13 +93,14 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 
 ucs_status_t
-ucp_wireup_select_aux_transport(ucp_ep_h ep, const ucp_ep_params_t *params,
+ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 const ucp_unpacked_address_t *remote_address,
                                 ucp_wireup_select_info_t *select_info);
 
-ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
-                                                  const ucp_ep_params_t *params,
-                                                  ucp_rsc_index_t *rsc_index_p);
+ucs_status_t
+ucp_wireup_select_sockaddr_transport(const ucp_context_h context,
+                                     const ucs_sock_addr_t *sockaddr,
+                                     ucp_rsc_index_t *rsc_index_p);
 
 double ucp_wireup_amo_score_func(ucp_context_h context,
                                  const uct_md_attr_t *md_attr,
@@ -113,14 +114,12 @@ int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae);
 
-ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                   unsigned ep_init_flags,
+ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_unpacked_address_t *remote_address,
                                    uint8_t *addr_indices);
 
 ucs_status_t
-ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                        unsigned ep_init_flags,
+ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         const ucp_unpacked_address_t *remote_address,
                         uint8_t *addr_indices, ucp_ep_config_key_t *key);
 
@@ -140,5 +139,8 @@ static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_
                                                                 rsc_index));
 
 }
+
+unsigned ucp_ep_init_flags(const ucp_worker_h worker,
+                           const ucp_ep_params_t *params);
 
 #endif
