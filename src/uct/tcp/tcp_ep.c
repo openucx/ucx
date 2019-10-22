@@ -471,11 +471,12 @@ static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
                                             uct_tcp_iface_t);
     uct_tcp_ep_put_completion_t *put_comp;
 
-    uct_tcp_iface_outstanding_dec(iface);
-
     if (put_ack->sn == ep->tx.put_sn) {
-        /* Since there are no other PUT operations in-flight, can remove flag */
+        /* Since there are no other PUT operations in-flight, can remove flag
+         * and decrement iface outstanding operations counter */
+        ucs_assert(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK));
         ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK);
+        uct_tcp_iface_outstanding_dec(iface);
     }
 
     ucs_queue_for_each_extract(put_comp, &ep->put_comp_q, elem,
@@ -1315,12 +1316,15 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
 
     ep->tx.put_sn++;
 
-    /* Add UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK flag in order to ensure
-     * returning UCS_INPROGRESS from flush function and do progressing.
-     * UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK flag has to be removed upon PUT
-     * ACK message receiving if there are no other PUT operations in-flight */
-    ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK);
-    uct_tcp_iface_outstanding_inc(iface);
+    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK))) {
+        /* Add UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK flag and increment iface
+         * outstanding operations counter in order to ensure returning
+         * UCS_INPROGRESS from flush functions and do progressing.
+         * UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK flag has to be removed upon PUT
+         * ACK message receiving if there are no other PUT operations in-flight */
+        ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK);
+        uct_tcp_iface_outstanding_inc(iface);
+    }
 
     UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, put_req.length);
 

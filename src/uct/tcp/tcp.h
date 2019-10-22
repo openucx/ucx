@@ -296,7 +296,9 @@ typedef struct uct_tcp_iface {
     ucs_mpool_t                   rx_mpool;          /* RX memory pool */
     size_t                        outstanding;       /* How much data in the EP send buffers
                                                       * + how many non-blocking connections
-                                                      * are in progress */
+                                                      * are in progress + how many EPs are
+                                                      * waiting for PUT Zcopy operation ACKs
+                                                      * (0/1 for each EP) */
 
     struct {
         size_t                    tx_seg_size;       /* TX AM buffer size */
