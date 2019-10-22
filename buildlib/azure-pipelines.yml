@@ -91,3 +91,10 @@ stages:
               gcc -v
               make -s -j `nproc`
             displayName: Build for $(CONTAINER)
+
+      # Test on real HW
+      - job: Test
+        displayName: Test
+        pool: Test
+        steps:
+          - bash: hostname -f
