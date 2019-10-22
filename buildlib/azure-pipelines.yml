@@ -95,6 +95,7 @@ stages:
       # Test on real HW
       - job: Test
         displayName: Test
-        pool: Test
+        pool:
+          name: Test
         steps:
           - bash: hostname -f
