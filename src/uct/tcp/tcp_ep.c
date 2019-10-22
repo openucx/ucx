@@ -351,8 +351,8 @@ static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
                                                 const struct sockaddr_in *dest_addr,
                                                 uct_tcp_ep_t **new_ep)
 {
+    uct_tcp_ep_t *ep = NULL;
     ucs_status_t status;
-    uct_tcp_ep_t *ep;
     int fd;
 
     status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
@@ -382,7 +382,9 @@ static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
 err_ep_destroy:
     uct_tcp_ep_destroy_internal(&ep->super.super);
 err_close_fd:
-    close(fd);
+    if (ep == NULL) {
+        uct_tcp_ep_close_fd(&fd);
+    }
     return status;
 }
 
