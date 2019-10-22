@@ -15,6 +15,15 @@ libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la
 
+if HAVE_CUDA
+
+libucs_la_CPPFLAGS += $(CUDA_CPPFLAGS)
+libucs_la_CFLAGS   += $(CUDA_CFLAGS)
+libucs_la_LDFLAGS  += $(patsubst %, -Xlinker %, $(CUDA_LDFLAGS)) \
+                          -version-info $(SOVERSION)
+
+endif
+
 nobase_dist_libucs_la_HEADERS = \
 	algorithm/crc.h \
 	algorithm/qsort_r.h \

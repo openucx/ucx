@@ -1317,7 +1317,7 @@ ucs_status_t ucs_sys_free_sys_devices(ucs_sys_device_t *sys_devices)
     return UCS_OK;
 }
 
-int ucs_get_cpu_mm_index(void *ptr)
+int ucs_get_cpu_mm_index(void *ptr, ucs_mm_unit_t *mm_units, int num_units)
 {
     int mm_index = -1;
 
@@ -1348,7 +1348,7 @@ int ucs_get_cuda_mm_index(void *ptr, ucs_mm_unit_t *mm_units, int num_units)
     int mm_index = -1;
     int ordinal;
     int bus_id;
-    char *cu_err_str;
+    const char *cu_err_str;
     CUresult cures;
     CUdevice device;
 
