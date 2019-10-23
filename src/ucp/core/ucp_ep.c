@@ -1058,7 +1058,10 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
     ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
 
-    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        /* Disable RNDV */
+        rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
+    } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
         rndv_thresh     = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                          config->key.am_bw_lanes,
