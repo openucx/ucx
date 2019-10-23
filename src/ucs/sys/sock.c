@@ -29,6 +29,11 @@ typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
                                          int flags);
 
 
+int ucs_netif_flags_is_active(unsigned int flags)
+{
+    return (flags & IFF_UP) && (flags & IFF_RUNNING) && !(flags & IFF_LOOPBACK);
+}
+
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
                              struct ifreq *if_req)
 {
@@ -72,8 +77,7 @@ int ucs_netif_is_active(const char *if_name)
         return 0;
     }
 
-    return (ifr.ifr_flags & IFF_UP) && (ifr.ifr_flags & IFF_RUNNING) &&
-           !(ifr.ifr_flags & IFF_LOOPBACK);
+    return ucs_netif_flags_is_active(ifr.ifr_flags);
 }
 
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)

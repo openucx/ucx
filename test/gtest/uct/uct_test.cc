@@ -237,7 +237,7 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        if (!ucs_netif_is_active(ifa->ifa_name)) {
+        if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
             continue;
         }
 
@@ -248,9 +248,8 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
         }
 
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
-            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
-            ucs_netif_is_active(ifa->ifa_name)) {
-
+            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE))
+        {
             uct_test::set_interface_rscs(md_rsc, local_cpus, ifa, all_resources);
         }
     }
