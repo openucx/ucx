@@ -324,7 +324,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             hdr = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
-            priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name, hdr +1);
+            priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name, hdr + 1);
             if (priv_data_ret < 0) {
                 ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
                           "private data. status: %s",
@@ -337,7 +337,6 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
 
             hdr->length = (uint8_t)priv_data_ret;
             hdr->status = UCS_OK;
-            UCS_STATIC_ASSERT(sizeof(*hdr) == sizeof(uct_rdmacm_priv_data_hdr_t));
             /* The private_data starts with the header of the user's private data
              * and then the private data itself */
             conn_param.private_data_len = sizeof(*hdr) + hdr->length;
