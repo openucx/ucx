@@ -259,7 +259,9 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     uct_ud_put_hdr_t *put_hdr;
     uct_ud_neth_t *neth;
 
-    /* TODO: UCT_CHECK_LENGTH(length <= iface->config.max_inline, "put_short"); */
+    UCT_CHECK_LENGTH(sizeof(*neth) + sizeof(*put_hdr) + length,
+                     0, iface->super.config.max_inline, "put_short");
+
     uct_ud_enter(&iface->super);
 
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
