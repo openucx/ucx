@@ -142,7 +142,7 @@ UCS_TEST_F(test_pgtable, basic) {
     EXPECT_EQ(&region,  lookup(0x4033ff));
     EXPECT_TRUE(NULL == lookup(0x403400));
     EXPECT_TRUE(NULL == lookup(0x0));
-    EXPECT_TRUE(NULL == lookup(-1));
+    EXPECT_TRUE(NULL == lookup(std::numeric_limits<ucs_pgt_addr_t>::max()));
     EXPECT_EQ(1u,       num_regions());
 
     remove(&region);
@@ -168,14 +168,15 @@ UCS_TEST_F(test_pgtable, lookup_adjacent) {
 UCS_TEST_F(test_pgtable, multi_search) {
     for (int count = 0; count < 10; ++count) {
         ucs::ptr_vector<ucs_pgt_region_t> regions;
-        ucs_pgt_addr_t min = ULONG_MAX;
+        ucs_pgt_addr_t min = std::numeric_limits<ucs_pgt_addr_t>::max();
         ucs_pgt_addr_t max = 0;
 
         /* generate random regions */
         unsigned num_regions = 0;
         for (int i = 0; i < 200 / ucs::test_time_multiplier(); ++i) {
             ucs_pgt_addr_t start = (ucs::rand() & 0x7fffffff) << 24;
-            size_t         size  = ucs_min((size_t)ucs::rand(), ULONG_MAX - start);
+            size_t         size  = ucs_min((size_t)ucs::rand(),
+                                           std::numeric_limits<ucs_pgt_addr_t>::max() - start);
             ucs_pgt_addr_t end   = start + ucs_align_down(size, UCS_PGT_ADDR_ALIGN);
             if (count_overlap(regions, start, end)) {
                 /* Make sure regions do not overlap */
