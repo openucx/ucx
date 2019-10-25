@@ -1,15 +1,48 @@
 #
-## Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-## Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-## Copyright (C) ARM Ltd. 2017-2018.  ALL RIGHTS RESERVED.
+## Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+## Copyright (C) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
+## Copyright (C) ARM Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 ##
 ## See file LICENSE for terms.
 ##
 #
 
 ## Current
+
+## 1.7.0 (October 26, 2019)
 Features:
-- TBD
+- Added support multiple listening transports
+- Added UCT socket based connection manager transport
+- Updated API for UCT component management
+- Added a API to retrieve the server listening port
+- Added UCP active message API
+- Remove deprecated API for querying UCT memory domains
+- Added new UCT component query API and deprecate old one
+- Refactored server/client examples
+- Added support for dlopen interception in UCM
+- Added non-blocking TCP/IP connection manager
+- Added socket based connection manager
+- Added support for PCIe atomics
+- Updated Java API
+- Updated support for Mellanox DEVX API
+
+Bugfixes:
+- Multiple bugfixes in UCP, UCT, UCM libraries
+- Multiple fixes for BSD and Mac OS systems
+- Fixes for Clang compiler
+- Fixes for CUDA IPC
+- Fix CPU optimization configuration options
+
+## 1.6.1 (September 23, 2019)
+Features:
+- Add Bull Atos HCA device IDs
+- Add Azure Pipelines testing
+
+Bugfixes:
+- Multiple static checker fixes
+- Remove pkg.m4 dependency
+- Multiple clang static checker fixes
+- Fix mem type support with generic datatype
 
 ## 1.6.0 (July 17, 2019)
 Features:
