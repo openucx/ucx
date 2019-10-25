@@ -118,8 +118,6 @@ public:
              ++count;
         }
     }
-
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 

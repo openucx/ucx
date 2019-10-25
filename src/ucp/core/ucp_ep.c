@@ -992,6 +992,13 @@ static size_t ucp_ep_thresh(size_t thresh_value, size_t min_value,
     return thresh;
 }
 
+static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
+                                           size_t thresh)
+{
+    *max_short = ucs_min((size_t)(*max_short + 1), thresh) - 1;
+    ucs_assert(*max_short >= -1);
+}
+
 static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr_t *iface_attr,
                                              uct_md_attr_t *md_attr, ucp_ep_config_t *config,
                                              size_t max_rndv_thresh)
@@ -1016,6 +1023,10 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
     } else {
         rndv_thresh     = context->config.ext.rndv_thresh;
         rndv_nbr_thresh = context->config.ext.rndv_thresh;
+
+        /* adjust max_short if rndv_thresh is set externally */
+        ucp_ep_config_adjust_max_short(&config->tag.eager.max_short,
+                                       rndv_thresh);
     }
 
     config->tag.rndv.am_thresh = ucp_ep_thresh(rndv_thresh,
@@ -1028,13 +1039,6 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
 
     ucs_trace("Active Message rndv threshold is %zu (send_nbr: %zu)",
               config->tag.rndv.am_thresh, config->tag.rndv_send_nbr.am_thresh);
-}
-
-static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
-                                           size_t thresh)
-{
-    *max_short = ucs_min((size_t)(*max_short + 1), thresh) - 1;
-    ucs_assert(*max_short >= -1);
 }
 
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
@@ -1078,10 +1082,10 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                        rndv_thresh);
     }
 
-    config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
-    config->tag.rndv.rma_thresh    = ucp_ep_thresh(rndv_thresh,
-                                                   iface_attr->cap.get.min_zcopy,
-                                                   max_rndv_thresh);
+    /* TODO: need to check minimal PUT Zcopy */
+    config->tag.rndv.rma_thresh = ucp_ep_thresh(rndv_thresh,
+                                                iface_attr->cap.get.min_zcopy,
+                                                max_rndv_thresh);
 
     config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
                                                          iface_attr->cap.get.min_zcopy,
@@ -1234,7 +1238,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
     config->tag.rndv.rma_thresh         = SIZE_MAX;
+    config->tag.rndv.min_get_zcopy      = 0;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
+    config->tag.rndv.min_put_zcopy      = 0;
     config->tag.rndv.max_put_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
     config->tag.rndv_send_nbr.am_thresh = SIZE_MAX;
@@ -1265,7 +1271,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     }
 
     /* configuration for rndv */
-    config->tag.rndv.min_get_zcopy = 0;
     rndv_max_bw = 0;
     for (i = 0; (i < config->key.num_lanes) &&
                 (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
@@ -1274,11 +1279,20 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+
+            /* GET Zcopy */
             config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
                                                      iface_attr->cap.get.min_zcopy);
 
             config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
                                                      iface_attr->cap.get.max_zcopy);
+
+            /* PUT Zcopy */
+            config->tag.rndv.min_put_zcopy = ucs_max(config->tag.rndv.min_put_zcopy,
+                                                     iface_attr->cap.put.min_zcopy);
+
+            config->tag.rndv.max_put_zcopy = ucs_min(config->tag.rndv.max_put_zcopy,
+                                                     iface_attr->cap.put.max_zcopy);
 
             rndv_max_bw = ucs_max(rndv_max_bw, ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth));
         }
@@ -1355,11 +1369,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      UCT_IFACE_FLAG_AM_ZCOPY,
                                      sizeof(ucp_eager_hdr_t), SIZE_MAX);
 
-            /* Calculate rndv threshold for AM Rendezvous, which may be used by
-             * any tag-matching protocol (AM and offload). */
-            ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
-                                             max_am_rndv_thresh);
-
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't
              */
@@ -1376,14 +1385,17 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 ucp_ep_config_set_rndv_thresh(worker, config,
                                               config->key.rma_bw_lanes,
                                               max_rndv_thresh);
-                config->tag.eager = config->am;
-                config->tag.lane  = lane;
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
                                                  config->tag.eager.max_short,
                                                  context->num_mem_type_detect_mds);
             }
+
+            /* Calculate rndv threshold for AM Rendezvous, which may be used by
+             * any tag-matching protocol (AM and offload). */
+            ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
+                                             max_am_rndv_thresh);
         } else {
             /* Stub endpoint */
             config->am.max_bcopy = UCP_MIN_BCOPY;
@@ -1482,7 +1494,9 @@ static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
 
     /* Check whether maximum Eager short attribute is negative or not
      * before comparing it with maximum Bcopy attribute (unsigned) */
-    if ((max_eager_short < 0) || ((size_t)max_eager_short < max_bcopy)) {
+    if (((max_eager_short < 0) ||
+         ((size_t)max_eager_short < max_bcopy)) &&
+        (max_bcopy < zcopy_thresh) && (max_bcopy < min_rndv)) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
@@ -1656,7 +1670,8 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         ucp_ep_config_print_tag_proto(stream, "tag_send_nbr",
                                       config->tag.eager.max_short,
                                       /* disable zcopy */
-                                      config->tag.rndv_send_nbr.rma_thresh,
+                                      ucs_min(config->tag.rndv_send_nbr.rma_thresh,
+                                              config->tag.rndv_send_nbr.am_thresh),
                                       config->tag.rndv_send_nbr.rma_thresh,
                                       config->tag.rndv_send_nbr.am_thresh);
         ucp_ep_config_print_tag_proto(stream, "tag_send_sync",

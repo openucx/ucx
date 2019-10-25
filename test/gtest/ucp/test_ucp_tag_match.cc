@@ -54,7 +54,6 @@ protected:
     }
 
     static ucs_status_t m_req_status;
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 ucs_status_t test_ucp_tag_match::m_req_status = UCS_OK;

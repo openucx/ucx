@@ -968,6 +968,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             }
 
             if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
+                /* is it allowed to use PUT Zcopy for the current message? */
+                (sreq->send.length >= ucp_ep_config(ep)->tag.rndv.min_put_zcopy) &&
                 /* is PUT Zcopy operation supported? */
                 ucp_ep_config(ep)->tag.rndv.max_put_zcopy) {
                 ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,

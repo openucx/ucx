@@ -64,9 +64,6 @@ public:
         wait(req);
         request_free(req);
     }
-
-protected:
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 UCS_TEST_P(test_ucp_tag_offload, post_after_cancel)

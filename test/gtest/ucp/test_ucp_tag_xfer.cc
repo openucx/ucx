@@ -127,7 +127,6 @@ private:
     static const uint64_t SENDER_TAG = 0x111337;
     static const uint64_t RECV_MASK  = 0xffff;
     static const uint64_t RECV_TAG   = 0x1337;
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 
 };
 
