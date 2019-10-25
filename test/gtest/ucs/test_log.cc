@@ -111,3 +111,21 @@ UCS_TEST_F(log_test_print, print_off) {
     ucs_print("debug message");
 }
 
+
+class log_test_backtrace : public log_test {
+    virtual void check_log_file() {
+        if (do_grep("print_backtrace")) {
+            ADD_FAILURE() << read_logfile();
+        }
+
+#ifdef HAVE_DETAILED_BACKTRACE
+        if (do_grep("main")) {
+            ADD_FAILURE() << read_logfile();
+        }
+#endif
+    }
+};
+
+UCS_TEST_F(log_test_backtrace, backtrace) {
+    ucs_log_print_backtrace(UCS_LOG_LEVEL_INFO);
+}
