@@ -642,10 +642,11 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     info.recv_buffer        = (uintptr_t)perf->recv_buffer;
 
     rkey_buffer             = buffer;
-    dev_addr                = (void*)rkey_buffer + info.rkey_size;
-    iface_addr              = (void*)dev_addr    + info.uct.dev_addr_len;
-    ep_addr                 = (void*)iface_addr  + info.uct.iface_addr_len;
-    ucs_assert_always((void*)ep_addr + info.uct.ep_addr_len <= buffer + buffer_size);
+    dev_addr                = UCS_PTR_BYTE_OFFSET(rkey_buffer, info.rkey_size);
+    iface_addr              = UCS_PTR_BYTE_OFFSET(dev_addr, info.uct.dev_addr_len);
+    ep_addr                 = UCS_PTR_BYTE_OFFSET(iface_addr, info.uct.iface_addr_len);
+    ucs_assert_always(UCS_PTR_BYTE_OFFSET(ep_addr, info.uct.ep_addr_len) <=
+                      UCS_PTR_BYTE_OFFSET(buffer, buffer_size));
 
     status = uct_iface_get_device_address(perf->uct.iface, dev_addr);
     if (status != UCS_OK) {
@@ -719,9 +720,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
         remote_info = buffer;
         rkey_buffer = remote_info + 1;
-        dev_addr    = (void*)rkey_buffer + remote_info->rkey_size;
-        iface_addr  = (void*)dev_addr    + remote_info->uct.dev_addr_len;
-        ep_addr     = (void*)iface_addr  + remote_info->uct.iface_addr_len;
+        dev_addr    = UCS_PTR_BYTE_OFFSET(rkey_buffer, remote_info->rkey_size);
+        iface_addr  = UCS_PTR_BYTE_OFFSET(dev_addr, remote_info->uct.dev_addr_len);
+        ep_addr     = UCS_PTR_BYTE_OFFSET(iface_addr, remote_info->uct.iface_addr_len);
         perf->uct.peers[i].remote_addr = remote_info->recv_buffer;
 
         if (!uct_iface_is_reachable(perf->uct.iface, dev_addr,
@@ -807,7 +808,8 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
                                                ucp_params_t *ucp_params)
 {
-    ucs_status_t status, message_size;
+    ucs_status_t status;
+    size_t message_size;
 
     message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
@@ -1126,8 +1128,8 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
         rte_call(perf, recv, i, buffer, buffer_size, req);
 
         remote_info = buffer;
-        address     = (void*)(remote_info + 1);
-        rkey_buffer = (void*)address + remote_info->ucp.addr_len;
+        address     = (ucp_address_t*)(remote_info + 1);
+        rkey_buffer = UCS_PTR_BYTE_OFFSET(address, remote_info->ucp.addr_len);
         perf->ucp.peers[i].remote_addr = remote_info->recv_buffer;
 
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
@@ -1193,7 +1195,7 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
 {
     perf->max_iter = ucs_min(params->warmup_iter, ucs_div_round_up(params->max_iter, 10));
-    perf->report_interval = -1;
+    perf->report_interval = ULONG_MAX;
 }
 
 static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
@@ -1471,8 +1473,8 @@ static struct {
                           ucp_perf_test_dispatch, ucp_perf_barrier}
 };
 
-static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
-                                 ucx_perf_result_t* result);
+static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
+                                          ucx_perf_result_t* result);
 
 ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
 {
@@ -1604,8 +1606,8 @@ out:
     return &statuses[tid];
 }
 
-static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
-                                 ucx_perf_result_t* result)
+static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
+                                          ucx_perf_result_t* result)
 {
     ucx_perf_thread_context_t* tctx;
     ucs_status_t* statuses;
@@ -1632,8 +1634,10 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
     tctx[ti].statuses = statuses;
     tctx[ti].perf = *perf;
     /* Doctor the src and dst buffers to make them thread specific */
-    tctx[ti].perf.send_buffer += ti * message_size;
-    tctx[ti].perf.recv_buffer += ti * message_size;
+    tctx[ti].perf.send_buffer = UCS_PTR_BYTE_OFFSET(tctx[ti].perf.send_buffer,
+                                                    ti * message_size);
+    tctx[ti].perf.recv_buffer = UCS_PTR_BYTE_OFFSET(tctx[ti].perf.recv_buffer,
+                                                    ti * message_size);
     tctx[ti].perf.offset = ti * message_size;
     ucx_perf_thread_run_test((void*)&tctx[ti]);
 }
@@ -1653,8 +1657,8 @@ out_free:
     return status;
 }
 #else
-static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
-                                 ucx_perf_result_t* result) {
+static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
+                                          ucx_perf_result_t* result) {
     ucs_error("Invalid test parameter (thread mode requested without OpenMP capabilities)");
     return UCS_ERR_INVALID_PARAM;
 }

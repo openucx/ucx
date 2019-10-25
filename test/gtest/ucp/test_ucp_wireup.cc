@@ -4,8 +4,6 @@
 * See file LICENSE for terms.
 */
 
-#define __STDC_LIMIT_MACROS
-
 #include "ucp_test.h"
 #include "common/test.h"
 #include "ucp/ucp_test.h"

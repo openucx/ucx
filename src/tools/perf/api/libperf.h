@@ -116,30 +116,43 @@ typedef struct ucx_perf_result {
 } ucx_perf_result_t;
 
 
+typedef void (*ucx_perf_rte_progress_cb_t)(void *arg);
+
+typedef unsigned (*ucx_perf_rte_group_size_func_t)(void *rte_group);
+typedef unsigned (*ucx_perf_rte_group_index_func_t)(void *rte_group);
+typedef void (*ucx_perf_rte_barrier_func_t)(void *rte_group,
+                                            ucx_perf_rte_progress_cb_t progress,
+                                            void *arg);
+typedef void (*ucx_perf_rte_post_vec_func_t)(void *rte_group,
+                                             const struct iovec *iovec,
+                                             int iovcnt, void **req);
+typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
+                                         void *buffer, size_t max, void *req);
+typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
+typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
+                                           const ucx_perf_result_t *result,
+                                           void *arg, int is_final);
+
 /**
  * RTE used to bring-up the test
  */
 typedef struct ucx_perf_rte {
     /* @return Group size */
-    unsigned   (*group_size)(void *rte_group);
+    ucx_perf_rte_group_size_func_t   group_size;
 
     /* @return My index within the group */
-    unsigned   (*group_index)(void *rte_group);
+    ucx_perf_rte_group_index_func_t  group_index;
 
     /* Barrier */
-    void        (*barrier)(void *rte_group, void (*progress)(void *arg),
-                           void *arg);
+    ucx_perf_rte_barrier_func_t      barrier;
 
     /* Direct modex */
-    void        (*post_vec)(void *rte_group, const struct iovec *iovec,
-                            int iovcnt, void **req);
-    void        (*recv)(void *rte_group, unsigned src, void *buffer, size_t max,
-                        void *req);
-    void        (*exchange_vec)(void *rte_group, void *req);
+    ucx_perf_rte_post_vec_func_t     post_vec;
+    ucx_perf_rte_recv_func_t         recv;
+    ucx_perf_rte_exchange_vec_func_t exchange_vec;
 
     /* Handle results */
-    void        (*report)(void *rte_group, const ucx_perf_result_t *result,
-                          void *arg, int is_final);
+    ucx_perf_rte_report_func_t       report;
 
 } ucx_perf_rte_t;
 

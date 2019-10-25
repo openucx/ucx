@@ -9,6 +9,7 @@
 
 #include "compiler_def.h"
 #include <ucs/type/status.h>
+#include <ucs/sys/math.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,12 +27,12 @@ BEGIN_C_DECLS
 #define UCS_VALUE_AUTO_STR "auto"
 
 /* the numeric value of "infinity" */
-#define UCS_MEMUNITS_INF    SIZE_MAX
-#define UCS_ULUNITS_INF     SIZE_MAX
+#define UCS_MEMUNITS_INF    ((size_t)-1)
+#define UCS_ULUNITS_INF     ((size_t)-1)
 
 /* value which specifies "auto" for a numeric variable */
-#define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
-#define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
+#define UCS_MEMUNITS_AUTO   ((size_t)-2)
+#define UCS_ULUNITS_AUTO    ((size_t)-2)
 
 #define UCS_BANDWIDTH_AUTO  (-1.0)
 
