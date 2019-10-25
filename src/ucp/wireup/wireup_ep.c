@@ -254,8 +254,8 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
 
 ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
-                          const ucp_ep_params_t *params, unsigned address_count,
-                          const ucp_address_entry_t *address_list)
+                          const ucp_ep_params_t *params,
+                          const ucp_unpacked_address_t *remote_address)
 {
     ucp_ep_h ucp_ep                      = wireup_ep->super.ucp_ep;
     ucp_worker_h worker                  = ucp_ep->worker;
@@ -268,14 +268,14 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
-    status = ucp_wireup_select_aux_transport(ucp_ep, params, address_list,
-                                             address_count, &select_info);
+    status = ucp_wireup_select_aux_transport(ucp_ep, params, remote_address,
+                                             &select_info);
     if (status != UCS_OK) {
         return status;
     }
 
     wireup_ep->aux_rsc_index = select_info.rsc_index;
-    aux_addr                 = &address_list[select_info.addr_index];
+    aux_addr                 = &remote_address->address_list[select_info.addr_index];
     wiface                   = ucp_worker_iface(worker, select_info.rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
@@ -409,8 +409,7 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
 
 ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
                                    ucp_rsc_index_t rsc_index, int connect_aux,
-                                   unsigned address_count,
-                                   const ucp_address_entry_t *address_list)
+                                   const ucp_unpacked_address_t *remote_address)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
     uct_ep_params_t uct_ep_params;
@@ -438,8 +437,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_wireup_ep_connect_aux(wireup_ep, params, address_count,
-                                           address_list);
+        status = ucp_wireup_ep_connect_aux(wireup_ep, params, remote_address);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;
         }

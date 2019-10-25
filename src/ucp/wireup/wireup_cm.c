@@ -71,9 +71,7 @@ static ucs_status_t ucp_cm_ep_client_do_initial_config(ucp_ep_h ucp_ep,
     status = ucp_wireup_select_lanes(ucp_ep, &wireup_ep->ucp_ep_params,
                                      ucp_cm_ep_init_flags(worker,
                                                           &wireup_ep->ucp_ep_params),
-                                     unpacked_addr.address_count,
-                                     unpacked_addr.address_list, addr_indices,
-                                     &key);
+                                     &unpacked_addr, addr_indices, &key);
     if (status != UCS_OK) {
         goto free_addr_list;
     }
