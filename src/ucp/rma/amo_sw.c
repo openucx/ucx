@@ -201,7 +201,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     ucp_worker_h worker              = arg;
     ucp_ep_h ep                      = ucp_worker_get_ep_by_ptr(worker,
                                                                 atomicreqh->req.ep_ptr);
+    ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
+
+    if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
+                     (ucp_worker_iface_get_attr(worker,
+                                                amo_rsc_idx)->cap.flags &
+                      UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
+        ucs_error("Unsupported: got software atomic request while device atomics are selected on worker %p",
+                  worker);
+        /* TODO: this situation will be possible then CM wireup is implemented
+         *       and CM lane is bound to suboptimal device, then need to execute
+         *       AMO on fastest resource from worker->atomic_tls using loopback
+         *       EP and continue SW AMO protocol */
+    }
 
     if (atomicreqh->req.reqptr == 0) {
         /* atomic operation without result */
