@@ -1287,9 +1287,8 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
     uct_tcp_ep_put_req_hdr_t put_req = {0}; /* Suppress Cppcheck false-positive */
     ucs_status_t status;
 
-    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0,
-                     UCT_TCP_EP_PUT_ZCOPY_MAX -
-                     UCT_TCP_EP_PUT_SERVICE_LENGTH,
+    UCT_CHECK_LENGTH(sizeof(put_req) + uct_iov_total_length(iov, iovcnt), 0,
+                     UCT_TCP_EP_PUT_ZCOPY_MAX - sizeof(uct_tcp_am_hdr_t),
                      "put_zcopy");
 
     status = uct_tcp_ep_prepare_zcopy(iface, ep, UCT_TCP_EP_PUT_REQ_AM_ID,

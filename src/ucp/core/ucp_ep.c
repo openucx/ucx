@@ -1040,7 +1040,6 @@ static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                           ucp_ep_config_t *config,
                                           ucp_lane_index_t *lanes,
-                                          uint64_t rndv_cap_flag,
                                           size_t max_rndv_thresh)
 {
     ucp_context_t *context = worker->context;
@@ -1060,7 +1059,6 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     }
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-    ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
 
     if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
@@ -1327,7 +1325,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 /* Must have active messages for using rendezvous */
                 tag_lanes[0] = lane;
                 ucp_ep_config_set_rndv_thresh(worker, config, tag_lanes,
-                                              UCT_IFACE_FLAG_TAG_RNDV_ZCOPY,
                                               max_rndv_thresh);
             }
 
@@ -1375,8 +1372,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
                 ucp_ep_config_set_rndv_thresh(worker, config,
                                               config->key.rma_bw_lanes,
-                                              UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
+                config->tag.eager = config->am;
+                config->tag.lane  = lane;
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,

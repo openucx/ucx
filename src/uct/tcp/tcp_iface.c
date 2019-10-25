@@ -140,7 +140,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
                                         sizeof(uct_tcp_am_hdr_t);
         attr->cap.am.max_hdr          = iface->config.zcopy.max_hdr;
-        attr->cap.am.opt_zcopy_align  = 512;
+        attr->cap.am.opt_zcopy_align  = 1;
         attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
 
         /* PUT */
@@ -148,7 +148,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                                          UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
         attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
                                          UCT_TCP_EP_PUT_SERVICE_LENGTH;
-        attr->cap.put.opt_zcopy_align  = 512;
+        attr->cap.put.opt_zcopy_align  = 1;
         attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
     }
 
