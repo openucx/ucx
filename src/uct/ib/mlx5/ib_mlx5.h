@@ -64,6 +64,8 @@
 #define UCT_IB_MLX5_CQ_SET_CI           0
 #define UCT_IB_MLX5_CQ_ARM_DB           1
 #define UCT_IB_MLX5_ROCE_SRC_PORT_MIN   0xC000
+#define UCT_IB_MLX5_LOG_MAX_MSG_SIZE    30
+#define UCT_IB_MLX5_ATOMIC_MODE         3
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
@@ -539,7 +541,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_qp_attr_t *attr);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
-                                        enum ibv_qp_state state);
+                                        const void *in, size_t inlen,
+                                        void *out, size_t outlen);
+
+ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
+                                              enum ibv_qp_state state);
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp);
 
@@ -557,6 +563,12 @@ uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 static inline ucs_status_t
 uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                            enum ibv_qp_state state)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
 {
     return UCS_ERR_UNSUPPORTED;
 }
