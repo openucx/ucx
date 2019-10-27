@@ -272,7 +272,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     uct_rdmacm_ep_t *ep          = NULL;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char dev_name[UCT_DEVICE_NAME_MAX];
-    uct_rdmacm_priv_data_hdr_t hdr;
+    uct_rdmacm_priv_data_hdr_t *hdr;
     struct rdma_conn_param conn_param;
     uct_rdmacm_ctx_t *cm_id_ctx;
     ssize_t priv_data_ret;
@@ -321,11 +321,10 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                                                  sizeof(uct_rdmacm_priv_data_hdr_t));
 
             uct_rdmacm_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
+            hdr = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
-            priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name,
-                                        (void*)(conn_param.private_data +
-                                        sizeof(uct_rdmacm_priv_data_hdr_t)));
+            priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name, hdr + 1);
             if (priv_data_ret < 0) {
                 ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
                           "private data. status: %s",
@@ -336,14 +335,11 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                 break;
             }
 
-            hdr.length = (uint8_t)priv_data_ret;
-            hdr.status = UCS_OK;
-            UCS_STATIC_ASSERT(sizeof(hdr) == sizeof(uct_rdmacm_priv_data_hdr_t));
+            hdr->length = (uint8_t)priv_data_ret;
+            hdr->status = UCS_OK;
             /* The private_data starts with the header of the user's private data
              * and then the private data itself */
-            memcpy((void*)conn_param.private_data, &hdr, sizeof(uct_rdmacm_priv_data_hdr_t));
-            conn_param.private_data_len = sizeof(uct_rdmacm_priv_data_hdr_t) +
-                                          hdr.length;
+            conn_param.private_data_len = sizeof(*hdr) + hdr->length;
 
             if (rdma_connect(event->id, &conn_param)) {
                 ucs_error("rdma_connect(to addr=%s) failed: %m",
@@ -387,11 +383,11 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
 
     /* client error events */
     case RDMA_CM_EVENT_UNREACHABLE:
-        hdr = *(uct_rdmacm_priv_data_hdr_t *)event->param.ud.private_data;
-        if ((event->param.ud.private_data_len > 0) &&
-            (hdr.status == UCS_ERR_REJECTED)) {
-            ucs_assert(hdr.length == 0);
-            ucs_assert(event->param.ud.private_data_len >= sizeof(hdr));
+        hdr = (uct_rdmacm_priv_data_hdr_t *)event->param.ud.private_data;
+        if ((hdr != NULL) && (event->param.ud.private_data_len > 0) &&
+            (hdr->status == UCS_ERR_REJECTED)) {
+            ucs_assert(hdr->length == 0);
+            ucs_assert(event->param.ud.private_data_len >= sizeof(*hdr));
             ucs_assert(!iface->is_server);
             status = UCS_ERR_REJECTED;
         }
