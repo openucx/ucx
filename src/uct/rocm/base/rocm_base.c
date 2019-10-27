@@ -166,7 +166,8 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
     return HSA_STATUS_SUCCESS;
 }
 
-ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, void *addr, size_t length,
+ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
+                                              size_t length,
                                               ucs_memory_type_t *mem_type_p)
 {
     hsa_status_t status;
@@ -178,7 +179,7 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, void *addr, size_t le
     }
 
     info.size = sizeof(hsa_amd_pointer_info_t);
-    status = hsa_amd_pointer_info(addr, &info, NULL, NULL, NULL);
+    status = hsa_amd_pointer_info((void*)addr, &info, NULL, NULL, NULL);
     if ((status == HSA_STATUS_SUCCESS) &&
         (info.type == HSA_EXT_POINTER_TYPE_HSA)) {
         hsa_device_type_t dev_type;

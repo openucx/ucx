@@ -339,7 +339,7 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
 ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t length);
+ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -391,7 +391,7 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_memory_type_detect(ucp_context_h context, void *address, size_t length)
+ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length)
 {
     ucs_memory_type_t mem_type;
     ucs_status_t status;
