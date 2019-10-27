@@ -64,7 +64,7 @@ void ucs_memtype_cache_destroy(ucs_memtype_cache_t *memtype_cache);
  * @return Error code.
  */
 ucs_status_t
-ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache, void *address,
+ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache, const void *address,
                          size_t size, ucs_memory_type_t *mem_type_p);
 
 
@@ -78,8 +78,9 @@ ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache, void *address,
  * @param [out] mem_type        Set the memory type of the address range to this
  *                              value.
  */
-void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache, void *address,
-                              size_t size, ucs_memory_type_t mem_type);
+void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
+                              const void *address, size_t size,
+                              ucs_memory_type_t mem_type);
 
 END_C_DECLS
 

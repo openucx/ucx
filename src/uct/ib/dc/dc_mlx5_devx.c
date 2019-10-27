@@ -50,12 +50,12 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, cqn, dvcq.cqn);
     UCT_IB_MLX5DV_SET64(dctc, dctc, dc_access_key, UCT_IB_KEY);
 
-    UCT_IB_MLX5DV_SET(dctc, dctc, rre, 1);
-    UCT_IB_MLX5DV_SET(dctc, dctc, rwe, 1);
-    UCT_IB_MLX5DV_SET(dctc, dctc, rae, 1);
+    UCT_IB_MLX5DV_SET(dctc, dctc, rre, true);
+    UCT_IB_MLX5DV_SET(dctc, dctc, rwe, true);
+    UCT_IB_MLX5DV_SET(dctc, dctc, rae, true);
     UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, uct_ib_mlx5_qpc_cs_res(
                       iface->super.super.super.config.max_inl_resp));
-    UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, 3);
+    UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, iface->super.super.super.pkey_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->super.super.super.config.port_num);
 
@@ -76,6 +76,66 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     iface->rx.dct.type   = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     iface->rx.dct.qp_num = UCT_IB_MLX5DV_GET(create_dct_out, out, dctn);
     return UCS_OK;
+}
+
+ucs_status_t
+uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                   uct_ib_mlx5_qp_t *qp)
+{
+    uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
+    uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
+    uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
+    uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
+    uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
+    uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    ucs_status_t status;
+    void *qpc;
+
+    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
+    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, iface->super.super.super.config.port_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index, iface->super.super.super.pkey_index);
+
+    status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
+                                        out_2init, sizeof(out_2init));
+    if (status) {
+        return status;
+    }
+
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 4);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl, iface->super.super.super.config.sl);
+
+    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
+                                        out_2rtr, sizeof(out_2rtr));
+    if (status) {
+        return status;
+    }
+
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(iface->super.super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.super.config.retry_cnt);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.super.config.rnr_retry);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, iface->super.super.config.timeout);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.super.config.exp_backoff);
+
+    return uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
+                                      out_2rts, sizeof(out_2rts));
 }
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)

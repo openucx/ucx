@@ -559,7 +559,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
         if (rndv_rts_hdr->address &&
             (rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY) &&
-            (rndv_rts_hdr->size >= ucp_ep_config(ep)->tag.rndv.min_get_zcopy)) {
+            /* is it allowed to use GET Zcopy for the current message? */
+            (rndv_rts_hdr->size >= ucp_ep_config(ep)->tag.rndv.min_get_zcopy) &&
+            /* is GET Zcopy operation supported? */
+            ucp_ep_config(ep)->tag.rndv.max_get_zcopy) {
             /* try to fetch the data with a get_zcopy operation */
             ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr);
             goto out;
@@ -571,8 +574,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     }
 
     /* The sender didn't specify its address in the RTS, or the rndv mode was
-     * configured to put - send an RTR and the sender will send the data with
-     * active message or put_zcopy. */
+     * configured to PUT, or GET rndv mode is unsupported - send an RTR and
+     * the sender will send the data with active message or put_zcopy. */
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
     ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr);
 
@@ -840,9 +843,9 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
 {
     ucp_worker_h worker   = sreq->send.ep->worker;
     ucp_context_h context = worker->context;
+    const uct_md_attr_t *md_attr;
     ucp_lane_index_t mem_type_rma_lane;
     ucp_ep_h mem_type_ep;
-    uct_md_attr_t *md_attr;
     ucp_mem_desc_t *mdesc;
     ucp_request_t *frag_req;
     ucp_rsc_index_t md_index;
@@ -854,8 +857,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
     ucs_assert(!UCP_MEM_IS_HOST(sreq->send.mem_type));
 
     /* check if lane supports host memory, to stage sends through host memory */
-    md_index = ucp_ep_md_index(sreq->send.ep, sreq->send.lane);
-    md_attr  = &context->tl_mds[md_index].attr;
+    md_attr = ucp_ep_md_attr(sreq->send.ep, sreq->send.lane);
     if (!(md_attr->cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -965,13 +967,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                 }
             }
 
-            ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
-                                         UCP_REQUEST_SEND_PROTO_RNDV_PUT);
-            sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;
-            sreq->send.rndv_put.remote_request = rndv_rtr_hdr->rreq_ptr;
-            sreq->send.rndv_put.remote_address = rndv_rtr_hdr->address;
-            sreq->send.mdesc                   = NULL;
-            goto out_send;
+            if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
+                /* is PUT Zcopy operation supported? */
+                ucp_ep_config(ep)->tag.rndv.max_put_zcopy) {
+                ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
+                                             UCP_REQUEST_SEND_PROTO_RNDV_PUT);
+                sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;
+                sreq->send.rndv_put.remote_request = rndv_rtr_hdr->rreq_ptr;
+                sreq->send.rndv_put.remote_address = rndv_rtr_hdr->address;
+                sreq->send.mdesc                   = NULL;
+                goto out_send;
+            } else {
+                ucp_rkey_destroy(sreq->send.rndv_put.rkey);
+            }
         } else {
             ucp_rkey_destroy(sreq->send.rndv_put.rkey);
         }

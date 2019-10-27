@@ -20,7 +20,8 @@ template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner {
 public:
     static const ucp_tag_t TAG      = 0x1337a880u;
-    static const ucp_tag_t TAG_MASK = (FLAGS & UCX_PERF_TEST_FLAG_TAG_WILDCARD) ? 0 : -1;
+    static const ucp_tag_t TAG_MASK = (FLAGS & UCX_PERF_TEST_FLAG_TAG_WILDCARD) ?
+                                      0 : (ucp_tag_t)-1;
 
     typedef uint8_t psn_t;
 

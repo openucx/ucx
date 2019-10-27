@@ -92,11 +92,10 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 
-ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
-                                             const ucp_ep_params_t *params,
-                                             const ucp_address_entry_t *address_list,
-                                             unsigned address_count,
-                                             ucp_wireup_select_info_t *select_info);
+ucs_status_t
+ucp_wireup_select_aux_transport(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                const ucp_unpacked_address_t *remote_address,
+                                ucp_wireup_select_info_t *select_info);
 
 ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
                                                   const ucp_ep_params_t *params,
@@ -115,15 +114,15 @@ int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                   unsigned ep_init_flags, unsigned address_count,
-                                   const ucp_address_entry_t *address_list,
+                                   unsigned ep_init_flags,
+                                   const ucp_unpacked_address_t *remote_address,
                                    uint8_t *addr_indices);
 
-ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                     unsigned ep_init_flags, unsigned address_count,
-                                     const ucp_address_entry_t *address_list,
-                                     uint8_t *addr_indices,
-                                     ucp_ep_config_key_t *key);
+ucs_status_t
+ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                        unsigned ep_init_flags,
+                        const ucp_unpacked_address_t *remote_address,
+                        uint8_t *addr_indices, ucp_ep_config_key_t *key);
 
 ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                      int is_owner, uct_ep_h *signaling_ep);

@@ -481,7 +481,7 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
 
     ucs_time_t lookup_start_time = ucs_get_time();
     for (unsigned i = 0; i < count; ++i) {
-        void *ptr;
+        void *ptr GTEST_ATTRIBUTE_UNUSED_;
         int present = ucs_ptr_array_lookup(&pa, i, ptr);
         ASSERT_TRUE(present);
     }

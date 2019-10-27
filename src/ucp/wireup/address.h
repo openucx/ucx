@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
+#include <ucs/sys/math.h>
 
 
 /* Which iface flags would be packed in the address */
@@ -40,9 +41,8 @@ enum {
     UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR    = UCS_BIT(2),
     UCP_ADDRESS_PACK_FLAG_IFACE_ADDR     = UCS_BIT(3),
     UCP_ADDRESS_PACK_FLAG_EP_ADDR        = UCS_BIT(4),
-    UCP_ADDRESS_PACK_FLAG_HW_AMO_TLS     = UCS_BIT(5),
     UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16), /* show debug prints of pack/unpack */
-    UCP_ADDRESS_PACK_FLAG_ALL            = UINT64_MAX
+    UCP_ADDRESS_PACK_FLAG_ALL            = (uint64_t)-1
 };
 
 
@@ -87,6 +87,18 @@ struct ucp_unpacked_address {
     unsigned                   address_count;   /* Length of address list */
     ucp_address_entry_t        *address_list;   /* Pointer to address list */
 };
+
+
+/* Iterate over entries in an unpacked address */
+#define ucp_unpacked_address_for_each(_elem, _unpacked_address) \
+    for (_elem = (_unpacked_address)->address_list; \
+         _elem < (_unpacked_address)->address_list + (_unpacked_address)->address_count; \
+         ++_elem)
+
+
+/* Return the index of a specific entry in an unpacked address */
+#define ucp_unpacked_address_index(_unpacked_address, _ae) \
+    ((int)((_ae) - (_unpacked_address)->address_list))
 
 
 /**

@@ -526,16 +526,12 @@ uct_ib_mlx5_destroy_qp(uct_ib_mlx5_qp_t *qp)
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
-uct_ib_mlx5_modify_qp(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp,
+                            enum ibv_qp_state state)
 {
-    switch (qp->type) {
-    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_ib_mlx5_devx_modify_qp_state(qp, state);
+    } else {
         return uct_ib_modify_qp(qp->verbs.qp, state);
-    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        return uct_ib_mlx5_devx_modify_qp(qp, state);
-    case UCT_IB_MLX5_OBJ_TYPE_LAST:
-        break;
     }
-
-    return UCS_OK;
 }

@@ -15,13 +15,16 @@
 #include <netdb.h>
 
 
-#define CHKERR_JUMP(_cond, _msg, _label) \
+#define CHKERR_ACTION(_cond, _msg, _action) \
     do { \
         if (_cond) { \
             fprintf(stderr, "Failed to %s\n", _msg); \
-            goto _label; \
+            _action; \
         } \
     } while (0)
+
+#define CHKERR_JUMP(_cond, _msg, _label) \
+    CHKERR_ACTION(_cond, _msg, goto _label)
 
 #define CHKERR_JUMP_RETVAL(_cond, _msg, _label, _retval) \
     do { \

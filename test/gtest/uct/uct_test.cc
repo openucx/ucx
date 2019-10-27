@@ -768,7 +768,6 @@ bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
         break;
     default:
         UCS_TEST_ABORT("Incorrect atomic mode: " << mode);
-        break;
     }
 
     return ucs_test_all_flags(amo, required_ops);

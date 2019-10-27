@@ -76,14 +76,14 @@ static ucs_status_t client_status = UCS_OK;
 static uint16_t server_port = 13337;
 static long test_string_length = 16;
 static const ucp_tag_t tag  = 0x1337a880u;
-static const ucp_tag_t tag_mask = -1;
+static const ucp_tag_t tag_mask = UINT64_MAX;
 static ucp_address_t *local_addr;
 static ucp_address_t *peer_addr;
 
 static size_t local_addr_len;
 static size_t peer_addr_len;
 
-static int parse_cmd(int argc, char * const argv[], char **server_name);
+static ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name);
 
 static void request_init(void *request)
 {
@@ -132,11 +132,13 @@ static void wait(ucp_worker_h ucp_worker, struct ucx_context *context)
 
 static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
 {
-    int ret = -1, err = 0;
+    int err            = 0;
+    ucs_status_t ret   = UCS_ERR_NO_MESSAGE;
+    int epoll_fd_local = 0;
+    int epoll_fd       = 0;
     ucs_status_t status;
-    int epoll_fd_local = 0, epoll_fd = 0;
     struct epoll_event ev;
-    ev.data.u64 = 0;
+    ev.data.u64        = 0;
 
     status = ucp_worker_get_efd(ucp_worker, &epoll_fd);
     CHKERR_JUMP(UCS_OK != status, "ucp_worker_get_efd", err);
@@ -158,8 +160,8 @@ static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
     CHKERR_JUMP(status != UCS_OK, "ucp_worker_arm\n", err_fd);
 
     do {
-        ret = epoll_wait(epoll_fd_local, &ev, 1, -1);
-    } while ((ret == -1) && (errno == EINTR));
+        err = epoll_wait(epoll_fd_local, &ev, 1, -1);
+    } while ((err == -1) && (errno == EINTR));
 
     ret = UCS_OK;
 
@@ -529,7 +531,7 @@ err:
     return ret;
 }
 
-int parse_cmd(int argc, char * const argv[], char **server_name)
+ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
 {
     int c = 0, index = 0;
     opterr = 0;

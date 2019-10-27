@@ -15,6 +15,7 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 
+#include <limits>
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, uct_perf_data_layout_t DATA, bool ONESIDED>
 class uct_perf_test_runner {
@@ -315,7 +316,7 @@ public:
 
         uct_perf_test_prepare_iov_buffer();
 
-        *recv_sn  = -1;
+        *recv_sn  = std::numeric_limits<uint8_t>::max();
         uct_perf_barrier(&m_perf);
 
         my_index = rte_call(&m_perf, group_index);

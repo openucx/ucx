@@ -121,16 +121,14 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     ucs_status_t status;
     struct ibv_ah *ah;
     void *qpc;
-    int ret;
 
-    ucs_assert_always(qp->type == UCT_IB_MLX5_OBJ_TYPE_DEVX);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 14);
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.config.path_mtu);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, 30);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {
         status = uct_ib_iface_create_ah(&iface->super.super, ah_attr, &ah);
@@ -158,41 +156,30 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, 2);
-    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, 5);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rre, 1);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, 1);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rae, 1);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rre, true);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, iface->super.config.min_rnr_timer);
 
-    ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2rtr, sizeof(in_2rtr),
-                                 out_2rtr, sizeof(out_2rtr));
-    if (ret) {
-        ucs_error("mlx5dv_devx_obj_modify(2RTR) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, syndrome));
-        return UCS_ERR_IO_ERROR;
+    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
+                                     out_2rtr, sizeof(out_2rtr));
+    if (status) {
+        return status;
     }
 
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
 
-    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2rts, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq, 8);
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(iface->super.config.max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
     UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.config.rnr_retry);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, iface->super.config.timeout);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.config.exp_backoff);
 
-    ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2rts, sizeof(in_2rts),
-                                 out_2rts, sizeof(out_2rts));
-    if (ret) {
-        ucs_error("mlx5dv_devx_obj_modify(2RTS) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(rtr2rts_qp_out, out_2rts, syndrome));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
+    return uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
+                                      out_2rts, sizeof(out_2rts));
 }
 

@@ -195,7 +195,9 @@ static int sock_io(int sock, ssize_t (*sock_call)(int, void *, size_t, int),
 static int safe_send(int sock, void *data, size_t size,
                      void (*progress)(void *arg), void *arg)
 {
-    return sock_io(sock, (void*)send, POLLOUT, data, size, progress, arg, "send");
+    typedef ssize_t (*sock_call)(int, void *, size_t, int);
+
+    return sock_io(sock, (sock_call)send, POLLOUT, data, size, progress, arg, "send");
 }
 
 static int safe_recv(int sock, void *data, size_t size,
@@ -575,12 +577,12 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             if (optarg2) {
                 if (UCS_OK != parse_ucp_datatype_params(optarg2 + 1,
                                                        &params->ucp.recv_datatype)) {
-                    return -1;
+                    return UCS_ERR_INVALID_PARAM;
                 }
             }
         } else {
             ucs_error("Invalid option argument for -D");
-            return -1;
+            return UCS_ERR_INVALID_PARAM;
         }
         return UCS_OK;
     case 'i':
@@ -874,7 +876,7 @@ static ucx_perf_rte_t sock_rte = {
     .barrier       = sock_rte_barrier,
     .post_vec      = sock_rte_post_vec,
     .recv          = sock_rte_recv,
-    .exchange_vec  = (void*)ucs_empty_function,
+    .exchange_vec  = (ucx_perf_rte_exchange_vec_func_t)ucs_empty_function,
     .report        = sock_rte_report,
 };
 
