@@ -29,6 +29,11 @@ typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
                                          int flags);
 
 
+int ucs_netif_flags_is_active(unsigned int flags)
+{
+    return (flags & IFF_UP) && (flags & IFF_RUNNING) && !(flags & IFF_LOOPBACK);
+}
+
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
                              struct ifreq *if_req)
 {
@@ -72,8 +77,7 @@ int ucs_netif_is_active(const char *if_name)
         return 0;
     }
 
-    return (ifr.ifr_flags & IFF_UP) && (ifr.ifr_flags & IFF_RUNNING) &&
-           !(ifr.ifr_flags & IFF_LOOPBACK);
+    return ucs_netif_flags_is_active(ifr.ifr_flags);
 }
 
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
@@ -217,6 +221,8 @@ static ucs_status_t
 ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno,
                            ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
+    ucs_status_t status = UCS_ERR_IO_ERROR;
+
     if (io_retval == 0) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
@@ -226,11 +232,16 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
         return UCS_ERR_NO_PROGRESS;
     }
 
-    if ((err_cb == NULL) || (err_cb(err_cb_arg, io_errno) != UCS_OK)) {
-        ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
+    if (err_cb != NULL) {
+        status = err_cb(err_cb_arg, io_errno);
+        if (status == UCS_OK) {
+            return UCS_ERR_NO_PROGRESS;
+        }
     }
 
-    return UCS_ERR_IO_ERROR;
+    ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
+
+    return status;
 }
 
 static inline ucs_status_t

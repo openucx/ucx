@@ -4,6 +4,23 @@
 # See file LICENSE for terms.
 #
 
+AC_LANG_PUSH([C++])
+
+CHECK_COMPILER_FLAG([-fno-tree-vectorize], [-fno-tree-vectorize],
+                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [GTEST_CXXFLAGS="$GTEST_CXXFLAGS -fno-tree-vectorize"],
+                    [])
+
+# error #236: controlling expression is constant
+CHECK_COMPILER_FLAG([--diag_suppress 236], [--diag_suppress 236],
+                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [GTEST_CXXFLAGS="$GTEST_CXXFLAGS --diag_suppress 236"],
+                    [])
+
+AC_LANG_POP([C++])
+
+AC_SUBST([GTEST_CXXFLAGS], [$GTEST_CXXFLAGS])
+
 test_modules=""
 m4_include([test/gtest/ucm/test_dlopen/configure.m4])
 m4_include([test/gtest/ucm/test_dlopen/rpath-subdir/configure.m4])

@@ -182,6 +182,20 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
     return UCS_OK;
 }
 
+void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+{
+    va_list ap;
+
+    if (size == 0) {
+        return;
+    }
+
+    va_start(ap, fmt);
+    vsnprintf(buf, size - 1, fmt, ap);
+    buf[size - 1] = '\0';
+    va_end(ap);
+}
+
 char* ucs_strncpy_safe(char *dst, const char *src, size_t len)
 {
     size_t length;

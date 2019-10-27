@@ -66,6 +66,11 @@ UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 
 static void ucm_cuda_set_ptr_attr(CUdeviceptr dptr)
 {
+    if ((void*)dptr == NULL) {
+        ucm_trace("skipping cuPointerSetAttribute for null pointer");
+        return;
+    }
+
     unsigned int value = 1;
     CUresult ret;
     const char *cu_err_str;
@@ -110,11 +115,12 @@ static void ucm_cudafree_dispatch_events(void *dptr)
     }
 
     ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
-    if (ret != CUDA_SUCCESS) {
-        ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
+    if (ret == CUDA_SUCCESS) {
+        ucs_assert(dptr == (void *)pbase);
+    } else {
+        ucm_debug("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
         psize = 1; /* set minimum length */
     }
-    ucs_assert(dptr == (void *)pbase);
 
     ucm_dispatch_mem_type_free((void *)dptr, psize, UCS_MEMORY_TYPE_CUDA);
 }
@@ -161,9 +167,8 @@ CUresult ucm_cuMemAlloc(CUdeviceptr *dptr, size_t size)
     if (ret == CUDA_SUCCESS) {
         ucm_trace("ucm_cuMemAlloc(dptr=%p size:%lu)",(void *)*dptr, size);
         ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCS_MEMORY_TYPE_CUDA);
+        ucm_cuda_set_ptr_attr(*dptr);
     }
-
-    ucm_cuda_set_ptr_attr(*dptr);
 
     ucm_event_leave();
     return ret;
@@ -201,9 +206,8 @@ CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
                   (WidthInBytes * Height));
         ucm_dispatch_mem_type_alloc((void *)*dptr, WidthInBytes * Height,
                                     UCS_MEMORY_TYPE_CUDA);
+        ucm_cuda_set_ptr_attr(*dptr);
     }
-
-    ucm_cuda_set_ptr_attr(*dptr);
 
     ucm_event_leave();
     return ret;
@@ -281,9 +285,8 @@ cudaError_t ucm_cudaMalloc(void **devPtr, size_t size)
     if (ret == cudaSuccess) {
         ucm_trace("ucm_cudaMalloc(devPtr=%p size:%lu)", *devPtr, size);
         ucm_dispatch_mem_type_alloc(*devPtr, size, UCS_MEMORY_TYPE_CUDA);
+        ucm_cuda_set_ptr_attr((CUdeviceptr) *devPtr);
     }
-
-    ucm_cuda_set_ptr_attr((CUdeviceptr) *devPtr);
 
     ucm_event_leave();
 
@@ -319,9 +322,8 @@ cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
     if (ret == cudaSuccess) {
         ucm_trace("ucm_cudaMallocPitch(devPtr=%p size:%lu)",*devPtr, (width * height));
         ucm_dispatch_mem_type_alloc(*devPtr, (width * height), UCS_MEMORY_TYPE_CUDA);
+        ucm_cuda_set_ptr_attr((CUdeviceptr) *devPtr);
     }
-
-    ucm_cuda_set_ptr_attr((CUdeviceptr) *devPtr);
 
     ucm_event_leave();
     return ret;

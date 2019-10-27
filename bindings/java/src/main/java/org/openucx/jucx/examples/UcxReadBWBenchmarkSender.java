@@ -28,7 +28,6 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         String serverHost = argsMap.get("s");
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
-        resources.push(endpoint);
 
         // In java ByteBuffer can be allocated up to 2GB (int max size).
         if (totalSize >= Integer.MAX_VALUE) {
@@ -73,6 +72,14 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
         while (!recvRequest.isCompleted()) {
             worker.progress();
+        }
+
+        // Close endpoint and wait for remote side
+        // TODO remove when UCP close protocol is implemented
+        endpoint.close();
+        try {
+            Thread.sleep(3000);
+        } catch (java.lang.InterruptedException e) {
         }
 
         memory.deregister();

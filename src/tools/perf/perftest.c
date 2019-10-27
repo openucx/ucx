@@ -425,9 +425,13 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        host - system memory(default)\n");
     if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
         printf("                        cuda - NVIDIA GPU memory\n");
+    } else if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM] != NULL) {
+        printf("                        rocm - AMD ROCm GPU memory\n");
     }
     if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
         printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
+    } else if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] != NULL) {
+        printf("                        rocm-managed - AMD ROCm managed memory\n");
     }
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
@@ -669,11 +673,21 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
                    (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL)) {
             params->mem_type = UCS_MEMORY_TYPE_CUDA;
             return UCS_OK;
+        } else if (!strcmp(optarg, "rocm") &&
+                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM] != NULL)) {
+            params->mem_type = UCS_MEMORY_TYPE_ROCM;
+            return UCS_OK;
         } else if (!strcmp(optarg, "cuda-managed") &&
                    (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL)) {
             params->mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
             return UCS_OK;
+        } else if (!strcmp(optarg, "rocm-managed") &&
+                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] != NULL)) {
+            params->mem_type = UCS_MEMORY_TYPE_ROCM_MANAGED;
+            return UCS_OK;
         }
+
+        ucs_error("Unsupported memory type: \"%s\"", optarg);
         return UCS_ERR_INVALID_PARAM;
     default:
        return UCS_ERR_INVALID_PARAM;

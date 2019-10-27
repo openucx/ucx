@@ -23,7 +23,8 @@
 
 
 #define INDENT             4
-#define LESS_COMMAND       "less"
+#define PAGER_LESS         "less"
+#define PAGER_LESS_CMD     PAGER_LESS " -R"
 #define FUNC_NAME_MAX_LEN  35
 #define MAX_THREADS        256
 
@@ -594,11 +595,10 @@ static void close_pipes()
 
 static int redirect_output(const profile_data_t *data, options_t *opts)
 {
-    char *less_argv[] = {LESS_COMMAND,
-                         "-R" /* show colors */,
-                         NULL};;
+    const char *shell_cmd = "sh";
     struct winsize wsz;
     uint64_t num_lines;
+    const char *pager_cmd;
     pid_t pid;
     int ret;
     int *t;
@@ -665,7 +665,21 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
         }
 
         close_pipes();
-        return execvp(LESS_COMMAND, less_argv);
+
+        /* If PAGER environment variable is set, use it. If it's not set, or it
+         * is equal to "less", use "less -R" to show colors.
+         */
+        pager_cmd = getenv("PAGER");
+        if ((pager_cmd == NULL) || !strcmp(pager_cmd, PAGER_LESS)) {
+            pager_cmd = PAGER_LESS_CMD;
+        }
+
+        /* coverity[tainted_string] */
+        ret = execlp(shell_cmd, shell_cmd, "-c", pager_cmd, NULL);
+        if (ret) {
+            print_error("failed to execute shell '%s': %m", shell_cmd);
+        }
+        return ret;
     }
 }
 

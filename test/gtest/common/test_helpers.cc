@@ -530,11 +530,11 @@ void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
 }
 
 void sock_addr_storage::set_port(uint16_t port) {
-    if (get_sock_addr().sa_family == AF_INET) {
+    if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
         addr_in->sin_port = port;
     } else {
-        ASSERT_TRUE(get_sock_addr().sa_family == AF_INET6);
+        ASSERT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
         addr_in->sin6_port = port;
@@ -542,19 +542,15 @@ void sock_addr_storage::set_port(uint16_t port) {
 }
 
 uint16_t sock_addr_storage::get_port() const {
-    if (get_sock_addr().sa_family == AF_INET) {
+    if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
         return addr_in->sin_port;
     } else {
-        EXPECT_TRUE(get_sock_addr().sa_family == AF_INET6);
+        EXPECT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
         return addr_in->sin6_port;
     }
-}
-
-const struct sockaddr& sock_addr_storage::get_sock_addr() const {
-    return *get_sock_addr_ptr();
 }
 
 size_t sock_addr_storage::get_addr_size() const {
@@ -575,7 +571,7 @@ const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
 
 std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
 {
-    return os << ucs::sockaddr_to_str(&sa_storage.get_sock_addr());
+    return os << ucs::sockaddr_to_str(sa_storage.get_sock_addr_ptr());
 }
 
 auto_buffer::auto_buffer(size_t size) : m_ptr(malloc(size)) {

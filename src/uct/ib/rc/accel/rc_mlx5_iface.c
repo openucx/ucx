@@ -78,7 +78,8 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
         wqe_ctr = ntohs(ecqe->wqe_counter);
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
-        uct_rc_mlx5_iface_release_srq_seg(iface, seg, wqe_ctr, UCS_OK,
+        /* TODO: Check if ib_stride_index valid for error CQE */
+        uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, UCS_OK,
                                           iface->super.super.config.rx_headroom_offset,
                                           &iface->super.super.release_desc);
     } else {
@@ -333,15 +334,19 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif
 
-static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
-                                      uct_rc_iface_common_config_t *rc_config,
-                                      uct_rc_mlx5_iface_common_config_t *mlx5_config,
-                                      const uct_iface_params_t *params,
-                                      uct_ib_iface_init_attr_t *init_attr)
+static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
+                                              uct_md_h tl_md,
+                                              uct_rc_iface_common_config_t *rc_config,
+                                              uct_rc_mlx5_iface_common_config_t *mlx5_config,
+                                              const uct_iface_params_t *params,
+                                              uct_ib_iface_init_attr_t *init_attr)
 {
 #if IBV_HW_TM
-    uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_device_t UCS_V_UNUSED *dev = &md->super.dev;
     struct ibv_tmh tmh;
+    int mtu;
+    ucs_status_t status;
 
     iface->tm.enabled = mlx5_config->tm.enable && (init_attr->flags &
                                                    UCT_IB_TM_SUPPORTED);
@@ -380,19 +385,53 @@ static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_
      * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
      * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
     UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
-    init_attr->rx_cq_len = rc_config->super.rx.queue_len + iface->tm.num_tags * 3 +
-                           rc_config->super.rx.queue_len /
-                           IBV_DEVICE_MAX_UNEXP_COUNT;
-    init_attr->seg_size  = ucs_max(mlx5_config->tm.seg_size,
-                                   rc_config->super.seg_size);
-    return;
+    init_attr->rx_cq_len     = rc_config->super.rx.queue_len + iface->tm.num_tags * 3 +
+                               rc_config->super.rx.queue_len /
+                               IBV_DEVICE_MAX_UNEXP_COUNT;
+    init_attr->seg_size      = ucs_max(mlx5_config->tm.seg_size,
+                                       rc_config->super.seg_size);
+    iface->tm.mp.num_strides = 1;
+    iface->tm.max_bcopy      = init_attr->seg_size;
+
+    /* Multi-Packet XRQ initialization */
+    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ       |
+                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
+                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
+        return UCS_OK;
+    }
+
+    if ((mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) ||
+        (mlx5_config->tm.mp_num_strides == 1)) {
+        return UCS_OK;
+        /* TODO: make the following to be default when MP support is added to UCP
+        iface->tm.mp.num_strides = UCS_BIT(IBV_DEVICE_MP_MIN_LOG_NUM_STRIDES); */
+    } else if ((mlx5_config->tm.mp_num_strides != 8) &&
+               (mlx5_config->tm.mp_num_strides != 16)){
+        ucs_error("invalid value of TM_NUM_STRIDES: %lu, must be 1,8 or 16",
+                  mlx5_config->tm.mp_num_strides);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_device_mtu(params->mode.device.dev_name, tl_md, &mtu);
+    if (status != UCS_OK) {
+        ucs_error("failed to get port MTU: %s", ucs_status_string(status));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    iface->tm.mp.num_strides = mlx5_config->tm.mp_num_strides;
+    init_attr->seg_size      = mtu;
+
+    return UCS_OK;
 
 out_tm_disabled:
 #else
-    iface->tm.enabled    = 0;
+    iface->tm.enabled        = 0;
 #endif
-    init_attr->rx_cq_len = rc_config->super.rx.queue_len;
-    init_attr->seg_size  = rc_config->super.seg_size;
+    init_attr->rx_cq_len     = rc_config->super.rx.queue_len;
+    init_attr->seg_size      = rc_config->super.seg_size;
+    iface->tm.mp.num_strides = 1;
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -421,13 +460,17 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         return UCS_OK;
     }
 
+    /* MP XRQ is supported with HW TM only */
+    ucs_assert(iface->tm.mp.num_strides == 1);
+
     status = uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
     if (status != UCS_OK) {
         goto err;
     }
 
     status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                  iface->super.super.config.seg_size);
+                                  iface->super.super.config.seg_size,
+                                  iface->tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }
@@ -499,10 +542,13 @@ static int uct_rc_mlx5_iface_srq_topo(uct_rc_mlx5_iface_common_t *iface,
         (mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC)) &&
         UCT_RC_MLX5_TM_ENABLED(iface) &&
         (ib_md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        return UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
+
+        return UCT_RC_MLX5_MP_ENABLED(iface) ?
+               UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ : UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
     }
 
-    return UCT_IB_MLX5_SRQ_TOPO_LIST;
+    return UCT_RC_MLX5_MP_ENABLED(iface) ?
+           UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ : UCT_IB_MLX5_SRQ_TOPO_LIST;
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
@@ -516,18 +562,29 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     uct_ib_device_t *dev;
     ucs_status_t status;
 
-    uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config, params, init_attr);
+    status = uct_rc_mlx5_iface_preinit(self, md, rc_config, mlx5_config,
+                                       params, init_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->rx.srq.topo                = uct_rc_mlx5_iface_srq_topo(self, md, mlx5_config);
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
+                                       0 : sizeof(uct_rc_mlx5_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rc_config, init_attr);
 
-    dev                              = uct_ib_iface_device(&self->super.super);
-    self->tx.mmio_mode               = mlx5_config->super.mmio_mode;
-    self->tx.bb_max                  = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
+    dev                       = uct_ib_iface_device(&self->super.super);
+    self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
+    self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
+    self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
+
+    if (!UCT_RC_MLX5_MP_ENABLED(self)) {
+        self->tm.am_desc.offset = self->super.super.config.rx_headroom_offset;
+    }
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX],
                                 &self->cq[UCT_IB_DIR_TX]);

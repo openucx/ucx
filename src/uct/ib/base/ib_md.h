@@ -26,6 +26,8 @@
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
+#define UCT_IB_MEM_DEREG          0
+
 /**
  * IB MD statistics counters
  */
@@ -41,9 +43,12 @@ enum {
                                                        demand paging enabled */
     UCT_IB_MEM_FLAG_ATOMIC_MR       = UCS_BIT(1), /**< The memory region has UMR
                                                        for the atomic access */
-    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2)  /**< An atomic access was 
+    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2), /**< An atomic access was
                                                        requested for the memory
                                                        region */
+    UCT_IB_MEM_MULTITHREADED        = UCS_BIT(3), /**< The memory region registration
+                                                       handled by chunks in parallel
+                                                       threads */
 };
 
 enum {
@@ -72,6 +77,9 @@ typedef struct uct_ib_md_ext_config {
     } odp;
 
     size_t                   gid_index;    /**< IB GID index to use  */
+
+    size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
+    size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
 } uct_ib_md_ext_config_t;
 
 
@@ -144,6 +152,12 @@ typedef struct uct_ib_md_ops {
                                               uct_ib_mem_t *memh);
     ucs_status_t            (*dereg_atomic_key)(struct uct_ib_md *md,
                                                 uct_ib_mem_t *memh);
+    ucs_status_t            (*reg_multithreaded)(uct_ib_md_t *md,
+                                                 void *address, size_t length,
+                                                 uint64_t access,
+                                                 uct_ib_mem_t *memh);
+    ucs_status_t            (*dereg_multithreaded)(uct_ib_md_t *md,
+                                                   uct_ib_mem_t *memh);
 } uct_ib_md_ops_t;
 
 
@@ -243,4 +257,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
 void uct_ib_md_close(uct_md_h uct_md);
 
+ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
+
+ucs_status_t
+uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
+                                       size_t length, uint64_t access,
+                                       size_t chunk, struct ibv_mr **mrs);
 #endif

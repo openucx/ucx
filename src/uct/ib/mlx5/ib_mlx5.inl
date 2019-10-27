@@ -19,6 +19,33 @@ uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned index, unsigned mask)
     return (op_own & MLX5_CQE_OWNER_MASK) == !(index & mask);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
+{
+#if HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
+    return ntohs(cqe->ib_stride_index);
+#else
+    uint16_t *stride = (uint16_t*)&cqe->rsvd20[2];
+    return ntohs(*stride);
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_stride(int num_sge)
+{
+    int stride;
+
+    stride = sizeof(struct mlx5_wqe_srq_next_seg) +
+             (num_sge * sizeof(struct mlx5_wqe_data_seg));
+
+    return ucs_roundup_pow2(stride);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_srq_max_wrs(int rxq_len, int num_sge)
+{
+    return ucs_max(rxq_len / num_sge, UCT_IB_MLX5_XRQ_MIN_UWQ_POST);
+}
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
@@ -455,7 +482,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 static inline uct_ib_mlx5_srq_seg_t *
 uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
-    return srq->buf + (index & srq->mask) * UCT_IB_MLX5_SRQ_STRIDE;
+    return srq->buf + (index & srq->mask) * srq->stride;
 }
 
 static inline uint16_t uct_ib_mlx5_calc_av_sport(uint32_t rqpn, uint32_t qpn)
@@ -526,16 +553,12 @@ uct_ib_mlx5_destroy_qp(uct_ib_mlx5_qp_t *qp)
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
-uct_ib_mlx5_modify_qp(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp,
+                            enum ibv_qp_state state)
 {
-    switch (qp->type) {
-    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_ib_mlx5_devx_modify_qp_state(qp, state);
+    } else {
         return uct_ib_modify_qp(qp->verbs.qp, state);
-    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        return uct_ib_mlx5_devx_modify_qp(qp, state);
-    case UCT_IB_MLX5_OBJ_TYPE_LAST:
-        break;
     }
-
-    return UCS_OK;
 }

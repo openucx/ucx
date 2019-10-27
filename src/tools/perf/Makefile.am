@@ -8,7 +8,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = cuda lib
+SUBDIRS = cuda rocm lib
 CC      = $(UCX_PERFTEST_CC)
 
 noinst_HEADERS        = api/libperf.h

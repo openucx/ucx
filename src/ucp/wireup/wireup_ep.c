@@ -253,8 +253,7 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
 ucs_status_t
-ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
-                          const ucp_ep_params_t *params,
+ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address)
 {
     ucp_ep_h ucp_ep                      = wireup_ep->super.ucp_ep;
@@ -268,8 +267,8 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
-    status = ucp_wireup_select_aux_transport(ucp_ep, params, remote_address,
-                                             &select_info);
+    status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags,
+                                             remote_address, &select_info);
     if (status != UCS_OK) {
         return status;
     }
@@ -407,7 +406,7 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
     return wireup_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
                                    ucp_rsc_index_t rsc_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address)
 {
@@ -437,7 +436,8 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_wireup_ep_connect_aux(wireup_ep, params, remote_address);
+        status = ucp_wireup_ep_connect_aux(wireup_ep, ucp_ep_init_flags,
+                                           remote_address);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;
         }
@@ -592,7 +592,9 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
 
     ucs_assert(ucp_wireup_ep_test(uct_ep));
 
-    status = ucp_wireup_select_sockaddr_transport(ucp_ep, params, &sockaddr_rsc);
+    status = ucp_wireup_select_sockaddr_transport(worker->context,
+                                                  &params->sockaddr,
+                                                  &sockaddr_rsc);
     if (status != UCS_OK) {
         goto out;
     }

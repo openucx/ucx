@@ -248,7 +248,7 @@ ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
  * Release memory allocated via mmap API.
  *
  * @param address   Address of memory to release as returned from @ref ucs_mmap_alloc.
- * @param length    Length of memory to release as returned from @ref ucs_mmap_alloc.
+ * @param length    Length of memory to release passed to @ref ucs_mmap_alloc.
  */
 ucs_status_t ucs_mmap_free(void *address, size_t length);
 

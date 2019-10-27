@@ -370,13 +370,14 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
-    unsigned order[UCP_MAX_RESOURCES];
+    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     ucp_rsc_index_t tl;
 
     status = ucp_address_pack(sender().worker(), NULL,
                               std::numeric_limits<uint64_t>::max(),
-                              UCP_ADDRESS_PACK_FLAG_ALL, order, &size, &buffer);
+                              UCP_ADDRESS_PACK_FLAG_ALL, lanes2remote, &size,
+                              &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -422,10 +423,11 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
-    unsigned order[UCP_MAX_RESOURCES];
+    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
 
     status = ucp_address_pack(sender().worker(), NULL, 0,
-                              UCP_ADDRESS_PACK_FLAG_ALL, order, &size, &buffer);
+                              UCP_ADDRESS_PACK_FLAG_ALL, lanes2remote, &size,
+                              &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -1161,3 +1163,116 @@ UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback_amo,
                               shm_rc, "shm,rc_x,rc_v")
+
+/* NOTE: this fixture is NOT inherited from test_ucp_wireup, because we want to
+ * create our own entities.
+ */
+class test_ucp_wireup_asymmetric : public ucp_test {
+protected:
+    virtual void init() {
+        static const char *ibdev_sysfs_dir = "/sys/class/infiniband";
+
+        DIR *dir = opendir(ibdev_sysfs_dir);
+        if (dir == NULL) {
+            UCS_TEST_SKIP_R(std::string(ibdev_sysfs_dir) + " not found");
+        }
+
+        for (;;) {
+            struct dirent *entry = readdir(dir);
+            if (entry == NULL) {
+                break;
+            }
+
+            if (entry->d_name[0] == '.') {
+                continue;
+            }
+
+            m_ib_devices.push_back(entry->d_name);
+        }
+
+        closedir(dir);
+    }
+
+    void tag_sendrecv(size_t size) {
+        std::string send_data(size, 's');
+        std::string recv_data(size, 'x');
+
+        ucs_status_ptr_t sreq = ucp_tag_send_nb(
+                        sender().ep(0), &send_data[0], size,
+                        ucp_dt_make_contig(1), 1,
+                        (ucp_send_callback_t)ucs_empty_function);
+        ucs_status_ptr_t rreq = ucp_tag_recv_nb(
+                        receiver().worker(), &recv_data[0], size,
+                        ucp_dt_make_contig(1), 1, 1,
+                        (ucp_tag_recv_callback_t)ucs_empty_function);
+        wait(sreq);
+        wait(rreq);
+
+        EXPECT_EQ(send_data, recv_data);
+    }
+
+    /* Generate a pci_bw configuration string for IB devices, which assigns
+     * the speed ai+b for device i.
+     */
+    std::string pci_bw_config(int a, int b) {
+        std::string config_str;
+        for (size_t i = 0; i < m_ib_devices.size(); ++i) {
+            config_str += m_ib_devices[i] + ":" +
+                            ucs::to_string((a * i) + b) + "Gbps";
+            if (i != (m_ib_devices.size() - 1)) {
+                config_str += ",";
+            }
+        }
+        return config_str;
+    }
+
+    std::vector<std::string> m_ib_devices;
+
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
+        params.features     = UCP_FEATURE_TAG;
+        return params;
+    }
+};
+
+/*
+ * Force asymmetric configuration by different PCI_BW settings
+ */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
+
+    /* Enable cross-dev connection */
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv path_mtu_env("UCX_RC_PATH_MTU", "1024");
+
+    {
+        std::string config_str = pci_bw_config(20, 20);
+        UCS_TEST_MESSAGE << "creating sender: " << config_str;
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv pci_bw_env("UCX_IB_PCI_BW", config_str.c_str());
+        create_entity();
+    }
+
+    {
+        std::string config_str = pci_bw_config(-20, m_ib_devices.size() * 20);
+        UCS_TEST_MESSAGE << "creating receiver: " << config_str;
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv pci_bw_env("UCX_IB_PCI_BW", config_str.c_str());
+        create_entity();
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    receiver().connect(&sender(), get_ep_params());
+
+    ucp_ep_print_info(sender().ep(), stdout);
+    ucp_ep_print_info(receiver().ep(), stdout);
+
+    tag_sendrecv(1);
+    tag_sendrecv(100000);
+    tag_sendrecv(1000000);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcv, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")

@@ -131,7 +131,7 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
     accessible = &mdc->md->peer_accessible_cache[peer_idx * num_devices + this_device];
-    if (*accessible == -1) { /* unchecked, add to cache */
+    if (*accessible == (char)0xFF) { /* unchecked, add to cache */
         /* rkey->d_mapped is picked up in uct_cuda_ipc_cache_map_memhandle */
         CUresult result = cuIpcOpenMemHandle(&rkey->d_mapped,
                                              rkey->ph,

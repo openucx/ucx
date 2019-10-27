@@ -82,11 +82,13 @@ enum {
  */
 enum {
     UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0),  /**< Endpoint for local mem type transfers */
-    UCP_EP_CREATE_AM_LANE              = UCS_BIT(1),  /**< Endpoint requires an AM lane */
+    UCP_EP_INIT_CREATE_AM_LANE         = UCS_BIT(1),  /**< Endpoint requires an AM lane */
     UCP_EP_INIT_CM_WIREUP_CLIENT       = UCS_BIT(2),  /**< Endpoint wireup protocol is based on CM,
                                                            client side */
-    UCP_EP_INIT_CM_WIREUP_SERVER       = UCS_BIT(3)   /**< Endpoint wireup protocol is based on CM,
+    UCP_EP_INIT_CM_WIREUP_SERVER       = UCS_BIT(3),  /**< Endpoint wireup protocol is based on CM,
                                                            server side */
+    UCP_EP_INIT_ERR_MODE_PEER_FAILURE  = UCS_BIT(4)   /**< Endpoint requires an
+                                                           @ref UCP_ERR_HANDLING_MODE_PEER */
 };
 
 
@@ -241,6 +243,8 @@ typedef struct ucp_ep_config {
             size_t          min_get_zcopy;
             /* Maximal total size of rndv_put_zcopy */
             size_t          max_put_zcopy;
+            /* Minimal size of rndv_put_zcopy */
+            size_t          min_put_zcopy;
             /* Threshold for switching from eager to RMA based rendezvous */
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
@@ -402,7 +406,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
-                                 const uint8_t *addr_indices,
+                                 const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max);
@@ -412,12 +416,10 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
 
 void ucp_ep_delete(ucp_ep_h ep);
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
-                                       const ucp_ep_params_t *params,
+ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
-                                          const ucp_ep_params_t *params,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
@@ -433,13 +435,13 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
 
-ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
-                                        const ucp_ep_params_t *params,
-                                        const ucp_unpacked_address_t *remote_address,
-                                        ucp_ep_h *ep_p);
+ucs_status_t
+ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
+                           const ucp_unpacked_address_t *remote_address,
+                           ucp_ep_h *ep_p);
 
-void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
-                                  const ucp_ep_params_t *params);
+void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
+                                    unsigned ep_init_flags);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 

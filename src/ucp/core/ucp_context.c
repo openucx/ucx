@@ -1607,7 +1607,7 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
 }
 
 ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
+ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t size)
 {
     ucs_memory_type_t mem_type;
     unsigned i, md_index;

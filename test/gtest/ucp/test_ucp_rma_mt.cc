@@ -53,7 +53,6 @@ public:
 };
 
 UCS_TEST_P(test_ucp_rma_mt, put_get) {
-    int i;
     ucs_status_t st;
     uint64_t orig_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
     uint64_t target_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
@@ -84,7 +83,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
     /* test parallel rkey unpack */
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         int worker_index = 0;
         if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
             worker_index = i;
@@ -99,14 +98,14 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 
     /* test blocking PUT */
 
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         orig_data[i] = 0xdeadbeefdeadbeef + 10 * i;
         target_data[i] = 0;
     }
 
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         int worker_index = 0;
 
         if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
@@ -126,14 +125,14 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 
     /* test nonblocking PUT */
 
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         orig_data[i] = 0xdeadbeefdeadbeef + 10 * i;
         target_data[i] = 0;
     }
 
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
         int worker_index = 0;
 
@@ -152,14 +151,14 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 
     /* test blocking GET */
 
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         orig_data[i] = 0;
         target_data[i] = 0xdeadbeefdeadbeef + 10 * i;
     }
 
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         int worker_index = 0;
 
         if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
@@ -179,14 +178,14 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 
     /* test nonblocking GET */
 
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         orig_data[i] = 0;
         target_data[i] = 0xdeadbeefdeadbeef + 10 * i;
     }
 
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
         int worker_index = 0;
 
@@ -205,7 +204,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucp_rkey_destroy(rkey[i]);
     }
 #endif

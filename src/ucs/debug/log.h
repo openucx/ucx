@@ -154,6 +154,14 @@ void ucs_log_push_handler(ucs_log_func_t handler);
 void ucs_log_pop_handler();
 unsigned ucs_log_num_handlers();
 
+
+/**
+ * Log backtrace.
+ *
+ * @param level          Log level.
+ */
+void ucs_log_print_backtrace(ucs_log_level_t level);
+
 END_C_DECLS
 
 #endif

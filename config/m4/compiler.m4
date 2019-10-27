@@ -177,31 +177,19 @@ AC_DEFUN([DETECT_UARCH],
 #
 AC_DEFUN([CHECK_COMPILER_FLAG],
 [
-#
-# Force ICC treat command line warnings as errors.
-# This evaluation should be called prior to all other compiler flags evals
-#
-         AS_IF([test "x$icc_cmd_diag_to_error" = "x"],
-               [icc_cmd_diag_to_error=1
-                AC_MSG_CHECKING([compiler flag -diag-error 10006])
-                SAVE_CFLAGS="$CFLAGS"
-                CFLAGS="$BASE_CFLAGS $CFLAGS -diag-error 10006"
-                AC_COMPILE_IFELSE([AC_LANG_SOURCE([[int main(){return 0;}]])],
-                                  [BASE_CFLAGS="$BASE_CFLAGS -diag-error 10006"
-                                   AC_MSG_RESULT([yes])],
-                                  [AC_MSG_RESULT([no])])
-                CFLAGS="$SAVE_CFLAGS"
-               ],
-               [])
          AC_MSG_CHECKING([compiler flag $1])
          SAVE_CFLAGS="$CFLAGS"
+         SAVE_CXXFLAGS="$CFLAGS"
          CFLAGS="$BASE_CFLAGS $CFLAGS $2"
+         CXXFLAGS="$BASE_CXXFLAGS $CXXFLAGS $2"
          AC_COMPILE_IFELSE([$3],
                            [AC_MSG_RESULT([yes])
                             CFLAGS="$SAVE_CFLAGS"
+                            CXXFLAGS="$SAVE_CXXFLAGS"
                             $4],
                            [AC_MSG_RESULT([no])
                             CFLAGS="$SAVE_CFLAGS"
+                            CXXFLAGS="$SAVE_CXXFLAGS"
                             $5])
 ])
 
@@ -240,6 +228,17 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
                            [AC_MSG_RESULT([no])])
          CFLAGS="$SAVE_CFLAGS"
 ])
+
+
+#
+# Force ICC treat command line warnings as errors.
+# This evaluation should be called prior to all other compiler flags evals
+#
+CHECK_COMPILER_FLAG([-diag-error 10006], [-diag-error 10006],
+                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [BASE_CFLAGS="$BASE_CFLAGS -diag-error 10006"
+                     BASE_CXXFLAGS="$BASE_CXXFLAGS -diag-error 10006"],
+                    [])
 
 
 CHECK_DEPRECATED_DECL_FLAG([-diag-disable 1478], CFLAGS_NO_DEPRECATED) # icc
@@ -404,6 +403,12 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1901],
                                [],
                                [])
 
+# Check if "-pedantic" flag is supported
+CHECK_COMPILER_FLAG([-pedantic], [-pedantic],
+                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [CFLAGS_PEDANTIC="$CFLAGS_PEDANTIC -pedantic"],
+                    [])
+
 
 #
 # Set C++ optimization/debug flags to be the same as for C
@@ -411,6 +416,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1901],
 BASE_CXXFLAGS="$BASE_CFLAGS"
 AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
 AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
+AC_SUBST([CFLAGS_PEDANTIC], [$CFLAGS_PEDANTIC]) 
 
 #
 # Set common preprocessor flags
