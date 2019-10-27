@@ -19,8 +19,9 @@
 #define UCS_ASYNC_TIMER_ID_MIN      1000000u
 #define UCS_ASYNC_TIMER_ID_MAX      2000000u
 
-#define UCS_ASYNC_HANDLER_FMT       "%p [id=%d] %s()"
-#define UCS_ASYNC_HANDLER_ARG(_h)   (_h), (_h)->id, ucs_debug_get_symbol_name((_h)->cb)
+#define UCS_ASYNC_HANDLER_FMT       "%p [id=%d ref %d] %s()"
+#define UCS_ASYNC_HANDLER_ARG(_h)   (_h), (_h)->id, (_h)->refcount, \
+                                    ucs_debug_get_symbol_name((_h)->cb)
 
 /* Hash table for all event and timer handlers */
 KHASH_MAP_INIT_INT(ucs_async_handler, ucs_async_handler_t *);
@@ -206,6 +207,21 @@ out_unlock:
     return status;
 }
 
+static void ucs_async_handler_call(ucs_async_handler_t *handler)
+{
+    ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
+                    UCS_ASYNC_HANDLER_ARG(handler));
+
+    /* track call count to allow removing the handler synchronously from itself
+     * the handler must always be called with async context blocked, so it's
+     * already thread safe.
+     */
+    ucs_assert_always(handler->called == 0);
+    ++handler->called;
+    handler->cb(handler->id, handler->arg);
+    --handler->called;
+}
+
 static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
 {
     ucs_async_context_t *async;
@@ -218,13 +234,9 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
         async->last_wakeup = ucs_get_time();
     }
     if (async == NULL) {
-        ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
-                        UCS_ASYNC_HANDLER_ARG(handler));
-        handler->cb(handler->id, handler->arg);
+        ucs_async_handler_call(handler);
     } else if (ucs_async_method_call(mode, context_try_block, async)) {
-        ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
-                        UCS_ASYNC_HANDLER_ARG(handler));
-        handler->cb(handler->id, handler->arg);
+        ucs_async_handler_call(handler);
         ucs_async_method_call(mode, context_unblock, async);
     } else /* async != NULL */ {
         ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %lu",
@@ -398,6 +410,7 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
 
     handler->mode     = mode;
     handler->events   = events;
+    handler->called   = 0;
     handler->cb       = cb;
     handler->arg      = arg;
     handler->async    = async;
@@ -521,7 +534,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     }
 
     if (sync) {
-        while (handler->refcount > 1) {
+        while (handler->refcount - handler->called > 1) {
             /* TODO use pthread_cond / futex to reduce CPU usage while waiting
              * for the async handler to complete */
             sched_yield();
@@ -574,13 +587,13 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
         ucs_async_method_call_all(block);
         handler = ucs_async_handler_get(value);
         if (handler != NULL) {
-            ucs_trace_async("calling missed async handler " UCS_ASYNC_HANDLER_FMT,
-                            UCS_ASYNC_HANDLER_ARG(handler));
             if (handler->async) {
                 UCS_ASYNC_BLOCK(handler->async);
             }
+
             handler->missed = 0;
-            handler->cb(handler->id, handler->arg);
+            ucs_async_handler_call(handler);
+
             if (handler->async) {
                 UCS_ASYNC_UNBLOCK(handler->async);
             }

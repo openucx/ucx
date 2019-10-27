@@ -19,6 +19,7 @@ struct ucs_async_handler {
     int                        id;      /* Event/Timer ID */
     ucs_async_mode_t           mode;    /* Event delivery mode */
     int                        events;  /* Bitmap of events */
+    int                        called;  /* 1 if handler callback is being called */
     ucs_async_event_cb_t       cb;      /* Callback function */
     void                       *arg;    /* Callback argument */
     ucs_async_context_t        *async;  /* Async context for the handler. Can be NULL */

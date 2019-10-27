@@ -633,30 +633,45 @@ UCS_TEST_P(test_async, timer_unset_from_handler) {
 
 class local_event_remove_handler : public local_event {
 public:
-    local_event_remove_handler(ucs_async_mode_t mode) : local_event(mode) {
+    local_event_remove_handler(ucs_async_mode_t mode, bool sync) :
+        local_event(mode), m_sync(sync) {
     }
 
 protected:
     virtual void handler() {
          base::handler();
-         unset_handler(false);
+         unset_handler(m_sync);
+    }
+
+private:
+    bool m_sync;
+};
+
+class test_async_event_unset_from_handler : public test_async {
+protected:
+    void test_unset_from_handler(bool sync) {
+        local_event_remove_handler le(GetParam(), sync);
+
+        for (int iter = 0; iter < 5; ++iter) {
+            for (int retry = 0; retry < EVENT_RETRIES; ++retry) {
+                le.push_event();
+                suspend_and_poll(&le, COUNT);
+                if (le.count() >= 1) {
+                    break;
+                }
+                UCS_TEST_MESSAGE << "retry " << (retry + 1);
+            }
+            EXPECT_EQ(1, le.count());
+        }
     }
 };
 
-UCS_TEST_P(test_async, event_unset_from_handler) {
-    local_event_remove_handler le(GetParam());
+UCS_TEST_P(test_async_event_unset_from_handler, sync) {
+    test_unset_from_handler(true);
+}
 
-    for (int iter = 0; iter < 5; ++iter) {
-        for (int retry = 0; retry < EVENT_RETRIES; ++retry) {
-            le.push_event();
-            suspend_and_poll(&le, COUNT);
-            if (le.count() >= 1) {
-                break;
-            }
-            UCS_TEST_MESSAGE << "retry " << (retry + 1);
-        }
-        EXPECT_EQ(1, le.count());
-    }
+UCS_TEST_P(test_async_event_unset_from_handler, async) {
+    test_unset_from_handler(false);
 }
 
 class local_event_add_handler : public local_event {
@@ -756,15 +771,13 @@ UCS_TEST_P(test_async_timer_mt, multithread) {
     EXPECT_GE(min_count, exp_min_count);
 }
 
-INSTANTIATE_TEST_CASE_P(signal,          test_async, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread_spinlock, test_async, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK));
-INSTANTIATE_TEST_CASE_P(thread_mutex,    test_async, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX));
-INSTANTIATE_TEST_CASE_P(poll,            test_async, ::testing::Values(UCS_ASYNC_MODE_POLL));
-INSTANTIATE_TEST_CASE_P(signal,          test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread_spinlock, test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK));
-INSTANTIATE_TEST_CASE_P(thread_mutex,    test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX));
-INSTANTIATE_TEST_CASE_P(poll,            test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_POLL));
-INSTANTIATE_TEST_CASE_P(signal,          test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread_spinlock, test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK));
-INSTANTIATE_TEST_CASE_P(thread_mutex,    test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX));
-INSTANTIATE_TEST_CASE_P(poll,            test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_POLL));
+#define INSTANTIATE_ASYNC_TEST_CASES(_test_fixture) \
+    INSTANTIATE_TEST_CASE_P(signal,          _test_fixture, ::testing::Values(UCS_ASYNC_MODE_SIGNAL)); \
+    INSTANTIATE_TEST_CASE_P(thread_spinlock, _test_fixture, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK)); \
+    INSTANTIATE_TEST_CASE_P(thread_mutex,    _test_fixture, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX)); \
+    INSTANTIATE_TEST_CASE_P(poll,            _test_fixture, ::testing::Values(UCS_ASYNC_MODE_POLL));
+
+INSTANTIATE_ASYNC_TEST_CASES(test_async);
+INSTANTIATE_ASYNC_TEST_CASES(test_async_event_unset_from_handler);
+INSTANTIATE_ASYNC_TEST_CASES(test_async_event_mt);
+INSTANTIATE_ASYNC_TEST_CASES(test_async_timer_mt);
