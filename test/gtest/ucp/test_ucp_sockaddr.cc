@@ -123,12 +123,20 @@ public:
         UCS_TEST_SKIP_R("No interface for testing");
     }
 
-    void inaddr_any_addr(struct sockaddr_in *addr, in_port_t port)
+    void inaddr_any_ipv4(struct sockaddr_in *addr, in_port_t port)
     {
         memset(addr, 0, sizeof(struct sockaddr_in));
         addr->sin_family      = AF_INET;
         addr->sin_addr.s_addr = INADDR_ANY;
         addr->sin_port        = port;
+    }
+
+    void inaddr_any_ipv6(struct sockaddr_in6 *addr, in_port_t port)
+    {
+        memset(addr, 0, sizeof(struct sockaddr_in6));
+        addr->sin6_family = AF_INET6;
+        addr->sin6_addr   = in6addr_any;
+        addr->sin6_port   = port;
     }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
@@ -378,20 +386,20 @@ public:
                                 bool wakeup)
     {
         UCS_TEST_MESSAGE << "Testing "
-                         << ucs::sockaddr_to_str(&test_addr.get_sock_addr());
+                         << ucs::sockaddr_to_str(test_addr.get_sock_addr_ptr());
 
-        start_listener(cb_type, &test_addr.get_sock_addr(), test_addr.get_addr_size());
-        connect_and_send_recv(&test_addr.get_sock_addr(), wakeup);
+        start_listener(cb_type, test_addr.get_sock_addr_ptr(), test_addr.get_addr_size());
+        connect_and_send_recv(test_addr.get_sock_addr_ptr(), wakeup);
     }
 
     void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
                            bool wakeup)
     {
         UCS_TEST_MESSAGE << "Testing "
-                         << ucs::sockaddr_to_str(&test_addr.get_sock_addr());
+                         << ucs::sockaddr_to_str(test_addr.get_sock_addr_ptr());
 
-        start_listener(cb_type, &test_addr.get_sock_addr(), test_addr.get_addr_size());
-        connect_and_reject(&test_addr.get_sock_addr(), wakeup);
+        start_listener(cb_type, test_addr.get_sock_addr_ptr(), test_addr.get_addr_size());
+        connect_and_reject(test_addr.get_sock_addr_ptr(), wakeup);
     }
 
 
@@ -432,17 +440,30 @@ UCS_TEST_P(test_ucp_sockaddr, listen) {
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
 
-    struct sockaddr_in inaddr_any_listen_addr;
+    ucs::sock_addr_storage inaddr_any_listen_addr;
+    size_t size;
 
-    inaddr_any_addr(&inaddr_any_listen_addr, test_addr.get_port());
+    if (test_addr.get_sock_addr_ptr()->sa_family == AF_INET) {
+        struct sockaddr_in sin;
+
+        inaddr_any_ipv4(&sin, test_addr.get_port());
+        size = sizeof(struct sockaddr_in);
+        inaddr_any_listen_addr.set_sock_addr(*(struct sockaddr*)&sin, size);
+    } else {
+        EXPECT_EQ(test_addr.get_sock_addr_ptr()->sa_family, AF_INET6);
+        struct sockaddr_in6 sin;
+
+        inaddr_any_ipv6(&sin, test_addr.get_port());
+        size = sizeof(struct sockaddr_in6);
+        inaddr_any_listen_addr.set_sock_addr(*(struct sockaddr*)&sin, size);
+    }
 
     UCS_TEST_MESSAGE << "Testing "
-                     << ucs::sockaddr_to_str(
-                        (const struct sockaddr*)&inaddr_any_listen_addr);
+                     << ucs::sockaddr_to_str(inaddr_any_listen_addr.get_sock_addr_ptr());
 
     start_listener(cb_type(), (const struct sockaddr*)&inaddr_any_listen_addr,
-                   sizeof(struct sockaddr_in));
-    connect_and_send_recv(&test_addr.get_sock_addr(), false);
+                   size);
+    connect_and_send_recv(test_addr.get_sock_addr_ptr(), false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, reject,
@@ -457,13 +478,13 @@ UCS_TEST_P(test_ucp_sockaddr, listener_query) {
     listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
 
     UCS_TEST_MESSAGE << "Testing "
-                     << ucs::sockaddr_to_str(&test_addr.get_sock_addr());
+                     << ucs::sockaddr_to_str(test_addr.get_sock_addr_ptr());
 
-    start_listener(cb_type(), &test_addr.get_sock_addr(), test_addr.get_addr_size());
+    start_listener(cb_type(), test_addr.get_sock_addr_ptr(), test_addr.get_addr_size());
     status = ucp_listener_query(receiver().listenerh(), &listener_attr);
     EXPECT_UCS_OK(status);
 
-    EXPECT_EQ(ucs_sockaddr_cmp(&test_addr.get_sock_addr(),
+    EXPECT_EQ(ucs_sockaddr_cmp(test_addr.get_sock_addr_ptr(),
                                (const struct sockaddr*)&listener_attr.sockaddr,
                                &status), 0);
     EXPECT_UCS_OK(status);
@@ -473,7 +494,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
     ucs::sock_addr_storage listen_addr(test_addr.to_ucs_sock_addr());
     ucs_status_t status = receiver().listen(cb_type(),
-                                            &listen_addr.get_sock_addr(),
+                                            listen_addr.get_sock_addr_ptr(),
                                             listen_addr.get_addr_size());
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(&listen_addr));
@@ -484,7 +505,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
     {
         scoped_log_handler slh(wrap_errors_logger);
-        client_ep_connect(&listen_addr.get_sock_addr());
+        client_ep_connect(listen_addr.get_sock_addr_ptr());
         /* allow for the unreachable event to arrive before restoring errors */
         wait_for_flag(&m_err_handler_count);
     }
@@ -536,14 +557,14 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
      * features are RMA/ATOMIC. With these features, need to make sure that
      * there is a lane for ucp-wireup (an am_lane should be created and used) */
     UCS_TEST_MESSAGE << "Testing " <<
-        ucs::sockaddr_to_str(&test_addr.get_sock_addr());
+        ucs::sockaddr_to_str(test_addr.get_sock_addr_ptr());
 
-    start_listener(cb_type(), &test_addr.get_sock_addr(), test_addr.get_addr_size());
+    start_listener(cb_type(), test_addr.get_sock_addr_ptr(), test_addr.get_addr_size());
 
     {
         scoped_log_handler slh(wrap_errors_logger);
 
-        client_ep_connect(&test_addr.get_sock_addr());
+        client_ep_connect(test_addr.get_sock_addr_ptr());
 
         /* allow the err_handler callback to be invoked if needed */
         if (!wait_for_server_ep(false)) {

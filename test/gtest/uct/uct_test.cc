@@ -1092,7 +1092,7 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
             status = UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
                                                 uct_listener_destroy,
                                                 uct_listener_create, m_cm,
-                                                &listen_addr.get_sock_addr(),
+                                                listen_addr.get_sock_addr_ptr(),
                                                 listen_addr.get_addr_size(),
                                                 &params);
             if (status == UCS_OK) {
@@ -1101,7 +1101,7 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
         }
         EXPECT_EQ(UCS_ERR_BUSY, status);
 
-        const struct sockaddr* c_ifa_addr = &listen_addr.get_sock_addr();
+        const struct sockaddr* c_ifa_addr = listen_addr.get_sock_addr_ptr();
         struct sockaddr* ifa_addr = const_cast<struct sockaddr*>(c_ifa_addr);
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
