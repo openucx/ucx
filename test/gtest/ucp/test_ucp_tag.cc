@@ -383,8 +383,6 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH
     // (maximal short + 1) <= ZCOPY thresh
     EXPECT_LE(max_short,
               ucp_ep_config(sender().ep())->tag.eager.zcopy_thresh[0]);
-    EXPECT_LE(max_short,
-              ucp_ep_config(sender().ep())->tag.eager.zcopy_thresh[0]);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
