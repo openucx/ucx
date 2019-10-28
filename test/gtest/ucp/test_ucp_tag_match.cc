@@ -14,13 +14,16 @@ using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_tag_match : public test_ucp_tag {
 public:
-    virtual void init()
-    {
+    test_ucp_tag_match() {
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         if (RUNNING_ON_VALGRIND) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
             m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
         }
+    }
+
+    virtual void init()
+    {
         modify_config("TM_THRESH",  "1");
 
         test_ucp_tag::init();
@@ -54,7 +57,6 @@ protected:
     }
 
     static ucs_status_t m_req_status;
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 ucs_status_t test_ucp_tag_match::m_req_status = UCS_OK;
