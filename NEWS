@@ -1,5 +1,5 @@
 #
-## Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+## Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 ## Copyright (C) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
 ## Copyright (C) ARM Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 ##
@@ -9,22 +9,21 @@
 
 ## Current
 
-## 1.7.0 (October 26, 2019)
+## 1.7.0-rc1 (October 28, 2019)
 Features:
-- Added support multiple listening transports
-- Added UCT socket based connection manager transport
+- Added support for multiple listening transports
+- Added UCT socket-based connection manager transport
 - Updated API for UCT component management
-- Added a API to retrieve the server listening port
+- Added API to retrieve the listening port
 - Added UCP active message API
-- Remove deprecated API for querying UCT memory domains
-- Added new UCT component query API and deprecate old one
+- Removed deprecated API for querying UCT memory domains
 - Refactored server/client examples
 - Added support for dlopen interception in UCM
-- Added non-blocking TCP/IP connection manager
-- Added socket based connection manager
 - Added support for PCIe atomics
-- Updated Java API
-- Updated support for Mellanox DEVX API
+- Updated Java API: added support for most of UCP layer operations
+- Updated support for Mellanox DevX API
+- Added multiple UCT/TCP transport performance optimizations
+- Optimized memcpy() for Intel platforms
 
 Bugfixes:
 - Multiple bugfixes in UCP, UCT, UCM libraries
@@ -35,8 +34,8 @@ Bugfixes:
 
 ## 1.6.1 (September 23, 2019)
 Features:
-- Add Bull Atos HCA device IDs
-- Add Azure Pipelines testing
+- Added Bull Atos HCA device IDs
+- Added Azure Pipelines testing
 
 Bugfixes:
 - Multiple static checker fixes
@@ -123,7 +122,7 @@ Tested configurations:
 Features:
 - Improved support for installation with latest ROCm
 - Improved support for latest rdma-core
-- Adding support for CUDA IPC for intra-node GPU
+- Added support for CUDA IPC for intra-node GPU
 - Added support for CUDA memory allocation cache for mem-type detection
 - Added support for latest Mellanox devices
 - Added support for Nvidia GPU managed memory
