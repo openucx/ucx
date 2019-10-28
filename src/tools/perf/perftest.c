@@ -674,6 +674,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             params->mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
             return UCS_OK;
         }
+
+        ucs_error("Unsupported memory type: \"%s\"", optarg);
         return UCS_ERR_INVALID_PARAM;
     default:
        return UCS_ERR_INVALID_PARAM;
