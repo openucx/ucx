@@ -207,14 +207,14 @@ out_unlock:
     return status;
 }
 
-static void ucs_async_handler_call(ucs_async_handler_t *handler)
+static void ucs_async_handler_invoke(ucs_async_handler_t *handler)
 {
     ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
                     UCS_ASYNC_HANDLER_ARG(handler));
 
     /* track call count to allow removing the handler synchronously from itself
-     * the handler must always be called with async context blocked, so it's
-     * already thread safe.
+     * the handler must always be called with async context blocked, so no need
+     * for atomic operations here.
      */
     ucs_assert_always(handler->called == 0);
     ++handler->called;
@@ -234,9 +234,9 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
         async->last_wakeup = ucs_get_time();
     }
     if (async == NULL) {
-        ucs_async_handler_call(handler);
+        ucs_async_handler_invoke(handler);
     } else if (ucs_async_method_call(mode, context_try_block, async)) {
-        ucs_async_handler_call(handler);
+        ucs_async_handler_invoke(handler);
         ucs_async_method_call(mode, context_unblock, async);
     } else /* async != NULL */ {
         ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %lu",
@@ -534,7 +534,11 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     }
 
     if (sync) {
-        while (handler->refcount - handler->called > 1) {
+        /* the handler could not be called more than once because the async
+         * context is blocked when it's called */
+        ucs_assert(handler->called <= 1);
+
+        while ((handler->refcount - handler->called) > 1) {
             /* TODO use pthread_cond / futex to reduce CPU usage while waiting
              * for the async handler to complete */
             sched_yield();
@@ -592,7 +596,7 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
             }
 
             handler->missed = 0;
-            ucs_async_handler_call(handler);
+            ucs_async_handler_invoke(handler);
 
             if (handler->async) {
                 UCS_ASYNC_UNBLOCK(handler->async);
