@@ -330,13 +330,12 @@ ucp_context_attr_t test_ucp_tag::ctx_attr;
 class test_ucp_tag_limits : public test_ucp_tag {
 public:
     test_ucp_tag_limits() {
-        m_test_offload = false;
-    }
-
-    void init() {
         m_test_offload = GetParam().variant;
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE",
                                                ucs::to_string(m_test_offload).c_str()));
+    }
+
+    void init() {
         test_ucp_tag::init();
         check_offload_support(m_test_offload);
     }
