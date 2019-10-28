@@ -349,6 +349,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                          struct mlx5_grh_av.rmac],
                         [], [], [[#include <infiniband/$mlx5_include>]])
 
+       AC_CHECK_MEMBERS([struct mlx5_cqe64.ib_stride_index],
+                        [], [], [[#include <infiniband/$mlx5_include>]])
+
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
        AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],

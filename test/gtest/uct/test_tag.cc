@@ -59,6 +59,9 @@ public:
                                                 "RC_TM_ENABLE", "y");
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
 
+        status = uct_config_modify(m_iface_config, "RC_TM_MP_NUM_STRIDES", "1");
+        ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
+
         uct_test::init();
 
         uct_iface_params params;

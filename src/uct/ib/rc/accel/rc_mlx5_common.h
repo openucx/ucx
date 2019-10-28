@@ -35,9 +35,11 @@
 #    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
 #  endif
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
+#  define IBV_DEVICE_MP_MIN_NUM_STRIDES     8
 #else
 #  define IBV_TM_CAP_RC                     0
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
+#  define IBV_DEVICE_MP_MIN_NUM_STRIDES     0
 #endif
 
 #if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
@@ -52,9 +54,11 @@
 #  define ibv_srq_init_attr_ex              ibv_exp_create_srq_attr
 #endif
 
-#define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
-#define UCT_RC_MLX5_OPCODE_FLAG_TM    0x200
-#define UCT_RC_MLX5_OPCODE_MASK       0xff
+#define UCT_RC_MLX5_OPCODE_FLAG_RAW         0x100
+#define UCT_RC_MLX5_OPCODE_FLAG_TM          0x200
+#define UCT_RC_MLX5_OPCODE_MASK             0xff
+#define UCT_RC_MLX5_SINGLE_FRAG_MSG(_flags) \
+    (((_flags) & UCT_CB_PARAM_FLAG_FIRST) && !((_flags) & UCT_CB_PARAM_FLAG_MORE))
 
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
     UCT_CHECK_AM_ID(_id); \
@@ -122,21 +126,32 @@ enum {
 
 /* TODO: Remove/replace this enum when mlx5dv.h is included */
 enum {
-    UCT_RC_MLX5_OPCODE_TAG_MATCHING        = 0x28,
-    UCT_RC_MLX5_CQE_APP_TAG_MATCHING       = 1,
+    UCT_RC_MLX5_OPCODE_TAG_MATCHING          = 0x28,
+    UCT_RC_MLX5_CQE_APP_TAG_MATCHING         = 1,
+
+    /* last packet flag for multi-packet RQs */
+    UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD         = 0x40000000,
+
+    /* byte count mask for multi-packet RQs */
+    UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK    = 0x0000FFFF,
+
+    UCT_RC_MLX5_MP_RQ_NUM_STRIDES_FIELD_MASK = 0x3FFF0000,
+
+    /* filler cqe indicator */
+    UCT_RC_MLX5_MP_RQ_FILLER_CQE             = UCS_BIT(31),
 
     /* tag segment flags */
-    UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT         = (1 << 6),
-    UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ        = (1 << 7),
+    UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT           = (1 << 6),
+    UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ          = (1 << 7),
 
     /* tag CQE codes */
-    UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED     = 0x1,
-    UCT_RC_MLX5_CQE_APP_OP_TM_EXPECTED     = 0x2,
-    UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED   = 0x3,
-    UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG       = 0x4,
-    UCT_RC_MLX5_CQE_APP_OP_TM_APPEND       = 0x5,
-    UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE       = 0x6,
-    UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
+    UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED       = 0x1,
+    UCT_RC_MLX5_CQE_APP_OP_TM_EXPECTED       = 0x2,
+    UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED     = 0x3,
+    UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG         = 0x4,
+    UCT_RC_MLX5_CQE_APP_OP_TM_APPEND         = 0x5,
+    UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE         = 0x6,
+    UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG   = 0xA
 };
 
 #if IBV_HW_TM
@@ -210,6 +225,28 @@ typedef struct uct_rc_mlx5_cmd_wq {
                                                ops array size */
 } uct_rc_mlx5_cmd_wq_t;
 
+
+/* Message context used with multi-packet XRQ */
+typedef struct uct_rc_mlx5_mp_context {
+    /* Storage for a per-message user-defined context. Must be passed unchanged
+     * to the user in uct_tag_unexp_eager_cb_t. */
+    void                          *context;
+
+    /* With MP XRQ immediate value is delivered with the last fragment, while
+     * TMH is present in the first fragment only. Need to save app_context
+     * from TMH in this field and construct immediate data for unexpected
+     * eager callback when the last message fragment arrives. */
+    uint32_t                      app_ctx;
+
+    /* When 0, it means that tag eager unexpected multi-fragmented message is
+     * being processed (not all fragments are delivered to the user via
+     * uct_tag_unexp_eager_cb_t callback yet). Otherwise, any incoming tag eager
+     * message should be either a single fragment message or the first fragment
+     * of multi-fragmeneted message. */
+    uint8_t                       free;
+} uct_rc_mlx5_mp_context_t;
+
+
 #if IBV_HW_TM
 #  define UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
                                               _pack_cb, _arg, _length) \
@@ -242,6 +279,7 @@ typedef struct uct_rc_mlx5_tmh_priv_data {
     uint16_t                    data;
 } UCS_S_PACKED uct_rc_mlx5_tmh_priv_data_t;
 
+void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc);
 
 typedef struct uct_rc_mlx5_release_desc {
     uct_recv_desc_t             super;
@@ -294,14 +332,21 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_tag_entry_t      *head;
         uct_rc_mlx5_tag_entry_t      *tail;
         uct_rc_mlx5_tag_entry_t      *list;
+        ucs_mpool_t                  *bcopy_mp;
 
         ucs_ptr_array_t              rndv_comps;
+        size_t                       max_bcopy;
+        size_t                       max_zcopy;
         unsigned                     num_tags;
         unsigned                     num_outstanding;
         unsigned                     max_rndv_data;
         uint16_t                     unexpected_cnt;
         uint16_t                     cmd_qp_len;
         uint8_t                      enabled;
+        struct {
+            uint8_t                  num_strides;
+            ucs_mpool_t              tx_mp;
+        } mp;
         struct {
             void                     *arg; /* User defined arg */
             uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
@@ -313,6 +358,7 @@ typedef struct uct_rc_mlx5_iface_common {
         } rndv_unexp;
         uct_rc_mlx5_release_desc_t  eager_desc;
         uct_rc_mlx5_release_desc_t  rndv_desc;
+        uct_rc_mlx5_release_desc_t  am_desc;
         UCS_STATS_NODE_DECLARE(stats);
     } tm;
 #if HAVE_IBV_DM
@@ -336,15 +382,16 @@ typedef struct uct_rc_mlx5_iface_common {
  * Common RC/DC mlx5 interface configuration
  */
 typedef struct uct_rc_mlx5_iface_common_config {
-    uct_ib_mlx5_iface_config_t super;
-    unsigned                   tx_max_bb;
+    uct_ib_mlx5_iface_config_t       super;
+    unsigned                         tx_max_bb;
     struct {
-        int                    enable;
-        unsigned               list_size;
-        size_t                 seg_size;
+        int                          enable;
+        unsigned                     list_size;
+        size_t                       seg_size;
+        size_t                       mp_num_strides;
     } tm;
-    unsigned                   exp_backoff;
-    uct_rc_mlx5_srq_topo_t     srq_topo;
+    unsigned                         exp_backoff;
+    uct_rc_mlx5_srq_topo_t           srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
 
@@ -361,6 +408,8 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
     UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_MLX5_STAT_TAG_##_op, 1)
 
 #define UCT_RC_MLX5_TM_ENABLED(_iface) (_iface)->tm.enabled
+
+#define UCT_RC_MLX5_MP_ENABLED(_iface) ((_iface)->tm.mp.num_strides > 1)
 
 /* TMH can carry 2 bytes of data in its reserved filed */
 #define UCT_RC_MLX5_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_mlx5_tmh_priv_data_t, \
@@ -406,9 +455,10 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
    }
 
 #if IBV_HW_TM
-ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
-                                     struct ibv_tmh *tmh, uct_tag_t tag,
-                                     unsigned byte_len);
+void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
+                                   struct ibv_tmh *tmh, uct_tag_t tag,
+                                   struct mlx5_cqe64 *cqe, unsigned flags,
+                                   unsigned byte_len);
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -491,7 +541,7 @@ uct_rc_mlx5_handle_rndv_fin(uct_rc_mlx5_iface_common_t *iface, uint32_t app_ctx)
 
 extern ucs_config_field_t uct_rc_mlx5_common_config_table[];
 
-unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
+unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface);
 
@@ -530,6 +580,7 @@ uct_rc_mlx5_iface_tm_set_cmd_qp_len(uct_rc_mlx5_iface_common_t *iface)
 
 #if IBV_HW_TM
 void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
+                                   const uct_rc_iface_common_config_t *config,
                                    unsigned rndv_hdr_len);
 
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,

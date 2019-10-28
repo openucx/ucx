@@ -614,7 +614,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
     status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
                                   iface->super.rx.srq.verbs.srq,
-                                  iface->super.super.super.config.seg_size);
+                                  iface->super.super.super.config.seg_size,
+                                  iface->super.tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }

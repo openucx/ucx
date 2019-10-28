@@ -27,14 +27,16 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     struct mlx5dv_cq dvcq = {};
     struct mlx5dv_obj dv = {};
     void *xrqc, *wq;
-    int len, ret, max;
+    int len, ret, max, stride, log_num_of_strides;
 
-    uct_rc_mlx5_init_rx_tm_common(iface, rndv_hdr_len);
+    uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
 
-    max = ucs_max(config->super.rx.queue_len, UCT_IB_MLX5_XRQ_MIN_UWQ_POST);
-    max = ucs_roundup_pow2(max);
-    len = max * UCT_IB_MLX5_SRQ_STRIDE;
-    ret = posix_memalign(&iface->rx.srq.buf, ucs_get_page_size(), len);
+    stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
+    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
+                                     iface->tm.mp.num_strides);
+    max    = ucs_roundup_pow2(max);
+    len    = max * stride;
+    ret    = posix_memalign(&iface->rx.srq.buf, ucs_get_page_size(), len);
     if (ret) {
         return status;
     }
@@ -70,16 +72,22 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     wq = UCT_IB_MLX5DV_ADDR_OF(xrqc, xrqc, wq);
 
-    ucs_assert((iface->rx.srq.topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) ||
-               (iface->rx.srq.topo == UCT_RC_MLX5_SRQ_TOPO_LIST));
-
     UCT_IB_MLX5DV_SET(wq, wq, wq_type, iface->rx.srq.topo);
     UCT_IB_MLX5DV_SET(wq, wq, log_wq_sz,     ucs_ilog2(max));
-    UCT_IB_MLX5DV_SET(wq, wq, log_wq_stride, ucs_ilog2(UCT_IB_MLX5_SRQ_STRIDE));
+    UCT_IB_MLX5DV_SET(wq, wq, log_wq_stride, ucs_ilog2(stride));
     UCT_IB_MLX5DV_SET(wq, wq, pd,            dvpd.pdn);
     UCT_IB_MLX5DV_SET(wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,    iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(wq, wq, wq_umem_id,    iface->rx.srq.devx.mem->umem_id);
+
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+        /* Normalize to device's interface values (range of (-6) - 7) */
+        log_num_of_strides           = ucs_ilog2(iface->tm.mp.num_strides) - 9;
+
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides, log_num_of_strides & 0xF);
+        UCT_IB_MLX5DV_SET(wq, wq, log_wqe_stride_size,
+                          (ucs_ilog2(iface->super.super.config.seg_size) - 6));
+    }
 
     iface->rx.srq.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                                     out, sizeof(out));
@@ -94,8 +102,10 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->rx.srq.srq_num     = UCT_IB_MLX5DV_GET(create_xrq_out, out, xrqn);
     uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
-                              iface->super.super.config.seg_size);
+                              iface->super.super.config.seg_size,
+                              iface->tm.mp.num_strides);
     iface->super.rx.srq.quota = max - 1;
+
     return UCS_OK;
 
 err_free:
