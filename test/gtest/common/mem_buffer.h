@@ -59,12 +59,15 @@ public:
     /* return the string name of a memory type */
     static std::string mem_type_name(ucs_memory_type_t mem_type);
 
+    mem_buffer(void *ptr, size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     ~mem_buffer();
 
     ucs_memory_type_t mem_type() const;
 
     void *ptr() const;
+
+    size_t size() const;
 
 private:
     static void abort_wrong_mem_type(ucs_memory_type_t mem_type);
@@ -73,6 +76,7 @@ private:
 
     ucs_memory_type_t m_mem_type;
     void              *m_ptr;
+    size_t            m_size;
 };
 
 
