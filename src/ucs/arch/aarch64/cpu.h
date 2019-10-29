@@ -32,15 +32,19 @@ BEGIN_C_DECLS
  */
 
 #define ucs_aarch64_dmb(_op)          asm volatile ("dmb " #_op ::: "memory")
-#define ucs_aarch64_dsb(_op)          asm volatile ("dsb " #_op ::: "memory")
 #define ucs_aarch64_isb(_op)          asm volatile ("isb " #_op ::: "memory")
 
-/* The macro is used to serialize stores accross Normal NC (or Device) and WB memory.
- * (see Arm Spec, B2.7.2)
+/* The macro is used to serialize stores across Normal NC (or Device) and WB
+ * memory, (see Arm Spec, B2.7.2).  Based on recent changes in Linux kernel:
+ * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=22ec71615d824f4f11d38d0e55a88d8956b7e45f
+ *
+ * The underlying barrier code was changed to use lighter weight DMB instead
+ * of DSB. The barrier used for synchronization of access between write back
+ * and device mapped memory (PCIe BAR).
  */
-#define ucs_memory_bus_fence()        ucs_aarch64_dsb(oshsy)
-#define ucs_memory_bus_store_fence()  ucs_aarch64_dsb(oshst)
-#define ucs_memory_bus_load_fence()   ucs_aarch64_dsb(oshld)
+#define ucs_memory_bus_fence()        ucs_aarch64_dmb(oshsy)
+#define ucs_memory_bus_store_fence()  ucs_aarch64_dmb(oshst)
+#define ucs_memory_bus_load_fence()   ucs_aarch64_dmb(oshld)
 
 /* The macro is used to flush all pending stores from write combining buffer.
  * Some uarch "auto" flush the stores once cache line is full (no need for additional barrier).
