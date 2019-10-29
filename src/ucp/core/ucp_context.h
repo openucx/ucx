@@ -365,6 +365,17 @@ int ucp_score_cmp(double score1, double score2)
             0 : ucs_signum(diff));
 }
 
+/**
+ * Compare two scores taking into account priorities if scores are equal
+ */
+static UCS_F_ALWAYS_INLINE
+int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
+{
+    int score_res = ucp_score_cmp(score1, score2);
+
+    return score_res ? score_res : ucs_signum(prio1 - prio2);
+}
+
 static UCS_F_ALWAYS_INLINE
 int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 {
