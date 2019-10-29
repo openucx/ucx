@@ -72,6 +72,15 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_direct,
     test_get_zcopy();
 }
 
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_multithreaded,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_ZCOPY),
+                     "REG_MT_THRESH=1")
+{
+    test_put_zcopy();
+    test_get_zcopy();
+}
+
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 
 

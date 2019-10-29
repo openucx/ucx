@@ -161,6 +161,17 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
 
+    {"REG_MT_THRESH", "4G",
+     "Minimal MR size to be register using multiple parallel threads.\n"
+     "Number of threads used will be determined by number of CPUs which "
+     "registering thread is bound to by hard affinity.",
+     ucs_offsetof(uct_ib_md_config_t, ext.min_mt_reg), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"REG_MT_CHUNK", "2G",
+     "Size of single chunk used in multithreaded registration.\n"
+     "Must by power of 2.",
+     ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_chunk), UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -209,6 +220,16 @@ static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
 };
 
 UCS_LIST_HEAD(uct_ib_md_ops_list);
+
+typedef struct {
+    pthread_t     thread;
+    void          *addr;
+    size_t        len;
+    size_t        chunk;
+    uint64_t      access;
+    struct ibv_pd *pd;
+    struct ibv_mr **mr;
+} uct_ib_md_mem_reg_thread_t;
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
                                           const char *file,
@@ -285,12 +306,153 @@ static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address
     ucs_log(level, "%s", msg);
 }
 
+void *uct_ib_md_mem_handle_thread_func(void *arg)
+{
+    uct_ib_md_mem_reg_thread_t *ctx = arg;
+    ucs_status_t status;
+    int mr_idx = 0;
+    size_t size;
+
+    while (ctx->len) {
+        size = ucs_min(ctx->len, ctx->chunk);
+        if (ctx->access != UCT_IB_MEM_DEREG) {
+            ctx->mr[mr_idx] = UCS_PROFILE_NAMED_CALL(ibv_reg_mr_func_name,
+                                                     ibv_reg_mr, ctx->pd,
+                                                     ctx->addr, size,
+                                                     ctx->access);
+            if (ctx->mr[mr_idx] == NULL) {
+                return UCS_STATUS_PTR(UCS_ERR_IO_ERROR);
+            }
+        } else {
+            status = uct_ib_dereg_mr(ctx->mr[mr_idx]);
+            if (status != UCS_OK) {
+                return UCS_STATUS_PTR(status);
+            }
+        }
+        ctx->addr += size;
+        ctx->len  -= size;
+        mr_idx++;
+    }
+
+    return (void *)UCS_OK;
+}
+
+ucs_status_t
+uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
+                                       size_t length, uint64_t access,
+                                       size_t chunk, struct ibv_mr **mrs)
+{
+    int thread_num_mrs, thread_num, thread_idx, mr_idx = 0, cpu_id = 0;
+    int mr_num = ucs_div_round_up(length, chunk);
+    ucs_status_t status;
+    void *thread_status;
+    cpu_set_t parent_set, thread_set;
+    uct_ib_md_mem_reg_thread_t *ctxs, *cur_ctx;
+    pthread_attr_t attr;
+    int ret;
+
+    ret = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &parent_set);
+    if (ret != 0) {
+        ucs_error("pthread_getaffinity_np() failed: %m");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    thread_num = ucs_min(CPU_COUNT(&parent_set), mr_num);
+
+    if (thread_num == 1) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ctxs = ucs_calloc(thread_num, sizeof(*ctxs), "ib mr ctxs");
+    if (ctxs == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    pthread_attr_init(&attr);
+
+    status = UCS_OK;
+    for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
+        while (!CPU_ISSET(cpu_id, &parent_set)) {
+            cpu_id++;
+        }
+
+        /* calculate number of mrs for each thread so each one will
+         * get proportional amount */
+        thread_num_mrs  = ucs_div_round_up(mr_num - mr_idx, thread_num - thread_idx);
+
+        cur_ctx         = &ctxs[thread_idx];
+        cur_ctx->pd     = md->pd;
+        cur_ctx->addr   = address + (mr_idx * chunk);
+        cur_ctx->len    = ucs_min(thread_num_mrs * chunk, length - (mr_idx * chunk));
+        cur_ctx->access = access;
+        cur_ctx->mr     = &mrs[mr_idx];
+        cur_ctx->chunk  = chunk;
+
+        CPU_ZERO(&thread_set);
+        CPU_SET(cpu_id++, &thread_set);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &thread_set);
+        ret = pthread_create(&cur_ctx->thread, &attr,
+                             uct_ib_md_mem_handle_thread_func, cur_ctx);
+        if (ret) {
+            ucs_error("pthread_create() failed: %m");
+            status     = UCS_ERR_IO_ERROR;
+            thread_num = thread_idx;
+            break;
+        }
+
+        mr_idx += thread_num_mrs;
+    }
+
+    for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
+        cur_ctx = &ctxs[thread_idx];
+        pthread_join(cur_ctx->thread, &thread_status);
+        if (UCS_PTR_IS_ERR(UCS_OK)) {
+            status = UCS_PTR_STATUS(thread_status);
+        }
+    }
+
+    ucs_free(ctxs);
+    pthread_attr_destroy(&attr);
+
+    if (status != UCS_OK) {
+        for (mr_idx = 0; mr_idx < mr_num; mr_idx++) {
+            if (mrs[mr_idx]) {
+                /* coverity[check_return] */
+                uct_ib_dereg_mr(mrs[mr_idx]);
+            }
+        }
+    }
+
+    return status;
+}
+
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                                      size_t length, uint64_t access,
-                                     int silent, struct ibv_mr **mr_p)
+                                     int silent, uct_ib_mem_t *memh)
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_status_t status;
     struct ibv_mr *mr;
+
+    if (length >= md->config.min_mt_reg) {
+        UCS_PROFILE_CODE("reg ksm") {
+            status = md->ops->reg_multithreaded(md, address, length,
+                                                UCT_IB_MEM_ACCESS_FLAGS |
+                                                access, memh);
+        }
+
+        if (status != UCS_ERR_UNSUPPORTED) {
+            if (status == UCS_OK) {
+                memh->flags |= UCT_IB_MEM_MULTITHREADED;
+            } else {
+                uct_ib_md_print_mem_reg_err_msg(level, address, length,
+                                                UCT_IB_MEM_ACCESS_FLAGS |
+                                                access);
+            }
+
+            return status;
+        }
+    }
 
     mr = UCS_PROFILE_NAMED_CALL(ibv_reg_mr_func_name, ibv_reg_mr, md->pd,
                                 address, length, UCT_IB_MEM_ACCESS_FLAGS | access);
@@ -300,11 +462,11 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         return UCS_ERR_IO_ERROR;
     }
 
-    *mr_p = mr;
+    memh->mr = mr;
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
+ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
     int ret;
 
@@ -320,6 +482,10 @@ static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 static ucs_status_t uct_ib_memh_dereg(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
     ucs_status_t s1, s2;
+
+    if (memh->flags & UCT_IB_MEM_MULTITHREADED) {
+        return md->ops->dereg_multithreaded(md, memh);
+    }
 
     s1 = s2 = UCS_OK;
     if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
@@ -493,7 +659,6 @@ uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, si
 static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
                             uint64_t access)
 {
-    memh->lkey  = memh->mr->lkey;
     memh->flags = 0;
 
     /* coverity[dead_error_condition] */
@@ -515,7 +680,8 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     uint64_t access;
 
     access = uct_ib_md_access_flags(md, flags, length);
-    status = uct_ib_md_reg_mr(md, address, length, access, silent, &memh->mr);
+    uct_ib_mem_init(memh, flags, access);
+    status = uct_ib_md_reg_mr(md, address, length, access, silent, memh);
     if (status != UCS_OK) {
         return status;
     }
@@ -525,7 +691,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
               uct_ib_device_name(&md->dev), memh->mr->lkey, memh->mr->rkey,
               access, flags);
 
-    uct_ib_mem_init(memh, flags, access);
+    memh->lkey = memh->mr->lkey;
     uct_ib_mem_set_numa_policy(md, memh);
     if (md->config.odp.prefetch) {
         uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
@@ -1365,11 +1531,13 @@ err:
 }
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
-    .open              = uct_ib_verbs_md_open,
-    .cleanup           = (void*)ucs_empty_function,
-    .memh_struct_size  = sizeof(uct_ib_mem_t),
-    .reg_atomic_key    = (void*)ucs_empty_function_return_unsupported,
-    .dereg_atomic_key  = (void*)ucs_empty_function_return_unsupported,
+    .open                = uct_ib_verbs_md_open,
+    .cleanup             = (void*)ucs_empty_function,
+    .memh_struct_size    = sizeof(uct_ib_mem_t),
+    .reg_atomic_key      = (void*)ucs_empty_function_return_unsupported,
+    .dereg_atomic_key    = (void*)ucs_empty_function_return_unsupported,
+    .reg_multithreaded   = (void*)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (void*)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);

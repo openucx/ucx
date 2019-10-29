@@ -448,11 +448,13 @@ void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
-    .open             = uct_ib_mlx5_devx_md_open,
-    .cleanup          = uct_ib_mlx5_devx_md_cleanup,
-    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key   = uct_ib_mlx5_devx_reg_atomic_key,
-    .dereg_atomic_key = uct_ib_mlx5_devx_dereg_atomic_key,
+    .open                = uct_ib_mlx5_devx_md_open,
+    .cleanup             = uct_ib_mlx5_devx_md_cleanup,
+    .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key      = uct_ib_mlx5_devx_reg_atomic_key,
+    .dereg_atomic_key    = uct_ib_mlx5_devx_dereg_atomic_key,
+    .reg_multithreaded   = (void*)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (void*)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_devx_md_ops, 2);
@@ -627,11 +629,13 @@ err:
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
-    .open             = uct_ib_mlx5dv_md_open,
-    .cleanup          = (void*)ucs_empty_function,
-    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key   = (void*)ucs_empty_function_return_unsupported,
-    .dereg_atomic_key = (void*)ucs_empty_function_return_unsupported,
+    .open                = uct_ib_mlx5dv_md_open,
+    .cleanup             = (void*)ucs_empty_function,
+    .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key      = (void*)ucs_empty_function_return_unsupported,
+    .dereg_atomic_key    = (void*)ucs_empty_function_return_unsupported,
+    .reg_multithreaded   = (void*)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (void*)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);
