@@ -165,7 +165,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     uct_tcp_ep_ctx_init(&self->rx);
 
     self->events        = 0;
-    self->conn_attempts = 0;
+    self->conn_retries  = 0;
     self->fd            = fd;
     self->ctx_caps      = 0;
     self->conn_state    = UCT_TCP_EP_CONN_STATE_CLOSED;
@@ -383,7 +383,9 @@ uct_tcp_ep_create_socket_and_connect(uct_tcp_iface_t *iface,
         goto err_ep_destroy;
     }
 
-    *ep_p = ep;
+    if (*ep_p == NULL) {
+        *ep_p = ep;
+    }
 
     return UCS_OK;
 
@@ -392,6 +394,9 @@ err_ep_destroy:
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }
 err_close_fd:
+    /* fd has to be valid in case of valid EP has been
+     * passed to this function */
+    ucs_assert((*ep_p == NULL) || (fd != -1));
     uct_tcp_ep_close_fd(&fd);
     return status;
 }
@@ -624,7 +629,7 @@ static inline ssize_t uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
     return sent_length;
 }
 
-ucs_status_t uct_tcp_ep_handle_dropped_connect_error(uct_tcp_ep_t *ep, int io_errno)
+ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep, int io_errno)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
@@ -648,11 +653,10 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect_error(uct_tcp_ep_t *ep, int io_er
             ucs_error("try to increase \"net.core.somaxconn\", "
                       "\"net.core.netdev_max_backlog\", "
                       "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
-                      "on the remote node or increase %s%s%s=%u to do more "
-                      "more connection establishment attempts",
+                      "on the remote node or increase %s%s%s (=%u)",
                       UCS_CONFIG_PREFIX, UCT_TCP_CONFIG_PREFIX,
-                      UCT_TCP_CONFIG_MAX_CONN_ATTEMPTS,
-                      iface->config.max_conn_attempts);
+                      UCT_TCP_CONFIG_MAX_CONN_RETRIES,
+                      iface->config.max_conn_retries);
         }
 
         return status;
@@ -682,7 +686,7 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
         return UCS_OK;
     }
 
-    return uct_tcp_ep_handle_dropped_connect_error(ep, io_errno);
+    return uct_tcp_ep_handle_dropped_connect(ep, io_errno);
 }
 
 static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,

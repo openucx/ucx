@@ -54,10 +54,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
-  {UCT_TCP_CONFIG_MAX_CONN_ATTEMPTS, "5",
+  {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "5",
    "How many connection establishment attmepts should be done if dropped "
    "connection was detected due to lack of system resources",
-   ucs_offsetof(uct_tcp_iface_config_t, max_conn_attempts), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
 
   {"NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
@@ -481,7 +481,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.prefer_default    = config->prefer_default;
     self->config.conn_nb           = config->conn_nb;
     self->config.max_poll          = config->max_poll;
-    self->config.max_conn_attempts = config->max_conn_attempts;
+    self->config.max_conn_retries  = config->max_conn_retries;
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt_sndbuf;
     self->sockopt.rcvbuf           = config->sockopt_rcvbuf;

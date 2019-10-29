@@ -44,7 +44,7 @@
 #define UCT_TCP_EP_PUT_SERVICE_LENGTH        (sizeof(uct_tcp_am_hdr_t) + \
                                               sizeof(uct_tcp_ep_put_req_hdr_t))
 
-#define UCT_TCP_CONFIG_MAX_CONN_ATTEMPTS     "MAX_CONN_ATTEMPTS"
+#define UCT_TCP_CONFIG_MAX_CONN_RETRIES      "MAX_CONN_RETRIES"
 
 
 /**
@@ -274,7 +274,7 @@ struct uct_tcp_ep {
     uint8_t                       ctx_caps;         /* Which contexts are supported */
     int                           fd;               /* Socket file descriptor */
     uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
-    unsigned                      conn_attempts;    /* Number of connection attempts done */
+    unsigned                      conn_retries;     /* Number of connection attempts done */
     int                           events;           /* Current notifications */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
     uct_tcp_ep_ctx_t              rx;               /* RX resources */
@@ -321,7 +321,7 @@ typedef struct uct_tcp_iface {
         int                       prefer_default;    /* Prefer default gateway */
         int                       conn_nb;           /* Use non-blocking connect() */
         unsigned                  max_poll;          /* Number of events to poll per socket*/
-        unsigned                  max_conn_attempts; /* How many connection establishment attmepts
+        unsigned                  max_conn_retries;  /* How many connection establishment attmepts
                                                       * should be done if dropped connection was
                                                       * detected due to lack of system resources */
     } config;
@@ -346,7 +346,7 @@ typedef struct uct_tcp_iface_config {
     int                           prefer_default;
     int                           conn_nb;
     unsigned                      max_poll;
-    unsigned                      max_conn_attempts;
+    unsigned                      max_conn_retries;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
     size_t                        sockopt_rcvbuf;
@@ -381,7 +381,7 @@ void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
-ucs_status_t uct_tcp_ep_handle_dropped_connect_error(uct_tcp_ep_t *ep, int io_errno);
+ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep, int io_errno);
 
 unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep);
 

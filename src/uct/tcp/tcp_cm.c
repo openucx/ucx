@@ -92,8 +92,8 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
 
 static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg, int io_errno)
 {
-    return uct_tcp_ep_handle_dropped_connect_error((uct_tcp_ep_t*)arg,
-                                                   io_errno);
+    return uct_tcp_ep_handle_dropped_connect((uct_tcp_ep_t*)arg,
+                                             io_errno);
 }
 
 /* `fmt_str` parameter has to contain "%s" to write event type */
@@ -541,9 +541,9 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
                                             uct_tcp_iface_t);
     ucs_status_t status;
 
-    if (ep->conn_attempts++ > iface->config.max_conn_attempts) {
-        ucs_error("tcp_ep %p: reached maximum number of connections attempts "
-                  "(%u)", ep, iface->config.max_conn_attempts);
+    if (ep->conn_retries++ > iface->config.max_conn_retries) {
+        ucs_error("tcp_ep %p: reached maximum number of connection retries "
+                  "(%u)", ep, iface->config.max_conn_retries);
         return UCS_ERR_TIMED_OUT;
     }
 
