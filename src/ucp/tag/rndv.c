@@ -1137,14 +1137,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
         worker      = rreq->recv.worker;
         frag_size   = req->recv.length;
         frag_offset = req->recv.frag.offset;
-        ucs_assert_always(!UCP_MEM_IS_HOST(rreq->send.mem_type));
+        ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.mem_type));
 
         /* performan put zcopy on memtype endpoint to stage from
         ** frag recv buffer to memtype recv buffer */
         mem_type_ep       = worker->mem_type_ep[rreq->recv.mem_type];
         mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
         if (mem_type_rma_lane == UCP_NULL_LANE) {
-            ucs_fatal("memtype buffer is con't stage because of no rma lane");
+            ucs_fatal("no rma bw lane to stage from stage buffer to"
+                       " memory type recv buffer");
         }
         md_index  = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
         mdesc     = (ucp_mem_desc_t*) req->recv.buffer - 1;
