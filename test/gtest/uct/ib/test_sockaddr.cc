@@ -225,12 +225,12 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
+    int num_clients = ucs_max(2, 100 / ucs::test_time_multiplier());
     uct_iface_params_t client_params;
     entity *client_test;
-    int i, num_clients = 100;
 
     /* multiple clients, each on an iface of its own, connecting to the same server */
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         /* open iface for the client side */
         client_params.field_mask        = UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
                                           UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
@@ -259,10 +259,10 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
-    int i, num_conns_on_client = 100;
+    int num_conns_on_client = ucs_max(2, 100 / ucs::test_time_multiplier());
 
     /* multiple clients, on the same iface, connecting to the same server */
-    for (i = 0; i < num_conns_on_client; ++i) {
+    for (int i = 0; i < num_conns_on_client; ++i) {
         client->connect(i, *server, 0, m_connect_addr, client_iface_priv_data_cb,
                         NULL, NULL, &client->max_conn_priv);
     }
@@ -676,7 +676,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 {
-    int i, num_clients = 100;
+    int num_clients = ucs_max(2, 100 / ucs::test_time_multiplier());;
     entity *client_test;
 
     /* Listen */
@@ -684,7 +684,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 
     /* Connect */
     /* multiple clients, each on a cm of its own, connecting to the same server */
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         client_test = uct_test::create_entity();
         m_entities.push_back(client_test);
         client_test->max_conn_priv = client_test->cm_attr().max_conn_priv;
@@ -702,7 +702,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     EXPECT_EQ(num_clients, (int)m_server->num_eps());
 
     /* Disconnect */
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         /* first 2 entities are m_server and m_client */
         client_test = &m_entities.at(2 + i);
         ASSERT_TRUE(client_test != m_client);
@@ -720,7 +720,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     EXPECT_EQ(num_clients, m_server_disconnect_cnt);
     EXPECT_EQ(num_clients, m_client_disconnect_cnt);
 
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         client_test = m_entities.back();
         m_entities.remove(client_test);
     }
@@ -728,7 +728,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 {
-    int i, num_conns_on_client = 100;
+    int num_conns_on_client = ucs_max(2, 100 / ucs::test_time_multiplier());
 
     m_server_start_disconnect = true;
 
@@ -737,7 +737,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     /* Connect */
     /* multiple clients, on the same cm, connecting to the same server */
-    for (i = 0; i < num_conns_on_client; ++i) {
+    for (int i = 0; i < num_conns_on_client; ++i) {
         m_client->connect(i, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
     }
