@@ -136,17 +136,6 @@ ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh)
 ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags     = 0;
-    if (uct_mm_md_mapper_ops(md)->alloc != NULL) {
-        md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
-    }
-    if (uct_mm_md_mapper_ops(md)->attach != NULL) {
-        md_attr->cap.flags |= UCT_MD_FLAG_RKEY_PTR;
-    }
-    if (uct_mm_md_mapper_ops(md)->reg != NULL) {
-        md_attr->cap.flags |= UCT_MD_FLAG_REG;
-        md_attr->reg_cost.overhead = 1000.0e-9;
-        md_attr->reg_cost.growth   = 0.007e-9;
-    }
     md_attr->cap.flags            |= UCT_MD_FLAG_NEED_RKEY;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
@@ -157,6 +146,18 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_reg          = 0;
     md_attr->rkey_packed_size     = sizeof(uct_mm_packed_rkey_t) +
                                     uct_mm_md_mapper_ops(md)->get_path_size(md);
+    if (uct_mm_md_mapper_ops(md)->alloc != NULL) {
+        md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
+    }
+    if (uct_mm_md_mapper_ops(md)->attach != NULL) {
+        md_attr->cap.flags |= UCT_MD_FLAG_RKEY_PTR;
+    }
+    if (uct_mm_md_mapper_ops(md)->reg != NULL) {
+        md_attr->cap.flags |= UCT_MD_FLAG_REG;
+        md_attr->reg_cost.overhead = 1000.0e-9;
+        md_attr->reg_cost.growth   = 0.007e-9;
+        md_attr->cap.max_reg       = SIZE_MAX;
+    }
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
