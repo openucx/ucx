@@ -30,8 +30,9 @@ BEGIN_C_DECLS
 #define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
 
 
-/* Returns `UCS_ERR_NO_PROGRESS` if the default error
- * handling should be done, otherwise `UCS_OK` */
+/* Returns an error if the default error handling should be
+ * done (the error value will be returned to a caller),
+ * otherwise `UCS_OK` */
 typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int io_errno);
 
 
