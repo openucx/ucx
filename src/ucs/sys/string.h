@@ -114,6 +114,18 @@ size_t ucs_string_quantity_prefix_value(char prefix);
 
 
 /**
+ * Format a string to a buffer of given size, and guarantee that the last char
+ * in the buffer is '\0'.
+ *
+ * @param buf  Buffer to format the string to.
+ * @param size Buffer size.
+ * @param fmt  Format string.
+ */
+void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+    UCS_F_PRINTF(3, 4);
+
+
+/**
  * Copy string limited by len bytes. Destination string is always ended by '\0'
  *
  * @param dst Destination buffer
