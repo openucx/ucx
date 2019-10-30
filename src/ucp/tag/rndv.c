@@ -243,7 +243,7 @@ static void ucp_rndv_send_atp(ucp_request_t *sreq, uintptr_t remote_request)
 UCS_PROFILE_FUNC_VOID(ucp_rndv_complete_frag_rma_put_zcopy, (fsreq),
                       ucp_request_t *fsreq)
 {
-    ucp_request_t *sreq = fsreq->send.rndv_put.sreq;
+    ucp_request_t *sreq = fsreq->send.proto.sreq;
 
     sreq->send.state.dt.offset += fsreq->send.length;
 
@@ -266,6 +266,7 @@ static void ucp_rndv_send_frag_atp(ucp_request_t *fsreq, uintptr_t remote_reques
 
     fsreq->send.lane                 = ucp_ep_get_am_lane(fsreq->send.ep);
     fsreq->send.uct.func             = ucp_proto_progress_am_single;
+    fsreq->send.proto.sreq           = fsreq->send.rndv_put.sreq;
     fsreq->send.proto.am_id          = UCP_AM_ID_RNDV_ATP;
     fsreq->send.proto.status         = UCS_OK;
     fsreq->send.proto.remote_request = remote_request;
