@@ -226,8 +226,10 @@ class local_timer : public local,
                     public base_timer
 {
 public:
+    static const int TIMER_INTERVAL_USEC = 1000;
+
     local_timer(ucs_async_mode_t mode) : local(mode), base_timer(mode) {
-        set_timer(&m_async, ucs_time_from_usec(1000));
+        set_timer(&m_async, ucs_time_from_usec(TIMER_INTERVAL_USEC));
     }
 
     ~local_timer() {
@@ -602,6 +604,43 @@ UCS_TEST_P(test_async, warn_block) {
 
     if (GetParam() != UCS_ASYNC_MODE_POLL) {
         EXPECT_GE(warn_count, 1);
+    }
+}
+
+class local_timer_long_handler : public local_timer {
+public:
+    local_timer_long_handler(ucs_async_mode_t mode, int sleep_usec) :
+        local_timer(mode), m_sleep_usec(sleep_usec) {
+    }
+
+    virtual void handler() {
+        /* The handler would sleep long enough to increment the counter after
+         * main thread already considers it removed - unless the main thread
+         * waits for handler completion properly.
+         * It sleeps only once to avoid timer overrun deadlock in signal mode.
+         */
+        ucs::safe_usleep(m_sleep_usec * 2);
+        m_sleep_usec = 0;
+        local_timer::handler();
+    }
+
+    int m_sleep_usec;
+};
+
+UCS_TEST_P(test_async, remove_sync) {
+
+    /* create another handler so that removing the timer would not have to
+     * completely cleanup the async context, and race condition could happen
+     */
+    local_timer le(GetParam());
+
+    for (int i = 0; i < EVENT_RETRIES; ++i) {
+        local_timer_long_handler lt(GetParam(), SLEEP_USEC * 2);
+        suspend_and_poll(&lt, 1);
+        lt.unset_handler(true);
+        int count = lt.count();
+        suspend_and_poll(&lt, 1);
+        ASSERT_EQ(count, lt.count());
     }
 }
 
