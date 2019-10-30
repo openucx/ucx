@@ -31,6 +31,11 @@
     } while (_res == UCS_ERR_NO_RESOURCE)
 
 
+#define FOR_EACH_ENTITY(_iter) \
+    for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
+         _iter != m_entities.end(); ++_iter) \
+
+
 /* Testing resource */
 struct resource {
     virtual ~resource() {};
@@ -87,6 +92,9 @@ class uct_test : public testing::TestWithParam<const resource*>,
 public:
     UCS_TEST_BASE_IMPL;
 
+    /* we return a vector of pointers to allow test fixtures to extend the
+     * resource structure.
+     */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
     uct_test();
