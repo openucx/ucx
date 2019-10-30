@@ -14,7 +14,7 @@
 #include <ucp/wireup/wireup_ep.h>
 
 
-static unsigned
+unsigned
 ucp_cm_ep_init_flags(const ucp_worker_h worker, const ucp_ep_params_t *params)
 {
     if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
@@ -66,9 +66,7 @@ static ucs_status_t ucp_cm_ep_client_do_initial_config(ucp_ep_h ucp_ep,
     }
 
     ucs_assert(unpacked_addr.address_count <= UCP_MAX_RESOURCES);
-    status = ucp_wireup_select_lanes(ucp_ep, &wireup_ep->ucp_ep_params,
-                                     ucp_cm_ep_init_flags(worker,
-                                                          &wireup_ep->ucp_ep_params),
+    status = ucp_wireup_select_lanes(ucp_ep, wireup_ep->ep_init_flags,
                                      &unpacked_addr, addr_indices, &key);
     if (status != UCS_OK) {
         goto free_addr_list;
@@ -208,16 +206,7 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
     uct_ep_params_t cm_lane_params;
     ucs_status_t status;
 
-    /* TODO: remove ucp_ep_params form wireup_ep */
-    wireup_ep->ucp_ep_params  = *params;
-    /* reset pointers which can be inaccessible later */
-    wireup_ep->ucp_ep_params.address          = NULL;
-    wireup_ep->ucp_ep_params.err_handler.cb   = NULL;
-    wireup_ep->ucp_ep_params.err_handler.arg  = NULL;
-    wireup_ep->ucp_ep_params.user_data        = NULL;
-    wireup_ep->ucp_ep_params.sockaddr.addr    = NULL;
-    wireup_ep->ucp_ep_params.sockaddr.addrlen = 0;
-    wireup_ep->ucp_ep_params.conn_request     = NULL;
+    wireup_ep->ep_init_flags  = ucp_ep_init_flags(ucp_ep->worker, params);
 
     cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
                                 UCT_EP_PARAM_FIELD_USER_DATA             |

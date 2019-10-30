@@ -154,10 +154,10 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 
-ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
-                                        const ucp_ep_params_t *params,
-                                        const ucp_unpacked_address_t *remote_address,
-                                        ucp_ep_h *ep_p)
+ucs_status_t
+ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
+                           const ucp_unpacked_address_t *remote_address,
+                           ucp_ep_h *ep_p)
 {
     ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
@@ -169,12 +169,12 @@ ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
         goto err;
     }
 
-    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ep_init_flags, &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
 
-    status = ucp_wireup_ep_connect_aux(wireup_ep, params, remote_address);
+    status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags, remote_address);
     if (status != UCS_OK) {
         goto err_destroy_wireup_ep;
     }
@@ -190,11 +190,11 @@ err:
     return status;
 }
 
-void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
-                                  const ucp_ep_params_t *params)
+void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
+                                    unsigned ep_init_flags)
 {
-    key->err_mode = UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
-                                    UCP_ERR_HANDLING_MODE_NONE);
+    key->err_mode = (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ?
+                    UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
 }
 
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep)
@@ -237,9 +237,6 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
-    ucp_ep_params_t params;
-
-    params.field_mask = 0;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
@@ -263,8 +260,9 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_free_address_buffer;
         }
 
-        status = ucp_ep_create_to_worker_addr(worker, &params, &local_address,
-                                              UCP_EP_INIT_FLAG_MEM_TYPE, "mem type",
+        status = ucp_ep_create_to_worker_addr(worker, &local_address,
+                                              UCP_EP_INIT_FLAG_MEM_TYPE,
+                                              "mem type",
                                               &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
             goto err_free_address_list;
@@ -289,15 +287,14 @@ err_cleanup_eps:
     return status;
 }
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
-                                       const ucp_ep_params_t *params,
+ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep)
 {
     ucp_ep_config_key_t key;
     ucs_status_t status;
 
     ucp_ep_config_key_reset(&key);
-    ucp_ep_config_key_set_params(&key, params);
+    ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
     key.num_lanes             = 1;
     if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
@@ -325,7 +322,6 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
 }
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
-                                          const ucp_ep_params_t *params,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
@@ -341,22 +337,15 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, params, ep_init_flags, remote_address,
+    status = ucp_wireup_init_lanes(ep, ep_init_flags, remote_address,
                                    addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
 
-    status = ucp_ep_adjust_params(ep, params);
-    if (status != UCS_OK) {
-        goto err_cleanup_lanes;
-    }
-
     *ep_p = ep;
     return UCS_OK;
 
-err_cleanup_lanes:
-    ucp_ep_cleanup_lanes(ep);
 err_delete:
     ucp_ep_delete(ep);
 err:
@@ -388,7 +377,8 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err;
     }
 
-    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ucp_ep_init_flags(worker, params),
+                                       &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -423,13 +413,14 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
                                   const ucp_wireup_sockaddr_data_t *sa_data,
                                   ucp_ep_h *ep_p)
 {
-    ucp_ep_params_t        params;
+    unsigned ep_init_flags = 0;
     ucp_unpacked_address_t remote_address;
     uint64_t               addr_flags;
     ucs_status_t           status;
 
-    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    params.err_mode   = sa_data->err_mode;
+    if (sa_data->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    }
 
     if (sa_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
@@ -448,18 +439,20 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     switch (sa_data->addr_mode) {
     case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
-        status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
-                                              UCP_EP_CREATE_AM_LANE, "listener",
-                                              ep_p);
+        status = ucp_ep_create_to_worker_addr(worker, &remote_address,
+                                              ep_init_flags |
+                                              UCP_EP_INIT_CREATE_AM_LANE,
+                                              "listener", ep_p);
         if (status == UCS_OK) {
+            ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
             ucp_ep_flush_state_reset(*ep_p);
         } else {
             goto out_free_address;
         }
         break;
     case UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR:
-        status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
-                                            ep_p);
+        status = ucp_ep_create_sockaddr_aux(worker, ep_init_flags,
+                                            &remote_address, ep_p);
         if (status == UCS_OK) {
             /* the server's ep should be aware of the sent address from the client */
             (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
@@ -581,9 +574,16 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    status = ucp_ep_create_to_worker_addr(worker, params, &remote_address, 0,
+    status = ucp_ep_create_to_worker_addr(worker, &remote_address,
+                                          ucp_ep_init_flags(worker, params),
                                           "from api call", &ep);
     if (status != UCS_OK) {
+        goto out_free_address;
+    }
+
+    status = ucp_ep_adjust_params(ep, params);
+    if (status != UCS_OK) {
+        ucp_ep_destroy_internal(ep);
         goto out_free_address;
     }
 
@@ -609,7 +609,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
-            ucp_ep_destroy_internal(ep);
             goto out_free_address;
         }
     }
