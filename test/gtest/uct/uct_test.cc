@@ -232,7 +232,7 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        if (!ucs_netif_is_active(ifa->ifa_name)) {
+        if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
             continue;
         }
 
@@ -243,9 +243,8 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
         }
 
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
-            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
-            ucs_netif_is_active(ifa->ifa_name)) {
-
+            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE))
+        {
             uct_test::set_interface_rscs(md_rsc, local_cpus, ifa, all_resources);
         }
     }
@@ -1088,7 +1087,7 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
             status = UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
                                                 uct_listener_destroy,
                                                 uct_listener_create, m_cm,
-                                                &listen_addr.get_sock_addr(),
+                                                listen_addr.get_sock_addr_ptr(),
                                                 listen_addr.get_addr_size(),
                                                 &params);
             if (status == UCS_OK) {
@@ -1097,7 +1096,7 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
         }
         EXPECT_EQ(UCS_ERR_BUSY, status);
 
-        const struct sockaddr* c_ifa_addr = &listen_addr.get_sock_addr();
+        const struct sockaddr* c_ifa_addr = listen_addr.get_sock_addr_ptr();
         struct sockaddr* ifa_addr = const_cast<struct sockaddr*>(c_ifa_addr);
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =

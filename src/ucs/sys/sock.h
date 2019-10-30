@@ -37,6 +37,17 @@ typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int io_errno);
 
 
 /**
+ * Check if the given (interface) flags represent an active interface.
+ *
+ * @param [in] flags  Interface flags (Can be obtained using getifaddrs
+ *                    or from SIOCGIFFLAGS ioctl).
+ *
+ * @return 1 if true, otherwise 0
+ */
+int ucs_netif_flags_is_active(unsigned int flags);
+
+
+/**
  * Perform an ioctl call on the given interface with the given request.
  * Set the result in the ifreq struct.
  *

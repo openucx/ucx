@@ -633,7 +633,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
     status = uct_listener_query(m_server->listener(), &attr);
     ASSERT_UCS_OK(status);
 
-    ucs_sockaddr_str(&m_listen_addr.get_sock_addr(), m_listener_ip_port_str,
+    ucs_sockaddr_str(m_listen_addr.get_sock_addr_ptr(), m_listener_ip_port_str,
                      UCS_SOCKADDR_STRING_LEN);
     ucs_sockaddr_str((struct sockaddr*)&attr.sockaddr, attr_addr_ip_port_str,
                      UCS_SOCKADDR_STRING_LEN);
