@@ -30,11 +30,12 @@ stages:
             displayName: Build tarball
 
           - task: GithubRelease@0
-            displayName: Create GitHub Draft Release
+            displayName: Create/edit GitHub Draft Release
             inputs:
               githubConnection: release
               repositoryName: openucx/ucx
-              action: create
+              action: edit
+              tag: $(Build.SourceBranchName)
               isDraft: true
               addChangeLog: false
               assets: |
