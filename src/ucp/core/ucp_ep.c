@@ -1476,42 +1476,58 @@ void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
     ucs_free(config->key.dst_md_cmpts);
 }
 
+static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
+                                        size_t thresh)
+{
+    return ((max_short < 0) ||
+            (((size_t)max_short + 1) < thresh));
+}
+
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
                                           ssize_t max_eager_short,
                                           size_t zcopy_thresh,
                                           size_t rndv_rma_thresh,
                                           size_t rndv_am_thresh)
 {
-    size_t max_bcopy, min_rndv;
-
-    fprintf(stream, "# %23s: 0", name);
-    if (max_eager_short > 0) {
-        fprintf(stream, "..<egr/short>..%zd" , max_eager_short + 1);
-    }
+    size_t max_bcopy, min_rndv, max_short;
 
     min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
     max_bcopy = ucs_min(zcopy_thresh, min_rndv);
 
-    /* Check whether maximum Eager short attribute is negative or not
-     * before comparing it with maximum Bcopy attribute (unsigned) */
-    if (((max_eager_short < 0) ||
-         ((size_t)max_eager_short < max_bcopy)) &&
-        (max_bcopy < zcopy_thresh) && (max_bcopy < min_rndv)) {
+    fprintf(stream, "# %23s: 0", name);
+
+    /* print eager short */
+    if (max_eager_short > 0) {
+        max_short = max_eager_short;
+        ucs_assert(max_short <= SSIZE_MAX);
+        fprintf(stream, "..<egr/short>..%zu" , max_short + 1);
+    } else if (!max_eager_short) {
+        fprintf(stream, "..<egr/short>..%zu" , max_eager_short);
+    }
+
+    /* print eager bcopy */
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) &&
+        (max_bcopy < min_rndv)) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
         }
     }
-    if (zcopy_thresh < min_rndv) {
+
+    /* print eager zcopy */
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, min_rndv) &&
+        (zcopy_thresh < min_rndv)) {
         fprintf(stream, "..<egr/zcopy>..");
         if (min_rndv < SIZE_MAX) {
             fprintf(stream, "%zu", min_rndv);
         }
     }
 
+    /* print rendezvous */
     if (min_rndv < SIZE_MAX) {
         fprintf(stream, "..<rndv>..");
     }
+
     fprintf(stream, "(inf)\n");
 }
 
