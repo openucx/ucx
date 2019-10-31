@@ -490,15 +490,23 @@ UCS_TEST_P(test_async, two_timers) {
 
 UCS_TEST_P(test_async, ctx_event_block) {
     local_event le(GetParam());
+    int count = 0;
 
-    le.block();
-    le.push_event();
-    suspend_and_poll(&le, COUNT);
-    EXPECT_EQ(0, le.count());
-    le.unblock();
+    for (int i = 0; i < EVENT_RETRIES; ++i) {
+        le.block();
+        count = le.count();
+        le.push_event();
+        suspend_and_poll(&le, COUNT);
+        EXPECT_EQ(count, le.count());
+        le.unblock();
 
-    le.check_miss();
-    EXPECT_GE(le.count(), 1);
+        le.check_miss();
+        if (le.count() > count) {
+            break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (i + 1);
+    }
+    EXPECT_GT(le.count(), count);
 }
 
 UCS_TEST_P(test_async, ctx_event_block_two_miss) {
@@ -536,21 +544,22 @@ UCS_TEST_P(test_async, ctx_event_block_two_miss) {
 
 UCS_TEST_P(test_async, ctx_timer_block) {
     local_timer lt(GetParam());
+    int count = 0;
 
     for (int i = 0; i < TIMER_RETRIES; ++i) {
         lt.block();
-        int count = lt.count();
+        count = lt.count();
         suspend_and_poll(&lt, COUNT);
         EXPECT_EQ(count, lt.count());
         lt.unblock();
 
         lt.check_miss();
-        if (lt.count() >= 1) {
+        if (lt.count() > count) {
             break;
         }
         UCS_TEST_MESSAGE << "retry " << (i + 1);
     }
-    EXPECT_GE(lt.count(), 1); /* Timer could expire again after unblock */
+    EXPECT_GT(lt.count(), count); /* Timer could expire again after unblock */
 }
 
 UCS_TEST_P(test_async, modify_event) {
@@ -808,6 +817,11 @@ UCS_TEST_P(test_async_timer_mt, multithread) {
         }
     }
     EXPECT_GE(min_count, exp_min_count);
+}
+
+std::ostream& operator<<(std::ostream& os, ucs_async_mode_t mode)
+{
+    return os << ucs_async_mode_names[mode];
 }
 
 #define INSTANTIATE_ASYNC_TEST_CASES(_test_fixture) \
