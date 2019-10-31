@@ -175,7 +175,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
 
     sa_data->ep_ptr    = (uintptr_t)ep;
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SOCKADDR_CD_CM_ADDR;
+    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
 
 free_addr:
