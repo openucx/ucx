@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -686,6 +686,27 @@ static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)
         ucp_tag_offload_sync_posted(worker, req);
     }
     return status;
+}
+
+void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
+                                   ucp_tag_t stag, uint16_t recv_flags)
+{
+    ucp_request_t *req;
+
+    ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
+
+    req = ucp_proto_ssend_ack_request_alloc(worker, ep_ptr);
+    if (req == NULL) {
+        ucs_fatal("could not allocate request");
+    }
+
+    req->send.proto.am_id      = UCP_AM_ID_OFFLOAD_SYNC_ACK;
+    req->send.proto.sender_tag = stag;
+
+    ucs_trace_req("tag_offload send_sync_ack ep 0x%lx tag %"PRIx64"",
+                  ep_ptr, stag);
+
+    ucp_request_send(req, 0);
 }
 
 const ucp_proto_t ucp_tag_offload_sync_proto = {

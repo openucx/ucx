@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
@@ -74,15 +74,17 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
     UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
     UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
-    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(6), /* Descriptor was allocated with malloc 
+    UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
+                                                       Used by tag offload protocol. */
+    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7), /* Descriptor was allocated with malloc
                                                        and must be freed, not returned to the
                                                        memory pool */
-    UCP_RECV_DESC_FLAG_AM_HDR         = UCS_BIT(7), /* Descriptor was orignally allocated by
+    UCP_RECV_DESC_FLAG_AM_HDR         = UCS_BIT(8), /* Descriptor was orignally allocated by
                                                        uct and the ucp level am header must
-                                                       be accounted for when releasing 
+                                                       be accounted for when releasing
                                                        descriptors */
-    UCP_RECV_DESC_FLAG_AM_REPLY       = UCS_BIT(8)  /* AM that needed a reply */
+    UCP_RECV_DESC_FLAG_AM_REPLY       = UCS_BIT(9)  /* AM that needed a reply */
 };
 
 
@@ -250,8 +252,17 @@ struct ucp_request {
                     uint64_t                sn;       /* Tag match sequence */
                     ucp_tag_recv_callback_t cb;       /* Completion callback */
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
-                    ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                     ssize_t                 remaining; /* How much more data to be received */
+
+                    /* Can use union, because rdesc is used in expected flow,
+                     * while gen_buf is used in unexpected flow only. */
+                    union {
+                        ucp_mem_desc_t      *rdesc;   /* Offload bounce buffer */
+                        void                *non_contig_buf; /* Used for assembling
+                                                                multi-fragment
+                                                                non-contig unexpected
+                                                                message in tag offload flow. */
+                    };
                     ucp_worker_iface_t      *wiface;  /* Cached iface this request
                                                          is received on. Used in
                                                          tag offload expected callbacks*/
@@ -337,5 +348,8 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
 /* Fast-forward to data end */
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
+
+ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
+                                            size_t offset);
 
 #endif

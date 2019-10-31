@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -398,3 +398,22 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         ucp_request_complete_send(req, status);
     }
 }
+
+ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
+                                            size_t offset)
+{
+    ucp_dt_generic_t *dt_gen;
+
+    ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
+              length, offset, req->recv.length);
+
+    if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
+        dt_gen = ucp_dt_generic(req->recv.datatype);
+        UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                    req->recv.state.dt.generic.state);
+    }
+
+    return UCS_ERR_MESSAGE_TRUNCATED;
+}
+
+
