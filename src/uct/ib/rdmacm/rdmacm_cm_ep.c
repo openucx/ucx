@@ -155,7 +155,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
         ucs_error("rdma_cm private data pack function on ep %p returned "
                   "%zd (max: %zu)", cep, priv_data_ret,
                    uct_rdmacm_cm_get_max_conn_priv());
-        status = (priv_data_ret < 0) ? priv_data_ret : UCS_ERR_EXCEEDS_LIMIT;
+        status = (priv_data_ret < 0) ? (ucs_status_t)priv_data_ret : UCS_ERR_EXCEEDS_LIMIT;
         goto err;
     }
 

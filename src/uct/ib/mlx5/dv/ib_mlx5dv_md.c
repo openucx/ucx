@@ -87,7 +87,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
         }
         UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
         UCT_IB_MLX5DV_SET64(klm, klm, address, addr + (i * reg_length));
-        klm += UCT_IB_MLX5DV_ST_SZ_BYTES(klm);
+        klm = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
     }
 
     memh->atomic_dvmr = mlx5dv_devx_obj_create(md->super.dev.ibv_context, in, inlen,
@@ -105,8 +105,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
         (offset & 0xff);
 
     ucs_debug("KSM registered memory %p..%p offset 0x%lx on %s rkey 0x%x",
-              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->super.dev),
-              memh->super.atomic_rkey);
+              mr->addr, UCS_PTR_BYTE_OFFSET(mr->addr, mr->length), offset,
+              uct_ib_device_name(&md->super.dev), memh->super.atomic_rkey);
 out:
     ucs_free(in);
     return status;
@@ -156,16 +156,16 @@ err:
 
 static void uct_ib_mlx5_init_dbrec(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_ib_mlx5_dbrec_page_t *page = chunk - sizeof(*page);
+    uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
     uct_ib_mlx5_dbrec_t *dbrec     = obj;
 
     dbrec->mem_id = page->mem->umem_id;
-    dbrec->offset = obj - chunk + sizeof(*page);
+    dbrec->offset = UCS_PTR_BYTE_DIFF(chunk, obj) + sizeof(*page);
 }
 
 static void uct_ib_mlx5_free_page(ucs_mpool_t *mp, void *chunk)
 {
-    uct_ib_mlx5_dbrec_page_t *page = chunk - sizeof(*page);
+    uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
     mlx5dv_devx_umem_dereg(page->mem);
     ucs_free(page);
 }
@@ -453,8 +453,8 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
     .reg_atomic_key      = uct_ib_mlx5_devx_reg_atomic_key,
     .dereg_atomic_key    = uct_ib_mlx5_devx_dereg_atomic_key,
-    .reg_multithreaded   = (void*)ucs_empty_function_return_unsupported,
-    .dereg_multithreaded = (void*)ucs_empty_function_return_unsupported,
+    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_devx_md_ops, 2);
@@ -630,12 +630,12 @@ err:
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .open                = uct_ib_mlx5dv_md_open,
-    .cleanup             = (void*)ucs_empty_function,
+    .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
     .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key      = (void*)ucs_empty_function_return_unsupported,
-    .dereg_atomic_key    = (void*)ucs_empty_function_return_unsupported,
-    .reg_multithreaded   = (void*)ucs_empty_function_return_unsupported,
-    .dereg_multithreaded = (void*)ucs_empty_function_return_unsupported,
+    .reg_atomic_key      = (uct_ib_md_reg_atomic_key_func_t)ucs_empty_function_return_unsupported,
+    .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_unsupported,
+    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);

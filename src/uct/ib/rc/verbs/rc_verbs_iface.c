@@ -212,7 +212,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
-    self->super.config.fence_mode    = config->super.super.fence_mode;
+    self->super.config.fence_mode    = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress             = uct_rc_verbs_iface_progress;
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
@@ -381,9 +381,9 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_atomic_cswap64        = uct_rc_verbs_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_rc_verbs_ep_atomic64_post,
     .ep_atomic64_fetch        = uct_rc_verbs_ep_atomic64_fetch,
-    .ep_atomic_cswap32        = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic32_post         = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic32_fetch        = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_cswap32        = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_unsupported,
+    .ep_atomic32_post         = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_unsupported,
+    .ep_atomic32_fetch        = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_unsupported,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_verbs_ep_flush,
@@ -407,7 +407,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     },
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
-    .event_cq                 = (void*)ucs_empty_function,
+    .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     },

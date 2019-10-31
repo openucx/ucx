@@ -178,7 +178,7 @@ ucs_status_t uct_dc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uin
 {
     return uct_dc_mlx5_ep_atomic_fop(ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t),
                                      MLX5_OPCODE_ATOMIC_CS, result, 0, sizeof(uint64_t),
-                                     remote_addr, rkey, 0, htobe64(compare), -1,
+                                     remote_addr, rkey, 0, htobe64(compare), UINT64_MAX,
                                      htobe64(swap), comp);
 }
 
@@ -189,7 +189,7 @@ ucs_status_t uct_dc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
     return uct_dc_mlx5_ep_atomic_fop(ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t),
                                      MLX5_OPCODE_ATOMIC_MASKED_CS, result, 1,
                                      sizeof(uint32_t), remote_addr, rkey, UCS_MASK(32),
-                                     htonl(compare), -1, htonl(swap), comp);
+                                     htonl(compare), UINT64_MAX, htonl(swap), comp);
 }
 
 ucs_status_t uct_dc_mlx5_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,

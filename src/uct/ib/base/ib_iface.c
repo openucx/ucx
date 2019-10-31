@@ -218,7 +218,7 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ib_iface_t *iface = ucs_container_of(self, uct_ib_iface_t, release_desc);
     void *ib_desc;
 
-    ib_desc = desc - iface->config.rx_headroom_offset;
+    ib_desc = UCS_PTR_BYTE_OFFSET(desc, -(ptrdiff_t)iface->config.rx_headroom_offset);
     ucs_mpool_put_inline(ib_desc);
 }
 
@@ -268,13 +268,13 @@ void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
         ib_addr->flags   = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
                            UCT_IB_ADDRESS_FLAG_LID;
         *(uint16_t*) ptr = lid;
-        ptr             += sizeof(uint16_t);
+        ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
 
         if ((gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) ||
             is_global_addr) {
             ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_IF_ID;
             *(uint64_t*) ptr = gid->global.interface_id;
-            ptr += sizeof(uint64_t);
+            ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint64_t));
 
             if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
                                               UCT_IB_SITE_LOCAL_PREFIX) &&
@@ -317,18 +317,18 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
         *lid = *(uint16_t*)ptr;
-        ptr += sizeof(uint16_t);
+        ptr  = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
         gid->global.interface_id = *(uint64_t*)ptr;
-        ptr += sizeof(uint64_t);
+        ptr                      = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint64_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
         gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
                                     ((uint64_t) *(uint16_t*) ptr << 48);
-        ptr += sizeof(uint16_t);
+        ptr                       = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
@@ -533,7 +533,7 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
 
     attr->ibv.srq                 = attr->srq;
     attr->ibv.cap                 = attr->cap;
-    attr->ibv.qp_type             = attr->qp_type;
+    attr->ibv.qp_type             = (enum ibv_qp_type)attr->qp_type;
     attr->ibv.sq_sig_all          = attr->sq_sig_all;
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
@@ -1118,7 +1118,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     wire_speed            = (width * signal_rate * encoding) / 8.0;
 
     /* Calculate packet overhead  */
-    mtu                   = ucs_min(uct_ib_mtu_value(active_mtu),
+    mtu                   = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
                                     iface->config.seg_size);
 
     extra_pkt_len = UCT_IB_BTH_LEN + xport_hdr_len +  UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;

@@ -62,7 +62,7 @@ public:
     {
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(60) * ucs::test_time_multiplier();
-        void *ud_ep_tmp;
+        void *ud_ep_tmp GTEST_ATTRIBUTE_UNUSED_;
 
         while ((ucs_get_time() < deadline) &&
                ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp)) {
@@ -102,7 +102,7 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, txn,
 }
 
 UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
-    void *ud_ep_tmp;
+    void *ud_ep_tmp GTEST_ATTRIBUTE_UNUSED_;
     connect();
 
     uct_ud_ep_t    *ud_ep = ep(m_e1);
