@@ -256,8 +256,8 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         lanes2remote[lane] = remote_lane;
 
         if (used_remote_lanes & UCS_BIT(remote_lane)) {
-            ucs_bug("ep %p: remote lane %d is used more than once", ep,
-                    remote_lane);
+            ucs_fatal("ep %p: remote lane %d is used more than once", ep,
+                      remote_lane);
         }
         used_remote_lanes |= UCS_BIT(remote_lane);
 

@@ -649,8 +649,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 ep_flags_ptr = NULL;
 
                 for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                    uint8_t *ep_addr;
-
                     if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
                         continue;
                     }
@@ -661,7 +659,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                                            ep_addr_len);
 
                     /* pack ep address */
-                    ep_addr = ptr;
                     status = uct_ep_get_address(ep->uct_eps[lane], ptr);
                     if (status != UCS_OK) {
                         return status;
@@ -676,20 +673,10 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                     *(uint8_t*)ptr = remote_lane;
                     ptr            = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
-                    {
-                        char astr[128];
-                        char *p = astr;
-                        int i;
-                        for (i = 0; i < ep_addr_len; ++i) {
-                            sprintf(p, "%02x", ep_addr[i]);
-                            p += 2;
-                        }
-                        *p=0;
+                    ucs_trace("pack addr[%d].ep_addr[%d] : len %zu lane %d->%d",
+                               index, num_ep_addrs, ep_addr_len, lane,
+                               remote_lane);
 
-                        ucs_trace("pack addr[%d].ep_addr[%d] : len %zu lane %d->%d %s",
-                                   index, num_ep_addrs, ep_addr_len, lane,
-                                   remote_lane, astr);
-                    }
                     ++num_ep_addrs;
                 }
 

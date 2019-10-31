@@ -113,7 +113,7 @@ struct ucp_unpacked_address {
  * @param [in]  ep            Endpoint object whose uct_ep addresses to pack.
  *                            Can be set to NULL, to take addresses only from worker.
  * @param [in]  tl_bitmap     Specifies the resources whose transport address
- *                             (ep or iface) should be packed.
+ *                            (ep or iface) should be packed.
  * @param [in]  flags         UCP_ADDRESS_PACK_FLAG_xx flags to specify address
  *                            format.
  * @param [in]  lanes2remote  If NULL, the lane index in each packed ep address
