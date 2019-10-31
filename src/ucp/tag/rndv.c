@@ -608,13 +608,13 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
             ucs_fatal("failed to allocate fragment memory buffer");
         }
 
-        freq->recv.buffer                    = mdesc + 1;
-        freq->recv.datatype                  = ucp_dt_make_contig(1);
-        freq->recv.mem_type                  = UCS_MEMORY_TYPE_HOST;
-        freq->recv.length                    = frag_size;
-        freq->recv.state.dt.contig.md_map    = 0;
-        freq->recv.frag.rreq                 = rreq;
-        freq->recv.frag.offset               = offset;
+        freq->recv.buffer                 = mdesc + 1;
+        freq->recv.datatype               = ucp_dt_make_contig(1);
+        freq->recv.mem_type               = UCS_MEMORY_TYPE_HOST;
+        freq->recv.length                 = frag_size;
+        freq->recv.state.dt.contig.md_map = 0;
+        freq->recv.frag.rreq              = rreq;
+        freq->recv.frag.offset            = offset;
 
         memh_index = 0;
         ucs_for_each_bit(md_index,
@@ -625,8 +625,8 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         }
         ucs_assert(memh_index <= UCP_MAX_OP_MDS);
 
-        frndv_req->send.ep                  = rndv_req->send.ep;
-        frndv_req->send.pending_lane        = UCP_NULL_LANE;
+        frndv_req->send.ep           = rndv_req->send.ep;
+        frndv_req->send.pending_lane = UCP_NULL_LANE;
 
         ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.reqptr);
         offset += frag_size;
@@ -1015,10 +1015,10 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
         return UCS_ERR_UNSUPPORTED;
     }
 
-    rndv_size          = rndv_rtr_hdr->size;
-    max_frag_size      = context->config.ext.rndv_frag_size;
-    rndv_base_offset   = rndv_rtr_hdr->offset;
-    num_frags          = ucs_div_round_up(rndv_size, max_frag_size);
+    rndv_size        = rndv_rtr_hdr->size;
+    max_frag_size    = context->config.ext.rndv_frag_size;
+    rndv_base_offset = rndv_rtr_hdr->offset;
+    num_frags        = ucs_div_round_up(rndv_size, max_frag_size);
 
     /* initialize send req state on first fragment rndv request */
     if (rndv_base_offset == 0) {
@@ -1045,7 +1045,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
 
     offset = 0;
     for (i = 0; i < num_frags; i++) {
-        length  = (i == (num_frags - 1)) ? (rndv_size - offset) : max_frag_size;
+        length = (i == (num_frags - 1)) ? (rndv_size - offset) : max_frag_size;
 
         /* internal fragment send request allocated on sender side to receive
         *  mem type fragment stage to host and to performan put to receiver */
@@ -1090,22 +1090,22 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
             ucp_request_send_state_init(freq, ucp_dt_make_contig(1), 0);
             ucp_request_send_state_reset(freq, ucp_rndv_frag_get_completion,
                                          UCP_REQUEST_SEND_PROTO_RNDV_GET);
-            md_index                             = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
-            freq->send.ep                        = mem_type_ep;
-            freq->send.buffer                    = mdesc + 1;
-            freq->send.datatype                  = ucp_dt_make_contig(1);
-            freq->send.mem_type                  = sreq->send.mem_type;
-            freq->send.state.dt.dt.contig.memh[0]= ucp_memh2uct(mdesc->memh, md_index);
-            freq->send.state.dt.dt.contig.md_map = UCS_BIT(md_index);
-            freq->send.length                    = length;
-            freq->send.uct.func                  = ucp_rndv_progress_rma_get_zcopy;
-            freq->send.rndv_get.rkey             = NULL;
-            freq->send.rndv_get.remote_address   =
+            md_index                              = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
+            freq->send.ep                         = mem_type_ep;
+            freq->send.buffer                     = mdesc + 1;
+            freq->send.datatype                   = ucp_dt_make_contig(1);
+            freq->send.mem_type                   = sreq->send.mem_type;
+            freq->send.state.dt.dt.contig.memh[0] = ucp_memh2uct(mdesc->memh, md_index);
+            freq->send.state.dt.dt.contig.md_map  = UCS_BIT(md_index);
+            freq->send.length                     = length;
+            freq->send.uct.func                   = ucp_rndv_progress_rma_get_zcopy;
+            freq->send.rndv_get.rkey              = NULL;
+            freq->send.rndv_get.remote_address    =
                     (uint64_t)UCS_PTR_BYTE_OFFSET(fsreq->send.buffer, offset);
-            freq->send.rndv_get.lanes_map        = 0;
-            freq->send.rndv_get.lane_count       = 0;
-            freq->send.rndv_get.rreq             = fsreq;
-            freq->send.mdesc                     = mdesc;
+            freq->send.rndv_get.lanes_map         = 0;
+            freq->send.rndv_get.lane_count        = 0;
+            freq->send.rndv_get.rreq              = fsreq;
+            freq->send.mdesc                      = mdesc;
 
         }
 
