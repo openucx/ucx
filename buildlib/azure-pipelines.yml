@@ -91,3 +91,18 @@ stages:
               gcc -v
               make -s -j `nproc`
             displayName: Build for $(CONTAINER)
+
+      # Test RPM build
+      - job: build_rpm
+        displayName: build tarball and source rpm
+        container: fedora
+        steps:
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              gcc --version
+              ./contrib/configure-release
+              ./contrib/buildrpm.sh -s -t -b
+            displayName: Build tarball
