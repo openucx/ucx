@@ -101,4 +101,3 @@ if [ $opt_binrpm -eq 1 ]; then
 
 	echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines $with_args | bash -eEx
 fi
-
