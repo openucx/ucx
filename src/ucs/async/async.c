@@ -16,12 +16,15 @@
 #include <ucs/sys/stubs.h>
 
 
-#define UCS_ASYNC_TIMER_ID_MIN      1000000u
-#define UCS_ASYNC_TIMER_ID_MAX      2000000u
+#define UCS_ASYNC_TIMER_ID_MIN          1000000u
+#define UCS_ASYNC_TIMER_ID_MAX          2000000u
 
-#define UCS_ASYNC_HANDLER_FMT       "%p [id=%d ref %d] %s()"
-#define UCS_ASYNC_HANDLER_ARG(_h)   (_h), (_h)->id, (_h)->refcount, \
-                                    ucs_debug_get_symbol_name((_h)->cb)
+#define UCS_ASYNC_HANDLER_FMT           "%p [id=%d ref %d] %s()"
+#define UCS_ASYNC_HANDLER_ARG(_h)       (_h), (_h)->id, (_h)->refcount, \
+                                        ucs_debug_get_symbol_name((_h)->cb)
+
+#define UCS_ASYNC_HANDLER_CALLER_NULL   ((pthread_t)-1)
+
 
 /* Hash table for all event and timer handlers */
 KHASH_MAP_INIT_INT(ucs_async_handler, ucs_async_handler_t *);
@@ -216,10 +219,10 @@ static void ucs_async_handler_invoke(ucs_async_handler_t *handler)
      * the handler must always be called with async context blocked, so no need
      * for atomic operations here.
      */
-    ucs_assert_always(handler->called == 0);
-    ++handler->called;
+    ucs_assert(handler->caller == UCS_ASYNC_HANDLER_CALLER_NULL);
+    handler->caller = pthread_self();
     handler->cb(handler->id, handler->arg);
-    --handler->called;
+    handler->caller = UCS_ASYNC_HANDLER_CALLER_NULL;
 }
 
 static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
@@ -410,7 +413,7 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
 
     handler->mode     = mode;
     handler->events   = events;
-    handler->called   = 0;
+    handler->caller   = UCS_ASYNC_HANDLER_CALLER_NULL;
     handler->cb       = cb;
     handler->arg      = arg;
     handler->async    = async;
@@ -534,11 +537,10 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     }
 
     if (sync) {
-        /* the handler could not be called more than once because the async
-         * context is blocked when it's called */
-        ucs_assert(handler->called <= 1);
-
-        while ((handler->refcount - handler->called) > 1) {
+        int called = (pthread_self() == handler->caller);
+        ucs_trace("waiting for " UCS_ASYNC_HANDLER_FMT " completion (called=%d)",
+                  UCS_ASYNC_HANDLER_ARG(handler), called);
+        while ((handler->refcount - called) > 1) {
             /* TODO use pthread_cond / futex to reduce CPU usage while waiting
              * for the async handler to complete */
             sched_yield();
@@ -558,7 +560,10 @@ ucs_status_t ucs_async_modify_handler(int fd, int events)
         return UCS_ERR_INVALID_PARAM;
     }
 
+    ucs_async_method_call_all(block);
     handler = ucs_async_handler_get(fd);
+    ucs_async_method_call_all(unblock);
+
     if (handler == NULL) {
         return UCS_ERR_NO_ELEM;
     }
@@ -589,20 +594,15 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
         }
 
         ucs_async_method_call_all(block);
+        UCS_ASYNC_BLOCK(async);
         handler = ucs_async_handler_get(value);
         if (handler != NULL) {
-            if (handler->async) {
-                UCS_ASYNC_BLOCK(handler->async);
-            }
-
+            ucs_assert(handler->async == async);
             handler->missed = 0;
             ucs_async_handler_invoke(handler);
-
-            if (handler->async) {
-                UCS_ASYNC_UNBLOCK(handler->async);
-            }
             ucs_async_handler_put(handler);
         }
+        UCS_ASYNC_UNBLOCK(async);
         ucs_async_method_call_all(unblock);
     }
 }
