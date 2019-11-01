@@ -40,6 +40,14 @@ void ucs_string_set_cleanup(ucs_string_set_t *sset);
 
 
 /**
+ * Get a size of the string set.
+ *
+ * @param [out] sset   String set to get size.
+ */
+size_t ucs_string_set_size(const ucs_string_set_t *sset);
+
+
+/**
  * Add a copy of a string to the string set
  *
  * @param [inout] sset  String set to add to.

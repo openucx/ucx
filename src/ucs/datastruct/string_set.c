@@ -29,6 +29,11 @@ void ucs_string_set_cleanup(ucs_string_set_t *sset)
     kh_destroy_inplace(ucs_string_set, sset);
 }
 
+size_t ucs_string_set_size(const ucs_string_set_t *sset)
+{
+    return kh_size(sset);
+}
+
 /* Adds string by pointer, and releases the string if add fails or the string
  * already exists in the set
  */

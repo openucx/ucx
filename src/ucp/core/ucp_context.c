@@ -681,6 +681,10 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
     unsigned i;
     int found;
 
+    if (!ucs_string_set_size(avail_names)) {
+        return;
+    }
+
     ucs_string_buffer_init(&unavail_strb);
 
     found = 0;
@@ -1258,6 +1262,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         ucp_get_aliases_set(&avail_tls);
         ucp_report_unavailable(&config->tls, tl_cfg_mask, "", "transport",
                                &avail_tls);
+
         ucp_report_unavailable(&config->memtype_tls, mem_tl_cfg_mask, "",
                                "memtype transport", &avail_mem_tls);
     }
