@@ -97,6 +97,8 @@ struct ucp_config {
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_names_array_t               tls;
+    /** Array of memtype transport names to use */
+    ucs_config_names_array_t               memtype_tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
