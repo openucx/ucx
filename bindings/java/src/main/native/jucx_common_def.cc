@@ -194,7 +194,9 @@ UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, u
 
 void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info)
 {
-    jucx_request_callback(request, status);
+    if (ucs_likely(UCS_PTR_IS_PTR(request))) {
+        jucx_request_callback(request, status);
+    }
 }
 
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
