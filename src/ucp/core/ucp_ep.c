@@ -326,7 +326,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
 {
-    uint8_t addr_indices[UCP_MAX_LANES];
+    unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
     ucp_ep_h ep;
 
@@ -1549,7 +1549,7 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
-                                 const uint8_t *addr_indices,
+                                 const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max)
@@ -1645,7 +1645,7 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
 static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                 const ucp_ep_config_t *config,
-                                const uint8_t *addr_indices,
+                                const unsigned *addr_indices,
                                 ucp_rsc_index_t aux_rsc_index)
 {
     ucp_context_h context = worker->context;
