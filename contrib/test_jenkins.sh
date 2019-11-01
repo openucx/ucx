@@ -376,7 +376,7 @@ build_icc() {
 #
 build_pgi() {
 	echo 1..1 > build_pgi.tap
-	pgi_test_file=$(mktemp).c
+	pgi_test_file=$(mktemp ./XXXXXX).c
 	echo "int main() {}" > ${pgi_test_file}
 
 	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
