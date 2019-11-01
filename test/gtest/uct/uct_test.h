@@ -385,9 +385,13 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     cuda_copy,              \
     gdr_copy
 
+#define UCT_TEST_ROCM_MEM_TYPE_TLS \
+    rocm_copy
+
 #define UCT_TEST_TLS      \
     UCT_TEST_NO_SELF_TLS, \
     UCT_TEST_CUDA_MEM_TYPE_TLS, \
+    UCT_TEST_ROCM_MEM_TYPE_TLS, \
     self
 
 /**

@@ -496,6 +496,8 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
                    xpmem, \
                    cuda_cpy, \
                    cuda_ipc, \
+                   rocm_cpy, \
+                   rocm_ipc, \
                    ib, \
                    ugni, \
                    sockcm, \
