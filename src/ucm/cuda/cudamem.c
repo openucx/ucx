@@ -115,11 +115,12 @@ static void ucm_cudafree_dispatch_events(void *dptr)
     }
 
     ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
-    if (ret != CUDA_SUCCESS) {
-        ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
+    if (ret == CUDA_SUCCESS) {
+        ucs_assert(dptr == (void *)pbase);
+    } else {
+        ucm_debug("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
         psize = 1; /* set minimum length */
     }
-    ucs_assert(dptr == (void *)pbase);
 
     ucm_dispatch_mem_type_free((void *)dptr, psize, UCS_MEMORY_TYPE_CUDA);
 }
