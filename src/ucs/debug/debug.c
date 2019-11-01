@@ -35,6 +35,18 @@ KHASH_MAP_INIT_INT(ucs_signal_orig_action, struct sigaction*);
 #define BACKTRACE_MAX            64
 #define UCS_DEBUG_UNKNOWN_SYM    "???"
 
+#ifdef HAVE_DETAILED_BACKTRACE
+#    define UCS_DEBUG_BACKTRACE_LINE_FMT "%2d 0x%016lx %s()  %s:%u\n"
+#    define UCS_DEBUG_BACKTRACE_LINE_ARG(_n, _line) \
+         _n, (_line)->address, \
+         (_line)->function ? (_line)->function : "??", \
+         (_line)->file ? (_line)->file : "??", \
+         (_line)->lineno
+#else
+#    define UCS_DEBUG_BACKTRACE_LINE_FMT "%2d  %s\n"
+#    define UCS_DEBUG_BACKTRACE_LINE_ARG(_n, _line) _n, (_line)->symbol
+#endif
+
 struct dl_address_search {
     unsigned long            address;
     const char               *filename;
@@ -56,7 +68,6 @@ struct backtrace_file {
     asymbol                  **syms;
 };
 
-typedef struct backtrace *backtrace_h;
 struct backtrace {
     struct backtrace_line    lines[BACKTRACE_MAX];
     int                      size;
@@ -70,6 +81,21 @@ struct backtrace_search {
                                          took place, instead of return address */
     struct backtrace_line    *lines;
     int                      max_lines;
+};
+
+#else /* HAVE_DETAILED_BACKTRACE */
+
+struct backtrace_line {
+    void                     *address;
+    char                     *symbol;
+};
+
+struct backtrace {
+    char                     **symbols;
+    void                     *addresses[BACKTRACE_MAX];
+    int                      size;
+    int                      position;
+    struct backtrace_line    line;
 };
 
 #endif /* HAVE_DETAILED_BACKTRACE */
@@ -312,26 +338,40 @@ static int get_line_info(struct backtrace_file *file, int backoff,
 
 /**
  * Create a backtrace from the calling location.
- */
-static void ucs_debug_backtrace_create(struct backtrace *bckt)
+ *
+ * @param bckt          Backtrace object.
+ * @param strip         How many frames to strip.
+*/
+ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip)
 {
+    size_t size = sizeof(**bckt);
     struct backtrace_file file;
     void *addresses[BACKTRACE_MAX];
     int i, num_addresses;
+    ucs_status_t status;
+
+    *bckt  = NULL;
+    status = ucs_mmap_alloc(&size, (void**)bckt, 0
+                            UCS_MEMTRACK_NAME("debug backtrace object"));
+    if (status != UCS_OK) {
+        return status;
+    }
 
     num_addresses = backtrace(addresses, BACKTRACE_MAX);
 
-    bckt->size     = 0;
-    bckt->position = 0;
+    (*bckt)->size     = 0;
+    (*bckt)->position = strip;
     for (i = 0; i < num_addresses; ++i) {
         file.dl.address = (unsigned long)addresses[i];
         if (dl_lookup_address(&file.dl) && load_file(&file)) {
-            bckt->size += get_line_info(&file, 1, bckt->lines + bckt->size,
-                                        BACKTRACE_MAX - bckt->size);
+            (*bckt)->size += get_line_info(&file, 1,
+                                           (*bckt)->lines + (*bckt)->size,
+                                           BACKTRACE_MAX - (*bckt)->size);
             unload_file(&file);
         }
     }
 
+    return UCS_OK;
 }
 
 /**
@@ -339,7 +379,7 @@ static void ucs_debug_backtrace_create(struct backtrace *bckt)
  *
  * @param bckt          Backtrace object.
  */
-static void ucs_debug_backtrace_destroy(backtrace_h bckt)
+void ucs_debug_backtrace_destroy(backtrace_h bckt)
 {
     int i;
 
@@ -348,6 +388,7 @@ static void ucs_debug_backtrace_destroy(backtrace_h bckt)
         free(bckt->lines[i].file);
     }
     bckt->size = 0;
+    ucs_mmap_free(bckt, sizeof(*bckt));
 }
 
 static ucs_status_t
@@ -416,63 +457,24 @@ ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *i
  * Walk to the next backtrace line information.
  *
  * @param bckt          Backtrace object.
- * @param address       Filled with backtrace address.
- * @param file          Filled with a pointer to the source file name.
- * @param function      Filled with a pointer to function name.
- * @param lineno        Filled with source line number.
+ * @param line          Filled with backtrace frame info.
  *
- * NOTE: the file and function memory remains valid as long as the backtrace
- * object is not destroyed.
+ * NOTE: the line remains valid as long as the backtrace object is not destroyed.
  */
-int backtrace_next(backtrace_h bckt, unsigned long *address, char const ** file,
-                   char const ** function, unsigned *lineno)
+int ucs_debug_backtrace_next(backtrace_h bckt, backtrace_line_h *line)
 {
-    struct backtrace_line *line;
+    backtrace_line_h ln;
 
-    if (bckt->position >= bckt->size)
-        return 0;
-
-    line = &bckt->lines[bckt->position++];
-    *address = line->address;
-    *file = line->file;
-    *function = line->function;
-    *lineno = line->lineno;
-    return 1;
-}
-
-/*
- * Filter specific functions from the head of the backtrace.
- */
-void ucs_debug_print_backtrace(FILE *stream, int strip)
-{
-    const char *file, *function;
-    struct backtrace bckt;
-    unsigned long address;
-    unsigned line;
-    int exclude;
-    int i, n;
-
-    ucs_debug_backtrace_create(&bckt);
-
-    fprintf(stream, "==== backtrace (tid:%7d) ====\n", ucs_get_tid());
-    exclude = 1;
-    i       = 0;
-    n       = 0;
-    while (backtrace_next(&bckt, &address, &file, &function, &line)) {
-        if (i >= strip) {
-            exclude = exclude && ucs_debug_backtrace_is_excluded((void*)address,
-                                                                 function);
-            if (!exclude) {
-                fprintf(stream, "%2d 0x%016lx %s()  %s:%u\n", n, address,
-                        function ? function : "??", file ? file : "??", line);
-                ++n;
-            }
+    do {
+        if (bckt->position >= bckt->size) {
+            return 0;
         }
-        ++i;
-    }
-    fprintf(stream, "=================================\n");
 
-    ucs_debug_backtrace_destroy(&bckt);
+        ln = &bckt->lines[bckt->position++];
+    } while (ucs_debug_backtrace_is_excluded((void*)ln->address, ln->function));
+
+    *line = ln;
+    return 1;
 }
 
 static void ucs_debug_print_source_file(const char *file, unsigned line,
@@ -508,19 +510,20 @@ static void ucs_debug_print_source_file(const char *file, unsigned line,
 
 static void ucs_debug_show_innermost_source_file(FILE *stream)
 {
-    const char *file, *function;
-    struct backtrace bckt;
-    unsigned long address;
-    unsigned line;
+    backtrace_h bckt;
+    backtrace_line_h bckt_line;
+    ucs_status_t status;
 
-    ucs_debug_backtrace_create(&bckt);
-    while (backtrace_next(&bckt, &address, &file, &function, &line)) {
-        if (!ucs_debug_backtrace_is_excluded((void*)address, function)) {
-            ucs_debug_print_source_file(file, line, function, stream);
-            break;
-        }
+    status = ucs_debug_backtrace_create(&bckt, 0);
+    if (status != UCS_OK) {
+        return;
     }
-    ucs_debug_backtrace_destroy(&bckt);
+
+    if (ucs_debug_backtrace_next(bckt, &bckt_line)) {
+        ucs_debug_print_source_file(bckt_line->file, bckt_line->lineno,
+                                    bckt_line->function, stream);
+    }
+    ucs_debug_backtrace_destroy(bckt);
 }
 
 #else /* HAVE_DETAILED_BACKTRACE */
@@ -546,26 +549,62 @@ ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *i
     return UCS_OK;
 }
 
-void ucs_debug_print_backtrace(FILE *stream, int strip)
+/**
+ * Create a backtrace from the calling location.
+ */
+ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip)
 {
-    char **symbols;
-    void *addresses[BACKTRACE_MAX];
-    int count, i, n;
+    size_t size = sizeof(**bckt);
+    ucs_status_t status;
 
-    fprintf(stream, "==== backtrace ====\n");
+    *bckt  = NULL;
+    status = ucs_mmap_alloc(&size, (void**)bckt, 0
+                            UCS_MEMTRACK_NAME("debug backtrace object"));
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    count = backtrace(addresses, BACKTRACE_MAX);
-    symbols = backtrace_symbols(addresses, count);
-    n = 0;
-    for (i = strip; i < count; ++i) {
-        if (!ucs_debug_backtrace_is_excluded(addresses[i], symbols[i])) {
-            fprintf(stream, "   %2d  %s\n", n, symbols[i]);
-            ++n;
+    (*bckt)->size     = backtrace((*bckt)->addresses, BACKTRACE_MAX);
+    (*bckt)->symbols  = backtrace_symbols((*bckt)->addresses, (*bckt)->size);
+    (*bckt)->position = strip;
+
+    return UCS_OK;
+}
+
+/**
+ * Destroy a backtrace and free all memory.
+ *
+ * @param bckt          Backtrace object.
+ */
+void ucs_debug_backtrace_destroy(backtrace_h bckt)
+{
+    free(bckt->symbols);
+    ucs_mmap_free(bckt, sizeof(*bckt));
+}
+
+/**
+ * Walk to the next backtrace line information.
+ *
+ * @param bckt          Backtrace object.
+ * @param line          Filled with backtrace frame info.
+ *
+ * NOTE: the line remains valid as long as the backtrace object is not destroyed.
+ */
+int ucs_debug_backtrace_next(backtrace_h bckt, backtrace_line_h *line)
+{
+    while (bckt->position < bckt->size) {
+        bckt->line.address = bckt->addresses[bckt->position];
+        bckt->line.symbol  = bckt->symbols[bckt->position];
+        bckt->position++;
+
+        if (!ucs_debug_backtrace_is_excluded(bckt->line.address,
+                                             bckt->line.symbol)) {
+            *line = &bckt->line;
+            return 1;
         }
     }
-    free(symbols);
 
-    fprintf(stream, "===================\n");
+    return 0;
 }
 
 static void ucs_debug_show_innermost_source_file(FILE *stream)
@@ -574,6 +613,36 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 #endif /* HAVE_DETAILED_BACKTRACE */
 
+/*
+ * Filter specific functions from the head of the backtrace.
+ */
+void ucs_debug_print_backtrace(FILE *stream, int strip)
+{
+    backtrace_h bckt;
+    backtrace_line_h bckt_line;
+    int i;
+
+    ucs_debug_backtrace_create(&bckt, strip);
+    fprintf(stream, "==== backtrace (tid:%7d) ====\n", ucs_get_tid());
+    for (i = 0; ucs_debug_backtrace_next(bckt, &bckt_line); ++i) {
+         fprintf(stream, UCS_DEBUG_BACKTRACE_LINE_FMT,
+                 UCS_DEBUG_BACKTRACE_LINE_ARG(i, bckt_line));
+    }
+    fprintf(stream, "=================================\n");
+
+    ucs_debug_backtrace_destroy(bckt);
+}
+
+/*
+ * Filter specific functions from the head of the backtrace.
+ */
+void ucs_debug_print_backtrace_line(char *buffer, size_t maxlen,
+                                    int frame_num,
+                                    backtrace_line_h line)
+{
+    snprintf(buffer, maxlen, UCS_DEBUG_BACKTRACE_LINE_FMT,
+             UCS_DEBUG_BACKTRACE_LINE_ARG(frame_num, line));
+}
 
 const char *ucs_debug_get_symbol_name(void *address)
 {

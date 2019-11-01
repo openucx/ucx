@@ -331,3 +331,26 @@ void ucs_log_cleanup()
     ucs_log_initialized    = 0;
     ucs_log_handlers_count = 0;
 }
+
+void ucs_log_print_backtrace(ucs_log_level_t level)
+{
+    backtrace_h bckt;
+    backtrace_line_h bckt_line;
+    int i;
+    char buf[1024];
+    ucs_status_t status;
+
+    status = ucs_debug_backtrace_create(&bckt, 1);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucs_log(level, "==== backtrace (tid:%7d) ====\n", ucs_get_tid());
+    for (i = 0; ucs_debug_backtrace_next(bckt, &bckt_line); ++i) {
+        ucs_debug_print_backtrace_line(buf, sizeof(buf), i, bckt_line);
+        ucs_log(level, "%s", buf);
+    }
+    ucs_log(level, "=================================\n");
+
+    ucs_debug_backtrace_destroy(bckt);
+}

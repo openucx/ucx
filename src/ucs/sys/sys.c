@@ -836,8 +836,11 @@ ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
 ucs_status_t ucs_mmap_free(void *address, size_t length)
 {
     int ret;
+    size_t alloc_length;
 
-    ret = ucs_munmap(address, length);
+    alloc_length = ucs_align_up_pow2(length, ucs_get_page_size());
+
+    ret = ucs_munmap(address, alloc_length);
     if (ret != 0) {
         ucs_warn("munmap(address=%p, length=%zu) failed: %m", address, length);
         return UCS_ERR_INVALID_PARAM;
