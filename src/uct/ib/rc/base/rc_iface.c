@@ -611,7 +611,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);
     if (status != UCS_OK) {
-        goto err_destroy_tx_mp;
+        goto err_cleanup_tx_ops;
     }
 
     /* Initialize RX resources (SRQ) */
@@ -656,6 +656,7 @@ err_cleanup_rx:
     ops->cleanup_rx(self);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
+err_cleanup_tx_ops:
     uct_rc_iface_tx_ops_cleanup(self);
 err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);
