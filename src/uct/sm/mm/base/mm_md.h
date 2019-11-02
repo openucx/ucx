@@ -72,9 +72,10 @@ typedef struct uct_mm_md {
 
 
 /*
- * Memory mapper operations - MM uses them to implement MD and TL functionality.
+ * Memory mapper operations - used to implement MD and TL functionality
  */
 typedef struct uct_mm_mapper_ops {
+    uct_md_ops_t           super;
 
     ucs_status_t (*query)();
 
@@ -82,7 +83,7 @@ typedef struct uct_mm_mapper_ops {
 
     uint8_t      (*get_priority)();
 
-    ucs_status_t (*reg)(void *address, size_t size, 
+    ucs_status_t (*reg)(void *address, size_t size,
                         uct_mm_id_t *mmid_p);
 
     ucs_status_t (*dereg)(uct_mm_id_t mm_id);
@@ -100,26 +101,31 @@ typedef struct uct_mm_mapper_ops {
     ucs_status_t (*free)(void *address, uct_mm_id_t mm_id, size_t length,
                          const char *path);
 
-} uct_mm_mapper_ops_t;
+} uct_mm_md_mapper_ops_t;
 
 
 /**
- * MM component
+ * Memory mapper component
  */
 typedef struct uct_mm_component {
-    uct_component_t       super;
-    uct_mm_mapper_ops_t   *ops;
+    uct_component_t        super;
+    uct_mm_md_mapper_ops_t *md_ops;
 } uct_mm_component_t;
 
 
 /* Extract mapper ops from MM component */
 #define uct_mm_mdc_mapper_ops(_component) \
-    (ucs_derived_of(_component, uct_mm_component_t)->ops)
+    (ucs_derived_of(_component, uct_mm_component_t)->md_ops)
 
 
-/* Extract mapper ops from MM MD */
+/* Extract mapper ops from MM memory domain */
 #define uct_mm_md_mapper_ops(_md) \
-    uct_mm_mdc_mapper_ops((_md)->component)
+    ucs_derived_of((_md)->ops, uct_mm_md_mapper_ops_t)
+
+
+/* Call mapper operation */
+#define uct_mm_md_mapper_call(_md, _func, ...) \
+    uct_mm_md_mapper_ops(_md)->_func(__VA_ARGS__)
 
 
 /*
@@ -130,16 +136,17 @@ typedef struct uct_mm_component {
  * @param _md_ops       Mapper operations, of type uct_mm_mapper_ops_t.
  * @param _cfg_prefix   Prefix for configuration environment vars.
  */
-#define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _cfg_prefix) \
+#define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _rkey_unpack, \
+                                _rkey_release, _cfg_prefix) \
     \
     static uct_mm_component_t _var = { \
         .super = { \
             .query_md_resources = uct_mm_query_md_resources, \
             .md_open            = uct_mm_md_open, \
             .cm_open            = ucs_empty_function_return_unsupported, \
-            .rkey_unpack        = uct_mm_rkey_unpack, \
+            .rkey_unpack        = _rkey_unpack, \
             .rkey_ptr           = uct_mm_rkey_ptr, \
-            .rkey_release       = uct_mm_rkey_release, \
+            .rkey_release       = _rkey_release, \
             .name               = #_name, \
             .md_config          = { \
                 .name           = #_name " memory domain", \
@@ -151,7 +158,7 @@ typedef struct uct_mm_component {
                                       &(_var).super), \
             .flags              = 0, \
        }, \
-       .ops                     = (_md_ops) \
+       .md_ops                  = (_md_ops) \
     }; \
     UCT_COMPONENT_REGISTER(&(_var).super); \
 
@@ -190,5 +197,7 @@ ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p);
+
+void uct_mm_md_close(uct_md_h md);
 
 #endif

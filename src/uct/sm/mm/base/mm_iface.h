@@ -44,6 +44,12 @@ enum {
           (_fifo_elem_p)->desc_offset - (_iface)->rx_headroom) - 1)
 
 
+#define uct_mm_iface_mapper_call(_iface, _func, ...) \
+    ({ \
+        uct_mm_md_mapper_call((_iface)->super.super.md, _func, ## __VA_ARGS__); \
+    })
+
+
 /* Check if the resources on the remote peer are available for sending to it.
  * i.e. check if the remote receive FIFO has room in it.
  * return 1 if can send.
@@ -171,12 +177,17 @@ typedef struct uct_mm_iface {
  * Define a memory-mapper transport for MM.
  *
  * @param _name         Component name token
- * @param _ops          Memory domain operations, of type uct_mm_mapper_ops_t.
+ * @param _md_ops       Memory domain operations, of type uct_mm_md_ops_t.
+ * @param _rkey_unpack  Remote key unpack function
+ * @param _rkey_release Remote key release function
  * @param _cfg_prefix   Prefix for configuration variables.
  */
-#define UCT_MM_TL_DEFINE(_name, _ops, _cfg_prefix) \
+#define UCT_MM_TL_DEFINE(_name, _md_ops, _rkey_unpack, _rkey_release, \
+                         _cfg_prefix) \
     \
-    UCT_MM_COMPONENT_DEFINE(uct_##_name##_component, _name, _ops, _cfg_prefix) \
+    UCT_MM_COMPONENT_DEFINE(uct_##_name##_component, _name, _md_ops, \
+                            _rkey_unpack, _rkey_release, _cfg_prefix) \
+    \
     UCT_TL_DEFINE(&(uct_##_name##_component).super, \
                   _name, \
                   uct_sm_base_query_tl_devices, \

@@ -35,9 +35,7 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
-    uct_mm_component_t *mmc = ucs_derived_of(component, uct_mm_component_t);
-
-    if (mmc->ops->query() == UCS_OK) {
+    if (uct_mm_mdc_mapper_ops(component)->query() == UCS_OK) {
         return uct_md_query_single_md_resource(component, resources_p,
                                                num_resources_p);
     } else {
@@ -59,9 +57,9 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
     }
 
 
-    status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, flags,
-                                             alloc_name, address_p, &seg->mmid,
-                                             &seg->path);
+    status = uct_mm_md_mapper_call(md, alloc, md, length_p, UCS_TRY, flags,
+                                   alloc_name, address_p, &seg->mmid,
+                                   &seg->path);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -81,8 +79,8 @@ ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_md_mapper_ops(md)->free(seg->address, seg->mmid, seg->length,
-                                            seg->path);
+    status = uct_mm_md_mapper_call(md, free, seg->address, seg->mmid,
+                                   seg->length, seg->path);
     if (status != UCS_OK) {
         return status;
     }
@@ -103,8 +101,7 @@ ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_mm_md_mapper_ops(md)->reg(address, length, 
-                                           &seg->mmid);
+    status = uct_mm_md_mapper_call(md, reg, address, length, &seg->mmid);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -124,7 +121,7 @@ ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_md_mapper_ops(md)->dereg(seg->mmid);
+    status = uct_mm_md_mapper_call(md, dereg, seg->mmid);
     if (status != UCS_OK) {
         return status;
     }
@@ -145,7 +142,7 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_alloc        = ULONG_MAX;
     md_attr->cap.max_reg          = 0;
     md_attr->rkey_packed_size     = sizeof(uct_mm_packed_rkey_t) +
-                                    uct_mm_md_mapper_ops(md)->get_path_size(md);
+                                    uct_mm_md_mapper_call(md, get_path_size, md);
     if (uct_mm_md_mapper_ops(md)->alloc != NULL) {
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
@@ -241,7 +238,7 @@ ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
     return status;
 }
 
-static void uct_mm_md_close(uct_md_h md)
+void uct_mm_md_close(uct_md_h md)
 {
     uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
 
@@ -250,56 +247,45 @@ static void uct_mm_md_close(uct_md_h md)
     ucs_free(mm_md);
 }
 
-uct_md_ops_t uct_mm_md_ops = {
-    .close              = uct_mm_md_close,
-    .query              = uct_mm_md_query,
-    .mem_alloc          = uct_mm_mem_alloc,
-    .mem_free           = uct_mm_mem_free,
-    .mem_reg            = uct_mm_mem_reg,
-    .mem_dereg          = uct_mm_mem_dereg,
-    .mkey_pack          = uct_mm_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
-};
-
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p)
 {
-    uct_mm_md_t *mm_md;
+    uct_mm_component_t *mmc = ucs_derived_of(component, uct_mm_component_t);
     ucs_status_t status;
+    uct_mm_md_t *md;
 
-    mm_md = ucs_malloc(sizeof(*mm_md), "uct_mm_md_t");
-    if (mm_md == NULL) {
+    md = ucs_malloc(sizeof(*md), "uct_mm_md_t");
+    if (md == NULL) {
         ucs_error("Failed to allocate memory for uct_mm_md_t");
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
-    mm_md->config = ucs_malloc(component->md_config.size, "mm_md config");
-    if (mm_md->config == NULL) {
+    md->config = ucs_malloc(component->md_config.size, "mm_md config");
+    if (md->config == NULL) {
         ucs_error("Failed to allocate memory for mm_md config");
         status = UCS_ERR_NO_MEMORY;
         goto err_free_mm_md;
     }
 
-    status = ucs_config_parser_clone_opts(config, mm_md->config,
-                                          component->md_config.table);
+    status = ucs_config_parser_clone_opts(config, md->config,
+                                          mmc->super.md_config.table);
     if (status != UCS_OK) {
         ucs_error("Failed to clone opts");
         goto err_free_mm_md_config;
     }
 
-    component->rkey_ptr    = uct_mm_rkey_ptr;
-    mm_md->super.ops       = &uct_mm_md_ops;
-    mm_md->super.component = component;
+    md->super.ops       = &mmc->md_ops->super;
+    md->super.component = &mmc->super;
 
     /* cppcheck-suppress autoVariables */
-    *md_p = &mm_md->super;
+    *md_p = &md->super;
     return UCS_OK;
 
 err_free_mm_md_config:
-    ucs_free(mm_md->config);
+    ucs_free(md->config);
 err_free_mm_md:
-    ucs_free(mm_md);
+    ucs_free(md);
 err:
     return status;
 }
