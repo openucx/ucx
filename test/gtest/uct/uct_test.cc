@@ -694,9 +694,7 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
                                    uct_rkey_bundle *rkey_bundle) const
 {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
-        (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) &&
-        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-        (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
+        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
 
         void *rkey_buffer = malloc(md_attr().rkey_packed_size);
         if (rkey_buffer == NULL) {

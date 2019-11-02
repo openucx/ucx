@@ -79,8 +79,6 @@ typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*query)();
 
-    size_t       (*get_path_size)(uct_md_h md);
-
     uint8_t      (*get_priority)();
 
     ucs_status_t (*reg)(void *address, size_t size,
@@ -181,7 +179,7 @@ ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
 
 ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh);
 
-ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
+void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, int support_alloc);
 
 ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
 

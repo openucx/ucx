@@ -127,6 +127,16 @@ static size_t uct_posix_get_path_size(uct_md_h md)
     }
 }
 
+static ucs_status_t uct_posix_md_query(uct_md_h tl_md, uct_md_attr_t *md_attr)
+{
+    uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
+
+    uct_mm_md_query(&md->super, md_attr, 1);
+    md_attr->rkey_packed_size = sizeof(uct_mm_packed_rkey_t) +
+                                uct_posix_get_path_size(tl_md);
+    return UCS_OK;
+}
+
 static uint8_t uct_posix_get_priority()
 {
     return 0;
@@ -552,7 +562,7 @@ err:
 static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
     .super = {
         .close                  = uct_mm_md_close,
-        .query                  = uct_mm_md_query,
+        .query                  = uct_posix_md_query,
         .mem_alloc              = uct_mm_mem_alloc,
         .mem_free               = uct_mm_mem_free,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
@@ -563,7 +573,6 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
         .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query                      = ucs_empty_function_return_success,
-    .get_path_size              = uct_posix_get_path_size,
     .get_priority               = uct_posix_get_priority,
     .reg                        = NULL,
     .dereg                      = NULL,
