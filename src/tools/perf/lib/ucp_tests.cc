@@ -268,9 +268,9 @@ public:
             }
         case UCX_PERF_CMD_STREAM:
             if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
-                return recv_stream_data(ep, length, datatype, sn);
+                return recv_stream_data(ep, length, datatype);
             } else {
-                return recv_stream(ep, buffer, length, datatype, sn);
+                return recv_stream(ep, buffer, length, datatype);
             }
         default:
             return UCS_ERR_INVALID_PARAM;
@@ -279,6 +279,7 @@ public:
 
     ucs_status_t run_pingpong()
     {
+        const psn_t unknown_psn = -1;
         unsigned my_index;
         ucp_worker_h worker;
         ucp_ep_h ep;
@@ -294,7 +295,12 @@ public:
 
         ucp_perf_test_prepare_iov_buffers();
 
-        m_perf.allocator->memset((char*)m_perf.recv_buffer + length - 1, -1, 1);
+        if (CMD == UCX_PERF_CMD_PUT) {
+            m_perf.allocator->memcpy((psn_t*)m_perf.recv_buffer + length - 1,
+                                     m_perf.allocator->mem_type,
+                                     &unknown_psn, UCS_MEMORY_TYPE_HOST,
+                                     sizeof(unknown_psn));
+        }
 
         ucp_perf_barrier(&m_perf);
 
@@ -419,8 +425,7 @@ public:
 
 private:
     ucs_status_t UCS_F_ALWAYS_INLINE
-    recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype,
-                     uint8_t sn)
+    recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype)
     {
         void *data;
         size_t data_length;
@@ -439,8 +444,7 @@ private:
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    recv_stream(ucp_ep_h ep, void *buf, unsigned length, ucp_datatype_t datatype,
-                uint8_t sn)
+    recv_stream(ucp_ep_h ep, void *buf, unsigned length, ucp_datatype_t datatype)
     {
         ssize_t  total = 0;
         void    *rreq;

@@ -14,6 +14,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/module.h>
+#include <ucs/sys/string.h>
 #include <string.h>
 #include <tools/perf/lib/libperf_int.h>
 #include <unistd.h>
@@ -159,6 +160,44 @@ static ucs_time_t __find_median_quick_select(ucs_time_t arr[], int n)
     }
 }
 
+static ucs_status_t
+uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
+                         unsigned flags, uct_allocated_memory_t *alloc_mem)
+{
+    ucs_status_t status;
+
+    status = uct_iface_mem_alloc(perf->uct.iface, length,
+                                 flags, "perftest", alloc_mem);
+    if (status != UCS_OK) {
+        ucs_free(alloc_mem);
+        ucs_error("failed to allocate memory: %s", ucs_status_string(status));
+        return status;
+    }
+
+    ucs_assert(alloc_mem->md == perf->uct.md);
+
+    return UCS_OK;
+}
+
+static void uct_perf_test_free_host(const ucx_perf_context_t *perf,
+                                    uct_allocated_memory_t *alloc_mem)
+{
+    uct_iface_mem_free(alloc_mem);
+}
+
+static void ucx_perf_test_memcpy_host(void *dst, ucs_memory_type_t dst_mem_type,
+                                      const void *src, ucs_memory_type_t src_mem_type,
+                                      size_t count)
+{
+    if ((dst_mem_type != UCS_MEMORY_TYPE_HOST) ||
+        (src_mem_type != UCS_MEMORY_TYPE_HOST)) {
+        ucs_error("wrong memory type passed src - %d, dst - %d",
+                  src_mem_type, dst_mem_type);
+    } else {
+        memcpy(dst, src, count);
+    }
+}
+
 static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
     ucx_perf_params_t *params = &perf->params;
@@ -175,31 +214,25 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     /* TODO use params->alignment  */
 
     flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
-                    UCT_MD_MEM_FLAG_NONBLOCK : 0;
+             UCT_MD_MEM_FLAG_NONBLOCK : 0;
     flags |= UCT_MD_MEM_ACCESS_ALL;
 
     /* Allocate send buffer memory */
-    status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 buffer_size * params->thread_count,
-                                 flags, "perftest", &perf->uct.send_mem);
+    status = perf->allocator->uct_alloc(perf, buffer_size * params->thread_count,
+                                        flags, &perf->uct.send_mem);
     if (status != UCS_OK) {
-        ucs_error("Failed allocate send buffer: %s", ucs_status_string(status));
         goto err;
     }
 
-    ucs_assert(perf->uct.send_mem.md == perf->uct.md);
     perf->send_buffer = perf->uct.send_mem.address;
 
     /* Allocate receive buffer memory */
-    status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 buffer_size * params->thread_count,
-                                 flags, "perftest", &perf->uct.recv_mem);
+    status = perf->allocator->uct_alloc(perf, buffer_size * params->thread_count,
+                                        flags, &perf->uct.recv_mem);
     if (status != UCS_OK) {
-        ucs_error("Failed allocate receive buffer: %s", ucs_status_string(status));
         goto err_free_send;
     }
 
-    ucs_assert(perf->uct.recv_mem.md == perf->uct.md);
     perf->recv_buffer = perf->uct.recv_mem.address;
 
     /* Allocate IOV datatype memory */
@@ -211,7 +244,7 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
         status = UCS_ERR_NO_MEMORY;
         ucs_error("Failed allocate send IOV(%lu) buffer: %s",
                   perf->params.msg_size_cnt, ucs_status_string(status));
-        goto err_free_send;
+        goto err_free_recv;
     }
 
     perf->offset = 0;
@@ -220,16 +253,18 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
               perf->send_buffer, perf->recv_buffer);
     return UCS_OK;
 
+err_free_recv:
+    perf->allocator->uct_free(perf, &perf->uct.recv_mem);
 err_free_send:
-    uct_iface_mem_free(&perf->uct.send_mem);
+    perf->allocator->uct_free(perf, &perf->uct.send_mem);
 err:
     return status;
 }
 
 static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 {
-    uct_iface_mem_free(&perf->uct.send_mem);
-    uct_iface_mem_free(&perf->uct.recv_mem);
+    perf->allocator->uct_free(perf, &perf->uct.send_mem);
+    perf->allocator->uct_free(perf, &perf->uct.recv_mem);
     free(perf->uct.iov);
 }
 
@@ -341,7 +376,17 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
 {
     size_t it;
 
-    if (ucx_perf_get_message_size(params) < 1) {
+    /* check if zero-size messages are requested and supported */
+    if ((/* they are not supported by: */
+         /* - UCT tests, except UCT AM Short/Bcopy */
+         (params->api == UCX_PERF_API_UCT) ||
+         (/* - UCP RMA and AMO tests */
+          (params->api == UCX_PERF_API_UCP) &&
+          (params->command != UCX_PERF_CMD_AM) &&
+          (params->command != UCX_PERF_CMD_TAG) &&
+          (params->command != UCX_PERF_CMD_TAG_SYNC) &&
+          (params->command != UCX_PERF_CMD_STREAM))) &&
+        ucx_perf_get_message_size(params) < 1) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too small, need to be at least 1");
         }
@@ -413,19 +458,30 @@ static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_
 }
 
 static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
-                                                     uct_iface_h iface)
+                                                     uct_iface_h iface, uct_md_h md)
 {
     uint64_t required_flags = 0;
     uint64_t atomic_op32    = 0;
     uint64_t atomic_op64    = 0;
     uint64_t atomic_fop32   = 0;
     uint64_t atomic_fop64   = 0;
+    uct_md_attr_t md_attr;
     uct_iface_attr_t attr;
     ucs_status_t status;
     size_t min_size, max_size, max_iov, message_size;
 
+    status = uct_md_query(md, &md_attr);
+    if (status != UCS_OK) {
+        ucs_error("uct_md_query(%s) failed: %s",
+                  params->uct.md_name, ucs_status_string(status));
+        return status;
+    }
+
     status = uct_iface_query(iface, &attr);
     if (status != UCS_OK) {
+        ucs_error("uct_iface_query(%s/%s) failed: %s",
+                  params->uct.tl_name, params->uct.dev_name,
+                  ucs_status_string(status));
         return status;
     }
 
@@ -590,6 +646,13 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                 return UCS_ERR_INVALID_PARAM;
             }
         }
+    }
+
+    if (!(md_attr.cap.reg_mem_types & UCS_BIT(params->mem_type))) {
+        ucs_error("Unsupported memory type %s by %s/%s",
+                  ucs_memory_type_names[params->mem_type],
+                  params->uct.tl_name, params->uct.dev_name);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
@@ -878,7 +941,7 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
 }
 
 static ucs_status_t
-ucp_perf_test_alloc_host(ucx_perf_context_t *perf, size_t length,
+ucp_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
                          void **address_p, ucp_mem_h *memh, int non_blk_flag)
 {
     ucp_mem_map_params_t mem_map_params;
@@ -913,8 +976,8 @@ err:
     return status;
 }
 
-static void ucp_perf_test_free_host(ucx_perf_context_t *perf, void *address,
-                                    ucp_mem_h memh)
+static void ucp_perf_test_free_host(const ucx_perf_context_t *perf,
+                                    void *address, ucp_mem_h memh)
 {
     ucs_status_t status;
 
@@ -1239,6 +1302,10 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
                 goto out_release_components_list;
             }
 
+            ucs_strncpy_zero(perf->params.uct.md_name,
+                             component_attr.md_resources[md_index].md_name,
+                             UCT_MD_NAME_MAX);
+
             status = uct_md_open(uct_components[cmpt_index],
                                  component_attr.md_resources[md_index].md_name,
                                  md_config, &md);
@@ -1340,7 +1407,8 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
         goto out_destroy_md;
     }
 
-    status = uct_perf_test_check_capabilities(params, perf->uct.iface);
+    status = uct_perf_test_check_capabilities(params, perf->uct.iface,
+                                              perf->uct.md);
     /* sync status across all processes */
     status = ucp_perf_test_exchange_status(perf, status);
     if (status != UCS_OK) {
@@ -1504,9 +1572,18 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
     ucx_perf_test_init(perf, params);
 
     if (perf->allocator == NULL) {
-        ucs_error("Unsupported memory type");
+        ucs_error("Unsupported memory type %s",
+                  ucs_memory_type_names[params->mem_type]);
         status = UCS_ERR_UNSUPPORTED;
         goto out_free;
+    }
+
+    if ((params->api == UCX_PERF_API_UCT) &&
+        (perf->allocator->mem_type != UCS_MEMORY_TYPE_HOST)) {
+        ucs_warn("UCT tests also copy 2-byte values from %s memory to "
+                 "%s memory, which may impact performance results",
+                 ucs_memory_type_names[perf->allocator->mem_type],
+                 ucs_memory_type_names[UCS_MEMORY_TYPE_HOST]);
     }
 
     status = perf->allocator->init(perf);
@@ -1667,9 +1744,13 @@ static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
 void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
+        .mem_type  = UCS_MEMORY_TYPE_HOST,
         .init      = ucs_empty_function_return_success,
         .ucp_alloc = ucp_perf_test_alloc_host,
         .ucp_free  = ucp_perf_test_free_host,
+        .uct_alloc = uct_perf_test_alloc_host,
+        .uct_free  = uct_perf_test_free_host,
+        .memcpy    = ucx_perf_test_memcpy_host,
         .memset    = memset
     };
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
