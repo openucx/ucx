@@ -14,15 +14,22 @@
 #include <ucs/type/status.h>
 
 
-/* Shared memory ID */
-typedef uint64_t uct_mm_id_t;
+/* Memory mapper segment unique id for FIFO and bcopy descriptors
+ * the exact structure depends on specific mapper */
+typedef uint64_t          uct_mm_seg_id_t;
+
+
+/* For compatibility - to be removed */
+typedef uct_mm_seg_id_t   uct_mm_id_t;
 
 
 /**
  * Local memory segment structure.
+ * The mappers must implement memory allocation functions so that they will
+ * return this structure as uct_memh.
  */
 typedef struct uct_mm_seg {
-    uct_mm_id_t           mmid;       /* Shared memory ID */
+    uct_mm_seg_id_t       seg_id;     /* Shared memory ID */
     void                  *address;   /* Virtual address */
     size_t                length;     /* Size of the memory */
     const char            *path;      /* Path to the backing file when using posix */
@@ -46,7 +53,7 @@ typedef struct uct_mm_packed_rkey {
 typedef struct uct_mm_remote_seg uct_mm_remote_seg_t;
 struct uct_mm_remote_seg {
     uct_mm_remote_seg_t   *next;
-    uct_mm_id_t           mmid;        /* mmid of the remote memory chunk */
+    uct_mm_seg_id_t       mmid;        /* mmid of the remote memory chunk */
     void                  *address;    /* Local address of attached memory */
     uint64_t              cookie;      /* Cookie for mmap, xpmem, etc. */
     size_t                length;      /* Size of the memory */
@@ -67,7 +74,7 @@ typedef struct uct_mm_md_config {
  */
 typedef struct uct_mm_md {
     uct_md_t              super;
-    uct_mm_md_config_t    *config;
+    uct_mm_md_config_t    *config;         /* Clone of MD configuration */
 } uct_mm_md_t;
 
 
@@ -82,21 +89,21 @@ typedef struct uct_mm_mapper_ops {
     uint8_t      (*get_priority)();
 
     ucs_status_t (*reg)(void *address, size_t size,
-                        uct_mm_id_t *mmid_p);
+                        uct_mm_seg_id_t *mmid_p);
 
-    ucs_status_t (*dereg)(uct_mm_id_t mm_id);
+    ucs_status_t (*dereg)(uct_mm_seg_id_t mm_id);
 
     ucs_status_t (*alloc)(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                           unsigned flags, const char *alloc_name, void **address_p,
-                          uct_mm_id_t *mmid_p, const char **path_p);
+                          uct_mm_seg_id_t *mmid_p, const char **path_p);
 
-    ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length,
+    ucs_status_t (*attach)(uct_mm_seg_id_t mmid, size_t length,
                            void *remote_address, void **address, uint64_t *cookie,
                            const char *path);
 
     ucs_status_t (*detach)(uct_mm_remote_seg_t *mm_desc);
 
-    ucs_status_t (*free)(void *address, uct_mm_id_t mm_id, size_t length,
+    ucs_status_t (*free)(void *address, uct_mm_seg_id_t mm_id, size_t length,
                          const char *path);
 
 } uct_mm_md_mapper_ops_t;
