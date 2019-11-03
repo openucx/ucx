@@ -39,8 +39,9 @@ BEGIN_C_DECLS
 
 typedef struct ucs_config_parser {
     int                      (*read) (const char *buf, void *dest, const void *arg);
-    int                      (*write)(char *buf, size_t max, void *src, const void *arg);
-    ucs_status_t             (*clone)(void *src, void *dest, const void *arg);
+    int                      (*write)(char *buf, size_t max,
+                                      const void *src, const void *arg);
+    ucs_status_t             (*clone)(const void *src, void *dest, const void *arg);
     void                     (*release)(void *ptr, const void *arg);
     void                     (*help)(char *buf, size_t max, const void *arg);
     const void               *arg;
@@ -113,83 +114,83 @@ typedef struct ucs_config_bw_spec {
  */
 
 int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_string(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_string(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_string(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_string(const void *src, void *dest, const void *arg);
 void ucs_config_release_string(void *ptr, const void *arg);
 
 int ucs_config_sscanf_int(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_int(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_int(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_int(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_int(const void *src, void *dest, const void *arg);
 
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_uint(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_uint(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_uint(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_uint(const void *src, void *dest, const void *arg);
 
 int ucs_config_sscanf_ulong(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_ulong(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_ulong(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_ulong(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_ulong(const void *src, void *dest, const void *arg);
 
 int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_double(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_double(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_double(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_double(const void *src, void *dest, const void *arg);
 
 int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_hex(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_hex(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_bool(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_bool(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_ternary(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_ternary(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_ternary(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg);
 
 int ucs_config_sscanf_on_off_auto(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_on_off_auto(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_on_off_auto(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_enum(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_enum(char *buf, size_t max, const void *src, const void *arg);
 void ucs_config_help_enum(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_bitmap(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_bitmap(char *buf, size_t max, const void *src, const void *arg);
 void ucs_config_help_bitmap(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_bitmask(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_bitmask(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_time(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_time(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_bw(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_bw(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_bw_spec(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_bw_spec(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_bw_spec(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_bw_spec(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_bw_spec(const void *src, void *dest, const void *arg);
 void ucs_config_release_bw_spec(void *ptr, const void *arg);
 
 int ucs_config_sscanf_signo(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_signo(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_signo(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_memunits(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_ulunits(char *buf, size_t max, void *src, const void *arg);
+int ucs_config_sprintf_ulunits(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_range_spec(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_range_spec(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_range_spec(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void *arg);
 
 int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_array(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_array(void *src, void *dest, const void *arg);
+int ucs_config_sprintf_array(char *buf, size_t max, const void *src, const void *arg);
+ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg);
 void ucs_config_release_array(void *ptr, const void *arg);
 void ucs_config_help_array(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg);
-ucs_status_t ucs_config_clone_table(void *src, void *dest, const void *arg);
+ucs_status_t ucs_config_clone_table(const void *src, void *dest, const void *arg);
 void ucs_config_release_table(void *ptr, const void *arg);
 void ucs_config_help_table(char *buf, size_t max, const void *arg);
 
@@ -233,7 +234,8 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_TYPE_HEX        {ucs_config_sscanf_hex,       ucs_config_sprintf_hex, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "hex representation of a number"}
+                                    ucs_config_help_generic, \
+                                    "hex representation of a number or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BOOL       {ucs_config_sscanf_bool,      ucs_config_sprintf_bool, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
@@ -346,7 +348,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
  * @param table  Array of fields which define the structure of the options.
  */
 ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
-                                         ucs_config_field_t *fields);
+                                          ucs_config_field_t *fields);
 
 /**
  * Release the options fields.

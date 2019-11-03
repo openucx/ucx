@@ -161,8 +161,9 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "which will be the low portion of the LID, according to the LMC in the fabric.",
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
 
-  {"PKEY", "0x7fff",
-   "Which pkey value to use. Should be between 0 and 0x7fff.",
+  {"PKEY", "auto",
+   "Which pkey value to use. Should be between 0 and 0x7fff.\n"
+   "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
 #if HAVE_IBV_EXP_RES_DOMAIN
@@ -403,10 +404,11 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
 {
     uct_ib_device_t *dev  = uct_ib_iface_device(iface);
     uint16_t pkey_tbl_len = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
-    int pkey_already_set  = 0;
+    int pkey_found        = 0;
     uint16_t pkey_index, port_pkey, pkey;
 
-    if (config->pkey_value > UCT_IB_PKEY_PARTITION_MASK) {
+    if ((config->pkey_value != UCS_HEXUNITS_AUTO) &&
+        (config->pkey_value > UCT_IB_PKEY_PARTITION_MASK)) {
         ucs_error("Requested pkey 0x%x is invalid, should be in the range 0..0x%x",
                   config->pkey_value, UCT_IB_PKEY_PARTITION_MASK);
         return UCS_ERR_INVALID_PARAM;
@@ -418,8 +420,9 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
         if (ibv_query_pkey(dev->ibv_context, iface->config.port_num, pkey_index,
                            &port_pkey))
         {
-            ucs_error("ibv_query_pkey("UCT_IB_IFACE_FMT", index=%d) failed: %m",
+            ucs_debug("ibv_query_pkey("UCT_IB_IFACE_FMT", index=%d) failed: %m",
                       UCT_IB_IFACE_ARG(iface), pkey_index);
+            continue;
         }
 
         pkey = ntohs(port_pkey);
@@ -427,23 +430,31 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
             /* if pkey = 0x0, just skip it w/o debug trace, because 0x0
              * means that there is no real pkey configured at this index */
             if (pkey) {
-                ucs_debug("skipping send-only pkey[%d]=0x%x", pkey_index, pkey);
+                ucs_trace("skipping send-only pkey[%d]=0x%x on "UCT_IB_IFACE_FMT,
+                          pkey_index, pkey, UCT_IB_IFACE_ARG(iface));
             }
             continue;
         }
 
         /* take only the lower 15 bits for the comparison */
-        if (!pkey_already_set ||
+        if ((config->pkey_value == UCS_HEXUNITS_AUTO) ||
             ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey_value)) {
             iface->pkey_index = pkey_index;
             iface->pkey_value = pkey;
-            pkey_already_set  = 1;
+            pkey_found        = 1;
+            break;
         }
     }
 
-    if (!pkey_already_set) {
-        ucs_error("There is no valid pkey with full membership on %s:%d",
-                  uct_ib_device_name(dev), iface->config.port_num);
+    if (!pkey_found) {
+        if (config->pkey_value == UCS_HEXUNITS_AUTO) {
+            ucs_error("There is no valid pkey with full membership on "
+                      UCT_IB_IFACE_FMT, UCT_IB_IFACE_ARG(iface));
+        } else {
+            ucs_error("Unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
+                      config->pkey_value, UCT_IB_IFACE_ARG(iface));
+        }
+
         return UCS_ERR_INVALID_PARAM;
     }
 
