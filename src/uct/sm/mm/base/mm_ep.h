@@ -10,40 +10,37 @@
 
 #include "mm_iface.h"
 
-#include <ucs/datastruct/sglib.h>
-#include <ucs/datastruct/sglib_wrapper.h>
+#include <ucs/datastruct/khash.h>
 
 
-#define UCT_MM_BASE_ADDRESS_HASH_SIZE    64
+KHASH_INIT(uct_mm_remote_seg, uintptr_t, uct_mm_remote_seg_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal)
 
 
 /**
  * MM transport endpoint
  */
 typedef struct uct_mm_ep {
-    uct_base_ep_t       super;
+    uct_base_ep_t              super;
 
     /* Remote peer */
-    uct_mm_fifo_ctl_t    *fifo_ctl;   /* pointer to the destination's ctl struct in the receive fifo */
-    void                 *fifo;       /* fifo elements (destination's receive fifo) */
+    uct_mm_fifo_ctl_t          *fifo_ctl;   /* pointer to the destination's ctl struct in the receive fifo */
+    void                       *fifo_elems; /* fifo elements (destination's receive fifo) */
 
-    uint64_t             cached_tail; /* the sender's own copy of the remote FIFO's tail.
-                                         it is not always updated with the actual remote tail value */
+    uint64_t                   cached_tail; /* the sender's own copy of the remote FIFO's tail.
+                                               it is not always updated with the actual remote tail value */
 
     /* mapped remote memory chunks to which remote descriptors belong to.
      * (after attaching to them) */
-    uct_mm_remote_seg_t  *remote_segments_hash[UCT_MM_BASE_ADDRESS_HASH_SIZE];
+    khash_t(uct_mm_remote_seg) remote_segs;
 
-    ucs_arbiter_group_t  arb_group;   /* the group that holds this ep's pending operations */
+    ucs_arbiter_group_t        arb_group;   /* the group that holds this ep's pending operations */
 
     /* Used for signaling remote side wakeup */
     struct {
-        struct sockaddr_un  sockaddr;  /* address of signaling socket */
-        socklen_t           addrlen;   /* address length of signaling socket */
+        struct sockaddr_un     sockaddr;  /* address of signaling socket */
+        socklen_t              addrlen;   /* address length of signaling socket */
     } signal;
-
-    /* Remote peer */
-    uct_mm_remote_seg_t  mapped_desc; /* pointer to the descriptor of the destination's shared_mem (FIFO) */
 } uct_mm_ep_t;
 
 
@@ -67,18 +64,5 @@ void uct_mm_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
 ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg);
-
-static inline uint64_t uct_mm_remote_seg_hash(uct_mm_remote_seg_t *seg)
-{
-    return seg->mmid % UCT_MM_BASE_ADDRESS_HASH_SIZE;
-}
-
-static inline int64_t uct_mm_remote_seg_compare(uct_mm_remote_seg_t *seg1, uct_mm_remote_seg_t *seg2)
-{
-    return  seg1->mmid - seg2->mmid;
-}
-
-SGLIB_DEFINE_LIST_PROTOTYPES(uct_mm_remote_seg_t, uct_mm_remote_seg_compare, next)
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_mm_remote_seg_t, UCT_MM_BASE_ADDRESS_HASH_SIZE, uct_mm_remote_seg_hash)
 
 #endif
