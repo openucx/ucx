@@ -8,8 +8,6 @@
 #ifndef UCT_MM_MD_H_
 #define UCT_MM_MD_H_
 
-#include "mm_def.h"
-
 #include <uct/base/uct_md.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
@@ -19,18 +17,59 @@
 /* Shared memory ID */
 typedef uint64_t uct_mm_id_t;
 
-extern ucs_config_field_t uct_mm_md_config_table[];
+
+/**
+ * Local memory segment structure.
+ */
+typedef struct uct_mm_seg {
+    uct_mm_id_t           mmid;       /* Shared memory ID */
+    void                  *address;   /* Virtual address */
+    size_t                length;     /* Size of the memory */
+    const char            *path;      /* Path to the backing file when using posix */
+} uct_mm_seg_t;
+
+
+/**
+ * Packed remote key
+ */
+typedef struct uct_mm_packed_rkey {
+    uct_mm_id_t           mmid;       /* Shared memory ID */
+    uintptr_t             owner_ptr;  /* VA of in allocating process */
+    size_t                length;     /* Size of the memory */
+    char                  path[0];    /* path to the backing file when using posix */
+} uct_mm_packed_rkey_t;
+
 
 /*
  * Descriptor of the mapped memory
  */
+typedef struct uct_mm_remote_seg uct_mm_remote_seg_t;
 struct uct_mm_remote_seg {
-    uct_mm_remote_seg_t *next;
-    uct_mm_id_t mmid;        /**< mmid of the remote memory chunk */
-    void        *address;    /**< local memory address */
-    uint64_t    cookie;      /**< cookie for mmap, xpmem, etc. */
-    size_t      length;      /**< size of the memory */
+    uct_mm_remote_seg_t   *next;
+    uct_mm_id_t           mmid;        /* mmid of the remote memory chunk */
+    void                  *address;    /* Local address of attached memory */
+    uint64_t              cookie;      /* Cookie for mmap, xpmem, etc. */
+    size_t                length;      /* Size of the memory */
 };
+
+
+/**
+ * MM memory domain configuration
+ */
+typedef struct uct_mm_md_config {
+    uct_md_config_t       super;
+    ucs_ternary_value_t   hugetlb_mode;     /* Enable using huge pages */
+} uct_mm_md_config_t;
+
+
+/**
+ * MM memory domain
+ */
+typedef struct uct_mm_md {
+    uct_md_t              super;
+    uct_mm_md_config_t    *config;
+} uct_mm_md_t;
+
 
 /*
  * Memory mapper operations - MM uses them to implement MD and TL functionality.
@@ -117,35 +156,7 @@ typedef struct uct_mm_component {
     UCT_COMPONENT_REGISTER(&(_var).super); \
 
 
-/**
- * Local memory segment structure.
- */
-typedef struct uct_mm_seg {
-    uct_mm_id_t      mmid;       /* Shared memory ID */
-    void             *address;   /* Virtual address */
-    size_t           length;     /* Size of the memory */
-    const char       *path;      /* Path to the backing file when using posix */
-} uct_mm_seg_t;
-
-
-/**
- * Packed remote key
- */
-typedef struct uct_mm_packed_rkey {
-    uct_mm_id_t      mmid;         /* Shared memory ID */
-    uintptr_t        owner_ptr;    /* VA of in allocating process */
-    size_t           length;       /* Size of the memory */
-    char             path[0];      /* path to the backing file when using posix */
-} uct_mm_packed_rkey_t;
-
-
-/**
- * MM MD
- */
-typedef struct uct_mm_md {
-    uct_md_t           super;
-    uct_mm_md_config_t *config;
-} uct_mm_md_t;
+extern ucs_config_field_t uct_mm_md_config_table[];
 
 
 ucs_status_t uct_mm_query_md_resources(uct_component_t *component,

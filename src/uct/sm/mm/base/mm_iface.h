@@ -8,7 +8,6 @@
 #ifndef UCT_MM_IFACE_H
 #define UCT_MM_IFACE_H
 
-#include "mm_def.h"
 #include "mm_md.h"
 
 #include <uct/base/uct_iface.h>
@@ -22,6 +21,12 @@
 #include <sys/un.h>
 
 
+enum {
+    UCT_MM_FIFO_ELEM_FLAG_OWNER  = UCS_BIT(0), /* new/old info */
+    UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1), /* if inline or not */
+};
+
+
 #define UCT_MM_FIFO_CTL_SIZE_ALIGNED  ucs_align_up(sizeof(uct_mm_fifo_ctl_t),UCS_SYS_CACHE_LINE_SIZE)
 
 #define UCT_MM_GET_FIFO_SIZE(iface)  (UCS_SYS_CACHE_LINE_SIZE - 1 +  \
@@ -29,7 +34,28 @@
                                      ((iface)->config.fifo_size *    \
                                      (iface)->config.fifo_elem_size))
 
+#define UCT_MM_IFACE_GET_FIFO_ELEM(_iface, _fifo , _index) \
+          (uct_mm_fifo_element_t*) ((char*)(_fifo) + ((_index) * \
+          (_iface)->config.fifo_elem_size))
 
+
+#define UCT_MM_IFACE_GET_DESC_START(_iface, _fifo_elem_p) \
+          ((uct_mm_recv_desc_t *)UCS_PTR_BYTE_OFFSET((_fifo_elem_p)->desc_chunk_base_addr,  \
+          (_fifo_elem_p)->desc_offset - (_iface)->rx_headroom) - 1)
+
+
+/* Check if the resources on the remote peer are available for sending to it.
+ * i.e. check if the remote receive FIFO has room in it.
+ * return 1 if can send.
+ * return 0 if can't send.
+ */
+#define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
+          ucs_likely(((_head) - (_tail)) < (_fifo_size))
+
+
+/**
+ * MM interface configuration
+ */
 typedef struct uct_mm_iface_config {
     uct_sm_iface_config_t    super;
     size_t                   seg_size;            /* Size of the receive
@@ -43,7 +69,19 @@ typedef struct uct_mm_iface_config {
 } uct_mm_iface_config_t;
 
 
-struct uct_mm_fifo_ctl {
+/**
+ * MM interface address
+ */
+typedef struct uct_mm_iface_addr {
+    uint64_t   id;
+    uintptr_t  vaddr;
+} UCS_S_PACKED uct_mm_iface_addr_t;
+
+
+/**
+ * MM FIFO control segment
+ */
+typedef struct uct_mm_fifo_ctl {
     /* 1st cacheline */
     volatile uint64_t  head;       /* where to write next */
     socklen_t          signal_addrlen;   /* address length of signaling socket */
@@ -52,10 +90,44 @@ struct uct_mm_fifo_ctl {
 
     /* 2nd cacheline */
     volatile uint64_t  tail;       /* how much was read */
-} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE);
+} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_mm_fifo_ctl_t;
 
 
-struct uct_mm_iface {
+/**
+ * MM FIFO element
+ */
+typedef struct uct_mm_fifo_element {
+    uint8_t         flags;
+    uint8_t         am_id;          /* active message id */
+    uint16_t        length;         /* length of actual data */
+
+    /* bcopy parameters */
+    size_t          desc_mpool_size;
+    uct_mm_id_t     desc_mmid;      /* the mmid of the the memory chunk that
+                                     * the desc (that this fifo_elem points to)
+                                     * belongs to */
+    size_t          desc_offset;    /* the offset of the desc (its data location for bcopy)
+                                     * within the memory chunk it belongs to */
+    void            *desc_chunk_base_addr;
+    /* the data follows here (in case of inline messaging) */
+} UCS_S_PACKED uct_mm_fifo_element_t;
+
+
+/**
+ * MM receive descriptor:
+ */
+typedef struct uct_mm_recv_desc {
+    uct_mm_id_t         key;
+    void                *base_address;
+    size_t              mpool_length;
+    uct_recv_desc_t     recv;   /* has to be in the end */
+} uct_mm_recv_desc_t;
+
+
+/**
+ * MM trandport interface
+ */
+typedef struct uct_mm_iface {
     uct_sm_iface_t          super;
 
     /* Receive FIFO */
@@ -92,32 +164,7 @@ struct uct_mm_iface {
         unsigned fifo_elem_size;
         unsigned seg_size;                    /* size of the receive descriptor (for payload)*/
     } config;
-};
-
-
-struct uct_mm_fifo_element {
-    uint8_t         flags;
-    uint8_t         am_id;          /* active message id */
-    uint16_t        length;         /* length of actual data */
-
-    /* bcopy parameters */
-    size_t          desc_mpool_size;
-    uct_mm_id_t     desc_mmid;      /* the mmid of the the memory chunk that
-                                     * the desc (that this fifo_elem points to)
-                                     * belongs to */
-    size_t          desc_offset;    /* the offset of the desc (its data location for bcopy)
-                                     * within the memory chunk it belongs to */
-    void            *desc_chunk_base_addr;
-    /* the data follows here (in case of inline messaging) */
-} UCS_S_PACKED;
-
-
-struct uct_mm_recv_desc {
-    uct_mm_id_t         key;
-    void                *base_address;
-    size_t              mpool_length;
-    uct_recv_desc_t     recv;   /* has to be in the end */
-};
+} uct_mm_iface_t;
 
 
 /*
