@@ -183,7 +183,11 @@ ucs_status_t ucs_config_clone_double(void *src, void *dest, const void *arg)
 
 int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 {
-    if (strncasecmp(buf, "0x", 2) == 0) {
+    /* Special value: auto */
+    if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
+        *(size_t*)dest = UCS_HEXUNITS_AUTO;
+        return 1;
+    } else if (strncasecmp(buf, "0x", 2) == 0) {
         return (sscanf(buf + 2, "%x", (unsigned int*)dest));
     } else {
         return 0;
@@ -192,6 +196,12 @@ int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 
 int ucs_config_sprintf_hex(char *buf, size_t max, void *src, const void *arg)
 {
+    uint16_t val = *(uint16_t*)src;
+
+    if (val == UCS_HEXUNITS_AUTO) {
+        return snprintf(buf, max, UCS_VALUE_AUTO_STR);
+    }
+
     return snprintf(buf, max, "0x%x", *(unsigned int*)src);
 }
 
