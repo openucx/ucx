@@ -189,6 +189,8 @@ ucs_status_t ucs_topo_get_sys_devices(ucs_sys_device_t **sys_devices, int *num_u
 
     }
 
+    ucs_err = UCS_OK;
+
 out:
 
     for (sys_idx = UCS_SYS_DEVICE_IB; sys_idx < UCS_SYS_DEVICE_LAST; sys_idx++) {
