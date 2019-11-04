@@ -117,8 +117,13 @@ static int ucs_get_bus_id(char *name)
         rval = strtok(str, delim);
         str = NULL;
         count++;
-        if (count == 2) break; /* for 0000:0c:00.0 bus id = 0c */
-    } while (rval != NULL);
+    } while ((count != 2) || (rval != NULL)); /* for 0000:0c:00.0 bus id = 0c */
+
+    if (rval == NULL) {
+        ucs_error("unable to find bus_id from path; setting bus_id = -1");
+        ucs_free(str_p);
+        return -1;
+    }
 
     len = strlen(rval);
     for (idx = 0; idx < len; idx++) {
@@ -145,24 +150,28 @@ ucs_status_t ucs_topo_get_sys_devices(ucs_sys_device_t **sys_devices, int *num_u
     char *dev_loc;
     char *match;
     char *src;
+    ucs_status_t ucs_err;
 
     *num_units = 0;
 
     for (sys_idx = UCS_SYS_DEVICE_IB; sys_idx < UCS_SYS_DEVICE_LAST; sys_idx++) {
         dev_loc = ucs_sys_device_paths[sys_idx];
         match   = ucs_sys_device_match[sys_idx];
+        sys_fpaths[sys_idx] = NULL;
         ucs_get_paths(dev_loc, match, &num_sys_devices[sys_idx], &sys_fpaths[sys_idx]);
         *num_units += num_sys_devices[sys_idx];
     }
 
     if (0 == *num_units) {
+        ucs_err = UCS_OK;
         goto out;
     }
 
     *sys_devices = ucs_malloc(*num_units * sizeof(ucs_sys_device_t), "ucs_sys_device_t array");
     if (*sys_devices == NULL) {
         ucs_error("failed to allocate sys_devices");
-        return UCS_ERR_NO_MEMORY;
+        ucs_err = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     sys_dev_p   = *sys_devices;
@@ -183,11 +192,13 @@ ucs_status_t ucs_topo_get_sys_devices(ucs_sys_device_t **sys_devices, int *num_u
 out:
 
     for (sys_idx = UCS_SYS_DEVICE_IB; sys_idx < UCS_SYS_DEVICE_LAST; sys_idx++) {
-        ucs_release_paths(sys_fpaths[sys_idx]);
+        if (NULL != sys_fpaths[sys_idx]) {
+            ucs_release_paths(sys_fpaths[sys_idx]);
+        }
     }
 
 
-    return UCS_OK;
+    return ucs_err;
 }
 
 ucs_status_t ucs_topo_free_sys_devices(ucs_sys_device_t *sys_devices)
