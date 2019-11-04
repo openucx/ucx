@@ -32,32 +32,16 @@ typedef struct uct_mm_seg {
     uct_mm_seg_id_t       seg_id;     /* Shared memory ID */
     void                  *address;   /* Virtual address */
     size_t                length;     /* Size of the memory */
-    const char            *path;      /* Path to the backing file when using posix */
 } uct_mm_seg_t;
 
 
-/**
- * Packed remote key
- */
-typedef struct uct_mm_packed_rkey {
-    uct_mm_id_t           mmid;       /* Shared memory ID */
-    uintptr_t             owner_ptr;  /* VA of in allocating process */
-    size_t                length;     /* Size of the memory */
-    char                  path[0];    /* path to the backing file when using posix */
-} uct_mm_packed_rkey_t;
-
-
 /*
- * Descriptor of the mapped memory
+ * Descriptor of remote attached memory
  */
-typedef struct uct_mm_remote_seg uct_mm_remote_seg_t;
-struct uct_mm_remote_seg {
-    uct_mm_remote_seg_t   *next;
-    uct_mm_seg_id_t       mmid;        /* mmid of the remote memory chunk */
+typedef struct uct_mm_remote_seg {
     void                  *address;    /* Local address of attached memory */
-    uint64_t              cookie;      /* Cookie for mmap, xpmem, etc. */
-    size_t                length;      /* Size of the memory */
-};
+    void                  *cookie;     /* Mapper-specific data */
+} uct_mm_remote_seg_t;
 
 
 /**
@@ -75,37 +59,53 @@ typedef struct uct_mm_md_config {
 typedef struct uct_mm_md {
     uct_md_t              super;
     uct_mm_md_config_t    *config;         /* Clone of MD configuration */
+    size_t                iface_addr_len;  /* As returned from
+                                              uct_mm_md_mapper_ops_t::iface_addr_length */
 } uct_mm_md_t;
+
+
+/* Check if available on current machine */
+typedef ucs_status_t (*uct_mm_mapper_query_func_t)();
+
+
+/* Return the size of memory-domain specific iface address (e.g mmap path) */
+typedef size_t (*uct_mm_mapper_iface_addr_length_func_t)(uct_mm_md_t *md);
+
+
+/* Pack interface address. Holds common information for all memory segments
+ * allocated on the same interface. 'buffer' must be at least the size returned
+ * from iface_addr_length()
+ */
+typedef ucs_status_t (*uct_mm_mapper_iface_addr_pack_func_t)(
+                uct_mm_md_t *md, void *buffer);
+
+
+/* Attach memory allocated by mem_alloc(). seg_id is from 'uct_mm_seg_t'
+ * structure, and iface_addr is from iface_addr_pack() on the remote process
+ *
+ * This function is used only for active messages memory (FIFO and receive
+ * descriptors).
+ */
+typedef ucs_status_t (*uct_mm_mapper_mem_attach_func_t)(
+                uct_mm_md_t *md, uct_mm_seg_id_t seg_id, size_t length,
+                const void *iface_addr, uct_mm_remote_seg_t *rseg);
+
+
+/* Clean up the remote segment handle created by mem_attach() */
+typedef void (*uct_mm_mapper_mem_detach_func_t)(
+                uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg);
 
 
 /*
  * Memory mapper operations - used to implement MD and TL functionality
  */
 typedef struct uct_mm_mapper_ops {
-    uct_md_ops_t           super;
-
-    ucs_status_t (*query)();
-
-    uint8_t      (*get_priority)();
-
-    ucs_status_t (*reg)(void *address, size_t size,
-                        uct_mm_seg_id_t *mmid_p);
-
-    ucs_status_t (*dereg)(uct_mm_seg_id_t mm_id);
-
-    ucs_status_t (*alloc)(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-                          unsigned flags, const char *alloc_name, void **address_p,
-                          uct_mm_seg_id_t *mmid_p, const char **path_p);
-
-    ucs_status_t (*attach)(uct_mm_seg_id_t mmid, size_t length,
-                           void *remote_address, void **address, uint64_t *cookie,
-                           const char *path);
-
-    ucs_status_t (*detach)(uct_mm_remote_seg_t *mm_desc);
-
-    ucs_status_t (*free)(void *address, uct_mm_seg_id_t mm_id, size_t length,
-                         const char *path);
-
+    uct_md_ops_t                             super;
+    uct_mm_mapper_query_func_t               query;
+    uct_mm_mapper_iface_addr_length_func_t   iface_addr_length;
+    uct_mm_mapper_iface_addr_pack_func_t     iface_addr_pack;
+    uct_mm_mapper_mem_attach_func_t          mem_attach;
+    uct_mm_mapper_mem_detach_func_t          mem_detach;
 } uct_mm_md_mapper_ops_t;
 
 
@@ -125,12 +125,12 @@ typedef struct uct_mm_component {
 
 /* Extract mapper ops from MM memory domain */
 #define uct_mm_md_mapper_ops(_md) \
-    ucs_derived_of((_md)->ops, uct_mm_md_mapper_ops_t)
+    ucs_derived_of((_md)->super.ops, uct_mm_md_mapper_ops_t)
 
 
 /* Call mapper operation */
 #define uct_mm_md_mapper_call(_md, _func, ...) \
-    uct_mm_md_mapper_ops(_md)->_func(__VA_ARGS__)
+    uct_mm_md_mapper_ops(_md)->_func(_md, ## __VA_ARGS__)
 
 
 /*
@@ -175,34 +175,23 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p);
 
-ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, const char *alloc_name,
-                              uct_mem_h *memh_p);
-
-ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh);
-
-ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
-                            unsigned flags, uct_mem_h *memh_p);
-
-ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh);
+ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p);
 
 void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, int support_alloc);
 
-ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
-
-ucs_status_t uct_mm_rkey_unpack(uct_component_t *component,
-                                const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                void **handle_p);
-
 ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p);
-
-ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
-                                 void *handle);
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p);
 
 void uct_mm_md_close(uct_md_h md);
+
+static inline void
+uct_mm_md_make_rkey(void *local_address, uintptr_t remote_address,
+                    uct_rkey_t *rkey_p)
+{
+    *rkey_p = (uintptr_t)local_address - remote_address;
+}
 
 #endif

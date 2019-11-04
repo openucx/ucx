@@ -18,6 +18,11 @@
 #define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #define UCT_MM_SYSV_MSTR (UCT_MM_SYSV_PERM | IPC_CREAT | IPC_EXCL)
 
+typedef struct uct_sysv_packed_rkey {
+    uint32_t                shmid;
+    uintptr_t               owner_ptr;
+} UCS_S_PACKED uct_sysv_packed_rkey_t;
+
 typedef struct uct_sysv_md_config {
     uct_mm_md_config_t      super;
 } uct_sysv_md_config_t;
@@ -32,32 +37,38 @@ static ucs_config_field_t uct_sysv_md_config_table[] = {
 static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, 1);
-    md_attr->rkey_packed_size = sizeof(uct_mm_packed_rkey_t);
+    md_attr->rkey_packed_size = sizeof(uct_sysv_packed_rkey_t);
     return UCS_OK;
 }
 
 static ucs_status_t
-uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-               unsigned md_map_flags, const char *alloc_name, void **address_p,
-               uct_mm_id_t *mmid_p, const char **path_p)
+uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
+                   unsigned md_map_flags, const char *alloc_name,
+                   uct_mem_h *memh_p)
 {
+    uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     int flags, shmid = 0;
+    uct_mm_seg_t *seg;
 
     flags = UCT_MM_SYSV_MSTR;
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
+        return UCS_ERR_INVALID_PARAM;
     }
 
     if (!(md_map_flags & UCT_MD_MEM_FLAG_FIXED)) {
         *address_p = NULL;
     }
 
+    status = uct_mm_seg_new(NULL, 0, &seg);
+    if (status != UCS_OK) {
+        return status;
+    }
+
 #ifdef SHM_HUGETLB
-    if (hugetlb != UCS_NO) {
+    if (md->config->hugetlb_mode != UCS_NO) {
         status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
                                 flags | SHM_HUGETLB, alloc_name, &shmid);
         if (status == UCS_OK) {
@@ -68,7 +79,7 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 #endif
 
-    if (hugetlb != UCS_YES) {
+    if (md->config->hugetlb_mode != UCS_YES) {
         status = ucs_sysv_alloc(length_p, SIZE_MAX, address_p, flags, alloc_name,
                                 &shmid);
         if (status == UCS_OK) {
@@ -78,19 +89,19 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
         ucs_debug("mm failed to allocate %zu bytes without hugetlb", *length_p);
     }
 
-err:
     ucs_error("failed to allocate %zu bytes with mm for %s", *length_p, alloc_name);
+    ucs_free(seg);
     return status;
 
 out_ok:
-    *mmid_p = shmid;
+    seg->seg_id  = shmid;
+    seg->address = *address_p;
+    seg->length  = *length_p;
+    *memh_p      = seg;
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length,
-                                    void *remote_address,
-                                    void **local_address,
-                                    uint64_t *cookie, const char *path)
+static ucs_status_t uct_sysv_mem_attach_common(int mmid, void **local_address)
 {
     void *ptr;
 
@@ -100,57 +111,95 @@ static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length,
         return UCS_ERR_SHMEM_SEGMENT;
     }
 
-    ucs_trace("attached remote segment %d remote_address %p at address %p",
-              (int)mmid, remote_address, ptr);
+    ucs_trace("attached remote segment %d at address %p", (int)mmid, ptr);
     *local_address = ptr;
-    *cookie = 0xdeadbeef;
-
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_detach(uct_mm_remote_seg_t *mm_desc)
+static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg)
 {
-    ucs_status_t status = ucs_sysv_free(mm_desc->address);
-    if (UCS_OK != status) {
+    ucs_sysv_free(rseg->address);
+}
+
+static ucs_status_t uct_sysv_mem_free(uct_md_h tl_md, uct_mem_h memh)
+{
+    uct_mm_seg_t *seg = memh;
+    ucs_status_t status;
+
+    status = ucs_sysv_free(seg->address);
+    if (status != UCS_OK) {
         return status;
     }
 
+    ucs_free(seg);
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_free(void *address, uct_mm_id_t mm_id, size_t length,
-                                  const char *path)
+static ucs_status_t
+uct_sysv_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
+    uct_sysv_packed_rkey_t *packed_rkey = rkey_buffer;
+    const uct_mm_seg_t     *seg         = memh;
+
+    packed_rkey->shmid     = seg->seg_id;
+    packed_rkey->owner_ptr = (uintptr_t)seg->address;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_sysv_mem_attach(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
+                                        size_t length, const void *iface_addr,
+                                        uct_mm_remote_seg_t *rseg)
+{
+    return uct_sysv_mem_attach_common(seg_id, &rseg->address);
+}
+
+static ucs_status_t
+uct_sysv_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                     uct_rkey_t *rkey_p, void **handle_p)
+{
+    const uct_sysv_packed_rkey_t *packed_rkey = rkey_buffer;
+    ucs_status_t status;
+    void *address;
+
+    status = uct_sysv_mem_attach_common(packed_rkey->shmid, &address);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *handle_p = address;
+    uct_mm_md_make_rkey(address, packed_rkey->owner_ptr, rkey_p);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_sysv_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle)
+{
+    void *address = handle;
     return ucs_sysv_free(address);
 }
 
-static uint8_t uct_sysv_get_priority()
-{
-    return 0;
-}
-
 static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
-    .super = {
+   .super = {
         .close                  = uct_mm_md_close,
         .query                  = uct_sysv_md_query,
-        .mem_alloc              = uct_mm_mem_alloc,
-        .mem_free               = uct_mm_mem_free,
+        .mem_alloc              = uct_sysv_mem_alloc,
+        .mem_free               = uct_sysv_mem_free,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
         .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
-        .mkey_pack              = uct_mm_mkey_pack,
+        .mkey_pack              = uct_sysv_md_mkey_pack,
         .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
         .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
-    .query                      = ucs_empty_function_return_success,
-    .get_priority               = uct_sysv_get_priority,
-    .reg                        = NULL,
-    .dereg                      = NULL,
-    .alloc                      = uct_sysv_alloc,
-    .attach                     = uct_sysv_attach,
-    .detach                     = uct_sysv_detach,
-    .free                       = uct_sysv_free
+   .query                       = (uct_mm_mapper_query_func_t)
+                                      ucs_empty_function_return_success,
+   .iface_addr_length           = (uct_mm_mapper_iface_addr_length_func_t)
+                                      ucs_empty_function_return_zero_int64,
+   .iface_addr_pack             = (uct_mm_mapper_iface_addr_pack_func_t)
+                                      ucs_empty_function_return_success,
+   .mem_attach                  = uct_sysv_mem_attach,
+   .mem_detach                  = uct_sysv_mem_detach
 };
 
-UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_mm_rkey_unpack,
-                 uct_mm_rkey_release, "SYSV_")
+UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,
+                 uct_sysv_rkey_release, "SYSV_")
