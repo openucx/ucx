@@ -32,6 +32,7 @@ BEGIN_C_DECLS
 /* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
 #define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
+#define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 #define UCS_BANDWIDTH_AUTO  (-1.0)
 
