@@ -29,7 +29,7 @@ resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
 }
 
 resource::resource(uct_component_h component, const std::string& md_name,
-                   const cpu_set_t& local_cpus, const std::string& tl_name,
+                   const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
                    const std::string& dev_name, uct_device_type_t dev_type) :
                    component(component), md_name(md_name), local_cpus(local_cpus),
                    tl_name(tl_name), dev_name(dev_name), dev_type(dev_type)
@@ -172,7 +172,7 @@ void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
 }
 
 void uct_test::set_interface_rscs(const md_resource& md_rsc,
-                                  cpu_set_t local_cpus, struct ifaddrs *ifa,
+                                  ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
     int i;
@@ -221,7 +221,7 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
 }
 
 void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
-                                      cpu_set_t local_cpus,
+                                      ucs_cpu_set_t local_cpus,
                                       std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
