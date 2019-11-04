@@ -133,6 +133,7 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
 
     // alloc (should work with both sysv and xpmem
     size = sizeof(unsigned) * UCS_MBYTE;
+    rva  = NULL;
     status = uct_md_mem_alloc(md(), &size, (void **)&rva,
                               UCT_MD_MEM_ACCESS_ALL,
                               "test", &memh);
@@ -200,6 +201,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             continue;
         }
 
+        address = NULL;
         status = uct_md_mem_alloc(md(), &size, &address,
                                   UCT_MD_MEM_ACCESS_ALL, "test", &memh);
         EXPECT_GT(size, 0ul);
@@ -373,6 +375,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     uct_mem_h memh;
 
     orig_size = size = 128 * UCS_MBYTE;
+    address   = NULL;
 
     status = uct_md_mem_alloc(md(), &size, &address,
                               UCT_MD_MEM_FLAG_NONBLOCK|

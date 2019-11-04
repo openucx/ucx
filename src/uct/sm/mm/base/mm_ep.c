@@ -28,8 +28,7 @@ typedef enum {
 
 static UCS_F_NOINLINE ucs_status_t
 uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
-                            void *remote_address, size_t length,
-                            void **address_p)
+                            size_t length, void **address_p)
 {
     uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_mm_iface_t);
@@ -48,25 +47,22 @@ uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
 
     remote_seg = &kh_val(&ep->remote_segs, khiter);
 
-    status = uct_mm_iface_mapper_call(iface, attach, seg_id, length,
-                                      remote_address, &remote_seg->address,
-                                      &remote_seg->cookie, iface->path);
+    status = uct_mm_iface_mapper_call(iface, mem_attach, seg_id, length,
+                                      ep->remote_iface_addr, remote_seg);
     if (status != UCS_OK) {
         kh_del(uct_mm_remote_seg, &ep->remote_segs, khiter);
         return status;
     }
 
-    remote_seg->length = length;
-    *address_p         = remote_seg->address;
-
-    ucs_debug("mm_ep %p: attached remote segment id 0x%"PRIx64" at %p cookie 0x%"PRIx64,
+    *address_p = remote_seg->address;
+    ucs_debug("mm_ep %p: attached remote segment id 0x%"PRIx64" at %p cookie %p",
               ep, seg_id, remote_seg->address, remote_seg->cookie);
     return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
-                         void *remote_address, size_t length, void **address_p)
+uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id, size_t length,
+                         void **address_p)
 {
     khiter_t khiter;
 
@@ -78,8 +74,7 @@ uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
     }
 
     /* slow path - attach new segment */
-    return uct_mm_ep_attach_remote_seg(ep, seg_id, remote_address, length,
-                                       address_p);
+    return uct_mm_ep_attach_remote_seg(ep, seg_id, length, address_p);
 }
 
 
@@ -121,6 +116,7 @@ static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
 {
     uct_mm_iface_t            *iface = ucs_derived_of(params->iface, uct_mm_iface_t);
+    uct_mm_md_t               *md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
     const uct_mm_iface_addr_t *addr  = (const void *)params->iface_addr;
     ucs_status_t status;
     void *fifo_ptr;
@@ -131,12 +127,25 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
     kh_init_inplace(uct_mm_remote_seg, &self->remote_segs);
     ucs_arbiter_group_init(&self->arb_group);
 
+    /* save remote md address */
+    if (md->iface_addr_len > 0) {
+        self->remote_iface_addr = ucs_malloc(md->iface_addr_len, "mm_md_addr");
+        if (self->remote_iface_addr == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+
+        memcpy(self->remote_iface_addr, addr + 1, md->iface_addr_len);
+    } else {
+        self->remote_iface_addr = NULL;
+    }
+
     /* Attach the remote FIFO, use the same method as bcopy descriptors */
-    status = uct_mm_ep_get_remote_seg(self, addr->fifo_seg_id, (void*)addr->vaddr,
+    status = uct_mm_ep_get_remote_seg(self, addr->fifo_seg_id,
                                       UCT_MM_GET_FIFO_SIZE(iface), &fifo_ptr);
     if (fifo_ptr == NULL) {
         status = UCS_ERR_SHMEM_SEGMENT;
-        goto err_destroy_remote_segs;
+        goto err_free_md_addr;
     }
 
     /* Initialize remote FIFO control structure */
@@ -147,8 +156,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
 
     return UCS_OK;
 
-err_destroy_remote_segs:
-    kh_destroy_inplace(uct_mm_remote_seg, &self->remote_segs);
+err_free_md_addr:
+    ucs_free(self->remote_iface_addr);
+err:
     return status;
 }
 
@@ -160,9 +170,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     uct_mm_ep_pending_purge(&self->super.super, NULL, NULL);
 
     kh_foreach_value(&self->remote_segs, remote_seg, {
-        uct_mm_iface_mapper_call(iface, detach, &remote_seg);
+        uct_mm_iface_mapper_call(iface, mem_detach, &remote_seg);
     })
 
+    ucs_free(self->remote_iface_addr);
     kh_destroy_inplace(uct_mm_remote_seg, &self->remote_segs);
 }
 
@@ -259,7 +270,6 @@ retry:
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
         status = uct_mm_ep_get_remote_seg(ep, elem->desc.seg_id,
-                                          (void*)elem->desc.seg_va,
                                           elem->desc.seg_size, &base_address);
         if (ucs_unlikely(status != UCS_OK)) {
             return status;
