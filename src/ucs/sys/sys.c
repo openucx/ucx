@@ -39,6 +39,7 @@
 #define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_SMAPS_FILE     "/proc/self/smaps"
 
+
 const char *ucs_get_tmpdir()
 {
     char *env_tmpdir;
