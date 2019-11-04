@@ -57,7 +57,20 @@ public:
 
     void activate_offload(entity &se, ucp_tag_t tag = 0x11)
     {
-        send_recv(se, tag, receiver().worker()->context->config.ext.tm_thresh);
+        size_t tm_thresh = receiver().worker()->context->config.ext.tm_thresh;
+
+        // Send to ensure that wireup's UCT iface has been closed and
+        // it is not considered for num_active_iface on worker
+        // (message has to be less than `UCX_TM_THRESH` value)
+        send_recv(se, tag, ucs_min(0ul, tm_thresh - 1));
+
+        if (receiver().worker()->num_active_ifaces > 1) {
+            // Send to activate tag ofload (num_active_ifaces on worker is
+            // increased when any message is received on any iface. Tag hashing
+            // is done when we have more than 1 active ifaces and message has
+            // to be greater than `UCX_TM_THRESH` value)
+            send_recv(se, tag, tm_thresh + 1);
+        }
     }
 
     void req_cancel(entity &e, request *req)
@@ -306,9 +319,10 @@ public:
     {
         // The test checks that increase of active ifaces is handled
         // correctly. It needs to start with a single active iface, therefore
-        // disable multi-rail.
+        // disable multi-rail and memtype transports.
         modify_config("MAX_EAGER_LANES", "1");
         modify_config("MAX_RNDV_LANES",  "1");
+        modify_config("MEMTYPE_TLS",  "");
 
         test_ucp_tag_offload::init();
 
@@ -346,17 +360,7 @@ public:
     void activate_offload_hashing(entity &se, ucp_tag_t tag)
     {
         se.connect(&receiver(), get_ep_params());
-        // Need to send twice:
-        // 1. to ensure that wireup's UCT iface has been closed and
-        //    it is not considered for num_active_iface on worker
-        //    (message has to be less than `UCX_TM_THRESH` value)
-        // 2. to activate tag ofload
-        //    (num_active_ifaces on worker is increased when any message
-        //     is received on any iface. Tag hashing is done when we have
-        //     more than 1 active ifaces and message has to be greater
-        //     than `UCX_TM_THRESH` value)
-        send_recv(se, tag, 8);
-        send_recv(se, tag, 2048);
+        activate_offload(se, tag);
     }
 
     void post_recv_and_check(entity &e, unsigned sw_count, ucp_tag_t tag,
