@@ -1149,7 +1149,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                             UCT_IB_MLX5_MAX_BB * config->ndci;
     /* TODO check caps instead */
     if (ucs_roundup_pow2(init_attr.tx_cq_len) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
-        ucs_error("Can't allocate TX resources, try to decrese dcis number (%d)"
+        ucs_error("Can't allocate TX resources, try to decrease dcis number (%d)"
                   " or tx qp length (%d)",
                   config->ndci, config->super.super.tx.queue_len);
         return UCS_ERR_INVALID_PARAM;
