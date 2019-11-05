@@ -165,9 +165,9 @@ public:
             /* it has to be updated after AM completion */
             ucs_assert(&m_last_recvd_sn == recv_sn);
             return m_last_recvd_sn;
+        } else {
+            return get_sn(recv_sn, recv_mem_type);
         }
-
-        return get_sn(recv_sn, recv_mem_type);
     }
 
     void UCS_F_ALWAYS_INLINE progress_responder() {

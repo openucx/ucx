@@ -307,7 +307,7 @@ typedef struct ucp_ep {
     char                          peer_name[UCP_WORKER_NAME_MAX];
 #endif
 
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 
 } ucp_ep_t;
 

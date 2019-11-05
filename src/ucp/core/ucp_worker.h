@@ -240,8 +240,8 @@ typedef struct ucp_worker {
     uint64_t                      am_message_id; /* For matching long am's */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 
-    UCS_STATS_NODE_DECLARE(stats);
-    UCS_STATS_NODE_DECLARE(tm_offload_stats);
+    UCS_STATS_NODE_DECLARE(stats)
+    UCS_STATS_NODE_DECLARE(tm_offload_stats)
 
     ucp_worker_am_entry_t        *am_cbs;          /*array of callbacks and their data */
     size_t                        am_cb_array_len; /*len of callback array */

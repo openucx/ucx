@@ -219,7 +219,7 @@ typedef struct uct_base_iface {
         size_t              max_num_eps;
     } config;
 
-    UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
+    UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
 
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
@@ -241,7 +241,7 @@ typedef struct uct_failed_iface {
  */
 typedef struct uct_base_ep {
     uct_ep_t          super;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 } uct_base_ep_t;
 UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
 

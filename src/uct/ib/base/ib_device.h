@@ -125,7 +125,7 @@ typedef struct uct_ib_device {
     int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
     uint8_t                     atomic_arg_sizes;

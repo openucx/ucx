@@ -359,7 +359,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_release_desc_t  eager_desc;
         uct_rc_mlx5_release_desc_t  rndv_desc;
         uct_rc_mlx5_release_desc_t  am_desc;
-        UCS_STATS_NODE_DECLARE(stats);
+        UCS_STATS_NODE_DECLARE(stats)
     } tm;
 #if HAVE_IBV_DM
     struct {
@@ -375,7 +375,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t atomic_fence_flag;
         uint8_t put_fence_flag;
     } config;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
 
 /**
