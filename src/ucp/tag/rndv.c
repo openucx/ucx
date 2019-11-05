@@ -706,10 +706,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
                 ucp_rndv_send_frag_rtr(worker, rndv_req, rreq, rndv_rts_hdr);
                 goto out;
             }
-            /* put protocol is allowed - register receive buffer memory for rma */
-            ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map,
-                                        ucs_min(rreq->recv.length, rndv_rts_hdr->size));
         }
+        /* put protocol is allowed - register receive buffer memory for rma */
+        ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map,
+                                    ucs_min(rreq->recv.length, rndv_rts_hdr->size));
     }
 
     /* The sender didn't specify its address in the RTS, or the rndv mode was
