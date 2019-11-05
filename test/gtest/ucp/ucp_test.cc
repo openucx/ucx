@@ -297,6 +297,7 @@ void ucp_test::set_ucp_config(ucp_config_t *config,
     std::stringstream ss;
     ss << test_param;
     ucp_config_modify(config, "TLS", ss.str().c_str());
+    ucp_config_modify(config, "MEMTYPE_TLS", "");
     /* prevent configuration warnings in the UCP testing */
     ucp_config_modify(config, "WARN_INVALID_CONFIG", "no");
 }

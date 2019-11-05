@@ -65,7 +65,7 @@ public:
         send_recv(se, tag, ucs_min(0ul, tm_thresh - 1));
 
         if (receiver().worker()->num_active_ifaces > 1) {
-            // Send to activate tag ofload (num_active_ifaces on worker is
+            // Send to activate tag offload (num_active_ifaces on worker is
             // increased when any message is received on any iface. Tag hashing
             // is done when we have more than 1 active ifaces and message has
             // to be greater than `UCX_TM_THRESH` value)
@@ -481,6 +481,7 @@ public:
     void init()
     {
         stats_activate();
+        modify_config("MEMTYPE_TLS",  "");
         test_ucp_tag_offload::init(); // No need for multi::init()
     }
 
@@ -533,9 +534,6 @@ public:
     void test_send_recv(size_t count, bool send_iov, uint64_t cntr)
     {
         ucp_tag_t tag = 0x11;
-
-        // Make sender know about tag-offload capable ifaces
-        receiver().connect(&sender(), get_ep_params());
 
         std::vector<char> sbuf(count, 0);
         std::vector<char> rbuf(count, 0);
