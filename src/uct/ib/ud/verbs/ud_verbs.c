@@ -333,7 +333,8 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
-        if (!uct_ud_iface_check_grh(&iface->super, packet + UCT_IB_GRH_LEN,
+        if (!uct_ud_iface_check_grh(&iface->super,
+                                    UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
                                     wc[i].wc_flags & IBV_WC_GRH)) {
             ucs_mpool_put_inline((void*)wc[i].wr_id);
             continue;
@@ -341,7 +342,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
         uct_ib_log_recv_completion(&iface->super.super, &wc[i], packet,
                                    wc[i].byte_len, uct_ud_dump_packet);
         uct_ud_ep_process_rx(&iface->super,
-                             (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
+                             (uct_ud_neth_t *)UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
                              wc[i].byte_len - UCT_IB_GRH_LEN,
                              (uct_ud_recv_skb_t *)wc[i].wr_id,
                              is_async);
@@ -543,7 +544,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     },
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
-    .event_cq                 = (void*)ucs_empty_function,
+    .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed,
     },

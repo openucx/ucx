@@ -480,7 +480,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av);
 /**
  * Requests completion notification.
  */
-int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
+ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
 
 /**
  * Check for completion with error.

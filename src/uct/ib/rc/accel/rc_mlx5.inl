@@ -96,7 +96,7 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
 
         udesc = (void*)be64toh(seg->dptr[stride_idx].addr);
         udesc = UCS_PTR_BYTE_OFFSET(udesc,
-                                    offset - iface->super.super.config.rx_hdr_offset);
+                                    (ptrdiff_t)offset - iface->super.super.config.rx_hdr_offset);
         uct_recv_desc(udesc) = release_desc;
         seg->srq.ptr_mask   &= ~UCS_BIT(stride_idx);
     } else {
@@ -432,7 +432,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, next_seg);
 
     switch (opcode) {
     case MLX5_OPCODE_SEND_IMM:
@@ -536,10 +537,11 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         fm_ce_se |= uct_rc_iface_tx_moderation(&iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
     }
 
-    opmod         = 0;
+    opmod        = 0;
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, next_seg);
 
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND_IMM: /* Used by tag offload */
@@ -707,7 +709,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
-    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+    next_seg     = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size);
+    next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, next_seg);
 
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
@@ -1411,10 +1414,11 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     log_sge->num_sge = i;
 
     /* copy payload to DM */
-    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t, payload + head, body);
+    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t,
+                  UCS_PTR_BYTE_OFFSET(payload, head), body);
     if (tail) {
         dst += body;
-        memcpy(&padding, payload + head + body, tail);
+        memcpy(&padding, UCS_PTR_BYTE_OFFSET(payload, head + body), tail);
         /* use uint64_t for source datatype because it is aligned buffer on stack */
         UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, &padding, sizeof(padding));
     }
@@ -1452,7 +1456,7 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
          * hint to valgrind to make it defined */
         VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
-        buffer = (void*)(desc->super.buffer - iface->dm.dm->start_va);
+        buffer = (void*)UCS_PTR_BYTE_DIFF(iface->dm.dm->start_va, desc->super.buffer);
 
         uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
                                             length, desc->super.buffer, log_sge);
@@ -1514,7 +1518,7 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     case UCT_ATOMIC_OP_XOR:
         *op           = MLX5_OPCODE_ATOMIC_MASKED_FA;
         *compare_mask = 0;
-        *compare      = -1;
+        *compare      = UINT64_MAX;
         *swap_mask    = 0;
         *swap         = UCT_RC_MLX5_TO_BE(value, size);
         *ext          = 1;
@@ -1523,7 +1527,7 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
         *op           = MLX5_OPCODE_ATOMIC_MASKED_CS;
         *compare_mask = 0;
         *compare      = 0;
-        *swap_mask    = -1;
+        *swap_mask    = UINT64_MAX;
         *swap         = UCT_RC_MLX5_TO_BE(value, size);
         *ext          = 1;
         break;

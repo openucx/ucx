@@ -329,7 +329,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
                 return UCS_STATUS_PTR(status);
             }
         }
-        ctx->addr += size;
+        ctx->addr  = UCS_PTR_BYTE_OFFSET(ctx->addr, size);
         ctx->len  -= size;
         mr_idx++;
     }
@@ -382,7 +382,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
 
         cur_ctx         = &ctxs[thread_idx];
         cur_ctx->pd     = md->pd;
-        cur_ctx->addr   = address + (mr_idx * chunk);
+        cur_ctx->addr   = UCS_PTR_BYTE_OFFSET(address, mr_idx * chunk);
         cur_ctx->len    = ucs_min(thread_num_mrs * chunk, length - (mr_idx * chunk));
         cur_ctx->access = access;
         cur_ctx->mr     = &mrs[mr_idx];
@@ -618,7 +618,8 @@ uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, si
     int ret;
     if ((memh->flags & UCT_IB_MEM_FLAG_ODP)) {
         if ((addr < memh->mr->addr) ||
-            (addr + length > memh->mr->addr + memh->mr->length)) {
+            (UCS_PTR_BYTE_OFFSET(addr, length) >
+             UCS_PTR_BYTE_OFFSET(memh->mr->addr, memh->mr->length))) {
             return UCS_ERR_INVALID_PARAM;
         }
         ucs_debug("memh %p prefetch %p length %llu", memh, addr,
@@ -687,7 +688,8 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     }
 
     ucs_debug("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
-              "access 0x%lx flags 0x%x", address, address + length,
+              "access 0x%lx flags 0x%x", address,
+              UCS_PTR_BYTE_OFFSET(address, length),
               uct_ib_device_name(&md->dev), memh->mr->lkey, memh->mr->rkey,
               access, flags);
 
@@ -1532,12 +1534,12 @@ err:
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .open                = uct_ib_verbs_md_open,
-    .cleanup             = (void*)ucs_empty_function,
+    .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
     .memh_struct_size    = sizeof(uct_ib_mem_t),
-    .reg_atomic_key      = (void*)ucs_empty_function_return_unsupported,
-    .dereg_atomic_key    = (void*)ucs_empty_function_return_unsupported,
-    .reg_multithreaded   = (void*)ucs_empty_function_return_unsupported,
-    .dereg_multithreaded = (void*)ucs_empty_function_return_unsupported,
+    .reg_atomic_key      = (uct_ib_md_reg_atomic_key_func_t)ucs_empty_function_return_unsupported,
+    .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_unsupported,
+    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);

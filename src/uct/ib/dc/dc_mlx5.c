@@ -1163,7 +1163,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_dc_mlx5_iface_init_version(self, tl_md);
 
     self->tx.ndci                          = config->ndci;
-    self->tx.policy                        = config->tx_policy;
+    self->tx.policy                        = (uct_dc_tx_policy_t)config->tx_policy;
     self->tx.fc_grants                     = 0;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);

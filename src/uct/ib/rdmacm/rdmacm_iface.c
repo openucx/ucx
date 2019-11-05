@@ -107,7 +107,7 @@ static ucs_status_t uct_rdmacm_iface_reject(uct_iface_h tl_iface,
     ucs_status_t               status = UCS_OK;
     uct_rdmacm_priv_data_hdr_t hdr    = {
         .length = 0,
-        .status = UCS_ERR_REJECTED
+        .status = (uint8_t)UCS_ERR_REJECTED
     };
 
     ucs_trace("rejecting event %p with id %p", event, event->id);
@@ -152,15 +152,15 @@ static uct_iface_ops_t uct_rdmacm_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
     .iface_accept             = uct_rdmacm_iface_accept,
     .iface_reject             = uct_rdmacm_iface_reject,
-    .iface_progress_enable    = (void*)ucs_empty_function_return_success,
-    .iface_progress_disable   = (void*)ucs_empty_function_return_success,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function_return_success,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function_return_success,
     .iface_progress           = ucs_empty_function_return_zero,
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_iface_t),
     .iface_query              = uct_rdmacm_iface_query,
-    .iface_is_reachable       = (void*)ucs_empty_function_return_zero,
-    .iface_get_device_address = (void*)ucs_empty_function_return_success,
+    .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_rdmacm_iface_get_address
 };
 
@@ -329,9 +329,9 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                 ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
                           "private data. status: %s",
                           iface, event->id, iface->event_ch->fd,
-                          ucs_status_string(priv_data_ret));
+                          ucs_status_string((ucs_status_t)priv_data_ret));
                 ret_flags |= UCT_RDMACM_PROCESS_EVENT_DESTROY_CM_ID_FLAG;
-                uct_rdmacm_client_handle_failure(iface, ep, priv_data_ret);
+                uct_rdmacm_client_handle_failure(iface, ep, (ucs_status_t)priv_data_ret);
                 break;
             }
 
@@ -385,7 +385,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     case RDMA_CM_EVENT_UNREACHABLE:
         hdr = (uct_rdmacm_priv_data_hdr_t *)event->param.ud.private_data;
         if ((hdr != NULL) && (event->param.ud.private_data_len > 0) &&
-            (hdr->status == UCS_ERR_REJECTED)) {
+            ((ucs_status_t)hdr->status == UCS_ERR_REJECTED)) {
             ucs_assert(hdr->length == 0);
             ucs_assert(event->param.ud.private_data_len >= sizeof(*hdr));
             ucs_assert(!iface->is_server);

@@ -64,7 +64,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     wqe_index = ntohs(ecqe->wqe_counter);
     qp_num    = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     if (txwq != NULL) {
-        wqe_index %= (txwq->qend - txwq->qstart) / MLX5_SEND_WQE_BB;
+        wqe_index %= UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) / MLX5_SEND_WQE_BB;
     }
 
     if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
@@ -121,7 +121,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     if ((txwq != NULL) && ((ecqe->op_own >> 4) == MLX5_CQE_REQ_ERR)) {
-        wqe = txwq->qstart + (MLX5_SEND_WQE_BB * wqe_index);
+        wqe = UCS_PTR_BYTE_OFFSET(txwq->qstart, MLX5_SEND_WQE_BB * wqe_index);
         uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
                              NULL, wqe_info, sizeof(wqe_info) - 1, NULL);
     } else {
@@ -160,14 +160,14 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         sg->addr   = (uintptr_t)addr;
         sg->lkey   = 0;
         byte_count = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
-        if (addr + byte_count > qend) {
-            sg->length = qend - addr;
+        if (UCS_PTR_BYTE_OFFSET(addr, byte_count) > qend) {
+            sg->length       = UCS_PTR_BYTE_DIFF(addr, qend);
             (sg + 1)->addr   = (uintptr_t)qstart;
             (sg + 1)->lkey   = 0;
             (sg + 1)->length = byte_count - sg->length;
             ++(*index);
         } else {
-            sg->length = byte_count;
+            sg->length       = byte_count;
         }
         *is_inline = 1;
         ds         = ucs_div_round_up(sizeof(*inl) + byte_count,
@@ -183,9 +183,9 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         ++(*index);
     }
 
-    *dseg_p += ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+    *dseg_p = UCS_PTR_BYTE_OFFSET(*dseg_p, ds * UCT_IB_MLX5_WQE_SEG_SIZE);
     if (*dseg_p >= qend) {
-        *dseg_p -= (qend - qstart);
+        *dseg_p = UCS_PTR_BYTE_OFFSET(*dseg_p, -UCS_PTR_BYTE_DIFF(qstart, qend));
     }
     return ds;
 }
@@ -295,7 +295,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     /* QP and WQE index */
     if (dump_qp) {
         snprintf(s, ends - s, "QP 0x%x [%03ld] ", qp_num,
-                 (wqe - qstart) / MLX5_SEND_WQE_BB);
+                 UCS_PTR_BYTE_DIFF(qstart, wqe) / MLX5_SEND_WQE_BB);
         s += strlen(s);
     }
 
@@ -363,24 +363,26 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
         int size = 1 << ((opmod & 7) + 2);
 
         if (opcode == MLX5_OPCODE_ATOMIC_MASKED_FA) {
-            add      = network_to_host(seg,        size);
-            boundary = network_to_host(seg + size, size);
-            seg     += ucs_align_up_pow2(size * 2, UCT_IB_MLX5_WQE_SEG_SIZE);
+            add      = network_to_host(seg, size);
+            boundary = network_to_host(UCS_PTR_BYTE_OFFSET(seg, size), size);
+            seg      = UCS_PTR_BYTE_OFFSET(seg,
+                                           ucs_align_up_pow2(size * 2,
+                                                             UCT_IB_MLX5_WQE_SEG_SIZE));
             ds      -= ucs_div_round_up(2 * size, UCT_IB_MLX5_WQE_SEG_SIZE);
 
             uct_ib_log_dump_atomic_masked_fadd(size, add, boundary, s, ends - s);
         } else if (opcode == MLX5_OPCODE_ATOMIC_MASKED_CS) {
-            swap    = network_to_host(seg,        size);
-            compare = network_to_host(seg + size, size);
+            swap    = network_to_host(seg, size);
+            compare = network_to_host(UCS_PTR_BYTE_OFFSET(seg, size), size);
 
-            seg += size * 2;
+            seg = UCS_PTR_BYTE_OFFSET(seg, size * 2);
             if (seg == qend) {
                 seg = qstart;
             }
 
-            swap_mask    = network_to_host(seg,        size);
-            compare_mask = network_to_host(seg + size, size);
-            seg += size * 2;
+            swap_mask    = network_to_host(seg, size);
+            compare_mask = network_to_host(UCS_PTR_BYTE_OFFSET(seg, size), size);
+            seg          = UCS_PTR_BYTE_OFFSET(seg, size * 2);
             if (seg == qend) {
                 seg = qstart;
             }
@@ -452,7 +454,7 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
     length = ntohl(cqe->byte_cnt);
     if (iface->config.qp_type == IBV_QPT_UD) {
         length -= UCT_IB_GRH_LEN;
-        data   += UCT_IB_GRH_LEN;
+        data    = UCS_PTR_BYTE_OFFSET(data, UCT_IB_GRH_LEN);
     }
     uct_ib_log_dump_recv_completion(iface,
                                     ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER),

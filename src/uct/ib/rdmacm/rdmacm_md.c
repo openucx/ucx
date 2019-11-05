@@ -49,16 +49,18 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static int uct_rdmacm_get_event_type(struct rdma_event_channel *event_ch)
+static enum rdma_cm_event_type
+uct_rdmacm_get_event_type(struct rdma_event_channel *event_ch)
 {
+    enum rdma_cm_event_type event_type;
     struct rdma_cm_event *event;
-    int ret, event_type;
+    int ret;
 
     /* Fetch an event */
     ret = rdma_get_cm_event(event_ch, &event);
     if (ret) {
         ucs_warn("rdma_get_cm_event() failed: %m");
-        return 0;
+        return RDMA_CM_EVENT_ADDR_RESOLVED;
     }
 
     event_type = event->event;
@@ -75,8 +77,8 @@ static int uct_rdmacm_is_addr_route_resolved(struct rdma_cm_id *cm_id,
                                              int timeout_ms)
 {
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    enum rdma_cm_event_type event_type;
     ucs_status_t status;
-    int event_type;
 
     status = uct_rdmacm_resolve_addr(cm_id, addr, timeout_ms, UCS_LOG_LEVEL_DEBUG);
     if (status != UCS_OK) {

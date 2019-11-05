@@ -182,7 +182,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     if (tx != NULL) {
         tx->reg    = &uar->super;
         tx->qstart = qp->devx.wq_buf;
-        tx->qend   = qp->devx.wq_buf + len_tx;
+        tx->qend   = UCS_PTR_BYTE_OFFSET(qp->devx.wq_buf, len_tx);
         tx->dbrec  = &qp->devx.dbrec->db[MLX5_SND_DBR];
         tx->bb_max = max_tx - 2 * UCT_IB_MLX5_MAX_BB;
         uct_ib_mlx5_txwq_reset(tx);
@@ -275,7 +275,7 @@ void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp)
 }
 #endif
 
-int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
+ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {
     uint64_t doorbell, sn_ci_cmd;
     uint32_t sn, ci, cmd;
@@ -295,7 +295,7 @@ int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 
     ucs_memory_bus_store_fence();
 
-    return 0;
+    return UCS_OK;
 }
 
 #if HAVE_DECL_MLX5DV_OBJ_AH
