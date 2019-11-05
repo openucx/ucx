@@ -313,7 +313,8 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
 ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
+    return (rsc_index == UCP_NULL_RESOURCE) ? NULL :
+           worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
 }
 
 static UCS_F_ALWAYS_INLINE uct_iface_attr_t*

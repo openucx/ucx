@@ -395,8 +395,13 @@ typedef struct ucp_wireup_sockaddr_data {
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
+    union {
+        uct_listener_h          listener;
+        uct_iface_h             iface;
+    } uct;
     uct_conn_request_h          uct_req;
-    uct_iface_h                 uct_iface;
+    char                        dev_name[UCT_DEVICE_NAME_MAX];
+    uct_device_addr_t           *remote_dev_addr;
     ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -424,9 +429,9 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
 
-ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_sockaddr_data_t *client_data,
-                                  ucp_ep_h *ep_p);
+ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
+                                         const ucp_conn_request_h conn_request,
+                                         ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,

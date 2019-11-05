@@ -37,7 +37,8 @@ static ucs_status_t
 ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
                             const uct_ep_addr_t *ep_addr)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
 }
@@ -167,7 +168,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
                                               uct_pending_req_t *req,
                                               unsigned flags)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
     ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
     ucp_request_t *proxy_req;
@@ -211,7 +212,7 @@ static void
 ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
                             void *arg)
 {
-    ucp_wireup_ep_t   *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t   *wireup_ep = ucp_wireup_ep(uct_ep);
     ucp_worker_h      worker;
     uct_pending_req_t *req;
     ucp_request_t     *ucp_req;
@@ -238,7 +239,7 @@ static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
                                       uct_pack_callback_t pack_cb, void *arg,
                                       unsigned flags)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     if (id == UCP_AM_ID_WIREUP) {
         return uct_ep_am_bcopy(ucp_wireup_ep_get_msg_ep(wireup_ep),
@@ -302,7 +303,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
                                         uct_completion_t *comp)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     if (flags & UCT_FLUSH_FLAG_CANCEL) {
         if (wireup_ep->aux_ep) {
@@ -393,7 +394,7 @@ UCS_CLASS_DEFINE(ucp_wireup_ep_t, ucp_proxy_ep_t);
 
 ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     if (!ucp_wireup_ep_test(uct_ep)) {
         return UCP_NULL_RESOURCE;
@@ -410,14 +411,14 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
                                    ucp_rsc_index_t rsc_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep     = ucp_wireup_ep(uct_ep);
+    ucp_ep_h ucp_ep                = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker            = ucp_ep->worker;
     uct_ep_params_t uct_ep_params;
-    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
-    ucp_worker_h worker        = ucp_ep->worker;
     ucs_status_t status;
     uct_ep_h next_ep;
 
-    ucs_assert(ucp_wireup_ep_test(uct_ep));
+    ucs_assert(wireup_ep != NULL);
 
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
     uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
@@ -581,7 +582,7 @@ err:
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
     ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucp_worker_h worker        = ucp_ep->worker;
     char saddr_str[UCS_SOCKADDR_STRING_LEN];
@@ -629,9 +630,9 @@ out:
 
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
-    ucs_assert(ucp_wireup_ep_test(uct_ep));
+    ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep == NULL);
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
@@ -639,10 +640,10 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
     uct_ep_h next_ep;
 
-    ucs_assert_always(ucp_wireup_ep_test(uct_ep));
+    ucs_assert_always(wireup_ep != NULL);
     next_ep = wireup_ep->super.uct_ep;
     wireup_ep->super.uct_ep = NULL;
     return next_ep;
@@ -650,12 +651,14 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
 
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
-    ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_ep_h ucp_ep;
 
-    ucs_assert(ucp_wireup_ep_test(uct_ep));
+    ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep != NULL);
     ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
+
+    ucp_ep = wireup_ep->super.ucp_ep;
 
     ucs_trace("ep %p: wireup ep %p is remote-connected", ucp_ep, wireup_ep);
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY;
@@ -673,13 +676,12 @@ int ucp_wireup_ep_test(uct_ep_h uct_ep)
 
 int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
-    ucp_wireup_ep_t *wireup_ep;
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
-    if (!ucp_wireup_ep_test(uct_ep)) {
+    if (wireup_ep == NULL) {
         return 0;
     }
 
-    wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
     return (wireup_ep->aux_ep == owned_ep) ||
            (wireup_ep->sockaddr_ep == owned_ep) ||
            (wireup_ep->super.uct_ep == owned_ep);
@@ -687,9 +689,9 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
 
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
-    ucs_assert_always(ucp_wireup_ep_test(uct_ep));
+    ucs_assert_always(wireup_ep != NULL);
     if (wireup_ep->aux_ep == owned_ep) {
         wireup_ep->aux_ep = NULL;
     } else if (wireup_ep->sockaddr_ep == owned_ep) {
@@ -697,4 +699,10 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
     } else if (wireup_ep->super.uct_ep == owned_ep) {
         ucp_proxy_ep_extract(uct_ep);
     }
+}
+
+ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep)
+{
+    return ucp_wireup_ep_test(uct_ep) ?
+           ucs_derived_of(uct_ep, ucp_wireup_ep_t) : NULL;
 }
