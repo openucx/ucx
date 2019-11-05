@@ -534,6 +534,9 @@ public:
     {
         ucp_tag_t tag = 0x11;
 
+        // Make sender know about tag-offload capable ifaces
+        receiver().connect(&sender(), get_ep_params());
+
         std::vector<char> sbuf(count, 0);
         std::vector<char> rbuf(count, 0);
         request *req = recv_nb_exp(rbuf.data(), rbuf.size(), DATATYPE, tag,
