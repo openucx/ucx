@@ -93,7 +93,6 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
 
-unsigned ucp_wireup_sockaddr_ep_init_flags(ucp_worker_h worker,
-                                           const ucp_ep_params_t *params);
+ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep);
 
 #endif
