@@ -127,16 +127,29 @@ static uint8_t uct_sysv_get_priority()
     return 0;
 }
 
-static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
-   .query   = ucs_empty_function_return_success,
-   .get_path_size = uct_sysv_get_path_size,
-   .get_priority = uct_sysv_get_priority,
-   .reg     = NULL,
-   .dereg   = NULL,
-   .alloc   = uct_sysv_alloc,
-   .attach  = uct_sysv_attach,
-   .detach  = uct_sysv_detach,
-   .free    = uct_sysv_free
+static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
+    .super = {
+        .close                  = uct_mm_md_close,
+        .query                  = uct_mm_md_query,
+        .mem_alloc              = uct_mm_mem_alloc,
+        .mem_free               = uct_mm_mem_free,
+        .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack              = uct_mm_mkey_pack,
+        .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
+        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+    },
+    .query                      = ucs_empty_function_return_success,
+    .get_path_size              = uct_sysv_get_path_size,
+    .get_priority               = uct_sysv_get_priority,
+    .reg                        = NULL,
+    .dereg                      = NULL,
+    .alloc                      = uct_sysv_alloc,
+    .attach                     = uct_sysv_attach,
+    .detach                     = uct_sysv_detach,
+    .free                       = uct_sysv_free
 };
 
-UCT_MM_TL_DEFINE(sysv, &uct_sysv_mapper_ops, "SYSV_")
+UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_mm_rkey_unpack,
+                 uct_mm_rkey_release, "SYSV_")
