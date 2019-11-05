@@ -33,6 +33,8 @@ typedef struct {
     uintptr_t                 sreq_ptr; /* request on the rndv initiator side - sender */
     uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
     uint64_t                  address;  /* holds the address of the data buffer on the receiver's side */
+    size_t                    size;     /* size of the data to receive */
+    size_t                    offset;   /* offset of the data in the recv buffer */
     /* packed rkeys follow */
 } UCS_S_PACKED ucp_rndv_rtr_hdr_t;
 
