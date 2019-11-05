@@ -341,8 +341,11 @@ uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
                             uct_ib_mlx5_txwq_t *txwq, int flag)
 {
     uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
+    int fm;
 
-    fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi, flag);
+    fm        = uct_rc_ep_fm(&iface->super, &txwq->fi, flag);
+    fm_ce_se |= fm;
+    UCT_TL_IFACE_STAT_FENCE_OP(&iface->super.super.super, fm);
 
     return fm_ce_se;
 }
@@ -430,6 +433,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     uct_rc_mlx5_hdr_t            *rc_hdr;
     size_t wqe_size, ctrl_av_size;
     void *next_seg;
+    int fm;
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
@@ -474,6 +478,10 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         inl->byte_count  = htonl(length | MLX5_INLINE_SEG);
         uct_ib_mlx5_inline_copy(inl + 1, buffer, length, txwq);
         fm_ce_se        |= uct_rc_iface_tx_moderation(&iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
+        fm               = uct_rc_ep_fm(&iface->super, &txwq->fi,
+                                        iface->config.put_fence_flag);
+        fm_ce_se        |= fm;
+        UCT_TL_IFACE_STAT_FENCE_OP(&iface->super.super.super, fm);
         break;
 
     case MLX5_OPCODE_NOP:
@@ -533,6 +541,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     size_t  wqe_size, ctrl_av_size;
     uint8_t opmod;
     void *next_seg;
+    int fm;
 
     if (!(fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
         fm_ce_se |= uct_rc_iface_tx_moderation(&iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
@@ -562,10 +571,12 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
-        fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi,
+        fm        = uct_rc_ep_fm(&iface->super, &txwq->fi,
                                  (opcode_flags == MLX5_OPCODE_RDMA_READ) ?
                                  iface->config.atomic_fence_flag :
                                  iface->config.put_fence_flag);
+        fm_ce_se |= fm;
+        UCT_TL_IFACE_STAT_FENCE_OP(&iface->super.super.super, fm);
 
         ucs_assert(length <= UCT_IB_MAX_MESSAGE_SIZE);
 
@@ -703,6 +714,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     uct_rc_mlx5_hdr_t            *rch;
     unsigned                      wqe_size, inl_seg_size, ctrl_av_size;
     void                         *next_seg;
+    int                           fm;
 
     if (!(fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
         fm_ce_se |= uct_rc_iface_tx_moderation(&iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
@@ -759,10 +771,12 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
-        fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi,
+        fm        = uct_rc_ep_fm(&iface->super, &txwq->fi,
                                  (opcode_flags == MLX5_OPCODE_RDMA_READ) ?
                                  iface->config.atomic_fence_flag :
                                  iface->config.put_fence_flag);
+        fm_ce_se |= fm;
+        UCT_TL_IFACE_STAT_FENCE_OP(&iface->super.super.super, fm);
 
         ucs_assert(uct_iov_total_length(iov, iovcnt) <= UCT_IB_MAX_MESSAGE_SIZE);
 

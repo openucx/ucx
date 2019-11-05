@@ -19,7 +19,7 @@
 #define UCT_TL_NAME_MAX            10
 #define UCT_MD_NAME_MAX            16
 #define UCT_DEVICE_NAME_MAX        32
-#define UCT_PENDING_REQ_PRIV_LEN   40
+#define UCT_PENDING_REQ_PRIV_LEN   48
 #define UCT_TAG_PRIV_LEN           32
 #define UCT_AM_ID_BITS             5
 #define UCT_AM_ID_MAX              UCS_BIT(UCT_AM_ID_BITS)

@@ -54,6 +54,8 @@ typedef struct {
 typedef struct {
     uct_pending_req_priv_arb_t arb;
     uct_dc_mlx5_ep_t           *ep;
+    uint16_t                   fence_sn;
+    uint8_t                    fence;
 } uct_dc_mlx5_pending_req_priv_t;
 
 
@@ -254,7 +256,8 @@ enum uct_dc_mlx5_ep_flags {
                                                   selection policy above */
     UCT_DC_MLX5_EP_FLAG_GRH      = UCS_BIT(1), /* ep has GRH address. Used by
                                                   dc_mlx5 endpoint */
-    UCT_DC_MLX5_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
+    UCT_DC_MLX5_EP_FLAG_VALID    = UCS_BIT(2), /* ep is a valid endpoint */
+    UCT_DC_MLX5_EP_FLAG_FENCE    = UCS_BIT(3)  /* next RDMA op should be fenced */
 };
 
 
@@ -335,6 +338,8 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
 {
     uct_dc_mlx5_ep_t *ep;
 
+    iface->tx.dcis[dci].txwq.fi.fence_sn = iface->super.super.tx.fi.fence_sn;
+
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         return;
     }
@@ -392,7 +397,7 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     ucs_assert(ep->dci < iface->tx.ndci);
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, ep->dci) == NULL);
     ucs_assert(iface->tx.dcis[ep->dci].flags == 0);
-    iface->tx.dcis[ep->dci].ep = ep;
+    iface->tx.dcis[ep->dci].ep               = ep;
     iface->tx.stack_top++;
 }
 

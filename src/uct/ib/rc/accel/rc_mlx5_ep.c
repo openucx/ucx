@@ -17,6 +17,11 @@
 #include "rc_mlx5.inl"
 
 
+typedef struct {
+    uct_pending_req_priv_arb_t arb;
+    uint8_t                    flags;
+} uct_rc_mlx5_ep_pending_req_priv_t;
+
 /*
  *
  * Helper function for buffer-copy post.
@@ -495,6 +500,58 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
     return uct_rc_mlx5_ep_atomic_fop(tl_ep, MLX5_OPCODE_ATOMIC_MASKED_CS, result, 1,
                                      sizeof(uint32_t), remote_addr, rkey, UCS_MASK(32),
                                      htonl(compare), UINT64_MAX, htonl(swap), comp);
+}
+
+static UCS_F_ALWAYS_INLINE uct_rc_mlx5_ep_pending_req_priv_t *
+uct_rc_ep_pending_req_priv(uct_pending_req_t *req)
+{
+    return (uct_rc_mlx5_ep_pending_req_priv_t*)&(req)->priv;
+}
+
+ucs_status_t uct_rc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
+                                        unsigned flags)
+{
+    uct_rc_mlx5_ep_t *ep  = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    ucs_status_t status;
+
+    UCS_STATIC_ASSERT(sizeof(uct_rc_mlx5_ep_pending_req_priv_t) <=
+                      UCT_PENDING_REQ_PRIV_LEN);
+
+    status = uct_rc_ep_pending_add(tl_ep, n, flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_rc_ep_pending_req_priv(n)->flags = uct_rc_ep_fm(iface, &ep->tx.wq.fi, 1);
+    return UCS_OK;
+}
+
+ucs_arbiter_cb_result_t uct_rc_mlx5_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                       ucs_arbiter_elem_t *elem,
+                                                       void *arg)
+{
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_rc_iface_t *iface;
+    uct_rc_mlx5_ep_t *ep;
+    ucs_arbiter_cb_result_t result;
+    int fence;
+
+    ep    = ucs_container_of(ucs_arbiter_elem_group(elem),
+                             uct_rc_mlx5_ep_t, super.arb_group);
+    iface = ucs_derived_of(ep->super.super.super.iface, uct_rc_iface_t);
+    fence = uct_rc_ep_fm(iface, &ep->tx.wq.fi, 1); /* save fence mode */
+    uct_rc_ep_fence_set(&ep->super.super.super, &ep->tx.wq.fi,
+                        uct_rc_ep_pending_req_priv(req)->flags);
+    result = uct_rc_ep_process_pending(arbiter, elem, arg);
+    /* restore fence mode */
+    uct_rc_ep_fence_set(&ep->super.super.super, &ep->tx.wq.fi, fence);
+    /* in case if operation was split by few chunks - only first chunk
+     * should be fenced */
+    if (result == UCS_ARBITER_CB_RESULT_NEXT_GROUP) {
+        uct_rc_ep_pending_req_priv(req)->flags = 0;
+    }
+    return result;
 }
 
 ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)

@@ -18,6 +18,11 @@
     _txwq = &(_iface)->tx.dcis[dci].txwq; \
 }
 
+#define UCT_DC_MLX5_IFACE_FM(_ep, _txwq) \
+    uct_rc_ep_fence_add(&(_ep)->super.super, &_txwq->fi, \
+                        (_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE); \
+    (_ep)->flags &= ~UCT_DC_MLX5_EP_FLAG_FENCE
+
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                             unsigned opcode, unsigned length,
@@ -29,6 +34,7 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_IFACE_FM(ep, txwq);
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(&iface->super, UCT_IB_QPT_DCI, txqp, txwq,
                                opcode, buffer, length, &desc->lkey,
@@ -54,6 +60,7 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_IFACE_FM(ep, txwq);
 
     sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post_iov(&iface->super, UCT_IB_QPT_DCI, txqp,
@@ -82,6 +89,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_IFACE_FM(ep, txwq);
 
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(&iface->super, UCT_IB_QPT_DCI, txqp, txwq,
@@ -224,11 +232,11 @@ ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
 
 ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
-    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
-    return uct_rc_ep_fence(tl_ep, &iface->tx.dcis[ep->dci].txwq.fi,
-                           ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_FENCE;
+    UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_OK;
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE
@@ -388,6 +396,7 @@ uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_IFACE_FM(ep, txwq);
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                  txqp, txwq,
                                  MLX5_OPCODE_RDMA_WRITE,
@@ -980,6 +989,8 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     ucs_arbiter_group_t *group;
+    uct_pending_req_t *prev_pen_req;
+    uct_dc_mlx5_pending_req_priv_t *prev_dc_req;
 
     /* ep can tx iff
      * - iface has resources: cqe and tx skb
@@ -1007,6 +1018,29 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     } else {
         group = &ep->arb_group;
     }
+
+    if (!ucs_arbiter_group_is_empty(group)) {
+        /* in case if there are elements in queue - check if iface->fence_sn is
+         * updated since last element added */
+        prev_pen_req = ucs_container_of(group->tail, uct_pending_req_t, priv);
+        prev_dc_req  = uct_dc_mlx5_pending_req_priv(prev_pen_req);
+        uct_dc_mlx5_pending_req_priv(r)->fence = prev_dc_req->fence_sn !=
+                                                 iface->super.super.tx.fi.fence_sn;
+    } else if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        /* ok, there are no elements in pending queue, but we have DCI
+         * allocated where fence_sn available - check if iface->fence_sn was
+         * updated since last operation */
+        uct_dc_mlx5_pending_req_priv(r)->fence =
+            iface->tx.dcis[ep->dci].txwq.fi.fence_sn !=
+            iface->super.super.tx.fi.fence_sn;
+    } else {
+        /* have no DCI? no problemo - fence is not needed because nothing
+         * to order */
+        uct_dc_mlx5_pending_req_priv(r)->fence = 0;
+    }
+
+    /* save current iface->fence_sn for next pending_add operation */
+    uct_dc_mlx5_pending_req_priv(r)->fence_sn = iface->super.super.tx.fi.fence_sn;
     uct_pending_req_arb_group_push(group, r);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
@@ -1059,20 +1093,47 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
     uct_pending_req_t *req     = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_pending_req_priv_t *priv;
     ucs_status_t status;
+    uint8_t flags;
+    int fence;
 
     if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
+
+    /* should not come here if no DCI's available */
+    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+
+    /* save EP fence attributes, we will restore it later for
+     * next scheduled operations */
+    fence = uct_rc_ep_fm(&iface->super.super, &iface->tx.dcis[ep->dci].txwq.fi, 1);
+    uct_rc_ep_fence_set(&ep->super.super, &iface->tx.dcis[ep->dci].txwq.fi, 0);
+    flags = ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE;
+    priv  = uct_dc_mlx5_pending_req_priv(req);
+    /* force set fence flag for current operation */
+    ep->flags |= (ep->flags & ~UCT_DC_MLX5_EP_FLAG_FENCE) |
+                 (priv->fence ?
+                  UCT_DC_MLX5_EP_FLAG_FENCE : 0);
 
     ucs_trace_data("progressing pending request %p", req);
     status = req->func(req);
     ucs_trace_data("status returned from progress pending: %s",
                    ucs_status_string(status));
 
+    /* DCI should not be freed in callback */
+    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+
+    /* now restore fence flag/sn for next schedule operation */
+    ep->flags = (ep->flags & ~UCT_DC_MLX5_EP_FLAG_FENCE) | flags;
+    uct_rc_ep_fence_set(&ep->super.super, &iface->tx.dcis[ep->dci].txwq.fi, fence);
+
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
+        /* in case if operation was split by few chunks - only first chunk
+         * should be fenced */
+        priv->fence = 0;
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     }
 

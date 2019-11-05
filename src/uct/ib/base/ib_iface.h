@@ -202,9 +202,9 @@ struct uct_ib_iface {
 
 
 typedef struct uct_ib_fence_info {
-    uint16_t                    fence_beat; /* 16bit is enough because if it wraps around,
-                                             * it means the older ops are already completed
-                                             * because QP size is less than 64k */
+    uint16_t                    fence_sn; /* 16bit is enough because if it wraps around,
+                                           * it means the older ops are already completed
+                                           * because QP size is less than 64k */
 } uct_ib_fence_info_t;
 
 
@@ -563,7 +563,7 @@ size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
 static UCS_F_ALWAYS_INLINE void
 uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
 {
-    fence->fence_beat = 0;
+    fence->fence_sn = 0;
 }
 
 #endif

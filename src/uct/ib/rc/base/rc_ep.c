@@ -225,7 +225,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   void *arg)
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_iface_t *iface UCS_V_UNUSED;
+    uct_rc_iface_t *iface;
     ucs_status_t status;
     uct_rc_ep_t *ep;
 

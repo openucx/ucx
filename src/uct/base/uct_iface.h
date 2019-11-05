@@ -50,6 +50,7 @@ enum {
     UCT_IFACE_STAT_FLUSH,
     UCT_IFACE_STAT_FLUSH_WAIT,  /* number of times flush called while in progress */
     UCT_IFACE_STAT_FENCE,
+    UCT_IFACE_STAT_FENCE_OP, /* number of fenced requests posted */
     UCT_IFACE_STAT_LAST
 };
 
@@ -81,6 +82,8 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH_WAIT, 1);
 #define UCT_TL_IFACE_STAT_FENCE(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FENCE, 1);
+#define UCT_TL_IFACE_STAT_FENCE_OP(_iface, _op) \
+    UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FENCE_OP, !!(_op));
 #define UCT_TL_IFACE_STAT_TX_NO_DESC(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_DESC, 1);
 

@@ -117,7 +117,8 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
 
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
-    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1,
+                         uct_rc_mlx5_ep_process_pending, NULL);
 
     return 1;
 }
@@ -776,7 +777,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic32_post         = uct_rc_mlx5_ep_atomic32_post,
     .ep_atomic64_fetch        = uct_rc_mlx5_ep_atomic64_fetch,
     .ep_atomic32_fetch        = uct_rc_mlx5_ep_atomic32_fetch,
-    .ep_pending_add           = uct_rc_ep_pending_add,
+    .ep_pending_add           = uct_rc_mlx5_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_mlx5_ep_flush,
     .ep_fence                 = uct_rc_mlx5_ep_fence,

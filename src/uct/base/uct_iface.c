@@ -51,7 +51,8 @@ static ucs_stats_class_t uct_iface_stats_class = {
         [UCT_IFACE_STAT_TX_NO_DESC]  = "tx_no_desc",
         [UCT_IFACE_STAT_FLUSH]       = "flush",
         [UCT_IFACE_STAT_FLUSH_WAIT]  = "flush_wait",
-        [UCT_IFACE_STAT_FENCE]       = "fence"
+        [UCT_IFACE_STAT_FENCE]       = "fence",
+        [UCT_IFACE_STAT_FENCE_OP]    = "fence_op"
     }
 };
 #endif
