@@ -248,7 +248,8 @@ std::vector<ucp_test_param>
 ucp_test::enum_test_params(const ucp_params_t& ctx_params,
                            const std::string& name,
                            const std::string& test_case_name,
-                           const std::string& tls)
+                           const std::string& tls,
+                           const std::string& memtype_tls)
 {
     ucp_test_param test_param;
     std::stringstream ss(tls);
@@ -256,6 +257,7 @@ ucp_test::enum_test_params(const ucp_params_t& ctx_params,
     test_param.ctx_params    = ctx_params;
     test_param.variant       = DEFAULT_PARAM_VARIANT;
     test_param.thread_type   = SINGLE_THREAD;
+    test_param.memtype_tls   = memtype_tls;
 
     while (ss.good()) {
         std::string tl_name;
@@ -276,12 +278,14 @@ void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
                                             const std::string& tls,
                                             int variant,
                                             std::vector<ucp_test_param>& test_params,
-                                            int thread_type)
+                                            int thread_type,
+                                            const std::string& memtype_tls)
 {
     std::vector<ucp_test_param> tmp_test_params;
 
     tmp_test_params = ucp_test::enum_test_params(ctx_params,name,
-                                                 test_case_name, tls);
+                                                 test_case_name, tls,
+                                                 memtype_tls);
     for (std::vector<ucp_test_param>::iterator iter = tmp_test_params.begin();
          iter != tmp_test_params.end(); ++iter)
     {
@@ -297,7 +301,7 @@ void ucp_test::set_ucp_config(ucp_config_t *config,
     std::stringstream ss;
     ss << test_param;
     ucp_config_modify(config, "TLS", ss.str().c_str());
-    ucp_config_modify(config, "MEMTYPE_TLS", "");
+    ucp_config_modify(config, "MEMTYPE_TLS", test_param.memtype_tls.c_str());
     /* prevent configuration warnings in the UCP testing */
     ucp_config_modify(config, "WARN_INVALID_CONFIG", "no");
 }

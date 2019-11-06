@@ -481,7 +481,6 @@ public:
     void init()
     {
         stats_activate();
-        modify_config("MEMTYPE_TLS",  "");
         test_ucp_tag_offload::init(); // No need for multi::init()
     }
 

@@ -46,7 +46,8 @@ public:
         if (std::find(mem_types.begin(), mem_types.end(), mem_type) !=
             mem_types.end()) {
             generate_test_params_variant(ctx_params, "all", test_case_name,
-                                         "all", mem_type, result);
+                                         "all", mem_type, result, SINGLE_THREAD,
+                                         "all");
         }
 
         return result;

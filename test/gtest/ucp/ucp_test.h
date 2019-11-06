@@ -29,6 +29,7 @@ extern const uint32_t MAGIC;
 struct ucp_test_param {
     ucp_params_t              ctx_params;
     std::vector<std::string>  transports;
+    std::string               memtype_tls;
     int                       variant;
     int                       thread_type;
 };
@@ -151,7 +152,8 @@ public:
     enum_test_params(const ucp_params_t& ctx_params,
                      const std::string& name,
                      const std::string& test_case_name,
-                     const std::string& tls);
+                     const std::string& tls,
+                     const std::string& memtype_tls = "");
 
     static ucp_params_t get_ctx_params();
     virtual ucp_worker_params_t get_worker_params();
@@ -164,7 +166,8 @@ public:
                                  const std::string& tls,
                                  int variant,
                                  std::vector<ucp_test_param>& test_params,
-                                 int thread_type = SINGLE_THREAD);
+                                 int thread_type = SINGLE_THREAD,
+                                 const std::string& memtype_tls = "");
 
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional = false);
