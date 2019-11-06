@@ -648,7 +648,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         }
     }
 
-    if (!(md_attr.cap.reg_mem_types & UCS_BIT(params->mem_type))) {
+    if (!(md_attr.cap.access_mem_type == params->mem_type) &&
+        !(md_attr.cap.reg_mem_types & UCS_BIT(params->mem_type))) {
         ucs_error("Unsupported memory type %s by %s/%s",
                   ucs_memory_type_names[params->mem_type],
                   params->uct.tl_name, params->uct.dev_name);

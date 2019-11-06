@@ -37,9 +37,18 @@ static ucs_status_t uct_xpmem_query()
     return UCS_OK;
 }
 
-static size_t uct_xpmem_get_path_size(uct_md_h md)
+static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    return 0;
+    uct_mm_md_query(md, md_attr, 1);
+
+    md_attr->cap.flags         |= UCT_MD_FLAG_REG;
+    md_attr->reg_cost.overhead  = 1000.0e-9;
+    md_attr->reg_cost.growth    = 0.007e-9;
+    md_attr->cap.max_reg        = ULONG_MAX;
+    md_attr->cap.reg_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->rkey_packed_size   = sizeof(uct_mm_packed_rkey_t);
+
+    return UCS_OK;
 }
 
 static uint8_t uct_xpmem_get_priority()
@@ -222,7 +231,7 @@ static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mmid, size_t lengt
 static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
     .super = {
         .close                  = uct_mm_md_close,
-        .query                  = uct_mm_md_query,
+        .query                  = uct_xpmem_md_query,
         .mem_alloc              = uct_mm_mem_alloc,
         .mem_free               = uct_mm_mem_free,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
@@ -233,7 +242,6 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
         .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
     .query                      = uct_xpmem_query,
-    .get_path_size              = uct_xpmem_get_path_size,
     .get_priority               = uct_xpmem_get_priority,
     .reg                        = uct_xmpem_reg,
     .dereg                      = uct_xpmem_dereg,
