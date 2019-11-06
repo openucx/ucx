@@ -266,10 +266,11 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_debug("%s got disconnect event, status %d peer %s",
+    ucs_debug("uct ep %p on %s got disconnect event, status %d peer %s",
+              &cep->super.super,
               (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER ? "server" : "client"),
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
-                                             UCS_SOCKADDR_STRING_LEN));
+                                              UCS_SOCKADDR_STRING_LEN));
 
     cep->disconnect_cb(&cep->super.super, cep->user_data);
     cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
