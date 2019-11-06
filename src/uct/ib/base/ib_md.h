@@ -101,7 +101,7 @@ typedef struct uct_ib_md {
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     struct uct_ib_md_ops     *ops;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
     uct_ib_md_ext_config_t   config;    /* IB external configuration */
     struct {
         uct_ib_device_spec_t *specs;    /* Custom device specifications */
