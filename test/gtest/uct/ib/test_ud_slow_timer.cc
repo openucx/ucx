@@ -232,6 +232,4 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, partial_drop,
 }
 #endif
 
-_UCT_INSTANTIATE_TEST_CASE(test_ud_slow_timer, ud)
-_UCT_INSTANTIATE_TEST_CASE(test_ud_slow_timer, ud_mlx5)
-
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_slow_timer)

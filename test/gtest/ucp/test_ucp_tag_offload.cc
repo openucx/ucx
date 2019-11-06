@@ -417,7 +417,7 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
 // Do not include SM transports, because they would be selected for tag matching.
 // And since they do not support TM offload, this test would be skipped.
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
-                              "\\rc,\\ud,rc_x,dc_x")
+                              "\\rc_verbs,\\ud_verbs,\\rc_mlx5,\\dc_mlx5")
 
 
 class test_ucp_tag_offload_selection : public test_ucp_tag_offload {

@@ -4,6 +4,8 @@
 * See file LICENSE for terms.
 */
 
+#include "ud_base.h"
+
 #include <uct/uct_test.h>
 
 extern "C" {
@@ -152,6 +154,4 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     EXPECT_EQ(N+1, my_ep->conn_id);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_ud_ds, ud)
-_UCT_INSTANTIATE_TEST_CASE(test_ud_ds, ud_mlx5)
-
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_ds)
