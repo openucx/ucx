@@ -23,7 +23,6 @@
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
-#include <ucs/arch/bitops.h>
 #include <string.h>
 
 
@@ -281,6 +280,17 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
   { NULL }
+};
+
+
+const char *ucp_feature_str[] = {
+    [ucs_ilog2(UCP_FEATURE_TAG)]    = "UCP_FEATURE_TAG",
+    [ucs_ilog2(UCP_FEATURE_RMA)]    = "UCP_FEATURE_RMA",
+    [ucs_ilog2(UCP_FEATURE_AMO32)]  = "UCP_FEATURE_AMO32",
+    [ucs_ilog2(UCP_FEATURE_AMO64)]  = "UCP_FEATURE_AMO64",
+    [ucs_ilog2(UCP_FEATURE_WAKEUP)] = "UCP_FEATURE_WAKEUP",
+    [ucs_ilog2(UCP_FEATURE_STREAM)] = "UCP_FEATURE_STREAM",
+    [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM"
 };
 
 
@@ -723,52 +733,6 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
     return str;
 }
 
-static const char* ucp_feature_flag_str(unsigned feature_flag)
-{
-    switch (feature_flag) {
-    case UCP_FEATURE_TAG:
-        return "UCP_FEATURE_TAG";
-    case UCP_FEATURE_RMA:
-        return "UCP_FEATURE_RMA";
-    case UCP_FEATURE_AMO32:
-        return "UCP_FEATURE_AMO32";
-    case UCP_FEATURE_AMO64:
-        return "UCP_FEATURE_AMO64";
-    case UCP_FEATURE_WAKEUP:
-        return "UCP_FEATURE_WAKEUP";
-    case UCP_FEATURE_STREAM:
-        return "UCP_FEATURE_STREAM";
-    case UCP_FEATURE_AM:
-        return "UCP_FEATURE_AM";
-    default:
-        ucs_fatal("Unknown feature flag value %u", feature_flag);
-    }
-}
-
-const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
-                                  size_t max_str_len)
-{
-    unsigned i, count;
-    char *p, *endp;
-
-    p    = str;
-    endp = str + max_str_len;
-    count = 0;
-
-    ucs_for_each_bit(i, feature_flags) {
-        ucs_snprintf_zero(p, endp - p, "%s%s", (count == 0) ? "" : "|",
-                          ucp_feature_flag_str(UCS_BIT(i)));
-        count++;
-        p += strlen(p);
-    }
-
-    if (count == 0) {
-        ucs_assert(max_str_len > 0);
-        str[0] = '\0'; /* empty string */
-    }
-
-    return str;
-}
 
 static void ucp_free_resources(ucp_context_t *context)
 {
