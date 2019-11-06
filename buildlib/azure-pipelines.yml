@@ -17,6 +17,18 @@ resources:
       endpoint: ucfconsort_registry
 
 stages:
+  - stage: Codestyle
+    jobs:
+      # Check that commit title matches code style guidelines
+      - job: commit_title
+        displayName: Commit title
+        steps:
+          - bash: |
+              set -eE
+              title=`git log --format=%B -n 1|head -1`
+              echo "Commit title: '$title'"
+              echo "$title" | grep -qP '[A-Z/_]*: \w.*'
+
   - stage: Build
     jobs:
       - job: static_checks
