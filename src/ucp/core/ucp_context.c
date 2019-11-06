@@ -93,12 +93,12 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"MEMTYPE_TLS", UCP_RSC_CONFIG_ALL,
-   "Comma-separated list of non host memory type transports to use.\n"
+   "Comma-separated list of transports capable of handling non-host memory buffers.\n"
    "The order is not meaningful.\n"
    " - all       : use all the available transports.\n"
    " - cuda_ipc  : CUDA IPC API.\n"
    " - cuda_copy : CUDA copy.\n"
-   " - gdr_copy  : CUDA gdr copy (GPUDirect RDMA).\n"
+   " - gdr_copy  : CUDA gdr copy.\n"
    " - rocm_ipc  : ROCm IPC API.\n"
    " - rocm_copy : ROCm copy.\n"
    " - rocm_gdr  : ROCm gdr copy.",
@@ -510,13 +510,16 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
     if (resource->dev_type == UCT_DEVICE_TYPE_ACC) {
         /*
          * Transports for non host memory types are managed by UCX_MEMTYPE_TLS
-         * variable. There are no aliases for memtype transports, check just
-         * real tl names.
+         * variable.
          */
-        tl_enabled = ucp_config_is_tl_enabled((const char**)config->memtype_tls.names,
-                                              config->memtype_tls.count,
-                                              resource->tl_name, 0,
-                                              rsc_flags, mem_tl_cfg_mask);
+        if (config->memtype_tls.count) {
+            tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
+                                                           (const char**)config->memtype_tls.names,
+                                                            config->memtype_tls.count,
+                                                            rsc_flags, tl_cfg_mask);
+        } else {
+            tl_enabled = 0;
+        }
     } else {
         tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
                                                         (const char**)config->tls.names,

@@ -42,7 +42,7 @@ void ucs_string_set_cleanup(ucs_string_set_t *sset);
 /**
  * Return size of this string set.
  *
- * @param [in] sset   String set to get size.
+ * @param [in] sset    String set to get size.
  */
 size_t ucs_string_set_size(const ucs_string_set_t *sset);
 
