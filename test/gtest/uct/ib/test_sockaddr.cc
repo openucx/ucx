@@ -562,12 +562,14 @@ protected:
     }
 
     static ucs_log_func_rc_t
-    detect_error_logger(ucs_log_level_t level, const char *message, va_list ap,
-                        const char *err_to_detect)
+    detect_addr_route_error_logger(const char *file, unsigned line, const char *function,
+                                   ucs_log_level_t level, const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if (strstr(err_str.c_str(), err_to_detect)) {
+            if ((strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
+                (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
+                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -579,16 +581,14 @@ protected:
     detect_reject_error_logger(const char *file, unsigned line, const char *function,
                                ucs_log_level_t level, const char *message, va_list ap)
     {
-        std::string err_to_detect ("client got error event RDMA_CM_EVENT_REJECTED");
-        return detect_error_logger(level, message, ap, err_to_detect.c_str());
-    }
-
-    static ucs_log_func_rc_t
-    detect_addr_error_logger(const char *file, unsigned line, const char *function,
-                             ucs_log_level_t level, const char *message, va_list ap)
-    {
-        std::string err_to_detect ("client got error event RDMA_CM_EVENT_ADDR_ERROR");
-        return detect_error_logger(level, message, ap, err_to_detect.c_str());
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_REJECTED")) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
 protected:
@@ -826,7 +826,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
 
     /* wrap errors now since the client will try to connect to a non existing IP */
     {
-        scoped_log_handler slh(detect_addr_error_logger);
+        scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
         m_client->connect(0, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
