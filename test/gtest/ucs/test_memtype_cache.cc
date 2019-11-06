@@ -32,41 +32,42 @@ protected:
         ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
 
-    void test_lookup_found(void *ptr, size_t size,
+    void check_lookup(const void *ptr, size_t size,
+                      bool expect_found, 
+                      ucs_memory_type_t expected_type = UCS_MEMORY_TYPE_LAST) const {
+        if (!size) {
+            return;
+        }
+
+        ucs_memory_type_t mem_type;
+        ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
+                                                       size, &mem_type);
+
+        if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
+            /* memory type should be not found or unknown */
+            EXPECT_TRUE((status == UCS_ERR_NO_ELEM) ||
+                        ((status == UCS_OK) && (mem_type == UCS_MEMORY_TYPE_LAST)))
+                << "ptr=" << ptr << " size=" << size << ": "
+                << ucs_status_string(status)
+                << " memtype=" << mem_buffer::mem_type_name(mem_type);
+        } else {
+            EXPECT_UCS_OK(status);
+            EXPECT_EQ(expected_type, mem_type) << "ptr=" << ptr << " size=" << size;
+        }
+    }
+
+    void test_lookup_found(const void *ptr, size_t size,
                            ucs_memory_type_t expected_type) const {
-        if (!size) {
-            return;
-        }
-
-        ucs_memory_type_t mem_type;
-        ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
-                                                       size, &mem_type);
-        EXPECT_UCS_OK(status);
-        EXPECT_EQ(expected_type, mem_type) << "ptr=" << ptr << " size=" << size;
+        check_lookup(ptr, size, true, expected_type);
     }
 
-    void test_lookup_notfound(void *ptr, size_t size) const {
-        if (!size) {
-            return;
-        }
+    void test_lookup_notfound(const void *ptr, size_t size) const {
 
-        ucs_memory_type_t mem_type;
-        ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
-                                                       size, &mem_type);
-        /* memory type should be not-found or unknown */
-        EXPECT_TRUE((status == UCS_ERR_NO_ELEM) ||
-                    ((status == UCS_OK) && (mem_type == UCS_MEMORY_TYPE_LAST)))
-              << "ptr=" << ptr << " size=" << size << ": "
-              << ucs_status_string(status)
-              << " memtype=" << mem_buffer::mem_type_name(mem_type);
+        check_lookup(ptr, size, false);
     }
 
-    void test_ptr_found(void *ptr, size_t size,
+    void test_ptr_found(const void *ptr, size_t size,
                         ucs_memory_type_t expected_type) const {
-        if (expected_type == UCS_MEMORY_TYPE_HOST) {
-            return;
-        }
-
         test_lookup_found(ptr, size, expected_type);
         test_lookup_found(ptr, size / 2, expected_type);
         test_lookup_found(ptr, 1, expected_type);
@@ -75,22 +76,22 @@ protected:
         test_lookup_found(ptr, 0, expected_type);
     }
 
-    void test_region_found(mem_buffer &b, size_t size) const {
-        test_ptr_found(b.ptr(), size, b.mem_type());
+    void test_region_found(const mem_buffer &b) const {
+        test_ptr_found(b.ptr(), b.size(), b.mem_type());
     }
 
-    void test_region_not_found(mem_buffer &b, size_t size) const {
-        test_ptr_not_found(b.ptr(), size);
+    void test_region_not_found(const mem_buffer &b) const {
+        test_ptr_not_found(b.ptr(), b.size());
     }
 
-    void test_ptr_not_found(void *ptr, size_t size) const {
+    void test_ptr_not_found(const void *ptr, size_t size) const {
         /* memtype cache is aligned by Page Table defined constant,
          * so need to step by this value to make something not found */
         test_lookup_notfound(ptr, size + UCS_PGT_ADDR_ALIGN);
         test_lookup_notfound(UCS_PTR_BYTE_OFFSET(ptr, size), 1 + UCS_PGT_ADDR_ALIGN);
     }
 
-    void test_ptr_released(void *ptr, size_t size) const {
+    void test_ptr_released(const void *ptr, size_t size) const {
         test_lookup_notfound(ptr, size);
         test_lookup_notfound(ptr, 1);
     }
@@ -104,10 +105,10 @@ protected:
             allocated_buffers->push_back(buf);
         }
 
-        test_region_found(*buf, buf->size());
+        test_region_found(*buf);
 
         if (test_not_found) {
-            test_region_not_found(*buf, buf->size());
+            test_region_not_found(*buf);
         }
 
         return buf;
@@ -197,6 +198,19 @@ protected:
         }
     }
 
+    void memtype_cache_update(const void *ptr, size_t size,
+                              ucs_memory_type_t mem_type) {
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
+            return;
+        }
+
+        ucs_memtype_cache_update(m_memtype_cache, ptr, size, mem_type);
+    }
+
+    void memtype_cache_update(const mem_buffer &b) {
+        memtype_cache_update(b.ptr(), b.size(), b.mem_type());
+    }
+
 private:
     ucs_memtype_cache_t *m_memtype_cache;
 };
@@ -208,8 +222,8 @@ UCS_TEST_P(test_memtype_cache, basic) {
     {
         mem_buffer b(size, GetParam());
 
-        test_region_found(b, size);
-        test_region_not_found(b, size);
+        test_region_found(b);
+        test_region_not_found(b);
 
         ptr = b.ptr();
     }
@@ -244,14 +258,14 @@ UCS_TEST_P(test_memtype_cache, shared_page_regions) {
         mem_buffer *buf1 = allocate_mem_buffer(size, GetParam());
         mem_buffer *buf2 = allocate_mem_buffer(size, *iter);
 
-        test_region_found(*buf1, size);
-        test_region_found(*buf2, size);
+        test_region_found(*buf1);
+        test_region_found(*buf2);
 
         release_mem_buffer(buf2, &released_ptrs);
 
         /* check that `buf1` was not released accidentally
          * after releasing `buf2` */
-        test_region_found(*buf1, size);
+        test_region_found(*buf1);
 
         release_mem_buffer(buf1, &released_ptrs);
 
@@ -277,4 +291,69 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
 }
 
 INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache,
+                        ::testing::ValuesIn(mem_buffer::supported_mem_types()));
+
+class test_memtype_cache_deferred_create : public test_memtype_cache {
+protected:
+    virtual void init() {
+        /* do nothing */
+    }
+
+    void test_unknown_region_found(const mem_buffer &b) const {
+        test_ptr_found(b.ptr(), b.size(),
+                       ((b.mem_type() == UCS_MEMORY_TYPE_HOST) ?
+                        UCS_MEMORY_TYPE_HOST :
+                        UCS_MEMORY_TYPE_LAST));
+    }
+
+    void test_alloc_before_init(size_t buf_size, bool test_adjacent,
+                                size_t overlap_size) {
+        void *ptr;
+
+        {
+            mem_buffer b(buf_size, GetParam());
+
+            test_memtype_cache::init();
+
+            test_unknown_region_found(b);
+            test_region_not_found(b);
+
+            if (test_adjacent) {
+                /* add two adjacent regions: */
+                memtype_cache_update(b.ptr(), b.size() / 2, b.mem_type());
+                test_ptr_found(b.ptr(), b.size() / 2, b.mem_type());
+                memtype_cache_update(UCS_PTR_BYTE_OFFSET(b.ptr(),
+                                                         b.size() / 2 - overlap_size),
+                                     b.size() / 2 + 1, b.mem_type());
+                test_ptr_found(b.ptr(), b.size() / 2, b.mem_type());
+            } else {
+                memtype_cache_update(b);
+            }
+
+            /* check that able to find the entire region */ 
+            test_region_found(b);
+
+            ptr = b.ptr();
+        }
+
+        /* buffer is released */
+        test_ptr_released(ptr, buf_size);
+        test_ptr_not_found(ptr, buf_size);
+    }
+};
+
+UCS_TEST_P(test_memtype_cache_deferred_create, allocate_and_update) {
+    test_alloc_before_init(1000000, false, 0);
+}
+
+UCS_TEST_P(test_memtype_cache_deferred_create, lookup_adjacent_regions) {
+    test_alloc_before_init(1000000, true, 0);
+}
+
+UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
+    test_alloc_before_init(1000000, true, 1);
+    
+}
+
+INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
