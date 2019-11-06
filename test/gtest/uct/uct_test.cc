@@ -418,11 +418,11 @@ bool uct_test::has_transport(const std::string& tl_name) const {
 }
 
 bool uct_test::has_ud() const {
-    return (has_transport("ud") || has_transport("ud_mlx5"));
+    return (has_transport("ud_verbs") || has_transport("ud_mlx5"));
 }
 
 bool uct_test::has_rc() const {
-    return (has_transport("rc") || has_transport("rc_mlx5"));
+    return (has_transport("rc_verbs") || has_transport("rc_mlx5"));
 }
 
 bool uct_test::has_rc_or_dc() const {

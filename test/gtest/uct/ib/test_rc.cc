@@ -8,8 +8,8 @@
 #include "test_rc.h"
 
 
-#define UCT_RC_INSTANTIATE_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc) \
+#define UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_verbs) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
 
 
@@ -103,7 +103,7 @@ UCS_TEST_P(test_rc, tx_cq_moderation) {
     EXPECT_EQ(init_rsc, rc_ep(m_e1)->txqp.available);
 }
 
-UCT_RC_INSTANTIATE_TEST_CASE(test_rc)
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 
 class test_rc_max_wr : public test_rc {
@@ -132,7 +132,7 @@ UCS_TEST_P(test_rc_max_wr, send_limit)
     send_am_messages(m_e1, 1, UCS_OK);
 }
 
-UCT_RC_INSTANTIATE_TEST_CASE(test_rc_max_wr)
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
@@ -309,7 +309,7 @@ UCS_TEST_P(test_rc_flow_control, fc_disabled_flush)
     test_flush_fc_disabled();
 }
 
-UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control)
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control)
 
 
 #ifdef IBV_HW_TM
@@ -677,6 +677,6 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
     EXPECT_EQ(1ul, v);
 }
 
-UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control_stats)
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif

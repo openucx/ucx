@@ -1032,8 +1032,8 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
     // Accelerated transports have better performance charasteristics than their
     // verbs counterparts. Check that corresponding verbs transports are not used
     // by workers in unified mode.
-    check_unified_ifaces(&sender(), "rc_mlx5", "rc");
-    check_unified_ifaces(&sender(), "ud_mlx5", "ud");
+    check_unified_ifaces(&sender(), "rc_mlx5", "rc_verbs");
+    check_unified_ifaces(&sender(), "ud_mlx5", "ud_verbs");
 
     // RC and DC has similar capabilities, but RC has better latency while
     // estimated number of endpoints is relatively small.
