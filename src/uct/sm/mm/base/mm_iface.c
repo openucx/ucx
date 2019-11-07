@@ -460,6 +460,15 @@ err:
     return status;
 }
 
+static void uct_mm_iface_log_created(uct_mm_iface_t *iface)
+{
+    uct_mm_seg_t UCS_V_UNUSED *seg = iface->recv_fifo_mem.memh;
+
+    ucs_debug("created mm iface %p FIFO id 0x%lx va %p size %zu (%u x %u elems)",
+              iface, seg->seg_id, seg->address, seg->length,
+              iface->config.fifo_elem_size, iface->config.fifo_size);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -472,8 +481,6 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops, md,
                               worker, params, tl_config);
-
-    ucs_debug("creating an MM iface=%p worker=%p", self, worker);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("Shared memory transport does not support multi-threaded worker");
@@ -580,8 +587,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     ucs_arbiter_init(&self->arbiter);
+    uct_mm_iface_log_created(self);
 
-    ucs_debug("created an MM iface");
     return UCS_OK;
 
 destroy_descs:

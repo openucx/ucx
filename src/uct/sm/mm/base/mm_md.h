@@ -14,8 +14,8 @@
 #include <ucs/type/status.h>
 
 
-/* Memory mapper segment unique id for FIFO and bcopy descriptors
- * the exact structure depends on specific mapper */
+/* Memory mapper segment unique id, used for both FIFO and bcopy descriptors.
+ * The exact structure depends on specific mapper */
 typedef uint64_t          uct_mm_seg_id_t;
 
 
