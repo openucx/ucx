@@ -450,8 +450,9 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
         return user_val;
     }
 
-    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_INTEL) &&
-        (ucs_arch_get_cpu_model() >= UCS_CPU_MODEL_INTEL_HASWELL)) {
+    if (((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_INTEL) &&
+         (ucs_arch_get_cpu_model() >= UCS_CPU_MODEL_INTEL_HASWELL)) ||
+        (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD)) {
         return auto_val;
     } else {
         return UCS_MEMUNITS_INF;
@@ -463,9 +464,11 @@ void ucs_cpu_init()
 {
 #if ENABLE_BUILTIN_MEMCPY
     ucs_global_opts.arch.builtin_memcpy_min =
-        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_min, 1 * UCS_KBYTE);
+        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_min,
+                              ucs_cpu_builtin_memcpy[ucs_arch_get_cpu_vendor()].min);
     ucs_global_opts.arch.builtin_memcpy_max =
-        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max, 8 * UCS_MBYTE);
+        ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max,
+                              ucs_cpu_builtin_memcpy[ucs_arch_get_cpu_vendor()].max);
 #endif
 }
 
