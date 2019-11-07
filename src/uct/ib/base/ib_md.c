@@ -115,8 +115,16 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "  <vendor-id> - (mandatory) vendor id, integer or hexadecimal.\n"
      "  <part-id>   - (mandatory) vendor part id, integer or hexadecimal.\n"
      "  <name>      - (optional) device name.\n"
-     "  <flags>     - (optional) empty, or any of: '4' - mlx4 device, '5' - mlx5 device.\n"
-     "  <priority>  - (optional) device priority, integer.\n",
+     "  <flags>     - (optional) empty, or a combination of:\n"
+     "                             '4' - mlx4 device\n"
+     "                             '5' - mlx5 device\n"
+     "                             'd' - DC version 1 (Connect-IB, ConnectX-4)\n"
+     "                             'D' - DC version 2 (ConnectX-5 and above)\n"
+     "                             'a' - Compact address vector support\n"
+     "  <priority>  - (optional) device priority, integer.\n"
+     "\n"
+     "Example: The value '0x02c9:4115:ConnectX4:5d' would specify a device named ConnectX-4\n"
+     "to match vendor id 0x2c9, device id 4115, with DC version 1 support.",
      ucs_offsetof(uct_ib_md_config_t, custom_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
 
     {"PREFER_NEAREST_DEVICE", "y",
@@ -1155,6 +1163,12 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
                     spec->flags |= UCT_IB_DEVICE_FLAG_MLX4_PRM;
                 } else if (*p == '5') {
                     spec->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+                } else if (*p == 'd') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_DC_V1;
+                } else if (*p == 'D') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_DC_V2;
+                } else if (*p == 'a') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_AV;
                 } else {
                     ucs_error("invalid device flag: '%c'", *p);
                     free(flags_str);
