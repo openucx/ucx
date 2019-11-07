@@ -362,6 +362,17 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length);
  */
 void ucs_sys_free(void *ptr, size_t length);
 
+/**
+ * Fill human readable cpu set representation
+ *
+ * @param [in]  cpuset      Set of CPUs
+ * @param [in]  str         String to fill
+ * @param [in]  len         String length
+ *
+ * @return Filled string
+ */
+char *ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len);
+
 END_C_DECLS
 
 #endif
