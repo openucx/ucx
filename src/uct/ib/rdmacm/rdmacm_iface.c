@@ -581,9 +581,9 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     return UCS_OK;
 
 err_destroy_id:
-if (self->is_server) {
-    rdma_destroy_id(self->cm_id);
-}
+    if (self->is_server) {
+        rdma_destroy_id(self->cm_id);
+    }
 err_destroy_event_channel:
     rdma_destroy_event_channel(self->event_ch);
 err:
