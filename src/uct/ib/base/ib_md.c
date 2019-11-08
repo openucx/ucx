@@ -342,7 +342,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
 
     ucs_trace("%s %p..%p took %f usec\n",
               (ctx->access == UCT_IB_MEM_DEREG) ? "dereg_mr" : "reg_mr",
-              ctx->mr[0]->addr, ctx->mr[mr_idx-1]->addr + size,
+              ctx->mr[0]->addr,
+              UCS_PTR_BYTE_OFFSET(ctx->mr[mr_idx-1]->addr, size),
               ucs_time_to_usec(ucs_get_time() - t0));
 
     return UCS_STATUS_PTR(UCS_OK);
@@ -372,7 +373,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     thread_num = ucs_min(CPU_COUNT(&parent_set), mr_num);
 
     ucs_trace("multithreaded handle %p..%p access %lx threads %d affinity %s\n",
-              address, address + length, access, thread_num,
+              address, UCS_PTR_BYTE_OFFSET(address, length), access, thread_num,
               ucs_make_affinity_str(&parent_set, affinity_str, sizeof(affinity_str)));
 
     if (thread_num == 1) {
