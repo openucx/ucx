@@ -1137,7 +1137,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         } else {
             m_mem.method   = UCT_ALLOC_METHOD_LAST;
             m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-            m_mem.length   = size;
+            m_mem.length   = alloc_size;
             m_mem.mem_type = mem_type;
             m_mem.memh     = UCT_MEM_HANDLE_NULL;
             m_mem.md       = NULL;
@@ -1174,6 +1174,7 @@ uct_test::mapped_buffer::~mapped_buffer() {
         m_entity.mem_free_host(&m_mem);
     } else {
         ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
+        m_entity.mem_type_dereg(&m_mem);
         mem_buffer::release(m_mem.address, m_mem.mem_type);
     }
 }
