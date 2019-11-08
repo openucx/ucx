@@ -1174,6 +1174,7 @@ uct_test::mapped_buffer::~mapped_buffer() {
         m_entity.mem_free_host(&m_mem);
     } else {
         ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
+        m_entity.mem_type_dereg(&m_mem);
         mem_buffer::release(m_mem.address, m_mem.mem_type);
     }
 }
