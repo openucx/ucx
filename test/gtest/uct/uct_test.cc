@@ -1137,7 +1137,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         } else {
             m_mem.method   = UCT_ALLOC_METHOD_LAST;
             m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-            m_mem.length   = size;
+            m_mem.length   = alloc_size;
             m_mem.mem_type = mem_type;
             m_mem.memh     = UCT_MEM_HANDLE_NULL;
             m_mem.md       = NULL;
