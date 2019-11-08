@@ -1059,13 +1059,17 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
             /* sbuf is in host, directly do put */
             ucp_request_send_state_reset(freq, ucp_rndv_frag_send_put_completion,
                                          UCP_REQUEST_SEND_PROTO_RNDV_PUT);
+            md_index                              = ucp_ep_md_index(sreq->send.ep,
+                                                                    sreq->send.lane);
             freq->send.ep                         = fsreq->send.ep;
             freq->send.buffer                     = UCS_PTR_BYTE_OFFSET(fsreq->send.buffer,
                                                                         offset);
             freq->send.datatype                   = ucp_dt_make_contig(1);
             freq->send.mem_type                   = UCS_MEMORY_TYPE_HOST;
-            freq->send.state.dt.dt.contig.memh[0] = sreq->send.state.dt.dt.contig.memh[0];
-            freq->send.state.dt.dt.contig.md_map  = sreq->send.state.dt.dt.contig.md_map;
+            freq->send.state.dt.dt.contig.memh[0] =
+                        ucp_memh_map2uct(sreq->send.state.dt.dt.contig.memh,
+                                         sreq->send.state.dt.dt.contig.md_map, md_index);
+            freq->send.state.dt.dt.contig.md_map  = UCS_BIT(md_index);
             freq->send.length                     = length;
             freq->send.uct.func                   = ucp_rndv_progress_rma_put_zcopy;
             freq->send.rndv_put.sreq              = fsreq;
