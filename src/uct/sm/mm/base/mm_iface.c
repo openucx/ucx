@@ -353,14 +353,14 @@ static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,
 
     if (seg->length > UINT_MAX) {
         ucs_error("mm: shared memory segment length cannot exceed %u", UINT_MAX);
-        desc->info.seg_id   = -1;
+        desc->info.seg_id   = UINT64_MAX;
         desc->info.seg_va   = 0;
         desc->info.seg_size = 0;
         desc->info.offset   = 0;
         return;
     }
 
-    offset = UCS_PTR_BYTE_OFFSET(desc + 1, iface->rx_headroom) - seg->address;
+    offset = UCS_PTR_BYTE_DIFF(seg->address, desc + 1) + iface->rx_headroom;
     ucs_assert(offset <= UINT_MAX);
 
     desc->info.seg_id   = seg->seg_id;
