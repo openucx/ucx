@@ -13,6 +13,7 @@
 #endif
 
 #include <ucs/sys/compiler_def.h>
+#include <stddef.h>
 
 BEGIN_C_DECLS
 
@@ -69,6 +70,13 @@ typedef enum ucs_cpu_cache_type {
 } ucs_cpu_cache_type_t;
 
 
+/* Built-in memcpy settings */
+typedef struct ucs_cpu_builtin_memcpy {
+    size_t min;
+    size_t max;
+} ucs_cpu_builtin_memcpy_t;
+
+
 /* System constants */
 #define UCS_SYS_POINTER_SIZE       (sizeof(void*))
 #define UCS_SYS_PARAGRAPH_SIZE     16
@@ -90,6 +98,10 @@ typedef enum ucs_cpu_cache_type {
 #else
 #define UCS_SYS_CACHE_LINE_SIZE    UCS_ARCH_CACHE_LINE_SIZE
 #endif
+
+/* Array of default built-in memcpy settings for different CPU arhitectures */
+extern const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST];
+
 
 /**
  * Get size of CPU cache.
