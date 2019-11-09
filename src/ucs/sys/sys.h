@@ -15,6 +15,7 @@
 
 #include <ucs/sys/compiler.h>
 #include <ucs/type/status.h>
+#include <ucs/type/cpu_set.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/config/types.h>
 
@@ -403,6 +404,14 @@ int ucs_sys_setaffinity(ucs_sys_cpuset_t *cpuset);
  * @return -1 on error with errno set, 0 on success
  */
 int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset);
+
+/**
+ * Copies ucs_sys_cpuset_t to ucs_cpu_set_t.
+ *
+ * @param [in]  src         Source
+ * @param [out] dst         Destination
+ */
+void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src);
 
 END_C_DECLS
 
