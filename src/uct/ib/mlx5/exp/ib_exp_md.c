@@ -447,6 +447,9 @@ static ucs_status_t uct_ib_mlx5_exp_reg_multithreaded(uct_ib_md_t *ibmd,
         goto err;
     }
 
+    ucs_trace("multithreaded register memory %p..%p chunks %d",
+              address, address + length, mr_num);
+
     ksm_data->mr_num = mr_num;
     status = uct_ib_md_handle_mr_list_multithreaded(ibmd, address, length,
                                                     access, chunk, ksm_data->mrs);

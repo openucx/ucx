@@ -370,16 +370,17 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SOCKADDR_CD_FULL_ADDR = 0, /* Client data contains full address. */
-    UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR,  /* Client data contains partial
-                                             address, wireup protocol requires
-                                             extra MSGs. */
-    UCP_WIREUP_SOCKADDR_CD_CM_ADDR        /* Client data contains address for CM
-                                             based wireup: there is only iface
-                                             and ep address of transport lanes,
-                                             remote device address is provided
-                                             by CM and has to be added to
-                                             unpacked UCP address locally. */
+    UCP_WIREUP_SA_DATA_FULL_ADDR = 0,   /* Sockaddr client data contains full
+                                           address. */
+    UCP_WIREUP_SA_DATA_PARTIAL_ADDR,    /* Sockaddr client data contains partial
+                                           address, wireup protocol requires
+                                           extra MSGs. */
+    UCP_WIREUP_SA_DATA_CM_ADDR          /* Sockaddr client data contains address
+                                           for CM based wireup: there is only
+                                           iface and ep address of transport
+                                           lanes, remote device address is
+                                           provided by CM and has to be added to
+                                           unpacked UCP address locally. */
 };
 
 

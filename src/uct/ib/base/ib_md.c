@@ -18,6 +18,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
+#include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
 #include <pthread.h>
 #include <sys/resource.h>
@@ -172,6 +173,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Must by power of 2.",
      ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_chunk), UCS_CONFIG_TYPE_MEMUNITS},
 
+    {"REG_MT_BIND", "n",
+     "Enable setting CPU affinity of memory registration threads.",
+     ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -311,7 +316,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     uct_ib_md_mem_reg_thread_t *ctx = arg;
     ucs_status_t status;
     int mr_idx = 0;
-    size_t size;
+    size_t size = 0;
+    ucs_time_t UCS_V_UNUSED t0 = ucs_get_time();
 
     while (ctx->len) {
         size = ucs_min(ctx->len, ctx->chunk);
@@ -334,7 +340,12 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         mr_idx++;
     }
 
-    return (void *)UCS_OK;
+    ucs_trace("%s %p..%p took %f usec\n",
+              (ctx->access == UCT_IB_MEM_DEREG) ? "dereg_mr" : "reg_mr",
+              ctx->mr[0]->addr, ctx->mr[mr_idx-1]->addr + size,
+              ucs_time_to_usec(ucs_get_time() - t0));
+
+    return UCS_STATUS_PTR(UCS_OK);
 }
 
 ucs_status_t
@@ -349,6 +360,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     cpu_set_t parent_set, thread_set;
     uct_ib_md_mem_reg_thread_t *ctxs, *cur_ctx;
     pthread_attr_t attr;
+    char UCS_V_UNUSED affinity_str[64];
     int ret;
 
     ret = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &parent_set);
@@ -358,6 +370,10 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     }
 
     thread_num = ucs_min(CPU_COUNT(&parent_set), mr_num);
+
+    ucs_trace("multithreaded handle %p..%p access %lx threads %d affinity %s\n",
+              address, address + length, access, thread_num,
+              ucs_make_affinity_str(&parent_set, affinity_str, sizeof(affinity_str)));
 
     if (thread_num == 1) {
         return UCS_ERR_UNSUPPORTED;
@@ -372,10 +388,6 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
 
     status = UCS_OK;
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
-        while (!CPU_ISSET(cpu_id, &parent_set)) {
-            cpu_id++;
-        }
-
         /* calculate number of mrs for each thread so each one will
          * get proportional amount */
         thread_num_mrs  = ucs_div_round_up(mr_num - mr_idx, thread_num - thread_idx);
@@ -388,9 +400,16 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
         cur_ctx->mr     = &mrs[mr_idx];
         cur_ctx->chunk  = chunk;
 
-        CPU_ZERO(&thread_set);
-        CPU_SET(cpu_id++, &thread_set);
-        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &thread_set);
+        if (md->config.mt_reg_bind) {
+            while (!CPU_ISSET(cpu_id, &parent_set)) {
+                cpu_id++;
+            }
+
+            CPU_ZERO(&thread_set);
+            CPU_SET(cpu_id++, &thread_set);
+            pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &thread_set);
+        }
+
         ret = pthread_create(&cur_ctx->thread, &attr,
                              uct_ib_md_mem_handle_thread_func, cur_ctx);
         if (ret) {

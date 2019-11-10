@@ -1082,3 +1082,37 @@ void ucs_sys_free(void *ptr, size_t length)
         }
     }
 }
+
+char* ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len)
+{
+    int i = 0, prev = -1;
+    char *p = str;
+
+    for (i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, cpuset)) {
+            if (prev < 0) {
+                prev = i;
+            }
+        } else {
+            if (prev > 0) {
+                if (prev == i - 1) {
+                    p += snprintf(p, str + len - p, "%d,", prev);
+                } else {
+                    p += snprintf(p, str + len - p, "%d-%d,", prev, i - 1);
+                }
+            }
+            if (p > str + len) {
+                p = str + len - 4;
+                while (*p != ',') {
+                    p--;
+                }
+                sprintf(p, "...");
+                return str;
+            }
+            prev = -1;
+        }
+    }
+
+    *(--p) = 0;
+    return str;
+}

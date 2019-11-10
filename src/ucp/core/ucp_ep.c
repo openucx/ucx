@@ -424,7 +424,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     }
 
-    if (sa_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
+    if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR |
                      UCP_ADDRESS_PACK_FLAG_TRACE;
@@ -439,7 +439,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     }
 
     switch (sa_data->addr_mode) {
-    case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
+    case UCP_WIREUP_SA_DATA_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &remote_addr,
                                               ep_init_flags |
@@ -452,7 +452,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
         ucp_ep_flush_state_reset(*ep_p);
         break;
-    case UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR:
+    case UCP_WIREUP_SA_DATA_PARTIAL_ADDR:
         status = ucp_ep_create_sockaddr_aux(worker, ep_init_flags,
                                             &remote_addr, ep_p);
         if (status != UCS_OK) {
@@ -465,7 +465,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
                                        UCP_EP_FLAG_FLUSH_STATE_VALID)));
         break;
-    case UCP_WIREUP_SOCKADDR_CD_CM_ADDR:
+    case UCP_WIREUP_SA_DATA_CM_ADDR:
         ucs_assert(ucp_worker_sockaddr_is_cm_proto(worker));
         for (i = 0; i < remote_addr.address_count; ++i) {
             remote_addr.address_list[i].dev_addr = conn_request->remote_dev_addr;
