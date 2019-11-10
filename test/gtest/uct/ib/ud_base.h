@@ -10,8 +10,10 @@
 
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
+extern "C" {
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
+}
 
 
 #define TEST_UD_PROGRESS_TIMEOUT 300.0
@@ -48,5 +50,11 @@ protected:
     entity *m_e1, *m_e2;
     uint64_t m_dummy;
 };
+
+
+#define UCT_INSTANTIATE_UD_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, ud_verbs) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, ud_mlx5)
+
 
 #endif
