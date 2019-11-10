@@ -78,7 +78,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
 typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t *neth);
 
 #define UCT_UD_IFACE_HOOK_DECLARE(_name) \
-    uct_ud_iface_hook_t _name
+    uct_ud_iface_hook_t _name;
 
 #define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _len) \
     if ((_iface)->rx.hook(_iface, _neth) != UCS_OK) { \
@@ -122,7 +122,7 @@ struct uct_ud_iface {
         unsigned             available;
         unsigned             quota;
         ucs_queue_head_t     pending_q;
-        UCT_UD_IFACE_HOOK_DECLARE(hook);
+        UCT_UD_IFACE_HOOK_DECLARE(hook)
     } rx;
     struct {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
@@ -147,7 +147,7 @@ struct uct_ud_iface {
         unsigned             gid_len;
     } config;
 
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];

@@ -15,6 +15,8 @@ extern "C" {
 }
 #include <ucs/sys/preprocessor.h>
 
+#include <limits>
+
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner {
@@ -279,7 +281,7 @@ public:
 
     ucs_status_t run_pingpong()
     {
-        const psn_t unknown_psn = -1;
+        const psn_t unknown_psn = std::numeric_limits<psn_t>::max();
         unsigned my_index;
         ucp_worker_h worker;
         ucp_ep_h ep;

@@ -45,7 +45,7 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 #define UCS_STATS_RVAL(_rval) _rval
 
 #define UCS_STATS_NODE_DECLARE(_node) \
-    ucs_stats_node_t* _node
+    ucs_stats_node_t* _node;
 
 #define UCS_STATS_NODE_ALLOC(_p_node, _class, _parent, ...) \
     ucs_stats_node_alloc(_p_node, _class, _parent, ## __VA_ARGS__ , "")
