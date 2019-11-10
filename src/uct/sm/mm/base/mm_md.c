@@ -20,7 +20,7 @@ ucs_config_field_t uct_mm_md_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_mm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-  {"HUGETLB_MODE", "yes",
+  {"HUGETLB_MODE", "try",
    "Enable using huge pages for internal buffers. "
    "Possible values are:\n"
    " y   - Allocate memory using huge pages only.\n"
@@ -35,11 +35,18 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
-    if (uct_mm_mdc_mapper_ops(component)->query() == UCS_OK) {
+    uct_mm_component_t *mmc = ucs_derived_of(component, uct_mm_component_t);
+    ucs_status_t status;
+
+    status = mmc->md_ops->query();
+    switch (status) {
+    case UCS_OK:
         return uct_md_query_single_md_resource(component, resources_p,
                                                num_resources_p);
-    } else {
+    case UCS_ERR_UNSUPPORTED:
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    default:
+        return status;
     }
 }
 
@@ -56,9 +63,8 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-
     status = uct_mm_md_mapper_call(md, alloc, md, length_p, UCS_TRY, flags,
-                                   alloc_name, address_p, &seg->mmid,
+                                   alloc_name, address_p, &seg->seg_id,
                                    &seg->path);
     if (status != UCS_OK) {
         ucs_free(seg);
@@ -70,7 +76,7 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
     *memh_p      = seg;
 
     ucs_debug("mm allocated address %p length %zu mmid %"PRIu64,
-              seg->address, seg->length, seg->mmid);
+              seg->address, seg->length, seg->seg_id);
     return UCS_OK;
 }
 
@@ -79,7 +85,7 @@ ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_md_mapper_call(md, free, seg->address, seg->mmid,
+    status = uct_mm_md_mapper_call(md, free, seg->address, seg->seg_id,
                                    seg->length, seg->path);
     if (status != UCS_OK) {
         return status;
@@ -101,7 +107,7 @@ ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_mm_md_mapper_call(md, reg, address, length, &seg->mmid);
+    status = uct_mm_md_mapper_call(md, reg, address, length, &seg->seg_id);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -112,7 +118,7 @@ ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
     *memh_p      = seg;
 
     ucs_debug("mm registered address %p length %zu mmid %"PRIu64,
-              address, length, seg->mmid);
+              address, length, seg->seg_id);
     return UCS_OK;
 }
 
@@ -121,7 +127,7 @@ ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_md_mapper_call(md, dereg, seg->mmid);
+    status = uct_mm_md_mapper_call(md, dereg, seg->seg_id);
     if (status != UCS_OK) {
         return status;
     }
@@ -138,7 +144,6 @@ void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, int support_alloc)
                                     UCT_MD_FLAG_NEED_RKEY;
     md_attr->cap.max_reg          = 0;
     md_attr->cap.max_alloc        = 0;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     md_attr->cap.detect_mem_types = 0;
 
@@ -155,7 +160,7 @@ ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     uct_mm_packed_rkey_t *rkey = rkey_buffer;
     uct_mm_seg_t *seg = memh;
 
-    rkey->mmid      = seg->mmid;
+    rkey->mmid      = seg->seg_id;
     rkey->owner_ptr = (uintptr_t)seg->address;
     rkey->length    = seg->length;
 
@@ -210,7 +215,7 @@ ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
     uct_mm_remote_seg_t *mm_desc = handle;
 
     /* rkey stores offset from the remote va */
-    *laddr_p = (void *)(raddr + (uint64_t)rkey);
+    *laddr_p = UCS_PTR_BYTE_OFFSET(raddr, (ptrdiff_t)rkey);
     if ((*laddr_p < mm_desc->address) ||
         (*laddr_p >= UCS_PTR_BYTE_OFFSET(mm_desc->address, mm_desc->length))) {
        return UCS_ERR_INVALID_ADDR;
@@ -229,15 +234,6 @@ ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
     return status;
 }
 
-void uct_mm_md_close(uct_md_h md)
-{
-    uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
-
-    ucs_config_parser_release_opts(mm_md->config, md->component->md_config.table);
-    ucs_free(mm_md->config);
-    ucs_free(mm_md);
-}
-
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p)
 {
@@ -252,7 +248,7 @@ ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
         goto err;
     }
 
-    md->config = ucs_malloc(component->md_config.size, "mm_md config");
+    md->config = ucs_malloc(mmc->super.md_config.size, "mm_md config");
     if (md->config == NULL) {
         ucs_error("Failed to allocate memory for mm_md config");
         status = UCS_ERR_NO_MEMORY;
@@ -279,4 +275,14 @@ err_free_mm_md:
     ucs_free(md);
 err:
     return status;
+}
+
+void uct_mm_md_close(uct_md_h md)
+{
+    uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
+
+    ucs_config_parser_release_opts(mm_md->config,
+                                   md->component->md_config.table);
+    ucs_free(mm_md->config);
+    ucs_free(mm_md);
 }

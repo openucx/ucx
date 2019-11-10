@@ -5,26 +5,83 @@
 * See file LICENSE for terms.
 */
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
 #include "mm_ep.h"
 
 #include <ucs/arch/atomic.h>
 
 
-enum {
-    UCT_MM_AM_BCOPY,
-    UCT_MM_AM_SHORT,
-};
+/* send modes */
+typedef enum {
+    UCT_MM_SEND_AM_BCOPY,
+    UCT_MM_SEND_AM_SHORT,
+} uct_mm_send_op_t;
 
 
-/* cppcheck-suppress ctunullpointer */
-SGLIB_DEFINE_LIST_FUNCTIONS(uct_mm_remote_seg_t, uct_mm_remote_seg_compare, next)
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_mm_remote_seg_t,
-                                        UCT_MM_BASE_ADDRESS_HASH_SIZE,
-                                        uct_mm_remote_seg_hash)
+/* Check if the resources on the remote peer are available for sending to it.
+ * i.e. check if the remote receive FIFO has room in it.
+ * return 1 if can send.
+ * return 0 if can't send.
+ */
+#define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
+    ucs_likely(((_head) - (_tail)) < (_fifo_size))
+
+
+static UCS_F_NOINLINE ucs_status_t
+uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
+                            void *remote_address, size_t length,
+                            void **address_p)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_mm_iface_t);
+    uct_mm_remote_seg_t *remote_seg;
+    ucs_status_t status;
+    khiter_t khiter;
+    int khret;
+
+    khiter = kh_put(uct_mm_remote_seg, &ep->remote_segs, seg_id, &khret);
+    if (khret == -1) {
+        ucs_error("failed to add remote segment to mm ep hash");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    /* we expect the key would either be never used (=1) or deleted (=2) */
+    ucs_assert_always((khret == 1) || (khret == 2));
+
+    remote_seg = &kh_val(&ep->remote_segs, khiter);
+
+    status = uct_mm_iface_mapper_call(iface, attach, seg_id, length,
+                                      remote_address, &remote_seg->address,
+                                      &remote_seg->cookie, iface->path);
+    if (status != UCS_OK) {
+        kh_del(uct_mm_remote_seg, &ep->remote_segs, khiter);
+        return status;
+    }
+
+    remote_seg->length = length;
+    *address_p         = remote_seg->address;
+
+    ucs_debug("mm_ep %p: attached remote segment id 0x%"PRIx64" at %p cookie 0x%"PRIx64,
+              ep, seg_id, remote_seg->address, remote_seg->cookie);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
+                         void *remote_address, size_t length, void **address_p)
+{
+    khiter_t khiter;
+
+    /* fast path - segment is already present */
+    khiter = kh_get(uct_mm_remote_seg, &ep->remote_segs, seg_id);
+    if (ucs_likely(khiter != kh_end(&ep->remote_segs))) {
+        *address_p = kh_val(&ep->remote_segs, khiter).address;
+        return UCS_OK;
+    }
+
+    /* slow path - attach new segment */
+    return uct_mm_ep_attach_remote_seg(ep, seg_id, remote_address, length,
+                                       address_p);
+}
 
 
 /* send a signal to remote interface using Unix-domain socket */
@@ -64,130 +121,60 @@ static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
 
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
 {
-    uct_mm_iface_t *iface           = ucs_derived_of(params->iface, uct_mm_iface_t);
-    const uct_mm_iface_addr_t *addr = (const void *)params->iface_addr;
-
+    uct_mm_iface_t            *iface = ucs_derived_of(params->iface, uct_mm_iface_t);
+    const uct_mm_iface_addr_t *addr  = (const void *)params->iface_addr;
     ucs_status_t status;
-    size_t size_to_attach;
+    void *fifo_ptr;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    /* Connect to the remote address (remote FIFO) */
-    /* Attach the address's memory */
-    size_to_attach = UCT_MM_GET_FIFO_SIZE(iface);
-    status         = uct_mm_iface_mapper_call(iface, attach, addr->id,
-                                              size_to_attach,
-                                              (void *)addr->vaddr,
-                                              &self->mapped_desc.address,
-                                              &self->mapped_desc.cookie,
-                                              iface->path);
+    kh_init_inplace(uct_mm_remote_seg, &self->remote_segs);
+    ucs_arbiter_group_init(&self->arb_group);
+
+    /* Attach the remote FIFO, use the same method as bcopy descriptors */
+    status = uct_mm_ep_get_remote_seg(self, addr->fifo_seg_id, (void*)addr->vaddr,
+                                      UCT_MM_GET_FIFO_SIZE(iface), &fifo_ptr);
     if (status != UCS_OK) {
-        ucs_error("failed to connect to remote peer with mm. remote mm_id: %zu",
-                   addr->id);
-        return status;
+        ucs_error("mm ep failed to connect to remote FIFO id 0x%lx va 0x%lx: %s",
+                  addr->fifo_seg_id, addr->vaddr, ucs_status_string(status));
+        goto err_destroy_remote_segs;
     }
 
-    self->mapped_desc.length     = size_to_attach;
-    self->mapped_desc.mmid       = addr->id;
-
-    /* point the ep->fifo_ctl to the remote fifo.
-      * it's an aligned pointer to the beginning of the ctl struct in the remote FIFO */
-    self->fifo_ctl        = uct_mm_set_fifo_ctl(self->mapped_desc.address);
+    /* Initialize remote FIFO control structure */
+    uct_mm_iface_set_fifo_ptrs(fifo_ptr, &self->fifo_ctl, &self->fifo_elems);
     self->cached_tail     = self->fifo_ctl->tail;
     self->signal.addrlen  = self->fifo_ctl->signal_addrlen;
     self->signal.sockaddr = self->fifo_ctl->signal_sockaddr;
 
-    /* Make sure the fifo ctrl is aligned */
-    ucs_assert_always(((uintptr_t)self->fifo_ctl % UCS_SYS_CACHE_LINE_SIZE) == 0);
-
-    /* set the ep->fifo ptr to point to the beginning of the fifo elements at
-     * the remote peer */
-    uct_mm_set_fifo_elems_ptr(self->mapped_desc.address, &self->fifo);
-
-    /* Initiate the hash which will keep the base_adresses of remote memory
-     * chunks that hold the descriptors for bcopy. */
-    sglib_hashed_uct_mm_remote_seg_t_init(self->remote_segments_hash);
-
-    ucs_arbiter_group_init(&self->arb_group);
-
-    ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, addr->id);
+    ucs_debug("created mm ep %p, connected to remote FIFO id 0x%lx va 0x%lx",
+              self, addr->fifo_seg_id, addr->vaddr);
 
     return UCS_OK;
+
+err_destroy_remote_segs:
+    kh_destroy_inplace(uct_mm_remote_seg, &self->remote_segs);
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
 {
-    uct_mm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_mm_iface_t);
-    ucs_status_t status;
-    uct_mm_remote_seg_t *remote_seg;
-    struct sglib_hashed_uct_mm_remote_seg_t_iterator iter;
-
-    for (remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_init(&iter, self->remote_segments_hash);
-         remote_seg != NULL; remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_next(&iter)) {
-            sglib_hashed_uct_mm_remote_seg_t_delete(self->remote_segments_hash, remote_seg);
-            /* detach the remote proceess's descriptors segment */
-            status = uct_mm_iface_mapper_call(iface, detach, remote_seg);
-            if (status != UCS_OK) {
-                ucs_warn("Unable to detach shared memory segment of descriptors: %s",
-                         ucs_status_string(status));
-            }
-            ucs_free(remote_seg);
-    }
-
-    /* detach the remote proceess's shared memory segment (remote recv FIFO) */
-    status = uct_mm_iface_mapper_call(iface, detach, &self->mapped_desc);
-    if (status != UCS_OK) {
-        ucs_error("error detaching from remote FIFO");
-    }
+    uct_mm_iface_t  *iface = ucs_derived_of(self->super.super.iface, uct_mm_iface_t);
+    uct_mm_remote_seg_t remote_seg;
 
     uct_mm_ep_pending_purge(&self->super.super, NULL, NULL);
+
+    kh_foreach_value(&self->remote_segs, remote_seg, {
+        uct_mm_iface_mapper_call(iface, detach, &remote_seg);
+    })
+
+    kh_destroy_inplace(uct_mm_remote_seg, &self->remote_segs);
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
-void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm_fifo_element_t *elem)
-{
-    uct_mm_remote_seg_t *remote_seg, search;
-    ucs_status_t status;
-
-    /* take the mmid of the chunk that the desc belongs to, (the desc that the fifo_elem
-     * is 'assigned' to), and check if the ep has already attached to it.
-     */
-    search.mmid = elem->desc_mmid;
-    remote_seg = sglib_hashed_uct_mm_remote_seg_t_find_member(ep->remote_segments_hash, &search);
-    if (remote_seg == NULL) {
-        /* not in the hash. attach to the memory the mmid refers to. the attach call
-         * will return the base address of the mmid's chunk -
-         * save this base address in a hash table (which maps mmid to base address). */
-        remote_seg = ucs_malloc(sizeof(*remote_seg), "mm_desc");
-        if (remote_seg == NULL) {
-            ucs_fatal("Failed to allocated memory for a remote segment identifier. %m");
-        }
-
-        status = uct_mm_iface_mapper_call(iface, attach, elem->desc_mmid,
-                                          elem->desc_mpool_size,
-                                          elem->desc_chunk_base_addr,
-                                          &remote_seg->address,
-                                          &remote_seg->cookie,
-                                          iface->path);
-        if (status != UCS_OK) {
-            ucs_fatal("Failed to attach to remote mmid:%zu. %s ",
-                      elem->desc_mmid, ucs_status_string(status));
-        }
-
-        remote_seg->mmid   = elem->desc_mmid;
-        remote_seg->length = elem->desc_mpool_size;
-
-        /* put the base address into the ep's hash table */
-        sglib_hashed_uct_mm_remote_seg_t_add(ep->remote_segments_hash, remote_seg);
-    }
-
-    return remote_seg->address;
-
-}
 
 static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
                                                      uct_mm_fifo_element_t **elem)
@@ -198,7 +185,7 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
     uint64_t returned_val;
 
     elem_index = ep->fifo_ctl->head & iface->fifo_mask;
-    *elem = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo, elem_index);
+    *elem      = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo_elems, elem_index);
 
     /* try to get ownership of the head element */
     returned_val = ucs_atomic_cswap64(ucs_unaligned_ptr(&ep->fifo_ctl->head), head, head+1);
@@ -221,14 +208,16 @@ static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
  * is_short = 0 - perform AM bcopy sending
  */
 static UCS_F_ALWAYS_INLINE ssize_t
-uct_mm_ep_am_common_send(unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
-                         uint8_t am_id, size_t length, uint64_t header,
-                         const void *payload, uct_pack_callback_t pack_cb, void *arg,
+uct_mm_ep_am_common_send(uct_mm_send_op_t send_op, uct_mm_ep_t *ep,
+                         uct_mm_iface_t *iface, uint8_t am_id, size_t length,
+                         uint64_t header, const void *payload,
+                         uct_pack_callback_t pack_cb, void *arg,
                          unsigned flags)
 {
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
     void *base_address;
+    uint8_t elem_flags;
     uint64_t head;
 
     UCT_CHECK_AM_ID(am_id);
@@ -259,32 +248,39 @@ retry:
         goto retry;
     }
 
-    if (is_short) {
-        /* AM_SHORT */
+    switch (send_op) {
+    case UCT_MM_SEND_AM_SHORT:
         /* write to the remote FIFO */
         uct_am_short_fill_data(elem + 1, header, payload, length);
 
-        elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
+        elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
 
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
                            elem + 1, length + sizeof(header), "TX: AM_SHORT");
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(header) + length);
-    } else {
-        /* AM_BCOPY */
+        break;
+    case UCT_MM_SEND_AM_BCOPY:
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
-        base_address = uct_mm_ep_attach_remote_seg(ep, iface, elem);
-        length       = pack_cb(UCS_PTR_BYTE_OFFSET(base_address, elem->desc_offset), arg);
+        status = uct_mm_ep_get_remote_seg(ep, elem->desc.seg_id,
+                                          (void*)elem->desc.seg_va,
+                                          elem->desc.seg_size, &base_address);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
 
-        elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
+        length       = pack_cb(UCS_PTR_BYTE_OFFSET(base_address,
+                                                   elem->desc.offset),
+                               arg);
+        elem_flags   = 0;
         elem->length = length;
 
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           UCS_PTR_BYTE_OFFSET(base_address, elem->desc_offset),
+                           UCS_PTR_BYTE_OFFSET(base_address, elem->desc.offset),
                            length, "TX: AM_BCOPY");
-
         UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
+        break;
     }
 
     elem->am_id = am_id;
@@ -293,22 +289,24 @@ retry:
      * 'writing is complete' flag which the reader checks */
     ucs_memory_cpu_store_fence();
 
-    /* change the owner bit to indicate that the writing is complete.
+    /* set the owner bit to indicate that the writing is complete.
      * the owner bit flips after every FIFO wraparound */
     if (head & iface->config.fifo_size) {
-        elem->flags |= UCT_MM_FIFO_ELEM_FLAG_OWNER;
-    } else {
-        elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_OWNER;
+        elem_flags |= UCT_MM_FIFO_ELEM_FLAG_OWNER;
     }
+    elem->flags = elem_flags;
 
     if (ucs_unlikely(flags & UCT_SEND_FLAG_SIGNALED)) {
         uct_mm_ep_signal_remote(ep);
     }
 
-    if (is_short) {
+    switch (send_op) {
+    case UCT_MM_SEND_AM_SHORT:
         return UCS_OK;
-    } else {
+    case UCT_MM_SEND_AM_BCOPY:
         return length;
+    default:
+        return UCS_ERR_INVALID_PARAM;
     }
 }
 
@@ -322,9 +320,9 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                      iface->config.fifo_elem_size - sizeof(uct_mm_fifo_element_t),
                      "am_short");
 
-    return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface,
-                                                  id, length, header, payload,
-                                                  NULL, NULL, 0);
+    return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT, ep,
+                                                  iface, id, length, header,
+                                                  payload, NULL, NULL, 0);
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
@@ -333,8 +331,8 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    return uct_mm_ep_am_common_send(UCT_MM_AM_BCOPY, ep, iface, id, 0, 0, NULL,
-                                    pack_cb, arg, flags);
+    return uct_mm_ep_am_common_send(UCT_MM_SEND_AM_BCOPY, ep, iface, id, 0, 0,
+                                    NULL, pack_cb, arg, flags);
 }
 
 static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
