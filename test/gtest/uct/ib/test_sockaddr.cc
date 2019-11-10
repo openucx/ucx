@@ -371,6 +371,10 @@ public:
 protected:
 
     void cm_start_listen() {
+        if (!strcmp(GetParam()->md_name.c_str(), "sockcm")) {
+            UCS_TEST_SKIP_R("sockcm cm is not fully implemented");
+        }
+
         uct_listener_params_t params;
 
         params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
@@ -767,6 +771,10 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
+    if (!strcmp(GetParam()->md_name.c_str(), "sockcm")) {
+        UCS_TEST_SKIP_R("sockcm cm is not fully implemented");
+    }
+
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
 

@@ -5,6 +5,7 @@
  */
 
 #include "sockcm_md.h"
+#include "sockcm_cm.h"
 
 #define UCT_SOCKCM_NAME              "sockcm"
 
@@ -122,7 +123,7 @@ uct_sockcm_md_open(uct_component_t *component, const char *md_name,
 uct_component_t uct_sockcm_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_sockcm_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_sockcm_cm_t),
     .rkey_unpack        = ucs_empty_function_return_unsupported,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_unsupported,

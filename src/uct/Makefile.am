@@ -39,7 +39,8 @@ noinst_HEADERS = \
 	tcp/sockcm/sockcm_def.h \
 	tcp/sockcm/sockcm_iface.h \
 	tcp/sockcm/sockcm_ep.h \
-	tcp/sockcm/sockcm_md.h
+	tcp/sockcm/sockcm_md.h \
+	tcp/sockcm/sockcm_cm.h
 
 
 libuct_la_SOURCES = \
@@ -64,4 +65,5 @@ libuct_la_SOURCES = \
 	tcp/tcp_cm.c \
 	tcp/sockcm/sockcm_iface.c \
 	tcp/sockcm/sockcm_ep.c \
-	tcp/sockcm/sockcm_md.c
+	tcp/sockcm/sockcm_md.c \
+	tcp/sockcm/sockcm_cm.c
