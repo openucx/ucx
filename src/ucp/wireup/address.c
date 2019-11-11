@@ -30,15 +30,14 @@
  *    ...
  *
  *   * worker_name is packed if ENABLE_DEBUG is set.
- *   * In unified mode tl_info contains just rsc_index. For last address in the
- *     tl address list, it will have LAST flag set.
+ *   * In unified mode tl_info contains just rsc_index and iface latency overhead.
+ *     For last address in the tl address list, it will have LAST flag set.
  *   * In non unified mode tl_info contains iface attributes. LAST flag is set in
  *     iface address length.
  *   * If a device does not have tl addresses, it's md_index will have the flag
  *     EMPTY.
  *   * If the address list is empty, then it will contain only a single md_index
  *     which equals to UCP_NULL_RESOURCE.
- *
  */
 
 
@@ -57,6 +56,20 @@ typedef struct {
     float            lat_ovh;
     uint32_t         prio_cap_flags; /* 8 lsb: prio, 22 msb: cap flags, 2 hsb: amo */
 } ucp_address_packed_iface_attr_t;
+
+
+/* In unified mode we pack resource index instead of iface attrs to the address,
+ * so the peer can get all attrs from the local device with the same resource
+ * index. Also we send latency overhead because it depends on device NUMA
+ * locality, which may be different on peers (processes which do address pack
+ * and address unpack).
+ * TODO: Revise/fix this when NUMA locality is exposed in UCP.
+ * */
+typedef struct {
+    ucp_rsc_index_t  rsc_index;
+    float            lat_ovh;
+} ucp_address_unified_iface_attr_t;
+
 
 #define UCT_ADDRESS_FLAG_ATOMIC32     UCS_BIT(30) /* 32bit atomic operations */
 #define UCT_ADDRESS_FLAG_ATOMIC64     UCS_BIT(31) /* 64bit atomic operations */
@@ -87,7 +100,8 @@ static size_t ucp_address_worker_name_size(ucp_worker_h worker, uint64_t flags)
 static size_t ucp_address_iface_attr_size(ucp_worker_t *worker)
 {
     return ucp_worker_unified_mode(worker) ?
-           sizeof(ucp_rsc_index_t) : sizeof(ucp_address_packed_iface_attr_t);
+           sizeof(ucp_address_unified_iface_attr_t) :
+           sizeof(ucp_address_packed_iface_attr_t);
 }
 
 static uint64_t ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
@@ -301,7 +315,8 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
                                        const uct_iface_attr_t *iface_attr,
                                        int enable_atomics)
 {
-    ucp_address_packed_iface_attr_t *packed;
+    ucp_address_packed_iface_attr_t  *packed;
+    ucp_address_unified_iface_attr_t *unified;
     uint32_t packed_flag;
     uint64_t cap_flags;
     uint64_t bit;
@@ -316,9 +331,13 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     if (ucp_worker_unified_mode(worker)) {
         /* In unified mode all workers have the same transports and tl bitmap.
          * Just send rsc index, so the remote peer could fetch iface attributes
-         * from its local iface. */
-        *(ucp_rsc_index_t*)ptr = index;
-        return sizeof(ucp_rsc_index_t);
+         * from its local iface. Also send latency overhead, because it
+         * depends on device NUMA locality. */
+        unified            = ptr;
+        unified->lat_ovh   = iface_attr->latency.overhead;
+        unified->rsc_index = index;
+
+        return sizeof(*unified);
     }
 
     packed    = ptr;
@@ -362,21 +381,25 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
                               const void *ptr)
 {
     const ucp_address_packed_iface_attr_t *packed;
+    const ucp_address_unified_iface_attr_t *unified;
     ucp_worker_iface_t *wiface;
     uint32_t packed_flag;
     ucp_rsc_index_t rsc_idx;
     uint64_t bit;
 
     if (ucp_worker_unified_mode(worker)) {
-        /* Address contains resources index, not iface attrs.
-         * Just take iface attrs from the local resource. */
-        rsc_idx               = (*(ucp_rsc_index_t*)ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
+        /* Address contains resources index and iface latency overhead
+         * (not all iface attrs). */
+        unified               = ptr;
+        rsc_idx               = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
+        iface_attr->lat_ovh   = unified->lat_ovh;
         wiface                = ucp_worker_iface(worker, rsc_idx);
+
+        /* Just take the rest of iface attrs from the local resource. */
         iface_attr->cap_flags = wiface->attr.cap.flags;
         iface_attr->priority  = wiface->attr.priority;
         iface_attr->overhead  = wiface->attr.overhead;
         iface_attr->bandwidth = wiface->attr.bandwidth;
-        iface_attr->lat_ovh   = wiface->attr.latency.overhead;
         if (worker->atomic_tls & UCS_BIT(rsc_idx)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
             iface_attr->atomic.atomic32.fop_flags = wiface->attr.cap.atomic32.fop_flags;
@@ -384,7 +407,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
             iface_attr->atomic.atomic64.fop_flags = wiface->attr.cap.atomic64.fop_flags;
         }
 
-        return sizeof(rsc_idx);
+        return sizeof(*unified);
     }
 
     packed                          = ptr;
@@ -425,6 +448,8 @@ ucp_address_iface_flags_ptr(ucp_worker_h worker, const void *attr_ptr, int attr_
     if (ucp_worker_unified_mode(worker)) {
         /* In unified mode, rsc_index is packed instead of attrs. Address flags
          * will be packed in the end of rsc_index byte. */
+        UCS_STATIC_ASSERT(ucs_offsetof(ucp_address_unified_iface_attr_t,
+                                       rsc_index) == 0);
         return attr_ptr;
     }
 
@@ -452,17 +477,19 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
 {
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *attr;
+    const ucp_address_unified_iface_attr_t *unified;
 
     if (ucp_worker_unified_mode(worker)) {
         /* In unified mode:
-         * - flags are packed with rsc index
+         * - flags are packed with rsc index in ucp_address_unified_iface_attr_t
          * - iface and ep addr lengths are not packed, need to take them from
          *   local iface attrs */
-        rsc_index = (*(ucp_rsc_index_t*)flags_ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
+        unified   = flags_ptr;
+        rsc_index = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
         attr      = &ucp_worker_iface(worker, rsc_index)->attr;
 
         if (is_ep_addr) {
-            *addr_length = ((*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_EP_ADDR) ?
+            *addr_length = (unified->rsc_index & UCP_ADDRESS_FLAG_EP_ADDR) ?
                            attr->ep_addr_len : 0;
         } else {
             *addr_length = attr->iface_addr_len;
