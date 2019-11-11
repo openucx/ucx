@@ -8,7 +8,6 @@
 #  include "config.h"
 #endif
 
-#include "proto.h"
 #include "proto_am.inl"
 
 #include <ucp/tag/offload.h>

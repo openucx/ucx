@@ -50,7 +50,7 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_stream_send_req(ucp_request_t *req, size_t count,
                     const ucp_ep_msg_config_t* msg_config,
-                    ucp_send_callback_t cb, const ucp_proto_t *proto)
+                    ucp_send_callback_t cb, const ucp_am_proto_t *proto)
 {
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
                                                         count, SIZE_MAX);
@@ -253,7 +253,7 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
                                  ucp_proto_am_zcopy_req_complete, 0);
 }
 
-const ucp_proto_t ucp_stream_am_proto = {
+const ucp_am_proto_t ucp_stream_am_proto = {
     .contig_short            = ucp_stream_contig_am_short,
     .bcopy_single            = ucp_stream_bcopy_single,
     .bcopy_multi             = ucp_stream_bcopy_multi,

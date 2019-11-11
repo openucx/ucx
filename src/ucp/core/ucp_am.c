@@ -376,7 +376,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_am_send_req(ucp_request_t *req, size_t count,
                 const ucp_ep_msg_config_t *msg_config,
-                ucp_send_callback_t cb, const ucp_proto_t *proto)
+                ucp_send_callback_t cb, const ucp_am_proto_t *proto)
 {
     
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
@@ -698,7 +698,7 @@ UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE_REPLY,
 UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI_REPLY,
               ucp_am_long_handler_reply, NULL, 0);
 
-const ucp_proto_t ucp_am_proto = {
+const ucp_am_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,
     .bcopy_single           = ucp_am_bcopy_single,
     .bcopy_multi            = ucp_am_bcopy_multi,
@@ -710,7 +710,7 @@ const ucp_proto_t ucp_am_proto = {
     .mid_hdr_size           = sizeof(ucp_am_long_hdr_t)
 };
 
-const ucp_proto_t ucp_am_reply_proto = {
+const ucp_am_proto_t ucp_am_reply_proto = {
     .contig_short           = NULL,
     .bcopy_single           = ucp_am_bcopy_single_reply,
     .bcopy_multi            = ucp_am_bcopy_multi_reply,

@@ -635,7 +635,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
     return UCS_OK;
 }
 
-const ucp_proto_t ucp_tag_offload_proto = {
+const ucp_am_proto_t ucp_tag_offload_proto = {
     .contig_short     = ucp_tag_offload_eager_short,
     .bcopy_single     = ucp_tag_offload_eager_bcopy,
     .bcopy_multi      = NULL,
@@ -707,7 +707,7 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
     ucp_request_send(req, 0);
 }
 
-const ucp_proto_t ucp_tag_offload_sync_proto = {
+const ucp_am_proto_t ucp_tag_offload_sync_proto = {
     .contig_short     = NULL,
     .bcopy_single     = ucp_tag_offload_eager_sync_bcopy,
     .bcopy_multi      = NULL,

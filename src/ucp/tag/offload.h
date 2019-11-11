@@ -48,9 +48,8 @@ typedef struct {
 } UCS_S_PACKED ucp_offload_last_ssend_hdr_t;
 
 
-extern const ucp_proto_t ucp_tag_offload_proto;
-
-extern const ucp_proto_t ucp_tag_offload_sync_proto;
+extern const ucp_am_proto_t ucp_tag_offload_proto;
+extern const ucp_am_proto_t ucp_tag_offload_sync_proto;
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self);
 
