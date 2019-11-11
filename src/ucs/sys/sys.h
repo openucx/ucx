@@ -15,6 +15,7 @@
 
 #include <ucs/sys/compiler.h>
 #include <ucs/type/status.h>
+#include <ucs/type/cpu_set.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/config/types.h>
 
@@ -47,6 +48,19 @@
 #include <net/if_arp.h>
 #include <net/if.h>
 #include <netdb.h>
+
+
+#include <sys/types.h>
+#if defined(__linux__) || defined(HAVE_CPU_SET_T)
+#include <sched.h>
+typedef cpu_set_t ucs_sys_cpuset_t;
+#elif defined(__FreeBSD__) || defined(HAVE_CPUSET_T)
+#include <sys/cpuset.h>
+typedef cpuset_t ucs_sys_cpuset_t;
+#else
+#error "Port me"
+#endif
+
 
 BEGIN_C_DECLS
 
@@ -371,7 +385,33 @@ void ucs_sys_free(void *ptr, size_t length);
  *
  * @return Filled string
  */
-char *ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len);
+char *ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len);
+
+/**
+ * Sets affinity for the current process.
+ *
+ * @param [in] cpuset      Pointer to the cpuset to assign
+ *
+ * @return -1 on error with errno set, 0 on success
+ */
+int ucs_sys_setaffinity(ucs_sys_cpuset_t *cpuset);
+
+/**
+ * Queries affinity for the current process.
+ *
+ * @param [out] cpuset      Pointer to the cpuset to return result
+ *
+ * @return -1 on error with errno set, 0 on success
+ */
+int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset);
+
+/**
+ * Copies ucs_sys_cpuset_t to ucs_cpu_set_t.
+ *
+ * @param [in]  src         Source
+ * @param [out] dst         Destination
+ */
+void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src);
 
 END_C_DECLS
 

@@ -1336,7 +1336,7 @@ static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t check_system(struct perftest_context *ctx)
 {
-    cpu_set_t cpuset;
+    ucs_sys_cpuset_t cpuset;
     unsigned i, count, nr_cpus;
     int ret;
 
@@ -1357,13 +1357,13 @@ static ucs_status_t check_system(struct perftest_context *ctx)
         }
         CPU_SET(ctx->cpu, &cpuset);
 
-        ret = sched_setaffinity(0, sizeof(cpuset), &cpuset);
+        ret = ucs_sys_setaffinity(&cpuset);
         if (ret) {
             ucs_warn("sched_setaffinity() failed: %m");
             return UCS_ERR_INVALID_PARAM;
         }
     } else {
-        ret = sched_getaffinity(0, sizeof(cpuset), &cpuset);
+        ret = ucs_sys_getaffinity(&cpuset);
         if (ret) {
             ucs_warn("sched_getaffinity() failed: %m");
             return UCS_ERR_INVALID_PARAM;
