@@ -515,6 +515,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
+        self->is_server = 1;
+
         /* Create an id for this interface. Events associated with this id will be
          * reported on the event_channel that was previously created. */
         if (rdma_create_id(self->event_ch, &self->cm_id, NULL, RDMA_PS_UDP)) {
@@ -554,7 +556,6 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
-        self->is_server        = 1;
     } else {
         self->cm_id            = NULL;
         self->is_server        = 0;
@@ -580,7 +581,9 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     return UCS_OK;
 
 err_destroy_id:
-    rdma_destroy_id(self->cm_id);
+    if (self->is_server) {
+        rdma_destroy_id(self->cm_id);
+    }
 err_destroy_event_channel:
     rdma_destroy_event_channel(self->event_ch);
 err:
