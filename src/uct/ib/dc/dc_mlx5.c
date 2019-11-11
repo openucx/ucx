@@ -255,6 +255,8 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
                                          uct_dc_dci_t *dci)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     ucs_status_t status;
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
@@ -265,7 +267,7 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->super,
                                            &iface->super.super.super);
-    status = uct_ib_modify_qp(dci->txwq.super.verbs.qp, IBV_QPS_RESET);
+    status = uct_ib_mlx5_modify_qp_state(md, &dci->txwq.super, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
                                          &iface->super.super.super);
 
@@ -369,8 +371,14 @@ err_qp:
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     struct ibv_qp_attr attr;
     long attr_mask;
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super);
+    }
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
     memset(&attr, 0, sizeof(attr));
@@ -606,7 +614,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
     status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
                                   iface->super.rx.srq.verbs.srq,
-                                  iface->super.super.super.config.seg_size);
+                                  iface->super.super.super.config.seg_size,
+                                  iface->super.tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }
@@ -1140,7 +1149,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                             UCT_IB_MLX5_MAX_BB * config->ndci;
     /* TODO check caps instead */
     if (ucs_roundup_pow2(init_attr.tx_cq_len) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
-        ucs_error("Can't allocate TX resources, try to decrese dcis number (%d)"
+        ucs_error("Can't allocate TX resources, try to decrease dcis number (%d)"
                   " or tx qp length (%d)",
                   config->ndci, config->super.super.tx.queue_len);
         return UCS_ERR_INVALID_PARAM;
@@ -1154,7 +1163,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_dc_mlx5_iface_init_version(self, tl_md);
 
     self->tx.ndci                          = config->ndci;
-    self->tx.policy                        = config->tx_policy;
+    self->tx.policy                        = (uct_dc_tx_policy_t)config->tx_policy;
     self->tx.fc_grants                     = 0;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);

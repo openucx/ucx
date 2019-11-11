@@ -339,7 +339,7 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
 ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t length);
+ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -363,6 +363,17 @@ int ucp_score_cmp(double score1, double score2)
     double diff = score1 - score2;
     return ((fabs(diff) < ucp_calc_epsilon(score1, score2)) ?
             0 : ucs_signum(diff));
+}
+
+/**
+ * Compare two scores taking into account priorities if scores are equal
+ */
+static UCS_F_ALWAYS_INLINE
+int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
+{
+    int score_res = ucp_score_cmp(score1, score2);
+
+    return score_res ? score_res : ucs_signum(prio1 - prio2);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -391,7 +402,7 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_memory_type_detect(ucp_context_h context, void *address, size_t length)
+ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length)
 {
     ucs_memory_type_t mem_type;
     ucs_status_t status;

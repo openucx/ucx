@@ -43,7 +43,7 @@ struct ucs_rcache {
                                           The backing storage is original mmap()
                                           which does not generate memory events */
     char                   *name;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 };
 
 #endif

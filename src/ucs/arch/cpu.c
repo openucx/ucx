@@ -37,6 +37,29 @@ struct { /* sysfs entries for system cache sizes */
     [UCS_CPU_CACHE_L3]  = {.level = 3, .type = "Unified"}
 };
 
+const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
+    [UCS_CPU_VENDOR_UNKNOWN] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_INTEL] = {
+        .min = 1 * UCS_KBYTE,
+        .max = 8 * UCS_MBYTE
+    },
+    [UCS_CPU_VENDOR_AMD] = {
+        .min = 1 * UCS_KBYTE,
+        .max = 136 * UCS_KBYTE
+    },
+    [UCS_CPU_VENDOR_GENERIC_ARM] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_GENERIC_PPC] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    }
+};
+
 static void ucs_sysfs_get_cache_size()
 {
     char type_str[32];  /* Data/Instruction/Unified */

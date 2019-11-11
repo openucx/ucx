@@ -365,6 +365,14 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
+    printf("     -m <mem type>  memory type of messages\n");
+    printf("                        host - system memory(default)\n");
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
+        printf("                        cuda - NVIDIA GPU memory\n");
+    }
+    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
+        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
+    }
     printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%zu)\n",
                                 ctx->params.warmup_iter);
@@ -421,18 +429,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
-    printf("     -m <mem type>  memory type of messages\n");
-    printf("                        host - system memory(default)\n");
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
-        printf("                        cuda - NVIDIA GPU memory\n");
-    } else if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM] != NULL) {
-        printf("                        rocm - AMD ROCm GPU memory\n");
-    }
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
-        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
-    } else if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] != NULL) {
-        printf("                        rocm-managed - AMD ROCm managed memory\n");
-    }
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -686,6 +682,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             params->mem_type = UCS_MEMORY_TYPE_ROCM_MANAGED;
             return UCS_OK;
         }
+
+        ucs_error("Unsupported memory type: \"%s\"", optarg);
         return UCS_ERR_INVALID_PARAM;
     default:
        return UCS_ERR_INVALID_PARAM;
@@ -1346,7 +1344,7 @@ static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t check_system(struct perftest_context *ctx)
 {
-    cpu_set_t cpuset;
+    ucs_sys_cpuset_t cpuset;
     unsigned i, count, nr_cpus;
     int ret;
 
@@ -1367,13 +1365,13 @@ static ucs_status_t check_system(struct perftest_context *ctx)
         }
         CPU_SET(ctx->cpu, &cpuset);
 
-        ret = sched_setaffinity(0, sizeof(cpuset), &cpuset);
+        ret = ucs_sys_setaffinity(&cpuset);
         if (ret) {
             ucs_warn("sched_setaffinity() failed: %m");
             return UCS_ERR_INVALID_PARAM;
         }
     } else {
-        ret = sched_getaffinity(0, sizeof(cpuset), &cpuset);
+        ret = ucs_sys_getaffinity(&cpuset);
         if (ret) {
             ucs_warn("sched_getaffinity() failed: %m");
             return UCS_ERR_INVALID_PARAM;
@@ -1387,7 +1385,7 @@ static ucs_status_t check_system(struct perftest_context *ctx)
         }
         if (count > 2) {
             ucs_warn("CPU affinity is not set (bound to %u cpus)."
-                            " Performance may be impacted.", count);
+                     " Performance may be impacted.", count);
         }
     }
 

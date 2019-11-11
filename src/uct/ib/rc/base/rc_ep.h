@@ -163,7 +163,7 @@ struct uct_rc_txqp {
      * exact value on each signaled completion */
     uint16_t            unsignaled_store_count;
     int16_t             available;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 };
 
 typedef struct uct_rc_fc {
@@ -171,7 +171,7 @@ typedef struct uct_rc_fc {
     int16_t             fc_wnd;
     /* used only for FC protocol at this point (3 higher bits) */
     uint8_t             flags;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_fc_t;
 
 struct uct_rc_ep {

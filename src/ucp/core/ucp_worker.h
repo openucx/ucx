@@ -149,9 +149,9 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_worker)->tm_offload_stats, \
                              UCP_WORKER_STAT_TAG_OFFLOAD_##_name, 1);
 
-#define ucp_worker_mpool_get(_worker) \
+#define ucp_worker_mpool_get(_mp) \
     ({ \
-        ucp_mem_desc_t *rdesc = ucs_mpool_get_inline(&(_worker)->reg_mp); \
+        ucp_mem_desc_t *rdesc = ucs_mpool_get_inline((_mp)); \
         if (rdesc != NULL) { \
             VALGRIND_MAKE_MEM_DEFINED(rdesc, sizeof(*rdesc)); \
         } \
@@ -240,8 +240,8 @@ typedef struct ucp_worker {
     uint64_t                      am_message_id; /* For matching long am's */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 
-    UCS_STATS_NODE_DECLARE(stats);
-    UCS_STATS_NODE_DECLARE(tm_offload_stats);
+    UCS_STATS_NODE_DECLARE(stats)
+    UCS_STATS_NODE_DECLARE(tm_offload_stats)
 
     ucp_worker_am_entry_t        *am_cbs;          /*array of callbacks and their data */
     size_t                        am_cb_array_len; /*len of callback array */
@@ -313,7 +313,8 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
 ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
+    return (rsc_index == UCP_NULL_RESOURCE) ? NULL :
+           worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
 }
 
 static UCS_F_ALWAYS_INLINE uct_iface_attr_t*

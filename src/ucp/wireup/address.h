@@ -59,6 +59,7 @@ struct ucp_address_iface_attr {
 };
 
 typedef struct ucp_address_entry_ep_addr {
+    ucp_lane_index_t            lane;         /* Lane index (local or remote) */
     const uct_ep_addr_t         *addr;        /* Pointer to ep address */
 } ucp_address_entry_ep_addr_t;
 
@@ -108,25 +109,25 @@ struct ucp_unpacked_address {
  *    - if iface is CONNECT_TO_EP, and ep != NULL, and it has a uct_ep on this
  *      resource, pack endpoint address.
  *
- * @param [in]  worker      Worker object whose interface addresses to pack.
- * @param [in]  ep          Endpoint object whose uct_ep addresses to pack.
+ * @param [in]  worker        Worker object whose interface addresses to pack.
+ * @param [in]  ep            Endpoint object whose uct_ep addresses to pack.
  *                            Can be set to NULL, to take addresses only from worker.
- * @param [in]  tl_bitmap   Specifies the resources whose transport address
- *                           (ep or iface) should be packed.
- * @param [in]  flags       UCP_ADDRESS_PACK_FLAG_xx flags to specify address
- *                          format.
- * @param [out] order       If != NULL, filled with the order of addresses as they
- *                           were packed. For example: first entry in the array is
- *                           the address index of the first transport specified
- *                           by tl_bitmap. The array should be large enough to
- *                           hold all transports specified by tl_bitmap.
- * @param [out] size_p      Filled with buffer size.
- * @param [out] buffer_p    Filled with pointer to packed buffer. It should be
- *                           released by ucs_free().
+ * @param [in]  tl_bitmap     Specifies the resources whose transport address
+ *                            (ep or iface) should be packed.
+ * @param [in]  flags         UCP_ADDRESS_PACK_FLAG_xx flags to specify address
+ *                            format.
+ * @param [in]  lanes2remote  If NULL, the lane index in each packed ep address
+ *                            will be the local lane index. Otherwise, specifies
+ *                            which lane index should be packed in the ep address
+ *                            for each local lane.
+ * @param [out] size_p        Filled with buffer size.
+ * @param [out] buffer_p      Filled with pointer to packed buffer. It should be
+ *                            released by ucs_free().
  */
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               uint64_t tl_bitmap, uint64_t flags,
-                              unsigned *order, size_t *size_p, void **buffer_p);
+                              const ucp_lane_index_t *lanes2remote,
+                              size_t *size_p, void **buffer_p);
 
 
 /**

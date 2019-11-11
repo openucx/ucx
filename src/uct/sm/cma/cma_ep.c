@@ -93,7 +93,7 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
     struct iovec local_iov[UCT_SM_MAX_IOV];
     struct iovec remote_iov;
 
-    remote_iov.iov_base = UCS_PTR_BYTE_OFFSET(remote_addr, 0);
+    remote_iov.iov_base = (void*)remote_addr;
 
     while (iov_idx < iovcnt) {
         cur_iov_cnt   = ucs_min(iovcnt - iov_idx, UCT_SM_MAX_IOV);

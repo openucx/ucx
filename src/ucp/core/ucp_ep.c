@@ -154,10 +154,10 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 
-ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
-                                        const ucp_ep_params_t *params,
-                                        const ucp_unpacked_address_t *remote_address,
-                                        ucp_ep_h *ep_p)
+ucs_status_t
+ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
+                           const ucp_unpacked_address_t *remote_address,
+                           ucp_ep_h *ep_p)
 {
     ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
@@ -169,12 +169,12 @@ ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
         goto err;
     }
 
-    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ep_init_flags, &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
 
-    status = ucp_wireup_ep_connect_aux(wireup_ep, params, remote_address);
+    status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags, remote_address);
     if (status != UCS_OK) {
         goto err_destroy_wireup_ep;
     }
@@ -190,11 +190,11 @@ err:
     return status;
 }
 
-void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
-                                  const ucp_ep_params_t *params)
+void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
+                                    unsigned ep_init_flags)
 {
-    key->err_mode = UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
-                                    UCP_ERR_HANDLING_MODE_NONE);
+    key->err_mode = (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ?
+                    UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
 }
 
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep)
@@ -237,9 +237,6 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
-    ucp_ep_params_t params;
-
-    params.field_mask = 0;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
@@ -263,8 +260,9 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_free_address_buffer;
         }
 
-        status = ucp_ep_create_to_worker_addr(worker, &params, &local_address,
-                                              UCP_EP_INIT_FLAG_MEM_TYPE, "mem type",
+        status = ucp_ep_create_to_worker_addr(worker, &local_address,
+                                              UCP_EP_INIT_FLAG_MEM_TYPE,
+                                              "mem type",
                                               &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
             goto err_free_address_list;
@@ -289,15 +287,14 @@ err_cleanup_eps:
     return status;
 }
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
-                                       const ucp_ep_params_t *params,
+ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep)
 {
     ucp_ep_config_key_t key;
     ucs_status_t status;
 
     ucp_ep_config_key_reset(&key);
-    ucp_ep_config_key_set_params(&key, params);
+    ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
     key.num_lanes             = 1;
     if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
@@ -325,12 +322,11 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
 }
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
-                                          const ucp_ep_params_t *params,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
 {
-    uint8_t addr_indices[UCP_MAX_LANES];
+    unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
     ucp_ep_h ep;
 
@@ -341,22 +337,15 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, params, ep_init_flags, remote_address,
+    status = ucp_wireup_init_lanes(ep, ep_init_flags, remote_address,
                                    addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
 
-    status = ucp_ep_adjust_params(ep, params);
-    if (status != UCS_OK) {
-        goto err_cleanup_lanes;
-    }
-
     *ep_p = ep;
     return UCS_OK;
 
-err_cleanup_lanes:
-    ucp_ep_cleanup_lanes(ep);
 err_delete:
     ucp_ep_delete(ep);
 err:
@@ -388,7 +377,8 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err;
     }
 
-    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ucp_ep_init_flags(worker, params),
+                                       &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -419,19 +409,22 @@ err:
 /**
  * Create an endpoint on the server side connected to the client endpoint.
  */
-ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_sockaddr_data_t *sa_data,
-                                  ucp_ep_h *ep_p)
+ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
+                                         const ucp_conn_request_h conn_request,
+                                         ucp_ep_h *ep_p)
 {
-    ucp_ep_params_t        params;
-    ucp_unpacked_address_t remote_address;
-    uint64_t               addr_flags;
-    ucs_status_t           status;
+    const ucp_wireup_sockaddr_data_t *sa_data = &conn_request->sa_data;
+    unsigned ep_init_flags                    = 0;
+    ucp_unpacked_address_t           remote_addr;
+    uint64_t                         addr_flags;
+    unsigned                         i;
+    ucs_status_t                     status;
 
-    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    params.err_mode   = sa_data->err_mode;
+    if (sa_data->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    }
 
-    if (sa_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
+    if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR |
                      UCP_ADDRESS_PACK_FLAG_TRACE;
@@ -439,48 +432,65 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         addr_flags = UINT64_MAX;
     }
 
-    status = ucp_address_unpack(worker, sa_data + 1, addr_flags,
-                                &remote_address);
+    /* coverity[overrun-local] */
+    status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
     if (status != UCS_OK) {
         goto out;
     }
 
     switch (sa_data->addr_mode) {
-    case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
+    case UCP_WIREUP_SA_DATA_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
-        status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
-                                              UCP_EP_CREATE_AM_LANE, "listener",
-                                              ep_p);
-        if (status == UCS_OK) {
-            ucp_ep_flush_state_reset(*ep_p);
-        } else {
+        status = ucp_ep_create_to_worker_addr(worker, &remote_addr,
+                                              ep_init_flags |
+                                              UCP_EP_INIT_CREATE_AM_LANE,
+                                              "listener", ep_p);
+        if (status != UCS_OK) {
             goto out_free_address;
         }
+
+        ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
+        ucp_ep_flush_state_reset(*ep_p);
         break;
-    case UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR:
-        status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
-                                            ep_p);
-        if (status == UCS_OK) {
-            /* the server's ep should be aware of the sent address from the client */
-            (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
-            /* NOTE: protect union */
-            ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                                           UCP_EP_FLAG_FLUSH_STATE_VALID)));
-        } else {
+    case UCP_WIREUP_SA_DATA_PARTIAL_ADDR:
+        status = ucp_ep_create_sockaddr_aux(worker, ep_init_flags,
+                                            &remote_addr, ep_p);
+        if (status != UCS_OK) {
             goto out_free_address;
         }
+
+        /* the server's ep should be aware of the sent address from the client */
+        (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
+        /* NOTE: protect union */
+        ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
+                                       UCP_EP_FLAG_FLUSH_STATE_VALID)));
         break;
-    case UCP_WIREUP_SOCKADDR_CD_CM_ADDR:
-        return UCS_ERR_NOT_IMPLEMENTED;
+    case UCP_WIREUP_SA_DATA_CM_ADDR:
+        ucs_assert(ucp_worker_sockaddr_is_cm_proto(worker));
+        for (i = 0; i < remote_addr.address_count; ++i) {
+            remote_addr.address_list[i].dev_addr = conn_request->remote_dev_addr;
+        }
+        status = ucp_ep_cm_server_create_connected(worker,
+                                                   ep_init_flags |
+                                                   UCP_EP_INIT_CM_WIREUP_SERVER,
+                                                   &remote_addr, conn_request,
+                                                   ep_p);
+        if (status != UCS_OK) {
+            goto out_free_address;
+        }
+
+        (*ep_p)->flags                 |= UCP_EP_FLAG_LISTENER;
+        ucp_ep_ext_gen(*ep_p)->listener = conn_request->listener;
+        break;
     default:
-        ucs_fatal("client data contains invalid address mode %d",
+        ucs_fatal("client sockaddr data contains invalid address mode %d",
                   sa_data->addr_mode);
     }
 
     ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
 
 out_free_address:
-    ucs_free(remote_address.address_list);
+    ucs_free(remote_addr.address_list);
 out:
     return status;
 }
@@ -493,8 +503,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucp_ep_h           ep;
     ucs_status_t       status;
 
-    /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, &conn_request->sa_data, &ep);
+    status = ucp_ep_create_server_accept(worker, conn_request, &ep);
     if (status != UCS_OK) {
         goto out;
     }
@@ -521,11 +530,13 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
-    if (status == UCS_OK) {
-        status = uct_iface_accept(conn_request->uct_iface,
-                                  conn_request->uct_req);
-    } else {
-        uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
+    if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
+        if (status == UCS_OK) {
+            status = uct_iface_accept(conn_request->uct.iface,
+                                      conn_request->uct_req);
+        } else {
+            uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
+        }
     }
 
     ucs_free(params->conn_request);
@@ -581,9 +592,16 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    status = ucp_ep_create_to_worker_addr(worker, params, &remote_address, 0,
+    status = ucp_ep_create_to_worker_addr(worker, &remote_address,
+                                          ucp_ep_init_flags(worker, params),
                                           "from api call", &ep);
     if (status != UCS_OK) {
+        goto out_free_address;
+    }
+
+    status = ucp_ep_adjust_params(ep, params);
+    if (status != UCS_OK) {
+        ucp_ep_destroy_internal(ep);
         goto out_free_address;
     }
 
@@ -609,7 +627,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
-            ucp_ep_destroy_internal(ep);
             goto out_free_address;
         }
     }
@@ -992,6 +1009,13 @@ static size_t ucp_ep_thresh(size_t thresh_value, size_t min_value,
     return thresh;
 }
 
+static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
+                                           size_t thresh)
+{
+    *max_short = ucs_min((size_t)(*max_short + 1), thresh) - 1;
+    ucs_assert(*max_short >= -1);
+}
+
 static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr_t *iface_attr,
                                              uct_md_attr_t *md_attr, ucp_ep_config_t *config,
                                              size_t max_rndv_thresh)
@@ -1016,6 +1040,10 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
     } else {
         rndv_thresh     = context->config.ext.rndv_thresh;
         rndv_nbr_thresh = context->config.ext.rndv_thresh;
+
+        /* adjust max_short if rndv_thresh is set externally */
+        ucp_ep_config_adjust_max_short(&config->tag.eager.max_short,
+                                       rndv_thresh);
     }
 
     config->tag.rndv.am_thresh = ucp_ep_thresh(rndv_thresh,
@@ -1028,13 +1056,6 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
 
     ucs_trace("Active Message rndv threshold is %zu (send_nbr: %zu)",
               config->tag.rndv.am_thresh, config->tag.rndv_send_nbr.am_thresh);
-}
-
-static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
-                                           size_t thresh)
-{
-    *max_short = ucs_min((size_t)(*max_short + 1), thresh) - 1;
-    ucs_assert(*max_short >= -1);
 }
 
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
@@ -1078,10 +1099,10 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                        rndv_thresh);
     }
 
-    config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
-    config->tag.rndv.rma_thresh    = ucp_ep_thresh(rndv_thresh,
-                                                   iface_attr->cap.get.min_zcopy,
-                                                   max_rndv_thresh);
+    /* TODO: need to check minimal PUT Zcopy */
+    config->tag.rndv.rma_thresh = ucp_ep_thresh(rndv_thresh,
+                                                iface_attr->cap.get.min_zcopy,
+                                                max_rndv_thresh);
 
     config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
                                                          iface_attr->cap.get.min_zcopy,
@@ -1234,7 +1255,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
     config->tag.rndv.rma_thresh         = SIZE_MAX;
+    config->tag.rndv.min_get_zcopy      = 0;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
+    config->tag.rndv.min_put_zcopy      = 0;
     config->tag.rndv.max_put_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
     config->tag.rndv_send_nbr.am_thresh = SIZE_MAX;
@@ -1265,7 +1288,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     }
 
     /* configuration for rndv */
-    config->tag.rndv.min_get_zcopy = 0;
     rndv_max_bw = 0;
     for (i = 0; (i < config->key.num_lanes) &&
                 (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
@@ -1274,11 +1296,20 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+
+            /* GET Zcopy */
             config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
                                                      iface_attr->cap.get.min_zcopy);
 
             config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
                                                      iface_attr->cap.get.max_zcopy);
+
+            /* PUT Zcopy */
+            config->tag.rndv.min_put_zcopy = ucs_max(config->tag.rndv.min_put_zcopy,
+                                                     iface_attr->cap.put.min_zcopy);
+
+            config->tag.rndv.max_put_zcopy = ucs_min(config->tag.rndv.max_put_zcopy,
+                                                     iface_attr->cap.put.max_zcopy);
 
             rndv_max_bw = ucs_max(rndv_max_bw, ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth));
         }
@@ -1355,11 +1386,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      UCT_IFACE_FLAG_AM_ZCOPY,
                                      sizeof(ucp_eager_hdr_t), SIZE_MAX);
 
-            /* Calculate rndv threshold for AM Rendezvous, which may be used by
-             * any tag-matching protocol (AM and offload). */
-            ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
-                                             max_am_rndv_thresh);
-
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't
              */
@@ -1376,14 +1402,17 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 ucp_ep_config_set_rndv_thresh(worker, config,
                                               config->key.rma_bw_lanes,
                                               max_rndv_thresh);
-                config->tag.eager = config->am;
-                config->tag.lane  = lane;
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
                                                  config->tag.eager.max_short,
                                                  context->num_mem_type_detect_mds);
             }
+
+            /* Calculate rndv threshold for AM Rendezvous, which may be used by
+             * any tag-matching protocol (AM and offload). */
+            ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
+                                             max_am_rndv_thresh);
         } else {
             /* Stub endpoint */
             config->am.max_bcopy = UCP_MIN_BCOPY;
@@ -1464,40 +1493,58 @@ void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
     ucs_free(config->key.dst_md_cmpts);
 }
 
+static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
+                                        size_t thresh)
+{
+    return ((max_short < 0) ||
+            (((size_t)max_short + 1) < thresh));
+}
+
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
                                           ssize_t max_eager_short,
                                           size_t zcopy_thresh,
                                           size_t rndv_rma_thresh,
                                           size_t rndv_am_thresh)
 {
-    size_t max_bcopy, min_rndv;
-
-    fprintf(stream, "# %23s: 0", name);
-    if (max_eager_short > 0) {
-        fprintf(stream, "..<egr/short>..%zd" , max_eager_short + 1);
-    }
+    size_t max_bcopy, min_rndv, max_short;
 
     min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
     max_bcopy = ucs_min(zcopy_thresh, min_rndv);
 
-    /* Check whether maximum Eager short attribute is negative or not
-     * before comparing it with maximum Bcopy attribute (unsigned) */
-    if ((max_eager_short < 0) || ((size_t)max_eager_short < max_bcopy)) {
+    fprintf(stream, "# %23s: 0", name);
+
+    /* print eager short */
+    if (max_eager_short > 0) {
+        max_short = max_eager_short;
+        ucs_assert(max_short <= SSIZE_MAX);
+        fprintf(stream, "..<egr/short>..%zu" , max_short + 1);
+    } else if (!max_eager_short) {
+        fprintf(stream, "..<egr/short>..%zu" , max_eager_short);
+    }
+
+    /* print eager bcopy */
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) &&
+        (max_bcopy < min_rndv)) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
         }
     }
-    if (zcopy_thresh < min_rndv) {
+
+    /* print eager zcopy */
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, min_rndv) &&
+        (zcopy_thresh < min_rndv)) {
         fprintf(stream, "..<egr/zcopy>..");
         if (min_rndv < SIZE_MAX) {
             fprintf(stream, "%zu", min_rndv);
         }
     }
 
+    /* print rendezvous */
     if (min_rndv < SIZE_MAX) {
         fprintf(stream, "..<rndv>..");
     }
+
     fprintf(stream, "(inf)\n");
 }
 
@@ -1536,7 +1583,7 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
-                                 const uint8_t *addr_indices,
+                                 const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max)
@@ -1632,7 +1679,7 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
 static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                 const ucp_ep_config_t *config,
-                                const uint8_t *addr_indices,
+                                const unsigned *addr_indices,
                                 ucp_rsc_index_t aux_rsc_index)
 {
     ucp_context_h context = worker->context;
@@ -1656,7 +1703,8 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         ucp_ep_config_print_tag_proto(stream, "tag_send_nbr",
                                       config->tag.eager.max_short,
                                       /* disable zcopy */
-                                      config->tag.rndv_send_nbr.rma_thresh,
+                                      ucs_min(config->tag.rndv_send_nbr.rma_thresh,
+                                              config->tag.rndv_send_nbr.am_thresh),
                                       config->tag.rndv_send_nbr.rma_thresh,
                                       config->tag.rndv_send_nbr.am_thresh);
         ucp_ep_config_print_tag_proto(stream, "tag_send_sync",

@@ -791,7 +791,7 @@ typedef struct uct_linear_growth {
 
 /*
  * @ingroup UCT_RESOURCE
- * @brief Process Per Node (PPN) bandwidth specification: f(x) = dedicated + shared / ppn
+ * @brief Process Per Node (PPN) bandwidth specification: f(ppn) = dedicated + shared / ppn
  *
  *  This structure specifies a function which is used as basis for bandwidth
  * estimation of various UCT operations. This information can be used to select
@@ -1185,7 +1185,7 @@ struct uct_md_attr {
 
     char                     component_name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
-    cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
+    ucs_cpu_set_t            local_cpus;    /**< Mask of CPUs near the resource */
 };
 
 
@@ -2004,10 +2004,11 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     length       Size of memory
  * @param [out]    mem_type_p   Filled with memory type of the address range if
                                 function succeeds
- * @return UCS_OK               If memory type is succussfully detected
+ * @return UCS_OK               If memory type is successfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
-ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
+ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
+                                       size_t length,
                                        ucs_memory_type_t *mem_type_p);
 
 

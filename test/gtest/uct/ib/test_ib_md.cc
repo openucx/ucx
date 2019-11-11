@@ -118,8 +118,10 @@ bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
         uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
         return mlx5_md->umr_qp != NULL;
     }
-#endif
     return false;
+#else
+    return false;
+#endif
 }
 
 UCS_TEST_P(test_ib_md, ib_md_umr_rcache, "REG_METHODS=rcache") {

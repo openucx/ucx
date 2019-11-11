@@ -78,7 +78,8 @@ uct_ud_mlx5_ep_tx_skb(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     struct mlx5_wqe_data_seg *dptr;
 
     ctrl = iface->tx.wq.curr;
-    dptr = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, (void*)ctrl + ctrl_av_size);
+    dptr = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq,
+                                       UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size));
     uct_ib_mlx5_set_data_seg(dptr, skb->neth, skb->len, skb->lkey);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, skb->neth);
     uct_ud_mlx5_post_send(iface, ep, se, ctrl, ctrl_av_size + sizeof(*dptr), max_log_sge);
@@ -93,7 +94,8 @@ uct_ud_mlx5_ep_tx_inl(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     struct mlx5_wqe_inl_data_seg *inl;
 
     ctrl = iface->tx.wq.curr;
-    inl = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, (void*)ctrl + ctrl_av_size);
+    inl  = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq,
+                                       UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size));
     inl->byte_count = htonl(length | MLX5_INLINE_SEG);
     uct_ib_mlx5_inline_copy(inl + 1, buf, length, &iface->tx.wq);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)buf);
@@ -199,7 +201,8 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     ctrl = iface->tx.wq.curr;
     /* Set inline segment which has AM id, AM header, and AM payload */
-    inl = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, (void*)ctrl + ctrl_av_size);
+    inl = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq,
+                                      UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size));
     wqe_size = length + sizeof(*am) + sizeof(*neth);
     inl->byte_count = htonl(wqe_size | MLX5_INLINE_SEG);
 
@@ -287,7 +290,8 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     }
 
     ctrl = iface->tx.wq.curr;
-    inl = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, (void*)ctrl + ctrl_av_size);
+    inl  = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq,
+                                       UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size));
     inl_size = header_length + sizeof(*neth);
     inl->byte_count = htonl(inl_size | MLX5_INLINE_SEG);
 
@@ -298,9 +302,10 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     uct_ib_mlx5_inline_copy(neth + 1, header, header_length, &iface->tx.wq);
 
-    wqe_size = ucs_align_up_pow2(ctrl_av_size + inl_size + sizeof(*inl),
-                                 UCT_IB_MLX5_WQE_SEG_SIZE);
-    wqe_size += uct_ib_mlx5_set_data_seg_iov(&iface->tx.wq, (void *)ctrl + wqe_size,
+    wqe_size  = ucs_align_up_pow2(ctrl_av_size + inl_size + sizeof(*inl),
+                                  UCT_IB_MLX5_WQE_SEG_SIZE);
+    wqe_size += uct_ib_mlx5_set_data_seg_iov(&iface->tx.wq,
+                                             UCS_PTR_BYTE_OFFSET(ctrl, wqe_size),
                                              iov, iovcnt);
     ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
 
@@ -348,7 +353,8 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
 
     ctrl = iface->tx.wq.curr;
     /* Set inline segment which has AM id, AM header, and AM payload */
-    inl = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, (void*)ctrl + ctrl_av_size);
+    inl = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq,
+                                      UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size));
     wqe_size = length + sizeof(*put_hdr) + sizeof(*neth);
     inl->byte_count = htonl(wqe_size | MLX5_INLINE_SEG);
 
@@ -386,11 +392,13 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     uint32_t len;
     void *packet;
     unsigned count;
+    ptrdiff_t rx_hdr_offset;
 
-    ci     = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
-    packet = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
-    ucs_prefetch(packet + UCT_IB_GRH_LEN);
-    desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
+    ci            = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
+    packet        = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
+    ucs_prefetch(UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN));
+    rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
+    desc          = UCS_PTR_BYTE_OFFSET(packet, -rx_hdr_offset);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX]);
     if (cqe == NULL) {
@@ -410,7 +418,8 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     len   = ntohl(cqe->byte_cnt);
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
-    if (!uct_ud_iface_check_grh(&iface->super, packet + UCT_IB_GRH_LEN,
+    if (!uct_ud_iface_check_grh(&iface->super,
+                                UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
                                 (ntohl(cqe->flags_rqpn) >> 28) & 3)) {
         ucs_mpool_put_inline(desc);
         goto out;
@@ -419,7 +428,7 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     uct_ib_mlx5_log_rx(&iface->super.super, cqe, packet, uct_ud_dump_packet);
     /* coverity[tainted_data] */
     uct_ud_ep_process_rx(&iface->super,
-                         (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
+                         (uct_ud_neth_t *)UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
                          (uct_ud_recv_skb_t *)ucs_unaligned_ptr(desc), is_async);
 out:

@@ -225,12 +225,12 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
+    int num_clients = ucs_max(2, 100 / ucs::test_time_multiplier());
     uct_iface_params_t client_params;
     entity *client_test;
-    int i, num_clients = 100;
 
     /* multiple clients, each on an iface of its own, connecting to the same server */
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         /* open iface for the client side */
         client_params.field_mask        = UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
                                           UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
@@ -259,10 +259,10 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
-    int i, num_conns_on_client = 100;
+    int num_conns_on_client = ucs_max(2, 100 / ucs::test_time_multiplier());
 
     /* multiple clients, on the same iface, connecting to the same server */
-    for (i = 0; i < num_conns_on_client; ++i) {
+    for (int i = 0; i < num_conns_on_client; ++i) {
         client->connect(i, *server, 0, m_connect_addr, client_iface_priv_data_cb,
                         NULL, NULL, &client->max_conn_priv);
     }
@@ -562,12 +562,14 @@ protected:
     }
 
     static ucs_log_func_rc_t
-    detect_error_logger(ucs_log_level_t level, const char *message, va_list ap,
-                        const char *err_to_detect)
+    detect_addr_route_error_logger(const char *file, unsigned line, const char *function,
+                                   ucs_log_level_t level, const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if (strstr(err_str.c_str(), err_to_detect)) {
+            if ((strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
+                (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
+                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -579,16 +581,14 @@ protected:
     detect_reject_error_logger(const char *file, unsigned line, const char *function,
                                ucs_log_level_t level, const char *message, va_list ap)
     {
-        std::string err_to_detect ("client got error event RDMA_CM_EVENT_REJECTED");
-        return detect_error_logger(level, message, ap, err_to_detect.c_str());
-    }
-
-    static ucs_log_func_rc_t
-    detect_addr_error_logger(const char *file, unsigned line, const char *function,
-                             ucs_log_level_t level, const char *message, va_list ap)
-    {
-        std::string err_to_detect ("client got error event RDMA_CM_EVENT_ADDR_ERROR");
-        return detect_error_logger(level, message, ap, err_to_detect.c_str());
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_REJECTED")) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
 protected:
@@ -633,7 +633,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
     status = uct_listener_query(m_server->listener(), &attr);
     ASSERT_UCS_OK(status);
 
-    ucs_sockaddr_str(&m_listen_addr.get_sock_addr(), m_listener_ip_port_str,
+    ucs_sockaddr_str(m_listen_addr.get_sock_addr_ptr(), m_listener_ip_port_str,
                      UCS_SOCKADDR_STRING_LEN);
     ucs_sockaddr_str((struct sockaddr*)&attr.sockaddr, attr_addr_ip_port_str,
                      UCS_SOCKADDR_STRING_LEN);
@@ -676,7 +676,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 {
-    int i, num_clients = 100;
+    int num_clients = ucs_max(2, 100 / ucs::test_time_multiplier());;
     entity *client_test;
 
     /* Listen */
@@ -684,7 +684,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 
     /* Connect */
     /* multiple clients, each on a cm of its own, connecting to the same server */
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         client_test = uct_test::create_entity();
         m_entities.push_back(client_test);
         client_test->max_conn_priv = client_test->cm_attr().max_conn_priv;
@@ -702,7 +702,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     EXPECT_EQ(num_clients, (int)m_server->num_eps());
 
     /* Disconnect */
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         /* first 2 entities are m_server and m_client */
         client_test = &m_entities.at(2 + i);
         ASSERT_TRUE(client_test != m_client);
@@ -720,7 +720,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     EXPECT_EQ(num_clients, m_server_disconnect_cnt);
     EXPECT_EQ(num_clients, m_client_disconnect_cnt);
 
-    for (i = 0; i < num_clients; ++i) {
+    for (int i = 0; i < num_clients; ++i) {
         client_test = m_entities.back();
         m_entities.remove(client_test);
     }
@@ -728,7 +728,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 {
-    int i, num_conns_on_client = 100;
+    int num_conns_on_client = ucs_max(2, 100 / ucs::test_time_multiplier());
 
     m_server_start_disconnect = true;
 
@@ -737,7 +737,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     /* Connect */
     /* multiple clients, on the same cm, connecting to the same server */
-    for (i = 0; i < num_conns_on_client; ++i) {
+    for (int i = 0; i < num_conns_on_client; ++i) {
         m_client->connect(i, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
     }
@@ -826,7 +826,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
 
     /* wrap errors now since the client will try to connect to a non existing IP */
     {
-        scoped_log_handler slh(detect_addr_error_logger);
+        scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
         m_client->connect(0, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);

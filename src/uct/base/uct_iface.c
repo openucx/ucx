@@ -16,6 +16,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
+#include <ucs/debug/debug.h>
 
 
 #if ENABLE_STATS
@@ -67,6 +68,7 @@ static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
     ucs_warn("payload %zu of %zu bytes:\n%s", ucs_min(length, dump_len), length,
              ucs_str_dump_hex(data, ucs_min(length, dump_len),
                               dump_str, sizeof(dump_str), 16));
+    ucs_log_print_backtrace(UCS_LOG_LEVEL_WARN);
     return UCS_OK;
 }
 

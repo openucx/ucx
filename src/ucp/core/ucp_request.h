@@ -134,6 +134,7 @@ struct ucp_request {
 
                 struct {
                     uintptr_t     remote_request; /* pointer to the send request on receiver side */
+                    ucp_request_t *sreq;       /* original send request of frag put */
                     uint8_t       am_id;
                     ucs_status_t  status;
                     ucp_tag_t     sender_tag;  /* Sender tag, which is sent back in sync ack */
@@ -255,6 +256,11 @@ struct ucp_request {
                                                          is received on. Used in
                                                          tag offload expected callbacks*/
                 } tag;
+
+                struct {
+                    ucp_request_t           *rreq;    /* recv request on recv side */
+                    size_t                  offset;   /* offset in recv buffer */
+                } frag;
 
                 struct {
                     ucp_stream_recv_callback_t cb;     /* Completion callback */

@@ -89,8 +89,11 @@ protected:
     virtual bool is_external_request();
 
     static ucp_context_attr_t ctx_attr;
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
+
 private:
     int get_worker_index(int buf_index);
+
 public:
     int    count;
 };

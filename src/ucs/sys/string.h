@@ -33,6 +33,7 @@ BEGIN_C_DECLS
 /* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   ((size_t)-2)
 #define UCS_ULUNITS_AUTO    ((size_t)-2)
+#define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 #define UCS_BANDWIDTH_AUTO  (-1.0)
 
@@ -111,6 +112,18 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest);
  *  'M' -> 1048576
  */
 size_t ucs_string_quantity_prefix_value(char prefix);
+
+
+/**
+ * Format a string to a buffer of given size, and guarantee that the last char
+ * in the buffer is '\0'.
+ *
+ * @param buf  Buffer to format the string to.
+ * @param size Buffer size.
+ * @param fmt  Format string.
+ */
+void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+    UCS_F_PRINTF(3, 4);
 
 
 /**

@@ -131,8 +131,7 @@ const test_perf::test_spec test_uct_perf::tests[] =
 
 UCS_TEST_P(test_uct_perf, envelope) {
     if (has_transport("cm") ||
-        has_transport("ugni_udt") ||
-        has_transport("cuda_ipc")) {
+        has_transport("ugni_udt")) {
         UCS_TEST_SKIP;
     }
 
@@ -143,7 +142,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
         for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
-            if (!CPU_ISSET(*iter, &GetParam()->local_cpus)) {
+            if (!ucs_cpu_is_set(*iter, &GetParam()->local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
                 check_perf = false;
                 break;

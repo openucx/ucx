@@ -27,6 +27,14 @@ public:
         VARIANT_SEND_NBR,
     };
 
+    test_ucp_tag_xfer() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        if (RUNNING_ON_VALGRIND) {
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
+            m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
+        }
+    }
+
     virtual void init() {
         if (GetParam().variant == VARIANT_RNDV_PUT_ZCOPY) {
             modify_config("RNDV_SCHEME", "put_zcopy");
@@ -35,11 +43,6 @@ public:
         }
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES", "2");
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
-        if (RUNNING_ON_VALGRIND) {
-            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
-            m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
-        }
 
         test_ucp_tag::init();
     }
@@ -127,7 +130,6 @@ private:
     static const uint64_t SENDER_TAG = 0x111337;
     static const uint64_t RECV_MASK  = 0xffff;
     static const uint64_t RECV_TAG   = 0x1337;
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 
 };
 

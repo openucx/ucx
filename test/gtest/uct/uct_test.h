@@ -31,13 +31,18 @@
     } while (_res == UCS_ERR_NO_RESOURCE)
 
 
+#define FOR_EACH_ENTITY(_iter) \
+    for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
+         _iter != m_entities.end(); ++_iter) \
+
+
 /* Testing resource */
 struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
     uct_component_h         component;
     std::string             md_name;
-    cpu_set_t               local_cpus;
+    ucs_cpu_set_t           local_cpus;
     std::string             tl_name;
     std::string             dev_name;
     uct_device_type_t       dev_type;
@@ -46,7 +51,7 @@ struct resource {
 
     resource();
     resource(uct_component_h component, const std::string& md_name,
-             const cpu_set_t& local_cpus, const std::string& tl_name,
+             const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
              const std::string& dev_name, uct_device_type_t dev_type);
     resource(uct_component_h component, const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,
@@ -87,6 +92,9 @@ class uct_test : public testing::TestWithParam<const resource*>,
 public:
     UCS_TEST_BASE_IMPL;
 
+    /* we return a vector of pointers to allow test fixtures to extend the
+     * resource structure.
+     */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
     uct_test();
@@ -328,10 +336,10 @@ protected:
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
     static void set_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
-                                       cpu_set_t local_cpus,
+                                       ucs_cpu_set_t local_cpus,
                                        std::vector<resource>& all_resources);
     static void set_interface_rscs(const md_resource& md_rsc,
-                                   cpu_set_t local_cpus, struct ifaddrs *ifa,
+                                   ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size);
@@ -354,9 +362,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 #define UCT_TEST_IB_TLS \
     rc_mlx5,            \
-    rc,                 \
+    rc_verbs,           \
     dc_mlx5,            \
-    ud,                 \
+    ud_verbs,           \
     ud_mlx5,            \
     cm
 
@@ -377,9 +385,13 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     cuda_copy,              \
     gdr_copy
 
+#define UCT_TEST_ROCM_MEM_TYPE_TLS \
+    rocm_copy
+
 #define UCT_TEST_TLS      \
     UCT_TEST_NO_SELF_TLS, \
     UCT_TEST_CUDA_MEM_TYPE_TLS, \
+    UCT_TEST_ROCM_MEM_TYPE_TLS, \
     self
 
 /**

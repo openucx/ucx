@@ -10,13 +10,41 @@
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
 {
-    return cq->cq_buf + ((index & (cq->cq_length - 1)) << cq->cqe_size_log);
+    return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((index & (cq->cq_length - 1)) <<
+                                            cq->cqe_size_log));
 }
 
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned index, unsigned mask)
 {
     return (op_own & MLX5_CQE_OWNER_MASK) == !(index & mask);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
+{
+#if HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
+    return ntohs(cqe->ib_stride_index);
+#else
+    uint16_t *stride = (uint16_t*)&cqe->rsvd20[2];
+    return ntohs(*stride);
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_srq_stride(int num_sge)
+{
+    int stride;
+
+    stride = sizeof(struct mlx5_wqe_srq_next_seg) +
+             (num_sge * sizeof(struct mlx5_wqe_data_seg));
+
+    return ucs_roundup_pow2(stride);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_srq_max_wrs(int rxq_len, int num_sge)
+{
+    return ucs_max(rxq_len / num_sge, UCT_IB_MLX5_XRQ_MIN_UWQ_POST);
 }
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
@@ -69,12 +97,12 @@ uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
         return;
     }
 
-    wqe_cnt = (wq->qend - wq->qstart) / MLX5_SEND_WQE_BB;
+    wqe_cnt = UCS_PTR_BYTE_DIFF(wq->qstart, wq->qend) / MLX5_SEND_WQE_BB;
     if (wqe_cnt < wq->bb_max) {
         ucs_fatal("wqe count (%u) < bb_max (%u)", wqe_cnt, wq->bb_max);
     }
 
-    wqe_s = (wq->curr - wq->qstart) / MLX5_SEND_WQE_BB;
+    wqe_s = UCS_PTR_BYTE_DIFF(wq->qstart, wq->curr) / MLX5_SEND_WQE_BB;
     wqe_e = (wqe_s + num_bb) % wqe_cnt;
 
     sw_pi = wq->prev_sw_pi % wqe_cnt;
@@ -118,12 +146,12 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 {
     ptrdiff_t n;
 
-    if (dest + length <= wq->qend) {
+    if (UCS_PTR_BYTE_OFFSET(dest, length) <= wq->qend) {
         memcpy(dest, src, length);
     } else {
-        n = wq->qend - dest;
+        n = UCS_PTR_BYTE_DIFF(dest, wq->qend);
         memcpy(dest, src, n);
-        memcpy(wq->qstart, src + n, length - n);
+        memcpy(wq->qstart, UCS_PTR_BYTE_OFFSET(src, n), length - n);
     }
 }
 
@@ -156,7 +184,8 @@ static UCS_F_ALWAYS_INLINE void *
 uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
 {
     if (ucs_unlikely(seg >= txwq->qend)) {
-        seg -= (txwq->qend - txwq->qstart);
+        seg = UCS_PTR_BYTE_OFFSET(seg, -UCS_PTR_BYTE_DIFF(txwq->qstart,
+                                                          txwq->qend));
     }
     return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
 }
@@ -168,7 +197,8 @@ static UCS_F_ALWAYS_INLINE void *
 uct_ib_mlx5_txwq_wrap_data(uct_ib_mlx5_txwq_t *txwq, void *data)
 {
     if (ucs_unlikely(data >= txwq->qend)) {
-        data -= (txwq->qend - txwq->qstart);
+        data = UCS_PTR_BYTE_OFFSET(data, -UCS_PTR_BYTE_DIFF(txwq->qstart,
+                                                            txwq->qend));
     }
     return data;
 }
@@ -378,8 +408,8 @@ void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
 
     for (n = 0; n < num_bb; ++n) {
         uct_ib_mlx5_bf_copy_bb(dst, src);
-        dst += MLX5_SEND_WQE_BB;
-        src += MLX5_SEND_WQE_BB;
+        dst = UCS_PTR_BYTE_OFFSET(dst, MLX5_SEND_WQE_BB);
+        src = UCS_PTR_BYTE_OFFSET(src, MLX5_SEND_WQE_BB);
         if (ucs_unlikely(src == wq->qend)) {
             src = wq->qstart;
         }
@@ -427,7 +457,8 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
         ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB);
         *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
         ucs_memory_bus_store_fence();
-        src = uct_ib_mlx5_txwq_wrap_any(wq, src + (num_bb * MLX5_SEND_WQE_BB));
+        src = UCS_PTR_BYTE_OFFSET(src, num_bb * MLX5_SEND_WQE_BB);
+        src = uct_ib_mlx5_txwq_wrap_any(wq, src);
     }
 
     /* We don't want the compiler to reorder instructions and hurt latency */
@@ -455,7 +486,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 static inline uct_ib_mlx5_srq_seg_t *
 uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
-    return srq->buf + (index & srq->mask) * UCT_IB_MLX5_SRQ_STRIDE;
+    return UCS_PTR_BYTE_OFFSET(srq->buf, (index & srq->mask) * srq->stride);
 }
 
 static inline uint16_t uct_ib_mlx5_calc_av_sport(uint32_t rqpn, uint32_t qpn)
@@ -526,16 +557,12 @@ uct_ib_mlx5_destroy_qp(uct_ib_mlx5_qp_t *qp)
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
-uct_ib_mlx5_modify_qp(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp,
+                            enum ibv_qp_state state)
 {
-    switch (qp->type) {
-    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_ib_mlx5_devx_modify_qp_state(qp, state);
+    } else {
         return uct_ib_modify_qp(qp->verbs.qp, state);
-    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        return uct_ib_mlx5_devx_modify_qp(qp, state);
-    case UCT_IB_MLX5_OBJ_TYPE_LAST:
-        break;
     }
-
-    return UCS_OK;
 }

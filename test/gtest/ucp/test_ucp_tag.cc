@@ -325,3 +325,63 @@ bool test_ucp_tag::is_external_request()
 }
 
 ucp_context_attr_t test_ucp_tag::ctx_attr;
+
+
+class test_ucp_tag_limits : public test_ucp_tag {
+public:
+    test_ucp_tag_limits() {
+        m_test_offload = GetParam().variant;
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE",
+                                               ucs::to_string(m_test_offload).c_str()));
+    }
+
+    void init() {
+        test_ucp_tag::init();
+        check_offload_support(m_test_offload);
+    }
+
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                     tls, false, result);
+        generate_test_params_variant(ctx_params, name, test_case_name + "/offload",
+                                     tls, true, result);
+        return result;
+    }
+
+protected:
+    bool m_test_offload;
+};
+
+UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0") {
+    size_t max_short =
+        static_cast<size_t>(ucp_ep_config(sender().ep())->tag.eager.max_short + 1);
+
+    // (maximal short + 1) <= RNDV thresh
+    EXPECT_LE(max_short,
+              ucp_ep_config(sender().ep())->tag.rndv.am_thresh);
+    EXPECT_LE(max_short,
+              ucp_ep_config(sender().ep())->tag.rndv.rma_thresh);
+
+    // (maximal short + 1) <= RNDV send_nbr thresh
+    EXPECT_LE(max_short,
+              ucp_ep_config(sender().ep())->tag.rndv_send_nbr.am_thresh);
+    EXPECT_LE(max_short,
+              ucp_ep_config(sender().ep())->tag.rndv_send_nbr.rma_thresh);
+}
+
+UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH=0") {
+    size_t max_short =
+        static_cast<size_t>(ucp_ep_config(sender().ep())->tag.eager.max_short + 1);
+
+    // (maximal short + 1) <= ZCOPY thresh
+    EXPECT_LE(max_short,
+              ucp_ep_config(sender().ep())->tag.eager.zcopy_thresh[0]);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)

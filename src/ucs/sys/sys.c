@@ -226,7 +226,7 @@ static long ucs_sysconf(int name)
 int ucs_get_first_cpu()
 {
     int first_cpu, total_cpus, ret;
-    cpu_set_t mask;
+    ucs_sys_cpuset_t mask;
 
     ret = ucs_sysconf(_SC_NPROCESSORS_CONF);
     if (ret < 0) {
@@ -236,7 +236,7 @@ int ucs_get_first_cpu()
     total_cpus = ret;
 
     CPU_ZERO(&mask);
-    ret = sched_getaffinity(0, sizeof(mask), &mask);
+    ret = ucs_sys_getaffinity(&mask);
     if (ret < 0) {
         ucs_error("failed to get process affinity: %m");
         return ret;
@@ -836,8 +836,11 @@ ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
 ucs_status_t ucs_mmap_free(void *address, size_t length)
 {
     int ret;
+    size_t alloc_length;
 
-    ret = ucs_munmap(address, length);
+    alloc_length = ucs_align_up_pow2(length, ucs_get_page_size());
+
+    ret = ucs_munmap(address, alloc_length);
     if (ret != 0) {
         ucs_warn("munmap(address=%p, length=%zu) failed: %m", address, length);
         return UCS_ERR_INVALID_PARAM;
@@ -1076,6 +1079,82 @@ void ucs_sys_free(void *ptr, size_t length)
         ret = syscall(__NR_munmap, ptr, length);
         if (ret) {
             ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
+        }
+    }
+}
+
+char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len)
+{
+    int i = 0, prev = -1;
+    char *p = str;
+
+    for (i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, cpuset)) {
+            if (prev < 0) {
+                prev = i;
+            }
+        } else {
+            if (prev > 0) {
+                if (prev == i - 1) {
+                    p += snprintf(p, str + len - p, "%d,", prev);
+                } else {
+                    p += snprintf(p, str + len - p, "%d-%d,", prev, i - 1);
+                }
+            }
+            if (p > str + len) {
+                p = str + len - 4;
+                while (*p != ',') {
+                    p--;
+                }
+                sprintf(p, "...");
+                return str;
+            }
+            prev = -1;
+        }
+    }
+
+    *(--p) = 0;
+    return str;
+}
+
+int ucs_sys_setaffinity(ucs_sys_cpuset_t *cpuset)
+{
+    int ret;
+
+#if defined(HAVE_SCHED_SETAFFINITY)
+    ret = sched_setaffinity(0, sizeof(*cpuset), cpuset);
+#elif defined(HAVE_CPUSET_SETAFFINITY)
+    ret = cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, getpid(),
+                             sizeof(*cpuset), cpuset);
+#else
+#error "Port me"
+#endif
+    return ret;
+}
+
+int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset)
+{
+    int ret;
+
+#if defined(HAVE_SCHED_GETAFFINITY)
+    ret = sched_getaffinity(0, sizeof(*cpuset), cpuset);
+#elif defined(HAVE_CPUSET_GETAFFINITY)
+    ret = cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, getpid(),
+                             sizeof(*cpuset), cpuset);
+#else
+#error "Port me"
+#endif
+    return ret;
+}
+
+void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
+{
+    int c;
+
+    UCS_CPU_ZERO(dst);
+    for (c = 0; c < UCS_CPU_SETSIZE; ++c) {
+        if (CPU_ISSET(c, src)) {
+            UCS_CPU_SET(c, dst);
         }
     }
 }

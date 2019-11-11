@@ -78,8 +78,9 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
  *
  * @param id        Timer/FD to remove.
  * @param sync      If nonzero, wait until the handler for this event is not
- *                  running anymore. Cannot be used in the context of the event
- *                  handler itself because it would deadlock.
+ *                  running anymore. If called from the context of the callback,
+ *                  the handler will be removed immediately after the current
+ *                  callback returns.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */

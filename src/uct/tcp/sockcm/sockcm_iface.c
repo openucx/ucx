@@ -36,7 +36,7 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
                                            uct_iface_attr_t *iface_attr)
 {
     uct_sockcm_iface_t *iface = ucs_derived_of(tl_iface, uct_sockcm_iface_t);
-    struct sockaddr_in sin;
+    struct sockaddr_storage addr;
     ucs_status_t status;
 
     uct_base_iface_query(&iface->super, iface_attr);
@@ -49,14 +49,14 @@ static ucs_status_t uct_sockcm_iface_query(uct_iface_h tl_iface,
     iface_attr->max_conn_priv   = UCT_SOCKCM_MAX_CONN_PRIV;
 
     if (iface->is_server) {
-        socklen_t len = sizeof(sin);
-        if (getsockname(iface->listen_fd, (struct sockaddr *)&sin, &len)) {
+        socklen_t len = sizeof(struct sockaddr_storage);
+        if (getsockname(iface->listen_fd, (struct sockaddr *)&addr, &len)) {
             ucs_error("sockcm_iface: getsockname failed %m");
             return UCS_ERR_IO_ERROR;
         }
 
         status = ucs_sockaddr_copy((struct sockaddr *)&iface_attr->listen_sockaddr,
-                                   (struct sockaddr *)&sin);
+                                   (const struct sockaddr *)&addr);
         if (status != UCS_OK) {
             return status;
         }

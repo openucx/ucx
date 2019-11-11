@@ -90,7 +90,7 @@ typedef struct ucs_frag_list {
     unsigned               elem_count;   /* total number of list elements */
     unsigned               list_count;   /* number of independent lists */
     int                    max_holes;    /* do not allow insertion if ucs_list_count >= max_holes */
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 #ifdef ENABLE_STATS
     ucs_frag_list_sn_t prev_sn;      /*  needed to detect busrts */
 #endif
