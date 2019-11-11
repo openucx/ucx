@@ -42,17 +42,27 @@ typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t super;
 } uct_cuda_ipc_md_config_t;
 
+/**
+ * Function to unmap a CUDA IPC memory handle.
+ *
+ * @param [in]  mapped_addr             Pointer to CUDA IPC memory handle to
+ *                                      be released.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_cuda_ipc_unmap_memhandle_func_t)(void *mapped_addr);
 
 /**
  * @brief cuda_ipc packed and remote key for put/get
  */
 typedef struct uct_cuda_ipc_key {
-    CUipcMemHandle ph;           /* Memory handle of GPU memory */
-    CUdeviceptr    d_bptr;       /* Allocation base address */
-    size_t         b_len;        /* Allocation size */
-    int            dev_num;      /* GPU Device number */
-    CUuuid         uuid;         /* GPU Device UUID */
-    CUdeviceptr    d_mapped;     /* Locally mapped device address */
+    CUipcMemHandle                      ph;                   /* Memory handle of GPU memory */
+    CUdeviceptr                         d_bptr;               /* Allocation base address */
+    size_t                              b_len;                /* Allocation size */
+    int                                 dev_num;              /* GPU Device number */
+    CUuuid                              uuid;                 /* GPU Device UUID */
+    CUdeviceptr                         d_mapped;             /* Locally mapped device address */
+    uct_cuda_ipc_unmap_memhandle_func_t unmap_memhandle_func; /* Memory handle unmap function */
 } uct_cuda_ipc_key_t;
 
 

@@ -44,8 +44,9 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
     uct_cuda_ipc_key_t *packed   = (uct_cuda_ipc_key_t *) rkey_buffer;
     uct_cuda_ipc_key_t *mem_hndl = (uct_cuda_ipc_key_t *) memh;
 
-    *packed          = *mem_hndl;
-    packed->d_mapped = 0;
+    *packed                      = *mem_hndl;
+    packed->d_mapped             = 0;
+    packed->unmap_memhandle_func = NULL;
 
     return UCT_CUDADRV_FUNC(cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num));
 }
@@ -173,7 +174,18 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_component_t *component,
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
                                               uct_rkey_t rkey, void *handle)
 {
+    uct_cuda_ipc_key_t *key = (uct_cuda_ipc_key_t *) rkey;
+
     ucs_assert(NULL == handle);
+
+    if ((key->unmap_memhandle_func != NULL) && (key->d_mapped != 0)) {
+        ucs_trace("unmapping addr: %p", (void *)key->d_mapped);
+        ucs_status_t status = key->unmap_memhandle_func((void *)key->d_mapped);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to unmap addr: %p", (void *)key->d_mapped);
+        }
+    }
+
     ucs_free((void *)rkey);
     return UCS_OK;
 }

@@ -203,11 +203,6 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
-        status = iface->unmap_memhandle(cuda_ipc_event->mapped_addr);
-        if (status != UCS_OK) {
-            ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
-        }
-
         ucs_trace_poll("CUDA_IPC Event Done :%p", cuda_ipc_event);
         ucs_mpool_put(cuda_ipc_event);
         count++;
@@ -343,22 +338,33 @@ static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
 };
 
+ucs_status_t uct_cuda_ipc_unmap_memhandle(void *mapped_addr)
+{
+    return UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)mapped_addr));
+}
+
 ucs_status_t uct_cuda_ipc_map_memhandle(void *arg, uct_cuda_ipc_key_t *key,
                                         void **mapped_addr)
 {
+    if (key->unmap_memhandle_func == NULL) {
+        key->unmap_memhandle_func = uct_cuda_ipc_unmap_memhandle;
+    }
+
     if (key->d_mapped != 0) {
         /* potentially already mapped in uct_cuda_ipc_rkey_unpack */
         *mapped_addr = (void *) key->d_mapped;
         return UCS_OK;
     }
 
-    return  UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
-                             key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
-}
+    ucs_status_t status = UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
+                                           key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
 
-ucs_status_t uct_cuda_ipc_unmap_memhandle(void *mapped_addr)
-{
-    return UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)mapped_addr));
+    /* Store mapped memory handle to use when copying remaining blocks */
+    if ((status == UCS_OK) && (key->d_mapped == 0)) {
+        key->d_mapped = (CUdeviceptr)*mapped_addr;
+    }
+
+    return status;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
