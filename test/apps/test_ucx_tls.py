@@ -15,14 +15,14 @@ from distutils.version import LooseVersion
 
 #expected AM transport selections per given number of eps
 mlx4_am = {
-       2 :      "rc",
-      16 :      "rc",
-      32 :      "rc",
-      64 :      "rc",
-     256 :      "ud",
-     512 :      "ud",
-    1024 :      "ud",
- 1000000 :      "ud",
+       2 :      "rc_verbs",
+      16 :      "rc_verbs",
+      32 :      "rc_verbs",
+      64 :      "rc_verbs",
+     256 :      "ud_verbs",
+     512 :      "ud_verbs",
+    1024 :      "ud_verbs",
+ 1000000 :      "ud_verbs",
 }
 
 mlx5_am = {
@@ -60,14 +60,14 @@ mlx5_am_override = {
 }
 
 mlx4_am_override = {
-       2 :      "rc",
-      16 :      "rc",
-      32 :      "rc",
-      64 :      "rc",
-     256 :      "rc",
-     512 :      "rc",
-    1024 :      "rc",
- 1000000 :      "rc",
+       2 :      "rc_verbs",
+      16 :      "rc_verbs",
+      32 :      "rc_verbs",
+      64 :      "rc_verbs",
+     256 :      "rc_verbs",
+     512 :      "rc_verbs",
+    1024 :      "rc_verbs",
+ 1000000 :      "rc_verbs",
 }
 
 am_tls =  {

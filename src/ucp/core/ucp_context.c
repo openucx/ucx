@@ -104,7 +104,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_AUX_TLS", "ud,ud_x",
+  {"SOCKADDR_AUX_TLS", "ud",
    "Transports to use for exchanging additional address information while\n"
    "establishing client/server connection. ",
    ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -270,13 +270,13 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "mm",    { "posix", "sysv", "xpmem" } }, /* for backward compatibility */
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
-  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
-  { "ud_v",  { "ud", "rdmacm", NULL } },
+  { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
+  { "ud_v",  { "ud_verbs", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
-  { "ud",    { "ud_mlx5", "ud", "rdmacm", NULL } },
-  { "rc_v",  { "rc", "ud:aux", "rdmacm", NULL } },
+  { "ud",    { "ud_mlx5", "ud_verbs", "rdmacm", NULL } },
+  { "rc_v",  { "rc_verbs", "ud_verbs:aux", "rdmacm", NULL } },
   { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
-  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc", "ud:aux", "rdmacm", NULL } },
+  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc_verbs", "ud_verbs:aux", "rdmacm", NULL } },
   { "dc",    { "dc_mlx5", "rdmacm", NULL } },
   { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
