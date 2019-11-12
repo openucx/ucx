@@ -316,8 +316,6 @@ public:
 
     void set_sock_addr(const struct sockaddr &addr, const size_t size);
 
-    const struct sockaddr& get_sock_addr() const;
-
     void set_port(uint16_t port);
 
     uint16_t get_port() const;
@@ -326,9 +324,9 @@ public:
 
     ucs_sock_addr_t to_ucs_sock_addr() const;
 
-private:
     const struct sockaddr* get_sock_addr_ptr() const;
 
+private:
     struct sockaddr_storage m_storage;
     size_t                  m_size;
     bool                    m_is_valid;
