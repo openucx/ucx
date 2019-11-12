@@ -508,6 +508,7 @@ retry:
                                rcache->params.region_struct_size,
                                "rcache_region");
     if (error != 0) {
+        ucs_error("failed to allocate rcache region descriptor: %m");
         status = UCS_ERR_NO_MEMORY;
         goto out_unlock;
     }

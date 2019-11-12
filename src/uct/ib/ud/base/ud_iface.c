@@ -758,7 +758,7 @@ static void uct_ud_ep_dispatch_err_comp(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb)
     }
 
     status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super,
-                                             skb->status);
+                                             (ucs_status_t)skb->status);
     if (status != UCS_OK) {
         ucs_fatal("transport error: %s", ucs_status_string(status));
     }
@@ -778,7 +778,7 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 
         if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
             ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED));
-            uct_invoke_completion(cdesc->comp, skb->status);
+            uct_invoke_completion(cdesc->comp, (ucs_status_t)skb->status);
         }
 
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {

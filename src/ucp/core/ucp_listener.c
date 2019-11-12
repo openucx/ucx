@@ -66,12 +66,11 @@ void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
 
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
-    ucp_conn_request_h               conn_request = arg;
-    const ucp_wireup_sockaddr_data_t *sa_data     = &conn_request->sa_data;
-    ucp_listener_h                   listener     = conn_request->listener;
-    ucp_worker_h                     worker       = listener->worker;
-    ucp_ep_h                         ep;
-    ucs_status_t                     status;
+    ucp_conn_request_h conn_request = arg;
+    ucp_listener_h     listener     = conn_request->listener;
+    ucp_worker_h       worker       = listener->worker;
+    ucp_ep_h           ep;
+    ucs_status_t       status;
 
     ucs_trace_func("listener=%p", listener);
 
@@ -81,8 +80,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, sa_data, &ep);
+    status = ucp_ep_create_server_accept(worker, conn_request, &ep);
 
     if (status != UCS_OK) {
         goto out;
@@ -101,7 +99,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         goto out;
     }
 
-    status = uct_iface_accept(conn_request->uct_iface, conn_request->uct_req);
+    status = uct_iface_accept(conn_request->uct.iface, conn_request->uct_req);
     if (status != UCS_OK) {
         ucp_ep_destroy_internal(ep);
         goto out;
@@ -121,7 +119,7 @@ out:
     if (status != UCS_OK) {
         ucs_error("connection request failed on listener %p with status %s",
                   listener, ucs_status_string(status));
-        uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
+        uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -161,7 +159,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
 
     conn_request->listener  = listener;
     conn_request->uct_req   = uct_req;
-    conn_request->uct_iface = tl_iface;
+    conn_request->uct.iface = tl_iface;
     memcpy(&conn_request->sa_data, conn_priv_data, length);
 
     uct_worker_progress_register_safe(listener->worker->uct,
@@ -530,7 +528,7 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
+    uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 

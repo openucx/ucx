@@ -254,7 +254,7 @@ struct uct_rc_iface {
         uct_rc_send_handler_t  atomic64_ext_handler;  /* 64bit extended */
     } config;
 
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;

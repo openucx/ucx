@@ -13,6 +13,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
+#include <pthread.h>
 
 
 BEGIN_C_DECLS

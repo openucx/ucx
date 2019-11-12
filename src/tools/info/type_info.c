@@ -168,7 +168,7 @@ void print_type_info(const char * tl_name)
     }
 
 #if HAVE_TL_RC
-    if (tl_name == NULL || !strcasecmp(tl_name, "rc") ||
+    if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs") ||
         !strcasecmp(tl_name, "rc_mlx5"))
     {
         printf("RC:\n");
@@ -181,7 +181,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rc_iface_send_desc_t);
 
         PRINT_SIZE(uct_rc_iface_send_desc_t);
-        if (tl_name == NULL || !strcasecmp(tl_name, "rc")) {
+        if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs")) {
             PRINT_SIZE(uct_rc_verbs_ep_t);
             PRINT_SIZE(uct_rc_verbs_iface_config_t);
             PRINT_SIZE(uct_rc_verbs_iface_t);
@@ -212,7 +212,7 @@ void print_type_info(const char * tl_name)
 #endif
 
 #if HAVE_TL_UD
-    if (tl_name == NULL || !strcasecmp(tl_name, "ud") ||
+    if (tl_name == NULL || !strcasecmp(tl_name, "ud_verbs") ||
         !strcasecmp(tl_name, "ud_mlx5"))
     {
         printf("UD:\n");
@@ -226,7 +226,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ud_recv_skb_t);
 
         PRINT_SIZE(uct_rc_iface_send_desc_t);
-        if (tl_name == NULL || !strcasecmp(tl_name, "ud")) {
+        if (tl_name == NULL || !strcasecmp(tl_name, "ud_verbs")) {
             PRINT_SIZE(uct_ud_verbs_ep_t);
             PRINT_SIZE(uct_ud_verbs_iface_t);
         }

@@ -80,6 +80,7 @@ typedef struct uct_ib_md_ext_config {
 
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
+    int                      mt_reg_bind;  /**< Multi-threaded registration bind to core */
 } uct_ib_md_ext_config_t;
 
 
@@ -101,7 +102,7 @@ typedef struct uct_ib_md {
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     struct uct_ib_md_ops     *ops;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
     uct_ib_md_ext_config_t   config;    /* IB external configuration */
     struct {
         uct_ib_device_spec_t *specs;    /* Custom device specifications */
@@ -141,23 +142,38 @@ typedef struct uct_ib_md_config {
 } uct_ib_md_config_t;
 
 
-typedef struct uct_ib_md_ops {
-    ucs_status_t            (*open)(struct ibv_device *ibv_device,
-                                    const uct_ib_md_config_t *md_config,
-                                    struct uct_ib_md **p_md);
-    void                    (*cleanup)(struct uct_ib_md *);
+typedef ucs_status_t (*uct_ib_md_open_func_t)(struct ibv_device *ibv_device,
+                                              const uct_ib_md_config_t *md_config,
+                                              struct uct_ib_md **p_md);
 
-    size_t                  memh_struct_size;
-    ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
-                                              uct_ib_mem_t *memh);
-    ucs_status_t            (*dereg_atomic_key)(struct uct_ib_md *md,
-                                                uct_ib_mem_t *memh);
-    ucs_status_t            (*reg_multithreaded)(uct_ib_md_t *md,
-                                                 void *address, size_t length,
-                                                 uint64_t access,
-                                                 uct_ib_mem_t *memh);
-    ucs_status_t            (*dereg_multithreaded)(uct_ib_md_t *md,
-                                                   uct_ib_mem_t *memh);
+typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
+
+typedef ucs_status_t (*uct_ib_md_reg_atomic_key_func_t)(struct uct_ib_md *md,
+                                                        uct_ib_mem_t *memh);
+
+typedef ucs_status_t (*uct_ib_md_dereg_atomic_key_func_t)(struct uct_ib_md *md,
+                                                          uct_ib_mem_t *memh);
+
+typedef ucs_status_t (*uct_ib_md_reg_multithreaded_func_t)(uct_ib_md_t *md,
+                                                           void *address,
+                                                           size_t length,
+                                                           uint64_t access,
+                                                           uct_ib_mem_t *memh);
+
+typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
+                                                             uct_ib_mem_t *memh);
+
+
+typedef struct uct_ib_md_ops {
+    uct_ib_md_open_func_t                open;
+    uct_ib_md_cleanup_func_t             cleanup;
+
+    size_t                               memh_struct_size;
+
+    uct_ib_md_reg_atomic_key_func_t      reg_atomic_key;
+    uct_ib_md_dereg_atomic_key_func_t    dereg_atomic_key;
+    uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
+    uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
 } uct_ib_md_ops_t;
 
 

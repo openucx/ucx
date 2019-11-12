@@ -44,7 +44,7 @@
 
 typedef ucs_status_t (*uct_ud_ep_hook_t)(uct_ud_ep_t *ep, uct_ud_neth_t *neth);
 
-#define UCT_UD_EP_HOOK_DECLARE(name) uct_ud_ep_hook_t name
+#define UCT_UD_EP_HOOK_DECLARE(name) uct_ud_ep_hook_t name;
 
 #define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len) \
     if ((ep)->rx.rx_hook(ep, neth) != UCS_OK) { \
@@ -225,15 +225,15 @@ struct uct_ud_ep {
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
          ucs_time_t             slow_tick;    /* timeout to trigger slow timer */
-         UCS_STATS_NODE_DECLARE(stats);
-         UCT_UD_EP_HOOK_DECLARE(tx_hook);
+         UCS_STATS_NODE_DECLARE(stats)
+         UCT_UD_EP_HOOK_DECLARE(tx_hook)
     } tx;
     struct {
         uct_ud_psn_t        acked_psn;    /* Last psn we acked */
         ucs_frag_list_t     ooo_pkts;     /* Out of order packets that can not be processed yet,
                                             also keeps last psn we successfully received and processed */
-        UCS_STATS_NODE_DECLARE(stats);
-        UCT_UD_EP_HOOK_DECLARE(rx_hook);
+        UCS_STATS_NODE_DECLARE(stats)
+        UCT_UD_EP_HOOK_DECLARE(rx_hook)
     } rx;
     struct {
         uct_ud_psn_t  wmax;
@@ -250,8 +250,8 @@ struct uct_ud_ep {
     uint8_t          rx_creq_count; /* TODO: remove when reason for DUP/OOO CREQ is found */
     ucs_wtimer_t     slow_timer;
     ucs_time_t       close_time;   /* timestamp of closure */
-    UCS_STATS_NODE_DECLARE(stats);
-    UCT_UD_EP_HOOK_DECLARE(timer_hook);
+    UCS_STATS_NODE_DECLARE(stats)
+    UCT_UD_EP_HOOK_DECLARE(timer_hook)
 #if ENABLE_DEBUG_DATA
     uct_ud_peer_name_t  peer;
 #endif

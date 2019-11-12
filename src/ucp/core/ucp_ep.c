@@ -409,20 +409,22 @@ err:
 /**
  * Create an endpoint on the server side connected to the client endpoint.
  */
-ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_wireup_sockaddr_data_t *sa_data,
-                                  ucp_ep_h *ep_p)
+ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
+                                         const ucp_conn_request_h conn_request,
+                                         ucp_ep_h *ep_p)
 {
-    unsigned ep_init_flags = 0;
-    ucp_unpacked_address_t remote_address;
-    uint64_t               addr_flags;
-    ucs_status_t           status;
+    const ucp_wireup_sockaddr_data_t *sa_data = &conn_request->sa_data;
+    unsigned ep_init_flags                    = 0;
+    ucp_unpacked_address_t           remote_addr;
+    uint64_t                         addr_flags;
+    unsigned                         i;
+    ucs_status_t                     status;
 
     if (sa_data->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     }
 
-    if (sa_data->addr_mode == UCP_WIREUP_SOCKADDR_CD_CM_ADDR) {
+    if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                      UCP_ADDRESS_PACK_FLAG_EP_ADDR |
                      UCP_ADDRESS_PACK_FLAG_TRACE;
@@ -430,50 +432,65 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         addr_flags = UINT64_MAX;
     }
 
-    status = ucp_address_unpack(worker, sa_data + 1, addr_flags,
-                                &remote_address);
+    /* coverity[overrun-local] */
+    status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
     if (status != UCS_OK) {
         goto out;
     }
 
     switch (sa_data->addr_mode) {
-    case UCP_WIREUP_SOCKADDR_CD_FULL_ADDR:
+    case UCP_WIREUP_SA_DATA_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
-        status = ucp_ep_create_to_worker_addr(worker, &remote_address,
+        status = ucp_ep_create_to_worker_addr(worker, &remote_addr,
                                               ep_init_flags |
                                               UCP_EP_INIT_CREATE_AM_LANE,
                                               "listener", ep_p);
-        if (status == UCS_OK) {
-            ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
-            ucp_ep_flush_state_reset(*ep_p);
-        } else {
+        if (status != UCS_OK) {
             goto out_free_address;
         }
+
+        ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
+        ucp_ep_flush_state_reset(*ep_p);
         break;
-    case UCP_WIREUP_SOCKADDR_CD_PARTIAL_ADDR:
+    case UCP_WIREUP_SA_DATA_PARTIAL_ADDR:
         status = ucp_ep_create_sockaddr_aux(worker, ep_init_flags,
-                                            &remote_address, ep_p);
-        if (status == UCS_OK) {
-            /* the server's ep should be aware of the sent address from the client */
-            (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
-            /* NOTE: protect union */
-            ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                                           UCP_EP_FLAG_FLUSH_STATE_VALID)));
-        } else {
+                                            &remote_addr, ep_p);
+        if (status != UCS_OK) {
             goto out_free_address;
         }
+
+        /* the server's ep should be aware of the sent address from the client */
+        (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
+        /* NOTE: protect union */
+        ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
+                                       UCP_EP_FLAG_FLUSH_STATE_VALID)));
         break;
-    case UCP_WIREUP_SOCKADDR_CD_CM_ADDR:
-        return UCS_ERR_NOT_IMPLEMENTED;
+    case UCP_WIREUP_SA_DATA_CM_ADDR:
+        ucs_assert(ucp_worker_sockaddr_is_cm_proto(worker));
+        for (i = 0; i < remote_addr.address_count; ++i) {
+            remote_addr.address_list[i].dev_addr = conn_request->remote_dev_addr;
+        }
+        status = ucp_ep_cm_server_create_connected(worker,
+                                                   ep_init_flags |
+                                                   UCP_EP_INIT_CM_WIREUP_SERVER,
+                                                   &remote_addr, conn_request,
+                                                   ep_p);
+        if (status != UCS_OK) {
+            goto out_free_address;
+        }
+
+        (*ep_p)->flags                 |= UCP_EP_FLAG_LISTENER;
+        ucp_ep_ext_gen(*ep_p)->listener = conn_request->listener;
+        break;
     default:
-        ucs_fatal("client data contains invalid address mode %d",
+        ucs_fatal("client sockaddr data contains invalid address mode %d",
                   sa_data->addr_mode);
     }
 
     ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
 
 out_free_address:
-    ucs_free(remote_address.address_list);
+    ucs_free(remote_addr.address_list);
 out:
     return status;
 }
@@ -486,8 +503,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucp_ep_h           ep;
     ucs_status_t       status;
 
-    /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, &conn_request->sa_data, &ep);
+    status = ucp_ep_create_server_accept(worker, conn_request, &ep);
     if (status != UCS_OK) {
         goto out;
     }
@@ -514,11 +530,13 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
-    if (status == UCS_OK) {
-        status = uct_iface_accept(conn_request->uct_iface,
-                                  conn_request->uct_req);
-    } else {
-        uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
+    if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
+        if (status == UCS_OK) {
+            status = uct_iface_accept(conn_request->uct.iface,
+                                      conn_request->uct_req);
+        } else {
+            uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
+        }
     }
 
     ucs_free(params->conn_request);
@@ -1475,42 +1493,58 @@ void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
     ucs_free(config->key.dst_md_cmpts);
 }
 
+static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
+                                        size_t thresh)
+{
+    return ((max_short < 0) ||
+            (((size_t)max_short + 1) < thresh));
+}
+
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
                                           ssize_t max_eager_short,
                                           size_t zcopy_thresh,
                                           size_t rndv_rma_thresh,
                                           size_t rndv_am_thresh)
 {
-    size_t max_bcopy, min_rndv;
-
-    fprintf(stream, "# %23s: 0", name);
-    if (max_eager_short > 0) {
-        fprintf(stream, "..<egr/short>..%zd" , max_eager_short + 1);
-    }
+    size_t max_bcopy, min_rndv, max_short;
 
     min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
     max_bcopy = ucs_min(zcopy_thresh, min_rndv);
 
-    /* Check whether maximum Eager short attribute is negative or not
-     * before comparing it with maximum Bcopy attribute (unsigned) */
-    if (((max_eager_short < 0) ||
-         ((size_t)max_eager_short < max_bcopy)) &&
-        (max_bcopy < zcopy_thresh) && (max_bcopy < min_rndv)) {
+    fprintf(stream, "# %23s: 0", name);
+
+    /* print eager short */
+    if (max_eager_short > 0) {
+        max_short = max_eager_short;
+        ucs_assert(max_short <= SSIZE_MAX);
+        fprintf(stream, "..<egr/short>..%zu" , max_short + 1);
+    } else if (!max_eager_short) {
+        fprintf(stream, "..<egr/short>..%zu" , max_eager_short);
+    }
+
+    /* print eager bcopy */
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) &&
+        (max_bcopy < min_rndv)) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
         }
     }
-    if (zcopy_thresh < min_rndv) {
+
+    /* print eager zcopy */
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, min_rndv) &&
+        (zcopy_thresh < min_rndv)) {
         fprintf(stream, "..<egr/zcopy>..");
         if (min_rndv < SIZE_MAX) {
             fprintf(stream, "%zu", min_rndv);
         }
     }
 
+    /* print rendezvous */
     if (min_rndv < SIZE_MAX) {
         fprintf(stream, "..<rndv>..");
     }
+
     fprintf(stream, "(inf)\n");
 }
 

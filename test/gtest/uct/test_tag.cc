@@ -11,7 +11,6 @@ extern "C" {
 #include "uct_test.h"
 
 #define UCT_TAG_INSTANTIATE_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 

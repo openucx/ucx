@@ -42,12 +42,12 @@ AS_IF([test "x$with_rocm" != "xno"],
         [x|xguess|xyes],
             [AC_MSG_NOTICE([ROCm path was not specified. Guessing ...])
              with_rocm=/opt/rocm
-             ROCM_CPPFLAGS="-I$with_rocm/include/hsa $(shell $with_rocm/bin/hipconfig --cpp_config)"
+             ROCM_CPPFLAGS="-I$with_rocm/include/hsa -D__HIP_PLATFORM_HCC__= -I$with_rocm/hip/include -I$with_rocm/hcc/include -I$with_rocm/hsa/include"
              ROCM_LDFLAGS="-L$with_rocm/hsa/lib -L$with_rocm/lib -lhip_hcc -lhsa-runtime64"
              ROCM_LIBS="-lhip_hcc -lhsa-runtime64"],
         [x/*],
             [AC_MSG_NOTICE([ROCm path given as $with_rocm ...])
-             ROCM_CPPFLAGS="-I$with_rocm/include/hsa $(shell $with_rocm/bin/hipconfig --cpp_config)"
+             ROCM_CPPFLAGS="-I$with_rocm/include/hsa -D__HIP_PLATFORM_HCC__= -I$with_rocm/hip/include -I$with_rocm/hcc/include -I$with_rocm/hsa/include"
              ROCM_LDFLAGS="-L$with_rocm/hsa/lib -L$with_rocm/lib -lhip_hcc -lhsa-runtime64"
              ROCM_LIBS="-lhip_hcc -lhsa-runtime64"],
         [AC_MSG_NOTICE([ROCm flags given ...])

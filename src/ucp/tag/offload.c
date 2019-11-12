@@ -20,7 +20,7 @@
 #include <ucs/sys/sys.h>
 
 
-int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
+void ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
 {
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
@@ -45,8 +45,6 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     iface->flags |= UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED;
 
     ucs_debug("Activate tag offload iface %p", iface);
-
-    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
@@ -282,7 +280,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
         iov.buffer          = (void*)req->recv.buffer;
         iov.memh            = req->recv.state.dt.contig.memh[0];
     } else {
-        rdesc = ucp_worker_mpool_get(worker);
+        rdesc = ucp_worker_mpool_get(&worker->reg_mp);
         if (rdesc == NULL) {
             return UCS_ERR_NO_MEMORY;
         }

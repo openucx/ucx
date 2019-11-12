@@ -224,6 +224,4 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, tx_wqe,
     uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_ud_pending, ud)
-_UCT_INSTANTIATE_TEST_CASE(test_ud_pending, ud_mlx5)
-
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_pending)

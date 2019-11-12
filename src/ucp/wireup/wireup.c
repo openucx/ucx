@@ -705,15 +705,26 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned addr_index)
 {
-    ucp_worker_h worker          = ep->worker;
-    ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
-    ucp_lane_index_t proxy_lane  = ucp_ep_get_proxy_lane(ep, lane);
-    ucp_worker_iface_t *wiface   = ucp_worker_iface(worker, rsc_index);
+    ucp_worker_h worker = ep->worker;
+    int connect_aux;
+    ucp_lane_index_t proxy_lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
     uct_ep_params_t uct_ep_params;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_trace("ep %p: connect lane[%d]", ep, lane);
+
+    ucs_assert(lane != ucp_ep_get_cm_lane(ep));
+
+    ucs_assert_always(remote_address != NULL);
+    ucs_assert_always(remote_address->address_list != NULL);
+    ucs_assert_always(addr_index <= remote_address->address_count);
+
+    proxy_lane = ucp_ep_get_proxy_lane(ep, lane);
+    rsc_index  = ucp_ep_get_rsc_index(ep, lane);
+    wiface     = ucp_worker_iface(worker, rsc_index);
 
     /*
      * if the selected transport can be connected directly to the remote
@@ -754,9 +765,6 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
         /* For now, p2p transports have no reason to have proxy */
         ucs_assert_always(proxy_lane == UCP_NULL_LANE);
 
-        /* If ep already exists, it's a wireup proxy, and we need to start
-         * auxiliary wireup.
-         */
         if (ep->uct_eps[lane] == NULL) {
             status = ucp_wireup_ep_create(ep, &uct_ep);
             if (status != UCS_OK) {
@@ -768,16 +776,20 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
             ep->uct_eps[lane] = uct_ep;
         } else {
             uct_ep = ep->uct_eps[lane];
+            ucs_assert(ucp_wireup_ep_test(uct_ep));
         }
 
-        ucs_trace("ep %p: connect uct_ep[%d]=%p to addr[%d] wireup", ep, lane,
-                  uct_ep, addr_index);
-        status = ucp_wireup_ep_connect(ep->uct_eps[lane], ep_init_flags,
-                                       rsc_index,
-                                       lane == ucp_ep_get_wireup_msg_lane(ep),
-                                       remote_address);
-        if (status != UCS_OK) {
-            return status;
+        if (!(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
+                               UCP_EP_INIT_CM_WIREUP_SERVER))) {
+            ucs_trace("ep %p: connect uct_ep[%d]=%p to addr[%d] wireup", ep,
+                      lane, uct_ep, addr_index);
+            connect_aux = lane == ucp_ep_get_wireup_msg_lane(ep);
+            status = ucp_wireup_ep_connect(ep->uct_eps[lane], ep_init_flags,
+                                           rsc_index, connect_aux,
+                                           remote_address);
+            if (status != UCS_OK) {
+                return status;
+            }
         }
 
         ucp_worker_iface_progress_ep(wiface);
@@ -947,7 +959,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
-    status = ucp_wireup_select_lanes(ep, ep_init_flags, remote_address,
+    status = ucp_wireup_select_lanes(ep, ep_init_flags,
+                                     worker->context->tl_bitmap, remote_address,
                                      addr_indices, &key);
     if (status != UCS_OK) {
         return status;
@@ -996,6 +1009,10 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     /* establish connections on all underlying endpoints */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_ep_get_cm_lane(ep) == lane) {
+            continue;
+        }
+
         status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
                                          remote_address, addr_indices[lane]);
         if (status != UCS_OK) {

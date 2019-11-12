@@ -64,6 +64,7 @@ AC_CHECK_TYPES([sighandler_t,  __sighandler_t], [], [],
 #
 # pthread
 #
+AC_CHECK_HEADERS([pthread_np.h])
 AC_SEARCH_LIBS(pthread_create, pthread)
 AC_SEARCH_LIBS(pthread_atfork, pthread)
 

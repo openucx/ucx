@@ -320,7 +320,7 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
 
     /* MTU is set by user configuration */
     if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
-        iface->config.path_mtu = config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512);
+        iface->config.path_mtu = (enum ibv_mtu)(config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512));
     } else if ((port_mtu > IBV_MTU_2048) && (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
         ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
          (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4104)))

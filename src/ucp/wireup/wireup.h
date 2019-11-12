@@ -72,11 +72,10 @@ typedef struct ucp_wireup_msg {
 
 
 typedef struct {
-    uint8_t         reachable;
-    uint8_t         priority;
-    ucp_rsc_index_t rsc_index;
-    unsigned        addr_index;
     double          score;
+    unsigned        addr_index;
+    ucp_rsc_index_t rsc_index;
+    uint8_t         priority;
 } ucp_wireup_select_info_t;
 
 
@@ -113,7 +112,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    unsigned *addr_indices);
 
 ucs_status_t
-ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
+ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags, uint64_t tl_bitmap,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned *addr_indices, ucp_ep_config_key_t *key);
 

@@ -29,7 +29,7 @@ resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
 }
 
 resource::resource(uct_component_h component, const std::string& md_name,
-                   const cpu_set_t& local_cpus, const std::string& tl_name,
+                   const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
                    const std::string& dev_name, uct_device_type_t dev_type) :
                    component(component), md_name(md_name), local_cpus(local_cpus),
                    tl_name(tl_name), dev_name(dev_name), dev_type(dev_type)
@@ -172,7 +172,7 @@ void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
 }
 
 void uct_test::set_interface_rscs(const md_resource& md_rsc,
-                                  cpu_set_t local_cpus, struct ifaddrs *ifa,
+                                  ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
     int i;
@@ -221,7 +221,7 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
 }
 
 void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
-                                      cpu_set_t local_cpus,
+                                      ucs_cpu_set_t local_cpus,
                                       std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
@@ -418,11 +418,11 @@ bool uct_test::has_transport(const std::string& tl_name) const {
 }
 
 bool uct_test::has_ud() const {
-    return (has_transport("ud") || has_transport("ud_mlx5"));
+    return (has_transport("ud_verbs") || has_transport("ud_mlx5"));
 }
 
 bool uct_test::has_rc() const {
-    return (has_transport("rc") || has_transport("rc_mlx5"));
+    return (has_transport("rc_verbs") || has_transport("rc_mlx5"));
 }
 
 bool uct_test::has_rc_or_dc() const {
@@ -694,9 +694,7 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
                                    uct_rkey_bundle *rkey_bundle) const
 {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
-        (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) &&
-        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-        (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
+        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
 
         void *rkey_buffer = malloc(md_attr().rkey_packed_size);
         if (rkey_buffer == NULL) {
@@ -1139,7 +1137,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         } else {
             m_mem.method   = UCT_ALLOC_METHOD_LAST;
             m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-            m_mem.length   = size;
+            m_mem.length   = alloc_size;
             m_mem.mem_type = mem_type;
             m_mem.memh     = UCT_MEM_HANDLE_NULL;
             m_mem.md       = NULL;
@@ -1176,6 +1174,7 @@ uct_test::mapped_buffer::~mapped_buffer() {
         m_entity.mem_free_host(&m_mem);
     } else {
         ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
+        m_entity.mem_type_dereg(&m_mem);
         mem_buffer::release(m_mem.address, m_mem.mem_type);
     }
 }

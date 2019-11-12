@@ -142,7 +142,8 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0, 0, "Generic HCA", 0, 0}
 };
 
-static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
+static void uct_ib_device_get_locality(const char *dev_name,
+                                       ucs_sys_cpuset_t *cpu_mask,
                                        int *numa_node)
 {
     char *p, buf[ucs_max(CPU_SETSIZE, 10)];
@@ -322,7 +323,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     /* Get device locality */
-    uct_ib_device_get_locailty(ibv_get_device_name(ibv_device), &dev->local_cpus,
+    uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
                                &dev->numa_node);
 
     /* Query all ports */

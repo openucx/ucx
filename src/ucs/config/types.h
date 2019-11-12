@@ -7,7 +7,6 @@
 #ifndef UCS_CONFIG_TYPES_H
 #define UCS_CONFIG_TYPES_H
 
-
 #include <ucs/sys/compiler_def.h>
 #include <sys/socket.h>
 

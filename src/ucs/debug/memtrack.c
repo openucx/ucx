@@ -37,7 +37,7 @@ typedef struct ucs_memtrack_context {
     ucs_memtrack_entry_t             total;
     khash_t(ucs_memtrack_ptr_hash)   ptrs;
     khash_t(ucs_memtrack_entry_hash) entries;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 } ucs_memtrack_context_t;
 
 

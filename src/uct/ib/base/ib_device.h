@@ -35,7 +35,7 @@
 #define UCT_IB_VCRC_LEN             2   /* IB variant crc footer */
 #define UCT_IB_DELIM_LEN            2   /* IB wire delimiter */
 #define UCT_IB_FDR_PACKET_GAP       64  /* Minimal FDR packet gap */
-#define UCT_IB_MAX_MESSAGE_SIZE     (2 << 30) /* Maximal IB message size */
+#define UCT_IB_MAX_MESSAGE_SIZE     (2UL << 30) /* Maximal IB message size */
 #define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
 #define UCT_IB_DEV_MAX_PORTS        2
@@ -121,11 +121,11 @@ typedef struct uct_ib_device {
     uct_ib_device_attr          dev_attr;        /* Cached device attributes */
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
-    cpu_set_t                   local_cpus;      /* CPUs local to device */
+    ucs_sys_cpuset_t            local_cpus;      /* CPUs local to device */
     int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
     uint8_t                     atomic_arg_sizes;

@@ -33,7 +33,6 @@ noinst_HEADERS = \
 	sm/base/sm_iface.h \
 	sm/mm/base/mm_iface.h \
 	sm/mm/base/mm_ep.h \
-	sm/mm/base/mm_def.h \
 	sm/mm/base/mm_md.h \
 	sm/self/self.h \
 	tcp/tcp.h \

@@ -372,6 +372,35 @@ build_icc() {
 }
 
 #
+# Build with PGI compiler
+#
+build_pgi() {
+	echo 1..1 > build_pgi.tap
+	pgi_test_file=$(mktemp ./XXXXXX).c
+	echo "int main() {}" > ${pgi_test_file}
+
+	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
+	then
+		echo "==== Build with PGI compiler ===="
+		# PGI failed to build valgrind headers, disable it for now
+		# TODO: Using non-default PGI compiler - pgcc18 which is going to be default
+		#       in next versions.
+		#       Switch to default CC compiler after pgcc18 is default for pgi module
+		../contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
+		$MAKEP clean
+		$MAKEP
+		$MAKEP distclean
+		echo "ok 1 - build successful " >> build_pgi.tap
+	else
+		echo "==== Not building with PGI compiler ===="
+		echo "ok 1 - # SKIP because PGI compiler not installed" >> build_pgi.tap
+	fi
+
+	rm -rf ${pgi_test_file} ${pgi_test_file}.out
+	module unload pgi/latest
+}
+
+#
 # Build debug version
 #
 build_debug() {
@@ -1367,6 +1396,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
 	do_distributed_task 0 4 build_icc
+	do_distributed_task 0 4 build_pgi
 	do_distributed_task 1 4 build_debug
 	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
