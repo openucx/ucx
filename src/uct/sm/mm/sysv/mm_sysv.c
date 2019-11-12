@@ -174,8 +174,7 @@ uct_sysv_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 static ucs_status_t
 uct_sysv_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle)
 {
-    void *address = handle;
-    return ucs_sysv_free(address);
+    return ucs_sysv_free(handle);
 }
 
 static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {

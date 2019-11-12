@@ -76,8 +76,8 @@ typedef size_t (*uct_mm_mapper_iface_addr_length_func_t)(uct_mm_md_t *md);
  * allocated on the same interface. 'buffer' must be at least the size returned
  * from iface_addr_length()
  */
-typedef ucs_status_t (*uct_mm_mapper_iface_addr_pack_func_t)(
-                uct_mm_md_t *md, void *buffer);
+typedef ucs_status_t
+(*uct_mm_mapper_iface_addr_pack_func_t)(uct_mm_md_t *md, void *buffer);
 
 
 /* Attach memory allocated by mem_alloc(). seg_id is from 'uct_mm_seg_t'
@@ -86,14 +86,16 @@ typedef ucs_status_t (*uct_mm_mapper_iface_addr_pack_func_t)(
  * This function is used only for active messages memory (FIFO and receive
  * descriptors).
  */
-typedef ucs_status_t (*uct_mm_mapper_mem_attach_func_t)(
-                uct_mm_md_t *md, uct_mm_seg_id_t seg_id, size_t length,
-                const void *iface_addr, uct_mm_remote_seg_t *rseg);
+typedef ucs_status_t
+(*uct_mm_mapper_mem_attach_func_t)(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
+                                   size_t length, const void *iface_addr,
+                                   uct_mm_remote_seg_t *rseg);
 
 
 /* Clean up the remote segment handle created by mem_attach() */
-typedef void (*uct_mm_mapper_mem_detach_func_t)(
-                uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg);
+typedef void
+(*uct_mm_mapper_mem_detach_func_t)(uct_mm_md_t *md,
+                                   const uct_mm_remote_seg_t *rseg);
 
 
 /*

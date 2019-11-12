@@ -56,7 +56,7 @@ static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     uct_mm_md_query(md, md_attr, 0);
 
     md_attr->cap.flags         |= UCT_MD_FLAG_REG;
-    md_attr->reg_cost.overhead  = 5.0e-9;
+    md_attr->reg_cost.overhead  = 60.0e-9;
     md_attr->reg_cost.growth    = 0;
     md_attr->cap.max_reg        = ULONG_MAX;
     md_attr->cap.reg_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -67,7 +67,7 @@ static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 
 static ucs_status_t uct_xpmem_get_global_xsegid(xpmem_segid_t *xsegid_p)
 {
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static ucs_init_once_t init_once   = UCS_INIT_ONCE_INITIALIZER;
     static xpmem_segid_t global_xsegid = -1;
 
     if (ucs_unlikely(global_xsegid == -1)) {

@@ -429,7 +429,7 @@ static size_t uct_posix_iface_addr_length(uct_mm_md_t *md)
     /* if shm_open is requested, the path to the backing file is /dev/shm
      * by default. however, if shm_open isn't used, the size of the path to the
      * requested backing file is needed so that the user would know how much
-     * space to allocated for the rkey.
+     * space to allocate for the rkey.
      */
     return (posix_config->use_shm_open == UCS_YES) ? 0 :
            (strlen(posix_config->path) + 1);
@@ -560,13 +560,13 @@ static ucs_status_t uct_posix_mem_detach_common(const uct_mm_remote_seg_t *mm_de
 
 static ucs_status_t uct_posix_mem_free(uct_md_h tl_md, uct_mem_h memh)
 {
-    uct_mm_md_t   *md = ucs_derived_of(tl_md, uct_mm_md_t);
-    uct_mm_seg_t *seg = memh;
-    uct_mm_id_t mm_id = seg->seg_id;
+    uct_mm_md_t     *md = ucs_derived_of(tl_md, uct_mm_md_t);
+    uct_mm_seg_t   *seg = memh;
+    uct_mm_id_t   mm_id = seg->seg_id;
+    ucs_status_t status = UCS_OK;
     const uct_posix_md_config_t *posix_config =
                      ucs_derived_of(md->config, uct_posix_md_config_t);
     int ret;
-    ucs_status_t status = UCS_OK;
 
     ret = ucs_munmap(seg->address, seg->length);
     if (ret != 0) {
