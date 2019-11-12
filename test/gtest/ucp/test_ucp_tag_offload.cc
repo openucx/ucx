@@ -17,7 +17,8 @@ extern "C" {
 class test_ucp_tag_offload : public test_ucp_tag {
 public:
     test_ucp_tag_offload() {
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        // TODO: test offload and offload MP as different variants
+        enable_tag_mp_offload();
     }
 
     void init()

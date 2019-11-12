@@ -400,6 +400,13 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
         return UCS_OK;
     }
 
+    /* TODO: Remove when DC MP XRQ support is implemented */
+#if HAVE_TL_DC
+    if (init_attr->qp_type == UCT_IB_QPT_DCI) {
+        return UCS_OK;
+    }
+#endif
+
     if ((mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) ||
         (mlx5_config->tm.mp_num_strides == 1)) {
         return UCS_OK;

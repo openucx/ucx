@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1294,7 +1294,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
 
     (void)ucp_tag_request_process_recv_data(rreq, rndv_data_hdr + 1, recv_len,
-                                            rndv_data_hdr->offset, 1);
+                                            rndv_data_hdr->offset, 1, 0);
     return UCS_OK;
 }
 

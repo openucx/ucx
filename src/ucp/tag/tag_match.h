@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -46,8 +46,8 @@ typedef struct {
  * Hash table entry for tag message fragments
  */
 typedef union {
-    ucs_queue_head_t      unexp_q;    /* Queue of unexpected descriptors */
-    ucp_request_t         *exp_req;   /* Expected request */
+    ucs_queue_head_t  unexp_q;    /* Queue of unexpected descriptors */
+    ucp_request_t     *exp_req;   /* Expected request */
 } ucp_tag_frag_match_t;
 
 
