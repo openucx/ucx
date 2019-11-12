@@ -211,11 +211,7 @@ bool mem_buffer::compare(const void *expected, const void *buffer,
 
 std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 {
-    if (mem_type < UCS_MEMORY_TYPE_LAST) {
-        return ucs_memory_type_names[mem_type];
-    } else {
-        return "unknown";
-    }
+    return ucs_memory_type_names[mem_type];
 }
 
 void mem_buffer::abort_wrong_mem_type(ucs_memory_type_t mem_type) {
