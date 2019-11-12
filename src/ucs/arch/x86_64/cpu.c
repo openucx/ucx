@@ -324,7 +324,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
     if (family == 0xf) {
         family += version.ext_family;
     }
-    if (family == 0x6 || family == 0xf) {
+    if (family == 0x6 || family == 0xf || family == 0x17) {
         model = (version.ext_model << 4) | model;
     }
 
@@ -363,6 +363,14 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
        }
     }
 
+    if (family == 0x17) {
+        switch (model) {
+        case 0x29:
+            return UCS_CPU_MODEL_AMD_NAPLES;
+        case 0x31:
+            return UCS_CPU_MODEL_AMD_ROME;
+        }
+    } 
     return UCS_CPU_MODEL_UNKNOWN;
 }
 
