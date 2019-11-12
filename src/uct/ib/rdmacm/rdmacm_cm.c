@@ -16,6 +16,13 @@
 #include <rdma/rdma_cma.h>
 
 
+ucs_config_field_t uct_rdmacm_cm_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_rdmacm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
+
+  {NULL}
+};
+
 ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id)
 {
     ucs_trace("destroying cm_id %p", id);
@@ -432,7 +439,7 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
 };
 
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
-                    uct_worker_h worker)
+                    uct_worker_h worker, const uct_cm_config_t *config)
 {
     uct_priv_worker_t *worker_priv;
     ucs_status_t status;
@@ -490,5 +497,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_cm_t, uct_cm_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_cm_t, uct_cm_t, uct_component_h, uct_worker_h);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_cm_t, uct_cm_t, uct_component_h,
+                          uct_worker_h, const uct_cm_config_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_cm_t, uct_cm_t);

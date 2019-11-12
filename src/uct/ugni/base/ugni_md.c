@@ -220,6 +220,7 @@ error:
 
 uct_component_t uct_ugni_component = {
     .query_md_resources = uct_ugni_query_md_resources,
+    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_ugni_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ugni_rkey_unpack,
@@ -231,6 +232,12 @@ uct_component_t uct_ugni_component = {
         .prefix         = "UGNI_",
         .table          = uct_md_config_table,
         .size           = sizeof(uct_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "",
+        .prefix         = "",
+        .table          = NULL,
+        .size           = 0,
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ugni_component),
     .flags              = 0

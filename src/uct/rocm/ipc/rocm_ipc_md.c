@@ -155,6 +155,7 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_component_t *component,
 
 uct_component_t uct_rocm_ipc_component = {
     .query_md_resources = uct_rocm_base_query_md_resources,
+    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_rocm_ipc_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
@@ -166,6 +167,12 @@ uct_component_t uct_rocm_ipc_component = {
         .prefix         = "ROCM_IPC_MD_",
         .table          = uct_rocm_ipc_md_config_table,
         .size           = sizeof(uct_rocm_ipc_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "",
+        .prefix         = "",
+        .table          = NULL,
+        .size           = 0,
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component),
     .flags              = 0

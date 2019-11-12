@@ -471,6 +471,63 @@ out:
     ;
 }
 
+static void print_cm_info(uct_component_h component,
+                          const uct_component_attr_t *component_attr,
+                          const char *cm_name, int print_opts,
+                          ucs_config_print_flags_t print_flags,
+                          const char *req_tl_name)
+{
+    ucs_status_t status;
+    uct_cm_config_t *cm_config;
+    uct_cm_attr_t cm_attr;
+    uct_cm_h cm;
+    ucs_async_context_t *async;
+    uct_worker_h worker;
+
+    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
+    if (status != UCS_OK) {
+        goto out_async_ctx_destroy;
+    }
+
+    status = uct_cm_config_read(component, NULL, NULL, &cm_config);
+    if (status != UCS_OK) {
+        goto out_destroy_worker;
+    }
+
+    status = uct_cm_open(component, worker, cm_config, &cm);
+    uct_config_release(cm_config);
+    if (status != UCS_OK) {
+        printf("# < failed to open connection manager %s >\n", cm_name);
+        goto out_destroy_worker;
+    }
+
+    cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(cm, &cm_attr);
+    if (status != UCS_OK) {
+        printf("# < failed to query connection manager >\n");
+        goto out_close_cm;
+    } else {
+        printf("#\n");
+        printf("# Connection manager: %s\n", cm_name);
+        printf("#     Component: %s\n", component_attr->name);
+        printf("#        max_conn_priv: %zu bytes\n", cm_attr.max_conn_priv);
+    }
+
+out_close_cm:
+    uct_cm_close(cm);
+out_destroy_worker:
+    uct_worker_destroy(worker);
+out_async_ctx_destroy:
+    ucs_async_context_destroy(async);
+out:
+    ;
+}
+
 static void print_uct_component_info(uct_component_h component,
                                      int print_opts,
                                      ucs_config_print_flags_t print_flags,
@@ -480,8 +537,9 @@ static void print_uct_component_info(uct_component_h component,
     ucs_status_t status;
     unsigned i;
 
-    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME  |
-                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME              |
+                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
+                                UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT;
     status = uct_component_query(component, &component_attr);
     if (status != UCS_OK) {
         printf("#   < failed to query component >\n");
@@ -493,7 +551,7 @@ static void print_uct_component_info(uct_component_h component,
                                          component_attr.md_resource_count);
     status = uct_component_query(component, &component_attr);
     if (status != UCS_OK) {
-        printf("#   < failed to query component resources >\n");
+        printf("#   < failed to query component md resources >\n");
         return;
     }
 
@@ -501,6 +559,21 @@ static void print_uct_component_info(uct_component_h component,
         print_md_info(component, &component_attr,
                       component_attr.md_resources[i].md_name,
                       print_opts, print_flags, req_tl_name);
+    }
+
+    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES;
+    component_attr.cm_resources = alloca(sizeof(*component_attr.cm_resources) *
+                                         component_attr.cm_resource_count);
+    status = uct_component_query(component, &component_attr);
+    if (status != UCS_OK) {
+        printf("#   < failed to query component cm resources >\n");
+        return;
+    }
+
+    for (i = 0; i < component_attr.cm_resource_count; ++i) {
+        print_cm_info(component, &component_attr,
+                      component_attr.cm_resources[i].cm_name,
+                      print_opts, print_flags, NULL);
     }
 }
 

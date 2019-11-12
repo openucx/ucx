@@ -413,6 +413,7 @@ err_free_md:
 
 uct_component_t uct_gdr_copy_component = {
     .query_md_resources = uct_gdr_copy_query_md_resources,
+    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_gdr_copy_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_gdr_copy_rkey_unpack,
@@ -424,6 +425,12 @@ uct_component_t uct_gdr_copy_component = {
         .prefix         = "GDR_COPY_",
         .table          = uct_gdr_copy_md_config_table,
         .size           = sizeof(uct_gdr_copy_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "",
+        .prefix         = "",
+        .table          = NULL,
+        .size           = 0,
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gdr_copy_component),
     .flags              = 0

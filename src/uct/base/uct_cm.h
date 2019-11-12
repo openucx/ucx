@@ -15,6 +15,17 @@
 
 UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
 
+
+/**
+ * "Base" structure which defines CM configuration options.
+ * Specific CMs extend this structure.
+ */
+struct uct_cm_config {
+    /* C standard prohibits empty structures */
+    char  __dummy;
+};
+
+
 /**
  * Connection manager component operations
  */
@@ -39,6 +50,13 @@ struct uct_cm {
     uct_component_h  component;
     uct_base_iface_t iface;
 };
+
+ucs_status_t
+uct_cm_query_single_cm_resource(uct_component_t *component,
+                                uct_cm_resource_desc_t **resources_p,
+                                unsigned *num_resources_p);
+
+extern ucs_config_field_t uct_cm_config_table[];
 
 UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
                   uct_component_h);

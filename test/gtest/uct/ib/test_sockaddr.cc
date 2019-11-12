@@ -370,10 +370,14 @@ public:
 
 protected:
 
-    void cm_start_listen() {
+    void skip_sockcm_cm() {
         if (!strcmp(GetParam()->md_name.c_str(), "sockcm")) {
             UCS_TEST_SKIP_R("sockcm cm is not fully implemented");
         }
+    }
+
+    void cm_start_listen() {
+        skip_sockcm_cm();
 
         uct_listener_params_t params;
 
@@ -771,9 +775,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
-    if (!strcmp(GetParam()->md_name.c_str(), "sockcm")) {
-        UCS_TEST_SKIP_R("sockcm cm is not fully implemented");
-    }
+    skip_sockcm_cm();
 
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
@@ -878,13 +880,17 @@ public:
                                uct_worker_create, m_test_async,
                                UCS_THREAD_MODE_SINGLE)
 
+        status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_test_config);
+        ASSERT_UCS_OK(status);
+
         UCS_TEST_CREATE_HANDLE(uct_cm_h, m_test_cm, uct_cm_close,
                                uct_cm_open, GetParam()->component,
-                               m_test_worker);
+                               m_test_worker, m_test_config);
     }
 
     void cleanup() {
         m_test_cm.reset();
+        uct_config_release(m_test_config);
         m_test_worker.reset();
         ucs_async_context_destroy(m_test_async);
         test_uct_cm_sockaddr::cleanup();
@@ -903,6 +909,7 @@ protected:
     ucs::handle<uct_worker_h> m_test_worker;
     ucs::handle<uct_cm_h>     m_test_cm;
     ucs_async_context_t       *m_test_async;
+    uct_cm_config_t           *m_test_config;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)

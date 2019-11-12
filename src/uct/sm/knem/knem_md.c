@@ -382,6 +382,7 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
 
 uct_component_t uct_knem_component = {
     .query_md_resources = uct_knem_query_md_resources,
+    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_knem_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_knem_rkey_unpack,
@@ -393,6 +394,12 @@ uct_component_t uct_knem_component = {
         .prefix         = "KNEM_",
         .table          = uct_knem_md_config_table,
         .size           = sizeof(uct_knem_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "",
+        .prefix         = "",
+        .table          = NULL,
+        .size           = 0,
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component),
     .flags              = 0

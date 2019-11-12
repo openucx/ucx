@@ -118,6 +118,7 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
             md_resources.resize(md_rsc.cmpt_attr.md_resource_count);
             component_attr_resouces.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
             component_attr_resouces.md_resources = &md_resources[0];
+            /* coverity[var_deref_model] */
             status = uct_component_query(uct_components[cmpt_index],
                                          &component_attr_resouces);
             ASSERT_UCS_OK(status);
@@ -622,6 +623,9 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+    ucs_status_t    status;
+    uct_cm_config_t *cm_config;
+
     memset(&m_iface_attr,   0, sizeof(m_iface_attr));
     memset(&m_iface_params, 0, sizeof(m_iface_params));
 
@@ -633,17 +637,22 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
                            uct_md_open, resource.component,
                            resource.md_name.c_str(), md_config);
 
-    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    status = uct_md_query(m_md, &m_md_attr);
+    ASSERT_UCS_OK(status);
+
+    status = uct_cm_config_read(resource.component, NULL, NULL, &cm_config);
     ASSERT_UCS_OK(status);
 
     UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_cm_h, m_cm, uct_cm_close,
-                                        uct_cm_open, resource.component, m_worker);
+                                        uct_cm_open, resource.component,
+                                        m_worker, cm_config);
 
     m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
     status = uct_cm_query(m_cm, &m_cm_attr);
     ASSERT_UCS_OK(status);
 
     max_conn_priv = 0;
+    uct_config_release(cm_config);
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,

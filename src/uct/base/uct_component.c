@@ -51,19 +51,34 @@ void uct_release_component_list(uct_component_h *components)
 ucs_status_t uct_component_query(uct_component_h component,
                                  uct_component_attr_t *component_attr)
 {
-    uct_md_resource_desc_t *resources = NULL;
-    unsigned num_resources            = 0;
+    uct_md_resource_desc_t *md_resources = NULL;
+    uct_cm_resource_desc_t *cm_resources = NULL;
+    unsigned num_md_resources            = 0;
+    unsigned num_cm_resources            = 0;
     ucs_status_t status;
 
     if (component_attr->field_mask & (UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT|
                                       UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES)) {
-        status = component->query_md_resources(component, &resources,
-                                               &num_resources);
+        status = component->query_md_resources(component, &md_resources,
+                                               &num_md_resources);
         if (status != UCS_OK) {
             return status;
         }
 
-        ucs_assertv((num_resources == 0) || (resources != NULL),
+        ucs_assertv((num_md_resources == 0) || (md_resources != NULL),
+                    "component=%s", component->name);
+    }
+
+    if ((component_attr->field_mask & (UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT|
+                                      UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES)) &&
+        (component->cm_open != ucs_empty_function_return_unsupported)){
+        status = component->query_cm_resources(component, &cm_resources,
+                                               &num_cm_resources);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucs_assertv((num_cm_resources == 0) || (cm_resources != NULL),
                     "component=%s", component->name);
     }
 
@@ -73,21 +88,34 @@ ucs_status_t uct_component_query(uct_component_h component,
     }
 
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT) {
-        component_attr->md_resource_count = num_resources;
+        component_attr->md_resource_count = num_md_resources;
 
     }
 
-    if ((resources != NULL) &&
+    if ((md_resources != NULL) &&
         (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES))
     {
-        memcpy(component_attr->md_resources, resources,
-               sizeof(uct_md_resource_desc_t) * num_resources);
+        memcpy(component_attr->md_resources, md_resources,
+               sizeof(uct_md_resource_desc_t) * num_md_resources);
+    }
+
+    if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT) {
+        component_attr->cm_resource_count = num_cm_resources;
+
+    }
+
+    if ((cm_resources != NULL) &&
+        (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES))
+    {
+        memcpy(component_attr->cm_resources, cm_resources,
+               sizeof(uct_cm_resource_desc_t) * num_cm_resources);
     }
 
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_FLAGS) {
         component_attr->flags = component->flags;
     }
 
-    ucs_free(resources);
+    ucs_free(md_resources);
+    ucs_free(cm_resources);
     return UCS_OK;
 }

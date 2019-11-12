@@ -6,15 +6,24 @@
 
 #include "sockcm_cm.h"
 
-size_t uct_sockcm_cm_get_max_conn_priv()
-{
-    return UCT_SOCKCM_CM_PRIV_DATA_LEN - sizeof(uct_sockcm_priv_data_hdr_t);
-}
+
+ucs_config_field_t uct_sockcm_cm_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_sockcm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
+
+  {"PRIVATE_DATA_LENGTH", "2048",
+   "Sockcm CM private data length",
+   ucs_offsetof(uct_sockcm_cm_config_t, priv_data_len), UCS_CONFIG_TYPE_INT},
+
+  {NULL}
+};
 
 static ucs_status_t uct_sockcm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 {
+    uct_sockcm_cm_t *sockcm_cm = ucs_derived_of(cm, uct_sockcm_cm_t);
+
     if (cm_attr->field_mask & UCT_CM_ATTR_FIELD_MAX_CONN_PRIV) {
-        cm_attr->max_conn_priv = uct_sockcm_cm_get_max_conn_priv();
+        cm_attr->max_conn_priv = sockcm_cm->priv_data_len;
     }
     return UCS_OK;
 }
@@ -60,12 +69,17 @@ static uct_iface_ops_t uct_sockcm_cm_iface_ops = {
 };
 
 UCS_CLASS_INIT_FUNC(uct_sockcm_cm_t, uct_component_h component,
-                    uct_worker_h worker)
+                    uct_worker_h worker, const uct_cm_config_t *config)
 {
+    uct_sockcm_cm_config_t *cm_config = ucs_derived_of(config,
+                                                       uct_sockcm_cm_config_t);
+
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_sockcm_cm_ops,
                               &uct_sockcm_cm_iface_ops, worker, component);
 
-    ucs_debug("created sockcn_cm %p", self);
+    self->priv_data_len = cm_config->priv_data_len;
+
+    ucs_debug("created sockcm_cm %p", self);
 
     return UCS_OK;
 }
@@ -75,5 +89,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_sockcm_cm_t)
 }
 
 UCS_CLASS_DEFINE(uct_sockcm_cm_t, uct_cm_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_sockcm_cm_t, uct_cm_t, uct_component_h, uct_worker_h);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_sockcm_cm_t, uct_cm_t, uct_component_h,
+                          uct_worker_h, const uct_cm_config_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sockcm_cm_t, uct_cm_t);

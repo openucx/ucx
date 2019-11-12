@@ -22,7 +22,7 @@ typedef struct uct_component uct_component_t;
  *
  * @param [in]  component               Query memory domain resources for this
  *                                      component.
- * @param [out] uct_md_resource_desc_t  Filled with a pointer to an array of
+ * @param [out] resources_p             Filled with a pointer to an array of
  *                                      memory domain resources, which should be
  *                                      released with ucs_free().
  * @param [out] num_resources_p         Filled with the number of memory domain
@@ -54,17 +54,37 @@ typedef ucs_status_t (*uct_component_md_open_func_t)(
 
 
 /**
+ * Component method to query component connection manager resources.
+ *
+ * @param [in]  component               Query connection manager resources
+ *                                      for this component.
+ * @param [out] resources_p             Filled with a pointer to an array of
+ *                                      connection manager resources, which
+ *                                      should be released with ucs_free().
+ * @param [out] num_resources_p         Filled with the number of connection
+ *                                      manager resource entries in the array.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_component_query_cm_resources_func_t)(
+                      uct_component_t *component, uct_cm_resource_desc_t **resources_p,
+                      unsigned *num_resources_p);
+
+
+/**
  * Component method to open a client/server connection manager.
  *
  * @param [in]  component               Open a connection manager on this
  *                                      component.
  * @param [in]  worker                  Open the connection manager on this worker.
+   @param [in]  config                  Connection manager configuration.
  * @param [out] cm_p                    Filled with a handle to the connection manager.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 typedef ucs_status_t (*uct_component_cm_open_func_t)(
-                uct_component_t *component, uct_worker_h worker, uct_cm_h *cm_p);
+                uct_component_t *component, uct_worker_h worker,
+                const uct_cm_config_t *config, uct_cm_h *cm_p);
 
 
 /**
@@ -127,12 +147,14 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 struct uct_component {
     const char                              name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     uct_component_query_md_resources_func_t query_md_resources; /**< Query memory domain resources method */
+    uct_component_query_cm_resources_func_t query_cm_resources; /**< Query connection manager resources method */
     uct_component_md_open_func_t            md_open;            /**< Memory domain open method */
     uct_component_cm_open_func_t            cm_open;            /**< Connection manager open method */
     uct_component_rkey_unpack_func_t        rkey_unpack;        /**< Remote key unpack method */
     uct_component_rkey_ptr_func_t           rkey_ptr;           /**< Remote key access pointer method */
     uct_component_rkey_release_func_t       rkey_release;       /**< Remote key release method */
     ucs_config_global_list_entry_t          md_config;          /**< MD configuration entry */
+    ucs_config_global_list_entry_t          cm_config;          /**< CM configuration entry */
     ucs_list_link_t                         tl_list;            /**< List of transports */
     ucs_list_link_t                         list;               /**< Entry in global list of components */
     uint64_t                                flags;              /**< Flags as defined by 
@@ -151,7 +173,8 @@ struct uct_component {
         extern ucs_list_link_t uct_components_list; \
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config);
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config) \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config);
 
 
 /**

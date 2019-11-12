@@ -230,6 +230,7 @@ out:
 
 uct_component_t uct_rdmacm_component = {
     .query_md_resources = uct_rdmacm_query_md_resources,
+    .query_cm_resources = uct_cm_query_single_cm_resource,
     .md_open            = uct_rdmacm_md_open,
 #if HAVE_RDMACM_QP_LESS
     .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_t),
@@ -245,6 +246,12 @@ uct_component_t uct_rdmacm_component = {
         .prefix         =  "IB_",
         .table          = uct_rdmacm_md_config_table,
         .size           = sizeof(uct_rdmacm_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "RDMA-CM connection manager",
+        .prefix         = "IB_",
+        .table          = uct_rdmacm_cm_config_table,
+        .size           = sizeof(uct_rdmacm_cm_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component),
 #if HAVE_RDMACM_QP_LESS

@@ -18,6 +18,7 @@
 #define UCT_COMPONENT_NAME_MAX     16
 #define UCT_TL_NAME_MAX            10
 #define UCT_MD_NAME_MAX            16
+#define UCT_CM_NAME_MAX            16
 #define UCT_DEVICE_NAME_MAX        32
 #define UCT_PENDING_REQ_PRIV_LEN   40
 #define UCT_TAG_PRIV_LEN           32
@@ -77,6 +78,7 @@ typedef struct uct_component       *uct_component_h;
 typedef struct uct_iface           *uct_iface_h;
 typedef struct uct_iface_config    uct_iface_config_t;
 typedef struct uct_md_config       uct_md_config_t;
+typedef struct uct_cm_config       uct_cm_config_t;
 typedef struct uct_ep              *uct_ep_h;
 typedef void *                     uct_mem_h;
 typedef uintptr_t                  uct_rkey_t;

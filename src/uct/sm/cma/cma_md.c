@@ -175,6 +175,7 @@ ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 
 uct_component_t uct_cma_component = {
     .query_md_resources = uct_cma_query_md_resources,
+    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_cma_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_md_stub_rkey_unpack,
@@ -182,6 +183,12 @@ uct_component_t uct_cma_component = {
     .rkey_release       = ucs_empty_function_return_success,
     .name               = "cma",
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .cm_config          = {
+        .name           = "",
+        .prefix         = "",
+        .table          = NULL,
+        .size           = 0,
+    },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cma_component),
     .flags              = 0
 };

@@ -159,6 +159,12 @@ typedef struct uct_mm_component {
                 .table          = uct_##_name##_md_config_table, \
                 .size           = sizeof(uct_##_name##_md_config_t), \
             }, \
+            .cm_config          = { \
+                .name           = "", \
+                .prefix         = "", \
+                .table          = NULL, \
+                .size           = 0, \
+            }, \
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super), \
             .flags              = 0, \

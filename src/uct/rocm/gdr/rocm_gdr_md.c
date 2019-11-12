@@ -137,6 +137,7 @@ uct_rocm_gdr_md_open(uct_component_h component, const char *md_name,
 
 uct_component_t uct_rocm_gdr_component = {
     .query_md_resources = uct_md_query_single_md_resource,
+    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_rocm_gdr_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_rocm_gdr_rkey_unpack,
@@ -148,6 +149,12 @@ uct_component_t uct_rocm_gdr_component = {
         .prefix         = "ROCM_GDR_",
         .table          = uct_rocm_gdr_md_config_table,
         .size           = sizeof(uct_rocm_gdr_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "",
+        .prefix         = "",
+        .table          = NULL,
+        .size           = 0,
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_gdr_component),
     .flags              = 0
