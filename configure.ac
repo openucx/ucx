@@ -236,7 +236,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AC_ARG_ENABLE([params-check],
          AS_HELP_STRING([--disable-params-check],
                         [Disable checking user parameters passed to API, default: NO]),
-         [], 
+         [],
          [enable_params_check=yes])
      AS_IF([test "x$enable_params_check" = xyes],
            [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])],
@@ -248,7 +248,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AC_ARG_ENABLE([debug-data],
                    AS_HELP_STRING([--enable-debug-data],
                                   [Enable collecting data to ease debugging, default: NO]),
-		   [], 
+		   [],
 		   [enable_debug_data=no])
      AS_IF([test "x$enable_debug_data" = xyes],
            [AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
@@ -322,6 +322,7 @@ build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
 build_modules="${build_modules}${uct_rocm_modules}"
 AC_SUBST([build_modules], [${build_modules}])
+AC_SUBST([build_bindings], [${build_bindings}])
 
 #
 # Final output
@@ -379,6 +380,7 @@ AC_MSG_NOTICE([           C flags:   ${BASE_CFLAGS}])
 AC_MSG_NOTICE([         C++ flags:   ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
+AC_MSG_NOTICE([          Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([     Devel headers:   ${enable_devel_headers}])
 AC_MSG_NOTICE([       UCT modules:   <$(echo ${uct_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([      CUDA modules:   <$(echo ${uct_cuda_modules}|tr ':' ' ') >])
