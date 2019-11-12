@@ -77,6 +77,7 @@ private:
     ucs_memory_type_t m_mem_type;
     void              *m_ptr;
     size_t            m_size;
+    int               m_allocated;
 };
 
 

@@ -8,6 +8,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
+#include <common/mem_buffer.h>
 
 /* ucp version compile time test */
 #if (UCP_API_VERSION != UCP_VERSION(UCP_API_MAJOR,UCP_API_MINOR))
@@ -212,6 +213,47 @@ protected:
     volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
+
+protected:
+    class mapped_buffer {
+    public:
+        mapped_buffer(size_t size, const entity& entity, int flags = 0,
+                      uint64_t seed = 0,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
+        virtual ~mapped_buffer();
+
+        void *ptr() const;
+        uintptr_t addr() const;
+        size_t length() const;
+
+        void pattern_fill(uint64_t seed);
+        void pattern_check(uint64_t seed);
+        void pattern_fill();
+        void pattern_check();
+
+        ucp_rkey_h rkey(const entity& entity) const;
+        ucp_mem_h memh() const;
+
+        class ucp_rkey {
+        public:
+            ucp_rkey(ucp_rkey_h rkey) : m_rkey(rkey) {}
+            ~ucp_rkey() {ucp_rkey_destroy(m_rkey);}
+            operator ucp_rkey_h() {return m_rkey;}
+
+        private:
+            ucp_rkey_h m_rkey;
+        };
+
+    private:
+        const entity& m_entity;
+        mem_buffer    m_buffer;
+        uint64_t      m_seed;
+        ucp_mem_h     m_memh;
+        void         *m_rkey;
+        void         *m_ptr;
+        size_t        m_length;
+    };
+
 };
 
 

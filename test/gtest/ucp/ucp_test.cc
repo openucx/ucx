@@ -729,3 +729,104 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
 }
+
+ucp_test::mapped_buffer::mapped_buffer(size_t size,
+                                       const entity& entity,
+                                       int flags,
+                                       uint64_t seed,
+                                       ucs_memory_type_t mem_type) :
+    m_entity(entity),
+    m_buffer((flags & UCP_MEM_MAP_FIXED) ? ucs::mmap_fixed_address() : NULL,
+             size, mem_type),
+    m_seed(seed)
+{
+    ucp_mem_map_params_t params;
+    ucs_status_t status;
+    size_t rkey_buffer_size;
+    ucp_mem_attr_t mem_attr;
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = m_buffer.ptr();
+    params.length     = size;
+    params.flags      = flags;
+    if (params.flags & UCP_MEM_MAP_FIXED) {
+        params.flags |= UCP_MEM_MAP_ALLOCATE;
+    } else {
+        params.flags &= ~UCP_MEM_MAP_ALLOCATE;
+    }
+
+    status = ucp_mem_map(m_entity.ucph(), &params, &m_memh);
+    ASSERT_UCS_OK(status);
+
+    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS |
+                          UCP_MEM_ATTR_FIELD_LENGTH;
+    status = ucp_mem_query(memh(), &mem_attr);
+    ASSERT_UCS_OK(status);
+
+    m_ptr    = mem_attr.address;
+    m_length = mem_attr.length;
+
+    status = ucp_rkey_pack(m_entity.ucph(), memh(), &m_rkey, &rkey_buffer_size);
+    ASSERT_UCS_OK(status);
+}
+
+ucp_test::mapped_buffer::~mapped_buffer()
+{
+    ucs_status_t status;
+
+    ucp_rkey_buffer_release(m_rkey);
+    status = ucp_mem_unmap(m_entity.ucph(), m_memh);
+    EXPECT_UCS_OK(status);
+}
+
+void *ucp_test::mapped_buffer::ptr() const
+{
+    return m_ptr;
+}
+
+uintptr_t ucp_test::mapped_buffer::addr() const
+{
+    return (uintptr_t)ptr();
+}
+
+size_t ucp_test::mapped_buffer::length() const
+{
+    return m_length;
+}
+
+void ucp_test::mapped_buffer::pattern_fill(uint64_t seed)
+{
+    m_buffer.pattern_fill(ptr(), length(), seed);
+}
+
+void ucp_test::mapped_buffer::pattern_check(uint64_t seed)
+{
+    m_buffer.pattern_check(ptr(), length(), seed);
+}
+
+void ucp_test::mapped_buffer::pattern_fill()
+{
+    m_buffer.pattern_fill(ptr(), length(), m_seed);
+}
+
+void ucp_test::mapped_buffer::pattern_check()
+{
+    m_buffer.pattern_check(ptr(), length(), m_seed);
+}
+
+ucp_rkey_h ucp_test::mapped_buffer::rkey(const entity& entity) const
+{
+    ucp_rkey_h rkey;
+    ucs_status_t status;
+
+    status = ucp_ep_rkey_unpack(entity.ep(), m_rkey, &rkey);
+    ASSERT_UCS_OK(status);
+    return rkey;
+}
+
+ucp_mem_h ucp_test::mapped_buffer::memh() const
+{
+    return m_memh;
+}
