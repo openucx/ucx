@@ -131,11 +131,18 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  sock
     return false;
 }
 
+static inline void jucx_context_reset(struct jucx_context* ctx)
+{
+    ctx->callback = NULL;
+    ctx->jucx_request = NULL;
+    ctx->status = UCS_INPROGRESS;
+}
+
 void jucx_request_init(void *request)
 {
      struct jucx_context *ctx = (struct jucx_context *)request;
-     ctx->callback = NULL;
-     ctx->jucx_request = NULL;
+     jucx_context_reset(ctx);
+     ucs_spinlock_init(&ctx->lock);
 }
 
 JNIEnv* get_jni_env()
@@ -167,29 +174,41 @@ static inline void call_on_error(jobject callback, ucs_status_t status)
     env->CallVoidMethod(callback, on_error, status, error_msg);
 }
 
+static inline void jucx_call_callback(jobject callback, jobject jucx_request,
+                                      ucs_status_t status)
+{
+    if (status == UCS_OK) {
+        UCS_PROFILE_CALL_VOID(call_on_success, callback, jucx_request);
+    } else {
+        call_on_error(callback, status);
+    }
+}
+
 UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, ucs_status_t status)
 {
     struct jucx_context *ctx = (struct jucx_context *)request;
-    while (ctx->jucx_request == NULL) {
-        pthread_yield();
+    ucs_spin_lock(&ctx->lock);
+    if (ctx->jucx_request == NULL) {
+        // here because 1 of 2 reasons:
+        // 1. progress is in another thread and got here earlier then process_request happened.
+        // 2. this callback is inside ucp_tag_recv_nb function.
+        ctx->status = status;
+        ucs_spin_unlock(&ctx->lock);
+        return;
     }
-    ucs_memory_cpu_load_fence();
+
     JNIEnv *env = get_jni_env();
     set_jucx_request_completed(env, ctx->jucx_request);
 
     if (ctx->callback != NULL) {
-        if (status == UCS_OK) {
-            UCS_PROFILE_CALL_VOID(call_on_success, ctx->callback, ctx->jucx_request);
-        } else {
-            call_on_error(ctx->callback, status);
-        }
+        jucx_call_callback(ctx->callback, ctx->jucx_request, status);
         env->DeleteGlobalRef(ctx->callback);
     }
 
     env->DeleteGlobalRef(ctx->jucx_request);
-    ctx->callback = NULL;
-    ctx->jucx_request = NULL;
+    jucx_context_reset(ctx);
     ucp_request_free(request);
+    ucs_spin_unlock(&ctx->lock);
 }
 
 void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info)
@@ -202,13 +221,25 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
     JNIEnv *env = get_jni_env();
     jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor);
 
-    // If request is a pointer set context callback and rkey.
     if (UCS_PTR_IS_PTR(request)) {
-        if (callback != NULL) {
-            ((struct jucx_context *)request)->callback = env->NewGlobalRef(callback);
+        struct jucx_context *ctx = (struct jucx_context *)request;
+        ucs_spin_lock(&ctx->lock);
+        if (ctx->status == UCS_INPROGRESS) {
+            // request not completed yet, install user callback
+            if (callback != NULL) {
+                ctx->callback = env->NewGlobalRef(callback);
+            }
+            ctx->jucx_request = env->NewGlobalRef(jucx_request);
+        } else {
+            // request was completed whether by progress in other thread or inside
+            // ucp_tag_recv_nb function call.
+            if (callback != NULL) {
+                jucx_call_callback(callback, jucx_request, ctx->status);
+            }
+            jucx_context_reset(ctx);
+            ucp_request_free(request);
         }
-        ucs_memory_cpu_store_fence();
-        ((struct jucx_context *)request)->jucx_request = env->NewGlobalRef(jucx_request);
+        ucs_spin_unlock(&ctx->lock);
     } else {
         if (UCS_PTR_IS_ERR(request)) {
             JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
