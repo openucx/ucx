@@ -15,6 +15,7 @@ import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
@@ -239,6 +240,69 @@ public class UcpEndpointTest {
         worker2.close();
         context1.close();
         context2.close();
+    }
+
+    @Test
+    public void testRecvAfterSend() {
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature()
+            .setMtWorkersShared(true);
+        UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA()
+            .requestThreadSafety();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+        UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
+        UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
+            .setUcpAddress(worker2.getAddress()));
+
+        ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer dst1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+
+        ep.sendTaggedNonBlocking(src1, 0, null);
+
+        Thread progressThread = new Thread() {
+            @Override
+            public void run() {
+                while (!isInterrupted()) {
+                    worker1.progress();
+                    worker2.progress();
+                }
+            }
+        };
+
+        progressThread.setDaemon(true);
+        progressThread.start();
+
+        try {
+            Thread.sleep(5);
+        } catch (InterruptedException e) {
+
+        }
+
+        AtomicBoolean success = new AtomicBoolean(false);
+
+        worker2.recvTaggedNonBlocking(dst1, 0, -1, new UcxCallback() {
+            @Override
+            public void onSuccess(UcxRequest request) {
+                success.set(true);
+            }
+        });
+
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+
+        }
+
+        assertTrue(success.get());
+        progressThread.interrupt();
+        ep.close();
+        worker2.close();
+        worker1.close();
+        context2.close();
+        context1.close();
     }
 
     @Test

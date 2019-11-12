@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -335,28 +335,23 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
         reqhdr = &((ucp_eager_sync_first_hdr_t*)hdr)->req; /* first */
     }
 
-    req = ucp_request_get(worker);
+    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
+        ucp_tag_offload_sync_send_ack(worker, reqhdr->ep_ptr,
+                                      ((ucp_eager_sync_hdr_t*)hdr)->super.super.tag,
+                                      recv_flags);
+        return;
+    }
+
+    ucs_assert(reqhdr->reqptr != 0);
+    req = ucp_proto_ssend_ack_request_alloc(worker, reqhdr->ep_ptr);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }
 
-    req->flags              = 0;
-    req->send.ep            = ucp_worker_get_ep_by_ptr(worker, reqhdr->ep_ptr);
-    req->send.uct.func      = ucp_proto_progress_am_single;
-    req->send.proto.comp_cb = ucp_request_put;
-    req->send.proto.status  = UCS_OK;
+    req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
+    req->send.proto.remote_request = reqhdr->reqptr;
 
     ucs_trace_req("send_sync_ack req %p ep %p", req, req->send.ep);
-
-    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_ONLY);
-        req->send.proto.am_id          = UCP_AM_ID_OFFLOAD_SYNC_ACK;
-        req->send.proto.sender_tag     = ((ucp_eager_sync_hdr_t*)hdr)->super.super.tag;
-    } else {
-        ucs_assert(reqhdr->reqptr != 0);
-        req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
-        req->send.proto.remote_request = reqhdr->reqptr;
-    }
 
     ucp_request_send(req, 0);
 }

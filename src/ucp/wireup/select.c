@@ -232,46 +232,21 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 }
 
 static void
-ucp_wireup_update_select_info(ucp_context_h context, uct_md_attr_t *md_attr,
-                              uint8_t rsc_index,
-                              const uct_iface_attr_t *iface_attr,
-                              const ucp_address_iface_attr_t *addr_iface_attr,
-                              unsigned addr_index,
-                              const ucp_wireup_criteria_t *criteria,
-                              ucp_wireup_select_info_t *select_info)
+ucp_wireup_init_select_info(ucp_context_h context, double score,
+                            unsigned addr_index, ucp_rsc_index_t rsc_index,
+                            uint8_t priority, const char *title,
+                            ucp_wireup_select_info_t *select_info)
 {
-    double score     = criteria->calc_score(context, md_attr,
-                                            iface_attr,
-                                            addr_iface_attr);
-    uint8_t priority = iface_attr->priority + addr_iface_attr->priority;
-    int update;
-
     ucs_assert(score >= 0.0);
-
-    if (select_info->reachable) {
-        /* Comparing score with the current best score */
-        update = (ucp_score_cmp(score, select_info->score) > 0);
-        if (!update) {
-            /* Comparing priority with the priority of the current
-             * best transport (if the scores are equal) */
-            update = (!ucp_score_cmp(score, select_info->score) &&
-                      (priority > select_info->priority));
-        }
-    } else {
-        update = 1;
-    }
 
     ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%u] : %s score %.2f priority %d",
               UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
-              addr_index, criteria->title, score, priority);
+              addr_index, title, score, priority);
 
-    if (update) {
-        select_info->rsc_index  = rsc_index;
-        select_info->score      = score;
-        select_info->priority   = priority;
-        select_info->addr_index = addr_index;
-        select_info->reachable  = 1;
-    }
+    select_info->score      = score;
+    select_info->addr_index = addr_index;
+    select_info->rsc_index  = rsc_index;
+    select_info->priority   = priority;
 }
 
 /**
@@ -286,9 +261,11 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
                             int show_error,
                             ucp_wireup_select_info_t *select_info)
 {
-    ucp_ep_h ep                          = select_params->ep;
-    ucp_worker_h worker                  = ep->worker;
-    ucp_context_h context                = worker->context;
+    ucp_ep_h ep                    = select_params->ep;
+    ucp_worker_h worker            = ep->worker;
+    ucp_context_h context          = worker->context;
+    ucp_wireup_select_info_t sinfo = {0};
+    int found                      = 0;
     unsigned addr_index;
     uct_tl_resource_desc_t *resource;
     const ucp_address_entry_t *ae;
@@ -298,13 +275,8 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
     uint64_t addr_index_map;
-    ucp_wireup_select_info_t sinfo;
-
-    /*
-     * sinfo.reachable = 0;
-     * everything else is needed to suppress compiler warnings
-     */
-    memset(&sinfo, 0, sizeof(sinfo));
+    double score;
+    uint8_t priority;
 
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
@@ -428,14 +400,22 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
                 continue;
             }
 
-            ucp_wireup_update_select_info(context, md_attr, rsc_index,
-                                          iface_attr, &ae->iface_attr,
-                                          addr_index, criteria, &sinfo);
+            score        = criteria->calc_score(context, md_attr, iface_attr,
+                                                &ae->iface_attr);
+            priority     = iface_attr->priority + ae->iface_attr.priority;
+
+            if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
+                                              sinfo.priority) > 0)) {
+                ucp_wireup_init_select_info(context, score, addr_index,
+                                            rsc_index, priority,
+                                            criteria->title, &sinfo);
+                found = 1;
+            }
         }
 
         /* If a local resource cannot reach any of the remote addresses,
          * generate debug message. */
-        if (!sinfo.reachable) {
+        if (!found) {
             snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - %s, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource),
                      ucs_status_string(UCS_ERR_UNREACHABLE));
@@ -448,7 +428,7 @@ out:
         *(p - 2) = '\0'; /* trim last "," */
     }
 
-    if (!sinfo.reachable) {
+    if (!found) {
         if (show_error) {
             ucs_error("no %s transport to %s: %s", criteria->title,
                       ucp_ep_peer_name(ep), tls_info);
@@ -809,8 +789,6 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    select_info.reachable  = 1;  /**< UCT CM provides reachability by its API
-                                      CBs */
     select_info.priority   = 0;  /**< Currently we have only 1 CM
                                       implementation */
     select_info.rsc_index  = UCP_NULL_RESOURCE; /**< RSC doesn't matter for CM */

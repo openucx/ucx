@@ -72,11 +72,10 @@ typedef struct ucp_wireup_msg {
 
 
 typedef struct {
-    uint8_t         reachable;
-    uint8_t         priority;
-    ucp_rsc_index_t rsc_index;
-    unsigned        addr_index;
     double          score;
+    unsigned        addr_index;
+    ucp_rsc_index_t rsc_index;
+    uint8_t         priority;
 } ucp_wireup_select_info_t;
 
 

@@ -1185,7 +1185,7 @@ struct uct_md_attr {
 
     char                     component_name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
-    cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
+    ucs_cpu_set_t            local_cpus;    /**< Mask of CPUs near the resource */
 };
 
 

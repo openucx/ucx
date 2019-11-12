@@ -969,7 +969,7 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uct_ib_md_t *md      = uct_ib_iface_md(iface);
-    cpu_set_t temp_cpu_mask, process_affinity;
+    ucs_sys_cpuset_t temp_cpu_mask, process_affinity;
 #if HAVE_NUMA
     int distance, min_cpu_distance;
     int cpu, num_cpus;
@@ -981,7 +981,7 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
         return UCS_OK;
     }
 
-    ret = sched_getaffinity(0, sizeof(process_affinity), &process_affinity);
+    ret = ucs_sys_getaffinity(&process_affinity);
     if (ret) {
         ucs_error("sched_getaffinity() failed: %m");
         return UCS_ERR_INVALID_PARAM;

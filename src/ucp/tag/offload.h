@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -7,6 +7,7 @@
 #ifndef UCP_TAG_OFFLOAD_H_
 #define UCP_TAG_OFFLOAD_H_
 
+#include <ucp/tag/eager.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/proto/proto.h>
@@ -37,6 +38,16 @@ typedef struct {
 } UCS_S_PACKED ucp_offload_ssend_hdr_t;
 
 
+/**
+ * Header for multi-fragmented sync send acknowledgment
+ * (carried by last fragment)
+ */
+typedef struct {
+    ucp_eager_middle_hdr_t    super;
+    ucp_offload_ssend_hdr_t   ssend_ack;
+} UCS_S_PACKED ucp_offload_last_ssend_hdr_t;
+
+
 extern const ucp_proto_t ucp_tag_offload_proto;
 
 extern const ucp_proto_t ucp_tag_offload_sync_proto;
@@ -62,6 +73,9 @@ ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags, uint64_t stag
 void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mode);
 
 int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue);
+
+void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
+                                   ucp_tag_t stag, uint16_t recv_flags);
 
 /**
  * @brief Activate tag offload interface

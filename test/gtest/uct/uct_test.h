@@ -42,7 +42,7 @@ struct resource {
     virtual std::string name() const;
     uct_component_h         component;
     std::string             md_name;
-    cpu_set_t               local_cpus;
+    ucs_cpu_set_t           local_cpus;
     std::string             tl_name;
     std::string             dev_name;
     uct_device_type_t       dev_type;
@@ -51,7 +51,7 @@ struct resource {
 
     resource();
     resource(uct_component_h component, const std::string& md_name,
-             const cpu_set_t& local_cpus, const std::string& tl_name,
+             const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
              const std::string& dev_name, uct_device_type_t dev_type);
     resource(uct_component_h component, const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,
@@ -336,10 +336,10 @@ protected:
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
     static void set_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
-                                       cpu_set_t local_cpus,
+                                       ucs_cpu_set_t local_cpus,
                                        std::vector<resource>& all_resources);
     static void set_interface_rscs(const md_resource& md_rsc,
-                                   cpu_set_t local_cpus, struct ifaddrs *ifa,
+                                   ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size);

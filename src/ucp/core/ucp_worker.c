@@ -844,8 +844,9 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
             /* 2. Has the same or better performance characteristics */
             (if_iter->attr.overhead <= wiface->attr.overhead) &&
             (ucp_tl_iface_bandwidth(ctx, &if_iter->attr.bandwidth) >= bw_cur) &&
-            (if_iter->attr.priority >= wiface->attr.priority) &&
-            (ucp_score_cmp(latency_iter, latency_cur) <= 0) &&
+            /* swap latencies in args list since less is better */
+            (ucp_score_prio_cmp(latency_cur,  if_iter->attr.priority,
+                                latency_iter, wiface->attr.priority) >= 0) &&
             /* 3. The found transport is scalable enough or both
              *    transport are unscalable */
             (ucp_is_scalable_transport(ctx, if_iter->attr.max_num_eps) ||

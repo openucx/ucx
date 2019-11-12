@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -408,4 +408,23 @@ ucp_proto_get_short_max(const ucp_request_t *req,
             (req->flags & UCP_REQUEST_FLAG_SYNC) ||
             (!UCP_MEM_IS_HOST(req->send.mem_type))) ?
            -1 : msg_config->max_short;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, uintptr_t ep_ptr)
+{
+    ucp_request_t *req;
+
+    req = ucp_request_get(worker);
+    if (req == NULL) {
+        return NULL;
+    }
+
+    req->flags              = 0;
+    req->send.ep            = ucp_worker_get_ep_by_ptr(worker, ep_ptr);
+    req->send.uct.func      = ucp_proto_progress_am_single;
+    req->send.proto.comp_cb = ucp_request_put;
+    req->send.proto.status  = UCS_OK;
+
+    return req;
 }

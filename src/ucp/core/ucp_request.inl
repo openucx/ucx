@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -398,6 +398,21 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_unpack_contig(ucp_request_t *req, void *buf, const void *data,
+                          size_t length)
+{
+    if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type) ||
+                   UCP_MEM_IS_CUDA_MANAGED(req->recv.mem_type) ||
+                   UCP_MEM_IS_ROCM_MANAGED(req->recv.mem_type))) {
+        UCS_PROFILE_NAMED_CALL("memcpy_recv", ucs_memcpy_relaxed, buf,
+                               data, length);
+    } else {
+        ucp_mem_type_unpack(req->recv.worker, buf, data, length,
+                            req->recv.mem_type);
+    }
+}
+
 /**
  * Unpack receive data to a request
  *
@@ -421,30 +436,15 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
                   req->recv.length, length, offset, last ? "yes" : "no");
 
     if (ucs_unlikely((length + offset) > req->recv.length)) {
-        ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
-                  length, offset, req->recv.length);
-        if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
-            dt_gen = ucp_dt_generic(req->recv.datatype);
-            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
-                                         req->recv.state.dt.generic.state);
-        }
-        return UCS_ERR_MESSAGE_TRUNCATED;
+        return ucp_request_recv_msg_truncated(req, length, offset);
     }
 
     switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if ((ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) ||
-            (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(req->recv.mem_type))) ||
-            (ucs_likely(UCP_MEM_IS_ROCM_MANAGED(req->recv.mem_type)))) {
-            UCS_PROFILE_NAMED_CALL("memcpy_recv", ucs_memcpy_relaxed,
-                                   UCS_PTR_BYTE_OFFSET(req->recv.buffer, offset),
-                                   data, length);
-        } else {
-            ucp_mem_type_unpack(req->recv.worker,
-                                UCS_PTR_BYTE_OFFSET(req->recv.buffer, offset),
-                                data, length, req->recv.mem_type);
-        }
-        return UCS_OK;;
+        ucp_request_unpack_contig(req,
+                                  UCS_PTR_BYTE_OFFSET(req->recv.buffer, offset),
+                                  data, length);
+        return UCS_OK;
 
     case UCP_DATATYPE_IOV:
         if (offset != req->recv.state.offset) {
