@@ -62,7 +62,7 @@ package:
 
 # Maven install phase
 install-data-hook: package
-	cp -fp $(java_build_dir)/jucx-@VERSION@.jar @libdir@
+	cp -fp $(java_build_dir)/jucx-@VERSION@.jar $(DESTDIR)@libdir@
 
 # Remove all compiled Java files
 clean-local:
