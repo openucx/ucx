@@ -1,14 +1,13 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
 #include <tools/perf/lib/libperf_int.h>
-
 #include "hip/hip_runtime.h"
 #include <ucs/sys/compiler.h>
-
 
 static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
 {
@@ -16,21 +15,16 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
     unsigned group_index;
     int num_gpus;
     int gpu_index;
-
     group_index = rte_call(perf, group_index);
-
     hiperr = hipGetDeviceCount(&num_gpus);
     if (hiperr != hipSuccess) {
         return UCS_ERR_NO_DEVICE;
     }
-
     gpu_index = group_index % num_gpus;
-
     hiperr = hipSetDevice(gpu_index);
     if (hiperr != hipSuccess) {
         return UCS_ERR_NO_DEVICE;
     }
-
     return UCS_OK;
 }
 
@@ -39,10 +33,8 @@ static inline ucs_status_t ucx_perf_rocm_alloc(size_t length,
                                                void **address_p)
 {
     hipError_t hiperr;
-
     ucs_assert((mem_type == UCS_MEMORY_TYPE_ROCM) ||
                (mem_type == UCS_MEMORY_TYPE_ROCM_MANAGED));
-
     hiperr = ((mem_type == UCS_MEMORY_TYPE_ROCM) ?
             hipMalloc(address_p, length) :
             hipMallocManaged(address_p, length, hipMemAttachGlobal));
@@ -50,7 +42,6 @@ static inline ucs_status_t ucx_perf_rocm_alloc(size_t length,
         ucs_error("failed to allocate memory");
         return UCS_ERR_NO_MEMORY;
     }
-
     return UCS_OK;
 }
 
@@ -87,7 +78,6 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
     if (status != UCS_OK) {
         return status;
     }
-
     status = uct_md_mem_reg(perf->uct.md, alloc_mem->address,
                             length, flags, &alloc_mem->memh);
     if (status != UCS_OK) {
@@ -95,10 +85,8 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
         ucs_error("failed to register memory");
         return status;
     }
-
     alloc_mem->mem_type = mem_type;
     alloc_mem->md       = perf->uct.md;
-
     return UCS_OK;
 }
 
@@ -129,7 +117,6 @@ static void uct_perf_rocm_free(const ucx_perf_context_t *perf,
     if (status != UCS_OK) {
         ucs_error("failed to deregister memory");
     }
-
     hipFree(alloc_mem->address);
 }
 
@@ -153,7 +140,6 @@ static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
     if (hiperr != hipSuccess) {
         ucs_error("failed to set memory: %s", hipGetErrorString(hiperr));
     }
-
     return dst;
 }
 
@@ -178,12 +164,10 @@ UCS_STATIC_INIT {
         .memcpy    = ucx_perf_rocm_memcpy,
         .memset    = ucx_perf_rocm_memset
     };
-
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = &hip_allocator;
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = &hip_managed_allocator;
 }
 UCS_STATIC_CLEANUP {
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = NULL;
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = NULL;
-
 }
