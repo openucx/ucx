@@ -242,13 +242,43 @@ typedef struct uct_rc_mlx5_mp_context {
      * eager callback when the last message fragment arrives. */
     uint32_t                      app_ctx;
 
-    /* When 0, it means that tag eager unexpected multi-fragmented message is
-     * being processed (not all fragments are delivered to the user via
-     * uct_tag_unexp_eager_cb_t callback yet). Otherwise, any incoming tag eager
-     * message should be either a single fragment message or the first fragment
-     * of multi-fragmeneted message. */
+    /* Used when local EP can be found by sender QP number (rc_mlx5 tl).
+     * When 0, it means that tag eager unexpected multi-fragmented message
+     * is being processed (not all fragments are delivered to the user via
+     * uct_tag_unexp_eager_cb_t callback yet). Otherwise, any incoming tag
+     * eager message should be either a single fragment message or the first
+     * fragment of multi-fragmeneted message. */
     uint8_t                       free;
 } uct_rc_mlx5_mp_context_t;
+
+
+typedef struct uct_rc_mlx5_mp_hash_key {
+    uint64_t                      guid;
+    uint32_t                      qp_num;
+} uct_rc_mlx5_mp_hash_key_t;
+
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_mlx5_mp_hash_equal(uct_rc_mlx5_mp_hash_key_t key1,
+                          uct_rc_mlx5_mp_hash_key_t key2)
+{
+    return (key1.guid == key2.guid) && (key1.qp_num == key2.qp_num);
+}
+
+
+static UCS_F_ALWAYS_INLINE khint32_t
+uct_rc_mlx5_mp_hash_func(uct_rc_mlx5_mp_hash_key_t key)
+{
+    return kh_int64_hash_func(key.guid ^ key.qp_num);
+}
+
+
+KHASH_MAP_INIT_INT64(uct_rc_mlx5_mp_hash_lid, uct_rc_mlx5_mp_context_t);
+
+
+KHASH_INIT(uct_rc_mlx5_mp_hash_gid, uct_rc_mlx5_mp_hash_key_t,
+           uct_rc_mlx5_mp_context_t, 1, uct_rc_mlx5_mp_hash_func,
+           uct_rc_mlx5_mp_hash_equal);
 
 
 #if IBV_HW_TM
@@ -350,6 +380,8 @@ typedef struct uct_rc_mlx5_iface_common {
         struct {
             uint8_t                  num_strides;
             ucs_mpool_t              tx_mp;
+            khash_t(uct_rc_mlx5_mp_hash_lid) hash_lid;
+            khash_t(uct_rc_mlx5_mp_hash_gid) hash_gid;
         } mp;
         struct {
             void                     *arg; /* User defined arg */

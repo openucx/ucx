@@ -127,7 +127,7 @@ unsigned uct_rc_mlx5_iface_progress(void *arg)
     uct_rc_mlx5_iface_common_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(iface, 0);
+    count = uct_rc_mlx5_iface_common_poll_rx(iface, 0, 1);
     if (count > 0) {
         return count;
     }
@@ -303,7 +303,7 @@ static UCS_F_MAYBE_UNUSED unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
     uct_rc_mlx5_iface_common_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(iface, 1);
+    count = uct_rc_mlx5_iface_common_poll_rx(iface, 1, 1);
     if (count > 0) {
         return count;
     }
@@ -399,13 +399,6 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                        UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
         return UCS_OK;
     }
-
-    /* TODO: Remove when DC MP XRQ support is implemented */
-#if HAVE_TL_DC
-    if (init_attr->qp_type == UCT_IB_QPT_DCI) {
-        return UCS_OK;
-    }
-#endif
 
     if ((mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) ||
         (mlx5_config->tm.mp_num_strides == 1)) {
