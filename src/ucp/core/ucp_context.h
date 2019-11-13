@@ -319,6 +319,10 @@ typedef struct ucp_tl_iface_atomic_flags {
                     (_params)->_name : (_default))
 
 
+#define ucp_assert_memtype(_context, _buffer, _length, _mem_type) \
+    ucs_assert(ucp_memory_type_detect(_context, _buffer, _length) == (_mem_type))
+
+
 extern ucp_am_handler_t ucp_am_handlers[];
 
 
