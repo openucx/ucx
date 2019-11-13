@@ -30,7 +30,7 @@ stages:
               for sha1 in `git log $range --format="%h"`
               do
                   title=`git log -1 --format="%s" $sha1`
-                  if echo $title | grep -qP '^Merge |^[A-Z/_]*: \w'
+                  if echo $title | grep -qP '^Merge |^[0-9A-Z/_]*: \w'
                   then
                       echo "Good commit title: '$title'"
                   else
