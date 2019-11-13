@@ -230,12 +230,12 @@ uint64_t mem_buffer::pat(uint64_t prev) {
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
     m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size),
-    m_allocated(1) {
+    m_allocated(true) {
 }
 
 mem_buffer::mem_buffer(void *ptr, size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(ptr ? ptr : allocate(size, mem_type)),
-    m_size(size), m_allocated(!ptr)
+    m_mem_type(mem_type), m_ptr((ptr != NULL) ? ptr : allocate(size, mem_type)),
+    m_size(size), m_allocated(ptr == NULL)
 {
 }
 

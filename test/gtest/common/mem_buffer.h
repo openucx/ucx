@@ -75,9 +75,9 @@ private:
     static uint64_t pat(uint64_t prev);
 
     ucs_memory_type_t m_mem_type;
-    void              *m_ptr;
+    void             *m_ptr;
     size_t            m_size;
-    int               m_allocated;
+    bool              m_allocated;
 };
 
 

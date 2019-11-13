@@ -796,6 +796,11 @@ size_t ucp_test::mapped_buffer::length() const
     return m_length;
 }
 
+ucs_memory_type_t ucp_test::mapped_buffer::mem_type() const
+{
+    return m_buffer.mem_type();
+}
+
 void ucp_test::mapped_buffer::pattern_fill(uint64_t seed)
 {
     m_buffer.pattern_fill(ptr(), length(), seed);

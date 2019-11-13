@@ -225,6 +225,7 @@ protected:
         void *ptr() const;
         uintptr_t addr() const;
         size_t length() const;
+        ucs_memory_type_t mem_type() const;
 
         void pattern_fill(uint64_t seed);
         void pattern_check(uint64_t seed);
