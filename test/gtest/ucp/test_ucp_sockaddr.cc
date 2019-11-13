@@ -92,6 +92,7 @@ public:
                 /* when the "peer failure" error happens, it is followed by: */
                 stop_list.push_back("received event RDMA_CM_EVENT_UNREACHABLE");
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNREACHABLE));
+                stop_list.push_back(ucs_status_string(UCS_ERR_UNSUPPORTED));
             }
 
             std::string err_str = format_message(message, ap);

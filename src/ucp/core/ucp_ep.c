@@ -779,7 +779,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucp_ep_destroy_internal(ep);
 }
 
-static unsigned ucp_ep_do_disconnect(void *arg)
+unsigned ucp_ep_do_disconnect(void *arg)
 {
     ucp_request_t *req = arg;
 
@@ -812,8 +812,10 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
-    ucp_worker_h worker = ep->worker;
-    void         *request;
+    ucp_worker_h  worker = ep->worker;
+    void          *request;
+    uct_ep_h      uct_cm_ep;
+    ucp_request_t *close_req;
 
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
@@ -827,7 +829,25 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
                                     NULL, 0, NULL,
                                     ucp_ep_close_flushed_callback, "close");
-    if (!UCS_PTR_IS_PTR(request)) {
+
+    uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
+    if (uct_cm_ep != NULL) {
+        if (UCS_PTR_IS_PTR(request)) {
+        } else if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+            /* flush state must be valid and queue is empty */
+            ucs_assert(ucp_ep_flush_state(ep) != NULL);
+            ucs_assert(ucs_queue_is_empty(&ucp_ep_ext_gen(ep)->flush_state.reqs));
+
+            close_req = ucp_request_get(ep->worker);
+            memset(close_req, 0, sizeof(*close_req));
+            close_req->status  = UCS_OK;
+            close_req->flags   = 0;
+            close_req->send.ep = ep;
+            ucp_ep_ext_gen(ep)->close_req.req = close_req;
+            ucp_ep_cm_disconnect(ep);
+            request = close_req + 1;
+        }
+    } else if (!UCS_PTR_IS_PTR(request)) {
         ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
     }
 
@@ -1800,4 +1820,18 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 
     return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
            ucs_derived_of(ep->uct_eps[lane], ucp_wireup_ep_t) : NULL;
+}
+
+uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+    ucp_wireup_ep_t *wireup_ep;
+
+    lane = ucp_ep_get_cm_lane(ep);
+    if (lane == UCP_NULL_LANE) {
+        return NULL;
+    }
+
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    return (wireup_ep == NULL) ? ep->uct_eps[lane] : wireup_ep->super.uct_ep;
 }

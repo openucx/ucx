@@ -9,8 +9,8 @@
 #endif
 
 #include "wireup_cm.h"
-#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_listener.h>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucs/sys/sock.h>
@@ -146,7 +146,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
                 goto out;
             }
 
-            ucp_wireup_assign_lane(ep, lane_idx, tl_ep, "sockaddr TL lane");
+            ucp_wireup_assign_lane(ep, lane_idx, tl_ep, 0, "sockaddr TL lane");
         } else {
             ucs_assert(ucp_worker_iface_get_attr(worker, rsc_idx)->cap.flags &
                        UCT_IFACE_FLAG_CONNECT_TO_IFACE);
@@ -197,9 +197,60 @@ static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
     ucs_error("UCP CM wireup is not completely implemented");
 }
 
+static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
+{
+    ucp_ep_h ucp_ep = req->send.ep;
+
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+    ucp_ep_cm_disconnect(ucp_ep);
+    ucp_request_complete_send(req, UCS_OK);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+}
+
+static unsigned ucp_ep_cm_disconnect_progress(void *arg)
+{
+    ucp_ep_h ucp_ep     = (ucp_ep_h)arg;
+    ucp_worker_h worker = ucp_ep->worker;
+    void *req;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_trace_func("ucp_ep = %p, ucp_ep->flags = %xu", ucp_ep, ucp_ep->flags);
+
+    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
+
+    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+        req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
+                                    ucp_ep_cm_disconnect_flushed_cb,
+                                    "disconnected_cb");
+        if (req == NULL) {
+            ucp_ep_cm_disconnect(ucp_ep);
+        } else if (UCS_PTR_IS_PTR(req)) {
+            ucp_request_release(req);
+        } else {
+            ucs_fatal("ucp_ep_flush_internal completed with error: %s",
+                      ucs_status_string(UCS_PTR_STATUS(req)));
+        }
+    } else {
+        ucp_ep_do_disconnect(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+
+    return 1;
+}
+
 static void ucp_cm_disconnect_cb(uct_ep_h ep, void *arg)
 {
-    ucs_error("UCP close protocol is not completely implemented");
+    ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == ep);
+
+    /* invoke the disconnect flow from the main thread */
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_ep_cm_disconnect_progress, ucp_ep,
+                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
 }
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
@@ -407,6 +458,21 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         return status;
     }
 
-    ucp_wireup_assign_lane(ep, lane, uct_ep, "server side cm lane");
+    ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    ucp_wireup_assign_lane(ep, lane, uct_ep, 1, "server side cm lane");
     return UCS_OK;
+}
+
+void ucp_ep_cm_disconnect(ucp_ep_h ucp_ep)
+{
+    uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ucp_ep);
+    ucs_status_t status UCS_V_UNUSED;
+
+    ucs_assert_always(uct_cm_ep != NULL);
+
+    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+        status = uct_ep_disconnect(uct_cm_ep, 0);
+        ucs_assert(status == UCS_OK);
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    }
 }

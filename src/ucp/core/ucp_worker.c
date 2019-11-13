@@ -497,6 +497,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
 
     /* set endpoint to failed to prevent wireup_ep switch */
     ucp_ep->flags |= UCP_EP_FLAG_FAILED;
+    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
 
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
         /* NOTE: if user has not requested error handling on the endpoint,
