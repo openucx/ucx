@@ -11,7 +11,6 @@ extern "C" {
 #include "uct_test.h"
 
 #define UCT_TAG_INSTANTIATE_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
@@ -57,6 +56,9 @@ public:
     {
         ucs_status_t status = uct_config_modify(m_iface_config,
                                                 "RC_TM_ENABLE", "y");
+        ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
+
+        status = uct_config_modify(m_iface_config, "RC_TM_MP_NUM_STRIDES", "1");
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
 
         uct_test::init();
@@ -146,7 +148,7 @@ public:
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ctx.mbuf->ptr(),
                                 ctx.mbuf->length(), ctx.mbuf->memh(),
-                                sender().iface_attr().cap.tag.eager.max_iov);
+                                e.iface_attr().cap.tag.eager.max_iov);
 
         ucs_status_t status = uct_ep_tag_eager_zcopy(e.ep(0), ctx.tag,
                                                      ctx.imm_data, iov, iovcnt,
@@ -400,7 +402,8 @@ public:
     }
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
-                                    unsigned flags, uct_tag_t stag, uint64_t imm)
+                                    unsigned flags, uct_tag_t stag,
+                                    uint64_t imm, void **context)
     {
         recv_ctx *user_ctx = reinterpret_cast<recv_ctx*>(imm);
         user_ctx->unexp    = true;

@@ -39,10 +39,6 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
-  {"FENCE", "y",
-   "Request IB fence when API fence requested.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, fence), UCS_CONFIG_TYPE_BOOL},
-
   {NULL}
 };
 
@@ -64,8 +60,9 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         log_lvl = iface->super.super.config.failure_level;
     }
 
-    ucs_log(log_lvl, "send completion with error: %s",
-            ibv_wc_status_str(wc->status));
+    ucs_log(log_lvl,
+            "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
+            ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
 }
 
 static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
@@ -110,8 +107,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         }
 
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i], &ep->super.txqp);
-        ucs_trace_poll("rc_verbs iface %p tx_wc: ep %p qpn 0x%x count %d",
-                       iface, ep, wc[i].qp_num, count);
+        ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
+                       iface, wc[i].wr_id, ep, wc[i].qp_num, count);
         uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         iface->super.tx.cq_available += count;
 
@@ -167,7 +164,6 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     }
 
     iface_attr->latency.growth += 1e-9;            /* 1 ns per each extra QP */
-    iface_attr->iface_addr_len  = sizeof(uint8_t); /* overwrite */
     iface_attr->overhead        = 75e-9;           /* Software overhead */
 
     return UCS_OK;
@@ -216,9 +212,24 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
                                                self->config.tx_max_wr / 4);
-    self->super.config.fence         = config->fence;
+    self->super.config.fence_mode    = (uct_rc_fence_mode_t)config->super.super.fence_mode;
+    self->super.progress             = uct_rc_verbs_iface_progress;
 
-    self->super.progress = uct_rc_verbs_iface_progress;
+    if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
+        (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {
+        self->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
+    } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
+        self->super.config.fence_mode = UCT_RC_FENCE_MODE_NONE;
+    } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_STRONG) {
+        /* TODO: for now strong fence mode is not supported by verbs */
+        ucs_error("fence mode 'strong' is not supported by verbs");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    } else {
+        ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
 
     memset(self->inl_sge, 0, sizeof(self->inl_sge));
     uct_rc_am_hdr_fill(&self->am_inl_hdr.rc_hdr, 0);
@@ -370,9 +381,9 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_atomic_cswap64        = uct_rc_verbs_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_rc_verbs_ep_atomic64_post,
     .ep_atomic64_fetch        = uct_rc_verbs_ep_atomic64_fetch,
-    .ep_atomic_cswap32        = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic32_post         = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic32_fetch        = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_cswap32        = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_unsupported,
+    .ep_atomic32_post         = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_unsupported,
+    .ep_atomic32_fetch        = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_unsupported,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_verbs_ep_flush,
@@ -390,13 +401,13 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
-    .iface_get_address        = uct_rc_iface_get_address,
+    .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_rc_iface_is_reachable,
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
     },
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
-    .event_cq                 = (void*)ucs_empty_function,
+    .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     },
@@ -419,6 +430,6 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
                                      num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, rc, uct_rc_verbs_query_tl_devices,
+UCT_TL_DEFINE(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,
               uct_rc_verbs_iface_t, "RC_VERBS_", uct_rc_verbs_iface_config_table,
               uct_rc_verbs_iface_config_t);

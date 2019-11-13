@@ -4,7 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#define _GNU_SOURCE /* for dladdr */
+#ifndef _GNU_SOURCE
+#  define _GNU_SOURCE /* for dladdr */
+#endif
 
 #include "sys.h"
 
@@ -59,7 +61,7 @@ size_t ucm_get_page_size()
 static void *ucm_sys_complete_alloc(void *ptr, size_t size)
 {
     *(size_t*)ptr = size;
-    return ptr + sizeof(size_t);
+    return UCS_PTR_BYTE_OFFSET(ptr, sizeof(size_t));
 }
 
 void *ucm_sys_malloc(size_t size)
@@ -71,6 +73,7 @@ void *ucm_sys_malloc(size_t size)
     ptr = ucm_orig_mmap(NULL, sys_size, PROT_READ|PROT_WRITE,
                         MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) {
+        ucm_error("mmap(size=%zu) failed: %m", sys_size);
         return NULL;
     }
 
@@ -99,7 +102,10 @@ void ucm_sys_free(void *ptr)
         return;
     }
 
-    ptr -= sizeof(size_t);
+    /* Do not use UCS_PTR_BYTE_OFFSET macro here due to coverity
+     * false positive.
+     * TODO: check for false positive on newer coverity. */
+    ptr  = (char*)ptr - sizeof(size_t);
     size = *(size_t*)ptr;
     munmap(ptr, size);
 }
@@ -113,7 +119,7 @@ void *ucm_sys_realloc(void *ptr, size_t size)
         return ucm_sys_malloc(size);
     }
 
-    oldptr   = ptr - sizeof(size_t);
+    oldptr   = UCS_PTR_BYTE_OFFSET(ptr, -sizeof(size_t));
     oldsize  = *(size_t*)oldptr;
     sys_size = ucs_align_up_pow2(size + sizeof(size_t), ucm_get_page_size());
 
@@ -123,6 +129,8 @@ void *ucm_sys_realloc(void *ptr, size_t size)
 
     newptr = ucm_orig_mremap(oldptr, oldsize, sys_size, MREMAP_MAYMOVE);
     if (newptr == MAP_FAILED) {
+        ucm_error("mremap(oldptr=%p oldsize=%zu, newsize=%zu) failed: %m",
+                  oldptr, oldsize, sys_size);
         return NULL;
     }
 

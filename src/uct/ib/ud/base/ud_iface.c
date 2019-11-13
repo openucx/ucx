@@ -449,9 +449,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         self->async.slow_tick = ucs_time_from_sec(config->slow_timer_tick);
     }
 
-    if (config->slow_timer_backoff <= 0.) {
-        ucs_error("The slow timer back off should be > 0 (%lf)",
-                  config->slow_timer_backoff);
+    if (config->slow_timer_backoff < UCT_UD_MIN_TIMER_TIMER_BACKOFF) {
+        ucs_error("The slow timer back off must be >= %lf (%lf)",
+                  UCT_UD_MIN_TIMER_TIMER_BACKOFF, config->slow_timer_backoff);
         return UCS_ERR_INVALID_PARAM;
     } else {
         self->config.slow_timer_backoff = config->slow_timer_backoff;
@@ -567,11 +567,13 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
     {"SLOW_TIMER_TICK", "100ms", "Initial timeout for retransmissions",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_tick), UCS_CONFIG_TYPE_TIME},
-    {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
+    {"SLOW_TIMER_BACKOFF", "2.0",
+     "Timeout multiplier for resending trigger (must be >= "
+     UCS_PP_MAKE_STRING(UCT_UD_MIN_TIMER_TIMER_BACKOFF) ")",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
                   UCS_CONFIG_TYPE_DOUBLE},
     {"ETH_DGID_CHECK", "y",
-     "Enable checking destination GID for incoming packets of Ethernet network\n"
+     "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
      ucs_offsetof(uct_ud_iface_config_t, dgid_check), UCS_CONFIG_TYPE_BOOL},
     {NULL}
@@ -756,7 +758,7 @@ static void uct_ud_ep_dispatch_err_comp(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb)
     }
 
     status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super,
-                                             skb->status);
+                                             (ucs_status_t)skb->status);
     if (status != UCS_OK) {
         ucs_fatal("transport error: %s", ucs_status_string(status));
     }
@@ -776,7 +778,7 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 
         if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
             ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED));
-            uct_invoke_completion(cdesc->comp, skb->status);
+            uct_invoke_completion(cdesc->comp, (ucs_status_t)skb->status);
         }
 
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {

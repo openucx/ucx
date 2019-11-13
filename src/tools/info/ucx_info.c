@@ -16,6 +16,7 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 
 static void usage() {
@@ -68,13 +69,13 @@ int main(int argc, char **argv)
     int c;
 
     print_opts               = 0;
-    print_flags              = 0;
+    print_flags              = (ucs_config_print_flags_t)0;
     tl_name                  = NULL;
     ucp_features             = 0;
     ucp_num_eps              = 1;
     ucp_num_ppn              = 1;
     mem_size                 = NULL;
-    dev_type_bitmap          = -1;
+    dev_type_bitmap          = UINT_MAX;
     ucp_ep_params.field_mask = 0;
     while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:N:")) != -1) {
         switch (c) {
@@ -157,7 +158,7 @@ int main(int argc, char **argv)
             } else if (!strcasecmp(optarg, "self")) {
                 dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SELF);
             } else if (!strcasecmp(optarg, "all")) {
-                dev_type_bitmap = -1;
+                dev_type_bitmap = UINT_MAX;
             } else {
                 usage();
                 return -1;

@@ -1,12 +1,11 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #ifndef UCS_CONFIG_TYPES_H
 #define UCS_CONFIG_TYPES_H
-
 
 #include <ucs/sys/compiler_def.h>
 #include <sys/socket.h>
@@ -56,6 +55,17 @@ typedef enum ucs_ternary_value {
     UCS_TRY = 2,
     UCS_TERNARY_LAST
 } ucs_ternary_value_t;
+
+
+/**
+ * On/Off/Auto logic value.
+ */
+typedef enum ucs_on_off_auto_value {
+    UCS_CONFIG_OFF  = 0,
+    UCS_CONFIG_ON   = 1,
+    UCS_CONFIG_AUTO = 2,
+    UCS_CONFIG_ON_OFF_LAST
+} ucs_on_off_auto_value_t;
 
 
 /**

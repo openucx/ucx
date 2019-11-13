@@ -45,10 +45,10 @@ enum uct_am_trace_type {
  * @ingroup UCT_RESOURCE
  * @brief Flags for active message and tag-matching offload callbacks (callback's parameters).
  *
- * If this flag is enabled, then data is part of a descriptor which includes
- * the user-defined rx_headroom, and the callback may return UCS_INPROGRESS
- * and hold on to that descriptor. Otherwise, the data can't be used outside
- * the callback. If needed, the data must be copied-out.
+ * If UCT_CB_PARAM_FLAG_DESC flag is enabled, then data is part of a descriptor
+ * which includes the user-defined rx_headroom, and the callback may return
+ * UCS_INPROGRESS and hold on to that descriptor. Otherwise, the data can't be
+ * used outside the callback. If needed, the data must be copied-out.
  *
    @verbatim
     descriptor    data
@@ -58,9 +58,15 @@ enum uct_am_trace_type {
     +-------------+-------------------------+
    @endverbatim
  *
+ * UCT_CB_PARAM_FLAG_FIRST and UCT_CB_PARAM_FLAG_MORE flags are relevant for
+ * @ref uct_tag_unexp_eager_cb_t callback only. The former value indicates that
+ * the data is the first fragment of the message. The latter value means that
+ * more fragments of the message yet to be delivered.
  */
 enum uct_cb_param_flags {
-    UCT_CB_PARAM_FLAG_DESC = UCS_BIT(0)
+    UCT_CB_PARAM_FLAG_DESC  = UCS_BIT(0),
+    UCT_CB_PARAM_FLAG_FIRST = UCS_BIT(1),
+    UCT_CB_PARAM_FLAG_MORE  = UCS_BIT(2)
 };
 
 /**
@@ -513,26 +519,44 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  *
  * @note It is allowed to call other communication routines from the callback.
  *
- * @param [in]  arg     User-defined argument
- * @param [in]  data    Points to the received unexpected data.
- * @param [in]  length  Length of data.
- * @param [in]  desc    Points to the received descriptor, at the beginning of
- *                      the user-defined rx_headroom.
- * @param [in]  stag    Tag from sender.
- * @param [in]  imm     Immediate data from sender.
+ * @param [in]     arg     User-defined argument
+ * @param [in]     data    Points to the received unexpected data.
+ * @param [in]     length  Length of data.
+ * @param [in]     flags   Mask with @ref uct_cb_param_flags flags. If it
+ *                         contains @ref UCT_CB_PARAM_FLAG_DESC value, this means
+ *                         @a data is part of a descriptor which must be released
+ *                         later using @ref uct_iface_release_desc by the user if
+ *                         the callback returns @ref UCS_INPROGRESS.
+ * @param [in]     stag    Tag from sender.
+ * @param [in]     imm     Immediate data from sender.
  *
- * @warning If the user became the owner of the @a desc (by returning
- *          @ref UCS_INPROGRESS) the descriptor must be released later by
- *          @ref uct_iface_release_desc by the user.
+ * @param [inout]  context Storage for a per-message user-defined context. In
+ *                         this context, the message is defined by the sender
+ *                         side as a single call to uct_ep_tag_eager_short/bcopy/zcopy.
+ *                         On the transport level the message can be fragmented
+ *                         and delivered to the target over multiple fragments.
+ *                         The fragments will preserve the original order of the
+ *                         message. Each fragment will result in invocation of
+ *                         the above callback. The user can use
+ *                         UCT_CB_PARAM_FLAG_FIRST to identify the first fragment,
+ *                         allocate the context object and use the context as a
+ *                         token that is set by the user and passed to subsequent
+ *                         callbacks of the same message. The user is responsible
+ *                         for allocation and release of the context.
  *
- * @retval UCS_OK         - descriptor was consumed, and can be released
- *                          by the caller.
- * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
- *                          released later.
+ * @note No need to allocate the context in the case of a single fragment message
+ *       (i.e. @a flags contains @ref UCT_CB_PARAM_FLAG_FIRST, but does not
+ *       contain @ref UCT_CB_PARAM_FLAG_MORE).
+ *
+ * @retval UCS_OK          - data descriptor was consumed, and can be released
+ *                           by the caller.
+ * @retval UCS_INPROGRESS  - data descriptor is owned by the callee, and will be
+ *                           released later.
  */
 typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
                                                  size_t length, unsigned flags,
-                                                 uct_tag_t stag, uint64_t imm);
+                                                 uct_tag_t stag, uint64_t imm,
+                                                 void **context);
 
 
 /**

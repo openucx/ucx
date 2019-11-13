@@ -346,6 +346,12 @@ static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
 ucs_status_t uct_cuda_ipc_map_memhandle(void *arg, uct_cuda_ipc_key_t *key,
                                         void **mapped_addr)
 {
+    if (key->d_mapped != 0) {
+        /* potentially already mapped in uct_cuda_ipc_rkey_unpack */
+        *mapped_addr = (void *) key->d_mapped;
+        return UCS_OK;
+    }
+
     return  UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
                              key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
 }
@@ -441,6 +447,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ipc_iface_t, uct_iface_t, uct_md_h, uct_worke
                           const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_cuda_ipc_component, cuda_ipc, uct_cuda_base_query_devices,
+UCT_TL_DEFINE(&uct_cuda_ipc_component.super, cuda_ipc, uct_cuda_base_query_devices,
               uct_cuda_ipc_iface_t, "CUDA_IPC_", uct_cuda_ipc_iface_config_table,
               uct_cuda_ipc_iface_config_t);

@@ -229,7 +229,7 @@ uint64_t mem_buffer::pat(uint64_t prev) {
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
 }
 
 mem_buffer::~mem_buffer() {
@@ -244,3 +244,6 @@ void *mem_buffer::ptr() const {
     return m_ptr;
 }
 
+size_t mem_buffer::size() const {
+    return m_size;
+}

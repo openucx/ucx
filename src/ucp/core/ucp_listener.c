@@ -13,6 +13,7 @@
 
 #include <ucp/stream/stream.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/wireup/wireup_cm.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
@@ -65,12 +66,11 @@ void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
 
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
-    ucp_conn_request_h               conn_request = arg;
-    ucp_listener_h                   listener     = conn_request->listener;
-    const ucp_wireup_client_data_t   *client_data = &conn_request->client_data;
-    ucp_worker_h                     worker       = listener->worker;
-    ucp_ep_h                         ep;
-    ucs_status_t                     status;
+    ucp_conn_request_h conn_request = arg;
+    ucp_listener_h     listener     = conn_request->listener;
+    ucp_worker_h       worker       = listener->worker;
+    ucp_ep_h           ep;
+    ucs_status_t       status;
 
     ucs_trace_func("listener=%p", listener);
 
@@ -80,8 +80,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    /* coverity[overrun-buffer-val] */
-    status = ucp_ep_create_accept(worker, client_data, &ep);
+    status = ucp_ep_create_server_accept(worker, conn_request, &ep);
 
     if (status != UCS_OK) {
         goto out;
@@ -100,7 +99,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         goto out;
     }
 
-    status = uct_iface_accept(conn_request->uct_iface, conn_request->uct_req);
+    status = uct_iface_accept(conn_request->uct.iface, conn_request->uct_req);
     if (status != UCS_OK) {
         ucp_ep_destroy_internal(ep);
         goto out;
@@ -120,7 +119,7 @@ out:
     if (status != UCS_OK) {
         ucs_error("connection request failed on listener %p with status %s",
                   listener, ucs_status_string(status));
-        uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
+        uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -148,7 +147,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucs_trace("listener %p: got connection request", listener);
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
-    conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, client_data) +
+    conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
                               length, "accept connection request");
     if (conn_request == NULL) {
         ucs_error("failed to allocate connect request, "
@@ -160,8 +159,8 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
 
     conn_request->listener  = listener;
     conn_request->uct_req   = uct_req;
-    conn_request->uct_iface = tl_iface;
-    memcpy(&conn_request->client_data, conn_priv_data, length);
+    conn_request->uct.iface = tl_iface;
+    memcpy(&conn_request->sa_data, conn_priv_data, length);
 
     uct_worker_progress_register_safe(listener->worker->uct,
                                       ucp_listener_conn_request_progress,
@@ -176,8 +175,14 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
 ucs_status_t ucp_listener_query(ucp_listener_h listener,
                                 ucp_listener_attr_t *attr)
 {
-    if (attr->field_mask & UCP_LISTENER_ATTR_FIELD_PORT) {
-        attr->port = listener->port;
+    ucs_status_t status;
+
+    if (attr->field_mask & UCP_LISTENER_ATTR_FIELD_SOCKADDR) {
+        status = ucs_sockaddr_copy((struct sockaddr *)&attr->sockaddr,
+                                   (struct sockaddr *)&listener->sockaddr);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
@@ -207,12 +212,12 @@ static void ucp_listener_close_ifaces(ucp_listener_h listener)
     ucs_assert_always(!ucp_worker_sockaddr_is_cm_proto(listener->worker));
 
     for (i = 0; i < listener->num_tls; i++) {
-        worker = listener->wifaces[i].worker;
+        worker = listener->wifaces[i]->worker;
         ucs_assert_always(worker == listener->worker);
         /* remove pending slow-path progress in case it wasn't removed yet */
         ucs_callbackq_remove_if(&worker->uct->progress_q,
                                 ucp_listener_remove_filter, listener);
-        ucp_worker_iface_cleanup(&listener->wifaces[i]);
+        ucp_worker_iface_cleanup(listener->wifaces[i]);
     }
 
     ucs_free(listener->wifaces);
@@ -227,20 +232,19 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     uct_listener_h        *uct_listeners;
     uct_listener_params_t uct_params;
     uct_listener_attr_t   uct_attr;
-    uint16_t              port;
-    ucp_rsc_index_t i;
-    char addr_str[UCS_SOCKADDR_STRING_LEN];
+    uint16_t              port, uct_listen_port;
+    ucp_rsc_index_t       i;
+    char                  addr_str[UCS_SOCKADDR_STRING_LEN];
     ucp_worker_cm_t       *ucp_cm;
-    ucs_status_t status;
+    ucs_status_t          status;
 
     ucs_assert_always(num_cms > 0);
 
     uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
                                   UCT_LISTENER_PARAM_FIELD_USER_DATA;
-    uct_params.conn_request_cb  = (void *)0xdeadbeaf; /* TODO: ucp_listener_conn_request_cb; */
+    uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
 
-    listener->port              = 0;
     listener->num_tls           = 0;
     uct_listeners               = ucs_calloc(num_cms, sizeof(*uct_listeners),
                                              "uct_listeners_arr");
@@ -257,8 +261,8 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
                                      params->sockaddr.addrlen, &uct_params,
                                      &uct_listeners[listener->num_tls]);
         if (status != UCS_OK) {
-            ucs_debug("failed to create UCT listener on CM %p (component %s) with address %s status %s",
-                      ucp_cm->cm,
+            ucs_debug("failed to create UCT listener on CM %p (component %s) "
+                      "with address %s status %s", ucp_cm->cm,
                       worker->context->tl_cmpts[ucp_cm->cmpt_idx].attr.name,
                       ucs_sockaddr_str(params->sockaddr.addr, addr_str,
                                        UCS_SOCKADDR_STRING_LEN),
@@ -281,17 +285,25 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         }
 
         status = ucs_sockaddr_get_port((struct sockaddr *)&uct_attr.sockaddr,
-                                       &listener->port);
+                                       &uct_listen_port);
         if (status != UCS_OK) {
             goto err_destroy_listeners;
         }
 
-        if (port != listener->port) {
+        if (port != uct_listen_port) {
             ucs_assert(port == 0);
-            status = ucs_sockaddr_set_port(&addr, listener->port);
+            status = ucs_sockaddr_set_port(&addr, uct_listen_port);
             if (status != UCS_OK) {
                 goto err_destroy_listeners;
             }
+        }
+    }
+
+    if (listener->num_tls > 0) {
+        status = ucs_sockaddr_copy((struct sockaddr *)&listener->sockaddr,
+                                   (struct sockaddr *)&uct_attr.sockaddr);
+        if (status != UCS_OK) {
+            goto err_destroy_listeners;
         }
     }
 
@@ -314,7 +326,8 @@ ucp_listen_on_iface(ucp_listener_h listener,
     char saddr_str[UCS_SOCKADDR_STRING_LEN];
     ucp_tl_resource_desc_t *resource;
     uct_iface_params_t iface_params;
-    ucp_worker_iface_t *tmp;
+    struct sockaddr_storage *listen_sock;
+    ucp_worker_iface_t **tmp;
     ucp_rsc_index_t tl_id;
     ucs_status_t status;
     ucp_tl_md_t *tl_md;
@@ -343,8 +356,8 @@ ucp_listen_on_iface(ucp_listener_h listener,
             continue;
         }
 
-        tmp = ucs_realloc(listener->wifaces, sizeof(*listener->wifaces) *
-                                             (sockaddr_tls + 1),
+        tmp = ucs_realloc(listener->wifaces,
+                          sizeof(*tmp) * (sockaddr_tls + 1),
                           "listener wifaces");
         if (tmp == NULL) {
             ucs_error("failed to allocate listener wifaces");
@@ -388,16 +401,20 @@ ucp_listen_on_iface(ucp_listener_h listener,
         }
 
         status = ucp_worker_iface_init(worker, tl_id,
-                                       &listener->wifaces[sockaddr_tls]);
+                                       listener->wifaces[sockaddr_tls]);
         if ((status != UCS_OK) ||
             ((context->config.features & UCP_FEATURE_WAKEUP) &&
-             !(listener->wifaces[sockaddr_tls].attr.cap.flags &
+             !(listener->wifaces[sockaddr_tls]->attr.cap.flags &
                UCT_IFACE_FLAG_CB_ASYNC))) {
-            ucp_worker_iface_cleanup(&listener->wifaces[sockaddr_tls]);
+            ucp_worker_iface_cleanup(listener->wifaces[sockaddr_tls]);
             goto err_close_listener_wifaces;
         }
 
-        port = listener->wifaces[sockaddr_tls].attr.listen_port;
+        listen_sock = &listener->wifaces[sockaddr_tls]->attr.listen_sockaddr;
+        status = ucs_sockaddr_get_port((struct sockaddr *)listen_sock, &port);
+        if (status != UCS_OK) {
+            goto err_close_listener_wifaces;
+        }
 
         sockaddr_tls++;
         listener->num_tls = sockaddr_tls;
@@ -416,10 +433,11 @@ ucp_listen_on_iface(ucp_listener_h listener,
         goto err_close_listener_wifaces;
     }
 
-    listener->port = port;
-    for (i = 0; i < listener->num_tls; ++i) {
-        ucs_assert_always(listener->port ==
-                          listener->wifaces[i].attr.listen_port);
+    listen_sock = &listener->wifaces[sockaddr_tls - 1]->attr.listen_sockaddr;
+    status = ucs_sockaddr_copy((struct sockaddr *)&listener->sockaddr,
+                               (struct sockaddr *)listen_sock);
+    if (status != UCS_OK) {
+        goto err_close_listener_wifaces;
     }
 
     return UCS_OK;
@@ -510,7 +528,7 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    uct_iface_reject(conn_request->uct_iface, conn_request->uct_req);
+    uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 

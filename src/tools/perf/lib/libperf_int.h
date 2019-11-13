@@ -34,14 +34,21 @@ typedef struct ucp_perf_request  ucp_perf_request_t;
 
 
 struct ucx_perf_allocator {
+    ucs_memory_type_t mem_type;
     ucs_status_t (*init)(ucx_perf_context_t *perf);
-    ucs_status_t (*ucp_alloc)(ucx_perf_context_t *perf, size_t length,
+    ucs_status_t (*ucp_alloc)(const ucx_perf_context_t *perf, size_t length,
                               void **address_p, ucp_mem_h *memh, int non_blk_flag);
-    void         (*ucp_free)(ucx_perf_context_t *perf, void *address,
+    void         (*ucp_free)(const ucx_perf_context_t *perf, void *address,
                              ucp_mem_h memh);
-    void*        (*memset)(void *s, int c, size_t len);
+    ucs_status_t (*uct_alloc)(const ucx_perf_context_t *perf, size_t length,
+                              unsigned flags, uct_allocated_memory_t *alloc_mem);
+    void         (*uct_free)(const ucx_perf_context_t *perf,
+                             uct_allocated_memory_t *alloc_mem);
+    void         (*memcpy)(void *dst, ucs_memory_type_t dst_mem_type,
+                           const void *src, ucs_memory_type_t src_mem_type,
+                           size_t count);
+    void*        (*memset)(void *dst, int value, size_t count);
 };
-
 
 struct ucx_perf_context {
     ucx_perf_params_t            params;
@@ -73,15 +80,15 @@ struct ucx_perf_context {
 
     union {
         struct {
-            ucs_async_context_t  async;
-            uct_component_h      cmpt;
-            uct_md_h             md;
-            uct_worker_h         worker;
-            uct_iface_h          iface;
-            uct_peer_t           *peers;
+            ucs_async_context_t    async;
+            uct_component_h        cmpt;
+            uct_md_h               md;
+            uct_worker_h           worker;
+            uct_iface_h            iface;
+            uct_peer_t             *peers;
             uct_allocated_memory_t send_mem;
             uct_allocated_memory_t recv_mem;
-            uct_iov_t            *iov;
+            uct_iov_t              *iov;
         } uct;
 
         struct {

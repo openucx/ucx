@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -20,7 +20,7 @@
 #include <ucs/sys/sys.h>
 
 
-int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
+void ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
 {
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
@@ -45,8 +45,6 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     iface->flags |= UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED;
 
     ucs_debug("Activate tag offload iface %p", iface);
-
-    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
@@ -238,7 +236,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_cancel, (worker, req, mode),
     }
 }
 
-static UCS_F_ALWAYS_INLINE int
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_offload_do_post(ucp_request_t *req)
 {
     ucp_worker_t *worker   = req->recv.worker;
@@ -282,7 +280,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
         iov.buffer          = (void*)req->recv.buffer;
         iov.memh            = req->recv.state.dt.contig.memh[0];
     } else {
-        rdesc = ucp_worker_mpool_get(worker);
+        rdesc = ucp_worker_mpool_get(&worker->reg_mp);
         if (rdesc == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
@@ -466,7 +464,7 @@ ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data,
                                             req->send.tag.tag, imm_data,
                                             pack_cb, req, 0);
     if (packed_len < 0) {
-        return packed_len;
+        return (ucs_status_t)packed_len;
     }
     return UCS_OK;
 }
@@ -686,6 +684,27 @@ static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)
         ucp_tag_offload_sync_posted(worker, req);
     }
     return status;
+}
+
+void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
+                                   ucp_tag_t stag, uint16_t recv_flags)
+{
+    ucp_request_t *req;
+
+    ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
+
+    req = ucp_proto_ssend_ack_request_alloc(worker, ep_ptr);
+    if (req == NULL) {
+        ucs_fatal("could not allocate request");
+    }
+
+    req->send.proto.am_id      = UCP_AM_ID_OFFLOAD_SYNC_ACK;
+    req->send.proto.sender_tag = stag;
+
+    ucs_trace_req("tag_offload send_sync_ack ep 0x%lx tag %"PRIx64"",
+                  ep_ptr, stag);
+
+    ucp_request_send(req, 0);
 }
 
 const ucp_proto_t ucp_tag_offload_sync_proto = {

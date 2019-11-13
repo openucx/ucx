@@ -17,9 +17,9 @@ EXAMPLE_CCLD_FLAGS = -lucs -I$(includedir) -L$(libdir) -Wall -Werror -Wl,-rpath,
 
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
-	$(CC) -o uct_hello_world   $(examplesdir)/uct_hello_world.c   -luct $(EXAMPLE_CCLD_FLAGS) -pedantic
-	$(CC) -o ucp_hello_world   $(examplesdir)/ucp_hello_world.c   -lucp $(EXAMPLE_CCLD_FLAGS) -pedantic
-	$(CC) -o ucp_client_server $(examplesdir)/ucp_client_server.c -lucp $(EXAMPLE_CCLD_FLAGS) -pedantic
+	$(CC) -o uct_hello_world   $(examplesdir)/uct_hello_world.c   -luct $(EXAMPLE_CCLD_FLAGS) $(CFLAGS_PEDANTIC)
+	$(CC) -o ucp_hello_world   $(examplesdir)/ucp_hello_world.c   -lucp $(EXAMPLE_CCLD_FLAGS) $(CFLAGS_PEDANTIC)
+	$(CC) -o ucp_client_server $(examplesdir)/ucp_client_server.c -lucp $(EXAMPLE_CCLD_FLAGS) $(CFLAGS_PEDANTIC)
 	$(CC) -o ucx_profiling     $(examplesdir)/ucx_profiling.c     -lm   $(EXAMPLE_CCLD_FLAGS)
 	$(RM) *.o uct_hello_world ucp_hello_world ucp_client_server ucx_profiling
 
@@ -32,19 +32,19 @@ noinst_PROGRAMS = \
 	ucp_client_server
 
 ucp_hello_world_SOURCES  = ucp_hello_world.c
-ucp_hello_world_CFLAGS   = $(BASE_CFLAGS) -pedantic
+ucp_hello_world_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
 ucp_hello_world_CPPFLAGS = $(BASE_CPPFLAGS)
 ucp_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/ucp/libucp.la
 
 uct_hello_world_SOURCES  = uct_hello_world.c
-uct_hello_world_CFLAGS   = $(BASE_CFLAGS) -pedantic
+uct_hello_world_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
 uct_hello_world_CPPFLAGS = $(BASE_CPPFLAGS)
 uct_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la
 
 ucp_client_server_SOURCES  = ucp_client_server.c
-ucp_client_server_CFLAGS   = $(BASE_CFLAGS) -pedantic
+ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
 ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS)
 ucp_client_server_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/ucp/libucp.la

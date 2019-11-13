@@ -27,12 +27,17 @@ static void vm_unmap_cb(ucm_event_type_t event_type, ucm_event_t *event,
 
 int test_ucm_set_event_handler(void *handle)
 {
-    ucs_status_t (*ucm_set_event_handler_f)(int events, int priority,
-                                            ucm_event_callback_t cb, void *arg);
+    typedef ucs_status_t (*ucm_set_event_handler_func_t)(int events,
+                                                         int priority,
+                                                         ucm_event_callback_t cb,
+                                                         void *arg);
+
+    ucm_set_event_handler_func_t ucm_set_event_handler_f;
     ucs_status_t status;
 
     dlerror();
-    ucm_set_event_handler_f = dlsym(handle, "ucm_set_event_handler");
+    ucm_set_event_handler_f = (ucm_set_event_handler_func_t)dlsym(handle,
+                                                                  "ucm_set_event_handler");
     if (ucm_set_event_handler_f == NULL) {
         fprintf(stderr, "failed to resolve ucm_set_event_handler(): %s\n",
                 dlerror());

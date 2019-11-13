@@ -352,7 +352,7 @@ enum ucp_worker_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_listener_attr_field {
-    UCP_LISTENER_ATTR_FIELD_PORT   = UCS_BIT(0) /**< Port used for listening */
+    UCP_LISTENER_ATTR_FIELD_SOCKADDR = UCS_BIT(0) /**< Sockaddr used for listening */
 };
 
 
@@ -931,13 +931,13 @@ typedef struct ucp_listener_attr {
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t              field_mask;
+    uint64_t                field_mask;
 
     /**
-     * The port on which the listener is listening for incoming connection
-     * requests. The port is returned in host byte order.
+     * Sockaddr on which this listener is listening for incoming connection
+     * requests.
      */
-    int                   port;
+    struct sockaddr_storage sockaddr;
 } ucp_listener_attr_t;
 
 
@@ -1802,7 +1802,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  * @param [in] cb        Callback which will be called when the flush operation
  *                       completes.
  *
- * @return UCS_OK           - The flush operation was completed immediately.
+ * @return NULL             - The flush operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The flush operation failed.
  * @return otherwise        - Flush operation was scheduled and can be completed
  *                          in any point in time. The request handle is returned
@@ -2227,7 +2227,7 @@ ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
  *                          data transfer if it is not completed immediately.
  * @param [in]  flags       For Future use.
  *
- * @return UCS_OK           Active Message was sent immediately.
+ * @return NULL             Active Message was sent immediately.
  * @return UCS_PTR_IS_ERR(_ptr) Error sending Active Message.
  * @return otherwise        Pointer to request, and Active Message is known
  *                          to be completed after cb is run.
@@ -2282,7 +2282,7 @@ void ucp_am_data_release(ucp_worker_h worker, void *data);
  *                          the operation cannot be completed in place.
  * @param [in]  flags       Reserved for future use.
  *
- * @return UCS_OK           - The send operation was completed immediately.
+ * @return NULL             - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
  * @return otherwise        - Operation was scheduled for send and can be
  *                          completed in any point in time. The request handle
@@ -2303,10 +2303,10 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  * This routine sends a messages that is described by the local address @a
  * buffer, size @a count, and @a datatype object to the destination endpoint
  * @a ep. Each message is associated with a @a tag value that is used for
- * message matching on the @ref ucp_tag_recv_nb "receiver".  The routine is
+ * message matching on the @ref ucp_tag_recv_nb "receiver". The routine is
  * non-blocking and therefore returns immediately, however the actual send
- * operation may be delayed.  The send operation is considered completed when
- * it is safe to reuse the source @e buffer.  If the send operation is
+ * operation may be delayed. The send operation is considered completed when
+ * it is safe to reuse the source @e buffer. If the send operation is
  * completed immediately the routine return UCS_OK and the call-back function
  * @a cb is @b not invoked. If the operation is @b not completed immediately
  * and no error reported then the UCP library will schedule to invoke the
@@ -2327,7 +2327,7 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed in place.
  *
- * @return UCS_OK           - The send operation was completed immediately.
+ * @return NULL            - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
  * @return otherwise        - Operation was scheduled for send and can be
  *                          completed in any point in time. The request handle
@@ -2488,7 +2488,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                          integral multiple of the @a datatype size.
  * @param [in]     flags    Flags defined in @ref ucp_stream_recv_flags_t.
  *
- * @return UCS_OK               - The receive operation was completed
+ * @return NULL                 - The receive operation was completed
  *                                immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
  * @return otherwise            - Operation was scheduled for receive. A request
@@ -2520,7 +2520,7 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
  *                                operation.
  * @param [out]  length           Length of received data.
  *
- * @return UCS_OK               - No received data available on the @a ep.
+ * @return NULL                 - No received data available on the @a ep.
  * @return UCS_PTR_IS_ERR(_ptr) - the receive operation failed and
  *                                UCS_PTR_STATUS(_ptr) indicates an error.
  * @return otherwise            - The pointer to the data UCS_STATUS_PTR(_ptr)
@@ -2763,7 +2763,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
  *                           can be modified. Does not guarantee remote
  *                           completion.
  *
- * @return UCS_OK               - The operation was completed immediately.
+ * @return NULL                 - The operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
  * @return otherwise            - Operation was scheduled and can be
  *                              completed at any point in time. The request handle
@@ -2784,7 +2784,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  * This routine initiate a load of contiguous block of data that is described
  * by the remote memory address @a remote_addr and the @ref ucp_rkey_h "memory handle"
  * @a rkey in the local contiguous memory region described by @a buffer
- * address.  The routine returns immediately and @b does @b not guarantee that
+ * address. The routine returns immediately and @b does @b not guarantee that
  * remote data is loaded and stored under the local address @e buffer.
  *
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()" in order
@@ -2838,7 +2838,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
  *                           get operation is completed and the data is
  *                           visible to the local process.
  *
- * @return UCS_OK               - The operation was completed immediately.
+ * @return NULL                 - The operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
  * @return otherwise            - Operation was scheduled and can be
  *                              completed at any point in time. The request handle
@@ -2913,7 +2913,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  *                         that the call-back function is only invoked in a case when
  *                         the operation cannot be completed in place.
  *
- * @return UCS_OK               - The operation was completed immediately.
+ * @return NULL                 - The operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
  * @return otherwise            - Operation was scheduled and can be
  *                              completed at any point in time. The request handle
@@ -3122,7 +3122,7 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  * @param [in] cb        Callback which will be called when the flush operation
  *                       completes.
  *
- * @return UCS_OK           - The flush operation was completed immediately.
+ * @return NULL             - The flush operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The flush operation failed.
  * @return otherwise        - Flush operation was scheduled and can be completed
  *                          in any point in time. The request handle is returned

@@ -4,7 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#define _GNU_SOURCE /* for dladdr(3) */
+#ifndef _GNU_SOURCE
+#  define _GNU_SOURCE /* for dladdr(3) */
+#endif
 
 #include "module.h"
 
@@ -161,16 +163,19 @@ static void *ucs_module_dlsym_shallow(const char *module_path, void *dl,
 
 static void ucs_module_init(const char *module_path, void *dl)
 {
+    typedef ucs_status_t (*init_func_t)();
+
     const char *module_init_name =
                     UCS_PP_MAKE_STRING(UCS_MODULE_CONSTRUCTOR_NAME);
     char *fullpath, buffer[PATH_MAX];
-    ucs_status_t (*init_func)();
+    init_func_t init_func;
     ucs_status_t status;
 
     fullpath = realpath(module_path, buffer);
     ucs_module_trace("loaded %s [%p]", fullpath, dl);
 
-    init_func = ucs_module_dlsym_shallow(module_path, dl, module_init_name);
+    init_func = (init_func_t)ucs_module_dlsym_shallow(module_path, dl,
+                                                      module_init_name);
     if (init_func == NULL) {
         ucs_module_trace("not calling constructor '%s' in %s", module_init_name,
                          module_path);

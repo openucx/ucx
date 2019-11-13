@@ -29,7 +29,7 @@ static void *ucm_bistro_page_align_ptr(void *ptr)
 static ucs_status_t ucm_bistro_protect(void *addr, size_t len, int prot)
 {
     void *aligned = ucm_bistro_page_align_ptr(addr);
-    size_t size   = addr - aligned + len;
+    size_t size   = UCS_PTR_BYTE_DIFF(aligned, addr) + len;
     int res;
 
     res = mprotect(aligned, size, prot) ? UCS_ERR_INVALID_PARAM : UCS_OK;
@@ -54,7 +54,7 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_EXEC);
     if (!UCS_STATUS_IS_ERR(status)) {
-        ucs_clear_cache(dst, dst + len);
+        ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
     }
     return status;
 }

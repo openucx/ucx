@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)
-define([ucx_ver_minor], 7)
+define([ucx_ver_minor], 8)
 define([ucx_ver_patch], 0)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 
@@ -80,6 +80,13 @@ AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
+
+
+#
+# Force link_all_deplibs=yes for libtool, otherwise it will not
+# link against dependency libs
+#
+link_all_deplibs=yes
 
 
 #
@@ -208,22 +215,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([src/uct/configure.m4])
      m4_include([src/tools/perf/configure.m4])
      m4_include([test/gtest/configure.m4])
-
-     #
-     # Compile code with frame pointer. Optimizations usually omit the frame pointer,
-     # but if we are profiling the code with callgraph we need it.
-     # This option may affect perofrmance so it is off by default.
-     #
-     AC_ARG_ENABLE([frame-pointer],
-         AS_HELP_STRING([--enable-frame-pointer],
-                        [Compile with frame pointer, useful for profiling, default: NO]),
-         [],
-         [enable_frame_pointer=no])
-     AS_IF([test "x$enable_frame_pointer" = xyes],
-         [AS_MESSAGE([compiling with frame pointer])
-          BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
-         [:])
-
 
      #
      # Enable fault injection code
@@ -383,6 +374,9 @@ AC_MSG_NOTICE([Building documents only])
 ],
 [
 AC_MSG_NOTICE([UCX build configuration:])
+AC_MSG_NOTICE([Preprocessor flags:   ${BASE_CPPFLAGS}])
+AC_MSG_NOTICE([           C flags:   ${BASE_CFLAGS}])
+AC_MSG_NOTICE([         C++ flags:   ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([     Devel headers:   ${enable_devel_headers}])

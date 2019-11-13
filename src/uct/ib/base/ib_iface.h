@@ -134,21 +134,32 @@ typedef struct uct_ib_qp_attr {
 } uct_ib_qp_attr_t;
 
 
+typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(struct ibv_context *context, int cqe,
+                                                      struct ibv_comp_channel *channel,
+                                                      int comp_vector, int ignore_overrun,
+                                                      size_t *inl, struct ibv_cq **cq_p);
+
+typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
+                                                   uct_ib_dir_t dir,
+                                                   int solicited_only);
+
+typedef void (*uct_ib_iface_event_cq_func_t)(uct_ib_iface_t *iface,
+                                             uct_ib_dir_t dir);
+
+typedef void (*uct_ib_iface_handle_failure_func_t)(uct_ib_iface_t *iface, void *arg,
+                                                   ucs_status_t status);
+
+typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface, uct_ep_h ep,
+                                                          ucs_status_t status);
+
+
 struct uct_ib_iface_ops {
-    uct_iface_ops_t         super;
-    ucs_status_t            (*create_cq)(struct ibv_context *context, int cqe,
-                                         struct ibv_comp_channel *channel,
-                                         int comp_vector, int ignore_overrun,
-                                         size_t *inl, struct ibv_cq **cq_p);
-    ucs_status_t            (*arm_cq)(uct_ib_iface_t *iface,
-                                      uct_ib_dir_t dir,
-                                      int solicited_only);
-    void                    (*event_cq)(uct_ib_iface_t *iface,
-                                        uct_ib_dir_t dir);
-    void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg,
-                                              ucs_status_t status);
-    ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
-                                             ucs_status_t status);
+    uct_iface_ops_t                    super;
+    uct_ib_iface_create_cq_func_t      create_cq;
+    uct_ib_iface_arm_cq_func_t         arm_cq;
+    uct_ib_iface_event_cq_func_t       event_cq;
+    uct_ib_iface_handle_failure_func_t handle_failure;
+    uct_ib_iface_set_ep_failed_func_t  set_ep_failed;
 };
 
 
@@ -194,13 +205,12 @@ typedef struct uct_ib_fence_info {
     uint16_t                    fence_beat; /* 16bit is enough because if it wraps around,
                                              * it means the older ops are already completed
                                              * because QP size is less than 64k */
-    uint8_t                     fence_flag;
 } uct_ib_fence_info_t;
 
 
 enum {
     UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_SUPPORTED              = UCS_BIT(1),
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
 };
 
 typedef struct uct_ib_iface_init_attr {
@@ -554,7 +564,6 @@ static UCS_F_ALWAYS_INLINE void
 uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
 {
     fence->fence_beat = 0;
-    fence->fence_flag = 0;
 }
 
 #endif

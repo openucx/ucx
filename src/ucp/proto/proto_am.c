@@ -72,7 +72,7 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
     } else {
         packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id,
                                      pack_cb, req, 0);
-        return ucs_unlikely(packed_len < 0) ? packed_len : UCS_OK;
+        return ucs_unlikely(packed_len < 0) ? (ucs_status_t)packed_len : UCS_OK;
     }
 }
 

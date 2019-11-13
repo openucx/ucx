@@ -6,6 +6,7 @@ RUN dnf install -y \
     automake \
     clang \
     cppcheck \
+    csclng \
     cscppc \
     csmock-common \
     doxygen \

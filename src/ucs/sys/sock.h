@@ -30,9 +30,21 @@ BEGIN_C_DECLS
 #define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
 
 
-/* Returns `UCS_ERR_NO_PROGRESS` if the default error
- * handling should be done, otherwise `UCS_OK` */
+/* Returns an error if the default error handling should be
+ * done (the error value will be returned to a caller),
+ * otherwise `UCS_OK` */
 typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int io_errno);
+
+
+/**
+ * Check if the given (interface) flags represent an active interface.
+ *
+ * @param [in] flags  Interface flags (Can be obtained using getifaddrs
+ *                    or from SIOCGIFFLAGS ioctl).
+ *
+ * @return 1 if true, otherwise 0
+ */
+int ucs_netif_flags_is_active(unsigned int flags);
 
 
 /**
@@ -121,16 +133,6 @@ int ucs_socket_is_connected(int fd);
  * waiting to be accepted.
  */
 int ucs_socket_max_conn();
-
-
-/**
- * Returns the maximum possible value for the number of IOVs.
- * It maybe either value from the system configuration or IOV_MAX
- * value or UIO_MAXIOV value or 1024 if nothing is defined.
- *
- * @return The maximum number of IOVs.
- */
-int ucs_socket_max_iov();
 
 
 /**
@@ -330,6 +332,30 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
  *         0 if not
  */
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
+
+
+/**
+ * Copy the src_addr sockaddr to dst_addr sockaddr. The length to copy is
+ * the size of the src_addr sockaddr.
+ *
+ * @param [in] dst_addr  Pointer to destination sockaddr (to copy to).
+ * @param [in] src_addr  Pointer to source sockaddr (to copy from).
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
+                               const struct sockaddr *src_addr);
+
+
+/**
+ * Copy into ifname_name the interface associated the IP on which the socket
+ * file descriptor fd is bound on. IPv4 and IPv6 addresses are handled.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [out]  if_str      A string filled with the interface name.
+ * @param [in]   max_strlen  Maximum length of the if_str.
+ */
+ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen);
 
 END_C_DECLS
 

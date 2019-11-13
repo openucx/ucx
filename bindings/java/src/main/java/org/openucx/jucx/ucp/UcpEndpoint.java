@@ -56,9 +56,8 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
         checkRemoteAccessParams(src, remoteKey);
 
-        return putNonBlockingNative(getNativeId(), UcxUtils.getAddress(src),
-            src.remaining(), remoteAddress,
-            remoteKey.getNativeId(), callback);
+        return putNonBlocking(UcxUtils.getAddress(src), src.remaining(), remoteAddress,
+            remoteKey, callback);
     }
 
     public UcxRequest putNonBlocking(long localAddress, long size,
@@ -67,6 +66,34 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
         return putNonBlockingNative(getNativeId(), localAddress,
             size, remoteAddress, remoteKey.getNativeId(), callback);
+    }
+
+    /**
+     * This routine initiates a storage of contiguous block of data that is
+     * described by the local {@code buffer} in the remote contiguous memory
+     * region described by {@code remoteAddress} and the {@code remoteKey}
+     * "memory handle". The routine returns immediately and does not
+     * guarantee re-usability of the source {@code src} buffer.
+     */
+    public void putNonBlockingImplicit(ByteBuffer src, long remoteAddress,
+                                       UcpRemoteKey remoteKey) {
+        checkRemoteAccessParams(src, remoteKey);
+
+        putNonBlockingImplicit(UcxUtils.getAddress(src), src.remaining(), remoteAddress,
+            remoteKey);
+    }
+
+    /**
+     * This routine initiates a storage of contiguous block of data that is
+     * described by the local {@code localAddress} in the remote contiguous memory
+     * region described by {@code remoteAddress} and the {@code remoteKey}
+     * "memory handle". The routine returns immediately and does not
+     * guarantee re-usability of the source {@code localAddress} address.
+     */
+    public void putNonBlockingImplicit(long localAddress, long size,
+                                       long remoteAddress, UcpRemoteKey remoteKey) {
+        putNonBlockingImplicitNative(getNativeId(), localAddress, size, remoteAddress,
+            remoteKey.getNativeId());
     }
 
     /**
@@ -84,8 +111,8 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
         checkRemoteAccessParams(dst, remoteKey);
 
-        return getNonBlockingNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
-            UcxUtils.getAddress(dst), dst.remaining(), callback);
+        return getNonBlocking(remoteAddress, remoteKey, UcxUtils.getAddress(dst),
+            dst.remaining(), callback);
     }
 
     public UcxRequest getNonBlocking(long remoteAddress, UcpRemoteKey remoteKey,
@@ -96,13 +123,44 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Non-blocking implicit remote memory get operation.
+     * This routine initiate a load of contiguous block of data that is described
+     * by the remote memory address {@code remoteAddress} and the
+     * {@code remoteKey} "memory handle" in the local contiguous memory region described
+     * by {@code dst} buffer. The routine returns immediately and does not guarantee that
+     * remote data is loaded and stored under the local buffer.
+     */
+    public void getNonBlockingImplicit(long remoteAddress, UcpRemoteKey remoteKey,
+                                       ByteBuffer dst) {
+        checkRemoteAccessParams(dst, remoteKey);
+
+        getNonBlockingImplicit(remoteAddress, remoteKey, UcxUtils.getAddress(dst),
+            dst.remaining());
+    }
+
+    /**
+     * Non-blocking implicit remote memory get operation.
+     * This routine initiate a load of contiguous block of data that is described
+     * by the remote memory address {@code remoteAddress} and the
+     * {@code remoteKey} "memory handle" in the local contiguous memory region described
+     * by {@code localAddress} the local address. The routine returns immediately
+     * and does not guarantee that remote data is loaded and stored under the local buffer.
+     */
+    public void getNonBlockingImplicit(long remoteAddress, UcpRemoteKey remoteKey,
+                                       long localAddress, long size) {
+
+        getNonBlockingImplicitNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
+              localAddress, size);
+    }
+
+    /**
      * Non-blocking tagged-send operations
      * This routine sends a messages that is described by the local buffer {@code sendBuffer},
      * starting of it's {@code sendBuffer.position()} and size {@code sendBuffer.remaining()}.
      * to the destination endpoint. Each message is associated with a {@code tag} value
      * that is used for message matching on the
      * {@link UcpWorker#recvTaggedNonBlocking(ByteBuffer, long, long, UcxCallback)}
-     * "receiver".  The routine is non-blocking and therefore returns immediately,
+     * "receiver". The routine is non-blocking and therefore returns immediately,
      * however the actual send operation may be delayed.
      * The send operation is considered completed when  it is safe to reuse the source
      * {@code data} buffer. {@code callback} is invoked on completion of this operation.
@@ -111,8 +169,8 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         if (!sendBuffer.isDirect()) {
             throw new UcxException("Send buffer must be direct.");
         }
-        return sendTaggedNonBlockingNative(getNativeId(),
-            UcxUtils.getAddress(sendBuffer), sendBuffer.remaining(), tag, callback);
+        return sendTaggedNonBlocking(UcxUtils.getAddress(sendBuffer),
+          sendBuffer.remaining(), tag, callback);
     }
 
     public UcxRequest sendTaggedNonBlocking(long localAddress, long size,
@@ -150,9 +208,17 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                           long size, long remoteAddr,
                                                           long ucpRkeyId, UcxCallback callback);
 
+    private static native void putNonBlockingImplicitNative(long enpointId, long localAddress,
+                                                            long size, long remoteAddr,
+                                                            long ucpRkeyId);
+
     private static native UcxRequest getNonBlockingNative(long enpointId, long remoteAddress,
                                                           long ucpRkeyId, long localAddress,
                                                           long size, UcxCallback callback);
+
+    private static native void getNonBlockingImplicitNative(long enpointId, long remoteAddress,
+                                                            long ucpRkeyId, long localAddress,
+                                                            long size);
 
     private static native UcxRequest sendTaggedNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long tag,

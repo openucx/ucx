@@ -49,7 +49,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         return UCS_OK; /* shortcut - no changes required */
     }
 
-    prev_num_memh = ucs_popcount(*md_map_p);
+    prev_num_memh = ucs_popcount(*md_map_p & reg_md_map);
     prev_uct_memh = ucs_alloca(prev_num_memh * sizeof(*prev_uct_memh));
 
     /* Go over previous handles, save only the ones we will need */
@@ -84,7 +84,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     }
 
     /* prev_uct_memh should contain the handles which should be reused */
-    ucs_assert(prev_memh_index == ucs_popcount(*md_map_p & reg_md_map));
+    ucs_assert(prev_memh_index == prev_num_memh);
 
     /* Go over requested MD map, and use / register new handles */
     new_md_map      = 0;
@@ -94,6 +94,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         md_attr = &context->tl_mds[md_index].attr;
         if (*md_map_p & UCS_BIT(md_index)) {
             /* already registered, use previous memh */
+            ucs_assert(prev_memh_index < prev_num_memh);
             uct_memh[memh_index++] = prev_uct_memh[prev_memh_index++];
             new_md_map            |= UCS_BIT(md_index);
         } else if (context->tl_mds[md_index].md == alloc_md) {
@@ -101,8 +102,13 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             ucs_assert(alloc_md_memh_p != NULL);
             uct_memh[memh_index++] = *alloc_md_memh_p;
             new_md_map            |= UCS_BIT(md_index);
+        } else if (!length) {
+            /* don't register zero-length regions */
+            continue;
         } else if ((md_attr->cap.flags & UCT_MD_FLAG_REG) &&
                    (md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
+            ucs_assert(address && length);
+
             /* MD supports registration, register new memh on it */
             status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
                                     length, uct_flags, &uct_memh[memh_index]);
@@ -517,7 +523,7 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_advice2uct(unsigned ucp_advice, unsigned *uct_advice) 
+static ucs_status_t ucp_advice2uct(unsigned ucp_advice, uct_mem_advice_t *uct_advice) 
 {
     switch(ucp_advice) {
     case UCP_MADV_NORMAL:
@@ -536,7 +542,7 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 {
     ucs_status_t status, tmp_status;
     int md_index;
-    unsigned uct_advice;
+    uct_mem_advice_t uct_advice;
     uct_mem_h uct_memh;
 
     if (!ucs_test_all_flags(params->field_mask,
@@ -547,7 +553,8 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     }
 
     if ((params->address < memh->address) ||
-        (params->address + params->length > memh->address + memh->length)) {
+        (UCS_PTR_BYTE_OFFSET(params->address, params->length) >
+         UCS_PTR_BYTE_OFFSET(memh->address, memh->length))) {
         return UCS_ERR_INVALID_PARAM;
     }
 

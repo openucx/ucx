@@ -10,7 +10,7 @@
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/math.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/iovec.h>
 
 
 #define UCT_SM_IFACE_DEVICE_ADDR_LEN    sizeof(uint64_t)
@@ -48,7 +48,7 @@ ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags);
 ucs_status_t uct_sm_ep_fence(uct_ep_t *tl_ep, unsigned flags);
 
 static UCS_F_ALWAYS_INLINE size_t uct_sm_get_max_iov() {
-    return ucs_min(UCT_SM_MAX_IOV, ucs_get_max_iov());
+    return ucs_min(UCT_SM_MAX_IOV, ucs_iov_get_max());
 }
 
 UCS_CLASS_DECLARE(uct_sm_iface_t, uct_iface_ops_t*, uct_md_h, uct_worker_h,

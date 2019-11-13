@@ -27,12 +27,13 @@
  * RC remote endpoint
  */
 typedef struct uct_rc_mlx5_ep {
-    uct_rc_ep_t             super;
+    uct_rc_ep_t              super;
     struct {
-        uct_ib_mlx5_txwq_t  wq;
+        uct_ib_mlx5_txwq_t   wq;
     } tx;
-    uct_ib_mlx5_qp_t        tm_qp;
-    uint16_t                atomic_mr_offset;
+    uct_ib_mlx5_qp_t         tm_qp;
+    uct_rc_mlx5_mp_context_t mp;
+    uint16_t                 atomic_mr_offset;
 } uct_rc_mlx5_ep_t;
 
 typedef struct uct_rc_mlx5_ep_address {

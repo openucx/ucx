@@ -17,6 +17,14 @@
 #include <ucs/type/class.h>
 
 
+static const char *uct_rc_fence_mode_values[] = {
+    [UCT_RC_FENCE_MODE_NONE]   = "none",
+    [UCT_RC_FENCE_MODE_WEAK]   = "weak",
+    [UCT_RC_FENCE_MODE_STRONG] = "strong",
+    [UCT_RC_FENCE_MODE_AUTO]   = "auto",
+    [UCT_RC_FENCE_MODE_LAST]   = NULL
+};
+
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),
@@ -41,7 +49,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
   {"RNR_TIMEOUT", "1ms",
    "RNR timeout",
-   ucs_offsetof(uct_rc_iface_common_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_timeout), UCS_CONFIG_TYPE_TIME},
 
   {"RNR_RETRY_COUNT", "7",
    "RNR retries",
@@ -67,6 +75,16 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Enable out-of-order RDMA data placement",
    ucs_offsetof(uct_rc_iface_common_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
 #endif
+
+  {"FENCE", "auto",
+   "IB fence type when API fence requested:\n"
+   "  none   - fence is a no-op\n"
+   "  weak   - fence makes sure remote reads are ordered with respect to remote writes\n"
+   "  strong - fence makes sure that subsequent remote operations start only after\n"
+   "           previous remote operations complete\n"
+   "  auto   - select fence mode based on hardware capabilities",
+   ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
+                UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
   {NULL}
 };
@@ -228,26 +246,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
-                                      uct_iface_addr_t *addr)
-{
-    *(uint8_t*)addr = UCT_RC_IFACE_ADDR_TYPE_BASIC;
-    return UCS_OK;
-}
-
-int uct_rc_iface_is_reachable(const uct_iface_h tl_iface,
-                              const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr)
-{
-    uint8_t my_type = UCT_RC_IFACE_ADDR_TYPE_BASIC;
-
-    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
-        return 0;
-    }
-
-    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
-}
-
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num)
 {
@@ -322,7 +320,7 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
 
     /* MTU is set by user configuration */
     if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
-        iface->config.path_mtu = config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512);
+        iface->config.path_mtu = (enum ibv_mtu)(config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512));
     } else if ((port_mtu > IBV_MTU_2048) && (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
         ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
          (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4104)))
@@ -613,7 +611,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);
     if (status != UCS_OK) {
-        goto err_destroy_tx_mp;
+        goto err_cleanup_tx_ops;
     }
 
     /* Initialize RX resources (SRQ) */
@@ -658,6 +656,7 @@ err_cleanup_rx:
     ops->cleanup_rx(self);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
+err_cleanup_tx_ops:
     uct_rc_iface_tx_ops_cleanup(self);
 err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);
@@ -880,8 +879,7 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
 
-    if (iface->config.fence) {
-        iface->tx.fi.fence_flag = 1;
+    if (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE) {
         iface->tx.fi.fence_beat++;
     }
 

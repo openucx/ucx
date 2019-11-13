@@ -10,6 +10,8 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/sys/sys.h>
 
+#include <memory>
+
 namespace ucs {
 
 pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -86,7 +88,7 @@ void test_base::get_config(const std::string& name, std::string& value, size_t m
                                        max);
     if (status != UCS_OK) {
         GTEST_FAIL() << "Invalid UCS configuration for " << name
-                     << ", error message: " << ucs_status_string(status)
+                     << ": " << ucs_status_string(status)
                      << "(" << status << ")";
     }
 }
@@ -141,9 +143,10 @@ test_base::count_warns_logger(const char *file, unsigned line, const char *funct
 std::string test_base::format_message(const char *message, va_list ap)
 {
     const size_t buffer_size = ucs_log_get_buffer_size();
-    char buf[buffer_size];
-    vsnprintf(buf, buffer_size, message, ap);
-    return std::string(buf);
+    std::string buf(buffer_size, '\0');
+    vsnprintf(&buf[0], buffer_size, message, ap);
+    buf.resize(strlen(buf.c_str()));
+    return buf;
 }
 
 void test_base::push_debug_message_with_limit(std::vector<std::string>& vec,
@@ -220,6 +223,7 @@ void test_base::SetUpProxy() {
     m_num_errors_before          = m_total_errors;
 
     m_errors.clear();
+    m_warnings.clear();
     m_num_log_handlers_before    = ucs_log_num_handlers();
     ucs_log_push_handler(count_warns_logger);
 

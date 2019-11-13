@@ -9,6 +9,7 @@
 
 #include "compiler_def.h"
 #include <ucs/type/status.h>
+#include <ucs/sys/math.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,12 +27,13 @@ BEGIN_C_DECLS
 #define UCS_VALUE_AUTO_STR "auto"
 
 /* the numeric value of "infinity" */
-#define UCS_MEMUNITS_INF    SIZE_MAX
-#define UCS_ULUNITS_INF     SIZE_MAX
+#define UCS_MEMUNITS_INF    ((size_t)-1)
+#define UCS_ULUNITS_INF     ((size_t)-1)
 
 /* value which specifies "auto" for a numeric variable */
-#define UCS_MEMUNITS_AUTO   (SIZE_MAX - 1)
-#define UCS_ULUNITS_AUTO    (SIZE_MAX - 1)
+#define UCS_MEMUNITS_AUTO   ((size_t)-2)
+#define UCS_ULUNITS_AUTO    ((size_t)-2)
+#define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 #define UCS_BANDWIDTH_AUTO  (-1.0)
 
@@ -113,6 +115,18 @@ size_t ucs_string_quantity_prefix_value(char prefix);
 
 
 /**
+ * Format a string to a buffer of given size, and guarantee that the last char
+ * in the buffer is '\0'.
+ *
+ * @param buf  Buffer to format the string to.
+ * @param size Buffer size.
+ * @param fmt  Format string.
+ */
+void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+    UCS_F_PRINTF(3, 4);
+
+
+/**
  * Copy string limited by len bytes. Destination string is always ended by '\0'
  *
  * @param dst Destination buffer
@@ -150,6 +164,23 @@ static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
     return (name == NULL) ? path : name + 1;
 }
 
+
+/**
+ * Dump binary array into string in hex format. Destination string is
+ * always ended by '\0'.
+ *
+ * @param data     Source array to dump.
+ * @param length   Length of source array in bytes.
+ * @param buf      Destination string.
+ * @param max      Max length of destination string including terminating
+ *                 '\0' byte.
+ * @param per_line Number of bytes in source array to print per line
+ *                 or SIZE_MAX for single line.
+ * 
+ * @return address of destination buffer
+ */
+const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
+                             size_t max, size_t per_line);
 
 END_C_DECLS
 

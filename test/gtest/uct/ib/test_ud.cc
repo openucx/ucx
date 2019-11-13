@@ -937,6 +937,4 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 }
 #endif
 
-_UCT_INSTANTIATE_TEST_CASE(test_ud, ud)
-_UCT_INSTANTIATE_TEST_CASE(test_ud, ud_mlx5)
-
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud)

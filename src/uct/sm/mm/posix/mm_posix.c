@@ -127,6 +127,16 @@ static size_t uct_posix_get_path_size(uct_md_h md)
     }
 }
 
+static ucs_status_t uct_posix_md_query(uct_md_h tl_md, uct_md_attr_t *md_attr)
+{
+    uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
+
+    uct_mm_md_query(&md->super, md_attr, 1);
+    md_attr->rkey_packed_size = sizeof(uct_mm_packed_rkey_t) +
+                                uct_posix_get_path_size(tl_md);
+    return UCS_OK;
+}
+
 static uint8_t uct_posix_get_priority()
 {
     return 0;
@@ -549,16 +559,28 @@ err:
     return status;
 }
 
-static uct_mm_mapper_ops_t uct_posix_mapper_ops = {
-   .query   = ucs_empty_function_return_success,
-   .get_path_size = uct_posix_get_path_size,
-   .get_priority = uct_posix_get_priority,
-   .reg     = NULL,
-   .dereg   = NULL,
-   .alloc   = uct_posix_alloc,
-   .attach  = uct_posix_attach,
-   .detach  = uct_posix_detach,
-   .free    = uct_posix_free
+static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
+    .super = {
+        .close                  = uct_mm_md_close,
+        .query                  = uct_posix_md_query,
+        .mem_alloc              = uct_mm_mem_alloc,
+        .mem_free               = uct_mm_mem_free,
+        .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
+        .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mkey_pack              = uct_mm_mkey_pack,
+        .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
+        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+    },
+    .query                      = ucs_empty_function_return_success,
+    .get_priority               = uct_posix_get_priority,
+    .reg                        = NULL,
+    .dereg                      = NULL,
+    .alloc                      = uct_posix_alloc,
+    .attach                     = uct_posix_attach,
+    .detach                     = uct_posix_detach,
+    .free                       = uct_posix_free
 };
 
-UCT_MM_TL_DEFINE(posix, &uct_posix_mapper_ops, "POSIX_")
+UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_mm_rkey_unpack,
+                 uct_mm_rkey_release, "POSIX_")

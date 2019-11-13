@@ -34,7 +34,7 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
 
     if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
         /* compare-swap has two arguments */
-        memcpy((void*)(atomich + 1) + size, req->send.buffer, size);
+        memcpy(UCS_PTR_BYTE_OFFSET(atomich + 1, size), req->send.buffer, size);
         length += size;
     }
 
@@ -201,7 +201,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     ucp_worker_h worker              = arg;
     ucp_ep_h ep                      = ucp_worker_get_ep_by_ptr(worker,
                                                                 atomicreqh->req.ep_ptr);
+    ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
+
+    if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
+                     (ucp_worker_iface_get_attr(worker,
+                                                amo_rsc_idx)->cap.flags &
+                      UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
+        ucs_error("Unsupported: got software atomic request while device atomics are selected on worker %p",
+                  worker);
+        /* TODO: this situation will be possible then CM wireup is implemented
+         *       and CM lane is bound to suboptimal device, then need to execute
+         *       AMO on fastest resource from worker->atomic_tls using loopback
+         *       EP and continue SW AMO protocol */
+    }
 
     if (atomicreqh->req.reqptr == 0) {
         /* atomic operation without result */
@@ -287,7 +300,8 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     }
 
     p = buffer + strlen(buffer);
-    ucp_dump_payload(worker->context, p, buffer + max - p, data + header_len,
+    ucp_dump_payload(worker->context, p, buffer + max - p,
+                     UCS_PTR_BYTE_OFFSET(data, header_len),
                      length - header_len);
 }
 

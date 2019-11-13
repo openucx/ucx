@@ -29,8 +29,8 @@ BEGIN_C_DECLS
 #define ucs_log(_level, _fmt, ...) \
     do { \
         if (ucs_log_is_enabled(_level)) { \
-            ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, (_level), \
-                             _fmt, ## __VA_ARGS__); \
+            ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, \
+                             (ucs_log_level_t)(_level), _fmt, ## __VA_ARGS__); \
         } \
     } while (0)
 
@@ -147,15 +147,20 @@ void ucs_log_cleanup();
 
 const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
 
-const char *ucs_log_dump_hex(const void* data, size_t length, char *buf,
-                             size_t max);
-
 /**
  * Add/remove logging handlers
  */
 void ucs_log_push_handler(ucs_log_func_t handler);
 void ucs_log_pop_handler();
 unsigned ucs_log_num_handlers();
+
+
+/**
+ * Log backtrace.
+ *
+ * @param level          Log level.
+ */
+void ucs_log_print_backtrace(ucs_log_level_t level);
 
 END_C_DECLS
 

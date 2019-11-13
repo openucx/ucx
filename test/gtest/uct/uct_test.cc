@@ -8,16 +8,12 @@
 #include "uct/api/uct_def.h"
 
 #include <ucs/stats/stats.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <common/test_helpers.h>
 #include <algorithm>
 #include <malloc.h>
 #include <ifaddrs.h>
-
-
-#define FOR_EACH_ENTITY(_iter) \
-    for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
-         _iter != m_entities.end(); ++_iter) \
 
 
 std::string resource::name() const {
@@ -33,7 +29,7 @@ resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
 }
 
 resource::resource(uct_component_h component, const std::string& md_name,
-                   const cpu_set_t& local_cpus, const std::string& tl_name,
+                   const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
                    const std::string& dev_name, uct_device_type_t dev_type) :
                    component(component), md_name(md_name), local_cpus(local_cpus),
                    tl_name(tl_name), dev_name(dev_name), dev_type(dev_type)
@@ -176,7 +172,7 @@ void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
 }
 
 void uct_test::set_interface_rscs(const md_resource& md_rsc,
-                                  cpu_set_t local_cpus, struct ifaddrs *ifa,
+                                  ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
     int i;
@@ -225,7 +221,7 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
 }
 
 void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
-                                      cpu_set_t local_cpus,
+                                      ucs_cpu_set_t local_cpus,
                                       std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
@@ -236,6 +232,10 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
+        if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
+            continue;
+        }
+
         /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
         if (!strcmp(md_rsc.rsc_desc.md_name, "rdmacm") &&
             !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
@@ -243,9 +243,8 @@ void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
         }
 
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
-            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
-            ucs_netif_is_active(ifa->ifa_name)) {
-
+            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE))
+        {
             uct_test::set_interface_rscs(md_rsc, local_cpus, ifa, all_resources);
         }
     }
@@ -419,11 +418,11 @@ bool uct_test::has_transport(const std::string& tl_name) const {
 }
 
 bool uct_test::has_ud() const {
-    return (has_transport("ud") || has_transport("ud_mlx5"));
+    return (has_transport("ud_verbs") || has_transport("ud_mlx5"));
 }
 
 bool uct_test::has_rc() const {
-    return (has_transport("rc") || has_transport("rc_mlx5"));
+    return (has_transport("rc_verbs") || has_transport("rc_mlx5"));
 }
 
 bool uct_test::has_rc_or_dc() const {
@@ -619,7 +618,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     m_iface_params = *params;
 
     memset(&m_cm_attr, 0, sizeof(m_cm_attr));
-    client_cb_arg = 0;
+    max_conn_priv = 0;
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
@@ -644,7 +643,7 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     status = uct_cm_query(m_cm, &m_cm_attr);
     ASSERT_UCS_OK(status);
 
-    client_cb_arg = 0;
+    max_conn_priv = 0;
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,
@@ -695,9 +694,7 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
                                    uct_rkey_bundle *rkey_bundle) const
 {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
-        (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) &&
-        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-        (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
+        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
 
         void *rkey_buffer = malloc(md_attr().rkey_packed_size);
         if (rkey_buffer == NULL) {
@@ -764,7 +761,6 @@ bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
         break;
     default:
         UCS_TEST_ABORT("Incorrect atomic mode: " << mode);
-        break;
     }
 
     return ucs_test_all_flags(amo, required_ops);
@@ -881,18 +877,14 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
-ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
-                                              void *priv_data)
+size_t uct_test::entity::priv_data_do_pack(void *priv_data)
 {
-    size_t *max_conn_priv = (size_t*)arg;
     size_t priv_data_len;
 
     client_priv_data = "Client private data";
     priv_data_len = 1 + client_priv_data.length();
 
     memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
-    EXPECT_LE(priv_data_len, (*max_conn_priv));
-
     return priv_data_len;
 }
 
@@ -908,6 +900,7 @@ ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
 void
 uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                       const ucs::sock_addr_storage &remote_addr,
+                                      uct_sockaddr_priv_pack_callback_t pack_cb,
                                       uct_ep_client_connect_cb_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
@@ -943,7 +936,7 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     params.user_data         = user_data;
     params.sockaddr          = &ucs_remote_addr;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
-    params.sockaddr_pack_cb  = client_priv_data_cb;
+    params.sockaddr_pack_cb  = pack_cb;
     status = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);
 
@@ -1023,13 +1016,14 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
                                const ucs::sock_addr_storage &remote_addr,
+                               uct_sockaddr_priv_pack_callback_t pack_cb,
                                uct_ep_client_connect_cb_t connect_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
 {
     if (m_cm ||
         iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
-        connect_to_sockaddr(index, other, remote_addr, connect_cb,
+        connect_to_sockaddr(index, other, remote_addr, pack_cb, connect_cb,
                             disconnect_cb, user_data);
     } else {
         UCS_TEST_SKIP_R("cannot connect");
@@ -1091,7 +1085,7 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
             status = UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
                                                 uct_listener_destroy,
                                                 uct_listener_create, m_cm,
-                                                &listen_addr.get_sock_addr(),
+                                                listen_addr.get_sock_addr_ptr(),
                                                 listen_addr.get_addr_size(),
                                                 &params);
             if (status == UCS_OK) {
@@ -1100,7 +1094,7 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
         }
         EXPECT_EQ(UCS_ERR_BUSY, status);
 
-        const struct sockaddr* c_ifa_addr = &listen_addr.get_sock_addr();
+        const struct sockaddr* c_ifa_addr = listen_addr.get_sock_addr_ptr();
         struct sockaddr* ifa_addr = const_cast<struct sockaddr*>(c_ifa_addr);
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
@@ -1143,7 +1137,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         } else {
             m_mem.method   = UCT_ALLOC_METHOD_LAST;
             m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
-            m_mem.length   = size;
+            m_mem.length   = alloc_size;
             m_mem.mem_type = mem_type;
             m_mem.memh     = UCT_MEM_HANDLE_NULL;
             m_mem.md       = NULL;
@@ -1180,6 +1174,7 @@ uct_test::mapped_buffer::~mapped_buffer() {
         m_entity.mem_free_host(&m_mem);
     } else {
         ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
+        m_entity.mem_type_dereg(&m_mem);
         mem_buffer::release(m_mem.address, m_mem.mem_type);
     }
 }

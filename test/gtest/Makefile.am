@@ -63,8 +63,9 @@ gtest_CPPFLAGS = \
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install -Wl,-dynamic-list-data
 gtest_CFLAGS   = $(BASE_CFLAGS)
-gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -fno-tree-vectorize \
-				 -DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\""
+gtest_CXXFLAGS = \
+	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) \
+	-DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\""
 
 gtest_SOURCES = \
 	common/gtest-all.cc \

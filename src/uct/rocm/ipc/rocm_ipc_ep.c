@@ -97,8 +97,9 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    remote_copy_addr = remote_base_addr + (remote_addr - key->address);
-    remote_agent = uct_rocm_base_get_dev_agent(key->dev_num);
+    remote_copy_addr = UCS_PTR_BYTE_OFFSET(remote_base_addr,
+                                           remote_addr - key->address);
+    remote_agent     = uct_rocm_base_get_dev_agent(key->dev_num);
 
     if (is_put) {
         dst_addr = remote_copy_addr;

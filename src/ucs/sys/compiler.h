@@ -80,7 +80,7 @@
  */
 #define UCS_CACHELINE_PADDING(...) \
     char UCS_PP_APPEND_UNIQUE_ID(pad)[UCS_SYS_CACHE_LINE_SIZE - \
-                                      UCS_CACHELINE_PADDING_MISALIGN(__VA_ARGS__)];
+                                      UCS_CACHELINE_PADDING_MISALIGN(__VA_ARGS__)]
 #define UCS_CACHELINE_PADDING_SIZEOF(_, _x) \
     + sizeof(_x)
 #define UCS_CACHELINE_PADDING_MISALIGN(...) \
@@ -91,13 +91,13 @@
  * Define code which runs at global constructor phase
  */
 #define UCS_STATIC_INIT \
-    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
+    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_ctor)()
 
 
 /*
  * Define code which runs at global destructor phase
  */
 #define UCS_STATIC_CLEANUP \
-    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
+    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
 
 #endif

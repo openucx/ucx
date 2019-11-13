@@ -87,7 +87,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
         }
         UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
         UCT_IB_MLX5DV_SET64(klm, klm, address, addr + (i * reg_length));
-        klm += UCT_IB_MLX5DV_ST_SZ_BYTES(klm);
+        klm = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
     }
 
     memh->atomic_dvmr = mlx5dv_devx_obj_create(md->super.dev.ibv_context, in, inlen,
@@ -105,8 +105,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
         (offset & 0xff);
 
     ucs_debug("KSM registered memory %p..%p offset 0x%lx on %s rkey 0x%x",
-              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->super.dev),
-              memh->super.atomic_rkey);
+              mr->addr, UCS_PTR_BYTE_OFFSET(mr->addr, mr->length), offset,
+              uct_ib_device_name(&md->super.dev), memh->super.atomic_rkey);
 out:
     ucs_free(in);
     return status;
@@ -156,16 +156,16 @@ err:
 
 static void uct_ib_mlx5_init_dbrec(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_ib_mlx5_dbrec_page_t *page = chunk - sizeof(*page);
+    uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
     uct_ib_mlx5_dbrec_t *dbrec     = obj;
 
     dbrec->mem_id = page->mem->umem_id;
-    dbrec->offset = obj - chunk + sizeof(*page);
+    dbrec->offset = UCS_PTR_BYTE_DIFF(chunk, obj) + sizeof(*page);
 }
 
 static void uct_ib_mlx5_free_page(ucs_mpool_t *mp, void *chunk)
 {
-    uct_ib_mlx5_dbrec_page_t *page = chunk - sizeof(*page);
+    uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
     mlx5dv_devx_umem_dereg(page->mem);
     ucs_free(page);
 }
@@ -306,7 +306,14 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
             status = UCS_ERR_IO_ERROR;
         }
         goto err_free;
+    }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg) !=
+        UCT_IB_MLX5_LOG_MAX_MSG_SIZE) {
+        status = UCS_ERR_UNSUPPORTED;
+        ucs_debug("Unexpected QUERY_HCA_CAP.log_max_msg %d\n",
+                  UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg));
+        goto err_free;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {
@@ -325,14 +332,15 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
-    /* TODO temorarily disabled, pending resolution
-     * of RM 1860351 "ODP support for QP created via DEVX" */
-#if HAVE_DEVX_ODP_QP
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
+        /* TODO: check if need to check for XRQ (not RQ) MP support */
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
+    }
+
     status = uct_ib_mlx5_devx_check_odp(md, cap);
     if (status != UCS_OK) {
         goto err_free;
     }
-#endif
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
@@ -409,6 +417,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags |= UCT_IB_MLX5_MD_FLAG_DEVX;
+    md->flags |= md_config->devx_objs << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS;
     *p_md = &md->super;
     return status;
 
@@ -439,11 +448,13 @@ void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
-    .open             = uct_ib_mlx5_devx_md_open,
-    .cleanup          = uct_ib_mlx5_devx_md_cleanup,
-    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key   = uct_ib_mlx5_devx_reg_atomic_key,
-    .dereg_atomic_key = uct_ib_mlx5_devx_dereg_atomic_key,
+    .open                = uct_ib_mlx5_devx_md_open,
+    .cleanup             = uct_ib_mlx5_devx_md_cleanup,
+    .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key      = uct_ib_mlx5_devx_reg_atomic_key,
+    .dereg_atomic_key    = uct_ib_mlx5_devx_dereg_atomic_key,
+    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_devx_md_ops, 2);
@@ -618,11 +629,13 @@ err:
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
-    .open             = uct_ib_mlx5dv_md_open,
-    .cleanup          = (void*)ucs_empty_function,
-    .memh_struct_size = sizeof(uct_ib_mlx5_mem_t),
-    .reg_atomic_key   = (void*)ucs_empty_function_return_unsupported,
-    .dereg_atomic_key = (void*)ucs_empty_function_return_unsupported,
+    .open                = uct_ib_mlx5dv_md_open,
+    .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
+    .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key      = (uct_ib_md_reg_atomic_key_func_t)ucs_empty_function_return_unsupported,
+    .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_unsupported,
+    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);

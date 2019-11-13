@@ -34,12 +34,13 @@
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
 
-
-const char test_message[] = "UCX Client-Server Hello World";
-static uint16_t server_port = 13337;
-
 #define TEST_STRING_LEN sizeof(test_message)
+#define DEFAULT_PORT    13337
+#define IP_STRING_LEN   50
+#define PORT_STRING_LEN 8
 
+const char test_message[]   = "UCX Client-Server Hello World";
+static uint16_t server_port = DEFAULT_PORT;
 
 /**
  * Server's application context to be used in the user's connection request
@@ -100,12 +101,12 @@ static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 /**
  * Set an address for the server to listen on - INADDR_ANY on a well known port.
  */
-void set_listen_addr(struct sockaddr_in *listen_addr)
+void set_listen_addr(const char *address_str, struct sockaddr_in *listen_addr)
 {
     /* The server will listen on INADDR_ANY */
     memset(listen_addr, 0, sizeof(struct sockaddr_in));
     listen_addr->sin_family      = AF_INET;
-    listen_addr->sin_addr.s_addr = INADDR_ANY;
+    listen_addr->sin_addr.s_addr = (address_str) ? inet_addr(address_str) : INADDR_ANY;
     listen_addr->sin_port        = htons(server_port);
 }
 
@@ -124,8 +125,8 @@ void set_connect_addr(const char *address_str, struct sockaddr_in *connect_addr)
  * Initialize the client side. Create an endpoint from the client side to be
  * connected to the remote server (to the given IP).
  */
-static int start_client(ucp_worker_h ucp_worker, const char *ip,
-                        ucp_ep_h *client_ep)
+static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
+                                 ucp_ep_h *client_ep)
 {
     ucp_ep_params_t ep_params;
     struct sockaddr_in connect_addr;
@@ -296,24 +297,32 @@ static void usage()
     fprintf(stderr, " -a Set IP address of the server "
                     "(required for client and should not be specified "
                     "for the server)\n");
-    fprintf(stderr, " -p Set alternative server port (default:13337)\n");
+    fprintf(stderr, " -l Set IP address where server listens "
+                    "(If not specified, server uses INADDR_ANY; "
+                    "Irrelevant at client)\n");
+    fprintf(stderr, " -p Port number to listen/connect to (default = %d). "
+                    "0 on the server side means select a random port and print it",
+                    DEFAULT_PORT);
     fprintf(stderr, "\n");
 }
 
 /**
  * Parse the command line arguments.
  */
-static int parse_cmd(int argc, char *const argv[], char **server_addr)
+static int parse_cmd(int argc, char *const argv[], char **server_addr, char **listen_addr)
 {
     int c = 0;
     int port;
 
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "a:p:")) != -1) {
+    while ((c = getopt(argc, argv, "a:l:p:")) != -1) {
         switch (c) {
         case 'a':
             *server_addr = optarg;
+            break;
+        case 'l':
+            *listen_addr = optarg;
             break;
         case 'p':
             port = atoi(optarg);
@@ -330,6 +339,46 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr)
     }
 
     return 0;
+}
+
+static char* sockaddr_get_ip_str(const struct sockaddr_storage *sock_addr,
+                                 char *ip_str, size_t max_size)
+{
+    struct sockaddr_in  addr_in;
+    struct sockaddr_in6 addr_in6;
+
+    switch (sock_addr->ss_family) {
+    case AF_INET:
+        memcpy(&addr_in, sock_addr, sizeof(struct sockaddr_in));
+        inet_ntop(AF_INET, &addr_in.sin_addr, ip_str, max_size);
+        return ip_str;
+    case AF_INET6:
+        memcpy(&addr_in6, sock_addr, sizeof(struct sockaddr_in6));
+        inet_ntop(AF_INET6, &addr_in6.sin6_addr, ip_str, max_size);
+        return ip_str;
+    default:
+        return "Invalid address family";
+    }
+}
+
+static char* sockaddr_get_port_str(const struct sockaddr_storage *sock_addr,
+                                   char *port_str, size_t max_size)
+{
+    struct sockaddr_in  addr_in;
+    struct sockaddr_in6 addr_in6;
+
+    switch (sock_addr->ss_family) {
+    case AF_INET:
+        memcpy(&addr_in, sock_addr, sizeof(struct sockaddr_in));
+        snprintf(port_str, max_size, "%d", ntohs(addr_in.sin_port));
+        return port_str;
+    case AF_INET6:
+        memcpy(&addr_in6, sock_addr, sizeof(struct sockaddr_in6));
+        snprintf(port_str, max_size, "%d", ntohs(addr_in6.sin6_port));
+        return port_str;
+    default:
+        return "Invalid address family";
+    }
 }
 
 /**
@@ -398,15 +447,18 @@ static void server_conn_handle_cb(ucp_conn_request_h conn_request, void *arg)
 /**
  * Initialize the server side. The server starts listening on the set address.
  */
-static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
-                        ucp_listener_h *listener_p)
+static ucs_status_t start_server(ucp_worker_h ucp_worker,
+                                 ucx_server_ctx_t *context,
+                                 ucp_listener_h *listener_p, const char *ip)
 {
     struct sockaddr_in listen_addr;
     ucp_listener_params_t params;
     ucp_listener_attr_t attr;
     ucs_status_t status;
+    char ip_str[IP_STRING_LEN];
+    char port_str[PORT_STRING_LEN];
 
-    set_listen_addr(&listen_addr);
+    set_listen_addr(ip, &listen_addr);
 
     params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
                                 UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
@@ -423,7 +475,7 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     }
 
     /* Query the created listener to get the port it is listening on. */
-    attr.field_mask = UCP_LISTENER_ATTR_FIELD_PORT;
+    attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
     status = ucp_listener_query(*listener_p, &attr);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to query the listener (%s)\n",
@@ -431,7 +483,10 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
         ucp_listener_destroy(*listener_p);
         goto out;
     }
-    fprintf(stderr,"server is listening on port %d\n", attr.port);
+
+    fprintf(stderr, "server is listening on IP %s port %s\n",
+            sockaddr_get_ip_str(&attr.sockaddr, ip_str, IP_STRING_LEN),
+            sockaddr_get_port_str(&attr.sockaddr, port_str, PORT_STRING_LEN));
 
 out:
     return status;
@@ -483,6 +538,7 @@ int main(int argc, char **argv)
 {
     ucx_server_ctx_t context;
     char *server_addr = NULL;
+    char *listen_addr = NULL;
     int ret;
 
     /* UCP objects */
@@ -492,7 +548,7 @@ int main(int argc, char **argv)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    ret = parse_cmd(argc, argv, &server_addr);
+    ret = parse_cmd(argc, argv, &server_addr, &listen_addr);
     if (ret != 0) {
         goto err;
     }
@@ -520,7 +576,7 @@ int main(int argc, char **argv)
          * worker' - used for connection establishment between client and server.
          * This listener will stay open for listening to incoming connection
          * requests from the client */
-        status = start_server(ucp_worker, &context, &listener);
+        status = start_server(ucp_worker, &context, &listener, listen_addr);
         if (status != UCS_OK) {
             fprintf(stderr, "failed to start server\n");
             ucp_worker_destroy(ucp_data_worker);

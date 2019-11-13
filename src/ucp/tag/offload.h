@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -7,6 +7,7 @@
 #ifndef UCP_TAG_OFFLOAD_H_
 #define UCP_TAG_OFFLOAD_H_
 
+#include <ucp/tag/eager.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/proto/proto.h>
@@ -37,6 +38,16 @@ typedef struct {
 } UCS_S_PACKED ucp_offload_ssend_hdr_t;
 
 
+/**
+ * Header for multi-fragmented sync send acknowledgment
+ * (carried by last fragment)
+ */
+typedef struct {
+    ucp_eager_middle_hdr_t    super;
+    ucp_offload_ssend_hdr_t   ssend_ack;
+} UCS_S_PACKED ucp_offload_last_ssend_hdr_t;
+
+
 extern const ucp_proto_t ucp_tag_offload_proto;
 
 extern const ucp_proto_t ucp_tag_offload_sync_proto;
@@ -50,7 +61,8 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req);
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq);
 
 ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
-                                         unsigned flags, uct_tag_t stag, uint64_t imm);
+                                         unsigned flags, uct_tag_t stag,
+                                         uint64_t imm, void **context);
 
 
 ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags, uint64_t stag,
@@ -62,15 +74,15 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned m
 
 int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue);
 
+void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
+                                   ucp_tag_t stag, uint16_t recv_flags);
+
 /**
  * @brief Activate tag offload interface
  *
  * @param [in]  wiface   UCP worker interface.
- *
- * @return 0 - if tag offloading is disabled in the configuration
- *         1 - wiface interface is activated (if it was inactive before)
  */
-int ucp_tag_offload_iface_activate(ucp_worker_iface_t *wiface);
+void ucp_tag_offload_iface_activate(ucp_worker_iface_t *wiface);
 
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req,
@@ -126,11 +138,13 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
     ++wiface->proxy_recv_count;
 
     if (ucs_unlikely(!(wiface->flags & UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED))) {
-        if (!ucp_tag_offload_iface_activate(wiface)) {
-            return;
-        }
+        ucp_tag_offload_iface_activate(wiface);
     }
 
+    /* Need to hash all tags of messages arriving to offload-capable interface
+       if more than one interface is activated on the worker. This is needed to
+       avoid unwanted postings of receive buffers (those, which are expected to
+       arrive from offload incapable iface) to the HW. */
     if (ucs_unlikely((length >= worker->tm.offload.thresh) &&
                      (worker->num_active_ifaces > 1))) {
         tag_key = worker->context->config.tag_sender_mask & tag;

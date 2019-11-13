@@ -339,7 +339,7 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
 ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t length);
+ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -349,6 +349,37 @@ static UCS_F_ALWAYS_INLINE
 double ucp_calc_epsilon(double val1, double val2)
 {
     return (val1 + val2) * (1e-6);
+}
+
+/**
+ * Compare two scores and return:
+ * - `-1` if score1 < score2
+ * -  `0` if score1 == score2
+ * -  `1` if score1 > score2
+ */
+static UCS_F_ALWAYS_INLINE
+int ucp_score_cmp(double score1, double score2)
+{
+    double diff = score1 - score2;
+    return ((fabs(diff) < ucp_calc_epsilon(score1, score2)) ?
+            0 : ucs_signum(diff));
+}
+
+/**
+ * Compare two scores taking into account priorities if scores are equal
+ */
+static UCS_F_ALWAYS_INLINE
+int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
+{
+    int score_res = ucp_score_cmp(score1, score2);
+
+    return score_res ? score_res : ucs_signum(prio1 - prio2);
+}
+
+static UCS_F_ALWAYS_INLINE
+int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
+{
+    return (max_num_eps >= (size_t)context->config.est_num_eps);
 }
 
 static UCS_F_ALWAYS_INLINE double
@@ -371,7 +402,7 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_memory_type_detect(ucp_context_h context, void *address, size_t length)
+ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length)
 {
     ucs_memory_type_t mem_type;
     ucs_status_t status;
@@ -402,5 +433,7 @@ ucp_memory_type_detect(ucp_context_h context, void *address, size_t length)
 
     return ucp_memory_type_detect_mds(context, address, length);
 }
+
+uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
 
 #endif

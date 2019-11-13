@@ -37,6 +37,29 @@ struct { /* sysfs entries for system cache sizes */
     [UCS_CPU_CACHE_L3]  = {.level = 3, .type = "Unified"}
 };
 
+const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
+    [UCS_CPU_VENDOR_UNKNOWN] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_INTEL] = {
+        .min = 1 * UCS_KBYTE,
+        .max = 8 * UCS_MBYTE
+    },
+    [UCS_CPU_VENDOR_AMD] = {
+        .min = 1 * UCS_KBYTE,
+        .max = 136 * UCS_KBYTE
+    },
+    [UCS_CPU_VENDOR_GENERIC_ARM] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_GENERIC_PPC] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    }
+};
+
 static void ucs_sysfs_get_cache_size()
 {
     char type_str[32];  /* Data/Instruction/Unified */
@@ -73,7 +96,7 @@ static void ucs_sysfs_get_cache_size()
         }
 
         /* now lookup for cache size entry */
-        for (cache_type = 0; cache_type < UCS_CPU_CACHE_LAST; cache_type++) {
+        for (cache_type = UCS_CPU_CACHE_L1d; cache_type < UCS_CPU_CACHE_LAST; cache_type++) {
             if ((ucs_cpu_cache_sysfs_name[cache_type].level == level) &&
                 !strcasecmp(ucs_cpu_cache_sysfs_name[cache_type].type, type_str)) {
                 if (ucs_cpu_cache_size[cache_type] != 0) {
@@ -95,7 +118,7 @@ size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type)
     ucs_status_t status;
 
     if (type >= UCS_CPU_CACHE_LAST) {
-        return UCS_ERR_INVALID_PARAM;
+        return 0;
     }
 
     UCS_INIT_ONCE(&ucs_cache_read_once) {

@@ -24,6 +24,8 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
 
     switch(ep->conn_state) {
     case UCT_TCP_EP_CONN_STATE_CONNECTING:
+        ucs_assertv(iface->config.conn_nb, "ep=%p", ep);
+        /* Fall through */
     case UCT_TCP_EP_CONN_STATE_WAITING_ACK:
         if (old_conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
             uct_tcp_iface_outstanding_inc(iface);
@@ -42,7 +44,7 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                    (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ));
         if ((old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
             (old_conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ) ||
-            /* it may happen when a peer is going to use this EP with socket
+            /* It may happen when a peer is going to use this EP with socket
              * from accepted connection in case of handling simultaneous
              * connection establishment */
             (old_conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING)) {
@@ -90,18 +92,8 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
 
 static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg, int io_errno)
 {
-    uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
-
-    /* check whether this is possible somaxconn exceeded reason or not */
-    if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
-        ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED))) {
-        ucs_error("try to increase \"net.core.somaxconn\" on the remote node");
-    }
-
-    /* always want to print the default error */
-    return UCS_ERR_NO_PROGRESS;
+    return uct_tcp_ep_handle_dropped_connect((uct_tcp_ep_t*)arg,
+                                             io_errno);
 }
 
 /* `fmt_str` parameter has to contain "%s" to write event type */
@@ -424,11 +416,7 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
     }
 
     if (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
-        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_ACK);
-        if (status != UCS_OK) {
-            goto err;
-        }
-        return 1;
+        return 0;
     }
 
     ucs_assertv(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)),
@@ -549,31 +537,44 @@ err:
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
 {
-    uct_tcp_ep_conn_state_t new_conn_state;
-    uint32_t req_events;
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
     ucs_status_t status;
 
+    if (ep->conn_retries++ > iface->config.max_conn_retries) {
+        ucs_error("tcp_ep %p: reached maximum number of connection retries "
+                  "(%u)", ep, iface->config.max_conn_retries);
+        return UCS_ERR_TIMED_OUT;
+    }
+
     status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
-    if (status == UCS_INPROGRESS) {
-        new_conn_state  = UCT_TCP_EP_CONN_STATE_CONNECTING;
-        req_events      = UCS_EVENT_SET_EVWRITE;
-        status          = UCS_OK;
-    } else if (status == UCS_OK) {
-        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
+    } else if (status == UCS_INPROGRESS) {
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTING);
+        uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVWRITE, 0);
+
+        return UCS_OK;
+    }
+
+    ucs_assert(status == UCS_OK);
+
+    if (!iface->config.conn_nb) {
+        status = ucs_sys_fcntl_modfl(ep->fd, O_NONBLOCK, 0);
         if (status != UCS_OK) {
             return status;
         }
-
-        new_conn_state  = UCT_TCP_EP_CONN_STATE_WAITING_ACK;
-        req_events      = UCS_EVENT_SET_EVREAD;
-    } else {
-        new_conn_state  = UCT_TCP_EP_CONN_STATE_CLOSED;
-        req_events      = 0;
     }
 
-    uct_tcp_cm_change_conn_state(ep, new_conn_state);
-    uct_tcp_ep_mod_events(ep, req_events, 0);
-    return status;
+    status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_WAITING_ACK);
+    uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
+
+    return UCS_OK;
 }
 
 /* This function is called from async thread */
@@ -585,6 +586,16 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     uct_tcp_ep_t *ep;
+
+    if (!ucs_socket_is_connected(fd)) {
+        ucs_warn("tcp_iface %p: connection establishment for socket fd %d "
+                 "from %s to %s was unsuccessful", iface, fd,
+                 ucs_sockaddr_str((const struct sockaddr*)&peer_addr,
+                                  str_remote_addr, UCS_SOCKADDR_STRING_LEN),
+                 ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                  str_local_addr, UCS_SOCKADDR_STRING_LEN));
+        return UCS_ERR_UNREACHABLE;
+    }
 
     status = uct_tcp_ep_init(iface, fd, NULL, &ep);
     if (status != UCS_OK) {

@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
+#include <ucs/sys/math.h>
 
 
 /* Which iface flags would be packed in the address */
@@ -35,11 +36,13 @@ enum {
 
 
 enum {
-    UCP_ADDRESS_PACK_FLAG_WORKER_UUID = UCS_BIT(0),
-    UCP_ADDRESS_PACK_FLAG_WORKER_NAME = UCS_BIT(1), /* valid only for debug build */
-    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2),
-    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3),
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4)
+    UCP_ADDRESS_PACK_FLAG_WORKER_UUID    = UCS_BIT(0),
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME    = UCS_BIT(1), /* valid only for debug build */
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR    = UCS_BIT(2),
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR     = UCS_BIT(3),
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR        = UCS_BIT(4),
+    UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16), /* show debug prints of pack/unpack */
+    UCP_ADDRESS_PACK_FLAG_ALL            = (uint64_t)-1
 };
 
 
@@ -55,19 +58,24 @@ struct ucp_address_iface_attr {
     ucp_tl_iface_atomic_flags_t atomic;       /* Atomic operations */
 };
 
+typedef struct ucp_address_entry_ep_addr {
+    ucp_lane_index_t            lane;         /* Lane index (local or remote) */
+    const uct_ep_addr_t         *addr;        /* Pointer to ep address */
+} ucp_address_entry_ep_addr_t;
 
 /**
  * Address entry.
  */
 struct ucp_address_entry {
-    const uct_device_addr_t    *dev_addr;      /* Points to device address */
-    const uct_iface_addr_t     *iface_addr;    /* Interface address, NULL if not available */
-    const uct_ep_addr_t        *ep_addr;       /* Endpoint address, NULL if not available */
-    ucp_address_iface_attr_t   iface_attr;     /* Interface attributes information */
-    uint64_t                   md_flags;       /* MD reg/alloc flags */
-    uint16_t                   tl_name_csum;   /* Checksum of transport name */
-    ucp_rsc_index_t            md_index;       /* Memory domain index */
-    ucp_rsc_index_t            dev_index;      /* Device index */
+    const uct_device_addr_t     *dev_addr;      /* Points to device address */
+    const uct_iface_addr_t      *iface_addr;    /* Interface address, NULL if not available */
+    unsigned                    num_ep_addrs;   /* How many endpoint address are in ep_addrs */
+    ucp_address_entry_ep_addr_t ep_addrs[UCP_MAX_LANES]; /* Endpoint addresses */
+    ucp_address_iface_attr_t    iface_attr;     /* Interface attributes information */
+    uint64_t                    md_flags;       /* MD reg/alloc flags */
+    uint16_t                    tl_name_csum;   /* Checksum of transport name */
+    ucp_rsc_index_t             md_index;       /* Memory domain index */
+    ucp_rsc_index_t             dev_index;      /* Device index */
 };
 
 
@@ -82,6 +90,18 @@ struct ucp_unpacked_address {
 };
 
 
+/* Iterate over entries in an unpacked address */
+#define ucp_unpacked_address_for_each(_elem, _unpacked_address) \
+    for (_elem = (_unpacked_address)->address_list; \
+         _elem < (_unpacked_address)->address_list + (_unpacked_address)->address_count; \
+         ++_elem)
+
+
+/* Return the index of a specific entry in an unpacked address */
+#define ucp_unpacked_address_index(_unpacked_address, _ae) \
+    ((int)((_ae) - (_unpacked_address)->address_list))
+
+
 /**
  * Pack multiple addresses into a buffer, of resources specified in rsc_bitmap.
  * For every resource in rcs_bitmap:
@@ -89,25 +109,25 @@ struct ucp_unpacked_address {
  *    - if iface is CONNECT_TO_EP, and ep != NULL, and it has a uct_ep on this
  *      resource, pack endpoint address.
  *
- * @param [in]  worker      Worker object whose interface addresses to pack.
- * @param [in]  ep          Endpoint object whose uct_ep addresses to pack.
+ * @param [in]  worker        Worker object whose interface addresses to pack.
+ * @param [in]  ep            Endpoint object whose uct_ep addresses to pack.
  *                            Can be set to NULL, to take addresses only from worker.
- * @param [in]  tl_bitmap   Specifies the resources whose transport address
- *                           (ep or iface) should be packed.
- * @param [in]  flags       UCP_ADDRESS_PACK_FLAG_xx flags to specify address
- *                          format.
- * @param [out] order       If != NULL, filled with the order of addresses as they
- *                           were packed. For example: first entry in the array is
- *                           the address index of the first transport specified
- *                           by tl_bitmap. The array should be large enough to
- *                           hold all transports specified by tl_bitmap.
- * @param [out] size_p      Filled with buffer size.
- * @param [out] buffer_p    Filled with pointer to packed buffer. It should be
- *                           released by ucs_free().
+ * @param [in]  tl_bitmap     Specifies the resources whose transport address
+ *                            (ep or iface) should be packed.
+ * @param [in]  flags         UCP_ADDRESS_PACK_FLAG_xx flags to specify address
+ *                            format.
+ * @param [in]  lanes2remote  If NULL, the lane index in each packed ep address
+ *                            will be the local lane index. Otherwise, specifies
+ *                            which lane index should be packed in the ep address
+ *                            for each local lane.
+ * @param [out] size_p        Filled with buffer size.
+ * @param [out] buffer_p      Filled with pointer to packed buffer. It should be
+ *                            released by ucs_free().
  */
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               uint64_t tl_bitmap, uint64_t flags,
-                              unsigned *order, size_t *size_p, void **buffer_p);
+                              const ucp_lane_index_t *lanes2remote,
+                              size_t *size_p, void **buffer_p);
 
 
 /**

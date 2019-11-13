@@ -69,8 +69,8 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
         return;
     }
 
-    ucs_assert((start % ucs_get_page_size()) == 0);
-    ucs_assert((end   % ucs_get_page_size()) == 0);
+    ucs_assert((start % UCS_PGT_ADDR_ALIGN) == 0);
+    ucs_assert((end   % UCS_PGT_ADDR_ALIGN) == 0);
 
     region->super.start = start;
     region->super.end   = end;
@@ -97,18 +97,21 @@ static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtab
 
 UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                       (memtype_cache, address, size, mem_type, action),
-                      ucs_memtype_cache_t *memtype_cache, void *address,
+                      ucs_memtype_cache_t *memtype_cache, const void *address,
                       size_t size, ucs_memory_type_t mem_type,
                       ucs_memtype_cache_action_t action)
 {
-    const size_t page_size = ucs_get_page_size();
     ucs_memtype_cache_region_t *region, *tmp;
     UCS_LIST_HEAD(region_list);
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
 
-    start = ucs_align_down_pow2((uintptr_t)address,        page_size);
-    end   = ucs_align_up_pow2  ((uintptr_t)address + size, page_size);
+    if (!size) {
+        return;
+    }
+
+    start = ucs_align_down_pow2((uintptr_t)address,        UCS_PGT_ADDR_ALIGN);
+    end   = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
 
     pthread_rwlock_wrlock(&memtype_cache->lock);
 
@@ -152,8 +155,9 @@ out_unlock:
     pthread_rwlock_unlock(&memtype_cache->lock);
 }
 
-void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache, void *address,
-                              size_t size, ucs_memory_type_t mem_type)
+void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
+                              const void *address, size_t size,
+                              ucs_memory_type_t mem_type)
 {
     ucs_memtype_cache_update_internal(memtype_cache, address, size, mem_type,
                                       UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
@@ -194,7 +198,7 @@ static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
                  (memtype_cache, address, size, mem_type_p),
-                 ucs_memtype_cache_t *memtype_cache, void *address,
+                 ucs_memtype_cache_t *memtype_cache, const void *address,
                  size_t size, ucs_memory_type_t *mem_type_p)
 {
     const ucs_pgt_addr_t start = (uintptr_t)address;

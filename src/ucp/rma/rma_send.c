@@ -90,7 +90,7 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         }
         return UCS_OK;
     }
-    req->send.buffer          += frag_length;
+    req->send.buffer           = UCS_PTR_BYTE_OFFSET(req->send.buffer, frag_length);
     req->send.rma.remote_addr += frag_length;
     return UCS_INPROGRESS;
 }
@@ -331,7 +331,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
 {
     return ucp_rma_wait(ep->worker,
                         ucp_put_nb(ep, buffer, length, remote_addr, rkey,
-                                   (void*)ucs_empty_function),
+                                   (ucp_send_callback_t)ucs_empty_function),
                         "put");
 }
 
@@ -341,6 +341,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
 {
     return ucp_rma_wait(ep->worker,
                         ucp_get_nb(ep, buffer, length, remote_addr, rkey,
-                                   (void*)ucs_empty_function),
+                                   (ucp_send_callback_t)ucs_empty_function),
                         "get");
 }

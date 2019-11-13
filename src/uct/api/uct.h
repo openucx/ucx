@@ -791,7 +791,7 @@ typedef struct uct_linear_growth {
 
 /*
  * @ingroup UCT_RESOURCE
- * @brief Process Per Node (PPN) bandwidth specification: f(x) = dedicated + shared / ppn
+ * @brief Process Per Node (PPN) bandwidth specification: f(ppn) = dedicated + shared / ppn
  *
  *  This structure specifies a function which is used as basis for bandwidth
  * estimation of various UCT operations. This information can be used to select
@@ -909,8 +909,8 @@ struct uct_iface_attr {
     size_t                   max_conn_priv;  /**< Max size of the iface's private data.
                                                   used for connection
                                                   establishment with sockaddr */
-    int                      listen_port;    /**< Port number on which this iface
-                                                  is listening. (in host byte order) */
+    struct sockaddr_storage  listen_sockaddr; /**< Sockaddr on which this iface
+                                                   is listening. */
     /*
      * The following fields define expected performance of the communication
      * interface, this would usually be a combination of device and system
@@ -1185,7 +1185,7 @@ struct uct_md_attr {
 
     char                     component_name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
-    cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
+    ucs_cpu_set_t            local_cpus;    /**< Mask of CPUs near the resource */
 };
 
 
@@ -2004,10 +2004,11 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     length       Size of memory
  * @param [out]    mem_type_p   Filled with memory type of the address range if
                                 function succeeds
- * @return UCS_OK               If memory type is succussfully detected
+ * @return UCS_OK               If memory type is successfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
-ucs_status_t uct_md_detect_memory_type(uct_md_h md, void *addr, size_t length,
+ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
+                                       size_t length,
                                        ucs_memory_type_t *mem_type_p);
 
 
@@ -2547,16 +2548,16 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  * @ingroup UCT_RESOURCE
  * @brief Add a pending request to an endpoint.
  *
- *  Add a pending request to the endpoint pending queue. The request will be
+ * Add a pending request to the endpoint pending queue. The request will be
  * dispatched when the endpoint could potentially have additional send resources.
  *
  * @param [in]  ep    Endpoint to add the pending request to.
  * @param [in]  req   Pending request, which would be dispatched when more
  *                    resources become available. The user is expected to initialize
  *                    the "func" field.
- *                    After passed to the function, the request is owned by UCT,
+ *                    After being passed to the function, the request is owned by UCT,
  *                    until the callback is called and returns UCS_OK.
- * @param [in]  flags Reserved for future use.
+ * @param [in]  flags Flags that control pending request processing (see @ref uct_cb_flags)
  *
  * @return UCS_OK       - request added to pending queue
  *         UCS_ERR_BUSY - request was not added to pending queue, because send

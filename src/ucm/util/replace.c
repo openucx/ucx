@@ -25,8 +25,21 @@
 #define MAP_FAILED ((void*)-1)
 #endif
 
+#ifdef PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
 pthread_mutex_t ucm_reloc_get_orig_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-pthread_t volatile ucm_reloc_get_orig_thread = -1;
+#else
+pthread_mutex_t ucm_reloc_get_orig_lock;
+static void ucm_reloc_get_orig_lock_init(void) __attribute__((constructor(101)));
+static void ucm_reloc_get_orig_lock_init(void)
+{
+	pthread_mutexattr_t attr;
+
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&ucm_reloc_get_orig_lock, &attr);
+}
+#endif
+pthread_t volatile ucm_reloc_get_orig_thread = (pthread_t)-1;
 
 UCM_DEFINE_REPLACE_FUNC(mmap,    void*, MAP_FAILED, void*, size_t, int, int, int, off_t)
 UCM_DEFINE_REPLACE_FUNC(munmap,  int,   -1,         void*, size_t)
@@ -139,7 +152,7 @@ void *ucm_orig_sbrk(intptr_t increment)
         return ucm_orig_dlsym_sbrk(increment);
     } else {
         prev = ucm_brk_syscall(0);
-        return ucm_orig_brk(prev + increment) ? (void*)-1 : prev;
+        return ucm_orig_brk(UCS_PTR_BYTE_OFFSET(prev, increment)) ? (void*)-1 : prev;
     }
 }
 

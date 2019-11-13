@@ -182,6 +182,20 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
     return UCS_OK;
 }
 
+void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+{
+    va_list ap;
+
+    if (size == 0) {
+        return;
+    }
+
+    va_start(ap, fmt);
+    vsnprintf(buf, size - 1, fmt, ap);
+    buf[size - 1] = '\0';
+    va_end(ap);
+}
+
 char* ucs_strncpy_safe(char *dst, const char *src, size_t len)
 {
     size_t length;
@@ -218,4 +232,38 @@ char *ucs_strtrim(char *str)
     }
 
     return start;
+}
+
+const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
+                              size_t max, size_t per_line)
+{
+    static const char hexchars[] = "0123456789abcdef";
+    char *p, *endp;
+    uint8_t value;
+    size_t i;
+
+    p     = buf;
+    endp  = buf + max - 2;
+    i     = 0;
+    while ((p < endp) && (i < length)) {
+        if (i > 0) {
+            if ((i % per_line) == 0) {
+                *(p++) = '\n';
+            } else if ((i % 4) == 0) {
+                *(p++) = ':';
+            }
+
+            if (p == endp) {
+                break;
+            }
+        }
+
+        value = *(const uint8_t*)(UCS_PTR_BYTE_OFFSET(data, i));
+        p[0]  = hexchars[value / 16];
+        p[1]  = hexchars[value % 16];
+        p    += 2;
+        ++i;
+    }
+    *p = 0;
+    return buf;
 }

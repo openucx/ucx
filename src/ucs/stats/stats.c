@@ -369,9 +369,9 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
     }
 }
 
-static int ucs_stats_node_add(ucs_stats_node_t *node,
-                              ucs_stats_node_t *parent,
-                              ucs_stats_filter_node_t *filter_node)
+static ucs_status_t ucs_stats_node_add(ucs_stats_node_t *node,
+                                       ucs_stats_node_t *parent,
+                                       ucs_stats_filter_node_t *filter_node)
 {
     ucs_assert(node != &ucs_stats_context.root_node);
     if (parent == NULL) {

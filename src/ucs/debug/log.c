@@ -48,7 +48,7 @@ static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static int ucs_log_get_thread_num(void)
 {
     pthread_t self = pthread_self();
-    unsigned i;
+    int i;
 
     for (i = 0; i < threads_count; ++i) {
         if (threads[i] == self) {
@@ -64,7 +64,7 @@ static int ucs_log_get_thread_num(void)
         }
     }
 
-    if (threads_count >= sizeof(threads) / sizeof(threads[0])) {
+    if (threads_count >= ucs_static_array_size(threads)) {
         i = -1;
         goto unlock_and_return_i;
     }
@@ -287,33 +287,6 @@ overflow:
     return buf;
 }
 
-
-const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
-                              size_t max)
-{
-    static const char hexchars[] = "0123456789abcdef";
-    char *p, *endp;
-    uint8_t value;
-    size_t i;
-
-    p    = buf;
-    endp = buf + max - 2;
-
-    i = 0;
-    while ((p < endp) && (i < length)) {
-        if (((i % 4) == 0) && (i > 0)) {
-            *(p++) = ':';
-        }
-        value = *(uint8_t*)(data + i);
-        p[0] = hexchars[value / 16];
-        p[1] = hexchars[value % 16];
-        p += 2;
-        ++i;
-    }
-    *p = 0;
-    return buf;
-}
-
 void ucs_log_early_init()
 {
     ucs_log_initialized      = 0;
@@ -357,4 +330,27 @@ void ucs_log_cleanup()
     ucs_log_file           = NULL;
     ucs_log_initialized    = 0;
     ucs_log_handlers_count = 0;
+}
+
+void ucs_log_print_backtrace(ucs_log_level_t level)
+{
+    backtrace_h bckt;
+    backtrace_line_h bckt_line;
+    int i;
+    char buf[1024];
+    ucs_status_t status;
+
+    status = ucs_debug_backtrace_create(&bckt, 1);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucs_log(level, "==== backtrace (tid:%7d) ====\n", ucs_get_tid());
+    for (i = 0; ucs_debug_backtrace_next(bckt, &bckt_line); ++i) {
+        ucs_debug_print_backtrace_line(buf, sizeof(buf), i, bckt_line);
+        ucs_log(level, "%s", buf);
+    }
+    ucs_log(level, "=================================\n");
+
+    ucs_debug_backtrace_destroy(bckt);
 }

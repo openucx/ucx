@@ -8,6 +8,7 @@
 #include <ucp/api/ucp.h>
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
+#include <ucs/type/spinlock.h>
 
 #include <jni.h>
 
@@ -29,6 +30,23 @@ void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
     env->SetStaticIntField(cls, field, _name); \
 } while(0)
 
+
+/**
+ * Throw a Java exception by name. Similar to SignalError.
+ */
+#define JNU_ThrowException(_env, _msg) do { \
+    jclass _cls = _env->FindClass("org/openucx/jucx/UcxException"); \
+    ucs_error("JUCX: %s", _msg); \
+    if (_cls != 0) { /* Otherwise an exception has already been thrown */ \
+        _env->ThrowNew(_cls, _msg); \
+    } \
+} while(0)
+
+#define JNU_ThrowExceptionByStatus(_env, _status) do { \
+    JNU_ThrowException(_env, ucs_status_string(_status)); \
+} while(0)
+
+
 /**
  * @brief Utility to convert Java InetSocketAddress class (corresponds to the Network Layer 4
  * and consists of an IP address and a port number) to corresponding sockaddr_storage struct.
@@ -39,6 +57,8 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss, sockl
 struct jucx_context {
     jobject callback;
     volatile jobject jucx_request;
+    ucs_status_t status;
+    ucs_spinlock_t lock;
 };
 
 void jucx_request_init(void *request);

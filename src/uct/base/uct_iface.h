@@ -219,7 +219,7 @@ typedef struct uct_base_iface {
         size_t              max_num_eps;
     } config;
 
-    UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
+    UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
 
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
@@ -241,7 +241,7 @@ typedef struct uct_failed_iface {
  */
 typedef struct uct_base_ep {
     uct_ep_t          super;
-    UCS_STATS_NODE_DECLARE(stats);
+    UCS_STATS_NODE_DECLARE(stats)
 } uct_base_ep_t;
 UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
 
@@ -671,6 +671,36 @@ size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
     }
 
     return total_length;
+}
+
+/**
+ * Fill iovec data structure by data provided in uct_iov_t.
+ * The function avoids copying IOVs with zero length.
+ * @return Number of elements in io_vec[].
+ */
+static UCS_F_ALWAYS_INLINE
+size_t uct_iovec_fill_iov(struct iovec *io_vec, const uct_iov_t *iov,
+                          size_t iovcnt, size_t *total_length)
+{
+    size_t io_vec_it  = 0;
+    size_t io_vec_len = 0;
+    size_t iov_it;
+
+    *total_length = 0;
+
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        io_vec_len = uct_iov_get_length(&iov[iov_it]);
+
+        /* Avoid zero length elements in resulted iov_vec */
+        if (io_vec_len != 0) {
+            io_vec[io_vec_it].iov_len   = io_vec_len;
+            io_vec[io_vec_it].iov_base  = iov[iov_it].buffer;
+            *total_length              += io_vec_len;
+            ++io_vec_it;
+        }
+    }
+
+    return io_vec_it;
 }
 
 /**

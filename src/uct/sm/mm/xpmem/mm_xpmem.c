@@ -37,9 +37,18 @@ static ucs_status_t uct_xpmem_query()
     return UCS_OK;
 }
 
-static size_t uct_xpmem_get_path_size(uct_md_h md)
+static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    return 0;
+    uct_mm_md_query(md, md_attr, 1);
+
+    md_attr->cap.flags         |= UCT_MD_FLAG_REG;
+    md_attr->reg_cost.overhead  = 1000.0e-9;
+    md_attr->reg_cost.growth    = 0.007e-9;
+    md_attr->cap.max_reg        = ULONG_MAX;
+    md_attr->cap.reg_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->rkey_packed_size   = sizeof(uct_mm_packed_rkey_t);
+
+    return UCS_OK;
 }
 
 static uint8_t uct_xpmem_get_priority()
@@ -53,10 +62,12 @@ static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_
     void *start, *end;
 
     start = ucs_align_down_pow2_ptr(address, ucs_get_page_size());
-    end   = ucs_align_up_pow2_ptr(address + size, ucs_get_page_size());
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, size),
+                                  ucs_get_page_size());
     ucs_assert_always(start <= end);
 
-    segid = xpmem_make(start, end - start, XPMEM_PERMIT_MODE, (void*)0666);
+    segid = xpmem_make(start, UCS_PTR_BYTE_DIFF(start, end), XPMEM_PERMIT_MODE,
+                       (void*)0666);
     VALGRIND_MAKE_MEM_DEFINED(&segid, sizeof(segid));
     if (segid < 0) {
         ucs_error("Failed to register %p..%p with xpmem: %m",
@@ -84,7 +95,7 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length, 
+static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
                                      void *remote_address, void **local_address,
                                      uint64_t *cookie, const char *path)
 {
@@ -117,11 +128,12 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
 
     VALGRIND_MAKE_MEM_DEFINED(address + offset, length);
 
-    *local_address = address + offset;
+    *local_address = UCS_PTR_BYTE_OFFSET(address, offset);
     *cookie        = addr.apid;
 
     ucs_trace("xpmem attached segment 0x%"PRIx64" apid 0x%llx %p..%p at %p (+%zd)",
-              mmid, addr.apid, remote_address, remote_address + length, address, offset);
+              mmid, addr.apid, remote_address,
+              UCS_PTR_BYTE_OFFSET(remote_address, length), address, offset);
     return UCS_OK;
 
 err_xattach:
@@ -216,16 +228,28 @@ static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mmid, size_t lengt
     return ucs_mmap_free(address, length);
 }
 
-static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
-    .query   = uct_xpmem_query,
-    .get_path_size = uct_xpmem_get_path_size,
-    .get_priority = uct_xpmem_get_priority,
-    .reg     = uct_xmpem_reg,
-    .dereg   = uct_xpmem_dereg,
-    .alloc   = uct_xpmem_alloc,
-    .attach  = uct_xpmem_attach,
-    .detach  = uct_xpmem_detach,
-    .free    = uct_xpmem_free
+static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
+    .super = {
+        .close                  = uct_mm_md_close,
+        .query                  = uct_xpmem_md_query,
+        .mem_alloc              = uct_mm_mem_alloc,
+        .mem_free               = uct_mm_mem_free,
+        .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_reg                = uct_mm_mem_reg,
+        .mem_dereg              = uct_mm_mem_dereg,
+        .mkey_pack              = uct_mm_mkey_pack,
+        .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
+        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+    },
+    .query                      = uct_xpmem_query,
+    .get_priority               = uct_xpmem_get_priority,
+    .reg                        = uct_xmpem_reg,
+    .dereg                      = uct_xpmem_dereg,
+    .alloc                      = uct_xpmem_alloc,
+    .attach                     = uct_xpmem_attach,
+    .detach                     = uct_xpmem_detach,
+    .free                       = uct_xpmem_free
 };
 
-UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_mapper_ops, "XPMEM_")
+UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_mm_rkey_unpack,
+                 uct_mm_rkey_release, "XPMEM_")

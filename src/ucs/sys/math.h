@@ -132,7 +132,7 @@ static inline double ucs_log2(double x)
  * @param __a            First number
  * @param __op           Operator (e.g >=)
  * @param __b            Second number
- * @param _signed_type   Signed type of __a/__b (e.g int_32_t)
+ * @param _signed_type   Signed type of __a/__b (e.g int32_t)
  *
  * @return value of the expression "__a __op __b".
  */

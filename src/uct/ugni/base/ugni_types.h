@@ -24,7 +24,7 @@ typedef struct uct_ugni_device {
     uint32_t         address;                   /**< Device address */
     uint32_t         cpu_id;                    /**< CPU attached directly
                                                   to the device */
-    cpu_set_t        cpu_mask;                  /**< CPU mask */
+    ucs_sys_cpuset_t cpu_mask;                  /**< CPU mask */
     /* TBD - reference counter */
 } uct_ugni_device_t;
 

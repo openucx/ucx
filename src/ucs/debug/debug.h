@@ -9,6 +9,7 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <ucs/config/types.h>
 #include <stdio.h>
 
 
@@ -25,6 +26,9 @@ typedef struct ucs_debug_address_info {
     unsigned           line_number;        /* Line number */
 } ucs_debug_address_info_t;
 
+
+typedef struct backtrace *backtrace_h;
+typedef struct backtrace_line *backtrace_line_h;
 
 extern const char *ucs_state_detail_level_names[];
 extern const char *ucs_signal_names[];
@@ -76,6 +80,46 @@ const char *ucs_debug_get_lib_path();
  */
 unsigned long ucs_debug_get_lib_base_addr();
 
+
+/**
+ * Create a backtrace from the calling location.
+ *
+ * @param bckt          Backtrace object.
+ * @param strip         How many frames to strip.
+*/
+ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip);
+
+
+/**
+ * Destroy a backtrace and free all memory.
+ *
+ * @param bckt          Backtrace object.
+ */
+void ucs_debug_backtrace_destroy(backtrace_h bckt);
+
+
+/**
+ * Walk to the next backtrace line information.
+ *
+ * @param bckt          Backtrace object.
+ * @param line          Filled with backtrace frame info.
+ *
+ * NOTE: the line remains valid as long as the backtrace object is not destroyed.
+ */
+int ucs_debug_backtrace_next(backtrace_h bckt, backtrace_line_h *line);
+
+
+/**
+ * Print backtrace line to string buffer.
+ *
+ * @param buffer         Target buffer to print to.
+ * @param maxlen         Size of target buffer.
+ * @param frame_num      Frame number
+ * @param line           Backtrace line to print
+ */
+void ucs_debug_print_backtrace_line(char *buffer, size_t maxlen,
+                                    int frame_num,
+                                    backtrace_line_h line);
 
 /**
  * Print backtrace to an output stream.

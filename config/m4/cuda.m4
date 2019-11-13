@@ -25,11 +25,11 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                 AS_IF([test -d "$with_cuda/lib64"], [libsuff="64"], [libsuff=""])
                 ucx_check_cuda_libdir="$with_cuda/lib$libsuff"
                 CUDA_CPPFLAGS="-I$with_cuda/include"
-                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir"])
+                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"])
 
          AS_IF([test ! -z "$with_cuda_libdir" -a "x$with_cuda_libdir" != "xyes"],
                [ucx_check_cuda_libdir="$with_cuda_libdir"
-                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir"])
+                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"])
 
          CPPFLAGS="$CPPFLAGS $CUDA_CPPFLAGS"
          LDFLAGS="$LDFLAGS $CUDA_LDFLAGS"
@@ -40,7 +40,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
          # Check cuda libraries
          AS_IF([test "x$cuda_happy" = "xyes"],
-                [AC_CHECK_LIB([cuda], [cuPointerGetAttribute],
+                [AC_CHECK_LIB([cuda], [cuDeviceGetUuid],
                               [CUDA_LDFLAGS="$CUDA_LDFLAGS -lcuda"], [cuda_happy="no"])])
          AS_IF([test "x$cuda_happy" = "xyes"],
                 [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],

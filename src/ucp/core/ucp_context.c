@@ -104,7 +104,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_AUX_TLS", "ud,ud_x",
+  {"SOCKADDR_AUX_TLS", "ud",
    "Transports to use for exchanging additional address information while\n"
    "establishing client/server connection. ",
    ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -234,7 +234,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "and the resulting performance.\n",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_SIZE", "256k",
+  {"RNDV_FRAG_SIZE", "512k",
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -270,13 +270,13 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "mm",    { "posix", "sysv", "xpmem" } }, /* for backward compatibility */
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
-  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
-  { "ud_v",  { "ud", "rdmacm", NULL } },
+  { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
+  { "ud_v",  { "ud_verbs", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
-  { "ud",    { "ud_mlx5", "ud", "rdmacm", NULL } },
-  { "rc_v",  { "rc", "ud:aux", "rdmacm", NULL } },
+  { "ud",    { "ud_mlx5", "ud_verbs", "rdmacm", NULL } },
+  { "rc_v",  { "rc_verbs", "ud_verbs:aux", "rdmacm", NULL } },
   { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
-  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc", "ud:aux", "rdmacm", NULL } },
+  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc_verbs", "ud_verbs:aux", "rdmacm", NULL } },
   { "dc",    { "dc_mlx5", "rdmacm", NULL } },
   { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
@@ -462,7 +462,8 @@ static int ucp_is_resource_in_transports_list(const char *tl_name,
              */
             alias_arr_count = ucp_tl_alias_count(alias);
             snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
-            tmp_rsc_flags = 0;
+            dummy_mask      = 0;
+            tmp_rsc_flags   = 0;
             tmp_tl_cfg_mask = 0;
             if (ucp_config_is_tl_enabled(names, count, alias->alias, 1,
                                          &tmp_rsc_flags, &tmp_tl_cfg_mask) &&
@@ -907,10 +908,10 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
                                              const ucp_config_t *config)
 {
     const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
-    unsigned count = config->sockaddr_aux_tls.count;
+    unsigned count        = config->sockaddr_aux_tls.count;
+    uint8_t dummy_flags   = 0;
+    uint64_t dummy_mask   = 0;
     ucp_rsc_index_t tl_id;
-    uint8_t dummy_flags;
-    uint64_t dummy_mask;
 
     context->config.sockaddr_aux_rscs_bitmap = 0;
 
@@ -958,7 +959,6 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
          * sockaddr tls bitmap. save the tl_id's for the client/server usage later */
         ucs_for_each_bit(tl_id, sa_tls_bitmap) {
             resource = &context->tl_rscs[tl_id];
-            tl_md    = &context->tl_mds[resource->md_index];
 
             if (!strcmp(sockaddr_tl_names[j], "*") ||
                 !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name, UCT_TL_NAME_MAX)) {
@@ -1106,7 +1106,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     ucs_string_set_init(&avail_tls);
-    for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+    UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
+    for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
         ucs_string_set_init(&avail_devices[dev_type]);
     }
 
@@ -1205,7 +1206,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      * configuration, but are not available
      */
     if (config->warn_invalid_config) {
-        for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+        UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
+        for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
             ucp_report_unavailable(&config->devices[dev_type],
                                    dev_cfg_masks[dev_type],
                                    ucp_device_type_names[dev_type], " device",
@@ -1234,7 +1236,8 @@ err_free_resources:
 out_release_components:
     uct_release_component_list(uct_components);
 out_cleanup_avail_devices:
-    for (dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+    UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
+    for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
         ucs_string_set_cleanup(&avail_devices[dev_type]);
     }
     ucs_string_set_cleanup(&avail_tls);
@@ -1288,8 +1291,6 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     } else {
         context->config.est_num_ppn = 1;
     }
-
-    context->config.est_num_ppn = 1;
 
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
@@ -1371,7 +1372,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                     !strcmp(method_name, uct_alloc_method_names[method]))
                 {
                     /* Found the allocation method in the internal name list */
-                    context->config.alloc_methods[i].method = method;
+                    context->config.alloc_methods[i].method = (uct_alloc_method_t)method;
                     strcpy(context->config.alloc_methods[i].cmpt_name, "");
                     ucs_debug("allocation method[%d] is '%s'", i, method_name);
                     break;
@@ -1606,7 +1607,7 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
 }
 
 ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
+ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t size)
 {
     ucs_memory_type_t mem_type;
     unsigned i, md_index;
@@ -1627,4 +1628,22 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *address, size_t size)
 
     /* Memory type not detected by any memtype MD - assume it is host memory */
     return UCS_MEMORY_TYPE_HOST;
+}
+
+uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
+{
+    uint64_t        tl_bitmap;
+    ucp_rsc_index_t tl_idx;
+
+    tl_bitmap = 0;
+
+    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+        if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
+            continue;
+        }
+
+        tl_bitmap |= UCS_BIT(tl_idx);
+    }
+
+    return tl_bitmap;
 }

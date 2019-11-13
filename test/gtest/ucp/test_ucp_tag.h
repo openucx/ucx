@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -31,6 +31,8 @@ protected:
     };
 
     virtual void init();
+
+    void enable_tag_mp_offload();
 
     static void request_init(void *request);
 
@@ -89,8 +91,11 @@ protected:
     virtual bool is_external_request();
 
     static ucp_context_attr_t ctx_attr;
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
+
 private:
     int get_worker_index(int buf_index);
+
 public:
     int    count;
 };

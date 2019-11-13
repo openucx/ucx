@@ -35,8 +35,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                                                  IBV_SEND_SIGNALED);
     }
     if (wr->opcode == IBV_WR_RDMA_READ) {
-        send_flags |= uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
-                                             IBV_SEND_FENCE);
+        send_flags |= uct_rc_ep_fm(&iface->super, &ep->fi, IBV_SEND_FENCE);
     }
 
     wr->send_flags = send_flags;
@@ -84,7 +83,8 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
-    UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.opcode, opcode, sge, sge_cnt, remote_addr, rkey);
+    UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.opcode, (enum ibv_wr_opcode)opcode,
+                                  sge, sge_cnt, remote_addr, rkey);
     wr.next = NULL;
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED, INT_MAX);
@@ -101,8 +101,9 @@ uct_rc_verbs_ep_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint64_t compare_
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
-    UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.opcode, sge, opcode, compare_add, swap,
-                                remote_addr, uct_ib_md_direct_rkey(rkey));
+    UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.opcode, sge, (enum ibv_wr_opcode)opcode,
+                                compare_add, swap, remote_addr,
+                                uct_ib_md_direct_rkey(rkey));
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, force_sig, INT_MAX);
 }
@@ -122,8 +123,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                           result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
                                 rkey, desc, IBV_SEND_SIGNALED |
-                                uct_rc_ep_atomic_fence(&iface->super, &ep->fi,
-                                                       IBV_SEND_FENCE));
+                                uct_rc_ep_fm(&iface->super, &ep->fi, IBV_SEND_FENCE));
     return UCS_INPROGRESS;
 }
 
@@ -168,8 +168,10 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_ib_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                        uct_ib_iface_t);
+    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep,
+                                                        uct_rc_verbs_ep_t);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
@@ -210,8 +212,10 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_ib_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                        uct_ib_iface_t);
+    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep,
+                                                        uct_rc_verbs_ep_t);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
@@ -438,7 +442,7 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
                                            uct_rc_iface_t);
 
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
-    /* Reset CI to prevent cq_available overrun on ep_destoroy */
+    /* Reset CI to prevent cq_available overrun on ep_destroy */
     ep->txcnt.ci = ep->txcnt.pi;
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
 

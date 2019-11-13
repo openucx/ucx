@@ -294,7 +294,7 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface)
          * Pending op on the tx_waitq can complete with the UCS_OK
          * status without actually sending anything on the dci.
          * In this case pending ops on the waitq may never be
-         * scdeduled.
+         * scheduled.
          *
          * So we keep progressing pending while dci_waitq is not
          * empty and it is possible to allocate a dci.

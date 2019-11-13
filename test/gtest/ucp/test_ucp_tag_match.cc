@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -14,13 +14,17 @@ using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_tag_match : public test_ucp_tag {
 public:
-    virtual void init()
-    {
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+    test_ucp_tag_match() {
+        // TODO: test offload and offload MP as different variants
+        enable_tag_mp_offload();
         if (RUNNING_ON_VALGRIND) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
             m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
         }
+    }
+
+    virtual void init()
+    {
         modify_config("TM_THRESH",  "1");
 
         test_ucp_tag::init();
@@ -54,7 +58,6 @@ protected:
     }
 
     static ucs_status_t m_req_status;
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 ucs_status_t test_ucp_tag_match::m_req_status = UCS_OK;

@@ -60,7 +60,7 @@ static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
     size_t size;
     hsa_status_t status;
     hsa_device_type_t dev_type;
-    int mem_type = UCS_MEMORY_TYPE_ROCM;
+    ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_ROCM;
     hsa_amd_pointer_info_t info = {
         .size = sizeof(hsa_amd_pointer_info_t),
     };
@@ -113,9 +113,9 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     hsa_amd_memory_pool_t memory_pool, size_t size,
     uint32_t flags, void** ptr)
 {
+    ucs_memory_type_t type = UCS_MEMORY_TYPE_ROCM;
+    uint32_t pool_flags    = 0;
     hsa_status_t status;
-    uint32_t pool_flags = 0;
-    int type = UCS_MEMORY_TYPE_ROCM;
 
     status = hsa_amd_memory_pool_get_info(memory_pool,
                                           HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS,
