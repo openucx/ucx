@@ -229,14 +229,21 @@ uint64_t mem_buffer::pat(uint64_t prev) {
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size),
-    m_allocated(true) {
+    m_mem_type(mem_type), m_ptr(NULL), m_size(size), m_allocated(false)
+{
+    m_ptr       = allocate(size, mem_type);
+    m_allocated = (m_ptr != NULL);
 }
 
 mem_buffer::mem_buffer(void *ptr, size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr((ptr != NULL) ? ptr : allocate(size, mem_type)),
-    m_size(size), m_allocated(ptr == NULL)
+    m_mem_type(mem_type), m_ptr(NULL), m_size(size), m_allocated(false)
 {
+    if (ptr == NULL) {
+        m_ptr       = allocate(size, mem_type);
+        m_allocated = (m_ptr != NULL);
+    } else {
+        m_ptr       = ptr;
+    }
 }
 
 mem_buffer::~mem_buffer() {
