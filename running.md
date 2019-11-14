@@ -1,28 +1,31 @@
 # UCX build and install
 
-1. Get UCX code:
+### Getting the source
 
-    * Download latest code from github:  
+
+* Download latest code from github:  
 ```
 $ git clone https://github.com/openucx/ucx.git ucx
 $ cd ucx
 $ ./autogen.sh
 ```
 
-    * Alternatively, download and extract one of UCX pre-configured [releases](http://github.com/openucx/ucx/releases):
+* Alternatively, download and extract one of UCX pre-configured [releases](http://github.com/openucx/ucx/releases):
 ```
 $ wget https://github.com/openucx/ucx/releases/download/v1.6.1/ucx-1.6.1.tar.gz
 $ tar xzf ucx-1.6.1.tar.gz
 $ cd ucx-1.6.1
 ```
 
-3. (This step is only required for OpenPOWER platforms)  
+* (This step is only required for OpenPOWER platforms)  
   On Ubuntu platform the config.guess file is a bit outdated and does not have support for power. In order to resolve the issue you have to download an updated config.guess. From the root of the project:  
   ```
   $ wget https://github.com/shamisp/ucx/raw/topic/power8-config/config.guess
   ```
 
-4. Configure:  
+### Building
+
+1. Configure:  
   ```
   $ mkdir build
   $ cd build
@@ -31,7 +34,7 @@ $ cd ucx-1.6.1
   > **NOTE**: For best performance configuration, use **../contrib/configure-release** instead of **../configure**.  
   > This will strip all debugging and profiling code.  
 
-5. Build and install:  
+2. Build and install:  
   ```
   $ make -j4
   $ make install
@@ -42,12 +45,12 @@ $ cd ucx-1.6.1
 ---
 <br/>
 
-# Using OpenMPI with UCX
+# OpenMPI with UCX
 
 [OpenMPI](www.open-mpi.org) supports UCX starting from version 3.0, but it's recommended to use 
 version 4.0 or higher due to stability and performance improvements.
 
-## Building OpenMPI
+## Building
 
 1. Get latest-and-greatest OpenMPI version:  
   ```
@@ -76,7 +79,7 @@ version 4.0 or higher due to stability and performance improvements.
 
 <br/>
 
-## Running OpenMPI
+## Running MPI
 
 Example of the command line (with optional flag to select IB device mlx5_0 port 1):  
 ```
@@ -108,11 +111,11 @@ $ mpirun -np 2 -mca pml ucx --mca btl ^vader,tcp,openib,uct -x UCX_NET_DEVICES=m
 ---
 <br/>
 
-# Using MPICH with UCX
+# MPICH with UCX
 UCX is supported in MPICH 3.3 and higher versions. 
 UCX is already embedded in the MPICH tarball, so you do not need to separately download UCX.
 
-## Building MPICH
+## Building
 
 1. Download mpich-3.3 or higher from https://www.mpich.org
 
@@ -131,7 +134,7 @@ $ make install
 
 <br/>
 
-## Running MPICH
+## Running MPI
 Example of the command line (with optional flag to select IB device mlx5_0 port 1):
 ```
 $ mpirun -np 2 -env UCX_NET_DEVICES=mlx5_0:1 ./executable
