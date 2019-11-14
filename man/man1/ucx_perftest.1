@@ -1,0 +1,154 @@
+.\"
+.\" Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+.\" Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+.\" Copyright (C) The University of Tennessee and The University
+.\"               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+.\" Copyright (C) Stony Brook University 2019. ALL RIGHTS RESERVED.
+.\"
+.\" See file LICENSE for terms.
+.\"
+.TH ucx_perftest 1 "" "openucx"
+.SH NAME
+\fBucx_perftest\fP \- run UCX performance tests
+.SH SYNOPSIS
+\fBucx_perftest\fP [server-hostname] [options]
+.SH DESCRIPTION
+\fBucx_perftest\fP runs various UCX performance tests.
+.SH OPTIONS
+\fBCommon options:\fP
+.IP "-t <test>"
+.TS
+center expand;
+r cw(3) l.
+am_lat	-	UCT active message latency
+put_lat	-	UCT put latency
+add_lat	-	UCT atomic add latency
+get	-	UCT get latency / bandwidth / message rate
+fadd	-	UCT atomic fetch-and-add latency / rate
+swap	-	UCT atomic swap latency / rate
+cswap	-	UCT atomic compare-and-swap latency / rate
+am_bw	-	UCT active message bandwidth / message rate
+put_bw	-	UCT put bandwidth / message rate
+add_mr	-	UCT atomic add message rate
+tag_lat	-	UCP tag match latency
+tag_bw	-	UCP tag match bandwidth
+tag_sync_lat	-	UCP tag sync match latency
+tag_sync_bw	-	UCP tag sync match bandwidth
+ucp_put_lat	-	UCP put latency
+ucp_put_bw	-	UCP put bandwidth
+ucp_get	-	UCP get latency / bandwidth / message rate
+ucp_add	-	UCP atomic add bandwidth / message rate
+ucp_fadd	-	UCP atomic fetch-and-add latency / bandwidth / rate
+ucp_swap	-	UCP atomic swap latency / bandwidth / rate
+ucp_cswap	-	UCP atomic compare-and-swap latency / bandwidth / rate
+stream_bw	-	UCP stream bandwidth
+stream_lat	-	UCP stream latency
+.TE
+.IP "-s <size>"
+list of scatter-gather sizes for single message (8),
+.br
+for example: "-s 16,48,8192,8192,14"
+.IP "-n <iters>"
+number of iterations to run (1000000)
+.IP "-w <iters>"
+number of warm-up iterations (10000)
+.IP "-c <cpu>"
+set affinity to this CPU (off)
+.IP "-O <count>"
+maximal number of uncompleted outstanding sends (1)
+.IP "-i <offset>"
+distance between consecutive scatter-gather entries (0)
+.IP "-T <threads>"
+number of threads in the test (1), if >1 implies "-M multi"
+.IP "-B"
+register memory with NONBLOCK flag
+.IP "-b <file>"
+read and execute tests from a batch file: every line in the file is a
+test to run, first word is test name, the rest of the line is
+command-line arguments for the test.
+.IP "-p <port>"
+TCP port to use for data exchange (13337)
+.IP "-h"
+show this help message
+.LP
+\fBOutput format:\fP
+.IP "-N"
+use numeric formatting (thousands separator)
+.IP "-f"
+print only final numbers
+.IP "-v"
+print CSV-formatted output
+.LP
+\fBUCT only:\fP
+.IP "-d <device>"
+device to use for testing
+.IP "-x <tl>"
+transport to use for testing
+.IP "-D <layout>"
+data layout for sender side:
+.TS
+l lw(3) l.
+short	-	short messages (default, cannot be used for get)
+bcopy	-	copy-out (cannot be used for atomics)
+zcopy	-	zero-copy (cannot be used for atomics)
+iov	-	scatter-gather list (iovec)
+.TE
+.IP "-W <count>"
+flow control window size, for active messages (127)
+.IP "-H <size>"
+active message header size (8)
+.IP "-A <mode>"
+asynchronous progress mode (thread_spinlock)
+.TS
+expand;
+l lw(3) l.
+thread_spinlock	-	separate progress thread with spin locking
+thread_mutex	-	separate progress thread with mutex locking
+signal	-	signal-based timer
+.TE
+.LP
+\fBUCP only:\fP
+.IP "-M <thread>"
+thread support level for progress engine (single)
+.TS
+l lw(3) l.
+single	-	only the master thread can access
+serialized	-	one thread can access at a time
+multi	-	multiple threads can access
+.TE
+.IP "-D <layout>[,<layout>]"
+data layout for sender and receiver side (contig)
+.TS
+l lw(3) l.
+contig	-	Continuous datatype
+iov	-	Scatter-gather list
+.TE
+.IP "-C"
+use wild-card tag for tag tests
+.IP "-U"
+force unexpected flow by using tag probe
+.IP "-r <mode>"
+receive mode for stream tests (recv)
+.TS
+l lw(3) l.
+recv	-	Use ucp_stream_recv_nb
+recv_data	-	Use ucp_stream_recv_data_nb
+.TE
+.IP "-m <mem type>"
+memory type of messages
+.TS
+l lw(3) l.
+host	-	system memory(default)
+cuda	-	NVIDIA GPU memory
+cuda-managed	-	NVIDIA cuda managed/unified memory
+.TE
+.LP
+\fBNOTE:\fP When running UCP tests, transport and device should be
+specified by environment variables: UCX_TLS and
+UCX_[SELF|SHM|NET]_DEVICES.
+.SH
+SEE ALSO
+ucx_info(1),
+ucx_read_profile(1)
+.SH OPENUCX
+\f(CRhttp://www.openucx.org/\fP

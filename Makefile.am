@@ -35,7 +35,8 @@ SUBDIRS = \
 	src/tools/perf \
 	src/tools/profile \
 	test/apps \
-	test/examples
+	test/examples \
+	man
 
 if HAVE_GTEST
 SUBDIRS += test/gtest
