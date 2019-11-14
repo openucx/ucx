@@ -37,7 +37,10 @@ $ cd ucx-1.6.1
   $ make install
   ```
 
+<br/>
+
 ---
+<br/>
 
 # Using OpenMPI with UCX
 
@@ -71,6 +74,8 @@ version 4.0 or higher due to stability and performance improvements.
   $ make install
   ```
 
+<br/>
+
 ## Running OpenMPI
 
 Example of the command line (with optional flag to select IB device mlx5_0 port 1):  
@@ -90,13 +95,18 @@ $ mpirun -np 2 -mca pml ucx -x UCX_NET_DEVICES=mlx5_0:1 ./app
 > $ mpirun -np 2 -mca pml ucx -mca btl ^uct -x UCX_NET_DEVICES=mlx5_0:1 ./app
 > ```
 
+<br/>
+
 ## OpenMPI runtime optimizations for UCX
 By default OpenMPI enables build-in transports (BTLs), which may result in additional software overheads in the OpenMPI progress function. In order to workaround this issue you may try to disable certain BTLs.
 ```
 $ mpirun -np 2 -mca pml ucx --mca btl ^vader,tcp,openib,uct -x UCX_NET_DEVICES=mlx5_0:1 ./app
 ```
 
+<br/>
+
 ---
+<br/>
 
 # Using MPICH with UCX
 UCX is supported in MPICH 3.3 and higher versions. 
@@ -118,6 +128,8 @@ $ ../configure --prefix=<mpich-install-path> --with-device=ch4:ucx
 $ make -j4
 $ make install
 ```
+
+<br/>
 
 ## Running MPICH
 Example of the command line (with optional flag to select IB device mlx5_0 port 1):
