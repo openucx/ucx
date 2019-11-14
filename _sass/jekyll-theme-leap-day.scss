@@ -8,7 +8,7 @@ by Matt Graham
 @import "rouge-base16-dark";
 
 body {
-  font:14px/22px 'Quattrocento Sans', "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font:16px/24px 'Quattrocento Sans', "Helvetica Neue", Helvetica, Arial, sans-serif;
   color:#2b2b2b;
   font-weight:300;
   margin: 0px;
@@ -18,11 +18,11 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   color:#333;
-  margin:0 0 10px;
+  margin:20px 0 10px;
 }
 
 p, ul, ol, table, pre, dl {
-  margin:0 0 20px;
+  margin:5px 0 10px;
 }
 
 h1, h2, h3 {
@@ -30,12 +30,13 @@ h1, h2, h3 {
 }
 
 h1 {
-  font-size:28px;
+  margin-top:30px;
+  font-size:25px;
 }
 
 h2 {
-  font-size: 24px;
-  color:#393939;
+  font-size: 20px;
+  color:#3939a0;
 }
 
 h3, h4, h5, h6 {
@@ -82,26 +83,23 @@ section img {
 blockquote {
   border-left:1px solid #ffcc00;
   margin:0;
-  padding:0 0 0 20px;
-  font-style:italic;
+  padding:1px 0 4px 20px;
 }
 
 code {
-  font-family: 'Lucida Sans', Monaco, Bitstream Vera Sans Mono, Lucida Console, Terminal;
-  font-size:13px;
-  color:#efefef;
-  text-shadow: 0px 1px 0px #000;
+  font-family: 'Lucida Console', Monaco, Bitstream Vera Sans Mono, Lucida Console, Terminal;
+  font-size:14px;
   margin: 0 4px;
   padding: 2px 6px;
-  background: #333;
+  color:#000000;
+  background: #eee;
   border-radius: 2px;
 }
 
 pre {
-  padding:8px 15px;
-  background: #333333;
+  padding:4px 8px;
+  background: #eee;
   border-radius: 3px;
-  border:1px solid #c7c7c7;
   overflow: auto;
   overflow-y: hidden;
 
@@ -187,7 +185,7 @@ header {
   left:0;
   right:50%;
   height: 50px;
-  margin-right:-382px;
+  margin-right:-682px;
   position: fixed;
   top: 115px;
   background: #ffcc00;
@@ -216,6 +214,12 @@ header {
       background: linear-gradient(rgb(255, 231, 136), rgb(255, 231, 136));
       background-color: #ffeca0;
     }
+  }
+
+  .buttons {
+     position:fixed;
+     left:50%;
+     margin-left:-325px;
   }
 
   .fork {
@@ -266,12 +270,12 @@ header {
     right:7px;
     top:7px;
     display: block;
-    background: url(../images/octocat-logo.svg);
+    background: url(../images/UCX_Logo_930x933.png);
   }
 }
 
 section {
-  width:590px;
+  width: 840px;
   padding: 30px 30px 50px 30px;
   margin: 20px 0;
   margin-top: 190px;
