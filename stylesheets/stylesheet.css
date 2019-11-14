@@ -371,3 +371,22 @@ footer a:hover {
 
 /* Mobile Portrait Size to Mobile Landscape Size (devices and browsers) */
 @media only screen and (max-width: 479px) { }
+
+.page-header2 {
+  color: $header-heading-color;
+  text-align: center;
+  background-color: $header-bg-color;
+  background-image: linear-gradient(120deg, $header-bg-color-secondary, $header-bg-color);
+
+  @include large {
+    padding: 5rem 6rem;
+  }
+
+  @include medium {
+    padding: 3rem 4rem;
+  }
+
+  @include small {
+    padding: 2rem 1rem;
+  }
+}
