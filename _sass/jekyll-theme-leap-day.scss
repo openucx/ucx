@@ -300,7 +300,7 @@ nav {
   ul {
     list-style: none;
     list-style-image:none;
-    font-size: 14px;
+    font-size: 15px;
     line-height:24px;
 
     li {
@@ -324,6 +324,7 @@ nav {
       }
 
       &.tag-h2 {
+        font-size: 1.1em;
 
         + .tag-h1 {
           margin-top:10px;

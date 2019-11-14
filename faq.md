@@ -138,7 +138,7 @@ SL and utilize adaptive routing.
 
 ## GPU support
 
-#### 1. In which way UCX supports GPU ?
+#### 1. How UCX supports GPU ?
 
 UCX protocol operations can work with GPU memory pointers the same way as with Host 
 memory pointers. For example, the 'buffer' argument passed to `ucp_tag_send_nb()` can
@@ -161,5 +161,19 @@ Currently only UCX tagged APIs (ucp_tag_send_XX/ucp_tag_recv_XX) and stream APIs
   must disable memory detection cache by setting `UCX_MEMTYPE_CACHE=n`. The reason
   is that memory allocation hooks do not work with static compilation. Disabling this
   cache could have a negative effect on performance, especially for small messages.
-  
+
+<br/>
+
+## Performance considerations
+
+#### 1. Does UCX support zero-copy for GPU memory over RDMA?
+
+Yes. For large messages UCX can transfer GPU memory using zero-copy RDMA using
+rendezvous protocol. It requires the peer memory driver for the relevant GPU type
+to be loaded on the system.
+> **NOTE:** In some cases if the RDMA network device and the GPU are not on
+the same NUMA node, such zero-copy transfer is inefficient.
+
+
+
 <br/>
