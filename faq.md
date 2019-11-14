@@ -24,6 +24,8 @@ UCP is responsible for the following functionality: initialization of the librar
 Please join our mailing list: https://elist.ornl.gov/mailman/listinfo/ucx-group or 
 submit issues on github: http://github.com/openucx/ucx/issues
 
+<br/>
+
 ## UCX mission
 
 #### 1. What are the key features of UCX?
@@ -62,6 +64,8 @@ UCX, is a middleware communication layer that relies on vendors provided user le
 #### 6. Is UCX a user level driver ?  
 No. Typically,  Drivers  aim to expose fine-grain access to the network architecture specific features.
 UCX abstracts the differences across various drivers and fill-in the gaps using software protocols for some of the architectures that don't provide hardware level support for all the operations.
+
+<br/>
 
 ## Dependencies
 
@@ -104,11 +108,26 @@ UCX would pick the 2 best network devices and split large messages across them.
 
 #### 3. Is it possible to use more than 2 rails?
 
-Yes, by setting UCX_MAX_RNDV_RAILS=<num-rails>. Currently up to 4 are supported.
+Yes, by setting `UCX_MAX_RNDV_RAILS=<num-rails>`. Currently up to 4 are supported.
 
 #### 4. How can I disable multi-rail?
 
-Set UCX_MAX_RNDV_RAILS=1.
+Set `UCX_MAX_RNDV_RAILS=1`.
+
+<br/>
+
+## Adaptive routing
+
+#### 1. Does UCX support adaptive routing fabrics?
+
+Yes.
+
+#### 2. What do I need to do to run UCX with adaptive routing?
+
+When adaptive routing is configured on an Infiniband fabric, it is enabled per SL 
+(IB Service Layer).  
+Setting `UCX_IB_SL=<sl-num>` will make UCX run on the given
+SL and utilize adaptive routing. 
 
 <br/>
 
@@ -136,3 +155,11 @@ Currently UCX supports NVIDIA GPUs by Cuda library, and AMD GPUs by ROCm library
 Currently only UCX tagged APIs (ucp_tag_send_XX/ucp_tag_recv_XX) and stream APIs 
 (ucp_stream_send/ucp_stream_recv_XX) support GPU memory.
   
+#### 4. What are the current limitations of using GPU memory?
+
+* **Static compilation** - programs which are statically compiled with Cuda libraries
+  must disable memory detection cache by setting `UCX_MEMTYPE_CACHE=n`. The reason
+  is that memory allocation hooks do not work with static compilation. Disabling this
+  cache could have a negative effect on performance, especially for small messages.
+  
+<br/>
