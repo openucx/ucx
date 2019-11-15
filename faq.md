@@ -93,6 +93,28 @@ UCX does not depend on an external runtime environment.
 ---
 <br/>
 
+
+# Configuration and tuning
+
+#### 1. How can I specify special configuration and tunings for UCX?
+
+UCX takes parameters from specific **environment variables**, which start with the
+prefix `UCX_`.  
+> **IMPORTANT NOTE:** Changing the values of UCX environment variables to non-default
+values may lead to undefined behavior. The environment variables are indented for 
+advanced users, or for specific tunings or workarounds recommended by UCX community.
+
+#### 2. Where can I see all UCX environment variables?
+
+* Running `ucx_info -c` prints all environment variables and their default values.
+* Running `ucx_info -cf` prints the documentation for all environment variables.
+
+
+<br/>
+
+---
+<br/>
+
 # Network capabilities
 
 ## Multi-rail
@@ -127,9 +149,19 @@ Yes.
 When adaptive routing is configured on an Infiniband fabric, it is enabled per SL 
 (IB Service Layer).  
 Setting `UCX_IB_SL=<sl-num>` will make UCX run on the given
-SL and utilize adaptive routing. 
+service level and utilize adaptive routing. 
 
 <br/>
+
+## RoCE
+
+#### 1. How to specify service level with UCX ?
+
+Setting `UCX_IB_SL=<sl-num>` will make UCX run on the given service level.
+
+#### 2. How to specify DSCP priority ?
+
+Setting `UCX_IB_TRAFFIC_CLASS=<num>`.
 
 ---
 <br/>

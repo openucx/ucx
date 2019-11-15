@@ -10,7 +10,7 @@ $ cd ucx
 $ ./autogen.sh
 ```
 
-* Alternatively, download and extract one of UCX pre-configured [releases](http://github.com/openucx/ucx/releases):
+* Alternatively, download and extract one of UCX pre-configured [releases](download):
 ```
 $ wget https://github.com/openucx/ucx/releases/download/v1.6.1/ucx-1.6.1.tar.gz
 $ tar xzf ucx-1.6.1.tar.gz

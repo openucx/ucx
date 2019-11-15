@@ -12,7 +12,7 @@ shared memory mechanisms for efficient intra-node communication.
 
 # Quick start
 
-The following will download and build UCX v1.6 [release](http://github.com/openucx/ucx/releases):
+The following will download and build UCX v1.6 [release](download):
 ```
 $ wget https://github.com/openucx/ucx/releases/download/v1.6.1/ucx-1.6.1.tar.gz
 $ tar xzf ucx-1.6.1.tar.gz
