@@ -41,84 +41,71 @@ static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
+static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
+{
+    void *address;
+
+    address = shmat(shmid, NULL, 0);
+    if (address == MAP_FAILED) {
+        ucs_error("shmat(shmid=%d) failed: %m", shmid);
+        return UCS_ERR_SHMEM_SEGMENT;
+    }
+
+    *address_p = address;
+    ucs_trace("attached remote segment %d at address %p", (int)shmid, address);
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                   unsigned md_map_flags, const char *alloc_name,
-                   uct_mem_h *memh_p)
+                   unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
-    ucs_status_t status = UCS_ERR_NO_MEMORY;
-    int flags, shmid = 0;
+    ucs_status_t status;
     uct_mm_seg_t *seg;
+    int shmid;
 
-    flags = UCT_MM_SYSV_MSTR;
-
-    if (0 == *length_p) {
-        ucs_error("Unexpected length %zu", *length_p);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (!(md_map_flags & UCT_MD_MEM_FLAG_FIXED)) {
-        *address_p = NULL;
-    }
-
-    status = uct_mm_seg_new(NULL, 0, &seg);
+    status = uct_mm_seg_new(*address_p, *length_p, &seg);
     if (status != UCS_OK) {
         return status;
     }
 
 #ifdef SHM_HUGETLB
     if (md->config->hugetlb_mode != UCS_NO) {
-        status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
-                                flags | SHM_HUGETLB, alloc_name, &shmid);
-        if (status == UCS_OK) {
-            goto out_ok;
-        }
-
-        ucs_debug("mm failed to allocate %zu bytes with hugetlb", *length_p);
-    }
-#endif
-
-    if (md->config->hugetlb_mode != UCS_YES) {
-        status = ucs_sysv_alloc(length_p, SIZE_MAX, address_p, flags, alloc_name,
+        status = ucs_sysv_alloc(&seg->length, seg->length * 2, &seg->address,
+                                UCT_MM_SYSV_MSTR | SHM_HUGETLB, alloc_name,
                                 &shmid);
         if (status == UCS_OK) {
             goto out_ok;
         }
 
-        ucs_debug("mm failed to allocate %zu bytes without hugetlb", *length_p);
+        ucs_debug("mm failed to allocate %zu bytes with hugetlb", seg->length);
+    }
+#else
+    status = UCS_ERR_UNSUPPORTED;
+#endif
+
+    if (md->config->hugetlb_mode != UCS_YES) {
+        status = ucs_sysv_alloc(&seg->length, SIZE_MAX, &seg->address,
+                                UCT_MM_SYSV_MSTR, alloc_name, &shmid);
+        if (status == UCS_OK) {
+            goto out_ok;
+        }
+
+        ucs_debug("mm failed to allocate %zu bytes without hugetlb", seg->length);
     }
 
-    ucs_error("failed to allocate %zu bytes with mm for %s", *length_p, alloc_name);
+    ucs_error("failed to allocate %zu bytes with mm for %s", seg->length,
+              alloc_name);
     ucs_free(seg);
     return status;
 
 out_ok:
-    seg->seg_id  = shmid;
-    seg->address = *address_p;
-    seg->length  = *length_p;
-    *memh_p      = seg;
+    seg->seg_id = shmid;
+    *address_p  = seg->address;
+    *length_p   = seg->length;
+    *memh_p     = seg;
     return UCS_OK;
-}
-
-static ucs_status_t uct_sysv_mem_attach_common(int mmid, void **local_address)
-{
-    void *ptr;
-
-    ptr = shmat(mmid, NULL, 0);
-    if (ptr == MAP_FAILED) {
-        ucs_error("shmat(shmid=%d) failed: %m", (int)mmid);
-        return UCS_ERR_SHMEM_SEGMENT;
-    }
-
-    ucs_trace("attached remote segment %d at address %p", (int)mmid, ptr);
-    *local_address = ptr;
-    return UCS_OK;
-}
-
-static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg)
-{
-    ucs_sysv_free(rseg->address);
 }
 
 static ucs_status_t uct_sysv_mem_free(uct_md_h tl_md, uct_mem_h memh)
@@ -151,6 +138,11 @@ static ucs_status_t uct_sysv_mem_attach(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
                                         uct_mm_remote_seg_t *rseg)
 {
     return uct_sysv_mem_attach_common(seg_id, &rseg->address);
+}
+
+static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg)
+{
+    ucs_sysv_free(rseg->address);
 }
 
 static ucs_status_t
