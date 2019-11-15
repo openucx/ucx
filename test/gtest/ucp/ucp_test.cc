@@ -111,9 +111,9 @@ ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
     return create_entity(add_in_front, GetParam());
 }
 
-ucp_test_base::entity* ucp_test::create_entity(bool add_in_front,
-                                               const ucp_test_param &test_param) {
-    entity *e = new entity(test_param, m_ucp_config, get_worker_params());
+ucp_test_base::entity*
+ucp_test::create_entity(bool add_in_front, const ucp_test_param &test_param) {
+    entity *e = new entity(test_param, m_ucp_config, get_worker_params(), this);
     if (add_in_front) {
         m_entities.push_front(e);
     } else {
@@ -380,8 +380,9 @@ bool ucp_test::check_test_param(const std::string& name,
 
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
-                              const ucp_worker_params_t& worker_params)
-    : m_rejected_cntr(0)
+                              const ucp_worker_params_t& worker_params,
+                              const ucp_test_base *test_owner)
+    : m_test_owner(test_owner), m_rejected_cntr(0)
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
@@ -463,13 +464,14 @@ void ucp_test_base::entity::connect(const entity* other,
 }
 
 ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
-                                       ucp_conn_request_h conn_request)
+                                       ucp_conn_request_h conn_request,
+                                       const void *ep_user_data)
 {
     ucp_ep_h        ep;
     ucp_ep_params_t ep_params;
     ep_params.field_mask   = UCP_EP_PARAM_FIELD_USER_DATA |
                              UCP_EP_PARAM_FIELD_CONN_REQUEST;
-    ep_params.user_data    = (void *)0xdeadbeef;
+    ep_params.user_data    = (void *)ep_user_data;
     ep_params.conn_request = conn_request;
 
     ucs_status_t status    = ucp_ep_create(worker, &ep_params, &ep);
@@ -647,7 +649,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     if (!m_conn_reqs.empty()) {
         ucp_conn_request_h conn_req = m_conn_reqs.back();
         m_conn_reqs.pop();
-        ucp_ep_h ep = accept(ucp_worker, conn_req);
+        ucp_ep_h ep = accept(ucp_worker, conn_req, m_test_owner);
         set_ep(ep, worker_index, std::numeric_limits<int>::max());
         ++progress_count;
     }

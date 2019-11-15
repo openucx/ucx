@@ -55,14 +55,16 @@ public:
         } listen_cb_type_t;
 
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
-               const ucp_worker_params_t& worker_params);
+               const ucp_worker_params_t& worker_params,
+               const ucp_test_base* test_owner);
 
         ~entity();
 
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
 
-        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
+        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request,
+                        const void *ep_user_data);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -111,6 +113,7 @@ public:
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
     protected:
+        const ucp_test_base             *m_test_owner;
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
