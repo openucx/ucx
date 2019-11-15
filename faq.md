@@ -156,9 +156,7 @@ In addition to the built-in transports it's possible to use aliases which specif
 ##### List of main transports and aliases
 <table>
 <tr><td>all</td><td>use all the available transports.</td></tr>
-<tr><td>sm</td><td>all shared memory transports.</td></tr>
-<tr><td>shm</td><td>same as "sm"</td></tr>
-<tr><td>mm</td><td>shared memory transports - without kernel-assisted copy</td></tr>
+<tr><td>sm or shm</td><td>all shared memory transports.</td></tr>
 <tr><td>ugni</td><td>ugni_rdma and ugni_udt.</td></tr>
 <tr><td>rc</td><td>RC (=reliable connection), "accelerated" transports are used if possible.</td></tr>
 <tr><td>ud</td><td>UD (=unreliable datagram), "accelerated" is used if possible.</td></tr>
