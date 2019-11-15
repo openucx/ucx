@@ -830,25 +830,27 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     NULL, 0, NULL,
                                     ucp_ep_close_flushed_callback, "close");
 
-    uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
-    if (uct_cm_ep != NULL) {
-        if (UCS_PTR_IS_PTR(request)) {
-        } else if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-            /* flush state must be valid and queue is empty */
-            ucs_assert(ucp_ep_flush_state(ep) != NULL);
-            ucs_assert(ucs_queue_is_empty(&ucp_ep_ext_gen(ep)->flush_state.reqs));
+    if (!UCS_PTR_IS_PTR(request)) {
+        uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
+        if (uct_cm_ep != NULL) {
+            if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+                /* flush state must be valid and queue is empty */
+                ucs_assert(ucp_ep_flush_state(ep) != NULL);
+                ucs_assert(ucs_queue_is_empty(
+                                &ucp_ep_ext_gen(ep)->flush_state.reqs));
 
-            close_req = ucp_request_get(ep->worker);
-            memset(close_req, 0, sizeof(*close_req));
-            close_req->status  = UCS_OK;
-            close_req->flags   = 0;
-            close_req->send.ep = ep;
-            ucp_ep_ext_gen(ep)->close_req.req = close_req;
-            ucp_ep_cm_disconnect(ep);
-            request = close_req + 1;
+                close_req = ucp_request_get(ep->worker);
+                memset(close_req, 0, sizeof(*close_req));
+                close_req->status  = UCS_OK;
+                close_req->flags   = 0;
+                close_req->send.ep = ep;
+                ucp_ep_ext_gen(ep)->close_req.req = close_req;
+                ucp_ep_cm_disconnect(ep);
+                request = close_req + 1;
+            }
+        } else {
+            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
         }
-    } else if (!UCS_PTR_IS_PTR(request)) {
-        ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

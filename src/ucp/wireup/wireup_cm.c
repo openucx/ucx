@@ -207,7 +207,7 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-static unsigned ucp_ep_cm_disconnect_progress(void *arg)
+static unsigned ucp_ep_cm_do_disconnect(void *arg)
 {
     ucp_ep_h ucp_ep     = (ucp_ep_h)arg;
     ucp_worker_h worker = ucp_ep->worker;
@@ -249,7 +249,7 @@ static void ucp_cm_disconnect_cb(uct_ep_h ep, void *arg)
 
     /* invoke the disconnect flow from the main thread */
     uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_ep_cm_disconnect_progress, ucp_ep,
+                                      ucp_ep_cm_do_disconnect, ucp_ep,
                                       UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
 }
 
