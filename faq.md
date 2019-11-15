@@ -8,7 +8,7 @@ and relatively easy way to construct widely used HPC protocols: MPI tag matching
 RMA operations, rendezvous protocols, stream, fragmentation, remote atomic operations, etc.
 
 #### 2. What is UCP, UCT, UCS ?
-* **UCT** is a transport layer that abstracts the differences across various hardware architectures and provides a low-level API that enables the implementation of communication protocols. The primary goal of the layer is to provide direct and efficient access to hardware network resources with minimal software overhead. For this purpose UCT relies on low-level drivers provided by vendors such as InfiniBand Verbs, Crayâs uGNI, libfabrics, etc. In addition, the layer provides constructs for communication context management (thread-based and ap- plication level), and allocation and management of device- specific memories including those found in accelerators. In terms of communication APIs, UCT defines interfaces for immediate (short), buffered copy-and-send (bcopy), and zero- copy (zcopy) communication operations. The short operations are optimized for small messages that can be posted and completed in place. The bcopy operations are optimized for medium size messages that are typically sent through a so- called bouncing-buffer. Finally, the zcopy operations expose zero-copy memory-to-memory communication semantics.
+* **UCT** is a transport layer that abstracts the differences across various hardware architectures and provides a low-level API that enables the implementation of communication protocols. The primary goal of the layer is to provide direct and efficient access to hardware network resources with minimal software overhead. For this purpose UCT relies on low-level drivers provided by vendors such as InfiniBand Verbs, Cray's uGNI, libfabrics, etc. In addition, the layer provides constructs for communication context management (thread-based and ap- plication level), and allocation and management of device- specific memories including those found in accelerators. In terms of communication APIs, UCT defines interfaces for immediate (short), buffered copy-and-send (bcopy), and zero- copy (zcopy) communication operations. The short operations are optimized for small messages that can be posted and completed in place. The bcopy operations are optimized for medium size messages that are typically sent through a so- called bouncing-buffer. Finally, the zcopy operations expose zero-copy memory-to-memory communication semantics.
 
 * **UCP** implements higher-level protocols that are typically used by message passing (MPI) and PGAS programming models by using lower-level capabilities exposed through the UCT layer.
 UCP is responsible for the following functionality: initialization of the library, selection of transports for communication, message fragmentation, and multi-rail communication. Currently, the API has the following classes of interfaces: Initialization, Remote Memory Access (RMA) communication, Atomic Memory Operations (AMO), Active Message, Tag-Matching, and Collectives. 
@@ -188,8 +188,8 @@ Yes.
 #### 2. What is the default behavior in a multi-rail environment?
 
 By default UCX would pick the 2 best network devices, and split large 
-messages between the rails. For example, in a 100 MB message - the 1st 50 MB
-would be sent on the 1st device, and the 2nd 50 MB would be send on the 2nd device.
+messages between the rails. For example, in a 100MB message - the 1st 50MB
+would be sent on the 1st device, and the 2nd 50MB would be sent on the 2nd device.
 If the device network speeds are not the same, the split will be proportional to
 their speed ratio.
 
