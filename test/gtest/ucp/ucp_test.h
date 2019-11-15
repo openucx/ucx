@@ -215,17 +215,11 @@ protected:
     static const ucp_datatype_t DATATYPE_IOV;
 
 protected:
-    class mapped_buffer {
+    class mapped_buffer : public mem_buffer {
     public:
         mapped_buffer(size_t size, const entity& entity, int flags = 0,
-                      uint64_t seed = 0,
                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
         virtual ~mapped_buffer();
-
-        void *ptr() const;
-        uintptr_t addr() const;
-        size_t length() const;
-        ucs_memory_type_t mem_type() const;
 
         ucp_rkey_h rkey(const entity& entity) const;
         ucp_mem_h memh() const;
@@ -234,14 +228,9 @@ protected:
 
     private:
         const entity& m_entity;
-        mem_buffer    m_buffer;
-        uint64_t      m_seed;
         ucp_mem_h     m_memh;
         void         *m_rkey;
-        void         *m_ptr;
-        size_t        m_length;
     };
-
 };
 
 

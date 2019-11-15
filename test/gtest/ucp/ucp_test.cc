@@ -733,28 +733,25 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
 ucp_test::mapped_buffer::mapped_buffer(size_t size,
                                        const entity& entity,
                                        int flags,
-                                       uint64_t seed,
                                        ucs_memory_type_t mem_type) :
-    m_entity(entity),
-    m_buffer(alloc_address(flags), size, mem_type),
-    m_seed(seed)
+    m_entity(entity)
 {
     ucp_mem_map_params_t params;
     ucs_status_t status;
     size_t rkey_buffer_size;
     ucp_mem_attr_t mem_attr;
 
+    if (flags & UCP_MEM_MAP_FIXED) {
+        params.flags = flags | UCP_MEM_MAP_ALLOCATE;
+    } else {
+        params.flags =  flags & ~UCP_MEM_MAP_ALLOCATE;
+        init(NULL, size, mem_type);
+    }
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.address    = m_buffer.ptr();
+    params.address    = ptr();
     params.length     = size;
-    params.flags      = flags;
-    if (params.flags & UCP_MEM_MAP_FIXED) {
-        params.flags |= UCP_MEM_MAP_ALLOCATE;
-    } else {
-        params.flags &= ~UCP_MEM_MAP_ALLOCATE;
-    }
 
     status = ucp_mem_map(m_entity.ucph(), &params, &m_memh);
     ASSERT_UCS_OK(status);
@@ -764,8 +761,9 @@ ucp_test::mapped_buffer::mapped_buffer(size_t size,
     status = ucp_mem_query(memh(), &mem_attr);
     ASSERT_UCS_OK(status);
 
-    m_ptr    = mem_attr.address;
-    m_length = mem_attr.length;
+    if (flags & UCP_MEM_MAP_FIXED) {
+        init(mem_attr.address, mem_attr.length, mem_type);
+    }
 
     status = ucp_rkey_pack(m_entity.ucph(), memh(), &m_rkey, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
@@ -778,26 +776,6 @@ ucp_test::mapped_buffer::~mapped_buffer()
     ucp_rkey_buffer_release(m_rkey);
     status = ucp_mem_unmap(m_entity.ucph(), m_memh);
     EXPECT_UCS_OK(status);
-}
-
-void *ucp_test::mapped_buffer::ptr() const
-{
-    return m_ptr;
-}
-
-uintptr_t ucp_test::mapped_buffer::addr() const
-{
-    return (uintptr_t)ptr();
-}
-
-size_t ucp_test::mapped_buffer::length() const
-{
-    return m_length;
-}
-
-ucs_memory_type_t ucp_test::mapped_buffer::mem_type() const
-{
-    return m_buffer.mem_type();
 }
 
 ucp_rkey_h ucp_test::mapped_buffer::rkey(const entity& entity) const

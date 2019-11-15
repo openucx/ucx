@@ -228,28 +228,49 @@ uint64_t mem_buffer::pat(uint64_t prev) {
     return (prev << 1) | (__builtin_parityl(prev & polynom) & 1);
 }
 
-mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(NULL), m_size(size), m_allocated(false)
+mem_buffer::mem_buffer() :
+    m_mem_type(UCS_MEMORY_TYPE_HOST), m_ptr(NULL), m_size(0), m_allocated(false)
 {
-    m_ptr       = allocate(size, mem_type);
-    m_allocated = (m_ptr != NULL);
+}
+
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)),
+    m_size(size), m_allocated(true)
+{
 }
 
 mem_buffer::mem_buffer(void *ptr, size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(NULL), m_size(size), m_allocated(false)
+    m_mem_type(UCS_MEMORY_TYPE_HOST), m_ptr(NULL), m_size(0), m_allocated(false)
 {
-    if (ptr == NULL) {
-        m_ptr       = allocate(size, mem_type);
-        m_allocated = (m_ptr != NULL);
-    } else {
-        m_ptr       = ptr;
-    }
+    init(ptr, size, mem_type);
 }
 
-mem_buffer::~mem_buffer() {
+void mem_buffer::init(void *ptr, size_t size, ucs_memory_type_t mem_type)
+{
+    clear();
+    if (ptr == NULL) {
+        m_ptr       = allocate(size, mem_type);
+        m_allocated = true;
+    } else {
+        m_ptr       = ptr;
+        m_allocated = false;
+    }
+    m_mem_type = mem_type;
+    m_size     = size;
+}
+
+void mem_buffer::clear() {
     if (m_allocated) {
         release(ptr(), mem_type());
     }
+
+    m_allocated = false;
+    m_ptr       = NULL;
+    m_mem_type  = UCS_MEMORY_TYPE_HOST;
+}
+
+mem_buffer::~mem_buffer() {
+    clear();
 }
 
 ucs_memory_type_t mem_buffer::mem_type() const {

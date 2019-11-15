@@ -124,7 +124,7 @@ protected:
 
         mapped_buffer buffer(memheap_size, receiver(), GetParam().variant);
 
-        EXPECT_LE(memheap_size, buffer.length());
+        EXPECT_LE(memheap_size, buffer.size());
         memset(buffer.ptr(), 0, memheap_size);
 
         ucs::handle<ucp_rkey_h> rkey(buffer.rkey(sender()), ucp_rkey_destroy);
