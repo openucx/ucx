@@ -227,23 +227,10 @@ protected:
         size_t length() const;
         ucs_memory_type_t mem_type() const;
 
-        void pattern_fill(uint64_t seed);
-        void pattern_check(uint64_t seed);
-        void pattern_fill();
-        void pattern_check();
-
         ucp_rkey_h rkey(const entity& entity) const;
         ucp_mem_h memh() const;
 
-        class ucp_rkey {
-        public:
-            ucp_rkey(ucp_rkey_h rkey) : m_rkey(rkey) {}
-            ~ucp_rkey() {ucp_rkey_destroy(m_rkey);}
-            operator ucp_rkey_h() {return m_rkey;}
-
-        private:
-            ucp_rkey_h m_rkey;
-        };
+        static void *alloc_address(int flags);
 
     private:
         const entity& m_entity;

@@ -736,8 +736,7 @@ ucp_test::mapped_buffer::mapped_buffer(size_t size,
                                        uint64_t seed,
                                        ucs_memory_type_t mem_type) :
     m_entity(entity),
-    m_buffer((flags & UCP_MEM_MAP_FIXED) ? ucs::mmap_fixed_address() : NULL,
-             size, mem_type),
+    m_buffer(alloc_address(flags), size, mem_type),
     m_seed(seed)
 {
     ucp_mem_map_params_t params;
@@ -801,26 +800,6 @@ ucs_memory_type_t ucp_test::mapped_buffer::mem_type() const
     return m_buffer.mem_type();
 }
 
-void ucp_test::mapped_buffer::pattern_fill(uint64_t seed)
-{
-    m_buffer.pattern_fill(ptr(), length(), seed);
-}
-
-void ucp_test::mapped_buffer::pattern_check(uint64_t seed)
-{
-    m_buffer.pattern_check(ptr(), length(), seed);
-}
-
-void ucp_test::mapped_buffer::pattern_fill()
-{
-    m_buffer.pattern_fill(ptr(), length(), m_seed);
-}
-
-void ucp_test::mapped_buffer::pattern_check()
-{
-    m_buffer.pattern_check(ptr(), length(), m_seed);
-}
-
 ucp_rkey_h ucp_test::mapped_buffer::rkey(const entity& entity) const
 {
     ucp_rkey_h rkey;
@@ -834,4 +813,9 @@ ucp_rkey_h ucp_test::mapped_buffer::rkey(const entity& entity) const
 ucp_mem_h ucp_test::mapped_buffer::memh() const
 {
     return m_memh;
+}
+
+void *ucp_test::mapped_buffer::alloc_address(int flags)
+{
+    return (flags & UCP_MEM_MAP_FIXED) ? ucs::mmap_fixed_address() : NULL;
 }

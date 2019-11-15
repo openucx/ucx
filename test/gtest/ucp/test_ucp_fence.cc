@@ -127,7 +127,7 @@ protected:
         EXPECT_LE(memheap_size, buffer.length());
         memset(buffer.ptr(), 0, memheap_size);
 
-        mapped_buffer::ucp_rkey rkey(buffer.rkey(sender()));
+        ucs::handle<ucp_rkey_h> rkey(buffer.rkey(sender()), ucp_rkey_destroy);
 
         run_workers(send1, send2, &sender(), rkey, buffer.ptr(), 1, &error);
 
