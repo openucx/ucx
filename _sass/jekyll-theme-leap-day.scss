@@ -47,6 +47,12 @@ h3 {
   line-height: 24px;
 }
 
+h5 {
+  font-size: 16px;
+  color:#800;
+  font-weight:normal;
+}
+
 a {
   color:#4276b6;
   font-weight:400;
@@ -324,8 +330,11 @@ nav {
       }
 
       &.tag-h2 {
-        font-size: 1.1em;
-
+        font-size: 1.0em;
+        margin-top:-2px;
+        a {
+          color: #334;
+        }
         + .tag-h1 {
           margin-top:10px;
         }

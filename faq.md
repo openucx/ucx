@@ -90,19 +90,16 @@ UCX does not depend on an external runtime environment.
 
 <br/>
 
----
-<br/>
 
-
-# Configuration and tuning
+## Configuration and tuning
 
 #### 1. How can I specify special configuration and tunings for UCX?
 
 UCX takes parameters from specific **environment variables**, which start with the
 prefix `UCX_`.  
 > **IMPORTANT NOTE:** Changing the values of UCX environment variables to non-default
-values may lead to undefined behavior. The environment variables are indented for 
-advanced users, or for specific tunings or workarounds recommended by UCX community.
+may lead to undefined behavior. The environment variables are mostly indented for
+ dvanced users, or for specific tunings or workarounds recommended by UCX community.
 
 #### 2. Where can I see all UCX environment variables?
 
@@ -116,6 +113,71 @@ advanced users, or for specific tunings or workarounds recommended by UCX commun
 <br/>
 
 # Network capabilities
+
+## Selecting networks and transports
+
+#### 1. Which network devices does UCX use?
+
+By default, UCX tries to use all available devices on the machine, and selects 
+best ones based on performance characteristics (bandwidth, latency, NUMA locality, etc).
+Setting `UCX_NET_DEVICES=<dev1>,<dev2>,...` would restrict UCX to using **only** 
+the specified devices.  
+For example:
+* `UCX_NET_DEVICES=eth2` - Use the Ethernet device eth2 for TCP sockets transport. 
+* `UCX_NET_DEVICES=mlx5_2:1` - Use the RDMA device mlx5_2, port 1
+
+Running `ucx_info -d` would show all available devices on the system that UCX can utilize.
+
+#### 2. Which transports does UCX use?
+
+By default, UCX tries to use all available transports, and select best ones 
+according to their performance capabilities and scale (passed as estimated number 
+of endpoints to *ucp_init()* API).   
+For example:
+* On machines with Ethernet devices only, shared memory will be used for intra-node
+communication and TCP sockets for inter-node communication.
+* On machines with RDMA devices, RC transport will be used for small scale, and 
+ DC transport (available with Connect-IB devices and above) will be used for large
+ scale. If DC is not available, UD will be used for large scale.
+* If GPUs are present on the machine, GPU transports will be enabled for detecting
+  memory pointer type and copying to/from GPU memory.  
+
+It's possible to restrict the transports in use by setting `UCX_TLS=<tl1>,<tl2>,...`.
+The list of all transports supported by UCX on the current machine can be generated
+by `ucx_info -d` command.
+> **IMPORTANT NOTE**
+> In some cases restricting the transports can lead to unexpected and undefined behavior:
+> * Using *rc_verbs* or *rc_mlx5* also requires *ud_verbs* or *ud_mlx5* transport for bootstrap.
+> * Applications using GPU memory must also specify GPU transports for detecting and
+>   handling non-host memory.
+
+In addition to the built-in transports it's possible to use aliases which specify multiple transports.  
+
+##### List of main transports and aliases
+<table>
+<tr><td>all</td><td>use all the available transports.</td></tr>
+<tr><td>sm</td><td>all shared memory transports.</td></tr>
+<tr><td>shm</td><td>same as "sm"</td></tr>
+<tr><td>mm</td><td>shared memory transports - without kernel-assisted copy</td></tr>
+<tr><td>ugni</td><td>ugni_rdma and ugni_udt.</td></tr>
+<tr><td>rc</td><td>RC (=reliable connection), "accelerated" transports are used if possible.</td></tr>
+<tr><td>ud</td><td>UD (=unreliable datagram), "accelerated" is used if possible.</td></tr>
+<tr><td>dc</td><td>DC - Mellanox scalable offloaded dynamic connection transport</td></tr>
+<tr><td>rc_x</td><td>Same as "rc", but using accelerated transports only</td></tr>
+<tr><td>rc_v</td><td>Same as "rc", but using Verbs-based transports only</td></tr>
+<tr><td>ud_x</td><td>Same as "ud", but using accelerated transports only</td></tr>
+<tr><td>ud_v</td><td>Same as "ud", but using Verbs-based transports only</td></tr>
+<tr><td>tcp</td><td>TCP over SOCK_STREAM sockets</td></tr>
+<tr><td>self</td><td>Loopback transport to communicate within the same process</td></tr>
+</table>
+ 
+For example:
+- `UCX_TLS=rc` will select RC, UD for bootstrap, and prefer accelerated transports
+- `UCX_TLS=rc,cuda_copy,cuda_ipc` will select RC along with Cuda memory transports.
+
+
+<br/>
+
 
 ## Multi-rail
 
@@ -162,6 +224,12 @@ Setting `UCX_IB_SL=<sl-num>` will make UCX run on the given service level.
 #### 2. How to specify DSCP priority ?
 
 Setting `UCX_IB_TRAFFIC_CLASS=<num>`.
+
+#### 3. How to specify which address to use?
+
+Setting `UCX_IB_GID_INDEX=<num>` would make UCX use the specified GID index on
+the RoCE port. The system command `show_gids` would print all available addresses
+and their indexes. 
 
 ---
 <br/>
