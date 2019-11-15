@@ -187,16 +187,27 @@ Yes.
 
 #### 2. What is the default behavior in a multi-rail environment?
 
-UCX would pick the 2 best network devices and split large messages across them.
-"Best" is determined by network speed and NUMA locality.
+By default UCX would pick the 2 best network devices, and split large 
+messages between the rails. For example, in a 100 MB message - the 1st 50 MB
+would be sent on the 1st device, and the 2nd 50 MB would be send on the 2nd device.
+If the device network speeds are not the same, the split will be proportional to
+their speed ratio.
+
+The devices to use are selected according to best network speed, PCI bandwidth, 
+and NUMA locality.
 
 #### 3. Is it possible to use more than 2 rails?
 
 Yes, by setting `UCX_MAX_RNDV_RAILS=<num-rails>`. Currently up to 4 are supported.
 
-#### 4. How can I disable multi-rail?
+#### 4. Is it possible that each process would just use the closest device?
 
-Set `UCX_MAX_RNDV_RAILS=1`.
+Yes, by `UCX_MAX_RNDV_RAILS=1` each process would use a single network device
+according to NUMA locality.
+
+#### 5. Can I disable multi-rail?
+
+Yes, by setting `UCX_NET_DEVICES=<dev>` to the single device that should be used.
 
 <br/>
 
