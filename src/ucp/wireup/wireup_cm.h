@@ -36,4 +36,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
 void ucp_ep_cm_disconnect(ucp_ep_h ucp_ep);
 
+unsigned ucp_ep_cm_do_disconnect(void *arg);
+
 #endif /* WIREUP_CM_H_ */

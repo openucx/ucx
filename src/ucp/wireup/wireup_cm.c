@@ -207,7 +207,7 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-static unsigned ucp_ep_cm_do_disconnect(void *arg)
+unsigned ucp_ep_cm_do_disconnect(void *arg)
 {
     ucp_ep_h ucp_ep     = (ucp_ep_h)arg;
     ucp_worker_h worker = ucp_ep->worker;
@@ -216,8 +216,6 @@ static unsigned ucp_ep_cm_do_disconnect(void *arg)
     UCS_ASYNC_BLOCK(&worker->async);
 
     ucs_trace_func("ucp_ep = %p, ucp_ep->flags = %xu", ucp_ep, ucp_ep->flags);
-
-    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
@@ -246,6 +244,8 @@ static void ucp_cm_disconnect_cb(uct_ep_h ep, void *arg)
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == ep);
+
+    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     /* invoke the disconnect flow from the main thread */
     uct_worker_progress_register_safe(ucp_ep->worker->uct,

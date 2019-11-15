@@ -805,9 +805,17 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
-                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &req->send.disconnect.prog_id);
+    if (ucp_ep_get_cm_lane(ep) == UCP_NULL_LANE) {
+        uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
+                                          req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &req->send.disconnect.prog_id);
+    } else {
+        ucp_ep_ext_gen(ep)->close_req.req = req;
+        uct_worker_progress_register_safe(ep->worker->uct,
+                                          ucp_ep_cm_do_disconnect, ep,
+                                          UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &req->send.disconnect.prog_id);
+    }
 }
 
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
@@ -838,7 +846,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                 ucs_assert(ucp_ep_flush_state(ep) != NULL);
                 ucs_assert(ucs_queue_is_empty(
                                 &ucp_ep_ext_gen(ep)->flush_state.reqs));
-
                 close_req = ucp_request_get(ep->worker);
                 memset(close_req, 0, sizeof(*close_req));
                 close_req->status  = UCS_OK;
