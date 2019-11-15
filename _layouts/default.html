@@ -1,4 +1,5 @@
 <!doctype html>
+<title>UCX | {{ page.name | remove: ".md" | capitalize }}</title>
 <html lang="{{ site.lang | default: "en-US" }}">
   <head>
     <meta charset="utf-8">
@@ -24,10 +25,11 @@
       <div id="banner">
         <span id="logo"><img src="assets/images/UCX_Logo_930x933.png" height="36px" width="36px"></span>
 		<div class="buttons">
-        <a href="index"        class="button"><strong>Main Page</strong></a>
-        <a href="download" class="button"><strong>Download</strong></a>
-        <a href="running" class="button"><strong>Running</strong></a>
-        <a href="faq"     class="button"><strong>FAQ</strong></a>
+        <a href="index"         class="button"><strong>Main Page</strong></a>
+        <a href="download"      class="button"><strong>Download</strong></a>
+        <a href="running"       class="button"><strong>Running</strong></a>
+        <a href="api/v1.6/html" class="button"><strong>API</strong></a>
+        <a href="faq"           class="button"><strong>FAQ</strong></a>
      	<!--<a href="troubleshoot" class="button"><strong>Troubleshooting</strong></a>-->
         <a href="{{ site.github.repository_url }}" class="button"><strong>View On GitHub</strong></a>
         </div>
