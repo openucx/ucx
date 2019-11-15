@@ -133,6 +133,7 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
 
     // alloc (should work with both sysv and xpmem
     size = sizeof(unsigned) * UCS_MBYTE;
+    rva  = NULL;
     status = uct_md_mem_alloc(md(), &size, (void **)&rva,
                               UCT_MD_MEM_ACCESS_ALL,
                               "test", &memh);
@@ -176,11 +177,13 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     //
     status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)(rva-1),
                           (void **)&lva);
-    EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
+    UCS_TEST_MESSAGE << "rkey_ptr of invalid address returned "
+                     << ucs_status_string(status);
 
     status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva+size,
                           (void **)&lva);
-    EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
+    UCS_TEST_MESSAGE << "rkey_ptr of invalid address returned "
+                     << ucs_status_string(status);
 
     free(rkey_buffer);
     uct_md_mem_free(md(), memh);
@@ -200,6 +203,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             continue;
         }
 
+        address = NULL;
         status = uct_md_mem_alloc(md(), &size, &address,
                                   UCT_MD_MEM_ACCESS_ALL, "test", &memh);
         EXPECT_GT(size, 0ul);
@@ -373,6 +377,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     uct_mem_h memh;
 
     orig_size = size = 128 * UCS_MBYTE;
+    address   = NULL;
 
     status = uct_md_mem_alloc(md(), &size, &address,
                               UCT_MD_MEM_FLAG_NONBLOCK|

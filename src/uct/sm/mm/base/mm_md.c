@@ -35,10 +35,9 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
-    uct_mm_component_t *mmc = ucs_derived_of(component, uct_mm_component_t);
     ucs_status_t status;
 
-    status = mmc->md_ops->query();
+    status = uct_mm_mdc_mapper_ops(component)->query();
     switch (status) {
     case UCS_OK:
         return uct_md_query_single_md_resource(component, resources_p,
@@ -50,89 +49,20 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
     }
 }
 
-ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, const char *alloc_name,
-                              uct_mem_h *memh_p)
+ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p)
 {
-    ucs_status_t status;
     uct_mm_seg_t *seg;
 
-    seg = ucs_calloc(1, sizeof(*seg), "mm_seg");
-    if (NULL == seg) {
-        ucs_error("Failed to allocate memory for mm segment");
+    seg = ucs_malloc(sizeof(*seg), "mm_seg");
+    if (seg == NULL) {
+        ucs_error("failed to allocate mm segment");
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_mm_md_mapper_call(md, alloc, md, length_p, UCS_TRY, flags,
-                                   alloc_name, address_p, &seg->seg_id,
-                                   &seg->path);
-    if (status != UCS_OK) {
-        ucs_free(seg);
-        return status;
-    }
-
-    seg->length  = *length_p;
-    seg->address = *address_p;
-    *memh_p      = seg;
-
-    ucs_debug("mm allocated address %p length %zu mmid %"PRIu64,
-              seg->address, seg->length, seg->seg_id);
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh)
-{
-    uct_mm_seg_t *seg = memh;
-    ucs_status_t status;
-
-    status = uct_mm_md_mapper_call(md, free, seg->address, seg->seg_id,
-                                   seg->length, seg->path);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_free(seg);
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
-                            unsigned flags, uct_mem_h *memh_p)
-{
-    ucs_status_t status;
-    uct_mm_seg_t *seg;
-
-    seg = ucs_calloc(1, sizeof(*seg), "mm_seg");
-    if (NULL == seg) {
-        ucs_error("Failed to allocate memory for mm segment");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    status = uct_mm_md_mapper_call(md, reg, address, length, &seg->seg_id);
-    if (status != UCS_OK) {
-        ucs_free(seg);
-        return status;
-    }
-
-    seg->length  = length;
     seg->address = address;
-    *memh_p      = seg;
-
-    ucs_debug("mm registered address %p length %zu mmid %"PRIu64,
-              address, length, seg->seg_id);
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh)
-{
-    uct_mm_seg_t *seg = memh;
-    ucs_status_t status;
-
-    status = uct_mm_md_mapper_call(md, dereg, seg->seg_id);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_free(seg);
+    seg->length  = length;
+    seg->seg_id  = 0;
+    *seg_p       = seg;
     return UCS_OK;
 }
 
@@ -155,83 +85,12 @@ void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, int support_alloc)
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
 }
 
-ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
-{
-    uct_mm_packed_rkey_t *rkey = rkey_buffer;
-    uct_mm_seg_t *seg = memh;
-
-    rkey->mmid      = seg->seg_id;
-    rkey->owner_ptr = (uintptr_t)seg->address;
-    rkey->length    = seg->length;
-
-    if (seg->path != NULL) {
-        strcpy(rkey->path, seg->path);
-    }
-
-    ucs_trace("packed rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
-              rkey->mmid, rkey->owner_ptr);
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_rkey_unpack(uct_component_t *component,
-                                const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                void **handle_p)
-{
-    /* user is responsible to free rkey_buffer */
-    const uct_mm_packed_rkey_t *rkey = rkey_buffer;
-    uct_mm_remote_seg_t *mm_desc;
-    ucs_status_t status;
-
-    ucs_trace("unpacking rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
-              rkey->mmid, rkey->owner_ptr);
-
-    mm_desc = ucs_malloc(sizeof(*mm_desc), "mm_desc");
-    if (mm_desc == NULL) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    status = uct_mm_mdc_mapper_ops(component)->attach(rkey->mmid, rkey->length,
-                                                      (void *)rkey->owner_ptr,
-                                                      &mm_desc->address,
-                                                      &mm_desc->cookie,
-                                                      rkey->path);
-    if (status != UCS_OK) {
-        ucs_free(mm_desc);
-        return status;
-    }
-
-    mm_desc->length = rkey->length;
-    mm_desc->mmid   = rkey->mmid;
-    /* store the offset of the addresses, this can be used directly to translate
-     * the remote VA to local VA of the attached segment */
-    *handle_p = mm_desc;
-    *rkey_p   = (uintptr_t)mm_desc->address - rkey->owner_ptr;
-    return UCS_OK;
-}
-
 ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p)
 {
-    uct_mm_remote_seg_t *mm_desc = handle;
-
     /* rkey stores offset from the remote va */
     *laddr_p = UCS_PTR_BYTE_OFFSET(raddr, (ptrdiff_t)rkey);
-    if ((*laddr_p < mm_desc->address) ||
-        (*laddr_p >= UCS_PTR_BYTE_OFFSET(mm_desc->address, mm_desc->length))) {
-       return UCS_ERR_INVALID_ADDR;
-    }
     return UCS_OK;
-}
-
-ucs_status_t uct_mm_rkey_release(uct_component_t *component, uct_rkey_t rkey,
-                                 void *handle)
-{
-    ucs_status_t status;
-    uct_mm_remote_seg_t *mm_desc = handle;
-
-    status = uct_mm_mdc_mapper_ops(component)->detach(mm_desc);
-    ucs_free(mm_desc);
-    return status;
 }
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
@@ -264,6 +123,7 @@ ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &mmc->md_ops->super;
     md->super.component = &mmc->super;
+    md->iface_addr_len  = mmc->md_ops->iface_addr_length(md);
 
     /* cppcheck-suppress autoVariables */
     *md_p = &md->super;

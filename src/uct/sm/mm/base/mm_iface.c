@@ -64,12 +64,13 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
                                              uct_iface_addr_t *addr)
 {
     uct_mm_iface_t      *iface      = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    uct_mm_md_t         *md         = ucs_derived_of(iface->super.super.md,
+                                                     uct_mm_md_t);
     uct_mm_iface_addr_t *iface_addr = (void*)addr;
     uct_mm_seg_t        *seg        = iface->recv_fifo_mem.memh;
 
     iface_addr->fifo_seg_id = seg->seg_id;
-    iface_addr->vaddr       = (uintptr_t)seg->address;
-    return UCS_OK;
+    return uct_mm_md_mapper_ops(md)->iface_addr_pack(md, iface_addr + 1);
 }
 
 void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
@@ -96,6 +97,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                        uct_iface_attr_t *iface_attr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    uct_mm_md_t    *md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
@@ -124,7 +126,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.align_mtu        = iface_attr->cap.am.opt_zcopy_align;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t);
+    iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t) +
+                                          md->iface_addr_len;
     iface_attr->device_addr_len         = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
@@ -158,8 +161,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->bandwidth.dedicated     = iface->super.config.bandwidth;
     iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 10e-9; /* 10 ns */
-    iface_attr->priority                = uct_mm_iface_mapper_call(iface,
-                                                                   get_priority);
+    iface_attr->priority                = 0;
+
     return UCS_OK;
 }
 
@@ -354,7 +357,6 @@ static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,
     if (seg->length > UINT_MAX) {
         ucs_error("mm: shared memory segment length cannot exceed %u", UINT_MAX);
         desc->info.seg_id   = UINT64_MAX;
-        desc->info.seg_va   = 0;
         desc->info.seg_size = 0;
         desc->info.offset   = 0;
         return;
