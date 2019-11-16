@@ -24,6 +24,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
+CUDA_MODULE="dev/cuda10.1"
+GDRCOPY_MODULE="dev/gdrcopy"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -103,15 +105,15 @@ try_load_cuda_env() {
 	have_cuda=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		have_cuda=yes
-		module_load dev/cuda    || have_cuda=no
-		module_load dev/gdrcopy || have_cuda=no
+		module_load $CUDA_MODULE    || have_cuda=no
+		module_load $GDRCOPY_MODULE || have_cuda=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
 
 unload_cuda_env() {
-	module unload dev/cuda
-	module unload dev/gdrcopy
+	module unload $CUDA_MODULE
+	module unload $GDRCOPY_MODULE
 }
 
 #
@@ -455,9 +457,9 @@ build_ugni() {
 #
 build_cuda() {
 	echo 1..1 > build_cuda.tap
-	if module_load dev/cuda
+	if module_load $CUDA_MODULE
 	then
-		if module_load dev/gdrcopy
+		if module_load $GDRCOPY_MODULE
 		then
 			echo "==== Build with enable cuda, gdr_copy ===="
 			../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
@@ -469,7 +471,7 @@ build_cuda() {
 			$MAKEP clean
 			$MAKEP
 			$MAKEP distclean
-			module unload dev/gdrcopy
+			module unload $GDRCOPY_MODULE
 		fi
 
 		echo "==== Build with enable cuda, w/o gdr_copy ===="
@@ -477,7 +479,7 @@ build_cuda() {
 		$MAKEP clean
 		$MAKEP
 
-		module unload dev/cuda
+		module unload $CUDA_MODULE
 
 		echo "==== Running test_link_map with cuda build but no cuda module ===="
 		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
@@ -488,6 +490,7 @@ build_cuda() {
 		echo "==== Not building with cuda flags ===="
 		echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
 	fi
+	unload_cuda_env
 }
 
 #
@@ -865,34 +868,58 @@ run_ucx_perftest() {
 	done
 
 	# run cuda tests if cuda module was loaded and GPU is found
-	if [ "X$have_cuda" == "Xyes" ] && (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
+	if [ "X$have_cuda" == "Xyes" ]
 	then
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		tls_list="all "
+		gdr_options="n "
+		if (lsmod | grep -q "nv_peer_mem")
+		then
+			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			tls_list+="rc,cuda_copy "
+			gdr_options+="y "
+		fi
+
+		if (lsmod | grep -q "gdrdrv")
+		then
+			echo "GDRCopy module (gdrdrv) is present..."
+			tls_list+="rc,cuda_copy,gdr_copy "
+		fi
+
+		if [ $num_gpus -gt 1 ]; then
+			export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		fi
+
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
 		echo "==== Running ucx_perf with cuda memory===="
 
-		for UCX_TLS in rc,cuda_copy,gdr_copy rc,cuda_copy
+		for tls in $tls_list
 		do
-			for UCX_MEMTYPE_CACHE in y n
+			for memtype_cache in y n
 			do
-				if [ $with_mpi -eq 1 ]
-				then
-					$MPIRUN -np 2 -x UCX_TLS -x UCX_MEMTYPE_CACHE $AFFINITY "$ucx_perftest" "$ucp_test_args"
-				else
-					export UCX_TLS
-					export UCX_MEMTYPE_CACHE
-					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-					unset UCX_TLS
-					unset UCX_MEMTYPE_CACHE
-				fi
+				for gdr in $gdr_options
+				do
+					if [ $with_mpi -eq 1 ]
+					then
+						$MPIRUN -np 2 -x UCX_TLS=$tls -x UCX_MEMTYPE_CACHE=$memtype_cache \
+									 -x UCX_IB_GPU_DIRECT_RDMA=$gdr $AFFINITY $ucx_perftest $ucp_test_args
+					else
+						export UCX_TLS=$tls
+						export UCX_MEMTYPE_CACHE=$memtype_cache
+						export UCX_IB_GPU_DIRECT_RDMA=$gdr
+						run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+						unset UCX_TLS
+						unset UCX_MEMTYPE_CACHE
+						unset UCX_IB_GPU_DIRECT_RDMA
+					fi
+				done
 			done
 		done
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY "$ucx_perftest" "$ucp_test_args"
-			$MPIRUN -np 2 $AFFINITY "$ucx_perftest" "$ucp_test_args"
+			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
 			export UCX_TLS=self,mm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
@@ -1395,12 +1422,17 @@ run_tests() {
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
+	# test cuda build if cuda modules available
+	do_distributed_task 2 4 build_cuda
+
+	# load cuda env only if GPU available for remaining tests
+	try_load_cuda_env
+
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 0 4 build_pgi
 	do_distributed_task 1 4 build_debug
 	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
-	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
