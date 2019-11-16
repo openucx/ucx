@@ -890,6 +890,7 @@ run_ucx_perftest() {
 		fi
 
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
+		sed -s 's,-n [0-9]*,-n 10 -w 1,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
 
 		echo "==== Running ucx_perf with cuda memory===="
 
