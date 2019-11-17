@@ -291,7 +291,10 @@ public class UcpEndpointTest {
         });
 
         try {
-            Thread.sleep(50);
+            int count = 0;
+            while ((++count < 100) && !success.get()) {
+                Thread.sleep(50);
+            }
         } catch (InterruptedException e) {
 
         }
