@@ -10,12 +10,23 @@
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/type/init_once.h>
 #include <ucs/debug/log.h>
 
 
 typedef struct uct_xpmem_md_config {
     uct_mm_md_config_t      super;
 } uct_xpmem_md_config_t;
+
+typedef struct uct_xpmem_iface_addr {
+    xpmem_segid_t           xsegid;
+} UCS_S_PACKED uct_xpmem_iface_addr_t;
+
+typedef struct uct_xpmem_packed_rkey {
+    xpmem_segid_t           xsegid;
+    uintptr_t               address;
+    size_t                  length;
+} UCS_S_PACKED uct_xpmem_packed_rkey_t;
 
 static ucs_config_field_t uct_xpmem_md_config_table[] = {
   {"MM_", "", NULL,
@@ -31,109 +42,118 @@ static ucs_status_t uct_xpmem_query()
 
     version = xpmem_version();
     if (version < 0) {
-        ucs_debug("Failed to query XPMEM version %d, %m", version);
+        ucs_debug("xpmem_version() returned %d (%m), xpmem is unavailable",
+                  version);
         return UCS_ERR_UNSUPPORTED;
     }
+
+    ucs_debug("xpmem version: %d", version);
     return UCS_OK;
 }
 
 static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    uct_mm_md_query(md, md_attr, 1);
+    uct_mm_md_query(md, md_attr, 0);
 
     md_attr->cap.flags         |= UCT_MD_FLAG_REG;
-    md_attr->reg_cost.overhead  = 1000.0e-9;
-    md_attr->reg_cost.growth    = 0.007e-9;
+    md_attr->reg_cost.overhead  = 60.0e-9;
+    md_attr->reg_cost.growth    = 0;
     md_attr->cap.max_reg        = ULONG_MAX;
     md_attr->cap.reg_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->rkey_packed_size   = sizeof(uct_mm_packed_rkey_t);
+    md_attr->rkey_packed_size   = sizeof(uct_xpmem_packed_rkey_t);
 
     return UCS_OK;
 }
 
-static uint8_t uct_xpmem_get_priority()
+static ucs_status_t uct_xpmem_get_global_xsegid(xpmem_segid_t *xsegid_p)
 {
-    return 0;
-}
+    static ucs_init_once_t init_once   = UCS_INIT_ONCE_INITIALIZER;
+    static xpmem_segid_t global_xsegid = -1;
 
-static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_p)
-{
-    xpmem_segid_t segid;
-    void *start, *end;
+    if (ucs_unlikely(global_xsegid == -1)) {
+        /* double-checked locking */
+        UCS_INIT_ONCE(&init_once) {
+            if (global_xsegid == -1) {
+                global_xsegid = xpmem_make(0, XPMEM_MAXADDR_SIZE,
+                                           XPMEM_PERMIT_MODE, (void*)0600);
+                VALGRIND_MAKE_MEM_DEFINED(&global_xsegid, sizeof(global_xsegid));
+            }
+        }
 
-    start = ucs_align_down_pow2_ptr(address, ucs_get_page_size());
-    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, size),
-                                  ucs_get_page_size());
-    ucs_assert_always(start <= end);
+        if (global_xsegid < 0) {
+            ucs_error("failed to register address space xpmem: %m");
+            return UCS_ERR_IO_ERROR;
+        }
 
-    segid = xpmem_make(start, UCS_PTR_BYTE_DIFF(start, end), XPMEM_PERMIT_MODE,
-                       (void*)0666);
-    VALGRIND_MAKE_MEM_DEFINED(&segid, sizeof(segid));
-    if (segid < 0) {
-        ucs_error("Failed to register %p..%p with xpmem: %m",
-                  start, end);
-        return UCS_ERR_IO_ERROR;
+        ucs_debug("xpmem registered global segment id 0x%llx", global_xsegid);
     }
 
-    ucs_trace("xpmem registered %p..%p segment 0x%llx", start, end, segid);
-    *mmid_p = segid;
+    *xsegid_p = global_xsegid;
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
+static ucs_status_t uct_xmpem_mem_reg(uct_md_h md, void *address, size_t length,
+                                      unsigned flags, uct_mem_h *memh_p)
 {
-    int ret;
+    ucs_status_t status;
+    uct_mm_seg_t *seg;
 
-    ret = xpmem_remove(mmid);
-    if (ret < 0) {
-        /* No error since there a chance that it already was released
-         * or deregistered */
-        ucs_debug("Failed to remove xpmem segment 0x%"PRIx64": %m", mmid);
+    status = uct_mm_seg_new(address, length, &seg);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ucs_trace("xpmem removed segment 0x%"PRIx64, mmid);
+    seg->seg_id  = (uintptr_t)address; /* to be used by mem_attach */
+    *memh_p      = seg;
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
-                                     void *remote_address, void **local_address,
-                                     uint64_t *cookie, const char *path)
+static ucs_status_t uct_xmpem_mem_dereg(uct_md_h md, uct_mem_h memh)
+{
+    uct_mm_seg_t *seg = memh;
+    ucs_free(seg);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_xpmem_mem_attach_common(xpmem_segid_t xsegid, uintptr_t remote_address,
+                            size_t length, uct_mm_remote_seg_t *rseg)
 {
     struct xpmem_addr addr;
+    uintptr_t start, end;
     ucs_status_t status;
-    ptrdiff_t offset;
     void *address;
 
-    addr.offset = 0;
-    addr.apid   = xpmem_get(mmid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
+    start = ucs_align_down_pow2(remote_address,          ucs_get_page_size());
+    end   = ucs_align_up_pow2  (remote_address + length, ucs_get_page_size());
+
+    addr.offset = start;
+    addr.apid   = xpmem_get(xsegid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
     VALGRIND_MAKE_MEM_DEFINED(&addr.apid, sizeof(addr.apid));
     if (addr.apid < 0) {
-        ucs_error("Failed to acquire xpmem segment 0x%"PRIx64": %m", mmid);
+        ucs_error("Failed to acquire xpmem segment 0x%llx: %m", xsegid);
         status = UCS_ERR_IO_ERROR;
         goto err_xget;
     }
 
-    ucs_trace("xpmem acquired segment 0x%"PRIx64" apid 0x%llx remote_address %p",
-              mmid, addr.apid, remote_address);
+    ucs_trace("xpmem acquired segment 0x%llx apid 0x%llx remote_address %p",
+              xsegid, addr.apid, (void*)remote_address);
 
-    offset  = ((uintptr_t)remote_address) % ucs_get_page_size();
-    address = xpmem_attach(addr, length + offset, NULL);
+    address = xpmem_attach(addr, end - start, NULL);
     VALGRIND_MAKE_MEM_DEFINED(&address, sizeof(address));
     if (address == MAP_FAILED) {
-        ucs_error("Failed to attach xpmem segment 0x%"PRIx64" apid 0x%llx "
-                  "with length %zu: %m", mmid, addr.apid, length);
+        ucs_error("Failed to attach xpmem segment 0x%llx apid 0x%llx "
+                  "with length %zu: %m", xsegid, addr.apid, length);
         status = UCS_ERR_IO_ERROR;
         goto err_xattach;
     }
 
-    VALGRIND_MAKE_MEM_DEFINED(address + offset, length);
+    rseg->address = UCS_PTR_BYTE_OFFSET(address, remote_address - start);
+    rseg->cookie  = (void*)addr.apid;
+    VALGRIND_MAKE_MEM_DEFINED(rseg->address, length);
 
-    *local_address = UCS_PTR_BYTE_OFFSET(address, offset);
-    *cookie        = addr.apid;
-
-    ucs_trace("xpmem attached segment 0x%"PRIx64" apid 0x%llx %p..%p at %p (+%zd)",
-              mmid, addr.apid, remote_address,
-              UCS_PTR_BYTE_OFFSET(remote_address, length), address, offset);
+    ucs_trace("xpmem attached segment 0x%llx apid 0x%llx 0x%lx..0x%lx at %p",
+              xsegid, addr.apid, start, end, address);
     return UCS_OK;
 
 err_xattach:
@@ -142,114 +162,134 @@ err_xget:
     return status;
 }
 
-static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
+static void uct_xpmem_mem_detach_common(const uct_mm_remote_seg_t *rseg)
 {
-    xpmem_apid_t apid = mm_desc->cookie;
+    xpmem_apid_t apid = (uintptr_t)rseg->cookie;
     void *address;
     int ret;
 
-    address = ucs_align_down_pow2_ptr(mm_desc->address, ucs_get_page_size());
+    address = ucs_align_down_pow2_ptr(rseg->address, ucs_get_page_size());
 
     ucs_trace("xpmem detaching address %p", address);
     ret = xpmem_detach(address);
     if (ret < 0) {
         ucs_error("Failed to xpmem_detach: %m");
-        return UCS_ERR_IO_ERROR;
+        return;
     }
-
-    VALGRIND_MAKE_MEM_UNDEFINED(mm_desc->address, mm_desc->length);
 
     ucs_trace("xpmem releasing segment apid 0x%llx", apid);
     ret = xpmem_release(apid);
     if (ret < 0) {
         ucs_error("Failed to release xpmem segment apid 0x%llx", apid);
-        return UCS_ERR_IO_ERROR;
+        return;
     }
+}
+
+static ucs_status_t
+uct_xpmem_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
+{
+    uct_mm_seg_t                    *seg = memh;
+    uct_xpmem_packed_rkey_t *packed_rkey = rkey_buffer;
+    ucs_status_t status;
+
+    ucs_assert((uintptr_t)seg->address == seg->seg_id); /* sanity */
+
+    status = uct_xpmem_get_global_xsegid(&packed_rkey->xsegid);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    packed_rkey->address = (uintptr_t)seg->address;
+    packed_rkey->length  = seg->length;
+    return UCS_OK;
+}
+
+static size_t uct_xpmem_iface_addr_length(uct_mm_md_t *md)
+{
+    return sizeof(uct_xpmem_iface_addr_t);
+}
+
+static ucs_status_t uct_xpmem_iface_addr_pack(uct_mm_md_t *md, void *buffer)
+{
+    uct_xpmem_iface_addr_t *xpmem_iface_addr = buffer;
+
+    return uct_xpmem_get_global_xsegid(&xpmem_iface_addr->xsegid);
+}
+
+static ucs_status_t uct_xpmem_mem_attach(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
+                                         size_t length, const void *iface_addr,
+                                         uct_mm_remote_seg_t *rseg)
+{
+    const uct_xpmem_iface_addr_t *xpmem_iface_addr = iface_addr;
+
+    ucs_assert(xpmem_iface_addr != NULL);
+    return uct_xpmem_mem_attach_common(xpmem_iface_addr->xsegid,
+                                       seg_id /* remote_address */, length, rseg);
+}
+
+static void uct_xpmem_mem_detach(uct_mm_md_t *md,
+                                 const uct_mm_remote_seg_t *rseg)
+{
+    uct_xpmem_mem_detach_common(rseg);
+}
+
+static ucs_status_t
+uct_xpmem_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                      uct_rkey_t *rkey_p, void **handle_p)
+{
+    const uct_xpmem_packed_rkey_t *packed_rkey = rkey_buffer;
+    uct_mm_remote_seg_t *rseg;
+    ucs_status_t status;
+
+    rseg = ucs_malloc(sizeof(*rseg), "xpmem_rseg");
+    if (rseg == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status = uct_xpmem_mem_attach_common(packed_rkey->xsegid,
+                                         packed_rkey->address,
+                                         packed_rkey->length,
+                                         rseg);
+    if (status != UCS_OK) {
+        ucs_free(rseg);
+        return status;
+    }
+
+    uct_mm_md_make_rkey(rseg->address, packed_rkey->address, rkey_p);
+    *handle_p = rseg;
 
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
-                                    ucs_ternary_value_t hugetlb,
-                                    unsigned md_map_flags, const char *alloc_name,
-                                    void **address_p, uct_mm_id_t *mmid_p,
-                                    const char **path_p)
+static ucs_status_t
+uct_xpmem_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle)
 {
-    ucs_status_t status;
-    int mmap_flags;
+    uct_mm_remote_seg_t *rseg = handle;
 
-    if (0 == *length_p) {
-        ucs_error("Unexpected length %zu", *length_p);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
-    }
-
-    if (md_map_flags & UCT_MD_MEM_FLAG_FIXED) {
-        mmap_flags = MAP_FIXED;
-    } else {
-        *address_p = NULL;
-        mmap_flags = 0;
-    }
-
-    /* TBD: any ideas for better allocation */
-    status = ucs_mmap_alloc(length_p, address_p, mmap_flags UCS_MEMTRACK_VAL);
-    if (status != UCS_OK) {
-        ucs_error("Failed to allocate %zu bytes of memory for %s", *length_p,
-                  alloc_name);
-        goto out;
-    }
-
-    ucs_trace("xpmem allocated address %p length %zu for %s", *address_p,
-              *length_p, alloc_name);
-
-    status = uct_xmpem_reg(*address_p, *length_p, mmid_p);
-    if (UCS_OK != status) {
-        ucs_free(*address_p);
-        goto out;
-    }
-
-    VALGRIND_MAKE_MEM_DEFINED(*address_p, *length_p);
-    status     = UCS_OK;
-
-out:
-    return status;
-}
-
-static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mmid, size_t length,
-                                   const char *path)
-{
-    ucs_status_t status;
-
-    status = uct_xpmem_dereg(mmid);
-    if (UCS_OK != status) {
-        return status;
-    }
-
-    return ucs_mmap_free(address, length);
+    uct_xpmem_mem_detach_common(rseg);
+    ucs_free(rseg);
+    return UCS_OK;
 }
 
 static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
     .super = {
         .close                  = uct_mm_md_close,
         .query                  = uct_xpmem_md_query,
-        .mem_alloc              = uct_mm_mem_alloc,
-        .mem_free               = uct_mm_mem_free,
+        .mem_alloc              = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
+        .mem_free               = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
-        .mem_reg                = uct_mm_mem_reg,
-        .mem_dereg              = uct_mm_mem_dereg,
-        .mkey_pack              = uct_mm_mkey_pack,
+        .mem_reg                = uct_xmpem_mem_reg,
+        .mem_dereg              = uct_xmpem_mem_dereg,
+        .mkey_pack              = uct_xpmem_mkey_pack,
         .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
         .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     },
-    .query                      = uct_xpmem_query,
-    .get_priority               = uct_xpmem_get_priority,
-    .reg                        = uct_xmpem_reg,
-    .dereg                      = uct_xpmem_dereg,
-    .alloc                      = uct_xpmem_alloc,
-    .attach                     = uct_xpmem_attach,
-    .detach                     = uct_xpmem_detach,
-    .free                       = uct_xpmem_free
+   .query                       = uct_xpmem_query,
+   .iface_addr_length           = uct_xpmem_iface_addr_length,
+   .iface_addr_pack             = uct_xpmem_iface_addr_pack,
+   .mem_attach                  = uct_xpmem_mem_attach,
+   .mem_detach                  = uct_xpmem_mem_detach
 };
 
-UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_mm_rkey_unpack,
-                 uct_mm_rkey_release, "XPMEM_")
+UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
+                 uct_xpmem_rkey_release, "XPMEM_")

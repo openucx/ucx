@@ -1338,7 +1338,7 @@ static UCS_F_NOINLINE void
 ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
                               ucp_ep_h ep, unsigned ep_init_flags,
                               const ucp_unpacked_address_t *remote_address,
-                              uint64_t tl_bitmap)
+                              uint64_t tl_bitmap, int show_error)
 {
     select_params->ep            = ep;
     select_params->ep_init_flags = ep_init_flags;
@@ -1346,8 +1346,7 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
     select_params->address       = remote_address;
     select_params->allow_am      =
             ucp_wireup_allow_am_emulation_layer(ep_init_flags);
-    /* If we are using reduced TL bitmap, don't show errors */
-    select_params->show_error    = (tl_bitmap == UINT64_MAX);
+    select_params->show_error    = show_error;
 }
 
 static UCS_F_NOINLINE ucs_status_t
@@ -1529,8 +1528,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags, uint64_t tl_bitmap,
 
     if (scalable_tl_bitmap) {
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                      remote_address,
-                                      scalable_tl_bitmap);
+                                      remote_address, scalable_tl_bitmap, 0);
         status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                          &select_ctx);
         if (status == UCS_OK) {
@@ -1543,7 +1541,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags, uint64_t tl_bitmap,
     }
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                  remote_address, tl_bitmap);
+                                  remote_address, tl_bitmap, 1);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      &select_ctx);
     if (status != UCS_OK) {
@@ -1574,7 +1572,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_select_params_t select_params;
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                  remote_address, UINT64_MAX);
+                                  remote_address, UINT64_MAX, 1);
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags);
     return ucp_wireup_select_transport(&select_params, &criteria,
                                        UINT64_MAX, UINT64_MAX, UINT64_MAX,

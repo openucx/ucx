@@ -21,6 +21,21 @@ typedef struct uct_ib_mlx5_dbrec_page {
     struct mlx5dv_devx_umem *mem;
 } uct_ib_mlx5_dbrec_page_t;
 
+static int uct_ib_mlx5_has_roce_port(uct_ib_device_t *dev)
+{
+    int port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports;
+         port_num++)
+    {
+        if (uct_ib_device_is_port_roce(dev, port_num)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
 
 #if HAVE_DEVX
 
@@ -185,6 +200,11 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md, void *cap)
     void *odp;
     int ret;
 
+    if (uct_ib_mlx5_has_roce_port(&md->super.dev)) {
+        ucs_debug("%s: disable ODP on RoCE", uct_ib_device_name(&md->super.dev));
+        goto no_odp;
+    }
+
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
         goto no_odp;
     }
@@ -286,7 +306,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     dev->ibv_context = ctx;
     md->super.config = md_config->ext;
 
-    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -586,7 +606,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
 
-    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -596,7 +616,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
+    if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr) &&
+        !uct_ib_mlx5_has_roce_port(dev)) {
         dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 

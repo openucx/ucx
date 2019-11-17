@@ -44,7 +44,8 @@ enum {
 
 #define uct_mm_iface_mapper_call(_iface, _func, ...) \
     ({ \
-        uct_mm_md_mapper_call((_iface)->super.super.md, _func, ## __VA_ARGS__); \
+        uct_mm_md_t *md = ucs_derived_of((_iface)->super.super.md, uct_mm_md_t); \
+        uct_mm_md_mapper_call(md, _func, ## __VA_ARGS__); \
     })
 
 
@@ -69,8 +70,7 @@ typedef struct uct_mm_iface_config {
  */
 typedef struct uct_mm_iface_addr {
     uct_mm_seg_id_t          fifo_seg_id;     /* Shared memory identifier of FIFO */
-    uintptr_t                vaddr;           /* Shared memory FIFO address,
-                                                 to be removed */
+    /* mapper-specific iface address follows */
 } UCS_S_PACKED uct_mm_iface_addr_t;
 
 
@@ -96,8 +96,6 @@ typedef struct uct_mm_fifo_ctl {
  */
 typedef struct uct_mm_desc_info {
     uct_mm_seg_id_t         seg_id;           /* shared memory segment id */
-    uintptr_t               seg_va;    /* shared memory segment base address,
-                                                 to be removed */
     unsigned                seg_size;         /* size of the shared memory segment */
     unsigned                offset;           /* offset inside the shared memory
                                                  segment */
@@ -166,7 +164,6 @@ typedef struct uct_mm_iface {
 
     size_t                  rx_headroom;
     ucs_arbiter_t           arbiter;
-    const char              *path;            /* path to the backing file (for 'posix') */
     uct_recv_desc_t         release_desc;
 
     struct {

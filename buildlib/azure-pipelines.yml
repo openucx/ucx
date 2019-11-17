@@ -30,7 +30,7 @@ stages:
               for sha1 in `git log $range --format="%h"`
               do
                   title=`git log -1 --format="%s" $sha1`
-                  if echo $title | grep -qP '^Merge |^[A-Z/_]*: \w'
+                  if echo $title | grep -qP '^Merge |^[0-9A-Z/_]*: \w'
                   then
                       echo "Good commit title: '$title'"
                   else
@@ -119,3 +119,18 @@ stages:
               gcc -v
               make -s -j `nproc`
             displayName: Build for $(CONTAINER)
+
+      # Test RPM build
+      - job: build_rpm
+        displayName: build tarball and source rpm
+        container: fedora
+        steps:
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              gcc --version
+              ./contrib/configure-release
+              ./contrib/buildrpm.sh -s -t -b
+            displayName: Build tarball

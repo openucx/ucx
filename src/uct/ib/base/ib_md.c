@@ -1534,7 +1534,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
-    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
         goto err_free_context;
     }

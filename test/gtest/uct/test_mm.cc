@@ -6,6 +6,7 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/sm/mm/base/mm_md.h>
 #include <ucs/time/time.h>
 }
 #include "uct_p2p_test.h"
@@ -139,6 +140,31 @@ public:
             << "ptr=" << ptr << " attach_ptr=" << attach_ptr;
 
         UCS_TEST_MESSAGE <<  std::hex << *(uint64_t*)attach_ptr;
+   }
+
+    uct_mm_md_t *md(entity *e) {
+        return ucs_derived_of(e->md(), uct_mm_md_t);
+    }
+
+    void test_attach(void *ptr, uct_mem_h memh, size_t size)
+    {
+        uct_mm_seg_t *seg = (uct_mm_seg_t*)memh;
+        ucs_status_t status;
+
+        size_t iface_addr_len = uct_mm_md_mapper_call(md(m_e1), iface_addr_length);
+        std::vector<uint8_t> iface_addr(iface_addr_len);
+
+        status = uct_mm_md_mapper_call(md(m_e1), iface_addr_pack, &iface_addr[0]);
+        ASSERT_UCS_OK(status);
+
+        uct_mm_remote_seg_t rseg;
+        status = uct_mm_md_mapper_call(md(m_e2), mem_attach, seg->seg_id, size,
+                                       &iface_addr[0], &rseg);
+        ASSERT_UCS_OK(status);
+
+        test_attach_ptr(ptr, rseg.address, 0xdeadbeef11111);
+
+        uct_mm_md_mapper_call(md(m_e2), mem_detach, &rseg);
     }
 
     void test_rkey(void *ptr, uct_mem_h memh, size_t size)
@@ -161,6 +187,12 @@ public:
                         0xdeadbeef22222);
 
         uct_rkey_release(GetParam()->component, &rkey_ob);
+    }
+
+    void test_memh(void *ptr, uct_mem_h memh, size_t size) {
+        test_attach(ptr, memh, size);
+        test_attach(ptr, memh, size);
+        test_rkey(ptr, memh, size);
     }
 
 protected:
@@ -207,7 +239,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
                               UCT_MD_MEM_ACCESS_ALL, "test_mm", &memh);
     ASSERT_UCS_OK(status);
 
-    test_rkey(address, memh, size);
+    test_memh(address, memh, size);
 
     status = uct_md_mem_free(m_e1->md(), memh);
     ASSERT_UCS_OK(status);
@@ -226,7 +258,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
                             &memh);
     ASSERT_UCS_OK(status);
 
-    test_rkey(&buffer[0], memh, size);
+    test_memh(&buffer[0], memh, size);
 
     status = uct_md_mem_dereg(m_e1->md(), memh);
     ASSERT_UCS_OK(status);
