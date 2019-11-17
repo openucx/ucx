@@ -34,6 +34,8 @@ libraries and RPC/data-centric applications.
 UCX utilizes high-speed networks for inter-node communication, and
 shared memory mechanisms for efficient intra-node communication.
 
+Please check out FAQ at http://openucx.github.io/ucx/faq
+
 ## Using UCX
 
 ### Release Builds
