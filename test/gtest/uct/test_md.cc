@@ -448,12 +448,9 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
 
     /* go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
+        if (ucs::is_inet_addr(ifa->ifa_addr) &&
+            ucs_netif_flags_is_active(ifa->ifa_flags)) {
             sock_addr.addr = ifa->ifa_addr;
-
-            if (!ucs_netif_is_active(ifa->ifa_name)) {
-                continue;
-            }
 
             found_ip = true;
 
