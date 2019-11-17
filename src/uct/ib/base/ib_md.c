@@ -1585,7 +1585,7 @@ UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
 
 uct_component_t uct_ib_component = {
     .query_md_resources = uct_ib_query_md_resources,
-    .query_cm_resources = ucs_empty_function_return_unsupported,
+    .query_cm_resource  = ucs_empty_function_return_unsupported,
     .md_open            = uct_ib_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ib_rkey_unpack,

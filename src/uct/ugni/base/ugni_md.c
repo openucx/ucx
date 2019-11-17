@@ -220,7 +220,7 @@ error:
 
 uct_component_t uct_ugni_component = {
     .query_md_resources = uct_ugni_query_md_resources,
-    .query_cm_resources = ucs_empty_function_return_unsupported,
+    .query_cm_resource  = ucs_empty_function_return_unsupported,
     .md_open            = uct_ugni_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ugni_rkey_unpack,

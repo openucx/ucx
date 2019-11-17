@@ -230,7 +230,7 @@ enum uct_component_attr_field {
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT = UCS_BIT(1), /**< MD resource count */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES      = UCS_BIT(2), /**< MD resources array */
     UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT = UCS_BIT(3), /**< CM resource count */
-    UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES      = UCS_BIT(4), /**< CM resources array */
+    UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE       = UCS_BIT(4), /**< CM resource */
     UCT_COMPONENT_ATTR_FIELD_FLAGS             = UCS_BIT(5)  /**< Capability flags */
 };
 
@@ -276,19 +276,21 @@ typedef struct uct_component_attr {
     unsigned               cm_resource_count;
 
     /**
-     * Array of connection manager resources. When used, it should be initialized
-     * prior to calling @ref uct_component_query with a pointer to an array,
-     * which is large enough to hold all connection manager resource entries.
-     * After the call, this array will be filled with information about existing
-     * connection manager resources.
+     * Array holding the connection manager resource.
+     * When used, it should be initialized prior to calling
+     * @ref uct_component_query with a pointer to an array, which is large
+     * enough to hold one connection manager resource entrie.
+     * After the call, this array will be filled with information about the
+     * existing connection manager resource.
      * In order to allocate this array, you can call @ref uct_component_query
      * twice: The first time would only obtain the amount of entries required,
+     * i.e. tell you if there is a connection manager availbale on this component,
      * by specifying @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT in
      * field_mask. Then the array could be allocated with the returned number of
      * entries, and passed to a second call to @ref uct_component_query, this
      * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES.
      */
-    uct_cm_resource_desc_t *cm_resources;
+    uct_cm_resource_desc_t *cm_resource;
 
     /**
      * Flags as defined by UCT_COMPONENT_FLAG_xx.

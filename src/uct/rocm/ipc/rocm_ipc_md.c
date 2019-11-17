@@ -155,7 +155,7 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_component_t *component,
 
 uct_component_t uct_rocm_ipc_component = {
     .query_md_resources = uct_rocm_base_query_md_resources,
-    .query_cm_resources = ucs_empty_function_return_unsupported,
+    .query_cm_resource  = ucs_empty_function_return_unsupported,
     .md_open            = uct_rocm_ipc_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_rocm_ipc_rkey_unpack,

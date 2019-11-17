@@ -54,21 +54,23 @@ typedef ucs_status_t (*uct_component_md_open_func_t)(
 
 
 /**
- * Component method to query component connection manager resources.
+ * Component method to query the component's connection manager resource.
  *
- * @param [in]  component               Query connection manager resources
+ * @param [in]  component               Query connection manager resource
  *                                      for this component.
- * @param [out] resources_p             Filled with a pointer to an array of
- *                                      connection manager resources, which
+ * @param [out] resource_p              Filled with a pointer to the connection
+ *                                      manager resource, which
  *                                      should be released with ucs_free().
  * @param [out] num_resources_p         Filled with the number of connection
- *                                      manager resource entries in the array.
+ *                                      manager resources - one connection
+ *                                      manager resource per component.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
-typedef ucs_status_t (*uct_component_query_cm_resources_func_t)(
-                      uct_component_t *component, uct_cm_resource_desc_t **resources_p,
-                      unsigned *num_resources_p);
+typedef ucs_status_t (*uct_component_query_cm_resource_func_t)(
+                uct_component_t *component,
+                uct_cm_resource_desc_t **resources_p,
+                unsigned *num_resources_p);
 
 
 /**
@@ -147,7 +149,7 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 struct uct_component {
     const char                              name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
     uct_component_query_md_resources_func_t query_md_resources; /**< Query memory domain resources method */
-    uct_component_query_cm_resources_func_t query_cm_resources; /**< Query connection manager resources method */
+    uct_component_query_cm_resource_func_t  query_cm_resource;  /**< Query connection manager resource method */
     uct_component_md_open_func_t            md_open;            /**< Memory domain open method */
     uct_component_cm_open_func_t            cm_open;            /**< Connection manager open method */
     uct_component_rkey_unpack_func_t        rkey_unpack;        /**< Remote key unpack method */

@@ -230,7 +230,7 @@ out:
 
 uct_component_t uct_rdmacm_component = {
     .query_md_resources = uct_rdmacm_query_md_resources,
-    .query_cm_resources = uct_cm_query_single_cm_resource,
+    .query_cm_resource  = uct_cm_query_single_cm_resource,
     .md_open            = uct_rdmacm_md_open,
 #if HAVE_RDMACM_QP_LESS
     .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_rdmacm_cm_t),

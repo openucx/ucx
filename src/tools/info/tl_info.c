@@ -561,19 +561,20 @@ static void print_uct_component_info(uct_component_h component,
                       print_opts, print_flags, req_tl_name);
     }
 
-    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES;
-    component_attr.cm_resources = alloca(sizeof(*component_attr.cm_resources) *
+    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE;
+    component_attr.cm_resource  = alloca(sizeof(*component_attr.cm_resource) *
                                          component_attr.cm_resource_count);
     status = uct_component_query(component, &component_attr);
     if (status != UCS_OK) {
-        printf("#   < failed to query component cm resources >\n");
+        printf("#   < failed to query component cm resource >\n");
         return;
     }
 
-    for (i = 0; i < component_attr.cm_resource_count; ++i) {
+    if (component_attr.cm_resource_count > 0) {
+        ucs_assert(component_attr.cm_resource_count == 1);
         print_cm_info(component, &component_attr,
-                      component_attr.cm_resources[i].cm_name,
-                      print_opts, print_flags, NULL);
+                      component_attr.cm_resource[0].cm_name, print_opts,
+                      print_flags, NULL);
     }
 }
 

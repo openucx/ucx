@@ -149,6 +149,7 @@ typedef struct uct_mm_component {
     static uct_mm_component_t _var = { \
         .super = { \
             .query_md_resources = uct_mm_query_md_resources, \
+            .query_cm_resource  = ucs_empty_function_return_unsupported, \
             .md_open            = uct_mm_md_open, \
             .cm_open            = ucs_empty_function_return_unsupported, \
             .rkey_unpack        = _rkey_unpack, \
