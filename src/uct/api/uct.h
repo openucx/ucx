@@ -288,7 +288,7 @@ typedef struct uct_component_attr {
      * by specifying @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT in
      * field_mask. Then the array could be allocated with the returned number of
      * entries, and passed to a second call to @ref uct_component_query, this
-     * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCES.
+     * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE.
      */
     uct_cm_resource_desc_t *cm_resource;
 
