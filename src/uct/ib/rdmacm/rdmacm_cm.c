@@ -104,7 +104,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
         return;
     }
 

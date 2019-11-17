@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -231,6 +231,10 @@ typedef struct uct_rc_mlx5_mp_context {
     /* Storage for a per-message user-defined context. Must be passed unchanged
      * to the user in uct_tag_unexp_eager_cb_t. */
     void                          *context;
+
+    /* Tag is saved when first fragment (with TMH) arrives and then passed to
+     * the eager unexpected callback for subsequent fragments. */
+    uct_tag_t                     tag;
 
     /* With MP XRQ immediate value is delivered with the last fragment, while
      * TMH is present in the first fragment only. Need to save app_context

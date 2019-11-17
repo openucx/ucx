@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -39,6 +39,14 @@ void test_ucp_tag::init()
 
     ucp::dt_gen_start_count  = 0;
     ucp::dt_gen_finish_count = 0;
+}
+
+void test_ucp_tag::enable_tag_mp_offload()
+{
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_NUM_STRIDES", "8"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_IB_MLX5_DEVX_OBJECTS",
+                                           "dct,dcsrq,rcsrq,rcqp"));
 }
 
 void test_ucp_tag::request_init(void *request)

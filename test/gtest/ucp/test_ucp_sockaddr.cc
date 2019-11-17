@@ -55,8 +55,8 @@ public:
 
     void init() {
         get_sockaddr();
-
         ucp_test::init();
+        skip_loopback();
     }
 
     static std::vector<ucp_test_param>
@@ -83,15 +83,23 @@ public:
                         ucs_log_level_t level, const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
-                (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
-                (strstr(err_str.c_str(), "no peer failure handler")) ||
-                (strstr(err_str.c_str(), "connection request failed on listener")) ||
+            static std::vector<std::string> stop_list;
+            if (stop_list.empty()) {
+                stop_list.push_back("no supported sockaddr auxiliary transports found for");
+                stop_list.push_back("sockaddr aux resources addresses");
+                stop_list.push_back("no peer failure handler");
+                stop_list.push_back("connection request failed on listener");
                 /* when the "peer failure" error happens, it is followed by: */
-                (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
-                UCS_TEST_MESSAGE << err_str;
-                return UCS_LOG_FUNC_RC_STOP;
+                stop_list.push_back("received event RDMA_CM_EVENT_UNREACHABLE");
+                stop_list.push_back(ucs_status_string(UCS_ERR_UNREACHABLE));
+            }
+
+            std::string err_str = format_message(message, ap);
+            for (size_t i = 0; i < stop_list.size(); ++i) {
+                if (err_str.find(stop_list[i]) != std::string::npos) {
+                    UCS_TEST_MESSAGE << err_str;
+                    return UCS_LOG_FUNC_RC_STOP;
+                }
             }
         }
         return UCS_LOG_FUNC_RC_CONTINUE;

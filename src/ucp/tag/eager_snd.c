@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -16,40 +16,50 @@
 #include <ucp/proto/proto_am.inl>
 
 
-/* packing  start */
+/* packing start */
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_pack_eager_common(ucp_request_t *req, void *dest,
+                          size_t length, size_t hdr_length,
+                          int UCS_V_UNUSED single,
+                          int UCS_V_UNUSED first)
+{
+    size_t packed_length;
+
+    ucs_assert((length + hdr_length) <=
+               ucp_ep_get_max_bcopy(req->send.ep, req->send.lane));
+    ucs_assert(!first || (req->send.state.dt.offset == 0));
+
+    packed_length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
+                                req->send.mem_type, dest, req->send.buffer,
+                                &req->send.state.dt, length);
+    ucs_assert((single && (packed_length == req->send.length)) ||
+               (packed_length < req->send.length));
+    return packed_length + hdr_length;
+}
 
 static size_t ucp_tag_pack_eager_only_dt(void *dest, void *arg)
 {
     ucp_eager_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
-    size_t length;
 
     hdr->super.tag = req->send.tag.tag;
 
-    ucs_assert(req->send.state.dt.offset == 0);
-    length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                         req->send.mem_type, hdr + 1, req->send.buffer,
-                         &req->send.state.dt, req->send.length);
-    ucs_assert(length == req->send.length);
-    return sizeof(*hdr) + length;
+    return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
+                                     sizeof(*hdr), 1, 1);
 }
 
 static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
 {
     ucp_eager_sync_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
-    size_t length;
 
     hdr->super.super.tag = req->send.tag.tag;
     hdr->req.ep_ptr      = ucp_request_get_dest_ep_ptr(req);
     hdr->req.reqptr      = (uintptr_t)req;
 
-    ucs_assert(req->send.state.dt.offset == 0);
-    length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                         req->send.mem_type, hdr + 1, req->send.buffer,
-                         &req->send.state.dt, req->send.length);
-    ucs_assert(length == req->send.length);
-    return sizeof(*hdr) + length;
+    return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
+                                     sizeof(*hdr), 1, 1);
 }
 
 static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
@@ -66,11 +76,7 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     hdr->total_len       = req->send.length;
     hdr->msg_id          = req->send.tag.message_id;
 
-    ucs_assert(req->send.state.dt.offset == 0);
-    ucs_assert(req->send.length > length);
-    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                                      req->send.mem_type, hdr + 1, req->send.buffer,
-                                      &req->send.state.dt, length);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 1);
 }
 
 static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
@@ -81,19 +87,16 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
 
     ucs_assert(req->send.lane == ucp_ep_get_am_lane(req->send.ep));
 
-    length                        = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
-                                    sizeof(*hdr);
-    hdr->super.super.super.tag    = req->send.tag.tag;
-    hdr->super.total_len          = req->send.length;
-    hdr->req.ep_ptr               = ucp_request_get_dest_ep_ptr(req);
-    hdr->super.msg_id             = req->send.tag.message_id;
-    hdr->req.reqptr               = (uintptr_t)req;
+    length                     = ucp_ep_get_max_bcopy(req->send.ep,
+                                                      req->send.lane) -
+                                 sizeof(*hdr);
+    hdr->super.super.super.tag = req->send.tag.tag;
+    hdr->super.total_len       = req->send.length;
+    hdr->req.ep_ptr            = ucp_request_get_dest_ep_ptr(req);
+    hdr->super.msg_id          = req->send.tag.message_id;
+    hdr->req.reqptr            = (uintptr_t)req;
 
-    ucs_assert(req->send.state.dt.offset == 0);
-    ucs_assert(req->send.length > length);
-    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                                      req->send.mem_type, hdr + 1, req->send.buffer,
-                                      &req->send.state.dt, length);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 1);
 }
 
 static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
@@ -102,14 +105,13 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
     ucp_request_t *req          = arg;
     size_t length;
 
-    length          = ucs_min(ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
-                              sizeof(*hdr),
-                              req->send.length - req->send.state.dt.offset);
-    hdr->msg_id     = req->send.tag.message_id;
-    hdr->offset     = req->send.state.dt.offset;
-    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                                      req->send.mem_type, hdr + 1, req->send.buffer,
-                                      &req->send.state.dt, length);
+    length      = ucs_min(ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
+                          sizeof(*hdr),
+                          req->send.length - req->send.state.dt.offset);
+    hdr->msg_id = req->send.tag.message_id;
+    hdr->offset = req->send.state.dt.offset;
+
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 0);
 }
 
 /* eager */
@@ -335,28 +337,23 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
         reqhdr = &((ucp_eager_sync_first_hdr_t*)hdr)->req; /* first */
     }
 
-    req = ucp_request_get(worker);
+    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
+        ucp_tag_offload_sync_send_ack(worker, reqhdr->ep_ptr,
+                                      ((ucp_eager_sync_hdr_t*)hdr)->super.super.tag,
+                                      recv_flags);
+        return;
+    }
+
+    ucs_assert(reqhdr->reqptr != 0);
+    req = ucp_proto_ssend_ack_request_alloc(worker, reqhdr->ep_ptr);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }
 
-    req->flags              = 0;
-    req->send.ep            = ucp_worker_get_ep_by_ptr(worker, reqhdr->ep_ptr);
-    req->send.uct.func      = ucp_proto_progress_am_single;
-    req->send.proto.comp_cb = ucp_request_put;
-    req->send.proto.status  = UCS_OK;
+    req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
+    req->send.proto.remote_request = reqhdr->reqptr;
 
     ucs_trace_req("send_sync_ack req %p ep %p", req, req->send.ep);
-
-    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_ONLY);
-        req->send.proto.am_id          = UCP_AM_ID_OFFLOAD_SYNC_ACK;
-        req->send.proto.sender_tag     = ((ucp_eager_sync_hdr_t*)hdr)->super.super.tag;
-    } else {
-        ucs_assert(reqhdr->reqptr != 0);
-        req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
-        req->send.proto.remote_request = reqhdr->reqptr;
-    }
 
     ucp_request_send(req, 0);
 }

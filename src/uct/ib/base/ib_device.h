@@ -121,7 +121,7 @@ typedef struct uct_ib_device {
     uct_ib_device_attr          dev_attr;        /* Cached device attributes */
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
-    cpu_set_t                   local_cpus;      /* CPUs local to device */
+    ucs_sys_cpuset_t            local_cpus;      /* CPUs local to device */
     int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
@@ -172,6 +172,8 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
                                        uct_tl_device_resource_t **devices_p,
                                        unsigned *num_devices_p);
 
+ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
+                                 struct ibv_device *ibv_device);
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events

@@ -226,7 +226,7 @@ static long ucs_sysconf(int name)
 int ucs_get_first_cpu()
 {
     int first_cpu, total_cpus, ret;
-    cpu_set_t mask;
+    ucs_sys_cpuset_t mask;
 
     ret = ucs_sysconf(_SC_NPROCESSORS_CONF);
     if (ret < 0) {
@@ -236,7 +236,7 @@ int ucs_get_first_cpu()
     total_cpus = ret;
 
     CPU_ZERO(&mask);
-    ret = sched_getaffinity(0, sizeof(mask), &mask);
+    ret = ucs_sys_getaffinity(&mask);
     if (ret < 0) {
         ucs_error("failed to get process affinity: %m");
         return ret;
@@ -1083,7 +1083,7 @@ void ucs_sys_free(void *ptr, size_t length)
     }
 }
 
-char* ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len)
+char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len)
 {
     int i = 0, prev = -1;
     char *p = str;
@@ -1115,4 +1115,46 @@ char* ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len)
 
     *(--p) = 0;
     return str;
+}
+
+int ucs_sys_setaffinity(ucs_sys_cpuset_t *cpuset)
+{
+    int ret;
+
+#if defined(HAVE_SCHED_SETAFFINITY)
+    ret = sched_setaffinity(0, sizeof(*cpuset), cpuset);
+#elif defined(HAVE_CPUSET_SETAFFINITY)
+    ret = cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, getpid(),
+                             sizeof(*cpuset), cpuset);
+#else
+#error "Port me"
+#endif
+    return ret;
+}
+
+int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset)
+{
+    int ret;
+
+#if defined(HAVE_SCHED_GETAFFINITY)
+    ret = sched_getaffinity(0, sizeof(*cpuset), cpuset);
+#elif defined(HAVE_CPUSET_GETAFFINITY)
+    ret = cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, getpid(),
+                             sizeof(*cpuset), cpuset);
+#else
+#error "Port me"
+#endif
+    return ret;
+}
+
+void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
+{
+    int c;
+
+    UCS_CPU_ZERO(dst);
+    for (c = 0; c < UCS_CPU_SETSIZE; ++c) {
+        if (CPU_ISSET(c, src)) {
+            UCS_CPU_SET(c, dst);
+        }
+    }
 }

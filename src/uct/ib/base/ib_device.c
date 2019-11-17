@@ -142,7 +142,8 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0, 0, "Generic HCA", 0, 0}
 };
 
-static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
+static void uct_ib_device_get_locality(const char *dev_name,
+                                       ucs_sys_cpuset_t *cpu_mask,
                                        int *numa_node)
 {
     char *p, buf[ucs_max(CPU_SETSIZE, 10)];
@@ -290,15 +291,17 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     ibv_ack_async_event(&event);
 }
 
-ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
-                                struct ibv_device *ibv_device, int async_events
-                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
+                                 struct ibv_device *ibv_device)
 {
     ucs_status_t status;
     uint8_t i;
     int ret;
 
-    dev->async_events = async_events;
+    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* Check device type*/
     switch (ibv_device->node_type) {
@@ -317,13 +320,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         ucs_error("%s has %d ports, but only up to %d are supported",
                   ibv_get_device_name(ibv_device), dev->num_ports,
                   UCT_IB_DEV_MAX_PORTS);
-        status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        return UCS_ERR_UNSUPPORTED;
     }
-
-    /* Get device locality */
-    uct_ib_device_get_locailty(ibv_get_device_name(ibv_device), &dev->local_cpus,
-                               &dev->numa_node);
 
     /* Query all ports */
     for (i = 0; i < dev->num_ports; ++i) {
@@ -331,10 +329,24 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                              &dev->port_attr[i]);
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
-            status = UCS_ERR_IO_ERROR;
-            goto err;
+            return UCS_ERR_IO_ERROR;
         }
     }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
+                                struct ibv_device *ibv_device, int async_events
+                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+{
+    ucs_status_t status;
+
+    dev->async_events = async_events;
+
+    /* Get device locality */
+    uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
+                               &dev->numa_node);
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");

@@ -8,6 +8,7 @@
 #include <ucp/api/ucp.h>
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
+#include <ucs/type/spinlock.h>
 
 #include <jni.h>
 
@@ -56,6 +57,8 @@ bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss, sockl
 struct jucx_context {
     jobject callback;
     volatile jobject jucx_request;
+    ucs_status_t status;
+    ucs_spinlock_t lock;
 };
 
 void jucx_request_init(void *request);

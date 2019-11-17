@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -83,6 +83,7 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
 {
     void *udesc;
     int stride_idx;
+    int desc_offset;
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* stride_idx is valid in non inline CQEs only.
@@ -94,9 +95,9 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
         ucs_assert(!(cqe->op_own & (MLX5_INLINE_SCATTER_32 |
                                     MLX5_INLINE_SCATTER_64)));
 
-        udesc = (void*)be64toh(seg->dptr[stride_idx].addr);
-        udesc = UCS_PTR_BYTE_OFFSET(udesc,
-                                    (ptrdiff_t)offset - iface->super.super.config.rx_hdr_offset);
+        udesc       = (void*)be64toh(seg->dptr[stride_idx].addr);
+        desc_offset = offset - iface->super.super.config.rx_hdr_offset;
+        udesc       = UCS_PTR_BYTE_OFFSET(udesc, desc_offset);
         uct_recv_desc(udesc) = release_desc;
         seg->srq.ptr_mask   &= ~UCS_BIT(stride_idx);
     } else {
@@ -1160,8 +1161,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
                                                    msg_ctx->app_ctx,
                                                    UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe));
         status   = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg, tmh,
-                                            byte_len, flags, 0ul, imm_data,
-                                            &msg_ctx->context);
+                                            byte_len, flags, msg_ctx->tag,
+                                            imm_data, &msg_ctx->context);
 
         /* Do not increase unexpected_cnt count here, because it is counter per
          * message rather than per every fragment */
@@ -1201,6 +1202,9 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         /* Save app_context to assemble eager immediate data when the last
            fragment arrives (and contains imm value) */
         msg_ctx->app_ctx = tmh->app_ctx;
+
+        /* Save tag to pass it with non-first fragments */
+        msg_ctx->tag     = tmh->tag;
 
         status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                           tmh + 1, byte_len - sizeof(*tmh),

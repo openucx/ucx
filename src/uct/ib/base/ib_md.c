@@ -21,6 +21,9 @@
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
 #include <pthread.h>
+#if HAVE_PTHREAD_NP_H
+#include <pthread_np.h>
+#endif
 #include <sys/resource.h>
 #include <float.h>
 
@@ -293,7 +296,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
 
     md_attr->reg_cost      = md->reg_cost;
-    md_attr->local_cpus    = md->dev.local_cpus;
+    ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
     return UCS_OK;
 }
 
@@ -366,13 +369,14 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     int mr_num = ucs_div_round_up(length, chunk);
     ucs_status_t status;
     void *thread_status;
-    cpu_set_t parent_set, thread_set;
+    ucs_sys_cpuset_t parent_set, thread_set;
     uct_ib_md_mem_reg_thread_t *ctxs, *cur_ctx;
     pthread_attr_t attr;
     char UCS_V_UNUSED affinity_str[64];
     int ret;
 
-    ret = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &parent_set);
+    ret = pthread_getaffinity_np(pthread_self(), sizeof(ucs_sys_cpuset_t),
+                                 &parent_set);
     if (ret != 0) {
         ucs_error("pthread_getaffinity_np() failed: %m");
         return UCS_ERR_INVALID_PARAM;
@@ -415,8 +419,9 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
             }
 
             CPU_ZERO(&thread_set);
-            CPU_SET(cpu_id++, &thread_set);
-            pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &thread_set);
+            CPU_SET(cpu_id, &thread_set);
+            cpu_id++;
+            pthread_attr_setaffinity_np(&attr, sizeof(ucs_sys_cpuset_t), &thread_set);
         }
 
         ret = pthread_create(&cur_ctx->thread, &attr,
@@ -1529,7 +1534,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
-    status = uct_ib_query_device(dev->ibv_context, &dev->dev_attr);
+    status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
         goto err_free_context;
     }

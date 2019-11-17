@@ -56,8 +56,8 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
     ucs_status_t status;
     int ret;
 
-    ucs_trace("memtype_cache: insert 0x%lx..0x%lx mem_type %d", start, end,
-              mem_type);
+    ucs_trace("memtype_cache: insert 0x%lx..0x%lx mem_type %s",
+              start, end, ucs_memory_type_names[mem_type]);
 
     /* Allocate structure for new region */
     ret = ucs_posix_memalign((void **)&region,
@@ -103,7 +103,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
 {
     ucs_memtype_cache_region_t *region, *tmp;
     UCS_LIST_HEAD(region_list);
-    ucs_pgt_addr_t start, end;
+    ucs_pgt_addr_t start, end, search_start, search_end;
     ucs_status_t status;
 
     if (!size) {
@@ -113,20 +113,48 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     start = ucs_align_down_pow2((uintptr_t)address,        UCS_PGT_ADDR_ALIGN);
     end   = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
 
+    if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
+        /* try to find regions that are contiguous and instersected
+         * with current one */
+        search_start = start - 1;
+        search_end   = end + 1;
+    } else {
+        /* try to find regions that are instersected with current one */
+        search_start = start;
+        search_end   = end;
+    }
+
     pthread_rwlock_wrlock(&memtype_cache->lock);
 
     /* find and remove all regions which intersect with new one */
-    ucs_pgtable_search_range(&memtype_cache->pgtable, start, end - 1,
+    ucs_pgtable_search_range(&memtype_cache->pgtable, search_start, search_end,
                              ucs_memtype_cache_region_collect_callback,
                              &region_list);
-    ucs_list_for_each(region, &region_list, list) {
+    ucs_list_for_each_safe(region, tmp, &region_list, list) {
+        if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
+            if (region->mem_type == mem_type) {
+                /* merge current region with overlapping or adjacent regions
+                 * of same memory type */
+                start = ucs_min(start, region->super.start);
+                end   = ucs_max(end, region->super.end);
+            } else if ((region->super.end < start) ||
+                       (region->super.start >= end)) {
+                /* ignore regions which are not really overlapping and can't
+                 * be merged because of different memory types */
+                ucs_list_del(&region->list);
+                continue;
+            }
+        }
+
         status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
         if (status != UCS_OK) {
             ucs_error("failed to remove address:%p from memtype_cache", address);
             goto out_unlock;
         }
-        ucs_trace("memtype_cache: removed 0x%lx..0x%lx mem_type %d",
-                  region->super.start, region->super.end, region->mem_type);
+
+        ucs_trace("memtype_cache: removed 0x%lx..0x%lx mem_type %s",
+                  region->super.start, region->super.end,
+                  ucs_memory_type_names[region->mem_type]);
     }
 
     if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
@@ -210,13 +238,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
 
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &memtype_cache->pgtable,
                                   start);
-    if ((pgt_region == NULL) || (pgt_region->end < (start + size))) {
+    if (pgt_region == NULL) {
         status = UCS_ERR_NO_ELEM;
         goto out_unlock;
     }
 
     region      = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
-    *mem_type_p = region->mem_type;
+    *mem_type_p = ((pgt_region->end >= (start + size)) ?
+                   region->mem_type : UCS_MEMORY_TYPE_LAST);
     status      = UCS_OK;
 
 out_unlock:

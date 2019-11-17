@@ -1,1 +1,2 @@
 build_modules="@build_modules@"
+build_bindings="@build_bindings@"
