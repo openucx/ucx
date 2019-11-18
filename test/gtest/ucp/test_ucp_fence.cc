@@ -192,7 +192,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_fence64)
 class test_fence_op;
 class test_fence_op {
 public:
-    test_fence_op(ucp_test *test) : m_test(test) {
+    test_fence_op(ucp_test *test) : m_test(test), m_ep(NULL), m_iface(NULL) {
     }
 
     virtual void op(void *buffer, size_t size, uintptr_t addr,
