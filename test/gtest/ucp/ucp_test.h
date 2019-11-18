@@ -8,6 +8,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
+#include <common/mem_buffer.h>
 
 /* ucp version compile time test */
 #if (UCP_API_VERSION != UCP_VERSION(UCP_API_MAJOR,UCP_API_MINOR))
@@ -212,6 +213,23 @@ protected:
     volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
+
+protected:
+    class mapped_buffer : public mem_buffer {
+    public:
+        mapped_buffer(size_t size, const entity& entity, int flags = 0,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
+        virtual ~mapped_buffer();
+
+        ucs::handle<ucp_rkey_h> rkey(const entity& entity) const;
+
+        ucp_mem_h memh() const;
+
+    private:
+        const entity& m_entity;
+        ucp_mem_h     m_memh;
+        void*         m_rkey_buffer;
+    };
 };
 
 

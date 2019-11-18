@@ -729,3 +729,52 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
 }
+
+ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,
+                                       int flags, ucs_memory_type_t mem_type) :
+    mem_buffer(size, mem_type), m_entity(entity), m_memh(NULL),
+    m_rkey_buffer(NULL)
+{
+    ucs_status_t status;
+
+    if (flags & (UCP_MEM_MAP_ALLOCATE|UCP_MEM_MAP_FIXED)) {
+        UCS_TEST_ABORT("mapped_buffer does not support allocation by UCP");
+    }
+
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.flags      = flags;
+    params.address    = ptr();
+    params.length     = size;
+
+    status = ucp_mem_map(m_entity.ucph(), &params, &m_memh);
+    ASSERT_UCS_OK(status);
+
+    size_t rkey_buffer_size;
+    status = ucp_rkey_pack(m_entity.ucph(), m_memh, &m_rkey_buffer,
+                           &rkey_buffer_size);
+    ASSERT_UCS_OK(status);
+}
+
+ucp_test::mapped_buffer::~mapped_buffer()
+{
+    ucp_rkey_buffer_release(m_rkey_buffer);
+    ucs_status_t status = ucp_mem_unmap(m_entity.ucph(), m_memh);
+    EXPECT_UCS_OK(status);
+}
+
+ucs::handle<ucp_rkey_h> ucp_test::mapped_buffer::rkey(const entity& entity) const
+{
+    ucp_rkey_h rkey;
+
+    ucs_status_t status = ucp_ep_rkey_unpack(entity.ep(), m_rkey_buffer, &rkey);
+    ASSERT_UCS_OK(status);
+    return ucs::handle<ucp_rkey_h>(rkey, ucp_rkey_destroy);
+}
+
+ucp_mem_h ucp_test::mapped_buffer::memh() const
+{
+    return m_memh;
+}
