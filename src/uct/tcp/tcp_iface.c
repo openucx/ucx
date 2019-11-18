@@ -18,6 +18,8 @@
 #include <netinet/tcp.h>
 #include <dirent.h>
 #include <float.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
 
 #define UCT_TCP_IFACE_NETDEV_DIR "/sys/class/net"
 
@@ -875,6 +877,85 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
+/* Fetch information about available network devices through an ioctl.  */
+static ucs_status_t uct_tcp_query_devices_ioctl(uct_md_h md,
+                                                uct_tl_device_resource_t **devices_p,
+                                                unsigned *num_devices_p)
+{
+    int sock, err, i;
+    uct_tl_device_resource_t *devices, *tmp;
+    unsigned num_devices;
+    ucs_status_t status;
+    struct ifconf conf;
+
+    conf.ifc_len = 0;
+    conf.ifc_req = NULL;
+
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    err = ioctl(sock, SIOCGIFCONF, &conf);
+    if (err < 0) {
+        ucs_error("ioctl(SIOCGIFCONF) failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    conf.ifc_req = ucs_calloc(1, conf.ifc_len, "ifreq");
+    if (conf.ifc_req == NULL) {
+        ucs_error("memory alocation failed");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    err = ioctl(sock, SIOCGIFCONF, &conf);
+    if (err < 0) {
+        ucs_error("ioctl(SIOCGIFCONF) failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out_free;
+    }
+
+    devices     = NULL;
+    num_devices = 0;
+    for (i = 0; i < (conf.ifc_len / sizeof(struct ifreq)); i++) {
+        const char *name = conf.ifc_req[i].ifr_name;
+	sa_family_t family = conf.ifc_req[i].ifr_addr.sa_family;
+
+        if (!ucs_netif_is_active(name, family)) {
+            continue;
+        }
+
+        tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),
+                          "tcp devices");
+        if (tmp == NULL) {
+            ucs_free(devices);
+            status = UCS_ERR_NO_MEMORY;
+            goto out_free;
+        }
+        devices = tmp;
+
+        ucs_snprintf_zero(devices[num_devices].name,
+                          sizeof(devices[num_devices].name),
+                          "%s", name);
+        devices[num_devices].type = UCT_DEVICE_TYPE_NET;
+        ++num_devices;
+    }
+
+    *num_devices_p = num_devices;
+    *devices_p     = devices;
+    status         = UCS_OK;
+
+out_free:
+    ucs_free(conf.ifc_req);
+out:
+    if (sock >= 0) {
+        close(sock);
+    }
+    return status;
+}
+
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
@@ -893,9 +974,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 
     dir = opendir(UCT_TCP_IFACE_NETDEV_DIR);
     if (dir == NULL) {
-        ucs_error("opendir(%s) failed: %m", UCT_TCP_IFACE_NETDEV_DIR);
-        status = UCS_ERR_IO_ERROR;
-        goto out;
+        /* When /sys is unavailable, as can be the case in a container,
+         * resort to a good old 'ioctl'.  */
+        return uct_tcp_query_devices_ioctl(md, devices_p, num_devices_p);
     }
 
     devices     = NULL;
@@ -963,7 +1044,6 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 
 out_closedir:
     closedir(dir);
-out:
     return status;
 }
 
