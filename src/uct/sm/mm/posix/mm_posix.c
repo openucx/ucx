@@ -25,7 +25,7 @@
 /* Memory mapping parameters */
 #define UCT_POSIX_MMAP_PROT             (PROT_READ | PROT_WRITE)
 
-/* Shared mmeory segment flags */
+/* Shared memory segment flags */
 #define UCT_POSIX_SEG_FLAG_PROCFS       UCS_BIT(63) /* use procfs mode: mmid encodes an
                                                        open fd symlink from procfs */
 #define UCT_POSIX_SEG_FLAG_SHM_OPEN     UCS_BIT(62) /* use shm_open() rather than open() */
@@ -36,7 +36,7 @@
 #define UCT_POSIX_SEG_MMID_MASK         (~UCT_POSIX_SEG_FLAGS_MASK)
 
 /* Packing mmid for procfs mode */
-#define UCT_POSIX_PROCFS_MMID_FD_BITS   31  /* how many bits for file descriptror */
+#define UCT_POSIX_PROCFS_MMID_FD_BITS   31  /* how many bits for file descriptor */
 #define UCT_POSIX_PROCFS_MMID_PID_BITS  30  /* how many bits for pid */
 
 /* Filesystem paths */
@@ -88,7 +88,7 @@ static size_t uct_posix_iface_addr_length(uct_mm_md_t *md)
     /* if shm_open is requested, the path to the backing file is /dev/shm
      * by default. however, if shm_open isn't used, the size of the path to the
      * requested backing file is needed so that the user would know how much
-     * space to allocated for the rkey.
+     * space to allocate for the rkey.
      */
     return uct_posix_use_shm_open(posix_config) ? 0 :
            (strlen(posix_config->dir) + 1);
