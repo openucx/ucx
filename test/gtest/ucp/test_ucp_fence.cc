@@ -117,71 +117,23 @@ public:
 protected:
     void test_fence(send_func_t send1, send_func_t send2, size_t alignment) {
         static const size_t memheap_size = sizeof(uint64_t);
-        ucs_status_t status;
-
-        ucp_mem_map_params_t params;
-        ucp_mem_attr_t mem_attr;
-        ucp_mem_h memh;
-        void *memheap = NULL;
-
-        void *rkey_buffer;
-        size_t rkey_buffer_size;
-        ucp_rkey_h rkey;
-
         uint32_t error = 0;
 
         sender().connect(&receiver(), get_ep_params());
         flush_worker(sender()); /* avoid deadlock for blocking amo */
 
-        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        params.length     = memheap_size;
-        params.flags      = GetParam().variant;
-        if (params.flags & UCP_MEM_MAP_FIXED) {
-            params.address  = ucs::mmap_fixed_address();
-            params.flags   |= UCP_MEM_MAP_ALLOCATE;
-        } else {
-            memheap = malloc(memheap_size);
-            params.address = memheap;
-            params.flags = params.flags & (~UCP_MEM_MAP_ALLOCATE);
-        }
+        mapped_buffer buffer(memheap_size, receiver(), 0);
 
-        status = ucp_mem_map(receiver().ucph(), &params, &memh);
-        ASSERT_UCS_OK(status);
+        EXPECT_LE(memheap_size, buffer.size());
+        memset(buffer.ptr(), 0, memheap_size);
 
-        mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS |
-                              UCP_MEM_ATTR_FIELD_LENGTH;
-        status = ucp_mem_query(memh, &mem_attr);
-        ASSERT_UCS_OK(status);
-        EXPECT_LE(memheap_size, mem_attr.length);
-        if (!memheap) {
-            memheap = mem_attr.address;
-        }
-        memset(memheap, 0, memheap_size);
-
-        status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
-        ASSERT_UCS_OK(status);
-
-        status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
-        ASSERT_UCS_OK(status);
-
-        ucp_rkey_buffer_release(rkey_buffer);
-
-        run_workers(send1, send2, &sender(), rkey, memheap, 1, &error);
+        run_workers(send1, send2, &sender(), buffer.rkey(sender()),
+                    buffer.ptr(), 1, &error);
 
         EXPECT_EQ(error, (uint32_t)0);
 
-        ucp_rkey_destroy(rkey);
-        status = ucp_mem_unmap(receiver().ucph(), memh);
-        ASSERT_UCS_OK(status);
-
         disconnect(sender());
         disconnect(receiver());
-
-        if (!(GetParam().variant & UCP_MEM_MAP_FIXED)) {
-            free(memheap);
-        }
     }
 
     static ucp_params_t get_ctx_params() {
