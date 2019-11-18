@@ -541,7 +541,7 @@ protected:
         }
 
         wait_for_bits(&m_state, TEST_STATE_CLIENT_DISCONNECTED |
-                                   TEST_STATE_SERVER_DISCONNECTED);
+                                TEST_STATE_SERVER_DISCONNECTED);
         EXPECT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_DISCONNECTED |
                                                  TEST_STATE_CLIENT_DISCONNECTED)));
     }
@@ -707,7 +707,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
                                              TEST_STATE_CLIENT_GOT_REJECT)));
 
     EXPECT_FALSE((m_state &
-                (TEST_STATE_SERVER_CONNECTED | TEST_STATE_CLIENT_CONNECTED)));
+                 (TEST_STATE_SERVER_CONNECTED | TEST_STATE_CLIENT_CONNECTED)));
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
@@ -816,7 +816,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
                           client_connect_cb, client_disconnect_cb, this);
 
         wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_ERROR);
-        EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_ERROR));
+        EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_ERROR);
 
         EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
         EXPECT_FALSE(m_state &
@@ -886,7 +886,6 @@ public:
                         reinterpret_cast<test_uct_cm_sockaddr_stress *>(arg);
 
         self->common_test_disconnect(ep);
-        self->m_state |= TEST_STATE_SERVER_DISCONNECTED;
         self->m_server_disconnect_cnt++;
     }
 
@@ -895,7 +894,6 @@ public:
                         reinterpret_cast<test_uct_cm_sockaddr_stress *>(arg);
 
         self->common_test_disconnect(ep);
-        self->m_state |= TEST_STATE_CLIENT_DISCONNECTED;
         self->m_client_disconnect_cnt++;
     }
 
