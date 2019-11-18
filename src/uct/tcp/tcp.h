@@ -19,6 +19,8 @@
 
 #define UCT_TCP_NAME                          "tcp"
 
+#define UCT_TCP_CONFIG_PREFIX                 "TCP_"
+
 /* Maximum number of events to wait on event set */
 #define UCT_TCP_MAX_EVENTS                    16
 
@@ -33,6 +35,8 @@
 /* How many IOVs are needed to do AM Short
  * (TCP protocol and user's AM headers, payload) */
 #define UCT_TCP_EP_AM_SHORTV_IOV_COUNT        3
+
+#define UCT_TCP_CONFIG_MAX_CONN_RETRIES      "MAX_CONN_RETRIES"
 
 
 /**
@@ -205,15 +209,16 @@ typedef struct uct_tcp_ep_zcopy_ctx {
  */
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    uint8_t                       ctx_caps;    /* Which contexts are supported */
-    int                           fd;          /* Socket file descriptor */
-    uct_tcp_ep_conn_state_t       conn_state;  /* State of connection with peer */
-    int                           events;      /* Current notifications */
-    uct_tcp_ep_ctx_t              tx;          /* TX resources */
-    uct_tcp_ep_ctx_t              rx;          /* RX resources */
-    struct sockaddr_in            peer_addr;   /* Remote iface addr */
-    ucs_queue_head_t              pending_q;   /* Pending operations */
-    ucs_list_link_t               list;
+    uint8_t                       ctx_caps;         /* Which contexts are supported */
+    int                           fd;               /* Socket file descriptor */
+    uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
+    unsigned                      conn_retries;     /* Number of connection attempts done */
+    int                           events;           /* Current notifications */
+    uct_tcp_ep_ctx_t              tx;               /* TX resources */
+    uct_tcp_ep_ctx_t              rx;               /* RX resources */
+    struct sockaddr_in            peer_addr;        /* Remote iface addr */
+    ucs_queue_head_t              pending_q;        /* Pending operations */
+    ucs_list_link_t               list;             /* List element to insert into TCP EP list */
 };
 
 
@@ -251,6 +256,9 @@ typedef struct uct_tcp_iface {
         int                       prefer_default;    /* Prefer default gateway */
         int                       conn_nb;           /* Use non-blocking connect() */
         unsigned                  max_poll;          /* Number of events to poll per socket*/
+        unsigned                  max_conn_retries;  /* How many connection establishment attmepts
+                                                      * should be done if dropped connection was
+                                                      * detected due to lack of system resources */
     } config;
 
     struct {
@@ -273,6 +281,7 @@ typedef struct uct_tcp_iface_config {
     int                           prefer_default;
     int                           conn_nb;
     unsigned                      max_poll;
+    unsigned                      max_conn_retries;
     int                           sockopt_nodelay;
     size_t                        sockopt_sndbuf;
     size_t                        sockopt_rcvbuf;
@@ -310,7 +319,7 @@ void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
-void uct_tcp_ep_dropped_connect_print_error(uct_tcp_ep_t *ep, int io_errno);
+ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep, int io_errno);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
