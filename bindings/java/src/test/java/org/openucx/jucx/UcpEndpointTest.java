@@ -300,7 +300,14 @@ public class UcpEndpointTest {
         }
 
         assertTrue(success.get());
+
         progressThread.interrupt();
+        try {
+            progressThread.join();
+        } catch (InterruptedException e) {
+
+        }
+
         ep.close();
         worker2.close();
         worker1.close();

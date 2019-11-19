@@ -251,8 +251,9 @@ static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_att
                                           const char *file,
                                           ucs_memory_type_t mem_type)
 {
-    if (!access(file, F_OK))
+    if (!access(file, F_OK)) {
         md_attr->cap.reg_mem_types |= UCS_BIT(mem_type);
+    }
 
     ucs_debug("%s: %s GPUDirect RDMA is %s",
               uct_ib_device_name(&md->dev), ucs_memory_type_names[mem_type],
@@ -285,7 +286,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                                       UCS_MEMORY_TYPE_ROCM);
 
         if (!(md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
-            md->config.enable_gpudirect_rdma == UCS_YES) {
+            (md->config.enable_gpudirect_rdma == UCS_YES)) {
                 ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure"
                           " nv_peer_mem or amdgpu plugin installed correctly.",
                           uct_ib_device_name(&md->dev));
@@ -294,9 +295,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     }
 
     md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
-
-    md_attr->reg_cost      = md->reg_cost;
+    md_attr->reg_cost         = md->reg_cost;
     ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
+
     return UCS_OK;
 }
 

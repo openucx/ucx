@@ -139,6 +139,18 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0x119f, 0x1bc6, "ConnectX-6",
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
+  /* Bull Sequana XH2000 ConnectX6 Mezz 2 CX6_0 HDR */
+  {0x119f, 0x1bc7, "ConnectX-6",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 50},
+  /* Bull Sequana XH2000 ConnectX6 Mezz 2 CX6_1 HDR */
+  {0x119f, 0x1bc8, "ConnectX-6",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 50},
+  /* BullSequana XH2000 ConnectX6 GPU Blade Mezz 1 HDR100 */
+  {0x119f, 0x1bc9, "ConnectX-6",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 50},
   {0, 0, "Generic HCA", 0, 0}
 };
 
