@@ -52,7 +52,7 @@ KHASH_INIT(xpmem_remote_mem, xpmem_segid_t, uct_xpmem_remote_mem_t*, 1,
 
 /* Global XPMEM segment which maps the entire process virtual address space */
 static ucs_init_once_t uct_xpmem_global_seg_init_once = UCS_INIT_ONCE_INITIALIZER;
-static xpmem_segid_t   uct_xpmem_global_xsegid = -1;
+static xpmem_segid_t   uct_xpmem_global_xsegid        = -1;
 
 /* Hash of remote regions */
 static khash_t(xpmem_remote_mem) uct_xpmem_remote_mem_hash;
@@ -264,7 +264,7 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     status = ucs_rcache_create(&rcache_params, "xpmem_remote_mem",
                                ucs_stats_get_root(), &rmem->rcache);
     if (status != UCS_OK) {
-        ucs_error("failed top create xpmem remote cache: %s",
+        ucs_error("failed to create xpmem remote cache: %s",
                   ucs_status_string(status));
         goto err_release_seg;
     }
