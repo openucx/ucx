@@ -27,7 +27,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"TX_SEG_SIZE", "8kb",
    "Size of send copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
-  
+
   {"RX_SEG_SIZE", "64kb",
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -251,29 +251,35 @@ static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
-    struct sockaddr_in peer_addr;
+    struct sockaddr_in peer_addr[UCT_TCP_MAX_SOCKETS];
     socklen_t addrlen;
     ucs_status_t status;
-    int fd;
-
+    int fds[UCT_TCP_MAX_SOCKETS];
     ucs_assert(listen_fd == iface->listen_fd);
 
     for (;;) {
-        addrlen = sizeof(peer_addr);
+        addrlen = sizeof(peer_addr[0]);
 
-        fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-        if (fd < 0) {
+        fds[0] = accept(iface->listen_fd, (struct sockaddr*)&peer_addr[0], &addrlen);
+        if (fds[0] < 0) {
             if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
                 ucs_error("accept() failed: %m");
                 uct_tcp_iface_listen_close(iface);
             }
-
             return;
         }
+        for (int i = 1; i < iface->num_sockets; i++) {
+            // TODO: non-blocking
+            do {
+                fds[i] = accept(iface->listen_fd, (struct sockaddr*)&peer_addr[i], &addrlen);
+            } while (fds[i] == -1);
+        }
 
-        status = uct_tcp_cm_handle_incoming_conn(iface, &peer_addr, fd);
+        status = uct_tcp_cm_handle_incoming_conn(iface, peer_addr, fds);
         if (status != UCS_OK) {
-            close(fd);
+            for (int i = 0; i < iface->num_sockets; i++) {
+                close(fds[i]);
+            }
             return;
         }
     }
@@ -449,6 +455,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                                sizeof(uct_tcp_am_hdr_t);
     self->config.rx_seg_size = config->rx_seg_size +
                                sizeof(uct_tcp_am_hdr_t);
+    // TODO:
+    char* ns = getenv("UCX_NUM_SOCKETS");
+    if (ns) {
+        self->num_sockets = atoi(ns);
+    }
 
     if (ucs_iov_get_max() >= UCT_TCP_EP_AM_SHORTV_IOV_COUNT) {
         self->config.sendv_thresh = config->sendv_thresh;

@@ -294,7 +294,10 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     ucs_assertv(connect_ep->events == 0,
                 "Requested epoll events must be 0-ed for ep=%p", connect_ep);
 
-    close(connect_ep->fd);
+    for (int i = 0; i < connect_ep->num_fds; i++) {
+        close(connect_ep->fds[i]);
+        connect_ep->fds[i] = accept_ep->fds[i];
+    }
     connect_ep->fd = accept_ep->fd;
 
     /* 2. Migrate RX from the EP allocated during accepting connection to
@@ -309,6 +312,9 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
      *    (set its socket `fd` to -1 prior to avoid closing this socket) */
     uct_tcp_ep_mod_events(accept_ep, 0, UCS_EVENT_SET_EVREAD);
     accept_ep->fd = -1;
+    for (int i = 0; i < accept_ep->num_fds; i++) {
+        accept_ep->fds[i] = -1;
+    }
     uct_tcp_ep_destroy_internal(&accept_ep->super.super);
     accept_ep = NULL;
 
@@ -547,7 +553,13 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
         return UCS_ERR_TIMED_OUT;
     }
 
-    status = ucs_socket_connect(ep->fd, (const struct sockaddr*)&ep->peer_addr);
+    // TODO:
+    ucs_assert(ep->fd == ep->fds[0]);
+    for (int i = 0; i < ep->num_fds; i++) {
+        status = ucs_socket_connect(ep->fds[i], (const struct sockaddr*)&ep->peer_addrs[i]);
+    }
+    memcpy(&ep->peer_addr, &ep->peer_addrs[0], sizeof(struct sockaddr_in));
+
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     } else if (status == UCS_INPROGRESS) {
@@ -560,9 +572,11 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
     ucs_assert(status == UCS_OK);
 
     if (!iface->config.conn_nb) {
-        status = ucs_sys_fcntl_modfl(ep->fd, O_NONBLOCK, 0);
-        if (status != UCS_OK) {
-            return status;
+        for (int i = 0; i < ep->num_fds; i++) {
+            status = ucs_sys_fcntl_modfl(ep->fds[i], O_NONBLOCK, 0);
+            if (status != UCS_OK) {
+                return status;
+            }
         }
     }
 
@@ -580,24 +594,26 @@ ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep)
 /* This function is called from async thread */
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr_in *peer_addr,
-                                             int fd)
+                                             int* fds)
 {
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     uct_tcp_ep_t *ep;
 
-    if (!ucs_socket_is_connected(fd)) {
-        ucs_warn("tcp_iface %p: connection establishment for socket fd %d "
-                 "from %s to %s was unsuccessful", iface, fd,
-                 ucs_sockaddr_str((const struct sockaddr*)&peer_addr,
-                                  str_remote_addr, UCS_SOCKADDR_STRING_LEN),
-                 ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
-                                  str_local_addr, UCS_SOCKADDR_STRING_LEN));
-        return UCS_ERR_UNREACHABLE;
+    for (int i = 0; i < iface->num_sockets; i++) {
+        if (!ucs_socket_is_connected(fds[i])) {
+            ucs_warn("tcp_iface %p: connection establishment for socket fd %d "
+                     "from %s to %s was unsuccessful\n", iface, fds[i],
+                     ucs_sockaddr_str((const struct sockaddr*)&peer_addr[i],
+                                      str_remote_addr, UCS_SOCKADDR_STRING_LEN),
+                     ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                      str_local_addr, UCS_SOCKADDR_STRING_LEN));
+            return UCS_ERR_UNREACHABLE;
+        }
     }
 
-    status = uct_tcp_ep_init(iface, fd, NULL, &ep);
+    status = uct_tcp_ep_init(iface, fds, NULL, &ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -605,12 +621,14 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
     uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_ACCEPTING);
     uct_tcp_ep_mod_events(ep, UCS_EVENT_SET_EVREAD, 0);
 
-    ucs_debug("tcp_iface %p: accepted connection from "
-              "%s on %s to tcp_ep %p (fd %d)", iface,
-              ucs_sockaddr_str((const struct sockaddr*)peer_addr,
-                               str_remote_addr, UCS_SOCKADDR_STRING_LEN),
-              ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
-                               str_local_addr, UCS_SOCKADDR_STRING_LEN),
-              ep, fd);
+    for (int i = 0; i < iface->num_sockets; i++) {
+        ucs_debug("tcp_iface %p: accepted connection from "
+                  "%s on %s to tcp_ep %p (fd %d)\n", iface,
+                  ucs_sockaddr_str((const struct sockaddr*)&peer_addr[i],
+                                   str_remote_addr, UCS_SOCKADDR_STRING_LEN),
+                  ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                   str_local_addr, UCS_SOCKADDR_STRING_LEN),
+                  ep, fds[i]);
+    }
     return UCS_OK;
 }
