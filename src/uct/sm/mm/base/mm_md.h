@@ -19,10 +19,6 @@
 typedef uint64_t          uct_mm_seg_id_t;
 
 
-/* For compatibility - to be removed */
-typedef uct_mm_seg_id_t   uct_mm_id_t;
-
-
 /**
  * Local memory segment structure.
  * The mappers must implement memory allocation functions so that they will
