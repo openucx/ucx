@@ -197,17 +197,21 @@ static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
     ucs_error("UCP CM wireup is not completely implemented");
 }
 
+/*
+ * Internal flush completion callback which is a part of close protocol,
+ * this flush was initiated by remote peer in disconnect callback on CM lane.
+ */
 static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
 {
     ucp_ep_h ucp_ep = req->send.ep;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-    ucp_ep_cm_disconnect(ucp_ep);
+    ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     ucp_request_complete_send(req, UCS_OK);
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-unsigned ucp_ep_cm_do_disconnect(void *arg)
+static unsigned ucp_ep_cm_do_disconnect(void *arg)
 {
     ucp_ep_h ucp_ep     = (ucp_ep_h)arg;
     ucp_worker_h worker = ucp_ep->worker;
@@ -217,22 +221,35 @@ unsigned ucp_ep_cm_do_disconnect(void *arg)
 
     ucs_trace_func("ucp_ep = %p, ucp_ep->flags = %xu", ucp_ep, ucp_ep->flags);
 
-    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-        req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
-                                    ucp_ep_cm_disconnect_flushed_cb,
-                                    "disconnected_cb");
-        if (req == NULL) {
-            ucp_ep_cm_disconnect(ucp_ep);
-        } else if (UCS_PTR_IS_PTR(req)) {
-            ucp_request_release(req);
-        } else {
-            ucs_fatal("ucp_ep_flush_internal completed with error: %s",
-                      ucs_status_string(UCS_PTR_STATUS(req)));
-        }
-    } else {
+    ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) != NULL);
+
+    if (!(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        /* while we were in slow progress queue, the EP was flushed and
+         * disconnected from API call. Destroy the EP, complete close request.*/
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
         ucp_ep_do_disconnect(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+        goto out;
     }
 
+    req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
+                                ucp_ep_cm_disconnect_flushed_cb,
+                                "cm_disconnected_cb");
+    if (req == NULL) {
+        /* flush is successfully completed in place, notify remote peer
+         * that we are disconnected, the EP will be destroyed from API call */
+        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+    } else if (UCS_PTR_IS_PTR(req)) {
+        /* flush is in progress, wait its completion */
+        ucp_request_release(req);
+    } else {
+        ucs_error("ucp_ep_flush_internal completed with error: %s",
+                  ucs_status_string(UCS_PTR_STATUS(req)));
+        ucp_worker_set_ep_failed(worker, ucp_ep, ucp_ep_get_cm_uct_ep(ucp_ep),
+                                 ucp_ep_get_cm_lane(ucp_ep),
+                                 UCS_PTR_STATUS(req));
+    }
+
+out:
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     return 1;
@@ -243,14 +260,30 @@ static void ucp_cm_disconnect_cb(uct_ep_h ep, void *arg)
     ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+
+    ucs_trace("invoke CM disconnect callback for UCP EP %p on CM EP %p",
+              ucp_ep, ep);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == ep);
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
-    /* invoke the disconnect flow from the main thread */
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_ep_cm_do_disconnect, ucp_ep,
+    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+        /* if the EP is local connected, need to flush it from main thread first */
+        uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                          ucp_ep_cm_do_disconnect, ucp_ep,
+                                          UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+        goto out;
+    }
+
+    /* if the EP is not local connected, the EP has been flushed and CM lane is
+     * disconnected, schedule close request completion and EP destroy */
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
+    uct_worker_progress_register_safe(ucp_ep->worker->uct, ucp_ep_do_disconnect,
+                                      ucp_ep_ext_gen(ucp_ep)->close_req.req,
                                       UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+out:
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
@@ -463,16 +496,35 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     return UCS_OK;
 }
 
-void ucp_ep_cm_disconnect(ucp_ep_h ucp_ep)
+void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
 {
     uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ucp_ep);
-    ucs_status_t status UCS_V_UNUSED;
+    ucs_status_t status;
 
     ucs_assert_always(uct_cm_ep != NULL);
+    /* No reason to try disconnect twice */
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
-    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-        status = uct_ep_disconnect(uct_cm_ep, 0);
-        ucs_assert(status == UCS_OK);
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    status = uct_ep_disconnect(uct_cm_ep, 0);
+    if (status != UCS_OK) {
+        ucs_warn("failed to disconnect CM lane %p of ep %p, %s", ucp_ep,
+                  uct_cm_ep, ucs_status_string(status));
     }
+}
+
+ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
+{
+    ucp_request_t *request = ucp_request_get(ep->worker);
+
+    if (request == NULL) {
+        ucs_error("failed to allocate close request for ep %p", ep);
+        return NULL;
+    }
+
+    request->status  = UCS_OK;
+    request->flags   = 0;
+    request->send.ep = ep;
+
+    return request;
 }

@@ -795,9 +795,30 @@ unsigned ucp_ep_do_disconnect(void *arg)
     return 0;
 }
 
+static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request)
+{
+    ucp_ep_flush_state_invalidate(ep);
+    ucp_ep_ext_gen(ep)->close_req.req = request;
+    ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
+}
+
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
+
+    if (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) {
+        UCS_ASYNC_BLOCK(&ep->worker->async);
+        if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+            /* Now, when close flush is completed and we are still connected,
+             * we have to notify remote side and wait disconnect notification
+             * from remote side */
+            ucp_ep_cm_disconnect_cm_lane(ep);
+            ucp_ep_set_close_request(ep, req);
+            UCS_ASYNC_UNBLOCK(&ep->worker->async);
+            return;
+        }
+        UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    }
 
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
@@ -805,17 +826,9 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
-    if (ucp_ep_get_cm_lane(ep) == UCP_NULL_LANE) {
-        uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
-                                          req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &req->send.disconnect.prog_id);
-    } else {
-        ucp_ep_ext_gen(ep)->close_req.req = req;
-        uct_worker_progress_register_safe(ep->worker->uct,
-                                          ucp_ep_cm_do_disconnect, ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &req->send.disconnect.prog_id);
-    }
+    uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
+                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &req->send.disconnect.prog_id);
 }
 
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
@@ -842,22 +855,18 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
         uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
         if (uct_cm_ep != NULL) {
             if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-                /* flush state must be valid and queue is empty */
-                ucs_assert(ucp_ep_flush_state(ep) != NULL);
-                ucs_assert(ucs_queue_is_empty(
-                                &ucp_ep_ext_gen(ep)->flush_state.reqs));
-                close_req = ucp_request_get(ep->worker);
-                memset(close_req, 0, sizeof(*close_req));
-                close_req->status  = UCS_OK;
-                close_req->flags   = 0;
-                close_req->send.ep = ep;
-                ucp_ep_ext_gen(ep)->close_req.req = close_req;
-                ucp_ep_cm_disconnect(ep);
-                request = close_req + 1;
+                ucp_ep_cm_disconnect_cm_lane(ep);
+                close_req = ucp_ep_cm_close_request_get(ep);
+                ucp_ep_set_close_request(ep, close_req);
+                request = (close_req != NULL) ? close_req + 1 :
+                          UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
             }
-        } else {
-            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
         }
+    }
+
+    if (!UCS_PTR_IS_PTR(request)) {
+        ucp_ep_disconnected(ep, (mode == UCP_EP_CLOSE_MODE_FORCE) ||
+                                UCS_PTR_IS_ERR(request));
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

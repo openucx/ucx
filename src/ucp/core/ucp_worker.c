@@ -15,6 +15,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
+#include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
@@ -495,9 +496,14 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out_ok;
     }
 
+    /* In case if this is a local failure we need to notify remote side */
+    if ((ucp_ep_get_cm_lane(ucp_ep) != UCP_NULL_LANE) &&
+        (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+    }
+
     /* set endpoint to failed to prevent wireup_ep switch */
     ucp_ep->flags |= UCP_EP_FLAG_FAILED;
-    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
 
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
         /* NOTE: if user has not requested error handling on the endpoint,

@@ -34,8 +34,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                   ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p);
 
-void ucp_ep_cm_disconnect(ucp_ep_h ucp_ep);
+void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep);
 
-unsigned ucp_ep_cm_do_disconnect(void *arg);
+ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep);
 
 #endif /* WIREUP_CM_H_ */
