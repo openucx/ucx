@@ -239,11 +239,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     size_t address_length;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            continue;
-        }
-
-        if (!context->mem_type_access_tls[mem_type]) {
+        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
+            !context->mem_type_access_tls[mem_type]) {
             continue;
         }
 
@@ -1183,7 +1180,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (UCP_MEM_IS_HOST(mem_type)) {
+        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = 1;

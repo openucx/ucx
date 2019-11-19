@@ -402,9 +402,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_unpack_contig(ucp_request_t *req, void *buf, const void *data,
                           size_t length)
 {
-    if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type) ||
-                   UCP_MEM_IS_CUDA_MANAGED(req->recv.mem_type) ||
-                   UCP_MEM_IS_ROCM_MANAGED(req->recv.mem_type))) {
+    if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type))) {
         UCS_PROFILE_NAMED_CALL("memcpy_recv", ucs_memcpy_relaxed, buf,
                                data, length);
     } else {
