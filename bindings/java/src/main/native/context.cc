@@ -67,18 +67,34 @@ Java_org_openucx_jucx_ucp_UcpContext_cleanupContextNative(JNIEnv *env, jclass cl
     ucp_cleanup((ucp_context_h)ucp_context_ptr);
 }
 
+
 JNIEXPORT jobject JNICALL
-Java_org_openucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject ctx,
-                                                          jlong ucp_context_ptr,
-                                                          jobject maped_buf)
+Java_org_openucx_jucx_ucp_UcpContext_memoryMapNative(JNIEnv *env, jobject ctx,
+                                                     jlong ucp_context_ptr,
+                                                     jobject jucx_mmap_params)
 {
     ucp_mem_map_params_t params = {0};
     ucp_mem_h memh;
     jfieldID field;
 
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_ADDRESS;
-    params.address    = env->GetDirectBufferAddress(maped_buf);
-    params.length     = env->GetDirectBufferCapacity(maped_buf);
+    jclass jucx_mmap_class = env->GetObjectClass(jucx_mmap_params);
+    field = env->GetFieldID(jucx_mmap_class, "fieldMask", "J");
+    params.field_mask = env->GetLongField(jucx_mmap_params, field);
+
+    if (params.field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS) {
+        field = env->GetFieldID(jucx_mmap_class, "address", "J");
+        params.address = (void *)env->GetLongField(jucx_mmap_params, field);;
+    }
+
+    if (params.field_mask & UCP_MEM_MAP_PARAM_FIELD_LENGTH) {
+        field = env->GetFieldID(jucx_mmap_class, "length", "J");
+        params.length = env->GetLongField(jucx_mmap_params, field);;
+    }
+
+    if (params.field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) {
+        field = env->GetFieldID(jucx_mmap_class, "flags", "J");
+        params.flags = env->GetLongField(jucx_mmap_params, field);;
+    }
 
     ucs_status_t status =  ucp_mem_map((ucp_context_h)ucp_context_ptr, &params, &memh);
     if (status != UCS_OK) {
@@ -94,13 +110,13 @@ Java_org_openucx_jucx_ucp_UcpContext_registerMemoryNative(JNIEnv *env, jobject c
     field = env->GetFieldID(jucx_mem_cls, "context", "Lorg/openucx/jucx/ucp/UcpContext;");
     env->SetObjectField(jucx_mem, field, ctx);
 
-    // Set data buffer
-    field = env->GetFieldID(jucx_mem_cls, "data", "Ljava/nio/ByteBuffer;");
-    env->SetObjectField(jucx_mem, field, maped_buf);
-
     // Set address
     field =  env->GetFieldID(jucx_mem_cls, "address", "J");
     env->SetLongField(jucx_mem, field, (native_ptr)memh->address);
+
+    // Set length
+    field =  env->GetFieldID(jucx_mem_cls, "length", "J");
+    env->SetLongField(jucx_mem, field, memh->length);
 
     /* Coverity thinks that memh is a leaked object here,
      * but it's stored in a UcpMemory object */

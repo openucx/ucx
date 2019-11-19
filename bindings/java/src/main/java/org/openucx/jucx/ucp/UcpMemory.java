@@ -7,6 +7,7 @@ package org.openucx.jucx.ucp;
 
 import org.openucx.jucx.UcxNativeStruct;
 
+import java.io.Closeable;
 import java.nio.ByteBuffer;
 
 /**
@@ -16,13 +17,15 @@ import java.nio.ByteBuffer;
  * to one or multiple network resources that are supported by UCP,
  * such as InfiniBand, Gemini, and others.
  */
-public class UcpMemory extends UcxNativeStruct {
+public class UcpMemory extends UcxNativeStruct implements Closeable {
 
     private UcpContext context;
 
     private ByteBuffer data;
 
     private long address;
+
+    private long length;
 
     /**
      * To prevent construct outside of JNI.
@@ -71,8 +74,12 @@ public class UcpMemory extends UcxNativeStruct {
         return result;
     }
 
-    public ByteBuffer getData() {
-        return data;
+    /**
+     * To keep reference to user's ByteBuffer so it won't be cleaned by refCount cleaner.
+     * @param data
+     */
+    void setByteBufferReference(ByteBuffer data) {
+        this.data = data;
     }
 
     /**
@@ -82,9 +89,21 @@ public class UcpMemory extends UcxNativeStruct {
         return address;
     }
 
+    /**
+     * Length of registered memory
+     */
+    public long getLength() {
+        return length;
+    }
+
     private static native void unmapMemoryNative(long contextId, long memoryId);
 
     private static native ByteBuffer getRkeyBufferNative(long contextId, long memoryId);
 
     private static native void releaseRkeyBufferNative(ByteBuffer rkey);
+
+    @Override
+    public void close() {
+        deregister();
+    }
 }
