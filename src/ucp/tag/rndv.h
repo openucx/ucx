@@ -59,4 +59,6 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 
+ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq);
+
 #endif

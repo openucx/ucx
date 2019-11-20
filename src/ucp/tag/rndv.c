@@ -145,10 +145,30 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     return status;
 }
 
-ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
+ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
 {
     ucp_ep_h ep = sreq->send.ep;
     ucp_md_map_t md_map;
+    ucs_status_t status;
+
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
+        ucp_rndv_is_get_zcopy(sreq->send.mem_type,
+                              ep->worker->context->config.ext.rndv_mode)) {
+
+        /* register a contiguous buffer for rma_get */
+        md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
+        status = ucp_request_send_buffer_reg(sreq, md_map);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
+{
+    ucp_ep_h ep = sreq->send.ep;
     ucs_status_t status;
 
     ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu",
@@ -163,26 +183,13 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 
     if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
         status = ucp_tag_offload_start_rndv(sreq);
-        if (status != UCS_OK) {
-            return status;
-        }
     } else {
-        if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-            ucp_rndv_is_get_zcopy(sreq->send.mem_type,
-                                  ep->worker->context->config.ext.rndv_mode)) {
-            /* register a contiguous buffer for rma_get */
-            md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
-            status = ucp_request_send_buffer_reg(sreq, md_map);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
-
         ucs_assert(sreq->send.lane == ucp_ep_get_am_lane(ep));
         sreq->send.uct.func = ucp_proto_progress_rndv_rts;
+        status              = ucp_tag_rndv_reg_send_buffer(sreq);
     }
 
-    return UCS_OK;
+    return status;
 }
 
 static void ucp_rndv_complete_send(ucp_request_t *sreq)

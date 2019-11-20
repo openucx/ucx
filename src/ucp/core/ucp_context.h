@@ -63,6 +63,8 @@ typedef struct ucp_context_config {
     /** Upper bound for posting tm offload receives with internal UCP
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bb_size;
+    /** Enabling SW rndv protocol with tag offload mode */
+    int                                    tm_sw_rndv;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
