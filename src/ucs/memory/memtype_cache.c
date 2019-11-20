@@ -56,9 +56,6 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
     ucs_status_t status;
     int ret;
 
-    ucs_trace("memtype_cache: insert 0x%lx..0x%lx mem_type %s",
-              start, end, ucs_memory_type_names[mem_type]);
-
     /* Allocate structure for new region */
     ret = ucs_posix_memalign((void **)&region,
                              ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
@@ -82,7 +79,12 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
         ucs_error("failed to insert region " UCS_PGT_REGION_FMT ": %s",
                   UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
         ucs_free(region);
+        return;
     }
+
+    ucs_trace("memtype_cache: insert " UCS_PGT_REGION_FMT " mem_type %s",
+              UCS_PGT_REGION_ARG(&region->super),
+              ucs_memory_type_names[mem_type]);
 }
 
 static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
@@ -113,15 +115,20 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     start = ucs_align_down_pow2((uintptr_t)address,        UCS_PGT_ADDR_ALIGN);
     end   = ucs_align_up_pow2  ((uintptr_t)address + size, UCS_PGT_ADDR_ALIGN);
 
+    ucs_trace("%s: [0x%lx..0x%lx] mem_type %s",
+              ((action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) ?
+               "update" : "remove"),
+              start, end, ucs_memory_type_names[mem_type]);
+
     if (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) {
         /* try to find regions that are contiguous and instersected
          * with current one */
         search_start = start - 1;
-        search_end   = end + 1;
+        search_end   = end;
     } else {
         /* try to find regions that are instersected with current one */
         search_start = start;
-        search_end   = end;
+        search_end   = end - 1;
     }
 
     pthread_rwlock_wrlock(&memtype_cache->lock);
@@ -148,12 +155,15 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
 
         status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
         if (status != UCS_OK) {
-            ucs_error("failed to remove address:%p from memtype_cache", address);
+            ucs_error("failed to remove " UCS_PGT_REGION_FMT
+                      " from memtype_cache: %s",
+                      UCS_PGT_REGION_ARG(&region->super),
+                      ucs_status_string(status));
             goto out_unlock;
         }
 
-        ucs_trace("memtype_cache: removed 0x%lx..0x%lx mem_type %s",
-                  region->super.start, region->super.end,
+        ucs_trace("memtype_cache: removed " UCS_PGT_REGION_FMT " %s",
+                  UCS_PGT_REGION_ARG(&region->super),
                   ucs_memory_type_names[region->mem_type]);
     }
 
@@ -189,6 +199,14 @@ void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
 {
     ucs_memtype_cache_update_internal(memtype_cache, address, size, mem_type,
                                       UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
+}
+
+void ucs_memtype_cache_remove(ucs_memtype_cache_t *memtype_cache,
+                              const void *address, size_t size)
+{
+    ucs_memtype_cache_update_internal(memtype_cache, address, size,
+                                      UCS_MEMORY_TYPE_LAST,
+                                      UCS_MEMTYPE_CACHE_ACTION_REMOVE);
 }
 
 static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,

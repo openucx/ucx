@@ -14,7 +14,6 @@ extern "C" {
 #include <vector>
 #include <set>
 
-
 class test_pgtable : public ucs::test {
 protected:
 
@@ -101,6 +100,23 @@ protected:
             }
         }
         return count;
+    }
+
+    void test_search_region(const ucs_pgt_region_t &region)
+    {
+        search_result_t result;
+
+        result = search(region.start, region.end - 1);
+        EXPECT_EQ(1u, result.size());
+        EXPECT_EQ(&region, result.front());
+
+        result = search(region.start, region.end);
+        EXPECT_EQ(1u, result.size());
+        EXPECT_EQ(&region, result.front());
+
+        result = search(region.start, region.end + 1);
+        EXPECT_EQ(1u, result.size());
+        EXPECT_EQ(&region, result.front());
     }
 
 private:
@@ -260,11 +276,133 @@ UCS_TEST_F(test_pgtable, search_large_region) {
     ucs_pgt_region_t region = {0x3c03cb00, 0x3c03f600};
     insert(&region, UCS_OK);
 
-    search_result_t result = search(0x36990000, 0x3c810000);
+    search_result_t result;
+
+    result = search(0x36990000, 0x3c810000);
     EXPECT_EQ(1u, result.size());
     EXPECT_EQ(&region, result.front());
 
+    result = search(region.start - 1, region.start);
+    EXPECT_EQ(1u, result.size());
+
+    result = search(region.start, region.start + 1);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region, result.front());
+
+    result = search(region.end - 1, region.end);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region, result.front());
+
+    result = search(region.end, region.end + 1);
+    EXPECT_EQ(0u, result.size());
+
     remove(&region);
+}
+
+UCS_TEST_F(test_pgtable, search_non_contig_regions) {
+    const size_t region_size = UCS_BIT(28);
+    size_t start, end;
+
+    // insert [0x7f6ef0000000 .. 0x7f6f00000000]
+    start = 0x7f6ef0000000;
+    end   = start + region_size;
+    ucs_pgt_region_t region1 = {start, end};
+    insert(&region1, UCS_OK);
+
+    // insert [0x7f6f2c021000 .. 0x7f6f3c021000]
+    start = 0x7f6f2c021000;
+    end   = start + region_size;
+    ucs_pgt_region_t region2 = {start, end};
+    insert(&region2, UCS_OK);
+
+    // insert [0x7f6f42000000 .. 0x7f6f52000000]
+    start = 0x7f6f42000000;
+    end   = start + region_size;
+    ucs_pgt_region_t region3 = {start, end};
+    insert(&region3, UCS_OK);
+
+    search_result_t result;
+
+    // search the 1st region
+    test_search_region(region1);
+
+    // search the 2nd region
+    test_search_region(region2);
+
+    // search the 3rd region
+    test_search_region(region3);
+
+    remove(&region1);
+    remove(&region2);
+    remove(&region3);
+}
+
+UCS_TEST_F(test_pgtable, search_adjacent_regions) {
+    const size_t region_size = UCS_BIT(28);
+    size_t start, end;
+
+    // insert [0x7f6ef0000000 .. 0x7f6f00000000]
+    start = 0x7f6ef0000000;
+    end   = start + region_size;
+    ucs_pgt_region_t region1 = {start, end};
+    insert(&region1, UCS_OK);
+
+    // insert [0x7f6f00000000 .. 0x7f6f10000000]
+    start = end;
+    end   = start + region_size;
+    ucs_pgt_region_t region2 = {region1.end, 0x7f6f40000000};
+    insert(&region2, UCS_OK);
+
+    // insert [0x7f6f10000000 .. 0x7f6f20000000]
+    start = end;
+    end   = start + region_size;
+    ucs_pgt_region_t region3 = {region2.end, 0x7f6f48000000};
+    insert(&region3, UCS_OK);
+
+    search_result_t result;
+
+    // search the 1st region
+    result = search(region1.start, region1.end - 1);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region1, result.front());
+
+    result = search(region1.start, region1.end);
+    EXPECT_EQ(2u, result.size());
+    EXPECT_EQ(&region1, result.front());
+
+    result = search(region1.start, region1.end + 1);
+    EXPECT_EQ(2u, result.size());
+    EXPECT_EQ(&region1, result.front());
+
+    // search the 2nd region
+    result = search(region2.start, region2.end - 1);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region2, result.front());
+
+    result = search(region2.start, region2.end);
+    EXPECT_EQ(2u, result.size());
+    EXPECT_EQ(&region2, result.front());
+
+    result = search(region2.start, region2.end + 1);
+    EXPECT_EQ(2u, result.size());
+    EXPECT_EQ(&region2, result.front());
+
+    // search the 3rd region
+    result = search(region3.start, region3.end - 1);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region3, result.front());
+
+    result = search(region3.start, region3.end);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region3, result.front());
+
+    result = search(region3.start, region3.end + 1);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region3, result.front());
+
+    remove(&region1);
+    remove(&region2);
+    remove(&region3);
 }
 
 class test_pgtable_perf : public test_pgtable {
@@ -474,4 +612,3 @@ UCS_TEST_SKIP_COND_F(test_pgtable_perf, workloads,
                      false,
                      0.8);
 }
-
