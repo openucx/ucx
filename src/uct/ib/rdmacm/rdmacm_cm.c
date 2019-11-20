@@ -71,14 +71,18 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
     struct sockaddr    *remote_addr = rdma_get_peer_addr(event->id);
     uct_rdmacm_cm_ep_t *cep         = (uct_rdmacm_cm_ep_t *)event->id->context;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
     ucs_assert(event->id == cep->id);
 
-    ucs_trace("rdma_resolve_route on cm_id %p", event->id);
+    ucs_trace("%s: rdma_resolve_route on cm_id %p",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+              event->id);
 
     if (rdma_resolve_route(event->id, 1000 /* TODO */)) {
-        ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
+        ucs_error("%s: rdma_resolve_route(to addr=%s) failed: %m",
+                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
@@ -94,6 +98,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     ucs_status_t           status;
     struct rdma_conn_param conn_param;
     char                   ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
 
     ucs_assert(event->id == cep->id);
 
@@ -108,10 +113,12 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
         return;
     }
 
-    ucs_trace("rdma_connect on ep %p, cm_id %p", cep, cep->id);
+    ucs_trace("%s: rdma_connect, cm_id %p",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id);
 
     if (rdma_connect(cep->id, &conn_param)) {
-        ucs_error("rdma_connect(to addr=%s) failed: %m",
+        ucs_error("%s: rdma_connect(to addr=%s) failed: %m",
+                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
@@ -263,11 +270,12 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t *cep      = event->id->context;
-    struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
-    char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr    *remote_addr = rdma_get_peer_addr(event->id);
+    char               ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char               ep_str[UCT_RDMACM_EP_STRING_LEN];
 
-    ucs_debug("%s got disconnect event, status %d peer %s",
-              (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER ? "server" : "client"),
+    ucs_debug("%s: got disconnect event, status %d peer %s",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
                                              UCS_SOCKADDR_STRING_LEN));
 
@@ -280,10 +288,11 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t *cep      = event->id->context;
     struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
-    ucs_error("%s got error event %s, status %d peer %s",
-              (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER ? "server" : "client"),
+    ucs_error("%s: got error event %s, status %d peer %s",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               rdma_event_str(event->event), event->status,
               ucs_sockaddr_str(remote_addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN));

@@ -361,22 +361,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_bitmap(char *buf, size_t max,
                               const void *src, const void *arg)
 {
-    char * const *table;
-    int i, len;
-
-    len = 0;
-    for (table = arg, i = 0; *table; ++table, ++i) {
-        if (*((unsigned*)src) & UCS_BIT(i)) {
-            snprintf(buf + len, max - len, "%s,", *table);
-            len = strlen(buf);
-        }
-    }
-
-    if (len > 0) {
-        buf[len - 1] = '\0'; /* remove last ',' */
-    } else {
-        buf[0] = '\0';
-    }
+    ucs_flags_str(buf, max, *((unsigned*)src), (const char**)arg);
     return 1;
 }
 
