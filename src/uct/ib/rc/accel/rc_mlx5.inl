@@ -340,14 +340,12 @@ static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
                             uct_ib_mlx5_txwq_t *txwq, int flag)
 {
-    uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
     int fm;
 
-    fm        = uct_rc_ep_fm(&iface->super, &txwq->fi, flag);
-    fm_ce_se |= fm;
+    fm = uct_rc_ep_fm(&iface->super, &txwq->fi, flag);
     UCT_TL_IFACE_STAT_FENCE_OP(&iface->super.super.super, fm);
 
-    return fm_ce_se;
+    return fm | MLX5_WQE_CTRL_CQ_UPDATE;
 }
 
 static UCS_F_ALWAYS_INLINE void

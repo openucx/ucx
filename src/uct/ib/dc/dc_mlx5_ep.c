@@ -19,7 +19,7 @@
 }
 
 #define UCT_DC_MLX5_IFACE_FM(_ep, _txwq) \
-    uct_rc_ep_fence_add(&(_ep)->super.super, &_txwq->fi, \
+    uct_rc_ep_fence_add(&(_ep)->super.super, &(_txwq)->fi, \
                         (_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE); \
     (_ep)->flags &= ~UCT_DC_MLX5_EP_FLAG_FENCE
 
@@ -235,7 +235,7 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
     ep->flags |= UCT_DC_MLX5_EP_FLAG_FENCE;
-    UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
+    UCT_TL_EP_STAT_FENCE(&ep->super);
     return UCS_OK;
 }
 
@@ -989,7 +989,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     ucs_arbiter_group_t *group;
-    uct_pending_req_t *prev_pen_req;
+    uct_pending_req_t *prev_pend_req;
     uct_dc_mlx5_pending_req_priv_t *prev_dc_req;
 
     /* ep can tx iff
@@ -1022,8 +1022,8 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     if (!ucs_arbiter_group_is_empty(group)) {
         /* in case if there are elements in queue - check if iface->fence_sn is
          * updated since last element added */
-        prev_pen_req = ucs_container_of(group->tail, uct_pending_req_t, priv);
-        prev_dc_req  = uct_dc_mlx5_pending_req_priv(prev_pen_req);
+        prev_pend_req = ucs_container_of(group->tail, uct_pending_req_t, priv);
+        prev_dc_req   = uct_dc_mlx5_pending_req_priv(prev_pend_req);
         uct_dc_mlx5_pending_req_priv(r)->fence = prev_dc_req->fence_sn !=
                                                  iface->super.super.tx.fi.fence_sn;
     } else if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
@@ -1113,8 +1113,7 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
     priv  = uct_dc_mlx5_pending_req_priv(req);
     /* force set fence flag for current operation */
     ep->flags |= (ep->flags & ~UCT_DC_MLX5_EP_FLAG_FENCE) |
-                 (priv->fence ?
-                  UCT_DC_MLX5_EP_FLAG_FENCE : 0);
+                 (priv->fence ? UCT_DC_MLX5_EP_FLAG_FENCE : 0);
 
     ucs_trace_data("progressing pending request %p", req);
     status = req->func(req);
