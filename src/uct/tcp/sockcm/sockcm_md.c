@@ -122,7 +122,6 @@ uct_sockcm_md_open(uct_component_t *component, const char *md_name,
 
 uct_component_t uct_sockcm_component = {
     .query_md_resources = uct_md_query_single_md_resource,
-    .query_cm_resource  = uct_cm_query_single_cm_resource,
     .md_open            = uct_sockcm_md_open,
     .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_sockcm_cm_t),
     .rkey_unpack        = ucs_empty_function_return_unsupported,
@@ -142,6 +141,6 @@ uct_component_t uct_sockcm_component = {
         .size           = sizeof(uct_sockcm_cm_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_sockcm_component),
-    .flags              = 0
+    .flags              = UCT_COMPONENT_FLAG_CM
 };
 UCT_COMPONENT_REGISTER(&uct_sockcm_component)

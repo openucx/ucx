@@ -413,7 +413,6 @@ err_free_md:
 
 uct_component_t uct_gdr_copy_component = {
     .query_md_resources = uct_gdr_copy_query_md_resources,
-    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_gdr_copy_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_gdr_copy_rkey_unpack,

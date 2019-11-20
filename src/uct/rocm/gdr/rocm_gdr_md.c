@@ -137,7 +137,6 @@ uct_rocm_gdr_md_open(uct_component_h component, const char *md_name,
 
 uct_component_t uct_rocm_gdr_component = {
     .query_md_resources = uct_md_query_single_md_resource,
-    .query_cm_resource  = ucs_empty_function_return_unsupported,
     .md_open            = uct_rocm_gdr_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_rocm_gdr_rkey_unpack,

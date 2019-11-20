@@ -378,7 +378,6 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
 
 static uct_component_t uct_self_component = {
     .query_md_resources = uct_md_query_single_md_resource,
-    .query_cm_resource  = ucs_empty_function_return_unsupported,
     .md_open            = uct_self_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_self_md_rkey_unpack,

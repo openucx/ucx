@@ -26,8 +26,9 @@ typedef struct uct_sockcm_cm {
 
 
 typedef struct uct_sockcm_priv_data_hdr {
-    uint8_t  length;       /* length of the private data */
+    uint8_t         length;       /* length of the private data */
 } uct_sockcm_priv_data_hdr_t;
+
 
 extern uct_component_t uct_sockcm_component;
 extern ucs_config_field_t uct_sockcm_cm_config_table[];

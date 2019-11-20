@@ -51,10 +51,6 @@ struct uct_cm {
     uct_base_iface_t iface;
 };
 
-ucs_status_t
-uct_cm_query_single_cm_resource(uct_component_t *component,
-                                uct_cm_resource_desc_t **resources_p,
-                                unsigned *num_resources_p);
 
 extern ucs_config_field_t uct_cm_config_table[];
 

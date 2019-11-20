@@ -11,7 +11,6 @@
 
 
 ucs_config_field_t uct_cm_config_table[] = {
-
   {NULL}
 };
 
@@ -48,26 +47,6 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
 
     *config_p = (uct_cm_config_t*) bundle->data;
     /* coverity[leaked_storage] */
-    return UCS_OK;
-}
-
-ucs_status_t
-uct_cm_query_single_cm_resource(uct_component_t *component,
-                                uct_cm_resource_desc_t **resources_p,
-                                unsigned *num_resources_p)
-{
-    uct_cm_resource_desc_t *resource;
-
-    resource = ucs_malloc(sizeof(*resource), "cm resource");
-    if (resource == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_snprintf_zero(resource->cm_name, UCT_CM_NAME_MAX, "%s",
-                      component->name);
-
-    *resources_p     = resource;
-    *num_resources_p = 1;
     return UCS_OK;
 }
 

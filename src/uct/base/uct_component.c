@@ -52,9 +52,7 @@ ucs_status_t uct_component_query(uct_component_h component,
                                  uct_component_attr_t *component_attr)
 {
     uct_md_resource_desc_t *md_resources = NULL;
-    uct_cm_resource_desc_t *cm_resource  = NULL;
     unsigned num_md_resources            = 0;
-    unsigned num_cm_resources            = 0;
     ucs_status_t status;
 
     if (component_attr->field_mask & (UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT|
@@ -66,19 +64,6 @@ ucs_status_t uct_component_query(uct_component_h component,
         }
 
         ucs_assertv((num_md_resources == 0) || (md_resources != NULL),
-                    "component=%s", component->name);
-    }
-
-    if ((component_attr->field_mask & (UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT |
-                                       UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE)) &&
-        (component->cm_open != ucs_empty_function_return_unsupported)) {
-        status = component->query_cm_resource(component, &cm_resource,
-                                              &num_cm_resources);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        ucs_assertv((num_cm_resources == 0) || (cm_resource != NULL),
                     "component=%s", component->name);
     }
 
@@ -99,23 +84,10 @@ ucs_status_t uct_component_query(uct_component_h component,
                sizeof(uct_md_resource_desc_t) * num_md_resources);
     }
 
-    if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT) {
-        component_attr->cm_resource_count = num_cm_resources;
-    }
-
-    if ((cm_resource != NULL) &&
-        (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE))
-    {
-        ucs_assert(num_cm_resources == 1);
-        memcpy(component_attr->cm_resource, cm_resource,
-               sizeof(uct_cm_resource_desc_t));
-    }
-
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_FLAGS) {
         component_attr->flags = component->flags;
     }
 
     ucs_free(md_resources);
-    ucs_free(cm_resource);
     return UCS_OK;
 }

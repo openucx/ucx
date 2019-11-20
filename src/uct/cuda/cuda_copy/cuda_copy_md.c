@@ -143,7 +143,6 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
 
 uct_component_t uct_cuda_copy_component = {
     .query_md_resources = uct_cuda_base_query_md_resources,
-    .query_cm_resources = ucs_empty_function_return_unsupported,
     .md_open            = uct_cuda_copy_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_cuda_copy_rkey_unpack,

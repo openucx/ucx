@@ -208,17 +208,6 @@ typedef struct uct_md_resource_desc {
 
 
 /**
- * @ingroup UCT_CLIENT_SERVER
- * @brief Connection manager resource descriptor.
- *
- * This structure describes a connection manager resource.
- */
-typedef struct uct_cm_resource_desc {
-    char                     cm_name[UCT_CM_NAME_MAX]; /**< Connectionn manager name */
-} uct_cm_resource_desc_t;
-
-
-/**
  * @ingroup UCT_RESOURCE
  * @brief UCT component attributes field mask
  *
@@ -229,9 +218,7 @@ enum uct_component_attr_field {
     UCT_COMPONENT_ATTR_FIELD_NAME              = UCS_BIT(0), /**< Component name */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT = UCS_BIT(1), /**< MD resource count */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES      = UCS_BIT(2), /**< MD resources array */
-    UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT = UCS_BIT(3), /**< CM resource count */
-    UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE       = UCS_BIT(4), /**< CM resource */
-    UCT_COMPONENT_ATTR_FIELD_FLAGS             = UCS_BIT(5)  /**< Capability flags */
+    UCT_COMPONENT_ATTR_FIELD_FLAGS             = UCS_BIT(3)  /**< Capability flags */
 };
 
 
@@ -271,26 +258,6 @@ typedef struct uct_component_attr {
      * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES.
      */
     uct_md_resource_desc_t *md_resources;
-
-    /** Number of connection manager resources */
-    unsigned               cm_resource_count;
-
-    /**
-     * Array holding the connection manager resource.
-     * When used, it should be initialized prior to calling
-     * @ref uct_component_query with a pointer to an array, which is large
-     * enough to hold one connection manager resource entrie.
-     * After the call, this array will be filled with information about the
-     * existing connection manager resource.
-     * In order to allocate this array, you can call @ref uct_component_query
-     * twice: The first time would only obtain the amount of entries required,
-     * i.e. tell you if there is a connection manager availbale on this component,
-     * by specifying @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE_COUNT in
-     * field_mask. Then the array could be allocated with the returned number of
-     * entries, and passed to a second call to @ref uct_component_query, this
-     * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_CM_RESOURCE.
-     */
-    uct_cm_resource_desc_t *cm_resource;
 
     /**
      * Flags as defined by UCT_COMPONENT_FLAG_xx.
@@ -2114,7 +2081,6 @@ ucs_status_t uct_md_config_read(uct_component_h component,
                                 const char *env_prefix, const char *filename,
                                 uct_md_config_t **config_p);
 
-
 /**
  * @ingroup UCT_MD
  * @brief Check if remote sock address is accessible from the memory domain.
@@ -3069,7 +3035,8 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
  * @ingroup UCT_CLIENT_SERVER
  * @brief Read the configuration for a connection manager.
  *
- * @param [in]  component     Read the configuration of this component.
+ * @param [in]  component     Read the configuration of the connection manager
+ *                            on this component.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.

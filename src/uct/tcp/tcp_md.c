@@ -73,7 +73,6 @@ static ucs_status_t uct_tcp_md_rkey_unpack(uct_component_t *component,
 
 uct_component_t uct_tcp_component = {
     .query_md_resources = uct_md_query_single_md_resource,
-    .query_cm_resource  = ucs_empty_function_return_unsupported,
     .md_open            = uct_tcp_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_tcp_md_rkey_unpack,
