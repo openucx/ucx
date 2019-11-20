@@ -7,16 +7,16 @@ package org.openucx.jucx.examples;
 
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.*;
 
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
 public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         if (!initializeArguments(args)) {
             return;
         }
@@ -39,7 +39,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         }
 
         long remoteAddress = recvBuffer.getLong();
-        long remoteSize = recvBuffer.getInt();
+        long remoteSize = recvBuffer.getLong();
         int remoteKeySize = recvBuffer.getInt();
         int rkeyBufferOffset = recvBuffer.position();
 
@@ -49,7 +49,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         copyBuffer(recvBuffer, workerAddress, workerAdressSize);
 
         int remoteHashCode = recvBuffer.getInt();
-        System.out.printf("Received connection. Will read %d bytes from remote address %d\n",
+        System.out.printf("Received connection. Will read %d bytes from remote address %d%n",
             remoteSize, remoteAddress);
 
         UcpEndpoint endpoint = worker.newEndpoint(
@@ -60,10 +60,14 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(recvBuffer);
         resources.push(remoteKey);
 
-        ByteBuffer data = ByteBuffer.allocateDirect((int)remoteSize);
+        UcpMemory recvMemory = context.memoryMap(allocationParams);
+        resources.push(recvMemory);
+        ByteBuffer data = UcxUtils.getByteBufferView(recvMemory.getAddress(),
+            (int)Math.min(Integer.MAX_VALUE, totalSize));
         for (int i = 0; i < numIterations; i++) {
             final int iterNum = i;
-            UcxRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey, data,
+            UcxRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey,
+                recvMemory.getAddress(), totalSize,
                 new UcxCallback() {
                     long startTime = System.nanoTime();
 
@@ -73,7 +77,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
                         data.clear();
                         assert data.hashCode() == remoteHashCode;
                         double bw = getBandwithGbits(finishTime - startTime, remoteSize);
-                        System.out.printf("Iteration %d, bandwidth: %.4f GB/s\n", iterNum, bw);
+                        System.out.printf("Iteration %d, bandwidth: %.4f GB/s%n", iterNum, bw);
                     }
                 });
 

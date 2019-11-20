@@ -69,7 +69,7 @@ clean-local:
 	-rm -rf $(java_build_dir)
 
 test:
-	$(MVNCMD) test
+	$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
 docs:
 	$(MVNCMD) javadoc:javadoc
 

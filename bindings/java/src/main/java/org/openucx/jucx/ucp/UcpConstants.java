@@ -7,7 +7,7 @@ package org.openucx.jucx.ucp;
 
 import org.openucx.jucx.NativeLibs;
 
-public class UcpConstants {
+class UcpConstants {
     static {
         NativeLibs.load();
         loadConstants();
@@ -19,10 +19,10 @@ public class UcpConstants {
      * <p>The enumeration allows specifying which fields in {@link UcpParams} are
      * present. It is used for the enablement of backward compatibility support.
      */
-    public static long UCP_PARAM_FIELD_FEATURES;
-    public static long UCP_PARAM_FIELD_TAG_SENDER_MASK;
-    public static long UCP_PARAM_FIELD_MT_WORKERS_SHARED;
-    public static long UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
+    static long UCP_PARAM_FIELD_FEATURES;
+    static long UCP_PARAM_FIELD_TAG_SENDER_MASK;
+    static long UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+    static long UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
 
     /**
      * UCP configuration features
@@ -31,12 +31,12 @@ public class UcpConstants {
      * An application can request the features using "UCP parameters"
      * during "UCP initialization" process.
      */
-    public static long UCP_FEATURE_TAG;
-    public static long UCP_FEATURE_RMA;
-    public static long UCP_FEATURE_AMO32;
-    public static long UCP_FEATURE_AMO64;
-    public static long UCP_FEATURE_WAKEUP;
-    public static long UCP_FEATURE_STREAM;
+    static long UCP_FEATURE_TAG;
+    static long UCP_FEATURE_RMA;
+    static long UCP_FEATURE_AMO32;
+    static long UCP_FEATURE_AMO64;
+    static long UCP_FEATURE_WAKEUP;
+    static long UCP_FEATURE_STREAM;
 
     /**
      * UCP worker parameters field mask.
@@ -44,53 +44,67 @@ public class UcpConstants {
      * <p>The enumeration allows specifying which fields in {@link UcpWorker} are
      * present. It is used for the enablement of backward compatibility support.
      */
-    public static long UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-    public static long UCP_WORKER_PARAM_FIELD_CPU_MASK;
-    public static long UCP_WORKER_PARAM_FIELD_EVENTS;
-    public static long UCP_WORKER_PARAM_FIELD_USER_DATA;
-    public static long UCP_WORKER_PARAM_FIELD_EVENT_FD;
+    static long UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    static long UCP_WORKER_PARAM_FIELD_CPU_MASK;
+    static long UCP_WORKER_PARAM_FIELD_EVENTS;
+    static long UCP_WORKER_PARAM_FIELD_USER_DATA;
+    static long UCP_WORKER_PARAM_FIELD_EVENT_FD;
 
     /**
      * Mask of events which are expected on wakeup.
      * If it's not set all types of events will trigger on
      * wakeup.
      */
-    public static long UCP_WAKEUP_RMA;
-    public static long UCP_WAKEUP_AMO;
-    public static long UCP_WAKEUP_TAG_SEND;
-    public static long UCP_WAKEUP_TAG_RECV;
-    public static long UCP_WAKEUP_TX;
-    public static long UCP_WAKEUP_RX;
-    public static long UCP_WAKEUP_EDGE;
+    static long UCP_WAKEUP_RMA;
+    static long UCP_WAKEUP_AMO;
+    static long UCP_WAKEUP_TAG_SEND;
+    static long UCP_WAKEUP_TAG_RECV;
+    static long UCP_WAKEUP_TX;
+    static long UCP_WAKEUP_RX;
+    static long UCP_WAKEUP_EDGE;
 
     /**
      * UCP listener parameters field mask.
      */
-    public static long UCP_LISTENER_PARAM_FIELD_SOCK_ADDR;
-    public static long UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
-    public static long UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+    static long UCP_LISTENER_PARAM_FIELD_SOCK_ADDR;
+    static long UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+    static long UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
 
     /**
      * UCP endpoint parameters field mask.
      */
-    public static long UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-    public static long UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    public static long UCP_EP_PARAM_FIELD_ERR_HANDLER;
-    public static long UCP_EP_PARAM_FIELD_USER_DATA;
-    public static long UCP_EP_PARAM_FIELD_SOCK_ADDR;
-    public static long UCP_EP_PARAM_FIELD_FLAGS;
-    public static long UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    static long UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    static long UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+    static long UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    static long UCP_EP_PARAM_FIELD_USER_DATA;
+    static long UCP_EP_PARAM_FIELD_SOCK_ADDR;
+    static long UCP_EP_PARAM_FIELD_FLAGS;
+    static long UCP_EP_PARAM_FIELD_CONN_REQUEST;
 
     /**
      * UCP error handling mode.
      */
-    public static int UCP_ERR_HANDLING_MODE_PEER;
+    static int UCP_ERR_HANDLING_MODE_PEER;
 
     /**
      * The enumeration list describes the endpoint's parameters flags.
      */
-    public static long UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-    public static long UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+    static long UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+    static long UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+
+    /**
+     * UCP memory mapping parameters field mask.
+     */
+    static long UCP_MEM_MAP_PARAM_FIELD_ADDRESS;
+    static long UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    static long UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+
+    /**
+     *  The enumeration list describes the memory mapping flags.
+     */
+    static long UCP_MEM_MAP_NONBLOCK;
+    static long UCP_MEM_MAP_ALLOCATE;
+    static long UCP_MEM_MAP_FIXED;
 
     private static native void loadConstants();
 }
