@@ -11,27 +11,28 @@ javadir=$(top_srcdir)/bindings/java
 MVNCMD=$(MVN) -B -T 1C -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(java_build_dir)/.deps \
               -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
-BUILT_SOURCES = org_openucx_jucx_ucp_UcpConstants.h \
-                org_openucx_jucx_ucp_UcpContext.h \
-                org_openucx_jucx_ucp_UcpEndpoint.h \
-                org_openucx_jucx_ucp_UcpWorker.h \
-                org_openucx_jucx_ucs_UcsConstants.h \
-                org_openucx_jucx_ucp_UcpListener.h
+JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
+                         org_openucx_jucx_ucp_UcpContext.h               \
+                         org_openucx_jucx_ucp_UcpEndpoint.h              \
+                         org_openucx_jucx_ucp_UcpListener.h              \
+                         org_openucx_jucx_ucp_UcpMemory.h                \
+                         org_openucx_jucx_ucp_UcpRemoteKey.h             \
+                         org_openucx_jucx_ucp_UcpWorker.h                \
+                         org_openucx_jucx_ucs_UcsConstants_ThreadMode.h  \
+                         org_openucx_jucx_ucs_UcsConstants.h
 
-DISTCLEANFILES = org_openucx_jucx_ucp_UcpConstants.h \
-                 org_openucx_jucx_ucp_UcpContext.h \
-                 org_openucx_jucx_ucp_UcpEndpoint.h \
-                 org_openucx_jucx_ucp_UcpWorker.h \
-                 org_openucx_jucx_ucs_UcsConstants.h \
-                 org_openucx_jucx_ucp_UcpListener.h
+BUILT_SOURCES = $(JUCX_GENERATED_H_FILES)
 
-org_openucx_jucx_ucp_UcpListener.h:
-org_openucx_jucx_ucp_UcpConstants.h:
-org_openucx_jucx_ucp_UcpEndpoint.h:
-org_openucx_jucx_ucp_UcpWorker.h:
-org_openucx_jucx_ucs_UcsConstants.h:
-org_openucx_jucx_ucp_UcpContext.h:
+MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES)
+
+generate_headers:
 	$(MVNCMD) compile native:javah
+
+.PHONY: generate_headers
+
+$(JUCX_GENERATED_H_FILES): $(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
+                           $(javadir)/src/main/java/org/openucx/jucx/ucp/*.java \
+                           generate_headers
 
 lib_LTLIBRARIES = libjucx.la
 
