@@ -1260,6 +1260,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 
         status = uct_cm_open(context->tl_cmpts[cmpt_index].cmpt, worker->uct,
                              cm_config, &worker->cms[cm_index].cm);
+        uct_config_release(cm_config);
         if (status != UCS_OK) {
             ucs_error("failed to open CM on component %s with status %s",
                       context->tl_cmpts[cmpt_index].attr.name,

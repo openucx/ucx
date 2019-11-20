@@ -471,22 +471,51 @@ out:
     ;
 }
 
-static void print_cm_info(uct_component_h component,
-                          const uct_component_attr_t *component_attr,
-                          const char *cm_name, int print_opts,
-                          ucs_config_print_flags_t print_flags,
-                          const char *req_tl_name)
+static void print_cm_attr(uct_worker_h worker, uct_component_h component,
+                          const char *comp_name)
 {
-    ucs_status_t status;
     uct_cm_config_t *cm_config;
     uct_cm_attr_t cm_attr;
+    ucs_status_t status;
     uct_cm_h cm;
+
+    status = uct_cm_config_read(component, NULL, NULL, &cm_config);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    status = uct_cm_open(component, worker, cm_config, &cm);
+    uct_config_release(cm_config);
+    if (status != UCS_OK) {
+        printf("# < failed to open connection manager %s >\n", comp_name);
+        /* coverity[leaked_storage] */
+        return;
+    }
+
+    cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(cm, &cm_attr);
+    if (status != UCS_OK) {
+        printf("# < failed to query connection manager >\n");
+    } else {
+        printf("#\n");
+        printf("# Connection manager: %s\n", comp_name);
+        printf("#     Component: %s\n", comp_name);
+        printf("#        max_conn_priv: %zu bytes\n", cm_attr.max_conn_priv);
+    }
+
+    uct_cm_close(cm);
+}
+
+static void print_cm_info(uct_component_h component,
+                          const uct_component_attr_t *component_attr)
+{
     ucs_async_context_t *async;
     uct_worker_h worker;
+    ucs_status_t status;
 
     status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
     if (status != UCS_OK) {
-        goto out;
+        return;
     }
 
     status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
@@ -494,38 +523,12 @@ static void print_cm_info(uct_component_h component,
         goto out_async_ctx_destroy;
     }
 
-    status = uct_cm_config_read(component, NULL, NULL, &cm_config);
-    if (status != UCS_OK) {
-        goto out_destroy_worker;
-    }
+    print_cm_attr(worker, component, component_attr->name);
 
-    status = uct_cm_open(component, worker, cm_config, &cm);
-    uct_config_release(cm_config);
-    if (status != UCS_OK) {
-        printf("# < failed to open connection manager %s >\n", cm_name);
-        goto out_destroy_worker;
-    }
-
-    cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
-    status = uct_cm_query(cm, &cm_attr);
-    if (status != UCS_OK) {
-        printf("# < failed to query connection manager >\n");
-        goto out_close_cm;
-    } else {
-        printf("#\n");
-        printf("# Connection manager: %s\n", cm_name);
-        printf("#     Component: %s\n", component_attr->name);
-        printf("#        max_conn_priv: %zu bytes\n", cm_attr.max_conn_priv);
-    }
-
-out_close_cm:
-    uct_cm_close(cm);
-out_destroy_worker:
     uct_worker_destroy(worker);
+
 out_async_ctx_destroy:
     ucs_async_context_destroy(async);
-out:
-    ;
 }
 
 static void print_uct_component_info(uct_component_h component,
@@ -562,8 +565,7 @@ static void print_uct_component_info(uct_component_h component,
     }
 
     if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
-        print_cm_info(component, &component_attr, component_attr.name,
-                      print_opts, print_flags, NULL);
+        print_cm_info(component, &component_attr);
     }
 }
 
