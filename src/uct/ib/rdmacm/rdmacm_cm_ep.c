@@ -17,7 +17,8 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
         [ucs_ilog2(UCT_RDMACM_CM_EP_ON_CLIENT)]     = "client",
         [ucs_ilog2(UCT_RDMACM_CM_EP_ON_SERVER)]     = "server",
         [ucs_ilog2(UCT_RDMACM_CM_EP_CONNECTED)]     = "connected",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)] = "disconnecting"
+        [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)] = "disconnecting",
+        NULL
     };
 
     ucs_flags_str(flags_buf, sizeof(flags_buf), cep->flags, ep_flag_to_str);

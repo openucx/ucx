@@ -275,9 +275,11 @@ const char* ucs_flags_str(char *buf, size_t max,
     int i, len;
 
     len = 0;
-    ucs_for_each_bit(i, flags) {
-        snprintf(buf + len, max - len, "%s,", str_table[i]);
-        len = strlen(buf);
+    for (i = 0; *str_table; ++str_table, ++i) {
+        if (flags & UCS_BIT(i)) { /* not using ucs_for_each_bit to silence coverity */
+            snprintf(buf + len, max - len, "%s,", *str_table);
+            len = strlen(buf);
+        }
     }
 
     if (len > 0) {
