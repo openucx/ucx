@@ -161,7 +161,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
 }
 
 #define uct_rc_mlx5_iface_mp_hash_lookup(_h_name, _h_ptr, _key, _last, _flags, \
-                                         _dummy_ctx) \
+                                         _iface) \
     ({ \
         uct_rc_mlx5_mp_context_t *ctx; \
         khiter_t h_it; \
@@ -172,7 +172,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
             *(_flags) |= UCT_CB_PARAM_FLAG_FIRST; \
             if (ucs_likely(_last)) { \
                 /* fast path - single fragment message */ \
-                return &(_dummy_ctx); \
+                return &(_iface)->tm.mp.dummy_ctx; \
             } \
             h_it = kh_put(_h_name, _h_ptr, _key, &ret); \
             ucs_assert(ret != 0); \
@@ -180,9 +180,9 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
         } else { \
             ctx = &kh_value(_h_ptr, h_it); \
             if (_last) { \
-                _dummy_ctx = *ctx; \
+                (_iface)->tm.mp.dummy_ctx = *ctx; \
                 kh_del(_h_name, _h_ptr, h_it); \
-                return &(_dummy_ctx); \
+                return &(_iface)->tm.mp.dummy_ctx; \
             } \
         } \
         *(_flags) |= UCT_CB_PARAM_FLAG_MORE; \
@@ -194,7 +194,6 @@ uct_rc_mlx5_iface_rx_mp_context(uct_rc_mlx5_iface_common_t *iface,
                                 struct mlx5_cqe64 *cqe, unsigned *flags,
                                 int has_ep)
 {
-    static uct_rc_mlx5_mp_context_t dummy_ctx = {};
     uct_rc_mlx5_mp_context_t *mp_ctx;
     uct_rc_mlx5_mp_hash_key_t key_gid;
     uct_rc_mlx5_ep_t *ep;
@@ -234,7 +233,7 @@ uct_rc_mlx5_iface_rx_mp_context(uct_rc_mlx5_iface_common_t *iface,
         mp_ctx         = uct_rc_mlx5_iface_mp_hash_lookup(uct_rc_mlx5_mp_hash_gid,
                                                           &iface->tm.mp.hash_gid,
                                                           key_gid, last, flags,
-                                                          dummy_ctx);
+                                                          iface);
     } else {
         /* Combine QP and SLID as a key. No need to fetch just qp
          * and convert to le. */
@@ -242,7 +241,7 @@ uct_rc_mlx5_iface_rx_mp_context(uct_rc_mlx5_iface_common_t *iface,
         mp_ctx         = uct_rc_mlx5_iface_mp_hash_lookup(uct_rc_mlx5_mp_hash_lid,
                                                           &iface->tm.mp.hash_lid,
                                                           key_lid, last, flags,
-                                                          dummy_ctx);
+                                                          iface);
     }
 
     ucs_assert(mp_ctx != NULL);
@@ -321,7 +320,6 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
                                  unsigned *flags, int has_ep,
                                  uct_rc_mlx5_mp_context_t **context_p)
 {
-    static uct_rc_mlx5_mp_context_t dummy_context = {};
     uct_ib_mlx5_srq_seg_t *seg;
     void *hdr;
     int stride_idx;
@@ -330,7 +328,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
         /* uct_rc_mlx5_iface_common_data will initialize flags value */
         hdr        = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, flags);
         *flags    |= UCT_CB_PARAM_FLAG_FIRST;
-        *context_p = &dummy_context;
+        *context_p = &iface->tm.mp.dummy_ctx;
         return hdr;
     }
 
@@ -1318,7 +1316,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
-    uct_rc_mlx5_mp_context_t *dummy_ctx;
+    uct_rc_mlx5_mp_context_t UCS_V_UNUSED *dummy_ctx;
 #endif
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,

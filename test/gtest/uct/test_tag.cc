@@ -961,8 +961,8 @@ private:
 size_t test_tag_mp_xrq::m_rx_counter = 0;
 
 test_tag_mp_xrq::test_tag_mp_xrq() : m_hold_uct_desc(false),
-                                   m_first_received(false),
-                                   m_last_received(false)
+                                     m_first_received(false),
+                                     m_last_received(false)
 {
     m_max_hdr        = sizeof(ibv_tmh) + sizeof(ibv_rvh);
     m_uct_comp.count = 512; // We do not need completion func to be invoked
@@ -975,7 +975,7 @@ uct_rc_mlx5_iface_common_t* test_tag_mp_xrq::rc_mlx5_iface(entity &e)
 }
 
 void test_tag_mp_xrq::set_env_var_or_skip(void *config, const char *var,
-                                         const char *val)
+                                          const char *val)
 {
     ucs_status_t status = uct_config_modify(config, var, val);
     if (status != UCS_OK) {
@@ -1078,7 +1078,7 @@ void test_tag_mp_xrq::send_am_bcopy(mapped_buffer *buf)
 }
 
 void test_tag_mp_xrq::test_common(send_func sfunc, size_t num_segs,
-                                 size_t exp_segs, bool is_eager)
+                                  size_t exp_segs, bool is_eager)
 {
     size_t seg_size  = rc_mlx5_iface(sender())->super.super.config.seg_size;
     size_t seg_num   = is_eager ? num_segs : 1;
@@ -1109,7 +1109,7 @@ ucs_status_t test_tag_mp_xrq::handle_uct_desc(void *data, unsigned flags)
 }
 
 ucs_status_t test_tag_mp_xrq::am_handler(void *arg, void *data, size_t length,
-                                        unsigned flags)
+                                         unsigned flags)
 {
    EXPECT_TRUE(flags & UCT_CB_PARAM_FLAG_FIRST);
    EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_MORE);
@@ -1121,7 +1121,7 @@ ucs_status_t test_tag_mp_xrq::am_handler(void *arg, void *data, size_t length,
 }
 
 ucs_status_t test_tag_mp_xrq::unexp_handler(void *data, unsigned flags,
-                                           uint64_t imm, void **context)
+                                            uint64_t imm, void **context)
 {
     void *self = reinterpret_cast<void*>(this);
 
@@ -1150,8 +1150,8 @@ ucs_status_t test_tag_mp_xrq::unexp_handler(void *data, unsigned flags,
 }
 
 ucs_status_t test_tag_mp_xrq::unexp_eager(void *arg, void *data, size_t length,
-                                         unsigned flags, uct_tag_t stag,
-                                         uint64_t imm, void **context)
+                                          unsigned flags, uct_tag_t stag,
+                                          uint64_t imm, void **context)
 {
     test_tag_mp_xrq *self = reinterpret_cast<test_tag_mp_xrq*>(arg);
 
@@ -1161,10 +1161,10 @@ ucs_status_t test_tag_mp_xrq::unexp_eager(void *arg, void *data, size_t length,
 }
 
 ucs_status_t test_tag_mp_xrq::unexp_rndv(void *arg, unsigned flags,
-                                        uint64_t stag, const void *header,
-                                        unsigned header_length,
-                                        uint64_t remote_addr, size_t length,
-                                        const void *rkey_buf)
+                                         uint64_t stag, const void *header,
+                                         unsigned header_length,
+                                         uint64_t remote_addr, size_t length,
+                                         const void *rkey_buf)
 {
     EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_FIRST);
     EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_MORE);

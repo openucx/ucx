@@ -380,6 +380,7 @@ typedef struct uct_rc_mlx5_iface_common {
         struct {
             uint8_t                  num_strides;
             ucs_mpool_t              tx_mp;
+            uct_rc_mlx5_mp_context_t dummy_ctx;
             khash_t(uct_rc_mlx5_mp_hash_lid) hash_lid;
             khash_t(uct_rc_mlx5_mp_hash_gid) hash_gid;
         } mp;
