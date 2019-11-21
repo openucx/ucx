@@ -537,6 +537,7 @@ build_gcc_latest() {
 			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 			$MAKEP distclean
 			echo "ok 1 - build successful " >> build_gcc_latest.tap
+			module unload dev/gcc-latest
 		else
 			echo "==== Not building with latest gcc compiler ===="
 			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
