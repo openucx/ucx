@@ -24,6 +24,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
+CUDA_MODULE="dev/cuda-latest"
+GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -101,10 +103,12 @@ module_load() {
 try_load_cuda_env() {
 	num_gpus=0
 	have_cuda=no
+	have_gdrcopy=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		have_cuda=yes
-		module_load dev/cuda    || have_cuda=no
-		module_load dev/gdrcopy || have_cuda=no
+		have_gdrcopy=yes
+		module_load $CUDA_MODULE    || have_cuda=no
+		module_load $GDRCOPY_MODULE || have_gdrcopy=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
@@ -838,7 +842,25 @@ run_ucx_perftest() {
 	# run cuda tests if cuda module was loaded and GPU is found
 	if [ "X$have_cuda" == "Xyes" ] && (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		tls_list="all "
+		gdr_options="n "
+		if (lsmod | grep -q "nv_peer_mem")
+		then
+			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			tls_list+="rc,cuda_copy "
+			gdr_options+="y "
+		fi
+
+		if  [ "X$have_gdrcopy" == "Xyes" ] && (lsmod | grep -q "gdrdrv")
+		then
+			echo "GDRCopy module (gdrdrv) is present..."
+			tls_list+="rc,cuda_copy,gdr_copy "
+		fi
+
+		if [ $num_gpus -gt 1 ]; then
+			export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		fi
+
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
 		echo "==== Running ucx_perf with cuda memory===="
