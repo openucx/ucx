@@ -154,8 +154,8 @@ struct uct_component {
         extern ucs_list_link_t uct_components_list; \
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config) \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config);
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config); \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config); \
 
 
 /**

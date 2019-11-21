@@ -9,14 +9,6 @@
 
 
 /**
- * RDMACM CM configuration.
- */
-typedef struct uct_rdmacm_cm_config {
-    uct_cm_config_t  super;
-} uct_rdmacm_cm_config_t;
-
-
-/**
  * An rdmacm connection manager
  */
 typedef struct uct_rdmacm_cm {

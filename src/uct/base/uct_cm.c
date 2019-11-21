@@ -41,7 +41,7 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
                              component->cm_config.size, env_prefix,
                              component->cm_config.prefix);
     if (status != UCS_OK) {
-        ucs_error("Failed to read CM config");
+        ucs_error("failed to read CM configuration");
         return status;
     }
 

@@ -16,14 +16,6 @@
 #include <rdma/rdma_cma.h>
 
 
-ucs_config_field_t uct_rdmacm_cm_config_table[] = {
-  {"", "", NULL,
-   ucs_offsetof(uct_rdmacm_cm_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
-
-  {NULL}
-};
-
 ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id)
 {
     ucs_trace("destroying cm_id %p", id);

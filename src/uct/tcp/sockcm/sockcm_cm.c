@@ -11,7 +11,7 @@ ucs_config_field_t uct_sockcm_cm_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_sockcm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
-  {"PRIVATE_DATA_LENGTH", "2048",
+  {"PRIV_DATA_LEN", "2048",
    "Sockcm CM private data length",
    ucs_offsetof(uct_sockcm_cm_config_t, priv_data_len), UCS_CONFIG_TYPE_INT},
 
@@ -25,9 +25,9 @@ static ucs_status_t uct_sockcm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
     if (cm_attr->field_mask & UCT_CM_ATTR_FIELD_MAX_CONN_PRIV) {
         cm_attr->max_conn_priv = sockcm_cm->priv_data_len;
     }
+
     return UCS_OK;
 }
-
 
 static uct_cm_ops_t uct_sockcm_cm_ops = {
     .close            = UCS_CLASS_DELETE_FUNC_NAME(uct_sockcm_cm_t),
