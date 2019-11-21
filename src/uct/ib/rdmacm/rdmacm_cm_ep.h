@@ -6,6 +6,7 @@
 
 #include "rdmacm_listener.h"
 
+
 /**
  * RDMACM endpoint that is opened on a connection manager
  */
@@ -38,9 +39,12 @@ typedef struct uct_rdmacm_cm_ep {
 } uct_rdmacm_cm_ep_t;
 
 enum {
-    UCT_RDMACM_CM_EP_ON_CLIENT   = UCS_BIT(0),
-    UCT_RDMACM_CM_EP_ON_SERVER   = UCS_BIT(1),
-    UCT_RDMACM_CM_EP_CONNECTED   = UCS_BIT(2)
+    UCT_RDMACM_CM_EP_ON_CLIENT     = UCS_BIT(0),
+    UCT_RDMACM_CM_EP_ON_SERVER     = UCS_BIT(1),
+    UCT_RDMACM_CM_EP_CONNECTED     = UCS_BIT(2),
+    UCT_RDMACM_CM_EP_DISCONNECTING = UCS_BIT(3) /* uct_ep_disconnect was called
+                                                   on the ep. this ep is not
+                                                   necessarily disconnected yet */
 };
 
 UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);
@@ -66,3 +70,6 @@ void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
                                uct_cm_remote_data_t *remote_data,
                                ucs_status_t status);
+
+const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
+                                 size_t max_len);

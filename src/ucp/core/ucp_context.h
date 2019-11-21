@@ -19,6 +19,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/string.h>
 
 
 enum {
@@ -302,13 +303,13 @@ typedef struct ucp_tl_iface_atomic_flags {
 #define UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, _flags, _action) \
     do { \
         if (ENABLE_PARAMS_CHECK && \
-            ucs_unlikely(!((_context)->config.features & (_flags)))) { \
+            ucs_unlikely(!((_context)->config.features & (_flags)))) {  \
             size_t feature_list_str_max = 512; \
-            char *feature_list_str = ucs_alloca(feature_list_str_max); \
+            char *feature_list_str = ucs_alloca(feature_list_str_max);  \
             ucs_error("feature flags %s were not set for ucp_init()", \
-                      ucp_feature_flags_str((_flags) & \
-                                            ~(_context)->config.features, \
-                      feature_list_str, feature_list_str_max)); \
+                      ucs_flags_str(feature_list_str, feature_list_str_max,  \
+                                    (_flags) & ~(_context)->config.features, \
+                                    ucp_feature_str)); \
             _action; \
         } \
     } while (0)
@@ -324,7 +325,7 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 extern ucp_am_handler_t ucp_am_handlers[];
-
+extern const char       *ucp_feature_str[];
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
