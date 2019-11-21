@@ -340,9 +340,9 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 }
 
 void uct_test::generate_test_variant(int variant,
-                                     std::string variant_name,
+                                     const std::string &variant_name,
                                      std::vector<resource>& test_res,
-                                     std::string tl_name)
+                                     const std::string &tl_name)
 {
     std::vector<const resource*> r = uct_test::enum_resources("");
 

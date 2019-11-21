@@ -103,9 +103,9 @@ public:
     /* By default generate test variant for all tls. If variant is specific to
      * the particular transport tl_name need to be specified accordingly */
     static void generate_test_variant(int variant,
-                                      std::string variant_name,
+                                      const std::string &variant_name,
                                       std::vector<resource>& test_res,
-                                      std::string tl_name="");
+                                      const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
 
