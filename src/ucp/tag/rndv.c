@@ -21,7 +21,7 @@ static int ucp_rndv_is_get_zcopy(ucs_memory_type_t mem_type,
 {
     return ((rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
             ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-              (UCP_MEM_IS_HOST(mem_type) || UCP_MEM_IS_ROCM(mem_type))));
+              (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) || UCP_MEM_IS_ROCM(mem_type))));
 }
 
 static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
@@ -1055,7 +1055,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
             ucs_fatal("failed to allocate fragment receive request");
         }
 
-        if (UCP_MEM_IS_HOST(sreq->send.mem_type)) {
+        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type)) {
             /* sbuf is in host, directly do put */
             ucp_request_send_state_reset(freq, ucp_rndv_frag_send_put_completion,
                                          UCP_REQUEST_SEND_PROTO_RNDV_PUT);
@@ -1144,7 +1144,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
         worker      = rreq->recv.worker;
         frag_size   = req->recv.length;
         frag_offset = req->recv.frag.offset;
-        ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.mem_type));
+        ucs_assert_always(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(rreq->recv.mem_type));
 
         /* performan put zcopy on memtype endpoint to stage from
         ** frag recv buffer to memtype recv buffer */
@@ -1222,7 +1222,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
              * PUT_ZCOPY anyway.
              */
             context = ep->worker->context;
-            if ((!UCP_MEM_IS_HOST(sreq->send.mem_type) ||
+            if ((!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type) ||
                  (sreq->send.length != rndv_rtr_hdr->size)) &&
                 (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY)) {
                 status = ucp_rndv_pipeline(sreq, rndv_rtr_hdr);
