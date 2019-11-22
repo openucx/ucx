@@ -709,7 +709,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     dir = opendir(netdev_dir);
     if (dir == NULL) {
         /* When /sys is unavailable, as can be the case in a container,
-         * resort to a good old 'ioctl'.  */
+         * resort to a good old 'ioctl'. */
         return uct_tcp_query_devices_ioctl(md, devices_p, num_devices_p);
     }
 
