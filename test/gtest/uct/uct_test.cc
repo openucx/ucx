@@ -19,11 +19,15 @@
 std::string resource::name() const {
     std::stringstream ss;
     ss << tl_name << "/" << dev_name;
+    if (!variant_name.empty()) {
+        ss << "/" << variant_name;
+    }
     return ss.str();
 }
 
 resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
-                       dev_type(UCT_DEVICE_TYPE_LAST)
+                       variant_name(""), dev_type(UCT_DEVICE_TYPE_LAST),
+                       variant(DEFAULT_VARIANT)
 {
     CPU_ZERO(&local_cpus);
 }
@@ -32,7 +36,8 @@ resource::resource(uct_component_h component, const std::string& md_name,
                    const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
                    const std::string& dev_name, uct_device_type_t dev_type) :
                    component(component), md_name(md_name), local_cpus(local_cpus),
-                   tl_name(tl_name), dev_name(dev_name), dev_type(dev_type)
+                   tl_name(tl_name), dev_name(dev_name), variant_name(""),
+                   dev_type(dev_type), variant(DEFAULT_VARIANT)
 {
 }
 
@@ -44,7 +49,9 @@ resource::resource(uct_component_h component, const uct_md_attr_t& md_attr,
                    local_cpus(md_attr.local_cpus),
                    tl_name(tl_resource.tl_name),
                    dev_name(tl_resource.dev_name),
-                   dev_type(tl_resource.dev_type)
+                   variant_name(""),
+                   dev_type(tl_resource.dev_type),
+                   variant(DEFAULT_VARIANT)
 {
 }
 
@@ -330,6 +337,26 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
     }
 
     return filter_resources(all_resources, tl_name);
+}
+
+void uct_test::generate_test_variant(int variant,
+                                     const std::string &variant_name,
+                                     std::vector<resource>& test_res,
+                                     const std::string &tl_name)
+{
+    std::vector<const resource*> r = uct_test::enum_resources("");
+
+    for (std::vector<const resource*>::iterator iter = r.begin();
+         iter != r.end(); ++iter) {
+        if (tl_name.empty() || ((*iter)->tl_name == tl_name)) {
+            resource rsc((*iter)->component, (*iter)->md_name,
+                         (*iter)->local_cpus, (*iter)->tl_name,
+                         (*iter)->dev_name, (*iter)->dev_type);
+            rsc.variant      = variant;
+            rsc.variant_name = variant_name;
+            test_res.push_back(rsc);
+        }
+    }
 }
 
 void uct_test::init() {
