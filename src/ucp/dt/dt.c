@@ -40,7 +40,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
                                       mem_type, md_index, memh, &md_map,
                                       &rkey_bundle);
     if (status != UCS_OK) {
-        ucs_error("failed to register buffer with mem type domian");
+        ucs_error("failed to register buffer with mem type domain %s",
+                  ucs_memory_type_names[mem_type]);
         return status;
     }
 
@@ -78,14 +79,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
                                       md_index, memh, &md_map, &rkey_bundle);
     if (status != UCS_OK) {
-        ucs_error("failed to register buffer with mem type domian");
+        ucs_error("failed to register buffer with mem type domain %s",
+                  ucs_memory_type_names[mem_type]);
         return status;
     }
 
     status = uct_ep_get_short(ep->uct_eps[lane], dest, length,
                               (uint64_t)src, rkey_bundle.rkey);
     if (status != UCS_OK) {
-        ucs_error("uct_ep_put_short() failed %s", ucs_status_string(status));
+        ucs_error("uct_ep_get_short() failed %s", ucs_status_string(status));
     }
 
     ucp_mem_type_unreg_buffers(worker, mem_type, md_index, memh,
