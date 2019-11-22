@@ -528,7 +528,11 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
+    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+        uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
+    } else {
+        uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
+    }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 

@@ -126,6 +126,16 @@ int ucp_wireup_is_rsc_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index);
 void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
                             const char *info);
 
+ucs_status_t
+ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
+                        ucp_lane_index_t lane,
+                        const ucp_unpacked_address_t *remote_address,
+                        unsigned addr_index);
+
+ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep);
+
+void ucp_wireup_remote_connected(ucp_ep_h ep);
+
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     return ucp_worker_iface_is_tl_p2p(ucp_worker_iface_get_attr(worker,
@@ -136,4 +146,8 @@ static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
                            const ucp_ep_params_t *params);
 
+ucs_status_t
+ucp_wireup_connect_local(ucp_ep_h ep,
+                         const ucp_unpacked_address_t *remote_address,
+                         const ucp_lane_index_t *lanes2remote);
 #endif
