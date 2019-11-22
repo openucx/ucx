@@ -192,11 +192,14 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
 free_addr:
     ucs_free(ucp_addr);
 out:
-    if (status != UCS_OK) {
+    if (status == UCS_OK) {
+        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    } else {
         ucp_worker_set_ep_failed(worker, ep,
                                  &ucp_ep_get_cm_wireup_ep(ep)->super.super,
                                  ucp_ep_get_cm_lane(ep), status);
     }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
@@ -214,6 +217,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
     unsigned                   addr_idx;
 
     if (status != UCS_OK) {
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         goto out;
     }
 
@@ -380,7 +384,6 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
-    ucp_ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
     ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep);
     ucp_ep_flush_state_reset(ucp_ep);
 
@@ -508,9 +511,7 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_ep_h ep                         = arg;
     ucp_worker_h worker                 = ep->worker;
-    ucp_ep_config_key_t key             = ucp_ep_config(ep)->key;
     uint64_t tl_bitmap                  = 0;
-    ucp_wireup_ep_t *wireup_ep;
     uct_cm_attr_t cm_attr;
     void* ucp_addr;
     size_t ucp_addr_size;
@@ -551,10 +552,12 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
 free_addr:
     ucs_free(ucp_addr);
 out:
-    if (status != UCS_OK) {
-        wireup_ep = (ucp_wireup_ep_t *)ep->uct_eps[key.wireup_lane];
-        ucp_worker_set_ep_failed(worker, ep, &wireup_ep->super.super,
-                                 key.wireup_lane, status);
+    if (status == UCS_OK) {
+        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    } else {
+        ucp_worker_set_ep_failed(worker, ep,
+                                 &ucp_ep_get_cm_wireup_ep(ep)->super.super,
+                                 ucp_ep_get_cm_lane(ep), status);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -617,8 +620,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         return status;
     }
 
-    ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
-    ucp_wireup_assign_lane(ep, lane, uct_ep, 1, "server side cm lane");
+    ucp_wireup_assign_lane(ep, lane, uct_ep, "server side cm lane");
     return UCS_OK;
 }
 
