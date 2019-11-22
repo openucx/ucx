@@ -158,7 +158,6 @@ out:
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
                              size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)
 {
-    ucs_status_ptr_t status_p;
     ucs_status_t status;
     ucp_request_t *req;
 
@@ -185,13 +184,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     ucp_amo_init_post(req, ep, ucp_uct_op_table[opcode], op_size, remote_addr,
                       rkey, value, rkey->cache.amo_proto);
 
-    status_p = ucp_rma_send_request_cb(req, (ucp_send_callback_t)ucs_empty_function);
-    if (UCS_PTR_IS_PTR(status_p)) {
-        ucp_request_release(status_p);
-        status = UCS_OK;
-    } else {
-        status = UCS_PTR_STATUS(status_p);
-    }
+    status = ucp_request_send(req, 0);
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
