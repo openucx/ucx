@@ -371,7 +371,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
         printf("                        cuda - NVIDIA GPU memory\n");
     }
     if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
-        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
+        printf("                        cuda-managed - NVIDIA GPU managed/unified memory\n");
     }
     printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%zu)\n",
