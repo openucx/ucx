@@ -633,21 +633,21 @@ static ucs_status_t uct_tcp_query_devices_ioctl(uct_md_h md,
 
     status = ucs_socket_create(AF_INET, SOCK_STREAM, &sock);
     if (status != UCS_OK) {
-        goto out;
+        return status;
     }
 
     err = ioctl(sock, SIOCGIFCONF, &conf);
     if (err < 0) {
         ucs_error("ioctl(SIOCGIFCONF) failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto out_close_sock;
     }
 
     conf.ifc_req = ucs_calloc(1, conf.ifc_len, "ifreq");
     if (conf.ifc_req == NULL) {
         ucs_error("memory alocation failed");
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        goto out_close_sock;
     }
 
     err = ioctl(sock, SIOCGIFCONF, &conf);
@@ -660,9 +660,7 @@ static ucs_status_t uct_tcp_query_devices_ioctl(uct_md_h md,
     devices     = NULL;
     num_devices = 0;
     for (i = 0; i < (conf.ifc_len / sizeof(struct ifreq)); i++) {
-        const char *name = conf.ifc_req[i].ifr_name;
-
-        if (!ucs_netif_is_active(name)) {
+        if (!ucs_netif_is_active(conf.ifc_req[i].ifr_name)) {
             continue;
         }
 
@@ -677,7 +675,7 @@ static ucs_status_t uct_tcp_query_devices_ioctl(uct_md_h md,
 
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name),
-                          "%s", name);
+                          "%s", conf.ifc_req[i].ifr_name);
         devices[num_devices].type = UCT_DEVICE_TYPE_NET;
         ++num_devices;
     }
@@ -688,10 +686,8 @@ static ucs_status_t uct_tcp_query_devices_ioctl(uct_md_h md,
 
 out_free:
     ucs_free(conf.ifc_req);
-out:
-    if (sock >= 0) {
-        close(sock);
-    }
+out_close_sock:
+    close(sock);
     return status;
 }
 
