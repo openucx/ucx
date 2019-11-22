@@ -39,6 +39,11 @@ typedef struct uct_rdmacm_ctx {
     ucs_list_link_t    list;    /* for list of used cm_ids */
 } uct_rdmacm_ctx_t;
 
+typedef struct uct_rdmacm_ep_op {
+    ucs_queue_elem_t   queue_elem;
+    uct_completion_t   *user_comp;
+} uct_rdmacm_ep_op_t;
+
 size_t uct_rdmacm_cm_get_max_conn_priv();
 
 ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,

@@ -244,9 +244,12 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     remote_data.dev_addr          = dev_addr;
     remote_data.dev_addr_length   = addr_length;
 
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data,
                                        (ucs_status_t)hdr->status);
     cep->flags |= UCT_RDMACM_CM_EP_CONNECTED;
+    uct_rdmacm_cm_ep_invoke_completions(cep, (ucs_status_t)hdr->status);
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
     ucs_free(dev_addr);
 
@@ -263,8 +266,11 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t *cep = event->id->context;
 
     ucs_assert(event->id == cep->id);
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
     cep->flags |= UCT_RDMACM_CM_EP_CONNECTED;
+    uct_rdmacm_cm_ep_invoke_completions(cep, UCS_OK);
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
@@ -274,13 +280,16 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     char               ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char               ep_str[UCT_RDMACM_EP_STRING_LEN];
 
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     ucs_debug("%s: got disconnect event, status %d peer %s",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
                                              UCS_SOCKADDR_STRING_LEN));
 
     cep->disconnect_cb(&cep->super.super, cep->user_data);
-    cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
+    ucs_assert(ucs_queue_is_empty(&cep->ops));
+    cep->flags |= UCT_RDMACM_CM_EP_REMOTE_DISCONNECTED;
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
 static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
@@ -422,7 +431,7 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_atomic32_post         = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_unsupported,
     .ep_atomic32_fetch        = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_unsupported,
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_unsupported,
-    .ep_flush                 = (uct_ep_flush_func_t)ucs_empty_function_return_unsupported,
+    .ep_flush                 = uct_rdmacm_cm_ep_flush,
     .ep_fence                 = (uct_ep_fence_func_t)ucs_empty_function_return_unsupported,
     .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
     .ep_create                = (uct_ep_create_func_t)ucs_empty_function_return_unsupported,

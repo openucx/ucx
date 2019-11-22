@@ -18,6 +18,7 @@ typedef struct uct_rdmacm_cm_ep {
     void                   *user_data;    /* User data associated with the endpoint */
     uct_ep_disconnect_cb_t disconnect_cb; /* Callback to handle the disconnection
                                              of the remote peer */
+    ucs_queue_head_t       ops;
     uint8_t                flags;
 
     struct {
@@ -39,26 +40,49 @@ typedef struct uct_rdmacm_cm_ep {
 } uct_rdmacm_cm_ep_t;
 
 enum {
-    UCT_RDMACM_CM_EP_ON_CLIENT     = UCS_BIT(0),
-    UCT_RDMACM_CM_EP_ON_SERVER     = UCS_BIT(1),
-    UCT_RDMACM_CM_EP_CONNECTED     = UCS_BIT(2),
-    UCT_RDMACM_CM_EP_DISCONNECTING = UCS_BIT(3) /* uct_ep_disconnect was called
-                                                   on the ep. this ep is not
-                                                   necessarily disconnected yet */
+    UCT_RDMACM_CM_EP_ON_CLIENT           = UCS_BIT(0),
+    UCT_RDMACM_CM_EP_ON_SERVER           = UCS_BIT(1),
+    UCT_RDMACM_CM_EP_CONNECTED           = UCS_BIT(2),
+    UCT_RDMACM_CM_EP_DISCONNECTING       = UCS_BIT(3), /* uct_ep_disconnect was
+                                                          called on the ep */
+    UCT_RDMACM_CM_EP_REMOTE_DISCONNECTED = UCS_BIT(4)  /* got disconnect event */
+
 };
 
 UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);
-UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t,
+                           const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
+static UCS_F_ALWAYS_INLINE
+uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
+{
+    /* return the rdmacm connection manager this ep is using */
+    return ucs_container_of(cep->super.super.iface, uct_rdmacm_cm_t, super.iface);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_async_context_t *
+uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
+{
+    uct_rdmacm_cm_t *cm      = uct_rdmacm_cm_ep_get_cm(cep);
+    uct_priv_worker_t *wpriv = ucs_derived_of(cm->super.iface.worker,
+                                              uct_priv_worker_t);
+
+    return wpriv->async;
+}
+
 ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags);
+
+ucs_status_t uct_rdmacm_cm_ep_flush(uct_ep_h ep, unsigned flags,
+                                    uct_completion_t *comp);
 
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
                             uct_rdmacm_cm_ep_t *cep);
 
-ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
-                                              struct rdma_conn_param *conn_param);
+ucs_status_t
+uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
+                                 struct rdma_conn_param *conn_param);
 
 void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         uct_cm_remote_data_t *remote_data,
@@ -73,3 +97,6 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
 
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len);
+
+void uct_rdmacm_cm_ep_invoke_completions(uct_rdmacm_cm_ep_t *ep,
+                                         ucs_status_t status);

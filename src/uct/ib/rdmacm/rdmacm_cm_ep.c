@@ -44,9 +44,12 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
                                uct_cm_remote_data_t *remote_data,
                                ucs_status_t status)
 {
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+
     if (cep->flags & UCT_RDMACM_CM_EP_CONNECTED) {
         cep->disconnect_cb(&cep->super.super, cep->user_data);
         cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
+        ucs_assert(ucs_queue_is_empty(&cep->ops));
     } else {
         ucs_assert(status != UCS_OK);
         if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
@@ -55,14 +58,10 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
             ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
             uct_rdmacm_cm_ep_server_connect_cb(cep, status);
         }
+        uct_rdmacm_cm_ep_invoke_completions(cep, status);
     }
-}
 
-static UCS_F_ALWAYS_INLINE
-uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
-{
-    /* return the rdmacm connection manager this ep is using */
-    return ucs_container_of(cep->super.super.iface, uct_rdmacm_cm_t, super.iface);
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
 static void uct_rdmacm_cm_ep_destroy_dummy_cq_qp(uct_rdmacm_cm_ep_t *cep)
@@ -317,6 +316,7 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
+    ucs_assert(ucs_queue_is_empty(&cep->ops));
     if (ucs_unlikely(cep->flags & UCT_RDMACM_CM_EP_DISCONNECTING)) {
         if (cep->flags & UCT_RDMACM_CM_EP_CONNECTED) {
             ucs_debug("%s: duplicate call of uct_ep_disconnect on an ep "
@@ -364,6 +364,43 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
     return UCS_OK;
 }
 
+ucs_status_t uct_rdmacm_cm_ep_flush(uct_ep_h ep, unsigned flags,
+                                    uct_completion_t *comp)
+{
+    uct_rdmacm_cm_ep_t *cep        = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
+    ucs_status_t status;
+    uct_rdmacm_ep_op_t *op;
+
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+
+    if (cep->flags & (UCT_RDMACM_CM_EP_CONNECTED |
+                      UCT_RDMACM_CM_EP_DISCONNECTING |
+                      UCT_RDMACM_CM_EP_REMOTE_DISCONNECTED)) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    status = UCS_INPROGRESS;
+
+    if (comp == NULL) {
+        goto out;
+    }
+
+    op = ucs_malloc(sizeof(*op), "uct_rdmacm_cm_ep_flush op");
+    if (op == NULL) {
+        ucs_error("failed to allocate flush op");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    op->user_comp = comp;
+    ucs_queue_push(&cep->ops, &op->queue_elem);
+
+out:
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    return status;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
@@ -404,6 +441,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     self->cq                  = NULL;
     self->qp                  = NULL;
     self->flags               = 0;
+    ucs_queue_head_init(&self->ops);
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_ep_client_init(self, params);
@@ -449,3 +487,18 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 UCS_CLASS_DEFINE(uct_rdmacm_cm_ep_t, uct_base_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
+
+void uct_rdmacm_cm_ep_invoke_completions(uct_rdmacm_cm_ep_t *ep,
+                                         ucs_status_t status)
+{
+    uct_rdmacm_ep_op_t *op;
+
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(ep));
+
+    ucs_queue_for_each_extract(op, &ep->ops, queue_elem, 1) {
+        uct_invoke_completion(op->user_comp, status);
+        ucs_free(op);
+    }
+
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(ep));
+}

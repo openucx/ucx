@@ -9,14 +9,6 @@
 #include "rdmacm_iface.h"
 
 
-typedef struct uct_rdmacm_ep_op uct_rdmacm_ep_op_t;
-
-struct uct_rdmacm_ep_op {
-    ucs_queue_elem_t    queue_elem;
-    uct_completion_t    *user_comp;
-};
-
-
 struct uct_rdmacm_ep {
     uct_base_ep_t                      super;
     uct_sockaddr_priv_pack_callback_t  pack_cb;
