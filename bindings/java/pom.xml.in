@@ -45,7 +45,7 @@
     <ucs.lib.path>${ucx.build.dir}/src/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.build.dir}/src/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.build.dir}/src/ucp/.libs</ucp.lib.path>
-    <ucx.inst.dir>@libdir@</ucx.inst.dir>
+    <ucx.inst.dir>@(DESTDIR)@/@libdir@</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>

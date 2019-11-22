@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import org.openucx.jucx.NativeLibs;
 import org.openucx.jucx.UcxException;
 import org.openucx.jucx.UcxNativeStruct;
+import org.openucx.jucx.UcxUtils;
 
 /**
  * UCP application context (or just a context) is an opaque handle that holds a
@@ -51,22 +52,38 @@ public class UcpContext extends UcxNativeStruct implements Closeable {
     }
 
     /**
-     * Associates memory allocated/mapped region with the network resources.
+     * Associates memory allocated/mapped region with communication operations.
      * The network stack associated with an application context
      * can typically send and receive data from the mapped memory without
      * CPU intervention; some devices and associated network stacks
-     * require the memory to be mapped to send and receive data.
+     * require the memory to be registered to send and receive data.
      */
     public UcpMemory registerMemory(ByteBuffer buf) {
         if (!buf.isDirect()) {
-            throw new UcxException("Registered buffer must be direct.");
+            throw new UcxException("Registered buffer must be direct");
         }
-        return registerMemoryNative(getNativeId(), buf);
+        UcpMemMapParams params = new UcpMemMapParams().setAddress(UcxUtils.getAddress(buf))
+            .setLength(buf.remaining());
+        UcpMemory result = memoryMapNative(getNativeId(), params);
+
+        result.setByteBufferReference(buf);
+        return result;
+    }
+
+    /**
+     * Associates memory allocated/mapped region with communication operations.
+     * The network stack associated with an application context
+     * can typically send and receive data from the mapped memory without
+     * CPU intervention; some devices and associated network stacks
+     * require the memory to be registered to send and receive data.
+     */
+    public UcpMemory memoryMap(UcpMemMapParams params) {
+        return memoryMapNative(getNativeId(), params);
     }
 
     private static native long createContextNative(UcpParams params);
 
     private static native void cleanupContextNative(long contextId);
 
-    private native UcpMemory registerMemoryNative(long conetxtId, ByteBuffer map);
+    private native UcpMemory memoryMapNative(long conetxtId, UcpMemMapParams params);
 }

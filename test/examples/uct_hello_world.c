@@ -123,7 +123,7 @@ ucs_status_t do_am_short(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
 size_t am_bcopy_data_pack_cb(void *dest, void *arg)
 {
     am_bcopy_args_t *bc_args = arg;
-    memcpy(dest, bc_args->data, bc_args->len);
+    mem_type_memcpy(dest, bc_args->data, bc_args->len);
     return bc_args->len;
 }
 
@@ -200,7 +200,7 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
     return status;
 }
 static void print_strings(const char *label, const char *local_str,
-                          const char *remote_str)
+                          const char *remote_str, size_t length)
 {
     fprintf(stdout, "\n\n----- UCT TEST SUCCESS ----\n\n");
     fprintf(stdout, "[%s] %s sent %s", label, local_str, remote_str);
@@ -209,11 +209,13 @@ static void print_strings(const char *label, const char *local_str,
 }
 
 /* Callback to handle receive active message */
-static ucs_status_t hello_world(void *arg, void *data, size_t length, unsigned flags)
+static ucs_status_t hello_world(void *arg, void *data, size_t length,
+                                unsigned flags)
 {
-    recv_desc_t *rdesc;
     func_am_t func_am_type = *(func_am_t *)arg;
-    print_strings("callback", func_am_t_str(func_am_type), data);
+    recv_desc_t *rdesc;
+
+    print_strings("callback", func_am_t_str(func_am_type), data, length);
 
     if (flags & UCT_CB_PARAM_FLAG_DESC) {
         rdesc = (recv_desc_t *)data - 1;
@@ -226,6 +228,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length, unsigned f
     /* We need to copy-out data and return UCS_OK if want to use the data
      * outside the callback */
     rdesc = malloc(sizeof(*rdesc) + length);
+    CHKERR_ACTION(rdesc == NULL, "allocate memory\n", return UCS_ERR_NO_MEMORY);
     rdesc->is_uct_desc = 0;
     memcpy(rdesc + 1, data, length);
     desc_holder = rdesc;
@@ -275,7 +278,11 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     /* Check if current device and transport support required active messages */
     if ((func_am_type == FUNC_AM_SHORT) &&
         (iface_p->iface_attr.cap.flags & UCT_IFACE_FLAG_AM_SHORT)) {
-        return UCS_OK;
+        if (test_mem_type != UCS_MEMORY_TYPE_CUDA) {
+            return UCS_OK;
+        } else {
+            fprintf(stderr, "AM short protocol doesn't support CUDA memory");
+        }
     }
 
     if ((func_am_type == FUNC_AM_BCOPY) &&
@@ -299,16 +306,16 @@ error_ret:
 static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
                                   iface_info_t *iface_p)
 {
-    uct_component_h         *components;
-    unsigned                num_components;
-    unsigned                cmpt_index;
-    uct_component_attr_t    component_attr;
-    unsigned                md_index;
-    uct_tl_resource_desc_t  *tl_resources; /* Communication resource descriptor */
-    unsigned                num_tl_resources; /* Number of transport resources resource objects created */
-    unsigned                tl_index;
-    uct_md_config_t         *md_config;
-    ucs_status_t            status;
+    uct_tl_resource_desc_t *tl_resources    = NULL; /* Communication resource descriptor */
+    unsigned               num_tl_resources = 0;    /* Number of transport resources resource objects created */
+    uct_component_h        *components;
+    unsigned               num_components;
+    unsigned               cmpt_index;
+    uct_component_attr_t   component_attr;
+    unsigned               md_index;
+    unsigned               tl_index;
+    uct_md_config_t        *md_config;
+    ucs_status_t           status;
 
     status = uct_query_components(&components, &num_components);
     CHKERR_JUMP(UCS_OK != status, "query for components", error_ret);
@@ -355,20 +362,38 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
             for (tl_index = 0; tl_index < num_tl_resources; ++tl_index) {
                 if (!strcmp(cmd_args->dev_name, tl_resources[tl_index].dev_name) &&
                     !strcmp(cmd_args->tl_name, tl_resources[tl_index].tl_name)) {
+                    if (!(iface_p->md_attr.cap.reg_mem_types & UCS_BIT(test_mem_type))) {
+                        fprintf(stderr, "Unsupported memory type %s by "
+                                UCT_TL_RESOURCE_DESC_FMT" on %s MD\n",
+                                ucs_memory_type_names[test_mem_type],
+                                UCT_TL_RESOURCE_DESC_ARG(&tl_resources[tl_index]),
+                                component_attr.md_resources[md_index].md_name);
+                        status = UCS_ERR_UNSUPPORTED;
+                        break;
+                    }
+
                     status = init_iface(tl_resources[tl_index].dev_name,
                                         tl_resources[tl_index].tl_name,
                                         cmd_args->func_am_type, iface_p);
-                    if (UCS_OK == status) {
-                        fprintf(stdout, "Using %s with %s.\n",
-                                tl_resources[tl_index].dev_name,
-                                tl_resources[tl_index].tl_name);
-                        uct_release_tl_resource_list(tl_resources);
-                        goto release_component_list;
+                    if (status != UCS_OK) {
+                        break;
                     }
+
+                    fprintf(stdout, "Using "UCT_TL_RESOURCE_DESC_FMT"\n",
+                            UCT_TL_RESOURCE_DESC_ARG(&tl_resources[tl_index]));
+                    goto release_tl_resources;
                 }
             }
 
+release_tl_resources:
             uct_release_tl_resource_list(tl_resources);
+            if ((status == UCS_OK) &&
+                (tl_index < num_tl_resources)) {
+                goto release_component_list;
+            }
+
+            tl_resources     = NULL;
+            num_tl_resources = 0;
             uct_md_close(iface_p->md);
         }
     }
@@ -398,11 +423,7 @@ int print_err_usage()
     fprintf(stderr, func_template, 'z', func_am_t_str(FUNC_AM_ZCOPY), "");
     fprintf(stderr, "  -d      Select device name\n");
     fprintf(stderr, "  -t      Select transport layer\n");
-    fprintf(stderr, "  -n name Set node name or IP address "
-            "of the server (required for client and should be ignored "
-            "for server)\n");
-    fprintf(stderr, "  -p port Set alternative server port (default:13337)\n");
-    fprintf(stderr, "  -s size Set test string length (default:16)\n");
+    print_common_help();
     fprintf(stderr, "\nExample:\n");
     fprintf(stderr, "  Server: uct_hello_world -d eth0 -t tcp\n");
     fprintf(stderr, "  Client: uct_hello_world -d eth0 -t tcp -n localhost\n");
@@ -423,7 +444,7 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
     args->test_strlen   = 16;
 
     opterr = 0;
-    while ((c = getopt(argc, argv, "ibzd:t:n:p:s:h")) != -1) {
+    while ((c = getopt(argc, argv, "ibzd:t:n:p:s:m:h")) != -1) {
         switch (c) {
         case 'i':
             args->func_am_type = FUNC_AM_SHORT;
@@ -455,6 +476,12 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
             args->test_strlen = atol(optarg);
             if (args->test_strlen <= 0) {
                 fprintf(stderr, "Wrong string size %ld\n", args->test_strlen);
+                return UCS_ERR_UNSUPPORTED;
+            }
+            break;
+        case 'm':
+            test_mem_type = parse_mem_type(optarg);
+            if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
                 return UCS_ERR_UNSUPPORTED;
             }
             break;
@@ -588,39 +615,37 @@ int main(int argc, char **argv)
 
     if (cmd_args.server_name) {
         oob_sock = client_connect(cmd_args.server_name, cmd_args.server_port);
-        if (oob_sock < 0) {
-            goto out_free_if_addrs;
-        }
     } else {
         oob_sock = server_connect(cmd_args.server_port);
-        if (oob_sock < 0) {
-            goto out_free_if_addrs;
-        }
     }
+    CHKERR_ACTION(oob_sock < 0, "OOB connect",
+                  status = UCS_ERR_IO_ERROR; goto out_close_oob_sock);
 
     res = sendrecv(oob_sock, own_dev, if_info.iface_attr.device_addr_len,
                    (void **)&peer_dev);
     CHKERR_ACTION(0 != res, "device exchange",
-                  status = UCS_ERR_NO_MESSAGE; goto out_free_dev_addrs);
+                  status = UCS_ERR_NO_MESSAGE; goto out_close_oob_sock);
 
     status = (ucs_status_t)uct_iface_is_reachable(if_info.iface, peer_dev, NULL);
-    CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
+    CHKERR_JUMP(0 == status, "reach the peer", out_close_oob_sock);
 
     /* Get interface address */
     if (if_info.iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         status = uct_iface_get_address(if_info.iface, own_iface);
-        CHKERR_JUMP(UCS_OK != status, "get interface address", out_free_if_addrs);
+        CHKERR_JUMP(UCS_OK != status, "get interface address",
+                    out_close_oob_sock);
 
         status = (ucs_status_t)sendrecv(oob_sock, own_iface, if_info.iface_attr.iface_addr_len,
                                         (void **)&peer_iface);
-        CHKERR_JUMP(0 != status, "ifaces exchange", out_free_if_addrs);
+        CHKERR_JUMP(0 != status, "ifaces exchange", out_close_oob_sock);
     }
 
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
     ep_params.iface      = if_info.iface;
     if (if_info.iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         own_ep = (uct_ep_addr_t*)calloc(1, if_info.iface_attr.ep_addr_len);
-        CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
+        CHKERR_ACTION(NULL == own_ep, "allocate memory for ep addrs",
+                      status = UCS_ERR_NO_MEMORY; goto out_close_oob_sock);
 
         /* Create new endpoint */
         status = uct_ep_create(&ep_params, &ep);
@@ -667,8 +692,12 @@ int main(int argc, char **argv)
     CHKERR_JUMP(UCS_OK != status, "set callback", out_free_ep);
 
     if (cmd_args.server_name) {
-        char *str = (char *)malloc(cmd_args.test_strlen);
-        generate_test_string(str, cmd_args.test_strlen);
+        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
+        CHKERR_ACTION(str == NULL, "allocate memory",
+                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
+        res = generate_test_string(str, cmd_args.test_strlen);
+        CHKERR_ACTION(res < 0, "generate test string",
+                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
 
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
@@ -679,19 +708,20 @@ int main(int argc, char **argv)
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
 
-        free(str);
+        mem_type_free(str);
         CHKERR_JUMP(UCS_OK != status, "send active msg", out_free_ep);
     } else {
         recv_desc_t *rdesc;
 
-        while (!desc_holder) {
+        while (desc_holder == NULL) {
             /* Explicitly progress any outstanding active message requests */
             uct_worker_progress(if_info.worker);
         }
 
         rdesc = desc_holder;
         print_strings("main", func_am_t_str(cmd_args.func_am_type),
-                                            (char *)(rdesc + 1));
+                      (char *)(rdesc + 1), cmd_args.test_strlen);
+
         if (rdesc->is_uct_desc) {
             /* Release descriptor because callback returns UCS_INPROGRESS */
             uct_iface_release_desc(rdesc);
@@ -703,13 +733,14 @@ int main(int argc, char **argv)
     if (barrier(oob_sock)) {
         status = UCS_ERR_IO_ERROR;
     }
-    close(oob_sock);
 
 out_free_ep:
     uct_ep_destroy(ep);
 out_free_ep_addrs:
     free(own_ep);
     free(peer_ep);
+out_close_oob_sock:
+    close(oob_sock);
 out_free_if_addrs:
     free(own_iface);
     free(peer_iface);
@@ -724,5 +755,5 @@ out_destroy_worker:
 out_cleanup_async:
     ucs_async_context_destroy(async);
 out:
-    return status == UCS_ERR_UNSUPPORTED ? UCS_OK : status;
+    return (status == UCS_ERR_UNSUPPORTED) ? UCS_OK : status;
 }

@@ -5,10 +5,7 @@
 
 package org.openucx.jucx.examples;
 
-import org.openucx.jucx.ucp.UcpContext;
-import org.openucx.jucx.ucp.UcpParams;
-import org.openucx.jucx.ucp.UcpWorker;
-import org.openucx.jucx.ucp.UcpWorkerParams;
+import org.openucx.jucx.ucp.*;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -32,7 +29,9 @@ public abstract class UcxBenchmark {
 
     protected static int numIterations;
 
-    protected static int totalSize;
+    protected static long totalSize;
+
+    protected static UcpMemMapParams allocationParams;
 
     private static String DESCRIPTION = "JUCX benchmark.\n" +
         "Run: \n" +
@@ -45,12 +44,14 @@ public abstract class UcxBenchmark {
         "s - IP address to bind sender listener (default: 0.0.0.0)\n" +
         "p - port to bind sender listener (default: 54321)\n" +
         "t - total size in bytes to transfer from sender to receiver (default 10000)\n" +
+        "o - on demand registration (default: false) \n" +
         "n - number of iterations (default 5)\n";
 
     static {
         argsMap.put("s", "0.0.0.0");
         argsMap.put("p", "54321");
         argsMap.put("t", "10000");
+        argsMap.put("o", "false");
         argsMap.put("n", "5");
     }
 
@@ -69,7 +70,11 @@ public abstract class UcxBenchmark {
         try {
             serverPort = Integer.parseInt(argsMap.get("p"));
             numIterations = Integer.parseInt(argsMap.get("n"));
-            totalSize = Integer.parseInt(argsMap.get("t"));
+            totalSize = Long.parseLong(argsMap.get("t"));
+            allocationParams = new UcpMemMapParams().allocate().setLength(totalSize);
+            if (argsMap.get("o").compareToIgnoreCase("true") == 0) {
+                allocationParams.nonBlocking();
+            }
         } catch (NumberFormatException ex) {
             System.out.println(DESCRIPTION);
             return false;

@@ -50,6 +50,9 @@ ucp_signaling_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
     ctx.payload = payload;
     ctx.length  = length;
 
+    ucp_assert_memtype(proxy_ep->ucp_ep->worker->context, ctx.payload,
+                       ctx.length, UCS_MEMORY_TYPE_HOST);
+
     packed_size = uct_ep_am_bcopy(proxy_ep->uct_ep, id,
                                   ucp_signaling_ep_pack_short, &ctx,
                                   UCT_SEND_FLAG_SIGNALED);
@@ -102,6 +105,9 @@ ucp_signaling_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag, const void *data,
 
     ctx.payload = data;
     ctx.length  = length;
+
+    ucp_assert_memtype(proxy_ep->ucp_ep->worker->context, ctx.payload,
+                       ctx.length, UCS_MEMORY_TYPE_HOST);
 
     packed_size = uct_ep_tag_eager_bcopy(proxy_ep->uct_ep, tag, 0,
                                          ucp_signaling_ep_pack_tag_short, &ctx,

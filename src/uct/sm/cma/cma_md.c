@@ -161,7 +161,7 @@ ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->rkey_packed_size     = 0;
     md_attr->cap.flags            = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.reg_mem_types    = UCS_MEMORY_TYPES_CPU_ACCESSIBLE;
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;

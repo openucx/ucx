@@ -12,6 +12,7 @@
 #include "math.h"
 #include "sys.h"
 #include <ucs/config/parser.h>
+#include <ucs/arch/bitops.h>
 
 #include <string.h>
 #include <ctype.h>
@@ -265,5 +266,27 @@ const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
         ++i;
     }
     *p = 0;
+    return buf;
+}
+
+const char* ucs_flags_str(char *buf, size_t max,
+                          uint64_t flags, const char **str_table)
+{
+    int i, len;
+
+    len = 0;
+    for (i = 0; *str_table; ++str_table, ++i) {
+        if (flags & UCS_BIT(i)) { /* not using ucs_for_each_bit to silence coverity */
+            snprintf(buf + len, max - len, "%s,", *str_table);
+            len = strlen(buf);
+        }
+    }
+
+    if (len > 0) {
+        buf[len - 1] = '\0'; /* remove last ',' */
+    } else {
+        buf[0] = '\0';
+    }
+
     return buf;
 }

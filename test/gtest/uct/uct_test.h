@@ -21,6 +21,7 @@
 
 #define DEFAULT_DELAY_MS           1.0
 #define DEFAULT_TIMEOUT_SEC       10.0
+#define DEFAULT_VARIANT              0
 
 #define UCT_TEST_CALL_AND_TRY_AGAIN(_func, _res) \
     do { \
@@ -45,9 +46,11 @@ struct resource {
     ucs_cpu_set_t           local_cpus;
     std::string             tl_name;
     std::string             dev_name;
+    std::string             variant_name;
     uct_device_type_t       dev_type;
     ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
     ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
+    int                     variant;
 
     resource();
     resource(uct_component_h component, const std::string& md_name,
@@ -97,6 +100,12 @@ public:
      */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
+    /* By default generate test variant for all tls. If variant is specific to
+     * the particular transport tl_name need to be specified accordingly */
+    static void generate_test_variant(int variant,
+                                      const std::string &variant_name,
+                                      std::vector<resource>& test_res,
+                                      const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
 

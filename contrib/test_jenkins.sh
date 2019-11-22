@@ -24,6 +24,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
+CUDA_MODULE="dev/cuda10.1"
+GDRCOPY_MODULE="dev/gdrcopy"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -103,15 +105,15 @@ try_load_cuda_env() {
 	have_cuda=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		have_cuda=yes
-		module_load dev/cuda    || have_cuda=no
-		module_load dev/gdrcopy || have_cuda=no
+		module_load $CUDA_MODULE    || have_cuda=no
+		module_load $GDRCOPY_MODULE || have_cuda=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
 
 unload_cuda_env() {
-	module unload dev/cuda
-	module unload dev/gdrcopy
+	module unload $CUDA_MODULE
+	module unload $GDRCOPY_MODULE
 }
 
 #
@@ -455,9 +457,9 @@ build_ugni() {
 #
 build_cuda() {
 	echo 1..1 > build_cuda.tap
-	if module_load dev/cuda
+	if module_load $CUDA_MODULE
 	then
-		if module_load dev/gdrcopy
+		if module_load $GDRCOPY_MODULE
 		then
 			echo "==== Build with enable cuda, gdr_copy ===="
 			../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
@@ -469,7 +471,7 @@ build_cuda() {
 			$MAKEP clean
 			$MAKEP
 			$MAKEP distclean
-			module unload dev/gdrcopy
+			module unload $GDRCOPY_MODULE
 		fi
 
 		echo "==== Build with enable cuda, w/o gdr_copy ===="
@@ -477,7 +479,7 @@ build_cuda() {
 		$MAKEP clean
 		$MAKEP
 
-		module unload dev/cuda
+		module unload $CUDA_MODULE
 
 		echo "==== Running test_link_map with cuda build but no cuda module ===="
 		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
@@ -488,6 +490,7 @@ build_cuda() {
 		echo "==== Not building with cuda flags ===="
 		echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
 	fi
+	unload_cuda_env
 }
 
 #
@@ -534,6 +537,7 @@ build_gcc_latest() {
 			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 			$MAKEP distclean
 			echo "ok 1 - build successful " >> build_gcc_latest.tap
+			module unload dev/gcc-latest
 		else
 			echo "==== Not building with latest gcc compiler ===="
 			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
@@ -684,9 +688,7 @@ run_hello() {
 
 	if [ ! -x ${test_name} ]
 	then
-		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-		    -l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-		    -Wl,-rpath=${ucx_inst}/lib
+		$MAKEP -C test/examples ${test_name}
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -704,7 +706,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./test/examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -723,10 +725,20 @@ run_ucp_hello() {
 		return # skip if cannot create ucp ep
 	fi
 
+	mem_types_list="host "
+
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		mem_types_list+="cuda cuda-managed "
+	fi
+
 	for test_mode in -w -f -b -e
 	do
-		echo "==== Running UCP hello world with mode ${test_mode} ===="
-		run_hello ucp ${test_mode}
+		for mem_type in $mem_types_list
+		do
+			echo "==== Running UCP hello world with mode ${test_mode} and \"${mem_type}\" memory type ===="
+			run_hello ucp ${test_mode} -m ${mem_type}
+		done
 	done
 	rm -f ./ucp_hello_world
 }
@@ -735,12 +747,27 @@ run_ucp_hello() {
 # Compile and run UCT hello world example
 #
 run_uct_hello() {
+	mem_types_list="host "
+
+	if [ "X$have_cuda" == "Xyes" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	then
+		mem_types_list+="cuda-managed "
+		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+		then
+			# test RDMA GPUDirect
+			mem_types_list+="cuda "
+		fi
+	fi
+
 	for send_func in -i -b -z
 	do
 		for ucx_dev in $(get_active_ib_devices)
 		do
-			echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} ===="
-			run_hello uct  -d ${ucx_dev} -t "rc" ${send_func}
+			for mem_type in $mem_types_list
+			do
+				echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} and \"${mem_type}\" memory type ===="
+				run_hello uct -d ${ucx_dev} -t "rc" ${send_func} -m ${mem_type}
+			done
 		done
 		for ucx_dev in $(get_active_ip_iface)
 		do
@@ -865,34 +892,59 @@ run_ucx_perftest() {
 	done
 
 	# run cuda tests if cuda module was loaded and GPU is found
-	if [ "X$have_cuda" == "Xyes" ] && (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
+	if [ "X$have_cuda" == "Xyes" ]
 	then
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		tls_list="all "
+		gdr_options="n "
+		if (lsmod | grep -q "nv_peer_mem")
+		then
+			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			tls_list+="rc,cuda_copy "
+			gdr_options+="y "
+		fi
+
+		if (lsmod | grep -q "gdrdrv")
+		then
+			echo "GDRCopy module (gdrdrv) is present..."
+			tls_list+="rc,cuda_copy,gdr_copy "
+		fi
+
+		if [ $num_gpus -gt 1 ]; then
+			export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		fi
+
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
+		sed -s 's,-n [0-9]*,-n 10 -w 1,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
 
 		echo "==== Running ucx_perf with cuda memory===="
 
-		for UCX_TLS in rc,cuda_copy,gdr_copy rc,cuda_copy
+		for tls in $tls_list
 		do
-			for UCX_MEMTYPE_CACHE in y n
+			for memtype_cache in y n
 			do
-				if [ $with_mpi -eq 1 ]
-				then
-					$MPIRUN -np 2 -x UCX_TLS -x UCX_MEMTYPE_CACHE $AFFINITY "$ucx_perftest" "$ucp_test_args"
-				else
-					export UCX_TLS
-					export UCX_MEMTYPE_CACHE
-					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-					unset UCX_TLS
-					unset UCX_MEMTYPE_CACHE
-				fi
+				for gdr in $gdr_options
+				do
+					if [ $with_mpi -eq 1 ]
+					then
+						$MPIRUN -np 2 -x UCX_TLS=$tls -x UCX_MEMTYPE_CACHE=$memtype_cache \
+									 -x UCX_IB_GPU_DIRECT_RDMA=$gdr $AFFINITY $ucx_perftest $ucp_test_args
+					else
+						export UCX_TLS=$tls
+						export UCX_MEMTYPE_CACHE=$memtype_cache
+						export UCX_IB_GPU_DIRECT_RDMA=$gdr
+						run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+						unset UCX_TLS
+						unset UCX_MEMTYPE_CACHE
+						unset UCX_IB_GPU_DIRECT_RDMA
+					fi
+				done
 			done
 		done
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY "$ucx_perftest" "$ucp_test_args"
-			$MPIRUN -np 2 $AFFINITY "$ucx_perftest" "$ucp_test_args"
+			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
 			export UCX_TLS=self,mm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
@@ -1117,12 +1169,14 @@ test_jucx() {
                         echo "Running standalone benchamrk on $iface"
 
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+                                -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
 			         -cp "bindings/java/src/main/native/build-java/*" \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+				 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
 			         -cp "bindings/java/src/main/native/build-java/*"  \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
@@ -1395,12 +1449,17 @@ run_tests() {
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
+	# test cuda build if cuda modules available
+	do_distributed_task 2 4 build_cuda
+
+	# load cuda env only if GPU available for remaining tests
+	try_load_cuda_env
+
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 0 4 build_pgi
 	do_distributed_task 1 4 build_debug
 	do_distributed_task 1 4 build_prof
 	do_distributed_task 1 4 build_ugni
-	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest

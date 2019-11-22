@@ -34,6 +34,8 @@ typedef struct uct_mm_ep {
      * (after attaching to them) */
     khash_t(uct_mm_remote_seg) remote_segs;
 
+    void                       *remote_iface_addr; /* remote md-specific address, can be NULL */
+
     ucs_arbiter_group_t        arb_group;   /* the group that holds this ep's pending operations */
 
     /* Used for signaling remote side wakeup */

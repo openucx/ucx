@@ -8,7 +8,6 @@ import org.junit.Test;
 
 import org.openucx.jucx.ucp.*;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -20,31 +19,31 @@ import static java.nio.file.StandardOpenOption.*;
 import static org.junit.Assert.*;
 
 public class UcpMemoryTest {
-    public static int MEM_SIZE = 4096;
-    public static String RANDOM_TEXT = UUID.randomUUID().toString();
+    static int MEM_SIZE = 4096;
+    static String RANDOM_TEXT = UUID.randomUUID().toString();
 
     @Test
-    public void testMmapFile() throws IOException {
+    public void testMmapFile() throws Exception {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
         Path tempFile = Files.createTempFile("jucx", "test");
         // 1. Create FileChannel to file in tmp directory.
         FileChannel fileChannel = FileChannel.open(tempFile, CREATE, WRITE, READ, DELETE_ON_CLOSE);
-        ByteBuffer data = ByteBuffer.allocateDirect(MEM_SIZE);
-        // 2. Put to file some random text.
-        data.asCharBuffer().put(RANDOM_TEXT);
-        fileChannel.write(data);
-        fileChannel.force(true);
-        // 3. MMap file channel.
         MappedByteBuffer buf = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, MEM_SIZE);
-        buf.load();
-        // 4. Make sure content of mmaped file has needed data
-        assertEquals(RANDOM_TEXT, buf.asCharBuffer().toString().trim());
-        // 5. Register mmaped buffer with UCX
-        UcpMemory mem = context.registerMemory(buf);
-        ByteBuffer memBuffer = mem.getData();
-        // 6. Make sure registered buffer is the same as mapped buffer.
-        assertEquals(RANDOM_TEXT, memBuffer.asCharBuffer().toString().trim());
-        mem.deregister();
+        buf.asCharBuffer().put(RANDOM_TEXT);
+        buf.force();
+        // 2. Register mmap buffer with ODP
+        UcpMemory mmapedMemory = context.memoryMap(new UcpMemMapParams()
+            .setAddress(UcxUtils.getAddress(buf)).setLength(MEM_SIZE).nonBlocking());
+
+        assertEquals(mmapedMemory.getAddress(), UcxUtils.getAddress(buf));
+
+        // 3. Test allocation
+        UcpMemory allocatedMemory = context.memoryMap(new UcpMemMapParams()
+            .allocate().setLength(MEM_SIZE).nonBlocking());
+        assertEquals(allocatedMemory.getLength(), MEM_SIZE);
+
+        allocatedMemory.deregister();
+        mmapedMemory.deregister();
         fileChannel.close();
         context.close();
     }

@@ -1437,13 +1437,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
 
         if (select_ctx->lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_CM) {
-            if (select_params->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT) {
-                /* Client creates CM lane before construction TL lanes */
-                ucs_assert((lane == 0) && (key->cm_lane == 0));
-            } else {
-                ucs_assert(key->cm_lane == UCP_NULL_LANE);
-                key->cm_lane = lane;
-            }
+            ucs_assert(key->cm_lane == UCP_NULL_LANE);
+            key->cm_lane = lane;
             /* CM lane can't be shared with TL usage */
             ucs_assert(select_ctx->lane_descs[lane].usage ==
                        UCP_WIREUP_LANE_USAGE_CM);

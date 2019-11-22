@@ -172,6 +172,8 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
                                        uct_tl_device_resource_t **devices_p,
                                        unsigned *num_devices_p);
 
+ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
+                                 struct ibv_device *ibv_device);
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events

@@ -452,7 +452,9 @@ protected:
     server_disconnect_cb(uct_ep_h ep, void *arg) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        self->m_server->disconnect(ep);
+        if (!(self->m_server_start_disconnect)) {
+            self->m_server->disconnect(ep);
+        }
         self->m_cm_state |= TEST_CM_STATE_SERVER_DISCONNECTED;
         self->m_server_disconnect_cnt++;
     }
@@ -567,8 +569,8 @@ protected:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
-                (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
+            if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
+                (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
                 (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -583,7 +585,22 @@ protected:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_REJECTED")) {
+            if (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_REJECTED")) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
+    detect_double_disconncet_error_logger(const char *file, unsigned line,
+                                          const char *function, ucs_log_level_t level,
+                                          const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), "duplicate call of uct_ep_disconnect")) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -850,6 +867,30 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
 {
     test_delayed_server_response(true);
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, double_ep_disconnect)
+{
+    ucs_status_t status;
+
+    cm_listen_and_connect();
+
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
+                               TEST_CM_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_CONNECTED |
+                                                TEST_CM_STATE_CLIENT_CONNECTED)));
+
+    ASSERT_UCS_OK(uct_ep_disconnect(m_client->ep(0), 0));
+
+    /* wrap errors since the client will call uct_ep_disconnect the second time
+     * on the same endpoint. this ep may not be disconnected yet */
+    {
+        scoped_log_handler slh(detect_double_disconncet_error_logger);
+
+        status = uct_ep_disconnect(m_client->ep(0), 0);
+        EXPECT_TRUE((status == UCS_ERR_NOT_CONNECTED) ||
+                    (status == UCS_INPROGRESS));
+    }
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)

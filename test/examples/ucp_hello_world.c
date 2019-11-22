@@ -85,6 +85,11 @@ static size_t peer_addr_len;
 
 static ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name);
 
+static void set_msg_data_len(struct msg *msg, uint64_t data_len)
+{
+    mem_type_memcpy(&msg->data_len, &data_len, sizeof(data_len));
+}
+
 static void request_init(void *request)
 {
     struct ucx_context *ctx = (struct ucx_context *) request;
@@ -183,6 +188,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     struct ucx_context *request = 0;
     size_t msg_len = 0;
     int ret = -1;
+    char *str;
 
     /* Send client UCX address to server */
     ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
@@ -194,8 +200,9 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
 
     msg_len = sizeof(*msg) + local_addr_len;
-    msg = calloc(1, msg_len);
-    CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
+    msg     = malloc(msg_len);
+    CHKERR_JUMP(msg == NULL, "allocate memory\n", err_ep);
+    memset(msg, 0, msg_len);
 
     msg->data_len = local_addr_len;
     memcpy(msg + 1, local_addr, local_addr_len);
@@ -213,7 +220,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         ucp_request_release(request);
     }
 
-    free (msg);
+    free(msg);
 
     if (err_handling_opt.failure) {
         fprintf(stderr, "Emulating unexpected failure on client side\n");
@@ -247,8 +254,8 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         }
     }
 
-    msg = malloc(info_tag.length);
-    CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
+    msg = mem_type_malloc(info_tag.length);
+    CHKERR_JUMP(msg == NULL, "allocate memory\n", err_ep);
 
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag,
@@ -268,11 +275,19 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         printf("UCX data message was received\n");
     }
 
-    printf("\n\n----- UCP TEST SUCCESS ----\n\n");
-    printf("%s", (char *)(msg + 1));
-    printf("\n\n---------------------------\n\n");
+    str = calloc(1, test_string_length);
+    if (str != NULL) {
+        mem_type_memcpy(str, msg + 1, test_string_length);
+        printf("\n\n----- UCP TEST SUCCESS ----\n\n");
+        printf("%s", str);
+        printf("\n\n---------------------------\n\n");
+        free(str);
+    } else {
+        fprintf(stderr, "Memory allocation failed\n");
+        goto err_ep;
+    }
 
-    free(msg);
+    mem_type_free(msg);
 
     ret = 0;
 
@@ -317,7 +332,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     struct msg *msg = 0;
     struct ucx_context *request = 0;
     size_t msg_len = 0;
-    int ret = -1;
+    int ret;
 
     /* Receive client UCX address */
     do {
@@ -329,7 +344,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     } while (msg_tag == NULL);
 
     msg = malloc(info_tag.length);
-    CHKERR_JUMP(!msg, "allocate memory\n", err);
+    CHKERR_ACTION(msg == NULL, "allocate memory\n", ret = -1; goto err);
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag, recv_handler);
 
@@ -337,6 +352,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         fprintf(stderr, "unable to receive UCX address message (%s)\n",
                 ucs_status_string(UCS_PTR_STATUS(request)));
         free(msg);
+        ret = -1;
         goto err;
     } else {
         /* ucp_tag_msg_recv_nb() cannot return NULL */
@@ -347,14 +363,15 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         printf("UCX address message was received\n");
     }
 
-    peer_addr = malloc(msg->data_len);
-    if (!peer_addr) {
+    peer_addr_len = msg->data_len;
+    peer_addr     = malloc(peer_addr_len);
+    if (peer_addr == NULL) {
         fprintf(stderr, "unable to allocate memory for peer address\n");
         free(msg);
+        ret = -1;
         goto err;
     }
 
-    peer_addr_len = msg->data_len;
     memcpy(peer_addr, msg + 1, peer_addr_len);
 
     free(msg);
@@ -371,22 +388,24 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ep_params.user_data       = &client_status;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
-    CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
+    CHKERR_ACTION(status != UCS_OK, "ucp_ep_create\n", ret = -1; goto err);
 
     msg_len = sizeof(*msg) + test_string_length;
-    msg = calloc(1, msg_len);
-    CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
+    msg = mem_type_malloc(msg_len);
+    CHKERR_ACTION(msg == NULL, "allocate memory\n", ret = -1; goto err_ep);
+    mem_type_memset(msg, 0, msg_len);
 
-    msg->data_len = msg_len - sizeof(*msg);
-    generate_test_string((char *)(msg + 1), test_string_length);
+    set_msg_data_len(msg, msg_len - sizeof(*msg));
+    ret = generate_test_string((char *)(msg + 1), test_string_length);
+    CHKERR_JUMP(ret < 0, "generate test string", err_free_mem_type_msg);
 
     request = ucp_tag_send_nb(client_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,
                               send_handler);
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to send UCX data message\n");
-        free(msg);
-        goto err_ep;
+        ret = -1;
+        goto err_free_mem_type_msg;
     } else if (UCS_PTR_IS_PTR(request)) {
         printf("UCX data message was scheduled for send\n");
         wait(ucp_worker, request);
@@ -399,11 +418,11 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
             status, ucs_status_string(status));
 
     ret = 0;
-    free(msg);
 
+err_free_mem_type_msg:
+    mem_type_free(msg);
 err_ep:
     ucp_ep_destroy(client_ep);
-
 err:
     return ret;
 }
@@ -539,7 +558,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
     err_handling_opt.ucp_err_mode   = UCP_ERR_HANDLING_MODE_NONE;
     err_handling_opt.failure        = 0;
 
-    while ((c = getopt(argc, argv, "wfben:p:s:h")) != -1) {
+    while ((c = getopt(argc, argv, "wfben:p:s:m:h")) != -1) {
         switch (c) {
         case 'w':
             ucp_test_mode = TEST_MODE_WAIT;
@@ -571,6 +590,12 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
                 return UCS_ERR_UNSUPPORTED;
             }	
             break;
+        case 'm':
+            test_mem_type = parse_mem_type(optarg);
+            if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
+                return UCS_ERR_UNSUPPORTED;
+            }
+            break;
         case '?':
             if (optopt == 's') {
                 fprintf(stderr, "Option -%c requires an argument.\n", optopt);
@@ -594,11 +619,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
             fprintf(stderr, "  -e      Emulate unexpected failure on server side"
                     "and handle an error on client side with enabled "
                     "UCP_ERR_HANDLING_MODE_PEER\n");
-            fprintf(stderr, "  -n name Set node name or IP address "
-                    "of the server (required for client and should be ignored "
-                    "for server)\n");
-            fprintf(stderr, "  -p port Set alternative server port (default:13337)\n");
-            fprintf(stderr, "  -s size Set test string length (default:16)\n");
+            print_common_help();
             fprintf(stderr, "\n");
             return UCS_ERR_UNSUPPORTED;
         }

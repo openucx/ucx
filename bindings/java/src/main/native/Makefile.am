@@ -62,14 +62,14 @@ package:
 
 # Maven install phase
 install-data-hook: package
-	cp -fp $(java_build_dir)/jucx-@VERSION@.jar @libdir@
+	cp -fp $(java_build_dir)/jucx-@VERSION@.jar $(DESTDIR)@libdir@
 
 # Remove all compiled Java files
 clean-local:
 	-rm -rf $(java_build_dir)
 
 test:
-	$(MVNCMD) test
+	$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
 docs:
 	$(MVNCMD) javadoc:javadoc
 
