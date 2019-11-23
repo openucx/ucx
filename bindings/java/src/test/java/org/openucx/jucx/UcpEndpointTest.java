@@ -140,7 +140,9 @@ public class UcpEndpointTest {
 
         rkey1.close();
         rkey2.close();
+
         endpoint.close();
+
         worker1.close();
         worker2.close();
         context1.close();
@@ -176,9 +178,7 @@ public class UcpEndpointTest {
                 }
             });
 
-        while (!request.isCompleted()) {
-            worker1.progress();
-        }
+        worker1.progressRequest(request);
 
         assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
 
@@ -261,6 +261,7 @@ public class UcpEndpointTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
+            .setPeerErrorHadnlingMode()
             .setUcpAddress(worker2.getAddress()));
 
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
@@ -307,6 +308,10 @@ public class UcpEndpointTest {
 
         assertTrue(success.get());
 
+        UcxRequest close = ep.closeNonBlockingForce();
+
+        while (!close.isCompleted()) {}
+
         progressThread.interrupt();
         try {
             progressThread.join();
@@ -314,7 +319,6 @@ public class UcpEndpointTest {
 
         }
 
-        ep.close();
         worker2.close();
         worker1.close();
         context2.close();

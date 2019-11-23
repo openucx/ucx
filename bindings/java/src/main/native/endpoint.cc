@@ -89,6 +89,15 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_destroyEndpointNative(JNIEnv *env, jclass 
 }
 
 JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_closeNonBlockingNative(JNIEnv *env, jclass cls,
+                                                             jlong ep_ptr, jint mode)
+{
+    ucs_status_ptr_t request = ucp_ep_close_nb((ucp_ep_h) ep_ptr, mode);
+
+    return process_request(request, NULL);
+}
+
+JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
                                                       jlong ep_ptr, jlong addr)
 {

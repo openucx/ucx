@@ -154,7 +154,7 @@ public class UcpWorkerTest {
             }
         });
 
-        while (request.isCompleted()) {
+        while (!request.isCompleted()) {
             worker1.progress();
             worker2.progress();
         }

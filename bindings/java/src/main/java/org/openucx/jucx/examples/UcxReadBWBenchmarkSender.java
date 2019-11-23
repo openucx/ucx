@@ -60,17 +60,10 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
                 }
             });
 
-        while (!recvRequest.isCompleted()) {
-            worker.progress();
-        }
+        worker.progressRequest(recvRequest);
 
-        // Close endpoint and wait for remote side
-        // TODO remove when UCP close protocol is implemented
-        endpoint.close();
-        try {
-            Thread.sleep(3000);
-        } catch (java.lang.InterruptedException e) {
-        }
+        UcxRequest close = endpoint.closeNonBlockingFlush();
+        worker.progressRequest(close);
 
         memory.deregister();
         closeResources();

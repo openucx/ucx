@@ -34,9 +34,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         System.out.println("Waiting for connections on " + sockaddr + " ...");
 
-        while (!recvRequest.isCompleted()) {
-            worker.progress();
-        }
+        worker.progressRequest(recvRequest);
 
         long remoteAddress = recvBuffer.getLong();
         long remoteSize = recvBuffer.getLong();
@@ -54,7 +52,6 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         UcpEndpoint endpoint = worker.newEndpoint(
             new UcpEndpointParams().setUcpAddress(workerAddress).setPeerErrorHadnlingMode());
-
 
         recvBuffer.position(rkeyBufferOffset);
         UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(recvBuffer);
@@ -81,9 +78,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
                     }
                 });
 
-            while (!getRequest.isCompleted()) {
-                worker.progress();
-            }
+            worker.progressRequest(getRequest);
             // To make sure we receive correct data each time to compare hashCodes
             data.put(0, (byte)1);
         }
@@ -92,17 +87,11 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         sendBuffer.asCharBuffer().put("DONE");
         UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
 
-        while (!sent.isCompleted()) {
-            worker.progress();
-        }
+        worker.progressRequest(sent);
 
-        // Close endpoint and wait for remote side
-        // TODO remove when UCP close protocol is implemented
-        endpoint.close();
-        try {
-            Thread.sleep(3000);
-        } catch (java.lang.InterruptedException e) {
-        }
+        UcxRequest close = endpoint.closeNonBlockingFlush();
+
+        worker.progressRequest(close);
 
         closeResources();
     }
