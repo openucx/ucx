@@ -1509,14 +1509,14 @@ run_tests() {
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 2 4 run_ucx_perftest
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 0 3 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
-	do_distributed_task 0 3 test_jucx
+	do_distributed_task 0 4 test_ucp_dlopen
 
 	# all are running gtest
 	run_gtest_default

@@ -15,21 +15,19 @@
 
 typedef uintptr_t native_ptr;
 
-
-JNIEXPORT void JNICALL JNU_ThrowException(JNIEnv *, const char *);
-
-void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
-
 #define JUCX_DEFINE_LONG_CONSTANT(_name) do { \
     jfieldID field = env->GetStaticFieldID(cls, #_name, "J"); \
-    env->SetStaticLongField(cls, field, _name); \
+    if (field != NULL) { \
+        env->SetStaticLongField(cls, field, _name); \
+    } \
 } while(0)
 
 #define JUCX_DEFINE_INT_CONSTANT(_name) do { \
     jfieldID field = env->GetStaticFieldID(cls, #_name, "I"); \
-    env->SetStaticIntField(cls, field, _name); \
+    if (field != NULL) { \
+        env->SetStaticIntField(cls, field, _name); \
+    } \
 } while(0)
-
 
 /**
  * Throw a Java exception by name. Similar to SignalError.
@@ -45,7 +43,6 @@ void JNU_ThrowExceptionByStatus(JNIEnv *, ucs_status_t);
 #define JNU_ThrowExceptionByStatus(_env, _status) do { \
     JNU_ThrowException(_env, ucs_status_string(_status)); \
 } while(0)
-
 
 /**
  * @brief Utility to convert Java InetSocketAddress class (corresponds to the Network Layer 4

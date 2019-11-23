@@ -198,6 +198,24 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         return flushNonBlockingNative(getNativeId(), callback);
     }
 
+    /**
+     * Releases the endpoint without any confirmation from the peer. All
+     * outstanding requests will be completed with UCS_ERR_CANCELED error.
+     * This mode may cause transport level errors on remote side, so it requires set
+     * {@link UcpEndpointParams#setPeerErrorHadnlingMode()} for all endpoints created on
+     * both (local and remote) sides to avoid undefined behavior.
+     */
+    public UcpRequest closeNonBlockingForce() {
+        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FORCE);
+    }
+
+    /**
+     * Releases the endpoint by scheduling flushes on all outstanding operations.
+     */
+    public UcpRequest closeNonBlockingFlush() {
+        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FLUSH);
+    }
+
     private static native long createEndpointNative(UcpEndpointParams params, long workerId);
 
     private static native void destroyEndpointNative(long epId);
@@ -225,4 +243,6 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                                  UcxCallback callback);
 
     private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
+
+    private static native UcpRequest closeNonBlockingNative(long endpointId, int mode);
 }
