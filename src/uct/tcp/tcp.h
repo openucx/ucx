@@ -46,6 +46,7 @@
 
 #define UCT_TCP_CONFIG_MAX_CONN_RETRIES      "MAX_CONN_RETRIES"
 
+#define UCT_TCP_MAX_SOCKETS                   64
 
 /**
  * TCP context type
@@ -283,6 +284,11 @@ struct uct_tcp_ep {
     ucs_queue_head_t              put_comp_q;       /* Flush completions waiting for
                                                      * outstanding PUTs acknowledgment */
     ucs_list_link_t               list;             /* List element to insert into TCP EP list */
+
+    int                           num_fds;
+    int                           fds[UCT_TCP_MAX_SOCKETS];
+    struct sockaddr_in            peer_addrs[UCT_TCP_MAX_SOCKETS];
+    int                           current_fd;
 };
 
 
@@ -333,6 +339,8 @@ typedef struct uct_tcp_iface {
         size_t                    sndbuf;            /* SO_SNDBUF */
         size_t                    rcvbuf;            /* SO_RCVBUF */
     } sockopt;
+
+    int                           num_sockets;
 } uct_tcp_iface_t;
 
 
@@ -389,7 +397,7 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep);
 
 unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep);
 
-ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
+ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int *fds,
                              const struct sockaddr_in *dest_addr,
                              uct_tcp_ep_t **ep_p);
 
@@ -475,7 +483,7 @@ void uct_tcp_cm_purge_ep(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr_in *peer_addr,
-                                             int fd);
+                                             int *fds);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
 
