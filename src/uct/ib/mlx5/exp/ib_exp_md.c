@@ -215,7 +215,7 @@ uct_ib_mlx5_exp_reg_indirect_mr(uct_ib_mlx5_md_t *md,
                                 void *addr, size_t length,
                                 struct ibv_exp_mem_region *mem_reg,
                                 int list_size, uint32_t create_flags,
-                                uint32_t umr_type, struct ibv_mr **p_mr)
+                                uint32_t umr_type, struct ibv_mr **mr_p)
 {
     struct ibv_exp_send_wr wr, *bad_wr;
     struct ibv_exp_create_mr_in mrin;
@@ -315,10 +315,11 @@ uct_ib_mlx5_exp_reg_indirect_mr(uct_ib_mlx5_md_t *md,
     umr->addr   = addr;
     umr->length = length;
     ucs_debug("UMR registered memory %p..%p on %s lkey 0x%x rkey 0x%x",
-              umr->addr, umr->addr + length, uct_ib_device_name(&md->super.dev),
+              umr->addr, UCS_PTR_BYTE_OFFSET(umr->addr, length),
+              uct_ib_device_name(&md->super.dev),
               umr->lkey, umr->rkey);
 
-    *p_mr = umr;
+    *mr_p = umr;
 
     return UCS_OK;
 
@@ -336,7 +337,7 @@ err:
 ucs_status_t uct_ib_mlx5_exp_reg_ksm(uct_ib_mlx5_md_t *md,
                                      uct_ib_mlx5_ksm_data_t *ksm_data,
                                      size_t length, off_t off,
-                                     struct ibv_mr **p_mr)
+                                     struct ibv_mr **mr_p)
 {
 #if HAVE_EXP_UMR_KSM
     struct ibv_exp_mem_region *mem_reg;
@@ -358,7 +359,7 @@ ucs_status_t uct_ib_mlx5_exp_reg_ksm(uct_ib_mlx5_md_t *md,
                                              length, mem_reg, ksm_data->mr_num,
                                              IBV_EXP_MR_FIXED_BUFFER_SIZE,
                                              IBV_EXP_UMR_MR_LIST_FIXED_SIZE,
-                                             p_mr);
+                                             mr_p);
 
     ucs_free(mem_reg);
     return status;
@@ -383,8 +384,13 @@ static ucs_status_t uct_ib_mlx5_exp_reg_atomic_key(uct_ib_md_t *ibmd,
     size_t reg_length;
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
-        return uct_ib_mlx5_exp_reg_ksm(md, memh->ksm_data, memh->mr->length,
-                                       offset, &memh->ksm_data->atomic_mr);
+        status = uct_ib_mlx5_exp_reg_ksm(md, memh->ksm_data, memh->mr->length,
+                                         offset, &memh->ksm_data->atomic_mr);
+        if (status == UCS_OK) {
+            memh->super.atomic_rkey = memh->ksm_data->atomic_mr->rkey;
+        }
+
+        return status;
     }
 
     reg_length = UCT_IB_MD_MAX_MR_SIZE;
@@ -502,7 +508,7 @@ static ucs_status_t uct_ib_mlx5_exp_reg_multithreaded(uct_ib_md_t *ibmd,
     }
 
     ucs_trace("multithreaded register memory %p..%p chunks %d",
-              address, address + length, mr_num);
+              address, UCS_PTR_BYTE_OFFSET(address, length), mr_num);
 
     ksm_data->mr_num = mr_num;
     status = uct_ib_md_handle_mr_list_multithreaded(ibmd, address, length,
@@ -540,7 +546,6 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_multithreaded(uct_ib_md_t *ibmd,
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     size_t chunk = ibmd->config.mt_reg_chunk;
     ucs_status_t s, status = UCS_OK;
-    int i;
 
     if (memh->super.flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
         s = uct_ib_dereg_mr(memh->ksm_data->atomic_mr);
@@ -554,11 +559,9 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_multithreaded(uct_ib_md_t *ibmd,
                                                UCT_IB_MEM_DEREG, chunk,
                                                memh->ksm_data->mrs);
     if (s == UCS_ERR_UNSUPPORTED) {
-        for (i = 0; i < memh->ksm_data->mr_num; i++) {
-            s = uct_ib_dereg_mr(memh->ksm_data->mrs[i]);
-            if (s != UCS_OK) {
-                status = s;
-            }
+        s = uct_ib_dereg_mrs(memh->ksm_data->mrs, memh->ksm_data->mr_num);
+        if (s != UCS_OK) {
+            status = s;
         }
     } else if (s != UCS_OK) {
         status = s;

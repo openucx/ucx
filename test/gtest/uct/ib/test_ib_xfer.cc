@@ -98,6 +98,12 @@ UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_rcache,
     run(1000);
 }
 
+UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_multithreaded,
+           "REG_MT_THRESH=1", "REG_MT_CHUNK=1K", "REG_MT_BIND=y")
+{
+    run(1000);
+}
+
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_alloc_methods)
 
 
