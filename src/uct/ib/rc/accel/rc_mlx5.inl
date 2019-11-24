@@ -870,7 +870,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     case IBV_TMH_RNDV:
         /* RVH can be wrapped */
         uct_rc_mlx5_fill_rvh(&rvh, iov->buffer,
-                              ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
+                              ((uct_ib_mem_t*)iov->memh)->rkey, iov->length);
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 
         tm_hdr_len = sizeof(*tmh) + sizeof(rvh);

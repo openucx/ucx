@@ -12,6 +12,7 @@
 
 typedef struct uct_ib_mlx5_mem {
     uct_ib_mem_t             super;
+    struct ibv_mr            *mr;
 #if HAVE_DEVX
     struct mlx5dv_devx_obj   *atomic_dvmr;
 #endif
@@ -20,6 +21,61 @@ typedef struct uct_ib_mlx5_mem {
 typedef struct uct_ib_mlx5_dbrec_page {
     struct mlx5dv_devx_umem *mem;
 } uct_ib_mlx5_dbrec_page_t;
+
+
+static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
+                                         size_t length, uint64_t access,
+                                         uct_ib_mem_t *ib_memh)
+{
+    uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    ucs_status_t status;
+
+    status = uct_ib_reg_mr(md->pd, address, length, access, &memh->mr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_ib_memh_init_from_mr(&memh->super, memh->mr);
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mlx5_dereg_key(uct_ib_md_t *md, uct_ib_mem_t *ib_memh)
+{
+    uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+
+    return uct_ib_dereg_mr(memh->mr);
+}
+
+static ucs_status_t
+uct_ib_mlx5_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh, void *addr,
+                         size_t length)
+{
+#if HAVE_DECL_IBV_ADVISE_MR
+    struct ibv_sge sg_list;
+    int ret;
+
+    if (!(ib_memh->flags & UCT_IB_MEM_FLAG_ODP)) {
+        return UCS_OK;
+    }
+
+    ucs_debug("memh %p prefetch %p length %zu", ib_memh, addr, length);
+
+    sg_list.lkey   = ib_memh->lkey;
+    sg_list.addr   = (uintptr_t)addr;
+    sg_list.length = length;
+
+    ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
+                           IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+                           IB_UVERBS_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+    if (ret) {
+        ucs_error("ibv_advise_mr(addr=%p length=%zu) returned %d: %m",
+                  addr, length, ret);
+        return UCS_ERR_IO_ERROR;
+    }
+#endif
+    return UCS_OK;
+}
 
 static int uct_ib_mlx5_has_roce_port(uct_ib_device_t *dev)
 {
@@ -46,7 +102,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     off_t offset = uct_ib_md_atomic_offset(uct_ib_mlx5_md_get_atomic_mr_id(md));
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {};
-    struct ibv_mr *mr = memh->super.mr;
+    struct ibv_mr *mr = memh->mr;
     ucs_status_t status = UCS_OK;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_obj dv = {};
@@ -471,10 +527,13 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .open                = uct_ib_mlx5_devx_md_open,
     .cleanup             = uct_ib_mlx5_devx_md_cleanup,
     .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
+    .reg_key             = uct_ib_mlx5_reg_key,
+    .dereg_key           = uct_ib_mlx5_dereg_key,
     .reg_atomic_key      = uct_ib_mlx5_devx_reg_atomic_key,
     .dereg_atomic_key    = uct_ib_mlx5_devx_dereg_atomic_key,
     .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
     .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .mem_prefetch        = uct_ib_mlx5_mem_prefetch,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_devx_md_ops, 2);
@@ -653,10 +712,13 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .open                = uct_ib_mlx5dv_md_open,
     .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
     .memh_struct_size    = sizeof(uct_ib_mlx5_mem_t),
+    .reg_key             = uct_ib_mlx5_reg_key,
+    .dereg_key           = uct_ib_mlx5_dereg_key,
     .reg_atomic_key      = (uct_ib_md_reg_atomic_key_func_t)ucs_empty_function_return_unsupported,
     .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_unsupported,
     .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
     .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
+    .mem_prefetch        = uct_ib_mlx5_mem_prefetch,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);
