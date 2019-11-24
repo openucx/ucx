@@ -674,6 +674,22 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
     cm_disconnect(m_client);
 }
 
+UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_kill_server)
+{
+    cm_listen_and_connect();
+
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
+                               TEST_CM_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_CONNECTED |
+                                                TEST_CM_STATE_CLIENT_CONNECTED)));
+
+    EXPECT_EQ(1ul, m_entities.remove(m_server));
+    m_server = NULL;
+
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_DISCONNECTED);
+    EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CLIENT_DISCONNECTED);
+}
+
 UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
 {
     m_reject_conn_request = true;
