@@ -943,8 +943,8 @@ run_ucx_perftest() {
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY "$ucx_perftest" "$ucp_test_args"
-			$MPIRUN -np 2 $AFFINITY "$ucx_perftest" "$ucp_test_args"
+			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
 			export UCX_TLS=self,shm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
