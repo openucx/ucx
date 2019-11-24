@@ -386,7 +386,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     ugni_udt,                \
     ugni_smsg,               \
     tcp,                     \
-    mm,                      \
+    posix,                   \
+    sysv,                    \
+    xpmem,                   \
     cma,                     \
     knem
 
