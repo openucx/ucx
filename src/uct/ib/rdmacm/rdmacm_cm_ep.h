@@ -47,7 +47,7 @@ enum {
                                                    necessarily disconnected yet */
 };
 
-UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE(uct_rdmacm_cm_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
