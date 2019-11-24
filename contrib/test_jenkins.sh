@@ -24,7 +24,7 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda-latest"
+CUDA_MODULE="dev/cuda10.1"
 GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
 
 if [ -z "$BUILD_NUMBER" ]; then
