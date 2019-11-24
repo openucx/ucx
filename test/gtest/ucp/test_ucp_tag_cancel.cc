@@ -14,15 +14,6 @@ extern "C" {
 }
 
 class test_ucp_tag_cancel : public test_ucp_tag {
-public:
-    void release_send_req(request *sreq) {
-        if (sreq != NULL) {
-            wait(sreq);
-            EXPECT_TRUE(sreq->completed);
-            EXPECT_EQ(UCS_OK, sreq->status);
-            request_free(sreq);
-        }
-    }
 };
 
 UCS_TEST_P(test_ucp_tag_cancel, cancel_exp) {
@@ -62,8 +53,7 @@ UCS_TEST_P(test_ucp_tag_cancel, cancel_matched, "RNDV_THRESH=32K") {
     request *sreq1 = send_nb(&sbuf[0], sbuf.size(), DATATYPE, tag);
     request *sreq2 = send_nb(&small_data, sizeof(small_data), DATATYPE, tag);
 
-    wait(rreq2);
-    EXPECT_EQ(UCS_OK, rreq2->status);
+    wait_and_validate(rreq2);
 
     if (!rreq1->completed) {
         ucp_request_cancel(receiver().worker(), rreq1);
@@ -71,14 +61,9 @@ UCS_TEST_P(test_ucp_tag_cancel, cancel_matched, "RNDV_THRESH=32K") {
         UCS_TEST_MESSAGE << "nothing to cancel";
     }
 
-    wait(rreq1);
-    EXPECT_EQ(UCS_OK, rreq1->status);
-    EXPECT_TRUE(rreq1->completed);
-
-    request_free(rreq1);
-    request_free(rreq2);
-    release_send_req(sreq1);
-    release_send_req(sreq2);
+    wait_and_validate(rreq1);
+    wait_and_validate(sreq1);
+    wait_and_validate(sreq2);
 }
 
 
