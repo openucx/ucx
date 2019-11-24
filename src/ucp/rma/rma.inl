@@ -22,7 +22,7 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
-        ucs_mpool_put(req);
+        ucp_request_put(req);
         return UCS_STATUS_PTR(status);
     }
 
