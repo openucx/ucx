@@ -25,7 +25,7 @@
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda10.1"
-GDRCOPY_MODULE="dev/gdrcopy"
+GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -103,10 +103,12 @@ module_load() {
 try_load_cuda_env() {
 	num_gpus=0
 	have_cuda=no
+	have_gdrcopy=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		have_cuda=yes
+		have_gdrcopy=yes
 		module_load $CUDA_MODULE    || have_cuda=no
-		module_load $GDRCOPY_MODULE || have_cuda=no
+		module_load $GDRCOPY_MODULE || have_gdrcopy=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
@@ -903,7 +905,7 @@ run_ucx_perftest() {
 			gdr_options+="y "
 		fi
 
-		if (lsmod | grep -q "gdrdrv")
+		if  [ "X$have_gdrcopy" == "Xyes" ] && (lsmod | grep -q "gdrdrv")
 		then
 			echo "GDRCopy module (gdrdrv) is present..."
 			tls_list+="rc,cuda_copy,gdr_copy "
