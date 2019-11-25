@@ -46,9 +46,11 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
 {
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
+    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
+    cep->status = status;
+
     if (cep->flags & UCT_RDMACM_CM_EP_CONNECTED) {
         cep->disconnect_cb(&cep->super.super, cep->user_data);
-        cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
         ucs_assert(ucs_queue_is_empty(&cep->ops));
     } else {
         ucs_assert(status != UCS_OK);
@@ -58,6 +60,7 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
             ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
             uct_rdmacm_cm_ep_server_connect_cb(cep, status);
         }
+
         uct_rdmacm_cm_ep_invoke_completions(cep, status);
     }
 
@@ -373,10 +376,11 @@ ucs_status_t uct_rdmacm_cm_ep_flush(uct_ep_h ep, unsigned flags,
 
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
-    if (cep->flags & (UCT_RDMACM_CM_EP_CONNECTED     |
-                      UCT_RDMACM_CM_EP_DISCONNECTING |
-                      UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT)) {
-        status = UCS_OK;
+    if (cep->flags & (UCT_RDMACM_CM_EP_CONNECTED            |
+                      UCT_RDMACM_CM_EP_DISCONNECTING        |
+                      UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT |
+                      UCT_RDMACM_CM_EP_FAILED)) {
+        status = cep->status;
         goto out;
     }
 
@@ -441,6 +445,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     self->cq                  = NULL;
     self->qp                  = NULL;
     self->flags               = 0;
+    self->status              = UCS_OK;
     ucs_queue_head_init(&self->ops);
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {

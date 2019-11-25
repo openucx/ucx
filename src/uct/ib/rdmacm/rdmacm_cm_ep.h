@@ -20,6 +20,7 @@ typedef struct uct_rdmacm_cm_ep {
                                              of the remote peer */
     ucs_queue_head_t       ops;
     uint8_t                flags;
+    ucs_status_t           status;
 
     struct {
         /* Callback to fill the user's private data */
@@ -45,7 +46,11 @@ enum {
     UCT_RDMACM_CM_EP_CONNECTED            = UCS_BIT(2),
     UCT_RDMACM_CM_EP_DISCONNECTING        = UCS_BIT(3), /* uct_ep_disconnect was
                                                            called on the ep */
-    UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT = UCS_BIT(4)
+    UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT = UCS_BIT(4),
+    UCT_RDMACM_CM_EP_FAILED               = UCS_BIT(5)  /* the ep got err during
+                                                           connection
+                                                           establishment, e.g.
+                                                           served rejected */
 };
 
 UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);

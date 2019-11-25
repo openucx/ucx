@@ -292,6 +292,19 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
+static ucs_status_t
+uct_rdmacm_event_get_ucs_status(const struct rdma_cm_event *event)
+{
+    switch (event->event) {
+    case RDMA_CM_EVENT_REJECTED:
+        return UCS_ERR_REJECTED;
+    case RDMA_CM_EVENT_ADDR_ERROR:
+        return UCS_ERR_INVALID_ADDR;
+    default:
+        return UCS_ERR_IO_ERROR;
+    }
+}
+
 static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t *cep      = event->id->context;
@@ -308,8 +321,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
 
     remote_data.field_mask = 0;
     uct_rdmacm_cm_ep_error_cb(cep, &remote_data,
-                              (event->event == RDMA_CM_EVENT_REJECTED ?
-                               UCS_ERR_REJECTED : UCS_ERR_IO_ERROR));
+                              uct_rdmacm_event_get_ucs_status(event));
 }
 
 static void
