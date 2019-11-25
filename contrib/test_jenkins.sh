@@ -25,7 +25,7 @@
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda10.1"
-GDRCOPY_MODULE="dev/gdrcopy"
+GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -103,10 +103,12 @@ module_load() {
 try_load_cuda_env() {
 	num_gpus=0
 	have_cuda=no
+	have_gdrcopy=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		have_cuda=yes
+		have_gdrcopy=yes
 		module_load $CUDA_MODULE    || have_cuda=no
-		module_load $GDRCOPY_MODULE || have_cuda=no
+		module_load $GDRCOPY_MODULE || have_gdrcopy=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
@@ -766,7 +768,7 @@ run_uct_hello() {
 			for mem_type in $mem_types_list
 			do
 				echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} and \"${mem_type}\" memory type ===="
-				run_hello uct -d ${ucx_dev} -t "rc" ${send_func} -m ${mem_type}
+				run_hello uct -d ${ucx_dev} -t "rc_verbs" ${send_func} -m ${mem_type}
 			done
 		done
 		for ucx_dev in $(get_active_ip_iface)
@@ -845,7 +847,7 @@ run_ucx_perftest() {
 	ip_ifaces=$(get_active_ip_ifaces)
 
 	# shared memory, IB devices, IP ifaces
-	devices="posix $(get_active_ib_devices) ${ip_ifaces}"
+	devices="memory $(get_active_ib_devices) ${ip_ifaces}"
 
 	# Run on all devices
 	my_devices=$(get_my_tasks $devices)
@@ -855,17 +857,17 @@ run_ucx_perftest() {
 			opt_transports="-b $ucx_inst_ptest/transports"
 			tls=`awk '{print $3 }' $ucx_inst_ptest/transports | tr '\n' ',' | sed -r 's/,$//; s/mlx5/x/g'`
 			dev=$ucx_dev
-		elif [[ $ucx_dev =~ posix ]]; then
-			opt_transports="-x mm"
-			tls="mm"
+		elif [[ $ucx_dev =~ memory ]]; then
+			opt_transports="-x posix"
+			tls="shm"
 			dev="all"
 		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
 			opt_transports="-x tcp"
 			tls="tcp"
 			dev=$ucx_dev
 		else
-			opt_transports="-x rc"
-			tls="rc"
+			opt_transports="-x rc_verbs"
+			tls="rc_verbs"
 			dev=$ucx_dev
 		fi
 
@@ -903,7 +905,7 @@ run_ucx_perftest() {
 			gdr_options+="y "
 		fi
 
-		if (lsmod | grep -q "gdrdrv")
+		if  [ "X$have_gdrcopy" == "Xyes" ] && (lsmod | grep -q "gdrdrv")
 		then
 			echo "GDRCopy module (gdrdrv) is present..."
 			tls_list+="rc,cuda_copy,gdr_copy "
@@ -943,10 +945,10 @@ run_ucx_perftest() {
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
 			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
-			export UCX_TLS=self,mm,cma,cuda_copy
+			export UCX_TLS=self,shm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 			unset UCX_TLS
 

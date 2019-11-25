@@ -557,6 +557,12 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
 
     for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
         sa = (struct sockaddr*) ifa->ifa_addr;
+
+        if (sa == NULL) {
+            ucs_debug("NULL ifaddr encountered with ifa_name: %s", ifa->ifa_name);
+            continue;
+        }
+
         if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) && 
             (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
             ucs_debug("matching ip found iface on %s", ifa->ifa_name);
