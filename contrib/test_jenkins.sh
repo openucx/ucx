@@ -929,6 +929,28 @@ run_ucx_perftest() {
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 		fi
 
+		# Specifically test cuda_ipc for large message sizes
+	        cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
+		ucp_test_args_large="-b $ucx_inst_ptest/test_types_cuda_ucp \
+			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
+		if [ $with_mpi -eq 1 ]
+		then
+			for ipc_cache in y n
+			do
+				$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_copy,cuda_ipc \
+					-x UCX_CUDA_IPC_CACHE=$ipc_cache $AFFINITY $ucx_perftest $ucp_test_args_large
+			done
+		else
+			for ipc_cache in y n
+			do
+				export UCX_TLS=self,sm,cuda_copy,cuda_ipc
+				export UCX_CUDA_IPC_CACHE=$ipc_cache
+				run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
+				unset UCX_TLS
+				unset UCX_CUDA_IPC_CACHE
+			done
+		fi
+
 		unset CUDA_VISIBLE_DEVICES
 	fi
 }
