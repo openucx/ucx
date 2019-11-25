@@ -275,7 +275,7 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-static unsigned ucp_ep_cm_do_disconnect(void *arg)
+static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
 {
     ucp_ep_h ucp_ep     = (ucp_ep_h)arg;
     ucp_worker_h worker = ucp_ep->worker;
@@ -291,7 +291,7 @@ static unsigned ucp_ep_cm_do_disconnect(void *arg)
         /* while we were in slow progress queue, the EP was flushed and
          * disconnected from API call. Destroy the EP, complete close request.*/
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
-        ucp_ep_do_disconnect(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+        ucp_ep_local_disconnect_progress(ucp_ep_ext_gen(ucp_ep)->close_req.req);
         goto out;
     }
 
@@ -315,35 +315,35 @@ static unsigned ucp_ep_cm_do_disconnect(void *arg)
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-
     return 1;
 }
 
-static void ucp_cm_disconnect_cb(uct_ep_h ep, void *arg)
+static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
 {
     ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
 
-    ucs_trace("invoke CM disconnect callback for UCP EP %p on CM EP %p",
-              ucp_ep, ep);
-    ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == ep);
+    ucs_trace("ep %p: got remote disconnect, cm_ep %p", ucp_ep, uct_cm_ep);
+    ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         /* if the EP is local connected, need to flush it from main thread first */
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_ep_cm_do_disconnect, ucp_ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+                                          ucp_ep_cm_remote_disconnect_progress,
+                                          ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &prog_id);
         goto out;
     }
 
     /* if the EP is not local connected, the EP has been flushed and CM lane is
      * disconnected, schedule close request completion and EP destroy */
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
-    uct_worker_progress_register_safe(ucp_ep->worker->uct, ucp_ep_do_disconnect,
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_ep_local_disconnect_progress,
                                       ucp_ep_ext_gen(ucp_ep)->close_req.req,
                                       UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
 out:
@@ -634,6 +634,7 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
     ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    /* this will invoke @ref ucp_cm_disconnect_cb on remote side */
     status = uct_ep_disconnect(uct_cm_ep, 0);
     if (status != UCS_OK) {
         ucs_warn("failed to disconnect CM lane %p of ep %p, %s", ucp_ep,

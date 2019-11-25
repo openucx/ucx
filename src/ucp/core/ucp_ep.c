@@ -788,7 +788,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucp_ep_destroy_internal(ep);
 }
 
-unsigned ucp_ep_do_disconnect(void *arg)
+unsigned ucp_ep_local_disconnect_progress(void *arg)
 {
     ucp_request_t *req = arg;
 
@@ -815,19 +815,17 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
 
-    if (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) {
-        UCS_ASYNC_BLOCK(&ep->worker->async);
-        if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-            /* Now, when close flush is completed and we are still connected,
-             * we have to notify remote side and wait disconnect notification
-             * from remote side */
-            ucp_ep_cm_disconnect_cm_lane(ep);
-            ucp_ep_set_close_request(ep, req);
-            UCS_ASYNC_UNBLOCK(&ep->worker->async);
-            return;
-        }
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+    if (ucp_ep_is_cm_local_connected(ep)) {
+        /* Now, when close flush is completed and we are still connected,
+         * we have to notify remote side and wait disconnect notification
+         * from remote side */
+        ucp_ep_cm_disconnect_cm_lane(ep);
+        ucp_ep_set_close_request(ep, req);
         UCS_ASYNC_UNBLOCK(&ep->worker->async);
+        return;
     }
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
@@ -835,7 +833,8 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_ep_local_disconnect_progress,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &req->send.disconnect.prog_id);
 }
@@ -844,7 +843,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h  worker = ep->worker;
     void          *request;
-    uct_ep_h      uct_cm_ep;
     ucp_request_t *close_req;
 
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
@@ -861,15 +859,13 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     ucp_ep_close_flushed_callback, "close");
 
     if (!UCS_PTR_IS_PTR(request)) {
-        uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
-        if (uct_cm_ep != NULL) {
-            if (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-                ucp_ep_cm_disconnect_cm_lane(ep);
-                close_req = ucp_ep_cm_close_request_get(ep);
-                ucp_ep_set_close_request(ep, close_req);
-                request = (close_req != NULL) ? close_req + 1 :
-                          UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-            }
+        if (ucp_ep_is_cm_local_connected(ep)) {
+            /* lanes already flushed, start disconnect on CM lane */
+            ucp_ep_cm_disconnect_cm_lane(ep);
+            close_req = ucp_ep_cm_close_request_get(ep);
+            ucp_ep_set_close_request(ep, close_req);
+            request = (close_req != NULL) ? close_req + 1 :
+                      UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         }
     }
 
@@ -1861,6 +1857,12 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
 
     wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     return (wireup_ep == NULL) ? ep->uct_eps[lane] : wireup_ep->super.uct_ep;
+}
+
+int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
+{
+    return (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) &&
+           (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)

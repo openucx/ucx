@@ -497,8 +497,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     }
 
     /* In case if this is a local failure we need to notify remote side */
-    if ((ucp_ep_get_cm_lane(ucp_ep) != UCP_NULL_LANE) &&
-        (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+    if (ucp_ep_is_cm_local_connected(ucp_ep)) {
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     }
 

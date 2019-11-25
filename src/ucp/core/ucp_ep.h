@@ -483,6 +483,8 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
 
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 
-unsigned ucp_ep_do_disconnect(void *arg);
+int ucp_ep_is_cm_local_connected(ucp_ep_h ep);
+
+unsigned ucp_ep_local_disconnect_progress(void *arg);
 
 #endif
