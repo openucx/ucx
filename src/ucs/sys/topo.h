@@ -25,6 +25,16 @@ typedef struct ucs_sys_bus_id {
 
 
 /**
+ * @brief System Device type enumeration
+ * Using a bit mask to allow the possibility of a device that may have memory
+ * and can also move data
+ */
+typedef enum ucm_sys_dev_type {
+	UCS_SYS_DEV_MEM     = UCS_BIT(0), /* CPU NUMA node, GPU device */
+	UCS_SYS_DEV_NET     = UCS_BIT(1)  /* IB HCA, TCP NIC, Copy engine? etc */
+} ucs_sys_dev_type_t;
+
+/**
  * @ingroup UCS_RESOURCE
  * System Device abstraction
  */
@@ -33,6 +43,8 @@ typedef struct ucs_sys_device {
     int              numa_node; /**< NUMA node assoicated with the device*/
     ucs_sys_bus_id_t bus_id;    /**< bus ID of of the device if applicable.
                                    eg: 0000:06:00.0 {domain:bus:slot.function}*/
+    unsigned         type_mask; /**< Describe if memory can be allocated on
+                                     the device; if the device can move memory*/
 } ucs_sys_device_t;
 
 
