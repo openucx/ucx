@@ -46,11 +46,16 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
 {
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
-    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
+    if (cep->flags & UCT_RDMACM_CM_EP_FAILED) {
+        goto out;
+    }
+
     cep->status = status;
+    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
 
     if (cep->flags & UCT_RDMACM_CM_EP_CONNECTED) {
         cep->disconnect_cb(&cep->super.super, cep->user_data);
+        cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
         ucs_assert(ucs_queue_is_empty(&cep->ops));
     } else {
         ucs_assert(status != UCS_OK);
@@ -64,6 +69,7 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
         uct_rdmacm_cm_ep_invoke_completions(cep, status);
     }
 
+out:
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 

@@ -286,9 +286,15 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
                                              UCS_SOCKADDR_STRING_LEN));
 
-    cep->disconnect_cb(&cep->super.super, cep->user_data);
     ucs_assert(ucs_queue_is_empty(&cep->ops));
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT;
+
+    if (!(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
+        cep->disconnect_cb(&cep->super.super, cep->user_data);
+    }
+
+    cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
+
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
