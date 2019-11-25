@@ -373,9 +373,9 @@ ucs_status_t uct_rdmacm_cm_ep_flush(uct_ep_h ep, unsigned flags,
 
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
-    if (cep->flags & (UCT_RDMACM_CM_EP_CONNECTED |
+    if (cep->flags & (UCT_RDMACM_CM_EP_CONNECTED     |
                       UCT_RDMACM_CM_EP_DISCONNECTING |
-                      UCT_RDMACM_CM_EP_REMOTE_DISCONNECTED)) {
+                      UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT)) {
         status = UCS_OK;
         goto out;
     }

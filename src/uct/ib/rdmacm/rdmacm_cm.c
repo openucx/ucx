@@ -288,7 +288,7 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 
     cep->disconnect_cb(&cep->super.super, cep->user_data);
     ucs_assert(ucs_queue_is_empty(&cep->ops));
-    cep->flags |= UCT_RDMACM_CM_EP_REMOTE_DISCONNECTED;
+    cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT;
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 

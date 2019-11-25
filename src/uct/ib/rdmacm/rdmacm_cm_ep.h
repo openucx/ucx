@@ -40,13 +40,12 @@ typedef struct uct_rdmacm_cm_ep {
 } uct_rdmacm_cm_ep_t;
 
 enum {
-    UCT_RDMACM_CM_EP_ON_CLIENT           = UCS_BIT(0),
-    UCT_RDMACM_CM_EP_ON_SERVER           = UCS_BIT(1),
-    UCT_RDMACM_CM_EP_CONNECTED           = UCS_BIT(2),
-    UCT_RDMACM_CM_EP_DISCONNECTING       = UCS_BIT(3), /* uct_ep_disconnect was
-                                                          called on the ep */
-    UCT_RDMACM_CM_EP_REMOTE_DISCONNECTED = UCS_BIT(4)  /* got disconnect event */
-
+    UCT_RDMACM_CM_EP_ON_CLIENT            = UCS_BIT(0),
+    UCT_RDMACM_CM_EP_ON_SERVER            = UCS_BIT(1),
+    UCT_RDMACM_CM_EP_CONNECTED            = UCS_BIT(2),
+    UCT_RDMACM_CM_EP_DISCONNECTING        = UCS_BIT(3), /* uct_ep_disconnect was
+                                                           called on the ep */
+    UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT = UCS_BIT(4)
 };
 
 UCS_CLASS_DECLARE(uct_rdmacm_ep_t, const uct_ep_params_t *);
