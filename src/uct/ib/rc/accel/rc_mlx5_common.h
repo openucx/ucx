@@ -354,68 +354,73 @@ typedef union uct_rc_mlx5_dm_copy_data {
 } UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
 #endif
 
+#define uct_rc_mlx5_tag_addr_hash(_ptr) kh_int64_hash_func((uintptr_t)(_ptr))
+KHASH_INIT(uct_rc_mlx5_tag_addrs, void*, char, 0, uct_rc_mlx5_tag_addr_hash,
+           kh_int64_hash_equal)
+
 typedef struct uct_rc_mlx5_iface_common {
-    uct_rc_iface_t                   super;
+    uct_rc_iface_t                     super;
     struct {
-        ucs_mpool_t                  atomic_desc_mp;
-        uct_ib_mlx5_mmio_mode_t      mmio_mode;
-        uint16_t                     bb_max;     /* limit number of outstanding WQE BBs */
+        ucs_mpool_t                    atomic_desc_mp;
+        uct_ib_mlx5_mmio_mode_t        mmio_mode;
+        uint16_t                       bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
     struct {
-        uct_ib_mlx5_srq_t            srq;
-        void                         *pref_ptr;
+        uct_ib_mlx5_srq_t              srq;
+        void                           *pref_ptr;
     } rx;
-    uct_ib_mlx5_cq_t                 cq[UCT_IB_DIR_NUM];
+    uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_NUM];
     struct {
-        uct_rc_mlx5_cmd_wq_t         cmd_wq;
-        uct_rc_mlx5_tag_entry_t      *head;
-        uct_rc_mlx5_tag_entry_t      *tail;
-        uct_rc_mlx5_tag_entry_t      *list;
-        ucs_mpool_t                  *bcopy_mp;
+        uct_rc_mlx5_cmd_wq_t           cmd_wq;
+        uct_rc_mlx5_tag_entry_t        *head;
+        uct_rc_mlx5_tag_entry_t        *tail;
+        uct_rc_mlx5_tag_entry_t        *list;
+        ucs_mpool_t                    *bcopy_mp;
+        khash_t(uct_rc_mlx5_tag_addrs) tag_addrs;
 
-        ucs_ptr_array_t              rndv_comps;
-        size_t                       max_bcopy;
-        size_t                       max_zcopy;
-        unsigned                     num_tags;
-        unsigned                     num_outstanding;
-        unsigned                     max_rndv_data;
-        uint16_t                     unexpected_cnt;
-        uint16_t                     cmd_qp_len;
-        uint8_t                      enabled;
+        ucs_ptr_array_t                rndv_comps;
+        size_t                         max_bcopy;
+        size_t                         max_zcopy;
+        unsigned                       num_tags;
+        unsigned                       num_outstanding;
+        unsigned                       max_rndv_data;
+        uint16_t                       unexpected_cnt;
+        uint16_t                       cmd_qp_len;
+        uint8_t                        enabled;
         struct {
-            uint8_t                  num_strides;
-            ucs_mpool_t              tx_mp;
-            uct_rc_mlx5_mp_context_t last_frag_ctx;
+            uint8_t                    num_strides;
+            ucs_mpool_t                tx_mp;
+            uct_rc_mlx5_mp_context_t   last_frag_ctx;
             khash_t(uct_rc_mlx5_mp_hash_lid) hash_lid;
             khash_t(uct_rc_mlx5_mp_hash_gid) hash_gid;
         } mp;
         struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
+            void                       *arg; /* User defined arg */
+            uct_tag_unexp_eager_cb_t   cb;   /* Callback for unexpected eager messages */
         } eager_unexp;
 
         struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
+            void                       *arg; /* User defined arg */
+            uct_tag_unexp_rndv_cb_t    cb;   /* Callback for unexpected rndv messages */
         } rndv_unexp;
-        uct_rc_mlx5_release_desc_t  eager_desc;
-        uct_rc_mlx5_release_desc_t  rndv_desc;
-        uct_rc_mlx5_release_desc_t  am_desc;
+        uct_rc_mlx5_release_desc_t     eager_desc;
+        uct_rc_mlx5_release_desc_t     rndv_desc;
+        uct_rc_mlx5_release_desc_t     am_desc;
         UCS_STATS_NODE_DECLARE(stats)
     } tm;
 #if HAVE_IBV_DM
     struct {
-        uct_mlx5_dm_data_t           *dm;
-        size_t                       seg_len; /* cached value to avoid double-pointer access */
-        ucs_status_t                 (*am_short)(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
-                                                 const void *payload, unsigned length);
-        ucs_status_t                 (*tag_short)(uct_ep_h tl_ep, uct_tag_t tag,
-                                                  const void *data, size_t length);
+        uct_mlx5_dm_data_t             *dm;
+        size_t                         seg_len; /* cached value to avoid double-pointer access */
+        ucs_status_t                   (*am_short)(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                                   const void *payload, unsigned length);
+        ucs_status_t                   (*tag_short)(uct_ep_h tl_ep, uct_tag_t tag,
+                                                    const void *data, size_t length);
     } dm;
 #endif
     struct {
-        uint8_t atomic_fence_flag;
-        uint8_t put_fence_flag;
+        uint8_t                        atomic_fence_flag;
+        uint8_t                        put_fence_flag;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
