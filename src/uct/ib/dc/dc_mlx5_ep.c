@@ -19,8 +19,9 @@
 }
 
 #define UCT_DC_MLX5_IFACE_FM(_ep, _txwq) \
-    uct_rc_ep_fence_add(&(_ep)->super.super, &(_txwq)->fi, \
-                        (_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE); \
+    if ((_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE) { \
+        uct_rc_ep_fence_set(&(_ep)->super.super, &(_txwq)->fi, 1); \
+    } \
     (_ep)->flags &= ~UCT_DC_MLX5_EP_FLAG_FENCE
 
 static UCS_F_ALWAYS_INLINE void
@@ -1112,8 +1113,8 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
     flags = ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE;
     priv  = uct_dc_mlx5_pending_req_priv(req);
     /* force set fence flag for current operation */
-    ep->flags |= (ep->flags & ~UCT_DC_MLX5_EP_FLAG_FENCE) |
-                 (priv->fence ? UCT_DC_MLX5_EP_FLAG_FENCE : 0);
+    ep->flags = (ep->flags & ~UCT_DC_MLX5_EP_FLAG_FENCE) |
+                (priv->fence ? UCT_DC_MLX5_EP_FLAG_FENCE : 0);
 
     ucs_trace_data("progressing pending request %p", req);
     status = req->func(req);
