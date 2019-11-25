@@ -285,6 +285,8 @@ protected:
         return result;
     }
 
+public:
+
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = DEFAULT_TIMEOUT_SEC) const
     {
@@ -320,6 +322,8 @@ protected:
             }
         }
     }
+
+protected:
 
     virtual void init();
     virtual void cleanup();

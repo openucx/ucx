@@ -15,29 +15,39 @@ extern "C" {
 
 #include <queue>
 
+
+class completion : public uct_completion_t {
+public:
+    completion(uct_test &test) :
+        m_test(test), m_flag(false), m_status(UCS_INPROGRESS) {
+        count = 1;
+        func  = completion_cb;
+    }
+
+    ucs_status_t do_flush(uct_ep_h ep) {
+        m_status = uct_ep_flush(ep, 0, this);
+        if (m_status == UCS_INPROGRESS) {
+            m_test.wait_for_flag(&m_flag);
+        }
+
+        return m_status;
+    }
+
+private:
+    static void completion_cb(uct_completion_t *self, ucs_status_t status) {
+        completion *c = static_cast<completion*>(self);
+        c->m_status   = status;
+        c->m_flag     = true;
+    }
+
+    uct_test                &m_test;
+    volatile bool           m_flag;
+    ucs_status_t            m_status;
+};
+
+
 class test_uct_sockaddr : public uct_test {
 public:
-    struct completion : public uct_completion_t {
-        volatile bool m_flag;
-
-        completion() : m_flag(false), m_status(UCS_INPROGRESS) {
-            count = 1;
-            func  = completion_cb;
-        }
-
-        ucs_status_t status() const {
-            return m_status;
-        }
-    private:
-        static void completion_cb(uct_completion_t *self, ucs_status_t status)
-        {
-            completion *c = static_cast<completion*>(self);
-            c->m_status   = status;
-            c->m_flag     = true;
-        }
-
-        ucs_status_t m_status;
-    };
 
     test_uct_sockaddr() : server(NULL), client(NULL), err_count(0),
                           server_recv_req(0), delay_conn_reply(false) {
@@ -189,15 +199,8 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
         delayed_conn_reqs.pop();
     }
 
-    completion comp;
-    ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
-    if (status == UCS_INPROGRESS) {
-        wait_for_flag(&comp.m_flag);
-        EXPECT_EQ(UCS_OK, comp.status());
-    } else {
-        EXPECT_EQ(UCS_OK, status);
-    }
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(UCS_OK, completion(*this).do_flush(client->ep(0)));
+    EXPECT_EQ(0,      err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
@@ -306,14 +309,8 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
         /* client - try to connect to a non-existing port on the server side */
         client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
                         NULL, NULL, &client->max_conn_priv);
-        completion comp;
-        ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
-        if (status == UCS_INPROGRESS) {
-            wait_for_flag(&comp.m_flag);
-            EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status());
-        } else {
-            EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
-        }
+        EXPECT_EQ(UCS_ERR_UNREACHABLE,
+                  completion(*this).do_flush(client->ep(0)));
         /* destroy the client's ep. this ep shouldn't be accessed anymore */
         client->destroy_ep(0);
     }
@@ -666,12 +663,15 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
 {
     cm_listen_and_connect();
 
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
-                               TEST_CM_STATE_CLIENT_CONNECTED);
+    EXPECT_EQ(UCS_OK, completion(*this).do_flush(m_client->ep(0)));
+    EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CONNECT_REQUESTED);
+    EXPECT_EQ(UCS_OK, completion(*this).do_flush(m_server->ep(0)));
     EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_CONNECTED |
                                                 TEST_CM_STATE_CLIENT_CONNECTED)));
-
     cm_disconnect(m_client);
+    EXPECT_EQ(UCS_OK, completion(*this).do_flush(m_client->ep(0)));
+    EXPECT_EQ(UCS_OK, completion(*this).do_flush(m_server->ep(0)));
+
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
@@ -682,13 +682,13 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
     scoped_log_handler slh(detect_reject_error_logger);
     cm_listen_and_connect();
 
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_REJECTED |
-                               TEST_CM_STATE_CLIENT_GOT_REJECT);
-    EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_REJECTED |
-                                                TEST_CM_STATE_CLIENT_GOT_REJECT)));
-
+    EXPECT_EQ(UCS_ERR_REJECTED, completion(*this).do_flush(m_client->ep(0)));
+    EXPECT_TRUE(ucs_test_all_flags(m_cm_state,
+                                   (TEST_CM_STATE_SERVER_REJECTED |
+                                    TEST_CM_STATE_CLIENT_GOT_REJECT)));
     EXPECT_FALSE((m_cm_state &
-                (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED)));
+                  (TEST_CM_STATE_SERVER_CONNECTED |
+                   TEST_CM_STATE_CLIENT_CONNECTED)));
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
@@ -795,7 +795,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 
     /* with the TCP port space (which is currently tested with rdmacm),
      * in this case, a REJECT event will be generated on the client side */
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
+    EXPECT_EQ(UCS_ERR_REJECTED, completion(*this).do_flush(m_client->ep(0)));
     EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT));
 }
 
@@ -815,7 +815,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 
     /* with the TCP port space (which is currently tested with rdmacm),
      * in this case, a REJECT event will be generated on the client side */
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT);
+    EXPECT_EQ(UCS_ERR_REJECTED, completion(*this).do_flush(m_client->ep(0)));
     EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_REJECT));
 }
 
@@ -848,12 +848,13 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
         m_client->connect(0, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
 
-        wait_for_bits(&m_cm_state, TEST_CM_STATE_CLIENT_GOT_ERROR);
-        EXPECT_TRUE(ucs_test_all_flags(m_cm_state, TEST_CM_STATE_CLIENT_GOT_ERROR));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR,
+                  completion(*this).do_flush(m_client->ep(0)));
 
-        EXPECT_FALSE(m_cm_state & TEST_CM_STATE_CONNECT_REQUESTED);
-        EXPECT_FALSE(m_cm_state &
-                    (TEST_CM_STATE_SERVER_CONNECTED | TEST_CM_STATE_CLIENT_CONNECTED));
+        EXPECT_TRUE(m_cm_state & TEST_CM_STATE_CLIENT_GOT_ERROR);
+        EXPECT_FALSE(m_cm_state & (TEST_CM_STATE_CONNECT_REQUESTED |
+                                   TEST_CM_STATE_SERVER_CONNECTED  |
+                                   TEST_CM_STATE_CLIENT_CONNECTED));
     }
 }
 
@@ -942,8 +943,8 @@ UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
 {
     cm_listen_and_connect();
 
-    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED |
-                               TEST_CM_STATE_CLIENT_CONNECTED);
+    EXPECT_EQ(UCS_OK, completion(*this).do_flush(m_client->ep(0)));
+    wait_for_bits(&m_cm_state, TEST_CM_STATE_SERVER_CONNECTED);
     EXPECT_TRUE(ucs_test_all_flags(m_cm_state, (TEST_CM_STATE_SERVER_CONNECTED |
                                                 TEST_CM_STATE_CLIENT_CONNECTED)));
 
