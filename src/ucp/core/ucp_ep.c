@@ -866,12 +866,9 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
             ucp_ep_set_close_request(ep, close_req);
             request = (close_req != NULL) ? close_req + 1 :
                       UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        } else {
+            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
         }
-    }
-
-    if (!UCS_PTR_IS_PTR(request)) {
-        ucp_ep_disconnected(ep, (mode == UCP_EP_CLOSE_MODE_FORCE) ||
-                                UCS_PTR_IS_ERR(request));
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

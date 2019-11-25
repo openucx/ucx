@@ -295,6 +295,10 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         goto out;
     }
 
+    /*
+     * TODO: set the ucp_ep to error state to prevent user from sending more
+     *       ops.
+     */
     req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
                                 ucp_ep_cm_disconnect_flushed_cb,
                                 "cm_disconnected_cb");
