@@ -766,7 +766,7 @@ run_uct_hello() {
 			for mem_type in $mem_types_list
 			do
 				echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} and \"${mem_type}\" memory type ===="
-				run_hello uct -d ${ucx_dev} -t "rc" ${send_func} -m ${mem_type}
+				run_hello uct -d ${ucx_dev} -t "rc_verbs" ${send_func} -m ${mem_type}
 			done
 		done
 		for ucx_dev in $(get_active_ip_iface)
@@ -864,8 +864,8 @@ run_ucx_perftest() {
 			tls="tcp"
 			dev=$ucx_dev
 		else
-			opt_transports="-x rc"
-			tls="rc"
+			opt_transports="-x rc_verbs"
+			tls="rc_verbs"
 			dev=$ucx_dev
 		fi
 
@@ -943,8 +943,8 @@ run_ucx_perftest() {
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY "$ucx_perftest" "$ucp_test_args"
-			$MPIRUN -np 2 $AFFINITY "$ucx_perftest" "$ucp_test_args"
+			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
 			export UCX_TLS=self,shm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
