@@ -77,6 +77,7 @@ typedef struct uct_component       *uct_component_h;
 typedef struct uct_iface           *uct_iface_h;
 typedef struct uct_iface_config    uct_iface_config_t;
 typedef struct uct_md_config       uct_md_config_t;
+typedef struct uct_cm_config       uct_cm_config_t;
 typedef struct uct_ep              *uct_ep_h;
 typedef void *                     uct_mem_h;
 typedef uintptr_t                  uct_rkey_t;

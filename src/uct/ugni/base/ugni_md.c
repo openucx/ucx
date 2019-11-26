@@ -232,6 +232,7 @@ uct_component_t uct_ugni_component = {
         .table          = uct_md_config_table,
         .size           = sizeof(uct_md_config_t),
     },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ugni_component),
     .flags              = 0
 };

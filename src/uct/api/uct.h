@@ -3000,11 +3000,15 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  * @param [in]  component   Component on which to open the connection manager,
  *                          as returned from @ref uct_query_components.
  * @param [in]  worker      Worker on which to open the connection manager.
+ * @param [in]  config      CM configuration options. Should be obtained
+ *                          from uct_cm_config_read() function, or point to
+ *                          CM-specific structure which extends uct_cm_config_t.
  * @param [out] cm_p        Filled with a handle to the connection manager.
  *
  * @return Error code.
  */
-ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker, uct_cm_h *cm_p);
+ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker,
+                         const uct_cm_config_t *config, uct_cm_h *cm_p);
 
 
 /**
@@ -3027,6 +3031,26 @@ void uct_cm_close(uct_cm_h cm);
  * @param [out] cm_attr Filled with connection manager attributes.
  */
 ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Read the configuration for a connection manager.
+ *
+ * @param [in]  component     Read the configuration of the connection manager
+ *                            on this component.
+ * @param [in]  env_prefix    If non-NULL, search for environment variables
+ *                            starting with this UCT_<prefix>_. Otherwise, search
+ *                            for environment variables starting with just UCT_.
+ * @param [in]  filename      If non-NULL, read configuration from this file. If
+ *                            the file does not exist, it will be ignored.
+ * @param [out] config_p      Filled with a pointer to the configuration.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_cm_config_read(uct_component_h component,
+                                const char *env_prefix, const char *filename,
+                                uct_cm_config_t **config_p);
 
 
 /**

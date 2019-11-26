@@ -42,16 +42,6 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
     {NULL}
 };
 
-/**
- * Keeps information about allocated configuration structure, to be used when
- * releasing the options.
- */
-typedef struct uct_config_bundle {
-    ucs_config_field_t *table;
-    const char         *table_prefix;
-    char               data[];
-} uct_config_bundle_t;
-
 
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
                          const uct_md_config_t *config, uct_md_h *md_p)
@@ -176,10 +166,10 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
     return UCS_OK;
 }
 
-static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
-                                    ucs_config_field_t *config_table,
-                                    size_t config_size, const char *env_prefix,
-                                    const char *cfg_prefix)
+ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
+                             ucs_config_field_t *config_table,
+                             size_t config_size, const char *env_prefix,
+                             const char *cfg_prefix)
 {
     uct_config_bundle_t *config_bundle;
     ucs_status_t status;

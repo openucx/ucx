@@ -649,6 +649,10 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+    ucs_status_t         status;
+    uct_cm_config_t      *cm_config;
+    uct_component_attr_t comp_attr;
+
     memset(&m_iface_attr,   0, sizeof(m_iface_attr));
     memset(&m_iface_params, 0, sizeof(m_iface_params));
 
@@ -660,17 +664,34 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
                            uct_md_open, resource.component,
                            resource.md_name.c_str(), md_config);
 
-    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_cm_h, m_cm, uct_cm_close,
-                                        uct_cm_open, resource.component, m_worker);
 
-    m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
-    status = uct_cm_query(m_cm, &m_cm_attr);
+    comp_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                           UCT_COMPONENT_ATTR_FIELD_FLAGS;
+    status = uct_component_query(resource.component, &comp_attr);
     ASSERT_UCS_OK(status);
 
-    max_conn_priv = 0;
+    if (comp_attr.flags & UCT_COMPONENT_FLAG_CM) {
+        status = uct_cm_config_read(resource.component, NULL, NULL, &cm_config);
+        ASSERT_UCS_OK(status);
+
+
+        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close,
+                               uct_cm_open, resource.component,
+                               m_worker, cm_config);
+
+        m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+        status = uct_cm_query(m_cm, &m_cm_attr);
+        ASSERT_UCS_OK(status);
+
+        max_conn_priv = 0;
+        uct_config_release(cm_config);
+    } else {
+        UCS_TEST_SKIP_R(std::string("cm is not supported on component ") +
+                        comp_attr.name );
+    }
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,
