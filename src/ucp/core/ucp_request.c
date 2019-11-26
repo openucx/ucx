@@ -180,10 +180,10 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
         /* Could not add, try to send again */
         return 0;
     }
+
     /* Unexpected error while adding to pending */
-    ucs_assert(status != UCS_INPROGRESS);
-    *req_status = status;
-    return 1;
+    ucs_fatal("invalid return status from uct_ep_pending_add(): %s",
+              ucs_status_string(status));
 }
 
 static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
