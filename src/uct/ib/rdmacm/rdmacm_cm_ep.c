@@ -14,10 +14,12 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
     char flags_buf[UCT_RDMACM_EP_FLAGS_STRING_LEN];
 
     static const char *ep_flag_to_str[] = {
-        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_CLIENT)]     = "client",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_SERVER)]     = "server",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_CONNECTED)]     = "connected",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)] = "disconnecting",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_CLIENT)]            = "client",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_SERVER)]            = "server",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_CONNECTED)]            = "connected",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)]        = "disconnecting",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT)] = "got_disconnect_event",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_FAILED)]               = "failed",
         NULL
     };
 
