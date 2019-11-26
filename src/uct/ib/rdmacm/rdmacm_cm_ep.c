@@ -326,6 +326,14 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
     uct_rdmacm_cm_ep_t *cep = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+
+    if (cep->flags & UCT_RDMACM_CM_EP_FAILED) {
+        status = cep->status;
+        goto out;
+    }
 
     ucs_assert(ucs_queue_is_empty(&cep->ops));
     if (ucs_unlikely(cep->flags & UCT_RDMACM_CM_EP_DISCONNECTING)) {
@@ -336,7 +344,8 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
                       cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
                                                 ip_port_str,
                                                 UCS_SOCKADDR_STRING_LEN));
-            return UCS_INPROGRESS;
+            status = UCS_INPROGRESS;
+            goto out;
         } else {
             ucs_error("%s: duplicate call of uct_ep_disconnect on a "
                       "disconnected ep (id=%p to peer %s)",
@@ -344,18 +353,21 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
                       cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
                                                 ip_port_str,
                                                 UCS_SOCKADDR_STRING_LEN));
-            return UCS_ERR_NOT_CONNECTED;
+            status = UCS_ERR_NOT_CONNECTED;
+            goto out;
         }
     }
 
-    if (!(cep->flags & UCT_RDMACM_CM_EP_CONNECTED)) {
+    if (!(cep->flags & (UCT_RDMACM_CM_EP_CONNECTED |
+                        UCT_RDMACM_CM_EP_GOT_DISCONNECT_EVENT))) {
         ucs_debug("%s: calling uct_ep_disconnect on an ep that is not "
                   "connected yet (id=%p to peer %s)",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
                                             ip_port_str,
                                             UCS_SOCKADDR_STRING_LEN));
-        return UCS_ERR_BUSY;
+        status = UCS_ERR_BUSY;
+        goto out;
     }
 
     if (rdma_disconnect(cep->id)) {
@@ -363,16 +375,21 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id), ip_port_str,
                                             UCS_SOCKADDR_STRING_LEN));
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out;
     }
 
     cep->flags |= UCT_RDMACM_CM_EP_DISCONNECTING;
+    status      = UCS_OK;
 
-    ucs_debug("%s: (id=%p) disconnecting from peer :%s",
+out:
+    ucs_debug("%s: (id=%p) disconnecting from peer: %s, status: %s",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-              cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id), ip_port_str,
-                                        UCS_SOCKADDR_STRING_LEN));
-    return UCS_OK;
+              cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
+                                        ip_port_str, UCS_SOCKADDR_STRING_LEN),
+              ucs_status_string(status));
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    return status;
 }
 
 ucs_status_t uct_rdmacm_cm_ep_flush(uct_ep_h ep, unsigned flags,
