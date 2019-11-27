@@ -52,17 +52,14 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
 {
     uct_rocm_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
     hsa_status_t status;
-    hsa_agent_t local_agent, remote_agent;
+    hsa_agent_t local_agent;
     size_t size = uct_iov_get_length(iov);
     ucs_status_t ret = UCS_OK;
     void *base_addr, *local_addr = iov->buffer;
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_ipc_iface_t);
     void *remote_base_addr, *remote_copy_addr;
     void *dst_addr, *src_addr;
-    hsa_agent_t dst_agent, src_agent;
     uct_rocm_ipc_signal_desc_t *rocm_ipc_signal;
-    hsa_agent_t *gpu_agents;
-    int num_gpu;
 
     /* no data to deliver */
     if (!size)
@@ -89,38 +86,22 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return ret;
     }
 
-    num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
-    status = hsa_amd_agents_allow_access(num_gpu, gpu_agents, NULL, base_addr);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_error("fail to map local mem %p %p %d\n",
-                  local_addr, base_addr, status);
-        return UCS_ERR_INVALID_ADDR;
-    }
-
     remote_copy_addr = UCS_PTR_BYTE_OFFSET(remote_base_addr,
                                            remote_addr - key->address);
-    remote_agent     = uct_rocm_base_get_dev_agent(key->dev_num);
-
     if (is_put) {
         dst_addr = remote_copy_addr;
-        dst_agent = remote_agent;
-
         src_addr = local_addr;
-        src_agent = local_agent;
     }
     else {
         dst_addr = local_addr;
-        dst_agent = local_agent;
-
         src_addr = remote_copy_addr;
-        src_agent = remote_agent;
     }
 
     rocm_ipc_signal = ucs_mpool_get(&iface->signal_pool);
     hsa_signal_store_screlease(rocm_ipc_signal->signal, 1);
 
-    status = hsa_amd_memory_async_copy(dst_addr, dst_agent,
-                                       src_addr, src_agent,
+    status = hsa_amd_memory_async_copy(dst_addr, local_agent,
+                                       src_addr, local_agent,
                                        size, 0, NULL,
                                        rocm_ipc_signal->signal);
 
