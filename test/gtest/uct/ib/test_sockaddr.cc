@@ -529,6 +529,7 @@ protected:
     void test_delayed_server_response(bool reject)
     {
         ucs_status_t status;
+        ucs_time_t deadline;
 
         m_delay_conn_reply = true;
 
@@ -538,6 +539,12 @@ protected:
                      (TEST_CM_STATE_SERVER_CONNECTED  | TEST_CM_STATE_CLIENT_CONNECTED |
                       TEST_CM_STATE_CLIENT_GOT_REJECT | TEST_CM_STATE_CLIENT_GOT_ERROR));
 
+        deadline = ucs_get_time() + ucs_time_from_sec(DEFAULT_TIMEOUT_SEC) *
+                                    ucs::test_time_multiplier();
+
+        while ((m_delayed_conn_reqs.size() == 0) && (ucs_get_time() < deadline)) {
+            progress();
+        }
         ASSERT_EQ(1ul, m_delayed_conn_reqs.size());
 
         if (reject) {
