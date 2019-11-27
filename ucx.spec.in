@@ -73,6 +73,7 @@ available, TCP is used instead. UCX supports efficient transfer of data in
 either main memory (RAM) or GPU memory (through CUDA and ROCm libraries).
 In addition, UCX provides efficient intra-node communication, by leveraging the
 following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
+This package was built from '@SCM_BRANCH@' branch, commit @SCM_VERSION@.
 
 %if "%{_vendor}" == "suse"
 %debug_package
