@@ -30,7 +30,7 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_CUDA;
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
-    md_attr->cap.max_reg          = UCT_CUDA_IPC_MAX_ALLOC_SZ;
+    md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_cuda_ipc_key_t);
     md_attr->reg_cost.overhead    = 0;
     md_attr->reg_cost.growth      = 0;

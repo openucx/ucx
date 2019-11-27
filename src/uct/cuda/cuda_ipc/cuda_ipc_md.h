@@ -12,8 +12,6 @@
 #include <uct/cuda/base/cuda_iface.h>
 
 
-#define UCT_CUDA_IPC_MAX_ALLOC_SZ (1 << 30)
-
 /**
  * @brief cuda ipc MD descriptor
  */
