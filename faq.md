@@ -165,13 +165,15 @@ In addition to the built-in transports it's possible to use aliases which specif
 <tr><td>rc_v</td><td>Same as "rc", but using Verbs-based transports only</td></tr>
 <tr><td>ud_x</td><td>Same as "ud", but using accelerated transports only</td></tr>
 <tr><td>ud_v</td><td>Same as "ud", but using Verbs-based transports only</td></tr>
+<tr><td>cuda</td><td>CUDA (NVIDIA GPU) memory support: cuda_copy, cuda_ipc, gdr_copy</td></tr>
+<tr><td>rocm</td><td>ROCm (AMD GPU) memory support: rocm_copy, rocm_ipc, rocm_gdr</td></tr>
 <tr><td>tcp</td><td>TCP over SOCK_STREAM sockets</td></tr>
 <tr><td>self</td><td>Loopback transport to communicate within the same process</td></tr>
 </table>
  
 For example:
 - `UCX_TLS=rc` will select RC, UD for bootstrap, and prefer accelerated transports
-- `UCX_TLS=rc,cuda_copy,cuda_ipc` will select RC along with Cuda memory transports.
+- `UCX_TLS=rc,cuda` will select RC along with Cuda memory transports.
 
 
 <br/>
@@ -263,8 +265,28 @@ Currently UCX supports NVIDIA GPUs by Cuda library, and AMD GPUs by ROCm library
 
 Currently only UCX tagged APIs (ucp_tag_send_XX/ucp_tag_recv_XX) and stream APIs 
 (ucp_stream_send/ucp_stream_recv_XX) support GPU memory.
-  
-#### 4. What are the current limitations of using GPU memory?
+
+#### 4. How to run UCX with GPU support?
+
+In order to run UCX with GPU support, you will need an application which allocates
+GPU memory (for example,
+[MPI OSU benchmarks with Cuda support](http://mvapich.cse.ohio-state.edu/benchmarks)),
+and UCX compiled with GPU support. Then you can run the application as usual (for
+example, with MPI) and whenever GPU memory is passed to UCX, it either use GPU-direct
+for zero copy operations, or copy the data to/from host memory.
+> NOTE When specifying UCX_TLS explicitly, must also specify cuda/rocm for GPU memory
+> support, otherwise the GPU memory will not be recognized.
+> For example: `UCX_TLS=rc,cuda` or `UCX_TLS=dc,rocm`
+
+#### 6. I'm running UCX with GPU memory and geting a segfault, why?
+
+Most likely UCX does not detect that the pointer is a GPU memory and tries to
+access it from CPU. It can happen if UCX is not compiled with GPU support, or fails
+to load CUDA or ROCm modules due to missing library paths or version mismatch.
+Please run `ucx_info -d | grep cuda` or `ucx_info -d | grep rocm` to check for
+UCX GPU support.
+
+#### 7. What are the current limitations of using GPU memory?
 
 * **Static compilation** - programs which are statically compiled with Cuda libraries
   must disable memory detection cache by setting `UCX_MEMTYPE_CACHE=n`. The reason
