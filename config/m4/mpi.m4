@@ -34,8 +34,8 @@ AS_IF([test "x$with_mpi" = xyes],
 
 AS_IF([test -n "$MPICC"],
       [AC_DEFINE([HAVE_MPI], [1], [MPI support])
-       mpi_enable=Enabled],
-      [mpi_enable=Disabled])
+       mpi_enable=enabled],
+      [mpi_enable=disabled])
 AM_CONDITIONAL([HAVE_MPI],    [test -n "$MPIRUN"])
 AM_CONDITIONAL([HAVE_MPICC],  [test -n "$MPICC"])
 AM_CONDITIONAL([HAVE_MPIRUN], [test -n "$MPIRUN"])
