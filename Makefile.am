@@ -21,6 +21,7 @@ doc_dir = $(pkgdatadir)/doc
 if !DOCS_ONLY
 perftest_dir = $(pkgdatadir)/perftest
 dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 \
+					  contrib/ucx_perftest_config/msg_pow2_large \
 					  contrib/ucx_perftest_config/README \
 					  contrib/ucx_perftest_config/test_types_uct \
 					  contrib/ucx_perftest_config/test_types_ucp \

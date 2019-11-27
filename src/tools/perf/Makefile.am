@@ -26,6 +26,7 @@ ucx_perftest_LDADD    = \
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \
+	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2_large \
 	$(top_srcdir)/contrib/ucx_perftest_config/README \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_uct \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
