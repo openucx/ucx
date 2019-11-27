@@ -27,6 +27,7 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
         String serverHost = argsMap.get("s");
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
+            .setPeerErrorHadnlingMode()
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
 
         UcpMemory memory = context.memoryMap(allocationParams);
