@@ -154,6 +154,11 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG   = 0xA
 };
 
+enum {
+    UCT_RC_MLX5_POLL_FLAG_TM                 = UCS_BIT(0),
+    UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1)
+};
+
 #if IBV_HW_TM
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
        (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_tmh))/ \
@@ -262,7 +267,7 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_mlx5_mp_hash_equal(uct_rc_mlx5_mp_hash_key_t key1,
                           uct_rc_mlx5_mp_hash_key_t key2)
 {
-    return (key1.guid == key2.guid) && (key1.qp_num == key2.qp_num);
+    return (key1.qp_num == key2.qp_num) && (key1.guid == key2.guid);
 }
 
 
@@ -380,7 +385,7 @@ typedef struct uct_rc_mlx5_iface_common {
         struct {
             uint8_t                  num_strides;
             ucs_mpool_t              tx_mp;
-            uct_rc_mlx5_mp_context_t dummy_ctx;
+            uct_rc_mlx5_mp_context_t last_frag_ctx;
             khash_t(uct_rc_mlx5_mp_hash_lid) hash_lid;
             khash_t(uct_rc_mlx5_mp_hash_gid) hash_gid;
         } mp;
