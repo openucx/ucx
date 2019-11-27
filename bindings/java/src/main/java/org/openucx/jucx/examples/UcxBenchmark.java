@@ -102,11 +102,4 @@ public abstract class UcxBenchmark {
             resources.pop().close();
         }
     }
-
-    protected static void copyBuffer(ByteBuffer src, ByteBuffer dst, int size) {
-        for (int i = 0; i < size; i++) {
-            dst.put(src.get());
-        }
-    }
-
 }
