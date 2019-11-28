@@ -33,4 +33,6 @@ AS_IF([test "x$rocm_happy" = "xyes" && test "x$hip_happy" = "xyes"],
      ucx_perftest_modules="${ucx_perftest_modules}:rocm"]
 )
 
+AM_CONDITIONAL([HAVE_HIP], [test "x$hip_happy" != xno])
+
 AC_CONFIG_FILES([src/tools/perf/rocm/Makefile])
