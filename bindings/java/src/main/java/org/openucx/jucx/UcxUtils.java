@@ -27,10 +27,6 @@ public class UcxUtils {
     /**
      * Returns view of underlying memory region as a ByteBuffer.
      * @param address - address of start of memory region
-     * @param length
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
-     * @throws InstantiationException
      */
     public static ByteBuffer getByteBufferView(long address, int length)
         throws IllegalAccessException, InvocationTargetException, InstantiationException {
