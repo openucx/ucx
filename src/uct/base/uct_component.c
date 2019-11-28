@@ -91,3 +91,40 @@ ucs_status_t uct_component_query(uct_component_h component,
     ucs_free(resources);
     return UCS_OK;
 }
+
+ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
+                             ucs_config_field_t *config_table,
+                             size_t config_size, const char *env_prefix,
+                             const char *cfg_prefix)
+{
+    uct_config_bundle_t *config_bundle;
+    ucs_status_t status;
+
+    config_bundle = ucs_calloc(1, sizeof(*config_bundle) + config_size, "uct_config");
+    if (config_bundle == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* TODO use env_prefix */
+    status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
+                                         env_prefix, cfg_prefix, 0);
+    if (status != UCS_OK) {
+        goto err_free_bundle;
+    }
+
+    config_bundle->table = config_table;
+    config_bundle->table_prefix = ucs_strdup(cfg_prefix, "uct_config");
+    if (config_bundle->table_prefix == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_bundle;
+    }
+
+    *bundle = config_bundle;
+    return UCS_OK;
+
+err_free_bundle:
+    ucs_free(config_bundle);
+err:
+    return status;
+}

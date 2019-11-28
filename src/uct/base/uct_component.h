@@ -18,6 +18,17 @@ typedef struct uct_component uct_component_t;
 
 
 /**
+ * Keeps information about allocated configuration structure, to be used when
+ * releasing the options.
+ */
+typedef struct uct_config_bundle {
+    ucs_config_field_t *table;
+    const char         *table_prefix;
+    char               data[];
+} uct_config_bundle_t;
+
+
+/**
  * Component method to query component memory domain resources.
  *
  * @param [in]  component               Query memory domain resources for this
@@ -164,5 +175,10 @@ struct uct_component {
 #define UCT_COMPONENT_TL_LIST_INITIALIZER(_component) \
     UCS_LIST_INITIALIZER(&(_component)->tl_list, &(_component)->tl_list)
 
+
+ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
+                             ucs_config_field_t *config_table,
+                             size_t config_size, const char *env_prefix,
+                             const char *cfg_prefix);
 
 #endif

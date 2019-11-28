@@ -20,16 +20,6 @@ typedef struct uct_md_rcache_config {
     double               overhead;     /**< Lookup overhead estimation */
 } uct_md_rcache_config_t;
 
-/**
- * Keeps information about allocated configuration structure, to be used when
- * releasing the options.
- */
-typedef struct uct_config_bundle {
-    ucs_config_field_t *table;
-    const char         *table_prefix;
-    char               data[];
-} uct_config_bundle_t;
-
 
 extern ucs_config_field_t uct_md_config_rcache_table[];
 
@@ -128,11 +118,6 @@ uct_md_fill_md_name(uct_md_h md, void *buffer)
     return buffer;
 #endif
 }
-
-ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
-                             ucs_config_field_t *config_table,
-                             size_t config_size, const char *env_prefix,
-                             const char *cfg_prefix);
 
 /*
  * Base implementation of query_md_resources(), which returns a single md

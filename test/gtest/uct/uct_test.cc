@@ -677,10 +677,8 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
         status = uct_cm_config_read(resource.component, NULL, NULL, &cm_config);
         ASSERT_UCS_OK(status);
 
-
-        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close,
-                               uct_cm_open, resource.component,
-                               m_worker, cm_config);
+        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close, uct_cm_open,
+                               resource.component, m_worker, cm_config);
 
         m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
         status = uct_cm_query(m_cm, &m_cm_attr);
