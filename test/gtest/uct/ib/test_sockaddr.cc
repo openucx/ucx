@@ -44,6 +44,10 @@ public:
     }
 
     void init() {
+        if (!strcmp(GetParam()->md_name.c_str(), "tcp")) {
+            UCS_TEST_SKIP_R("tcp does not support sockaddr over iface");
+        }
+
         uct_iface_params_t server_params, client_params;
         uint16_t port;
 
@@ -370,7 +374,15 @@ public:
 
 protected:
 
+    void skip_tcp_sockcm() {
+        if (!strcmp(GetParam()->md_name.c_str(), "tcp")) {
+            UCS_TEST_SKIP_R("tcp cm is not fully implemented");
+        }
+    }
+
     void cm_start_listen() {
+        skip_tcp_sockcm();
+
         uct_listener_params_t params;
 
         params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
@@ -800,6 +812,8 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
+    skip_tcp_sockcm();
+
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
 
