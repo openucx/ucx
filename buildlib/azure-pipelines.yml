@@ -134,3 +134,11 @@ stages:
               ./contrib/configure-release
               ./contrib/buildrpm.sh -s -t -b
             displayName: Build tarball
+
+  - stage: Tests
+    dependsOn: [Codestyle]
+    jobs:
+    - template: tests.yml
+      parameters:
+        name: althca
+        demands: althca -equals yes
