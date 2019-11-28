@@ -19,13 +19,11 @@ public:
 
     struct mm_resource : public resource {
         std::string  shm_dir;
-        bool         use_proc_link;
 
-        mm_resource(const resource& res, const std::string& shm_dir = "",
-                    bool use_proc_link = false) :
+        mm_resource(const resource& res, const std::string& shm_dir = "") :
             resource(res.component, res.md_name, res.local_cpus, res.tl_name,
                      res.dev_name, res.dev_type),
-            shm_dir(shm_dir), use_proc_link(use_proc_link)
+            shm_dir(shm_dir)
         {
         }
 
@@ -33,9 +31,6 @@ public:
             std::string name = resource::name();
             if (!shm_dir.empty()) {
                 name += ",dir=" + shm_dir;
-            }
-            if (use_proc_link) {
-                name += ",procfs";
             }
             return name;
         }
@@ -76,16 +71,12 @@ public:
 
     static void enum_posix_variants(const resource &res,
                                     std::vector<mm_resource> &variants) {
-        variants.push_back(mm_resource(res, ".",        false));
-        variants.push_back(mm_resource(res, ".",        true));
-        variants.push_back(mm_resource(res, "/dev/shm", false));
-        variants.push_back(mm_resource(res, "/dev/shm", true));
+        variants.push_back(mm_resource(res, "."       ));
+        variants.push_back(mm_resource(res, "/dev/shm"));
     }
 
     void set_posix_config() {
         set_config("DIR=" + GetParam()->shm_dir);
-        set_config("USE_PROC_LINK=" +
-                   std::string(GetParam()->use_proc_link ? "yes" : "no"));
     }
 
     virtual void init() {
