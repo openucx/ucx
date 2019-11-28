@@ -4,6 +4,7 @@
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
@@ -182,6 +183,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CUDA], [false])
      AM_CONDITIONAL([HAVE_GDR_COPY], [false])
      AM_CONDITIONAL([HAVE_ROCM], [false])
+     AM_CONDITIONAL([HAVE_HIP], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])
      AM_CONDITIONAL([HAVE_CMA], [false])
      AM_CONDITIONAL([HAVE_KNEM], [false])
