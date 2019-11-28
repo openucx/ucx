@@ -50,15 +50,15 @@ uct_ib_mlx5_srq_max_wrs(int rxq_len, int num_sge)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
 {
-    return (ntohl(cqe->flags_rqpn) >> UCT_IB_MLX5_CQE_RQPN_FLAGS_SHIFT) &
-           (UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA | UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
+    return cqe->flags_rqpn & htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA |
+                                   UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
 }
 
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
 {
     ucs_assert(uct_ib_mlx5_cqe_is_grh_present(cqe) ==
-               UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE); /* GRH is in CQE */
+               htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE)); /* GRH is in CQE */
     return UCS_PTR_BYTE_OFFSET(cqe, -UCT_IB_GRH_LEN);
 }
 
