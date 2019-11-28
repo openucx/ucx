@@ -11,6 +11,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/arch/atomic.h>
 }
 
 #include <queue>
@@ -132,20 +133,22 @@ public:
         } else {
             uct_iface_accept(iface, conn_request);
         }
+        ucs_memory_cpu_store_fence();
         self->server_recv_req++;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
-        self->err_count++;
+        ucs_atomic_add32(&self->err_count, 1);
         return UCS_OK;
     }
 
 protected:
     entity *server, *client;
     ucs::sock_addr_storage m_listen_addr, m_connect_addr;
-    volatile int err_count, server_recv_req;
+    volatile uint32_t err_count;
+    volatile int server_recv_req;
     std::queue<uct_conn_request_h> delayed_conn_reqs;
     bool delay_conn_reply;
 };
@@ -164,7 +167,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
     /* since the transport may support a graceful exit in case of an error,
      * make sure that the error handling flow wasn't invoked (there were no
      * errors) */
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
     /* the test may end before the client's ep got connected.
      * it should also pass in this case as well - the client's
      * ep shouldn't be accessed (for connection reply from the server) after the
@@ -182,8 +185,9 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
         progress();
     }
     ASSERT_EQ(1,   server_recv_req);
+    ucs_memory_cpu_load_fence();
     ASSERT_EQ(1ul, delayed_conn_reqs.size());
-    EXPECT_EQ(0,   err_count);
+    EXPECT_EQ(0ul, err_count);
     while (!delayed_conn_reqs.empty()) {
         uct_iface_accept(server->iface(), delayed_conn_reqs.front());
         delayed_conn_reqs.pop();
@@ -197,7 +201,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
     } else {
         EXPECT_EQ(UCS_OK, status);
     }
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
@@ -211,8 +215,9 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
         progress();
     }
     ASSERT_EQ(1, server_recv_req);
+    ucs_memory_cpu_load_fence();
     ASSERT_EQ(1ul, delayed_conn_reqs.size());
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
     while (!delayed_conn_reqs.empty()) {
         uct_iface_reject(server->iface(), delayed_conn_reqs.front());
         delayed_conn_reqs.pop();
@@ -220,7 +225,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
     while (err_count == 0) {
         progress();
     }
-    EXPECT_EQ(1, err_count);
+    EXPECT_EQ(1ul, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
@@ -254,7 +259,7 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         progress();
     }
     ASSERT_TRUE(server_recv_req == num_clients);
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
@@ -271,7 +276,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
         progress();
     }
     ASSERT_TRUE(server_recv_req == num_conns_on_client);
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
@@ -427,7 +432,6 @@ protected:
                   std::string(static_cast<const char *>(remote_data->conn_priv_data)));
 
         self->m_cm_state |= TEST_CM_STATE_CONNECT_REQUESTED;
-        self->m_server_recv_req_cnt++;
 
         if (self->m_delay_conn_reply) {
             self->m_delayed_conn_reqs.push(conn_request);
@@ -439,6 +443,9 @@ protected:
             self->server_accept(self->m_server, conn_request,
                                 server_connect_cb, server_disconnect_cb, self);
         }
+
+        ucs_memory_cpu_store_fence();
+        self->m_server_recv_req_cnt++;
     }
 
     static void
@@ -529,6 +536,7 @@ protected:
     void test_delayed_server_response(bool reject)
     {
         ucs_status_t status;
+        ucs_time_t deadline;
 
         m_delay_conn_reply = true;
 
@@ -538,7 +546,14 @@ protected:
                      (TEST_CM_STATE_SERVER_CONNECTED  | TEST_CM_STATE_CLIENT_CONNECTED |
                       TEST_CM_STATE_CLIENT_GOT_REJECT | TEST_CM_STATE_CLIENT_GOT_ERROR));
 
-        ASSERT_EQ(1ul, m_delayed_conn_reqs.size());
+        deadline = ucs_get_time() + ucs_time_from_sec(DEFAULT_TIMEOUT_SEC) *
+                                    ucs::test_time_multiplier();
+
+        while ((m_server_recv_req_cnt == 0) && (ucs_get_time() < deadline)) {
+            progress();
+        }
+        ASSERT_EQ(1, m_server_recv_req_cnt);
+        ucs_memory_cpu_load_fence();
 
         if (reject) {
             /* wrap errors since a reject is expected */
