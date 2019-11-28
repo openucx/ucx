@@ -874,8 +874,8 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
-                                                  uint64_t *tl_bitmap_p)
+static void ucp_worker_select_best_ifaces(ucp_worker_h worker,
+                                          uint64_t *tl_bitmap_p)
 {
     ucp_context_h context = worker->context;
     uint64_t tl_bitmap    = 0;
@@ -898,32 +898,34 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
     worker->num_ifaces = ucs_popcount(tl_bitmap);
     ucs_assert(worker->num_ifaces <= context->num_tls);
 
-    if (worker->num_ifaces < context->num_tls) {
-        /* Some ifaces need to be closed */
-        for (tl_id = 0, iface_id = 0; tl_id < context->num_tls; ++tl_id) {
-            wiface = worker->ifaces[tl_id];
-            if (tl_bitmap & UCS_BIT(tl_id)) {
-                if (iface_id != tl_id) {
-                    worker->ifaces[iface_id] = wiface;
-                }
-                ++iface_id;
-            } else {
-                ucs_debug("closing resource[%d] "UCT_TL_RESOURCE_DESC_FMT
-                          ", since resource[%d] "UCT_TL_RESOURCE_DESC_FMT
-                          " is better, worker %p",
-                          tl_id, UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc),
-                          repl_ifaces[tl_id],
-                          UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[repl_ifaces[tl_id]].tl_rsc),
-                          worker);
-                /* Ifaces should not be initialized yet, just close it
-                 * (no need for cleanup) */
-                ucp_worker_uct_iface_close(wiface);
-                ucs_free(wiface);
-            }
-        }
+    if (worker->num_ifaces == context->num_tls) {
+        return;
     }
 
-    return UCS_OK;
+    ucs_assert(worker->num_ifaces < context->num_tls);
+
+    /* Some ifaces need to be closed */
+    for (tl_id = 0, iface_id = 0; tl_id < context->num_tls; ++tl_id) {
+        wiface = worker->ifaces[tl_id];
+        if (tl_bitmap & UCS_BIT(tl_id)) {
+            if (iface_id != tl_id) {
+                worker->ifaces[iface_id] = wiface;
+            }
+            ++iface_id;
+        } else {
+            ucs_debug("closing resource[%d] "UCT_TL_RESOURCE_DESC_FMT
+                      ", since resource[%d] "UCT_TL_RESOURCE_DESC_FMT
+                      " is better, worker %p",
+                      tl_id, UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc),
+                      repl_ifaces[tl_id],
+                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[repl_ifaces[tl_id]].tl_rsc),
+                      worker);
+            /* Ifaces should not be initialized yet, just close it
+             * (no need for cleanup) */
+            ucp_worker_uct_iface_close(wiface);
+            ucs_free(wiface);
+        }
+    }
 }
 
 /**
@@ -947,26 +949,30 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     ucp_rsc_index_t tl_id, iface_id;
     ucp_worker_iface_t *wiface;
     uint64_t ctx_tl_bitmap, tl_bitmap;
+    unsigned num_ifaces;
     ucs_status_t status;
 
     /* If tl_bitmap is already set, just use it. Otherwise open ifaces on all
      * available resources and then select the best ones. */
-    ctx_tl_bitmap = context->tl_bitmap;
+    ctx_tl_bitmap  = context->tl_bitmap;
     if (ctx_tl_bitmap) {
-        worker->num_ifaces = ucs_popcount(ctx_tl_bitmap);
-        tl_bitmap          = ctx_tl_bitmap;
+        num_ifaces = ucs_popcount(ctx_tl_bitmap);
+        tl_bitmap  = ctx_tl_bitmap;
     } else {
-        worker->num_ifaces = context->num_tls;
-        tl_bitmap          = UCS_MASK(context->num_tls);
+        num_ifaces = context->num_tls;
+        tl_bitmap  = UCS_MASK(context->num_tls);
     }
 
-    worker->ifaces = ucs_calloc(worker->num_ifaces, sizeof(*worker->ifaces),
+    worker->ifaces = ucs_calloc(num_ifaces, sizeof(*worker->ifaces),
                                 "ucp ifaces array");
     if (worker->ifaces == NULL) {
+        ucs_error("failed to allocate worker ifaces");
         return UCS_ERR_NO_MEMORY;
     }
 
-    iface_id = 0;
+    worker->num_ifaces = num_ifaces;
+    iface_id           = 0;
+
     ucs_for_each_bit(tl_id, tl_bitmap) {
         iface_params.field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE;
         resource = &context->tl_rscs[tl_id];
@@ -990,10 +996,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     if (!ctx_tl_bitmap) {
         /* Context bitmap is not set, need to select the best tl resources */
         tl_bitmap = 0;
-        status    = ucp_worker_select_best_ifaces(worker, &tl_bitmap);
-        if (status != UCS_OK) {
-            return status;
-        }
+        ucp_worker_select_best_ifaces(worker, &tl_bitmap);
         ucs_assert(tl_bitmap);
 
         /* Cache tl_bitmap on the context, so the next workers would not need
@@ -1665,6 +1668,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
     worker->num_active_ifaces = 0;
+    worker->num_ifaces        = 0;
     worker->am_message_id     = ucs_generate_uuid(0);
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
