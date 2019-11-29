@@ -13,7 +13,6 @@
 #include <ucs/sys/iovec.h>
 
 
-#define UCT_SM_IFACE_DEVICE_ADDR_LEN    sizeof(uint64_t)
 #define UCT_SM_MAX_IOV                  16
 #define UCT_SM_DEVICE_NAME              "memory"
 
@@ -44,6 +43,8 @@ int uct_sm_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
                               const uct_iface_addr_t *iface_addr);
 
 ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags);
+
+size_t uct_sm_iface_get_device_addr_len();
 
 ucs_status_t uct_sm_ep_fence(uct_ep_t *tl_ep, unsigned flags);
 

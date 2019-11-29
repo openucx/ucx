@@ -11,6 +11,9 @@
 #include <uct/sm/base/sm_iface.h>
 
 
+#define UCT_CMA_IFACE_ADDR_FLAG_PID_NS UCS_BIT(31) /* use PID NS in address */
+
+
 typedef struct uct_cma_iface_config {
     uct_sm_iface_config_t         super;
 } uct_cma_iface_config_t;

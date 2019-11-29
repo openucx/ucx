@@ -26,7 +26,8 @@ static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
                     "UCT_EP_PARAM_FIELD_IFACE_ADDR and UCT_EP_PARAM_FIELD_DEV_ADDR are not defined");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
-    self->remote_pid = *(const pid_t*)params->iface_addr;
+    self->remote_pid = *(const pid_t*)params->iface_addr &
+                       ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
     return UCS_OK;
 }
 
