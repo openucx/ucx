@@ -66,6 +66,8 @@
 #define UCT_IB_MLX5_ROCE_SRC_PORT_MIN   0xC000
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE    30
 #define UCT_IB_MLX5_ATOMIC_MODE         3
+#define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA UCS_BIT(28) /* GRH/IP in the receive buffer */
+#define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE  UCS_BIT(29) /* GRH/IP in the CQE */
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \

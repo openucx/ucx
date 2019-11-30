@@ -160,16 +160,43 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
     ++iface->super.rx.srq.available;
 }
 
-static UCS_F_ALWAYS_INLINE uct_rc_mlx5_mp_context_t*
-uct_rc_mlx5_iface_rx_mp_context(uct_rc_mlx5_iface_common_t *iface,
-                                struct mlx5_cqe64 *cqe, unsigned *flags)
-{
-    uct_rc_mlx5_ep_t *ep;
-    uint32_t qp_num;
+#define uct_rc_mlx5_iface_mp_hash_lookup(_h_name, _h_ptr, _key, _last, _flags, \
+                                         _iface) \
+    ({ \
+        uct_rc_mlx5_mp_context_t *ctx; \
+        khiter_t h_it; \
+        int ret; \
+        h_it = kh_get(_h_name, _h_ptr, _key); \
+        if (h_it == kh_end(_h_ptr)) { \
+            /* No data from this sender - this must be the first fragment */ \
+            *(_flags) |= UCT_CB_PARAM_FLAG_FIRST; \
+            if (ucs_likely(_last)) { \
+                /* fast path - single fragment message */ \
+                return &(_iface)->tm.mp.last_frag_ctx; \
+            } \
+            h_it = kh_put(_h_name, _h_ptr, _key, &ret); \
+            ucs_assert(ret != 0); \
+            ctx  = &kh_value(_h_ptr, h_it); \
+        } else { \
+            ctx = &kh_value(_h_ptr, h_it); \
+            if (_last) { \
+                (_iface)->tm.mp.last_frag_ctx = *ctx; \
+                kh_del(_h_name, _h_ptr, h_it); \
+                return &(_iface)->tm.mp.last_frag_ctx; \
+            } \
+        } \
+        *(_flags) |= UCT_CB_PARAM_FLAG_MORE; \
+        ctx; \
+    })
 
-    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
-                            uct_rc_mlx5_ep_t);
+static UCS_F_ALWAYS_INLINE uct_rc_mlx5_mp_context_t*
+uct_rc_mlx5_iface_rx_mp_context_from_ep(uct_rc_mlx5_iface_common_t *iface,
+                                        struct mlx5_cqe64 *cqe, unsigned *flags)
+{
+    uint32_t qp_num      = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_rc_mlx5_ep_t *ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super,
+                                                                 qp_num),
+                                          uct_rc_mlx5_ep_t);
     ucs_assert(ep != NULL);
     if (ep->mp.free) {
         *flags     |= UCT_CB_PARAM_FLAG_FIRST;
@@ -184,6 +211,43 @@ uct_rc_mlx5_iface_rx_mp_context(uct_rc_mlx5_iface_common_t *iface,
     }
 
     return &ep->mp;
+}
+
+static UCS_F_ALWAYS_INLINE uct_rc_mlx5_mp_context_t*
+uct_rc_mlx5_iface_rx_mp_context_from_hash(uct_rc_mlx5_iface_common_t *iface,
+                                          struct mlx5_cqe64 *cqe,
+                                          unsigned *flags)
+{
+    uct_rc_mlx5_mp_context_t *mp_ctx;
+    uct_rc_mlx5_mp_hash_key_t key_gid;
+    uint64_t key_lid;
+    void *gid;
+    int last;
+
+    last = cqe->byte_cnt & htonl(UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD);
+
+    if (uct_ib_mlx5_cqe_is_grh_present(cqe)) {
+        gid            = uct_ib_mlx5_gid_from_cqe(cqe);
+        /* Use guid and QP as a key. No need to fetch just qp
+         * and convert to le. */
+        key_gid.guid   = *(uint64_t*)UCS_PTR_BYTE_OFFSET(gid, 8);
+        key_gid.qp_num = cqe->flags_rqpn;
+        mp_ctx         = uct_rc_mlx5_iface_mp_hash_lookup(uct_rc_mlx5_mp_hash_gid,
+                                                          &iface->tm.mp.hash_gid,
+                                                          key_gid, last, flags,
+                                                          iface);
+    } else {
+        /* Combine QP and SLID as a key. No need to fetch just qp
+         * and convert to le. */
+        key_lid        = (uint64_t)cqe->flags_rqpn << 32 | cqe->slid;
+        mp_ctx         = uct_rc_mlx5_iface_mp_hash_lookup(uct_rc_mlx5_mp_hash_lid,
+                                                          &iface->tm.mp.hash_lid,
+                                                          key_lid, last, flags,
+                                                          iface);
+    }
+
+    ucs_assert(mp_ctx != NULL);
+    return mp_ctx;
 }
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
@@ -254,11 +318,10 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void*
 uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
-                                 struct mlx5_cqe64 *cqe,
-                                 unsigned byte_len, unsigned *flags,
+                                 struct mlx5_cqe64 *cqe, unsigned byte_len,
+                                 unsigned *flags, int poll_flags,
                                  uct_rc_mlx5_mp_context_t **context_p)
 {
-    static uct_rc_mlx5_mp_context_t dummy_context = {};
     uct_ib_mlx5_srq_seg_t *seg;
     void *hdr;
     int stride_idx;
@@ -267,13 +330,18 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
         /* uct_rc_mlx5_iface_common_data will initialize flags value */
         hdr        = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, flags);
         *flags    |= UCT_CB_PARAM_FLAG_FIRST;
-        *context_p = &dummy_context;
+        *context_p = &iface->tm.mp.last_frag_ctx;
         return hdr;
     }
 
     ucs_assert(byte_len <= UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK);
     *flags     = 0;
-    *context_p = uct_rc_mlx5_iface_rx_mp_context(iface, cqe, flags);
+
+    if (poll_flags & UCT_RC_MLX5_POLL_FLAG_HAS_EP) {
+        *context_p = uct_rc_mlx5_iface_rx_mp_context_from_ep(iface, cqe, flags);
+    } else {
+        *context_p = uct_rc_mlx5_iface_rx_mp_context_from_hash(iface, cqe, flags);
+    }
 
     /* Get a pointer to the tag header or the payload (if it is not the first
      * fragment). */
@@ -1120,7 +1188,8 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
-                                   struct mlx5_cqe64 *cqe, unsigned byte_len)
+                                   struct mlx5_cqe64 *cqe, unsigned byte_len,
+                                   int poll_flags)
 {
     struct ibv_tmh           *tmh;
     uint64_t                 imm_data;
@@ -1128,7 +1197,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     unsigned                 flags;
     uct_rc_mlx5_mp_context_t *msg_ctx;
 
-    tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, byte_len, &flags, &msg_ctx);
+    tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, byte_len, &flags,
+                                           poll_flags, &msg_ctx);
 
     /* Fast path: single fragment eager message */
     if (ucs_likely(UCT_RC_MLX5_SINGLE_FRAG_MSG(flags) &&
@@ -1239,7 +1309,7 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
-                                 int is_tag_enabled)
+                                 int poll_flags)
 {
     uct_ib_mlx5_srq_seg_t UCS_V_UNUSED *seg;
     struct mlx5_cqe64 *cqe;
@@ -1253,7 +1323,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
-    uct_rc_mlx5_mp_context_t *dummy_ctx;
+    uct_rc_mlx5_mp_context_t UCS_V_UNUSED *dummy_ctx;
 #endif
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
@@ -1272,7 +1342,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     byte_len = ntohl(cqe->byte_cnt) & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK;
     count    = 1;
 
-    if (!is_tag_enabled) {
+    if (!(poll_flags & UCT_RC_MLX5_POLL_FLAG_TM)) {
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
         uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags, byte_len);
         goto done;
@@ -1292,7 +1362,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     /* Should be a fast path, because small (latency-critical) messages
      * are not supposed to be offloaded to the HW.  */
     if (ucs_likely(cqe->app_op == UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED)) {
-        uct_rc_mlx5_iface_tag_handle_unexp(iface, cqe, byte_len);
+        uct_rc_mlx5_iface_tag_handle_unexp(iface, cqe, byte_len, poll_flags);
         goto done;
     }
 
@@ -1310,7 +1380,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     case UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG:
         /* TODO: optimize */
         tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, byte_len, &flags,
-                                               &dummy_ctx);
+                                               poll_flags, &dummy_ctx);
 
         /* With MP XRQ, AM can be single-fragment only */
         ucs_assert(UCT_RC_MLX5_SINGLE_FRAG_MSG(flags));

@@ -47,6 +47,21 @@ uct_ib_mlx5_srq_max_wrs(int rxq_len, int num_sge)
     return ucs_max(rxq_len / num_sge, UCT_IB_MLX5_XRQ_MIN_UWQ_POST);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
+{
+    return cqe->flags_rqpn & htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA |
+                                   UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
+}
+
+static UCS_F_ALWAYS_INLINE void*
+uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
+{
+    ucs_assert(uct_ib_mlx5_cqe_is_grh_present(cqe) ==
+               htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE)); /* GRH is in CQE */
+    return UCS_PTR_BYTE_OFFSET(cqe, -UCT_IB_GRH_LEN);
+}
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {

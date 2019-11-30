@@ -412,16 +412,35 @@ err_tag_cleanup:
 
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        if (UCT_RC_MLX5_MP_ENABLED(iface)) {
-            ucs_mpool_cleanup(&iface->tm.mp.tx_mp, 1);
-        }
-        uct_ib_mlx5_destroy_qp(&iface->tm.cmd_wq.super.super);
-        uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
-        ucs_free(iface->tm.list);
-        ucs_free(iface->tm.cmd_wq.ops);
-        uct_rc_mlx5_tag_cleanup(iface);
+    uct_rc_mlx5_mp_hash_key_t key_gid;
+    uint64_t key_lid;
+
+    if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
+        return;
     }
+
+    uct_ib_mlx5_destroy_qp(&iface->tm.cmd_wq.super.super);
+    uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
+    ucs_free(iface->tm.list);
+    ucs_free(iface->tm.cmd_wq.ops);
+    uct_rc_mlx5_tag_cleanup(iface);
+
+    if (!UCT_RC_MLX5_MP_ENABLED(iface)) {
+        return;
+    }
+
+    kh_foreach_key(&iface->tm.mp.hash_lid, key_lid, {
+        ucs_debug("destroying iface %p with partially received rx msg (key: %lu)",
+                  iface, key_lid);
+    });
+    kh_destroy_inplace(uct_rc_mlx5_mp_hash_lid, &iface->tm.mp.hash_lid);
+
+    kh_foreach_key(&iface->tm.mp.hash_gid, key_gid, {
+        ucs_debug("destroying iface %p with partially received rx msg (key: %lu-%u)",
+                  iface, key_gid.guid, key_gid.qp_num);
+    });
+    kh_destroy_inplace(uct_rc_mlx5_mp_hash_gid, &iface->tm.mp.hash_gid);
+    ucs_mpool_cleanup(&iface->tm.mp.tx_mp, 1);
 }
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
@@ -657,6 +676,7 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 #endif
 
 #if IBV_HW_TM
+
 void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
                                    const uct_rc_iface_common_config_t *config,
                                    unsigned rndv_hdr_len)
@@ -686,6 +706,9 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
         if (status != UCS_OK) {
             return;
         }
+
+        kh_init_inplace(uct_rc_mlx5_mp_hash_lid, &iface->tm.mp.hash_lid);
+        kh_init_inplace(uct_rc_mlx5_mp_hash_gid, &iface->tm.mp.hash_gid);
 
         iface->tm.bcopy_mp  = &iface->tm.mp.tx_mp;
         iface->tm.max_zcopy = uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;

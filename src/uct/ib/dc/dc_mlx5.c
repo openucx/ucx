@@ -243,7 +243,8 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
     uct_dc_mlx5_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, 1);
+    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super,
+                                             UCT_RC_MLX5_POLL_FLAG_TM);
     if (count > 0) {
         return count;
     }
