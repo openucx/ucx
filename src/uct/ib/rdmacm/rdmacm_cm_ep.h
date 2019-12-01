@@ -19,6 +19,7 @@ typedef struct uct_rdmacm_cm_ep {
     uct_ep_disconnect_cb_t disconnect_cb; /* Callback to handle the disconnection
                                              of the remote peer */
     uint8_t                flags;
+    ucs_status_t           status;
 
     struct {
         /* Callback to fill the user's private data */
@@ -39,12 +40,16 @@ typedef struct uct_rdmacm_cm_ep {
 } uct_rdmacm_cm_ep_t;
 
 enum {
-    UCT_RDMACM_CM_EP_ON_CLIENT     = UCS_BIT(0),
-    UCT_RDMACM_CM_EP_ON_SERVER     = UCS_BIT(1),
-    UCT_RDMACM_CM_EP_CONNECTED     = UCS_BIT(2),
-    UCT_RDMACM_CM_EP_DISCONNECTING = UCS_BIT(3) /* uct_ep_disconnect was called
-                                                   on the ep. this ep is not
-                                                   necessarily disconnected yet */
+    UCT_RDMACM_CM_EP_ON_CLIENT      = UCS_BIT(0),
+    UCT_RDMACM_CM_EP_ON_SERVER      = UCS_BIT(1),
+    UCT_RDMACM_CM_EP_GOT_CONNECT    = UCS_BIT(2), /* connection was successfully
+                                                     established */
+    UCT_RDMACM_CM_EP_GOT_DISCONNECT = UCS_BIT(3), /* got disconnect event */
+    UCT_RDMACM_CM_EP_DISCONNECTING  = UCS_BIT(4), /* uct_ep_disconnect was
+                                                     called on the ep. */
+    UCT_RDMACM_CM_EP_FAILED         = UCS_BIT(5)  /* the EP is in error state,
+                                                     see @ref
+                                                     uct_rdmacm_cm_ep_t::status */
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
