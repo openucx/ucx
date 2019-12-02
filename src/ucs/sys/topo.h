@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdint.h>
 
 BEGIN_C_DECLS
 

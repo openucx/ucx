@@ -22,16 +22,21 @@ ucs_sys_dev_path_spec_t ucs_sys_dev_specs[] = {
 static void ucs_add_bus_id(ucs_sys_device_t *sys_dev, char *name)
 {
     char delim[] = {":."};
-    char *str1, *token;
+    char *str1   = name;
+    int j        = 1;
+    char *token;
     uint16_t uint_vals[4];
-    int j;
 
-    for (j = 1, str1 = name; ; j++, str1 = NULL) {
+    do {
 	token = strtok(str1, delim);
-	if (token == NULL)
-	        break;
-        uint_vals[j - 1] = (uint16_t) strtoul(token, NULL, 16);
-    }
+	if (token != NULL) {
+            uint_vals[j - 1] = (uint16_t) strtoul(token, NULL, 16);
+	    j++;
+	    str1 = NULL;
+	}
+    } while (token != NULL);
+
+    ucs_assert(j == 5);
 
     sys_dev->bus_id.domain   = (uint16_t) uint_vals[0];
     sys_dev->bus_id.bus      = (uint8_t) uint_vals[1];
