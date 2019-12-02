@@ -8,6 +8,8 @@
 #define UCS_TOPO_H
 
 #include <ucs/type/status.h>
+#include <ucs/datastruct/list.h>
+#include <ucs/sys/compiler.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -15,6 +17,9 @@
 BEGIN_C_DECLS
 
 /** @file topo.h */
+
+#define UCS_MAX_SYS_DEV_ENTRIES 128
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -34,6 +39,23 @@ typedef struct ucs_sys_device {
     ucs_sys_bus_id_t bus_id;    /**< bus ID of of the device if applicable.
                                    eg: 0000:06:00.0 {domain:bus:slot.function}*/
 } ucs_sys_device_t;
+
+
+typedef struct ucs_global_sys_dev_array {
+    ucs_sys_device_t entry[UCS_MAX_SYS_DEV_ENTRIES];
+    unsigned         num_entries;
+} ucs_global_sys_dev_array_t;
+
+typedef struct ucs_sys_dev_path_spec {
+    char *path;
+    char *match;
+} ucs_sys_dev_path_spec_t;
+
+
+extern ucs_global_sys_dev_array_t ucs_global_sys_devices;
+
+void ucs_sys_topo_init();
+void ucs_sys_topo_cleanup();
 
 
 /*
