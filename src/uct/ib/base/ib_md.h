@@ -86,9 +86,9 @@ typedef struct uct_ib_md_ext_config {
 
 typedef struct uct_ib_mem {
     uint32_t                lkey;
+    uint32_t                rkey;
     uint32_t                atomic_rkey;
     uint32_t                flags;
-    struct ibv_mr           *mr;
 } uct_ib_mem_t;
 
 /**
@@ -97,7 +97,7 @@ typedef struct uct_ib_mem {
 typedef struct uct_ib_md {
     uct_md_t                 super;
     ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
-    uct_ib_mem_t             global_odp;/**< Implicit ODP memory handle */
+    uct_mem_h                global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
@@ -148,6 +148,14 @@ typedef ucs_status_t (*uct_ib_md_open_func_t)(struct ibv_device *ibv_device,
 
 typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
 
+typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
+                                                 void *address, size_t length,
+                                                 uint64_t access,
+                                                 uct_ib_mem_t *memh);
+
+typedef ucs_status_t (*uct_ib_md_dereg_key_func_t)(struct uct_ib_md *md,
+                                                   uct_ib_mem_t *memh);
+
 typedef ucs_status_t (*uct_ib_md_reg_atomic_key_func_t)(struct uct_ib_md *md,
                                                         uct_ib_mem_t *memh);
 
@@ -163,6 +171,9 @@ typedef ucs_status_t (*uct_ib_md_reg_multithreaded_func_t)(uct_ib_md_t *md,
 typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
                                                              uct_ib_mem_t *memh);
 
+typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
+                                                      uct_ib_mem_t *memh,
+                                                      void *addr, size_t length);
 
 typedef struct uct_ib_md_ops {
     uct_ib_md_open_func_t                open;
@@ -170,10 +181,13 @@ typedef struct uct_ib_md_ops {
 
     size_t                               memh_struct_size;
 
+    uct_ib_md_reg_key_func_t             reg_key;
+    uct_ib_md_dereg_key_func_t           dereg_key;
     uct_ib_md_reg_atomic_key_func_t      reg_atomic_key;
     uct_ib_md_dereg_atomic_key_func_t    dereg_atomic_key;
     uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
+    uct_ib_md_mem_prefetch_func_t        mem_prefetch;
 } uct_ib_md_ops_t;
 
 
@@ -263,6 +277,11 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
     return 8 * atomic_mr_id;
 }
 
+static inline void uct_ib_memh_init_from_mr(uct_ib_mem_t *memh, struct ibv_mr *mr)
+{
+    memh->lkey = mr->lkey;
+    memh->rkey = mr->rkey;
+}
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
@@ -273,6 +292,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
 void uct_ib_md_close(uct_md_h uct_md);
 
+ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
+                           uint64_t access, struct ibv_mr **mr_p);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 
 ucs_status_t

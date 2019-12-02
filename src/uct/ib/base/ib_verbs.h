@@ -154,18 +154,6 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 
 #if HAVE_ODP
 #  if HAVE_VERBS_EXP_H
-static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
-                                            size_t length, long access)
-{
-    struct ibv_exp_reg_mr_in in = {};
-
-    in.pd         = pd;
-    in.addr       = addr;
-    in.length     = length;
-    in.exp_access = access;
-    return ibv_exp_reg_mr(&in);
-}
-#    define ibv_reg_mr                  uct_ib_reg_mr
 #    define IBV_ACCESS_ON_DEMAND        IBV_EXP_ACCESS_ON_DEMAND
 #    define ibv_reg_mr_func_name        "ibv_exp_reg_mr"
 #  else

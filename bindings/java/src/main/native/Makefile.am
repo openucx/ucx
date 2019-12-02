@@ -23,16 +23,19 @@ JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
 
 BUILT_SOURCES = $(JUCX_GENERATED_H_FILES)
 
-MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES)
+MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES) native_headers.stamp
 
-generate_headers:
+#
+# Create a timestamp file to avoid regenerating header files every time
+# See https://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html
+#
+native_headers.stamp: \
+		$(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
+		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java
 	$(MVNCMD) compile native:javah
+	touch native_headers.stamp
 
-.PHONY: generate_headers
-
-$(JUCX_GENERATED_H_FILES): $(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
-                           $(javadir)/src/main/java/org/openucx/jucx/ucp/*.java \
-                           generate_headers
+$(JUCX_GENERATED_H_FILES): native_headers.stamp
 
 lib_LTLIBRARIES = libjucx.la
 
