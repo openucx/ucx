@@ -176,11 +176,11 @@ uct_test::~uct_test() {
     uct_md_h md;
 
     status = uct_md_config_read(GetParam()->component, NULL, NULL, &md_config);
-    ASSERT_UCS_OK(status);
+    EXPECT_TRUE(status == UCS_OK);
 
     status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
                          md_config, &md);
-    ASSERT_UCS_OK(status);
+    EXPECT_TRUE(status == UCS_OK);
     uct_config_release(md_config);
 
     status = uct_md_query(md, &md_attr);
