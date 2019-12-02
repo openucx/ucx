@@ -6,7 +6,7 @@
 package org.openucx.jucx.examples;
 
 import org.openucx.jucx.UcxCallback;
-import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.ucp.UcpRequest;
 import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.UcpEndpoint;
 import org.openucx.jucx.ucp.UcpEndpointParams;
@@ -51,10 +51,10 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         endpoint.sendTaggedNonBlocking(sendData, null);
 
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
-        UcxRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer,
+        UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer,
             new UcxCallback() {
                 @Override
-                public void onSuccess(UcxRequest request) {
+                public void onSuccess(UcpRequest request) {
                     System.out.println("Received a message:");
                     System.out.println(recvBuffer.asCharBuffer().toString());
                 }

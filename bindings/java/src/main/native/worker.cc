@@ -156,3 +156,11 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jcl
 
     return process_request(request, callback);
 }
+
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_cancelRequestNative(JNIEnv *env, jclass cls,
+                                                        jlong ucp_worker_ptr,
+                                                        jlong ucp_request_ptr)
+{
+    ucp_request_cancel((ucp_worker_h)ucp_worker_ptr, (void *)ucp_request_ptr);
+}
