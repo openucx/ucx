@@ -3,6 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -147,8 +148,10 @@ enum ucp_feature {
     UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt
                                                  notification support */
     UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_AM           = UCS_BIT(6)   /**< Request Active Message
+    UCP_FEATURE_AM           = UCS_BIT(6),  /**< Request Active Message
                                                  support */
+    UCP_FEATURE_GROUPS       = UCS_BIT(7)   /**< Request Collective
+                                                 operations support */
 };
 
 
@@ -763,6 +766,12 @@ typedef struct ucp_params {
      * will override the number of endpoints set by @e estimated_num_ppn
      */
     size_t                             estimated_num_ppn;
+
+    /**
+     * To be documented upon consensus...
+     */
+    uint32_t                           num_local_peers;
+    uint32_t                           my_local_peer_idx;
 } ucp_params_t;
 
 
@@ -1238,6 +1247,14 @@ static inline ucs_status_t ucp_init(const ucp_params_t *params,
     return ucp_init_version(UCP_API_MAJOR, UCP_API_MINOR, params, config,
                             context_p);
 }
+
+typedef ucs_status_t (*ucp_ext_init_f)   (ucp_worker_h worker,
+                                          unsigned *next_am_id,
+                                          void *ctx);
+typedef void         (*ucp_ext_cleanup_f)(void *ctx);
+ucs_status_t ucp_extend(ucp_context_h context, size_t extension_ctx_length,
+                        ucp_ext_init_f init, ucp_ext_cleanup_f cleanup,
+                        size_t *extension_ctx_offset_in_worker);
 
 
 /**

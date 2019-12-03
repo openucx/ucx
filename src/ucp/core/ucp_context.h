@@ -2,6 +2,7 @@
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2019. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -155,6 +156,14 @@ typedef struct ucp_tl_md {
 } ucp_tl_md_t;
 
 
+typedef struct ucp_context_extenstion {
+    ucs_list_link_t list;
+    size_t worker_offset;
+    ucp_ext_init_f init;
+    ucp_ext_cleanup_f cleanup;
+} ucp_context_extension_t;
+
+
 /**
  * UCP context
  */
@@ -179,6 +188,10 @@ typedef struct ucp_context {
 
     /* Mask of memory type communication resources */
     uint64_t                      mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
+
+    ucs_list_link_t               extensions;     /* List of registered extensions */
+    size_t                        extension_size; /* Total size of worker extension */
+    unsigned                      last_am_id;     /* Last used AM ID */
 
     struct {
 
@@ -222,6 +235,10 @@ typedef struct ucp_context {
          * order. */
         ucp_rsc_index_t           cm_cmpt_idxs[UCP_MAX_RESOURCES];
         ucp_rsc_index_t           num_cm_cmpts;
+
+        /* Number of local (same-node) peers and my unique index among them */
+        uint32_t                  num_local_peers;
+        uint32_t                  my_local_peer_idx;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
@@ -391,6 +408,8 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 {
     return (max_num_eps >= (size_t)context->config.est_num_eps);
 }
+
+size_t ucp_worker_base_size(ucp_context_h context, unsigned *config_max);
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)

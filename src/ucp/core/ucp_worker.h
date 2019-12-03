@@ -1,9 +1,9 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
-
 
 #ifndef UCP_WORKER_H_
 #define UCP_WORKER_H_
@@ -238,6 +238,7 @@ typedef struct ucp_worker {
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
     uint64_t                      am_message_id; /* For matching long am's */
+    void                          *groups;       /* Groups and collectives context */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats)

@@ -141,6 +141,12 @@ char *ucs_strndup(const char *src, size_t n, const char *name);
 
 #endif /* ENABLE_MEMTRACK */
 
+#define UCS_ALLOC_CHECK(size, name) ({ \
+    void* ptr = ucs_malloc(size, name); \
+    if (ptr == 0) return UCS_ERR_NO_MEMORY; \
+    ptr; \
+})
+
 END_C_DECLS
 
 #endif
