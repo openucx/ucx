@@ -414,7 +414,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     uct_rc_mlx5_mp_hash_key_t key_gid;
     uint64_t key_lid;
-    void *tag_addr;
+    void *recv_buffer;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return;
@@ -426,9 +426,9 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     ucs_free(iface->tm.cmd_wq.ops);
     uct_rc_mlx5_tag_cleanup(iface);
 
-    kh_foreach_key(&iface->tm.tag_addrs, tag_addr, {
-        ucs_debug("destroying iface %p, with %p offloaded to the HW",
-                  iface, tag_addr);
+    kh_foreach_key(&iface->tm.tag_addrs, recv_buffer, {
+        ucs_debug("destroying iface %p, with recv buffer %p offloaded to the HW",
+                  iface, recv_buffer);
     });
     kh_destroy_inplace(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs);
 

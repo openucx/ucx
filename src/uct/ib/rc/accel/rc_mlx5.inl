@@ -1022,7 +1022,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     UCT_RC_MLX5_CHECK_TAG(iface);
 
     kh_put(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs, iov->buffer, &ret);
-    if (ucs_unlikely(!ret)) {
+    if (ucs_unlikely(ret == 0)) {
         /* Do not post the same buffer more than once (even with different tags)
          * to avoid memory corruption. */
         return UCS_ERR_ALREADY_EXISTS;
