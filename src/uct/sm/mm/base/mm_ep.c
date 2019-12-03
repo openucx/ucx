@@ -4,6 +4,11 @@
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
+
 
 #include "mm_ep.h"
 
@@ -193,6 +198,8 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ucs_writeback_cache(ucs_unaligned_ptr(&ep->fifo_ctl->head),
+                        ucs_unaligned_ptr(&ep->fifo_ctl->head + 1));
     return UCS_OK;
 }
 

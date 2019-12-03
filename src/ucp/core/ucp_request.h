@@ -5,6 +5,11 @@
  *
  * See file LICENSE for terms.
  */
+ 
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 
 #ifndef UCP_REQUEST_H_
@@ -33,6 +38,7 @@
 enum {
     UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
+	UCP_REQUEST_FLAG_COLLECTIVE           = UCS_BIT(2),
     UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
     UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
     UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
@@ -277,6 +283,12 @@ struct ucp_request {
             int                   comp_count; /* Countdown to request completion */
             ucp_ep_ext_gen_t      *next_ep; /* Next endpoint to flush */
         } flush_worker;
+
+        struct {
+            ucp_worker_h                      worker;   /* Worker to use for collective */
+            void                             *op;       /* collective operation object */
+            ucp_request_collective_callback_t comp_cb;  /* completion call-back */
+        } collective;
     };
 };
 

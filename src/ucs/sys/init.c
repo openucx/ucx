@@ -3,6 +3,10 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #include <ucs/sys/compiler.h>
 #include <ucs/arch/cpu.h>
@@ -38,6 +42,7 @@ static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
         { "sse42", UCS_CPU_FLAG_SSE42 },
         { "avx", UCS_CPU_FLAG_AVX },
         { "avx2", UCS_CPU_FLAG_AVX2 },
+        { "clwb", UCS_CPU_FLAG_CLWB },
         { NULL, UCS_CPU_FLAG_UNKNOWN },
     };
 

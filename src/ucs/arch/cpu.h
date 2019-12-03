@@ -4,6 +4,10 @@
 *
 * See file LICENSE for terms.
 */
+/*
+*2019.12.30-Modification for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #ifndef UCS_ARCH_CPU_H
 #define UCS_ARCH_CPU_H
@@ -45,7 +49,8 @@ typedef enum ucs_cpu_flag {
     UCS_CPU_FLAG_SSE41      = UCS_BIT(7),
     UCS_CPU_FLAG_SSE42      = UCS_BIT(8),
     UCS_CPU_FLAG_AVX        = UCS_BIT(9),
-    UCS_CPU_FLAG_AVX2       = UCS_BIT(10)
+    UCS_CPU_FLAG_AVX2       = UCS_BIT(10),
+    UCS_CPU_FLAG_CLWB       = UCS_BIT(11)
 } ucs_cpu_flag_t;
 
 
@@ -82,6 +87,7 @@ typedef struct ucs_cpu_builtin_memcpy {
 #define UCS_SYS_PARAGRAPH_SIZE     16
 #define UCS_SYS_PCI_MAX_PAYLOAD    512
 
+static inline void ucs_clear_cache(void *start, void *end);
 
 #if defined(__x86_64__)
 #  include "x86_64/cpu.h"

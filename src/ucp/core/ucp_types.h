@@ -3,6 +3,11 @@
  *
  * See file LICENSE for terms.
  */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
+
 
 #ifndef UCP_TYPES_H_
 #define UCP_TYPES_H_
@@ -91,7 +96,8 @@ enum {
     UCP_AM_ID_SINGLE_REPLY      =  25, /* For user defined AM when a reply
                                           is needed */
     UCP_AM_ID_MULTI_REPLY       =  26,
-    UCP_AM_ID_LAST
+    UCP_AM_ID_LAST,
+    UCP_AM_ID_MAX               =  32  /* Total IDs available for pre-registration */
 };
 
 
@@ -129,6 +135,11 @@ typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
  * Internal callback for UCP requests
  */
 typedef void (*ucp_request_callback_t)(ucp_request_t *req);
+
+/**
+ * Internal callback for UCP requests for collective operations
+ */
+typedef void (*ucp_request_collective_callback_t)(void *request, ucs_status_t status);
 
 
 #endif

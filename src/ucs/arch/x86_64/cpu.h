@@ -4,6 +4,10 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #ifndef UCS_ASM_X86_64_H_
 #define UCS_ASM_X86_64_H_
@@ -107,6 +111,15 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
     }
 #endif
     return memcpy(dst, src, len);
+}
+
+static inline void ucs_arch_writeback_cache(void *start, void *end)
+{
+#if __CLWB__
+    for(; start < end; start++) {
+        _mm_clwb(start);
+    }
+#endif
 }
 
 END_C_DECLS

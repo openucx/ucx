@@ -4,6 +4,10 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 
 #ifndef UCS_PPC64_CPU_H_
@@ -88,6 +92,11 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
     return UCS_ERR_UNSUPPORTED;
+}
+
+static inline void ucs_arch_writeback_cache(void *start, void *end)
+{
+    ucs_memory_cpu_fence();
 }
 
 END_C_DECLS

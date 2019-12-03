@@ -4,6 +4,10 @@
 #
 # See file LICENSE for terms.
 #
+#2019.12.30-Changed process for coll_ucx
+#            Huawei Technologies Co., Ltd. 2019.
+#
+
 
 bin_PROGRAMS = ucx_info
 
@@ -32,6 +36,9 @@ ucx_info_SOURCES  = \
 	tl_info.c \
 	type_info.c \
 	ucx_info.c
+if HAVE_UCG
+ucx_info_SOURCES += group_info.c
+endif
 
 noinst_HEADERS = \
 	ucx_info.h
@@ -42,5 +49,6 @@ nodist_ucx_info_SOURCES = \
 ucx_info_LDADD    = \
     $(abs_top_builddir)/src/uct/libuct.la \
     $(abs_top_builddir)/src/ucp/libucp.la \
+    $(abs_top_builddir)/src/ucg/libucg.la \
     $(abs_top_builddir)/src/ucs/libucs.la \
     $(abs_top_builddir)/src/ucm/libucm.la

@@ -6,6 +6,10 @@
 # Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
+#2019.12.30-Changed process for coll_ucx
+#            Huawei Technologies Co., Ltd. 2019.
+#
+
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)
@@ -213,6 +217,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/gdrcopy.m4])
      m4_include([src/ucm/configure.m4])
      m4_include([src/uct/configure.m4])
+     m4_include([src/ucg/configure.m4])
      m4_include([src/tools/perf/configure.m4])
      m4_include([test/gtest/configure.m4])
 
@@ -310,10 +315,24 @@ AS_IF([test "x$with_docs_only" = xyes],
                    [],
                    [enable_examples=no])
     AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
+
+     #
+     # Disable UCG - Group collective operations component
+     #
+     AC_ARG_ENABLE([ucg],
+                   [AS_HELP_STRING([--disable-ucg],
+                                   [Disable the group collective operations component, default: NO])],
+         [AM_CONDITIONAL([HAVE_UCG], [false])
+          AC_DEFINE(   [ENABLE_UCG], [0])],
+         [AS_IF([test "x$enable_ucg" != "xno"],
+                [AM_CONDITIONAL([HAVE_UCG], [true])
+                 AC_DEFINE(   [ENABLE_UCG], [1],
+                     [Enable Groups and collective operations support (UCG)])])])
+
     ]) # Docs only
 
 #
-# Print which transports are built
+# Print which transports and group topologies are built
 #
 build_modules="${uct_modules}"
 build_modules="${build_modules}${uct_ib_modules}"
@@ -321,6 +340,9 @@ build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
 build_modules="${build_modules}${uct_rocm_modules}"
+AS_IF([test "x$enable_ucg" != "xno"],
+      [AC_MSG_NOTICE([Supported group modules: $ucg_modules])
+       build_modules+="${ucg_modules}"],[])
 AC_SUBST([build_modules], [${build_modules}])
 
 #
@@ -347,6 +369,8 @@ AC_CONFIG_FILES([
                  src/ucp/Makefile
                  src/ucp/api/ucp_version.h
                  src/ucp/core/ucp_version.c
+                 src/ucg/api/ucg_version.h
+                 src/ucg/base/ucg_version.c
                  src/tools/info/Makefile
                  src/tools/profile/Makefile
                  test/apps/Makefile
@@ -386,5 +410,7 @@ AC_MSG_NOTICE([      ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([       UCM modules:   <$(echo $ucm_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([      Perf modules:   <$(echo $ucx_perftest_modules|tr ':' ' ') >])
+AS_IF([test "x$enable_ucg" != "xno"],
+      [AC_MSG_NOTICE([      UCG modules:    <$(echo $ucg_modules|tr ':' ' ') >])], [])
 ])
 AC_MSG_NOTICE([=========================================================])

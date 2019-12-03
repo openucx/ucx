@@ -3,6 +3,10 @@
 *
 * See file LICENSE for terms.
 */
+/**
++*2019.12.30-Changed process for coll_ucx
++*        Huawei Technologies Co., Ltd. 2019.
++*/
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"

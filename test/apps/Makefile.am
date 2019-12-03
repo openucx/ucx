@@ -5,6 +5,10 @@
 #
 # See file LICENSE for terms.
 #
+#2019.12.30-Changed process for coll_ucx
+#            Huawei Technologies Co., Ltd. 2019.
+#
+
 
 if HAVE_CXX11
 SUBDIRS = sockaddr
@@ -33,7 +37,7 @@ test_ucp_dlopen_LDADD    = -ldl
 test_link_map_SOURCES  = test_link_map.c
 test_link_map_CPPFLAGS = $(BASE_CPPFLAGS)
 test_link_map_CFLAGS   = $(BASE_CFLAGS)
-test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
+test_link_map_LDADD    = -ldl $(top_builddir)/src/ucs/libucs.la $(top_builddir)/src/ucp/libucp.la
 
 test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
 test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \

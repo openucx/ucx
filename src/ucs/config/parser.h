@@ -3,6 +3,10 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #ifndef UCS_CONFIG_PARSER_H
 #define UCS_CONFIG_PARSER_H
@@ -10,6 +14,7 @@
 #include "types.h"
 
 #include <ucs/datastruct/list.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
 

@@ -3,6 +3,10 @@
 *
 * See file LICENSE for terms.
 */
+/*
+*2019.12.30-Modification for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #if defined(__x86_64__)
 
@@ -419,6 +423,9 @@ int ucs_arch_get_cpu_flag()
             ucs_x86_cpuid(X86_CPUID_GET_EXTD_VALUE, &_eax, &_ebx, &_ecx, &_edx);
             if ((result & UCS_CPU_FLAG_AVX) && (_ebx & (1 << 5))) {
                 result |= UCS_CPU_FLAG_AVX2;
+            }
+            if (_ebx & (1 << 24)) {
+                result |= UCS_CPU_FLAG_CLWB;
             }
         }
         cpu_flag = result;

@@ -3,6 +3,10 @@
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #ifndef UCS_MEMTRACK_H_
 #define UCS_MEMTRACK_H_
@@ -140,6 +144,12 @@ char *ucs_strndup(const char *src, size_t n, const char *name);
 #define ucs_strndup(_src, _n, ...)                 strndup(_src, _n)
 
 #endif /* ENABLE_MEMTRACK */
+
+#define UCS_ALLOC_CHECK(size, name) ({ \
+    void* ptr = ucs_malloc(size, name); \
+    if (ptr == 0) return UCS_ERR_NO_MEMORY; \
+    ptr; \
+})
 
 END_C_DECLS
 

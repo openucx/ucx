@@ -4,6 +4,11 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
+
 
 #ifndef UCS_AARCH64_CPU_H_
 #define UCS_AARCH64_CPU_H_
@@ -206,6 +211,28 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
     return UCS_ERR_UNSUPPORTED;
+}
+
+static inline void ucs_arch_clear_cache(void *start, void *end)
+{
+    uintptr_t ptr;
+    unsigned ctr_el0,dcache;
+    asm volatile ("mrs\t%0, ctr_el0":"=r" (ctr_el0));
+    dcache = sizeof(int) << ((ctr_el0 >> 16) & 0xf);
+
+    for (ptr = ucs_align_down((uintptr_t)start, dcache); ptr < (uintptr_t)end; ptr += dcache) {
+        asm volatile ("dc cvac, %0" :: "r" (ptr) : "memory");
+    }
+    asm volatile ("dsb ish" ::: "memory");
+}
+
+static inline void ucs_arch_writeback_cache(void *start, void *end)
+{
+#if __CLWB__
+    for(; start < end; start++) {
+        _mm_clwb(start);
+    }
+#endif
 }
 
 END_C_DECLS

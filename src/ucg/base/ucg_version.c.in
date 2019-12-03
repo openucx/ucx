@@ -1,0 +1,19 @@
+/*
+* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019.  ALL RIGHTS RESERVED.
+* See file LICENSE for terms.
+*/
+
+
+void ucg_get_version(unsigned *major_version, unsigned *minor_version,
+                     unsigned *release_number)
+{
+    *major_version  = @MAJOR_VERSION@;
+    *minor_version  = @MINOR_VERSION@;
+    *release_number = @PATCH_VERSION@;
+}
+
+const char *ucg_get_version_string()
+{
+	return "@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@";
+}

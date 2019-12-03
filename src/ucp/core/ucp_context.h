@@ -5,6 +5,11 @@
  *
  * See file LICENSE for terms.
  */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
+
 
 
 #ifndef UCP_CONTEXT_H_
@@ -152,6 +157,14 @@ typedef struct ucp_tl_md {
 } ucp_tl_md_t;
 
 
+typedef struct ucp_context_extenstion {
+    ucs_list_link_t list;
+    size_t worker_offset;
+    ucp_extension_init_f init;
+    ucp_extension_cleanup_f cleanup;
+} ucp_context_extension_t;
+
+
 /**
  * UCP context
  */
@@ -176,6 +189,10 @@ typedef struct ucp_context {
 
     /* Mask of memory type communication resources */
     uint64_t                      mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
+
+    ucs_list_link_t               extensions;     /* List of registered extensions */
+    size_t                        extension_size; /* Total size of worker extension */
+    unsigned                      last_am_id;     /* Last used AM ID */
 
     struct {
 
@@ -370,6 +387,8 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 {
     return (max_num_eps >= (size_t)context->config.est_num_eps);
 }
+
+size_t ucp_worker_base_size(ucp_context_h context, unsigned *config_max);
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)

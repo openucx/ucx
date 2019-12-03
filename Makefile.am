@@ -6,6 +6,10 @@
 #
 # See file LICENSE for terms.
 #
+#2019.12.30-Changed process for coll_ucx
+#            Huawei Technologies Co., Ltd. 2019.
+#
+
 
 # Build . before src so that our all-local and clean-local hooks kicks in at
 # the right time.
@@ -30,7 +34,13 @@ SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp \
+	src/ucp
+
+if HAVE_UCG
+SUBDIRS += src/ucg
+endif
+
+SUBDIRS += \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \

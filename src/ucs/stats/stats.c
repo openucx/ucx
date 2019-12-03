@@ -3,6 +3,10 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -193,6 +197,35 @@ static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
     ucs_assert_always(r != 0); /* initialize a previously empty hash entry */
     kh_val(&ucs_stats_context.cls, iter) = dup;
     return dup;
+}
+
+static ucs_stats_class_t* ucs_stats_node_clone_cls(ucs_stats_class_t *orig_cls)
+{
+    size_t i, size = sizeof(ucs_stats_class_t) + strlen(orig_cls->name) + 1;
+    for (i = 0; i < orig_cls->num_counters; i++) {
+        size += sizeof(char*) + strlen(orig_cls->counter_names[i]) + 1;
+    }
+
+    ucs_stats_class_t *clone_cls = ucs_malloc(size, "stats_cls");
+    if (!clone_cls) {
+        return NULL;
+    }
+
+    char *write_iterator = (char*)clone_cls + sizeof(ucs_stats_class_t) +
+            (orig_cls->num_counters * sizeof(char*));
+    clone_cls->name = write_iterator;
+    strcpy(write_iterator, orig_cls->name);
+    write_iterator += strlen(orig_cls->name) + 1;
+
+    for (i = 0; i < orig_cls->num_counters; i++) {
+        clone_cls->counter_names[i] = write_iterator;
+        strcpy(write_iterator, orig_cls->counter_names[i]);
+        write_iterator += strlen(orig_cls->counter_names[i]) + 1;
+    }
+
+    clone_cls->num_counters = orig_cls->num_counters;
+    ucs_assert(write_iterator - size == (char*)clone_cls);
+    return clone_cls;
 }
 
 static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
@@ -692,6 +725,7 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
 
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
         ucs_stats_clean_node_recurs(child);
+        ucs_free(child->cls);
         ucs_stats_node_remove(child, 0);
     }
 }

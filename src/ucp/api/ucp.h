@@ -5,6 +5,11 @@
 * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
+
 
 #ifndef UCP_H_
 #define UCP_H_
@@ -147,8 +152,10 @@ enum ucp_feature {
     UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt
                                                  notification support */
     UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_AM           = UCS_BIT(6)   /**< Request Active Message
+    UCP_FEATURE_AM           = UCS_BIT(6),  /**< Request Active Message
                                                  support */
+    UCP_FEATURE_GROUPS       = UCS_BIT(7)   /**< Request Collective
+                                                 operations support */
 };
 
 
@@ -1238,6 +1245,12 @@ static inline ucs_status_t ucp_init(const ucp_params_t *params,
     return ucp_init_version(UCP_API_MAJOR, UCP_API_MINOR, params, config,
                             context_p);
 }
+
+typedef ucs_status_t (*ucp_extension_init_f)   (void *ctx);
+typedef void         (*ucp_extension_cleanup_f)(void *ctx);
+ucs_status_t ucp_extend(ucp_context_h context, size_t extension_ctx_length,
+        ucp_extension_init_f init, ucp_extension_cleanup_f cleanup,
+        size_t *extension_ctx_offset_in_worker, unsigned *am_id);
 
 
 /**

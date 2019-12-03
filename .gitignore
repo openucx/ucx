@@ -70,6 +70,8 @@ doc/doxygen/header.tex
 test-driver
 src/ucp/api/ucp_version.h
 src/ucp/core/ucp_version.c
+src/ucg/api/ucg_version.h
+src/ucg/base/ucg_version.c
 test/mpi/run_mpi.sh
 *.tap
 valgrind.xml

@@ -4,6 +4,11 @@
 *
 * See file LICENSE for terms.
 */
+/**
+*2019.12.30-Changed process for coll_ucx
+*        Huawei Technologies Co., Ltd. 2019.
+*/
+
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -145,7 +150,11 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
 
     ucs_trace_func("iface=%p is_proxy=%d", wiface->iface, is_proxy);
 
-    for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+    for (am_id = 0; am_id < UCP_AM_ID_MAX; ++am_id) {
+        if (!ucp_am_handlers[am_id].cb) {
+            continue;
+        }
+
         if (!(wiface->attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
@@ -212,7 +221,11 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
             continue;
         }
-        for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+        for (am_id = 0; am_id < UCP_AM_ID_MAX; ++am_id) {
+            if (!ucp_am_handlers[am_id].cb) {
+                continue;
+            }
+
             if (context->config.features & ucp_am_handlers[am_id].features) {
                 (void)uct_iface_set_am_handler(wiface->iface,
                                                am_id, ucp_stub_am_handler,
@@ -229,7 +242,7 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     ucp_worker_h worker = arg;
     ucp_am_tracer_t tracer;
 
-    if (id < UCP_AM_ID_LAST) {
+    if (id < UCP_AM_ID_MAX) {
         tracer = ucp_am_handlers[id].tracer;
         if (tracer != NULL) {
             tracer(worker, type, id, data, length, buffer, max);
@@ -1568,6 +1581,36 @@ out:
     return status;
 }
 
+static ucs_status_t ucp_worker_init_extensions(ucp_worker_h worker)
+{
+    ucs_status_t status;
+    ucp_context_extension_t *ext, *del_ext;
+    ucs_list_for_each(ext, &worker->context->extensions, list) {
+        status = ext->init((char*)worker + ext->worker_offset);
+        if (status != UCS_OK) {
+            goto err_extensions;
+        }
+    }
+    return UCS_OK;
+
+err_extensions:
+    ucs_list_for_each(del_ext, &worker->context->extensions, list) {
+        if (del_ext == ext) {
+            break;
+        }
+        ext->cleanup((char*)worker + ext->worker_offset);
+    }
+    return UCS_ERR_IO_ERROR;
+}
+
+static void ucp_worker_clean_extensions(ucp_worker_h worker)
+{
+    ucp_context_extension_t *ext;
+    ucs_list_for_each(ext, &worker->context->extensions, list) {
+        ext->cleanup((char*)worker + ext->worker_offset);
+    }
+}
+
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have it's own configuration (to save memory footprint). Same config can be used
  * by different eps.
@@ -1617,6 +1660,13 @@ static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+size_t ucp_worker_base_size(ucp_context_h context, unsigned *config_max)
+{
+    *config_max = ucs_min(UINT8_MAX,
+            (context->num_tls + 1) * (context->num_tls + 1) * context->num_tls);
+    return sizeof(ucp_worker_t) + sizeof(ucp_ep_config_t) * (*config_max);
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -1627,12 +1677,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_worker_h worker;
     ucs_status_t status;
 
-    config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
-                           UINT8_MAX);
+    size_t base_size = ucp_worker_base_size(context, &config_count);
 
-    worker = ucs_calloc(1, sizeof(*worker) +
-                           sizeof(*worker->ep_config) * config_count,
-                        "ucp worker");
+    worker = ucs_calloc(1, base_size + context->extension_size, "ucp worker");
     if (worker == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -1785,6 +1832,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
 
+    /* Init extensions registered for this context */
+    status = ucp_worker_init_extensions(worker);
+    if (status != UCS_OK) {
+        goto err_close_mpools;
+    }
+
     /* At this point all UCT memory domains and interfaces are already created
      * so warn about unused environment variables.
      */
@@ -1793,6 +1846,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     *worker_p = worker;
     return UCS_OK;
 
+err_close_mpools:
+    ucs_mpool_cleanup(&worker->am_mp, 1);
+    ucs_mpool_cleanup(&worker->reg_mp, 1);
+    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
 err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
@@ -1851,6 +1908,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);
+    ucp_worker_clean_extensions(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
