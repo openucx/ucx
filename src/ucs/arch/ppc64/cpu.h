@@ -85,6 +85,12 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
     return memcpy(dst, src, len);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
+{
+    memcpy(dst, src, len);
+}
+
 static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
     return UCS_ERR_UNSUPPORTED;
