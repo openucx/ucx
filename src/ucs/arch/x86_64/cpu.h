@@ -52,6 +52,7 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 ucs_cpu_vendor_t ucs_arch_get_cpu_vendor();
 void ucs_cpu_init();
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes);
+void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len);
 
 static inline int ucs_arch_x86_rdtsc_enabled()
 {
@@ -107,6 +108,12 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
     }
 #endif
     return memcpy(dst, src, len);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
+{
+    ucs_x86_memcpy_sse_movntdqa(dst, src, len);
 }
 
 END_C_DECLS
