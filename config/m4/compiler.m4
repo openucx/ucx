@@ -374,6 +374,30 @@ AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
 
 
 #
+# Check for GNU++11 support
+#
+AC_MSG_CHECKING([gnu++11 support])
+AC_LANG_PUSH([C++])
+SAVE_CXXFLAGS="$CXXFLAGS"
+CXX11FLAGS="-std=gnu++11"
+CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
+					#include <string>
+					int main() {
+						std::to_string(1);
+						return 0;
+					} ]])],
+                  [AC_MSG_RESULT([yes])
+                   AC_SUBST([CXX11FLAGS])
+                   gnuxx11_happy=yes],
+                  [AC_MSG_RESULT([no])
+                   gnuxx11_happy=no])
+CXXFLAGS="$SAVE_CXXFLAGS"
+AC_LANG_POP
+AM_CONDITIONAL([HAVE_GNUXX11], [test "x$gnuxx11_happy" != xno])
+
+
+#
 # PGI specific switches
 #
 ADD_COMPILER_FLAG_IF_SUPPORTED([--display_error_number],

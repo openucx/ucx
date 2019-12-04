@@ -23,6 +23,26 @@ AC_DEFUN([ROCM_PARSE_FLAGS],
         [AC_MSG_WARN([$arg of $1 not parsed])])
 done])
 
+# ROCM_BUILD_FLAGS(ARG, VAR_LIBS, VAR_LDFLAGS, VAR_CPPFLAGS)
+# ----------------------------------------------------------
+# Parse value of ARG into appropriate LIBS, LDFLAGS, and
+# CPPFLAGS variables.
+AC_DEFUN([ROCM_BUILD_FLAGS],
+    $4="-I$1/include/hsa -I$1/include"
+    $3="-L$1/hsa/lib -L$1/lib"
+    $2="-lhsa-runtime64"
+)
+
+# HIP_BUILD_FLAGS(ARG, VAR_LIBS, VAR_LDFLAGS, VAR_CPPFLAGS)
+# ----------------------------------------------------------
+# Parse value of ARG into appropriate LIBS, LDFLAGS, and
+# CPPFLAGS variables.
+AC_DEFUN([HIP_BUILD_FLAGS],
+    $4="-D__HIP_PLATFORM_HCC__ -I$1/include/hip -I$1/include"
+    $3="-L$1/hip/lib -L$1/lib"
+    $2="-lhip_hcc"
+)
+
 #
 # Check for ROCm  support
 #
@@ -41,22 +61,21 @@ AS_IF([test "x$with_rocm" != "xno"],
     [AS_CASE(["x$with_rocm"],
         [x|xguess|xyes],
             [AC_MSG_NOTICE([ROCm path was not specified. Guessing ...])
-             with_rocm=/opt/rocm
-             ROCM_CPPFLAGS="-I$with_rocm/include/hsa -I$with_rocm/include"
-             ROCM_LDFLAGS="-L$with_rocm/hsa/lib -L$with_rocm/lib"
-             ROCM_LIBS="-lhsa-runtime64"],
+             with_rocm="/opt/rocm"
+             ROCM_BUILD_FLAGS([$with_rocm],
+                          [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS])],
         [x/*],
             [AC_MSG_NOTICE([ROCm path given as $with_rocm ...])
-             ROCM_CPPFLAGS="-I$with_rocm/include/hsa -I$with_rocm/include"
-             ROCM_LDFLAGS="-L$with_rocm/hsa/lib -L$with_rocm/lib"
-             ROCM_LIBS="-lhsa-runtime64"],
+             ROCM_BUILD_FLAGS([$with_rocm],
+                          [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS])],
         [AC_MSG_NOTICE([ROCm flags given ...])
-         ROCM_PARSE_FLAGS([with_rocm],
+         ROCM_PARSE_FLAGS([$with_rocm],
                           [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS])])
 
     SAVE_CPPFLAGS="$CPPFLAGS"
     SAVE_LDFLAGS="$LDFLAGS"
     SAVE_LIBS="$LIBS"
+
     CPPFLAGS="$ROCM_CPPFLAGS $CPPFLAGS"
     LDFLAGS="$ROCM_LDFLAGS $LDFLAGS"
     LIBS="$ROCM_LIBS $LIBS"
@@ -67,27 +86,49 @@ AS_IF([test "x$with_rocm" != "xno"],
     AS_IF([test "x$rocm_happy" = xyes],
           [AC_CHECK_HEADERS([hsa_ext_amd.h], [rocm_happy=yes], [rocm_happy=no])])
     AS_IF([test "x$rocm_happy" = xyes],
-          [AC_SEARCH_LIBS([hsa_init], [hsa-runtime64])
-           AS_CASE(["x$ac_cv_search_hsa_init"],
-               [xnone*], [],
-               [xno], [rocm_happy=no],
-               [x-l*], [ROCM_LIBS="$ac_cv_search_hsa_init $ROCM_LIBS"])])
-
-    CPPFLAGS="$SAVE_CPPFLAGS"
-    LDFLAGS="$SAVE_LDFLAGS"
-    LIBS="$SAVE_LIBS"
+          [AC_CHECK_LIB([hsa-runtime64], [hsa_init], [rocm_happy=yes], [rocm_happy=no])])
 
     AS_IF([test "x$rocm_happy" = "xyes"],
           [AC_SUBST([ROCM_CPPFLAGS])
            AC_SUBST([ROCM_LDFLAGS])
            AC_SUBST([ROCM_LIBS])],
           [AC_MSG_WARN([ROCm not found])])
+
+    CPPFLAGS="$SAVE_CPPFLAGS"
+    LDFLAGS="$SAVE_LDFLAGS"
+    LIBS="$SAVE_LIBS"
+
+    HIP_BUILD_FLAGS([$with_rocm], [HIP_LIBS], [HIP_LDFLAGS], [HIP_CPPFLAGS])
+
+    CPPFLAGS="$HIP_CPPFLAGS $CPPFLAGS"
+    LDFLAGS="$HIP_LDFLAGS $LDFLAGS"
+    LIBS="$HIP_LIBS $LIBS"
+
+    hip_happy=yes
+    AS_IF([test "x$hip_happy" = xyes],
+          [AC_CHECK_HEADERS([hip_runtime.h], [hip_happy=yes], [hip_happy=no])])
+    AS_IF([test "x$hip_happy" = xyes],
+          [AC_CHECK_LIB([hip_hcc], [hipFree], [hip_happy=yes], [hip_happy=no])])
+    AS_IF([test "x$hip_happy" = xyes], [HIP_CXXFLAGS="--std=gnu++11"], [])
+
+    CPPFLAGS="$SAVE_CPPFLAGS"
+    LDFLAGS="$SAVE_LDFLAGS"
+    LIBS="$SAVE_LIBS"
+
+    AS_IF([test "x$hip_happy" = "xyes"],
+          [AC_SUBST([HIP_CPPFLAGS])
+           AC_SUBST([HIP_CXXFLAGS])
+           AC_SUBST([HIP_LDFLAGS])
+           AC_SUBST([HIP_LIBS])],
+          [AC_MSG_WARN([HIP Runtime not found])])
+
     ],
     [AC_MSG_WARN([ROCm was explicitly disabled])]
 )
 
 rocm_checked=yes
 AM_CONDITIONAL([HAVE_ROCM], [test "x$rocm_happy" != xno])
+AM_CONDITIONAL([HAVE_HIP], [test "x$hip_happy" != xno])
 
 ])
 
