@@ -141,36 +141,136 @@ typedef struct uct_ib_md_config {
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
 } uct_ib_md_config_t;
 
-
+/**
+ * Memory domain constructor.
+ *
+ * @param [in]  ibv_device    IB device.
+ *
+ * @param [in]  md_config     Memory domain configuration parameters.
+ *
+ * @param [out] md_p          Handle to memory domain.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_open_func_t)(struct ibv_device *ibv_device,
                                               const uct_ib_md_config_t *md_config,
-                                              struct uct_ib_md **p_md);
+                                              struct uct_ib_md **md_p);
 
+/**
+ * Memory domain destructor.
+ *
+ * @param [in]  md      Memory domain.
+ */
 typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
 
+/**
+ * Memory domain method to register memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  address Memory area start address.
+ *
+ * @param [in]  length  Memory area length.
+ *
+ * @param [in]  access  IB verbs registration access flags
+ *
+ * @param [in]  memh    Memory region handle.
+ *                      Method should initialize lkey & rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
                                                  void *address, size_t length,
                                                  uint64_t access,
                                                  uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to deregister memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered with
+ *                      uct_ib_md_reg_key_func_t.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_dereg_key_func_t)(struct uct_ib_md *md,
                                                    uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to register memory area optimized for atomic ops.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered for regular ops.
+ *                      Method should initialize atomic_rkey
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_reg_atomic_key_func_t)(struct uct_ib_md *md,
                                                         uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to release resources registered for atomic ops.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered with
+ *                      uct_ib_md_reg_atomic_key_func_t.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_dereg_atomic_key_func_t)(struct uct_ib_md *md,
                                                           uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to register memory area using multiple threads.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  address Memory area start address.
+ *
+ * @param [in]  length  Memory area length.
+ *
+ * @param [in]  access  IB verbs registration access flags
+ *
+ * @param [in]  memh    Memory region handle.
+ *                      Method should initialize lkey & rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_reg_multithreaded_func_t)(uct_ib_md_t *md,
                                                            void *address,
                                                            size_t length,
                                                            uint64_t access,
                                                            uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to deregister memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered with
+ *                      uct_ib_md_reg_key_func_t.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
                                                              uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to prefetch physical memory for virtual memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle.
+ *
+ * @param [in]  address Memory area start address.
+ *
+ * @param [in]  length  Memory area length.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
                                                       uct_ib_mem_t *memh,
                                                       void *addr, size_t length);
