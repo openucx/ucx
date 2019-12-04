@@ -279,6 +279,7 @@
             <javahClassName>org.openucx.jucx.ucp.UcpEndpoint</javahClassName>
             <javahClassName>org.openucx.jucx.ucp.UcpListener</javahClassName>
             <javahClassName>org.openucx.jucx.ucp.UcpMemory</javahClassName>
+            <javahClassName>org.openucx.jucx.ucp.UcpRequest</javahClassName>
             <javahClassName>org.openucx.jucx.ucp.UcpRemoteKey</javahClassName>
             <javahClassName>org.openucx.jucx.ucp.UcpWorker</javahClassName>
             <javahClassName>org.openucx.jucx.ucs.UcsConstants</javahClassName>

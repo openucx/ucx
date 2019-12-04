@@ -6,7 +6,7 @@
 package org.openucx.jucx.examples;
 
 import org.openucx.jucx.UcxCallback;
-import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.ucp.UcpRequest;
 import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.*;
 
@@ -30,7 +30,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         resources.push(listener);
 
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
-        UcxRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
+        UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
 
         System.out.println("Waiting for connections on " + sockaddr + " ...");
 
@@ -66,13 +66,13 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
             (int)Math.min(Integer.MAX_VALUE, totalSize));
         for (int i = 0; i < numIterations; i++) {
             final int iterNum = i;
-            UcxRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey,
+            UcpRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey,
                 recvMemory.getAddress(), totalSize,
                 new UcxCallback() {
                     long startTime = System.nanoTime();
 
                     @Override
-                    public void onSuccess(UcxRequest request) {
+                    public void onSuccess(UcpRequest request) {
                         long finishTime = System.nanoTime();
                         data.clear();
                         assert data.hashCode() == remoteHashCode;
@@ -90,7 +90,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         ByteBuffer sendBuffer = ByteBuffer.allocateDirect(100);
         sendBuffer.asCharBuffer().put("DONE");
-        UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
+        UcpRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
 
         while (!sent.isCompleted()) {
             worker.progress();

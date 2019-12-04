@@ -17,7 +17,7 @@ extern "C" {
 
 static JavaVM *jvm_global;
 static jclass jucx_request_cls;
-static jfieldID completed_field;
+static jfieldID native_id_field;
 static jmethodID on_success;
 static jmethodID jucx_request_constructor;
 
@@ -29,13 +29,13 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
        return JNI_ERR;
     }
 
-    jclass jucx_request_cls_local = env->FindClass("org/openucx/jucx/UcxRequest");
+    jclass jucx_request_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRequest");
     jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
     jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
-    completed_field = env->GetFieldID(jucx_request_cls, "completed", "Z");
+    native_id_field = env->GetFieldID(jucx_request_cls, "nativeId", "Ljava/lang/Long;");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
-                                  "(Lorg/openucx/jucx/UcxRequest;)V");
-    jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
+                                  "(Lorg/openucx/jucx/ucp/UcpRequest;)V");
+    jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "(J)V");
     return JNI_VERSION_1_1;
 }
 
@@ -155,7 +155,7 @@ JNIEnv* get_jni_env()
 
 static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request)
 {
-    env->SetBooleanField(jucx_request, completed_field, true);
+    env->SetObjectField(jucx_request, native_id_field, NULL);
 }
 
 static inline void call_on_success(jobject callback, jobject request)
@@ -219,7 +219,8 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
-    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor);
+    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor,
+                                          (native_ptr)request);
 
     if (UCS_PTR_IS_PTR(request)) {
         struct jucx_context *ctx = (struct jucx_context *)request;
