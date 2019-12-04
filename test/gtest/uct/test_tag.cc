@@ -333,6 +333,7 @@ public:
         // Message should be reported as unexpected and filled with
         // recv seed (unchanged), as the incoming tag does not match the expected
         check_rx_completion(r_ctx, false, RECV_SEED);
+        ASSERT_UCS_OK(tag_cancel(receiver(), r_ctx, 1));
         flush();
     }
 
@@ -650,16 +651,16 @@ UCS_TEST_SKIP_COND_P(test_tag, tag_limit,
                      !check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY))
 {
     const size_t length = 32;
-    mapped_buffer recvbuf(length, RECV_SEED, receiver());
     ucs::ptr_vector<recv_ctx> rctxs;
-    recv_ctx *rctx_p;
+    ucs::ptr_vector<mapped_buffer> rbufs;
     ucs_status_t status;
 
     do {
-        // Can use the same recv buffer, as no sends will be issued.
-        rctx_p = (new recv_ctx());
-        init_recv_ctx(*rctx_p, &recvbuf, 1);
+        recv_ctx *rctx_p     = new recv_ctx();
+        mapped_buffer *buf_p = new mapped_buffer(length, RECV_SEED, receiver());
+        init_recv_ctx(*rctx_p, buf_p, 1);
         rctxs.push_back(rctx_p);
+        rbufs.push_back(buf_p);
         status = tag_post(receiver(), *rctx_p);
         // Make sure send resources are acknowledged, as we
         // awaiting for tag space exhaustion.
@@ -678,6 +679,51 @@ UCS_TEST_SKIP_COND_P(test_tag, tag_limit,
         status = tag_post(receiver(), rctxs.at(0));
     } while ((ucs_get_time() < deadline) && (status == UCS_ERR_EXCEEDS_LIMIT));
     ASSERT_UCS_OK(status);
+
+    // remove posted tags from HW
+    for (ucs::ptr_vector<recv_ctx>::const_iterator iter = rctxs.begin();
+         iter != rctxs.end() - 1; ++iter) {
+        ASSERT_UCS_OK(tag_cancel(receiver(), **iter, 1));
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_tag, tag_post_same,
+                     !check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY))
+{
+    const size_t length = 128;
+    mapped_buffer recvbuf(length, RECV_SEED, receiver());
+    recv_ctx r_ctx;
+    init_recv_ctx(r_ctx, &recvbuf, 1);
+
+    ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
+
+    // Can't post the same buffer until it is completed/cancelled
+    ucs_status_t status = tag_post(receiver(), r_ctx);
+    EXPECT_EQ(status, UCS_ERR_ALREADY_EXISTS);
+
+    // Cancel with force, should be able to re-post immediately
+    ASSERT_UCS_OK(tag_cancel(receiver(), r_ctx, 1));
+    ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
+
+    // Cancel without force, should be able to re-post when receive completion
+    ASSERT_UCS_OK(tag_cancel(receiver(), r_ctx, 0));
+    status = tag_post(receiver(), r_ctx);
+    EXPECT_EQ(status, UCS_ERR_ALREADY_EXISTS); // no completion yet
+
+    wait_for_flag(&r_ctx.comp); // cancel completed, should be able to post
+    ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
+
+    // Now send something to trigger rx completion
+    init_recv_ctx(r_ctx, &recvbuf, 1); // reinit rx to clear completed states
+    mapped_buffer sendbuf(length, SEND_SEED, sender());
+    send_ctx s_ctx;
+    init_send_ctx(s_ctx, &sendbuf, 1, reinterpret_cast<uint64_t>(&r_ctx));
+    ASSERT_UCS_OK(tag_eager_bcopy(sender(), s_ctx));
+
+    wait_for_flag(&r_ctx.comp); // message consumed, should be able to post
+    ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
+
+    ASSERT_UCS_OK(tag_cancel(receiver(), r_ctx, 1));
 }
 
 UCS_TEST_SKIP_COND_P(test_tag, sw_rndv_expected,

@@ -414,6 +414,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     uct_rc_mlx5_mp_hash_key_t key_gid;
     uint64_t key_lid;
+    void *recv_buffer;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return;
@@ -424,6 +425,12 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     ucs_free(iface->tm.list);
     ucs_free(iface->tm.cmd_wq.ops);
     uct_rc_mlx5_tag_cleanup(iface);
+
+    kh_foreach_key(&iface->tm.tag_addrs, recv_buffer, {
+        ucs_debug("destroying iface %p, with recv buffer %p offloaded to the HW",
+                  iface, recv_buffer);
+    });
+    kh_destroy_inplace(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs);
 
     if (!UCT_RC_MLX5_MP_ENABLED(iface)) {
         return;
@@ -440,6 +447,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
                   iface, key_gid.guid, key_gid.qp_num);
     });
     kh_destroy_inplace(uct_rc_mlx5_mp_hash_gid, &iface->tm.mp.hash_gid);
+
     ucs_mpool_cleanup(&iface->tm.mp.tx_mp, 1);
 }
 
@@ -734,6 +742,10 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
      * ptr_array is used as operation ID and is passed in "app_context"
      * of TM header. */
     ucs_ptr_array_init(&iface->tm.rndv_comps, 0, "rm_rndv_completions");
+
+    /* Set of addresses posted to the HW. Used to avoid posting of the same
+     * address more than once. */
+    kh_init_inplace(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs);
 }
 
 ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
