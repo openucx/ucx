@@ -494,7 +494,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 
 err_close:
     close(fd);
-    if (!posix_config->use_proc_link) {
+    if (!(seg->seg_id & UCT_POSIX_SEG_FLAG_PROCFS)) {
         uct_posix_unlink(md, seg->seg_id);
     }
 err_free_seg:
