@@ -31,7 +31,7 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_FEATURE_WAKEUP);
     JUCX_DEFINE_LONG_CONSTANT(UCP_FEATURE_STREAM);
 
-    // UCP worker parameters.
+    // UCP worker parameters
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_THREAD_MODE);
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_CPU_MASK);
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_EVENTS);
@@ -47,12 +47,12 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_WAKEUP_RX);
     JUCX_DEFINE_LONG_CONSTANT(UCP_WAKEUP_EDGE);
 
-    // UCP listener parameters field mask.
+    // UCP listener parameters field mask
     JUCX_DEFINE_LONG_CONSTANT(UCP_LISTENER_PARAM_FIELD_SOCK_ADDR);
     JUCX_DEFINE_LONG_CONSTANT(UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER);
     JUCX_DEFINE_LONG_CONSTANT(UCP_LISTENER_PARAM_FIELD_CONN_HANDLER);
 
-    // UCP endpoint parameters field mask.
+    // UCP endpoint parameters field mask
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAM_FIELD_REMOTE_ADDRESS);
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE);
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAM_FIELD_ERR_HANDLER);
@@ -61,10 +61,14 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAM_FIELD_FLAGS);
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAM_FIELD_CONN_REQUEST);
 
-    // UCP error handling mode.
+    // UCP error handling mode
     JUCX_DEFINE_INT_CONSTANT(UCP_ERR_HANDLING_MODE_PEER);
 
-    // The enumeration list describes the endpoint's parameters flags.
+    // UCP endpoint close non blocking mode.
+    JUCX_DEFINE_INT_CONSTANT(UCP_EP_CLOSE_MODE_FORCE);
+    JUCX_DEFINE_INT_CONSTANT(UCP_EP_CLOSE_MODE_FLUSH);
+
+    // The enumeration list describes the endpoint's parameters flags
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAMS_FLAGS_CLIENT_SERVER);
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAMS_FLAGS_NO_LOOPBACK);
 

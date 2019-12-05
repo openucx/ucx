@@ -64,6 +64,15 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Blocking progress for request until it's not completed.
+     */
+    public void progressRequest(UcpRequest request) {
+        while (!request.isCompleted()) {
+            progress();
+        }
+    }
+
+    /**
      * This routine flushes all outstanding AMO and RMA communications on the
      * this worker. All the AMO and RMA operations issued on this  worker prior to this call
      * are completed both at the origin and at the target when this call returns.

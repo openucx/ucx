@@ -154,11 +154,12 @@ public class UcpWorkerTest {
             }
         });
 
-        while (request.isCompleted()) {
+        while (!request.isCompleted()) {
             worker1.progress();
             worker2.progress();
         }
 
+        assertTrue(request.isCompleted());
         ep.close();
         worker1.close();
         worker2.close();

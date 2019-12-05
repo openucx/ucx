@@ -27,6 +27,7 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
         String serverHost = argsMap.get("s");
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
+            .setPeerErrorHadnlingMode()
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
 
         UcpMemory memory = context.memoryMap(allocationParams);
@@ -60,17 +61,10 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
                 }
             });
 
-        while (!recvRequest.isCompleted()) {
-            worker.progress();
-        }
+        worker.progressRequest(recvRequest);
 
-        // Close endpoint and wait for remote side
-        // TODO remove when UCP close protocol is implemented
-        endpoint.close();
-        try {
-            Thread.sleep(3000);
-        } catch (java.lang.InterruptedException e) {
-        }
+        UcpRequest close = endpoint.closeNonBlockingFlush();
+        worker.progressRequest(close);
 
         memory.deregister();
         closeResources();
