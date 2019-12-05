@@ -221,6 +221,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "cases (non-contig buffer, or sender wildcard).",
    ucs_offsetof(ucp_config_t, ctx.tm_force_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"TM_SW_RNDV", "n",
+   "Use software rendezvous protocol with tag offload. If enabled, tag offload\n"
+   "mode will be used for messages sent with eager protocol only.",
+   ucs_offsetof(ucp_config_t, ctx.tm_sw_rndv), UCS_CONFIG_TYPE_BOOL},
+
   {"NUM_EPS", "auto",
    "An optimization hint of how many endpoints would be created on this context.\n"
    "Does not affect semantics, but only transport selection criteria and the\n"

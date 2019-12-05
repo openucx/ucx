@@ -642,6 +642,17 @@ UCS_TEST_P(test_ucp_tag_offload_stats, sw_rndv, "RNDV_THRESH=1000")
     test_send_recv(size, true, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
 }
 
+UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
+                                                      "RNDV_THRESH=1000")
+{
+    size_t size = 2048; // Size bigger than RNDV thresh
+
+    // Offload is not activated, so the first message should arrive unexpectedly
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV);
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
+}
+
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_stats)
 
 #endif

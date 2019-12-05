@@ -530,7 +530,8 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
 
     ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
                (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
-               !UCP_DT_IS_CONTIG(req->send.datatype));
+               !UCP_DT_IS_CONTIG(req->send.datatype) ||
+               ep->worker->context->config.ext.tm_sw_rndv);
 
     /* send RTS to allow fallback to SW RNDV on receiver */
     rndv_hdr_len = sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_config(ep)->tag.rndv.rkey_size;
@@ -606,28 +607,37 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 {
+    ucp_ep_t      *ep      = sreq->send.ep;
+    ucp_context_t *context = ep->worker->context;
     ucs_status_t status;
-    ucp_ep_t *ep = sreq->send.ep;
 
     /* should be set by ucp_tag_send_req_init() */
     ucs_assert(sreq->send.lane == ucp_ep_get_tag_lane(ep));
 
-    if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
+        !context->config.ext.tm_sw_rndv       &&
+        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
+        ucp_request_send_state_reset(sreq, ucp_tag_offload_rndv_zcopy_completion,
+                                     UCP_REQUEST_SEND_PROTO_RNDV_GET);
+
+        /* Register send buffer with tag lane, because tag offload rndv
+         * protocol will perform RDMA_READ on it (if it arrives expectedly) */
         status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
         if (status != UCS_OK) {
             return status;
         }
-    }
-
-    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
-        ucp_request_send_state_reset(sreq, ucp_tag_offload_rndv_zcopy_completion,
-                                     UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
         /* contiguous buffer, offload can be used, but only a single lane */
         sreq->send.uct.func = ucp_tag_offload_rndv_zcopy;
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_RNDV_GET);
+
+        /* RNDV will be performed by the SW - can register with SW RNDV lanes
+         * to get multirail benefits */
+        status = ucp_tag_rndv_reg_send_buffer(sreq);
+        if (status != UCS_OK) {
+            return status;
+        }
 
         /* offload enabled but can't be used */
         sreq->send.uct.func = ucp_tag_offload_sw_rndv;
