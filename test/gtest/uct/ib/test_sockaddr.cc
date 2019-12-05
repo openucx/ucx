@@ -44,10 +44,35 @@ public:
                           server_recv_req(0), delay_conn_reply(false) {
     }
 
-    void init() {
-        if (!strcmp(GetParam()->md_name.c_str(), "tcp")) {
-            UCS_TEST_SKIP_R("tcp does not support sockaddr over iface");
+    void check_md_usability() {
+        uct_md_attr_t md_attr;
+        uct_md_config_t *md_config;
+        ucs_status_t status;
+        uct_md_h md;
+
+        status = uct_md_config_read(GetParam()->component, NULL, NULL, &md_config);
+        EXPECT_TRUE(status == UCS_OK);
+
+        status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
+                             md_config, &md);
+        EXPECT_TRUE(status == UCS_OK);
+        uct_config_release(md_config);
+
+        status = uct_md_query(md, &md_attr);
+        ASSERT_UCS_OK(status);
+
+        uct_md_close(md);
+
+        if (!(md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            UCS_TEST_SKIP_R(GetParam()->md_name.c_str() +
+                            std::string(" does not support client-server "
+                                        "connection establishment via sockaddr "
+                                        "without a cm"));
         }
+    }
+
+    void init() {
+        check_md_usability();
 
         uct_iface_params_t server_params, client_params;
         uint16_t port;
@@ -380,7 +405,15 @@ public:
 protected:
 
     void skip_tcp_sockcm() {
-        if (!strcmp(GetParam()->md_name.c_str(), "tcp")) {
+        uct_component_attr_t cmpt_attr = {0};
+        ucs_status_t status;
+
+        cmpt_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
+        /* coverity[var_deref_model] */
+        status = uct_component_query(GetParam()->component, &cmpt_attr);
+        ASSERT_UCS_OK(status);
+
+        if (!strcmp(cmpt_attr.name, "tcp")) {
             UCS_TEST_SKIP_R("tcp cm is not fully implemented");
         }
     }

@@ -12,7 +12,7 @@
  */
 typedef struct uct_tcp_sockcm {
     uct_cm_t        super;
-    int             priv_data_len;
+    size_t          priv_data_len;
 } uct_tcp_sockcm_t;
 
 

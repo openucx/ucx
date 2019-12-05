@@ -170,28 +170,10 @@ uct_test::uct_test() {
 }
 
 uct_test::~uct_test() {
-    ucs_status_t status;
-    uct_md_attr_t md_attr;
-    uct_md_config_t *md_config;
-    uct_md_h md;
-
-    status = uct_md_config_read(GetParam()->component, NULL, NULL, &md_config);
-    EXPECT_TRUE(status == UCS_OK);
-
-    status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
-                         md_config, &md);
-    EXPECT_TRUE(status == UCS_OK);
-    uct_config_release(md_config);
-
-    status = uct_md_query(md, &md_attr);
-
-    if (((md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) ||
-        (strcmp(GetParam()->tl_name.c_str(), "sockaddr"))) {
+    if (m_iface_config != NULL) {
         uct_config_release(m_iface_config);
     }
-
     uct_config_release(m_md_config);
-    uct_md_close(md);
 }
 
 void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
@@ -257,7 +239,7 @@ bool uct_test::is_interface_usable(struct ifaddrs *ifa, const char *name) {
 
     /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
     if (!strcmp(name, "rdmacm") && !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
-        return false;;
+        return false;
     }
 
     return true;
@@ -270,7 +252,7 @@ void uct_test::set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
     struct ifaddrs *ifaddr, *ifa;
     ucs_sock_addr_t sock_addr;
 
-    EXPECT_TRUE(getifaddrs(&ifaddr) != -1);
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << "errno: " << errno;
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
@@ -296,7 +278,7 @@ void uct_test::set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_
 
     struct ifaddrs *ifaddr, *ifa;
 
-    EXPECT_TRUE(getifaddrs(&ifaddr) != -1);
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << "errno: " << errno;
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (!uct_test::is_interface_usable(ifa, cmpt_name)) {
