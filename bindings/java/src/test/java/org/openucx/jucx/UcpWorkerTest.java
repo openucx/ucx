@@ -145,20 +145,21 @@ public class UcpWorkerTest {
                 blockSize, memory.getAddress() + i * blockSize, rkey);
         }
 
-        UcxRequest request = worker1.flushNonBlocking(new UcxCallback() {
+        UcpRequest request = worker1.flushNonBlocking(new UcxCallback() {
             @Override
-            public void onSuccess(UcxRequest request) {
+            public void onSuccess(UcpRequest request) {
                 rkey.close();
                 memory.deregister();
                 assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
             }
         });
 
-        while (request.isCompleted()) {
+        while (!request.isCompleted()) {
             worker1.progress();
             worker2.progress();
         }
 
+        assertTrue(request.isCompleted());
         ep.close();
         worker1.close();
         worker2.close();

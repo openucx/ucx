@@ -76,8 +76,9 @@ UCS_STATIC_CLEANUP {
     ucs_status_t status;
 
     kh_foreach_value(&uct_xpmem_remote_mem_hash, rmem, {
-        ucs_warn("remote segment id %llx apid %llx is not released, refcount %d",
-                 rmem->xsegid, rmem->apid, rmem->refcount);
+        ucs_warn("remote segment id %lx apid %lx is not released, refcount %d",
+                 (unsigned long)rmem->xsegid, (unsigned long)rmem->apid,
+                 rmem->refcount);
     })
     kh_destroy_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
 
@@ -140,15 +141,16 @@ uct_xpmem_rcache_mem_reg(void *context, ucs_rcache_t *rcache, void *arg,
     VALGRIND_MAKE_MEM_DEFINED(&xpmem_region->attach_address,
                               sizeof(xpmem_region->attach_address));
     if (xpmem_region->attach_address == MAP_FAILED) {
-        ucs_error("failed to attach xpmem apid 0x%llx offset 0x%lx length %zu: %m",
-                  addr.apid, addr.offset, length);
+        ucs_error("failed to attach xpmem apid 0x%lx offset 0x%lx length %zu: %m",
+                  (unsigned long)addr.apid, addr.offset, length);
         return UCS_ERR_IO_ERROR;
     }
 
     xpmem_region->rmem = rmem;
 
-    ucs_trace("xpmem attached apid 0x%llx offset 0x%lx length %zu at %p",
-              addr.apid, addr.offset, length, xpmem_region->attach_address);
+    ucs_trace("xpmem attached apid 0x%lx offset 0x%lx length %zu at %p",
+              (unsigned long)addr.apid, addr.offset, length,
+              xpmem_region->attach_address);
 
     VALGRIND_MAKE_MEM_DEFINED(xpmem_region->attach_address, length);
     return UCS_OK;
@@ -180,8 +182,8 @@ static void uct_xpmem_rcache_dump_region(void *context, ucs_rcache_t *rcache,
     uct_xpmem_remote_region_t *xpmem_region =
                     ucs_derived_of(region, uct_xpmem_remote_region_t);
 
-    snprintf(buf, max, "apid 0x%llx attach_addr %p rmem %p", rmem->apid,
-             xpmem_region->attach_address, rmem);
+    snprintf(buf, max, "apid 0x%lx attach_addr %p rmem %p",
+             (unsigned long)rmem->apid, xpmem_region->attach_address, rmem);
 }
 
 static ucs_rcache_ops_t uct_xpmem_rcache_ops = {
@@ -208,8 +210,8 @@ uct_xpmem_make_global_xsegid(xpmem_segid_t *xsegid_p)
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_debug("xpmem registered global segment id 0x%llx",
-              uct_xpmem_global_xsegid);
+    ucs_debug("xpmem registered global segment id 0x%lx",
+              (unsigned long)uct_xpmem_global_xsegid);
     *xsegid_p = uct_xpmem_global_xsegid;
     return UCS_OK;
 }
@@ -248,7 +250,7 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     rmem->apid = xpmem_get(xsegid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
     VALGRIND_MAKE_MEM_DEFINED(&rmem->apid, sizeof(rmem->apid));
     if (rmem->apid < 0) {
-        ucs_error("xpmem_get(segid=0x%llx) failed: %m", xsegid);
+        ucs_error("xpmem_get(segid=0x%lx) failed: %m", (unsigned long)xsegid);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free;
     }
@@ -275,8 +277,8 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     ucs_assert_always (khiter != kh_end(&uct_xpmem_remote_mem_hash));
     kh_val(&uct_xpmem_remote_mem_hash, khiter) = rmem;
 
-    ucs_trace("xpmem attached to remote segment id 0x%llx apid 0x%llx rcache %p",
-              xsegid, rmem->apid, rmem->rcache);
+    ucs_trace("xpmem attached to remote segment id 0x%lx apid 0x%lx rcache %p",
+              (unsigned long)xsegid, (unsigned long)rmem->apid, rmem->rcache);
 
     *rmem_p = rmem;
     return UCS_OK;
@@ -298,7 +300,8 @@ uct_xpmem_rmem_del(uct_xpmem_remote_mem_t *rmem)
 
     ucs_assert(rmem->refcount == 0);
 
-    ucs_trace("detaching remote segment rmem %p apid %llx", rmem, rmem->apid);
+    ucs_trace("detaching remote segment rmem %p apid %lx", rmem,
+              (unsigned long)rmem->apid);
 
     khiter = kh_get(xpmem_remote_mem, &uct_xpmem_remote_mem_hash, rmem->xsegid);
     ucs_assert(kh_val(&uct_xpmem_remote_mem_hash, khiter) == rmem);
@@ -308,7 +311,8 @@ uct_xpmem_rmem_del(uct_xpmem_remote_mem_t *rmem)
 
     ret = xpmem_release(rmem->apid);
     if (ret) {
-        ucs_warn("xpmem_release(apid=0x%llx) failed: %m", rmem->apid);
+        ucs_warn("xpmem_release(apid=0x%lx) failed: %m",
+                 (unsigned long)rmem->apid);
     }
 
     ucs_free(rmem);

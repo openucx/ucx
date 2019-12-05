@@ -64,11 +64,20 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Blocking progress for request until it's not completed.
+     */
+    public void progressRequest(UcpRequest request) {
+        while (!request.isCompleted()) {
+            progress();
+        }
+    }
+
+    /**
      * This routine flushes all outstanding AMO and RMA communications on the
      * this worker. All the AMO and RMA operations issued on this  worker prior to this call
      * are completed both at the origin and at the target when this call returns.
      */
-    public UcxRequest flushNonBlocking(UcxCallback callback) {
+    public UcpRequest flushNonBlocking(UcxCallback callback) {
         return flushNonBlockingNative(getNativeId(), callback);
     }
 
@@ -114,7 +123,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * @param tagMask - bit mask that indicates the bits that are used for the matching of the
      * incoming tag against the expected tag.
      */
-    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, long tag, long tagMask,
+    public UcpRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, long tag, long tagMask,
                                             UcxCallback callback) {
         if (!recvBuffer.isDirect()) {
             throw new UcxException("Recv buffer must be direct.");
@@ -123,7 +132,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
             recvBuffer.remaining(), tag, tagMask, callback);
     }
 
-    public UcxRequest recvTaggedNonBlocking(long localAddress, long size, long tag, long tagMask,
+    public UcpRequest recvTaggedNonBlocking(long localAddress, long size, long tag, long tagMask,
                                             UcxCallback callback) {
         return recvTaggedNonBlockingNative(getNativeId(), localAddress, size,
             tag, tagMask, callback);
@@ -134,10 +143,22 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * {@link UcpWorker#recvTaggedNonBlocking(ByteBuffer, long, long, UcxCallback)}
      * with default tag=0 and tagMask=0.
      */
-    public UcxRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, UcxCallback callback) {
+    public UcpRequest recvTaggedNonBlocking(ByteBuffer recvBuffer, UcxCallback callback) {
         return recvTaggedNonBlocking(recvBuffer, 0, 0, callback);
     }
 
+    /**
+     * This routine tries to cancels an outstanding communication request. After
+     * calling this routine, the request will be in completed or canceled (but
+     * not both) state regardless of the status of the target endpoint associated
+     * with the communication request. If the request is completed successfully,
+     * the "send" or the "receive" completion callbacks (based on the type of the request) will be
+     * called with the status argument of the callback set to UCS_OK, and in a
+     * case it is canceled the status argument is set to UCS_ERR_CANCELED.
+     */
+    public void cancelRequest(UcpRequest request) {
+        cancelRequestNative(getNativeId(), request.getNativeId());
+    }
 
     /**
      * This routine returns the address of the worker object. This address can be
@@ -167,13 +188,15 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
     private static native int progressWorkerNative(long workerId);
 
-    private static native UcxRequest flushNonBlockingNative(long workerId, UcxCallback callback);
+    private static native UcpRequest flushNonBlockingNative(long workerId, UcxCallback callback);
 
     private static native void waitWorkerNative(long workerId);
 
     private static native void signalWorkerNative(long workerId);
 
-    private static native UcxRequest recvTaggedNonBlockingNative(long workerId, long localAddress,
+    private static native UcpRequest recvTaggedNonBlockingNative(long workerId, long localAddress,
                                                                  long size, long tag, long tagMask,
                                                                  UcxCallback callback);
+
+    private static native void cancelRequestNative(long workerId, long requestId);
 }

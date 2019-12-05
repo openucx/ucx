@@ -4,7 +4,7 @@ Conventions and Notations
 This section describes the conventions and notations in the UCX specification.
 
 \section Blocking Blocking Behavior
-The blocking UCX routines return only when an UCX operation is complete.
+The blocking UCX routines return only when a UCX operation is complete.
 After the return, the resources used in the UCX routine are available
 for reuse.
 
@@ -17,6 +17,6 @@ necessarily available for reuse.
 UCX routines do not guarantee fairness. However, the routines
 enable UCX consumers to write efficient and fair programs.
 
-\section Interaction with Signal Handler Functions
+\section Interaction Interaction with Signal Handler Functions
 If UCX routines are invoked from a signal handler function,
 the behavior of the program is undefined.

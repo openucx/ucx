@@ -1016,9 +1016,18 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_tag_entry_t  *tag_entry;
     uint16_t                 next_idx;
     unsigned                 ctrl_size;
+    int                      ret;
 
     UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_mlx5_iface_common_tag_recv");
     UCT_RC_MLX5_CHECK_TAG(iface);
+
+    kh_put(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs, iov->buffer, &ret);
+    if (ucs_unlikely(ret == 0)) {
+        /* Do not post the same buffer more than once (even with different tags)
+         * to avoid memory corruption. */
+        return UCS_ERR_ALREADY_EXISTS;
+    }
+    ucs_assert(ret > 0);
 
     ctrl_size           = sizeof(struct mlx5_wqe_ctrl_seg) +
                           sizeof(uct_rc_mlx5_wqe_tm_seg_t);
@@ -1053,6 +1062,17 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_tag_del_from_hash(uct_rc_mlx5_iface_common_t *iface,
+                                    void *buffer)
+{
+    khiter_t iter;
+
+    iter = kh_get(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs, buffer);
+    ucs_assert(iter != kh_end(&iface->tm.tag_addrs));
+    kh_del(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs, iter);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
                                          uct_tag_context_t *ctx, int force)
@@ -1067,6 +1087,7 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
     if (ucs_likely(force)) {
         flags = UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT;
         uct_rc_mlx5_release_tag_entry(iface, tag_entry);
+        uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
     } else {
         flags = UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ | UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT;
         uct_rc_mlx5_add_cmd_wq_op(iface, tag_entry);
@@ -1097,6 +1118,7 @@ uct_rc_mlx5_iface_handle_tm_list_op(uct_rc_mlx5_iface_common_t *iface, int opcod
     if (opcode == UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE) {
         ctx  = op->tag->ctx;
         priv = uct_rc_mlx5_ctx_priv(ctx);
+        uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
         ctx->completed_cb(ctx, priv->tag, 0, priv->length, UCS_ERR_CANCELED);
     }
 }
@@ -1142,6 +1164,7 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
     byte_len  = ntohl(cqe->byte_cnt);
 
     uct_rc_mlx5_release_tag_entry(iface, tag_entry);
+    uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
 
     if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         ucs_assert(byte_len <= priv->length);

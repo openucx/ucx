@@ -104,10 +104,10 @@ public class UcpEndpointTest {
         UcpRemoteKey rkey2 = endpoint.unpackRemoteKey(memory2.getRemoteKeyBuffer());
 
         AtomicInteger numCompletedRequests = new AtomicInteger(0);
-        HashMap<UcxRequest, ByteBuffer> requestToData = new HashMap<>();
+        HashMap<UcpRequest, ByteBuffer> requestToData = new HashMap<>();
         UcxCallback callback = new UcxCallback() {
             @Override
-            public void onSuccess(UcxRequest request) {
+            public void onSuccess(UcpRequest request) {
                 // Here thread safety is guaranteed since worker progress is called after
                 // request added to map. In multithreaded environment could be an issue that
                 // callback is called, but request wasn't added yet to map.
@@ -124,8 +124,8 @@ public class UcpEndpointTest {
         };
 
         // Submit 2 get requests
-        UcxRequest request1 = endpoint.getNonBlocking(memory1.getAddress(), rkey1, dst1, callback);
-        UcxRequest request2 = endpoint.getNonBlocking(memory2.getAddress(), rkey2, dst2, callback);
+        UcpRequest request1 = endpoint.getNonBlocking(memory1.getAddress(), rkey1, dst1, callback);
+        UcpRequest request2 = endpoint.getNonBlocking(memory2.getAddress(), rkey2, dst2, callback);
 
         // Map each request to corresponding data buffer.
         requestToData.put(request1, dst1);
@@ -167,18 +167,16 @@ public class UcpEndpointTest {
             worker1.newEndpoint(new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
 
         UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
-        UcxRequest request = ep.putNonBlocking(src, memory.getAddress(), rkey,
+        UcpRequest request = ep.putNonBlocking(src, memory.getAddress(), rkey,
             new UcxCallback() {
                 @Override
-                public void onSuccess(UcxRequest request) {
+                public void onSuccess(UcpRequest request) {
                     rkey.close();
                     memory.deregister();
                 }
             });
 
-        while (!request.isCompleted()) {
-            worker1.progress();
-        }
+        worker1.progressRequest(request);
 
         assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
 
@@ -214,7 +212,7 @@ public class UcpEndpointTest {
         AtomicInteger receivedMessages = new AtomicInteger(0);
         worker2.recvTaggedNonBlocking(dst1, 0, 0, new UcxCallback() {
             @Override
-            public void onSuccess(UcxRequest request) {
+            public void onSuccess(UcpRequest request) {
                 assertEquals(dst1, src1);
                 receivedMessages.incrementAndGet();
             }
@@ -222,7 +220,7 @@ public class UcpEndpointTest {
 
         worker2.recvTaggedNonBlocking(dst2, 1, -1, new UcxCallback() {
             @Override
-            public void onSuccess(UcxRequest request) {
+            public void onSuccess(UcpRequest request) {
                 assertEquals(dst2, src2);
                 receivedMessages.incrementAndGet();
             }
@@ -261,6 +259,7 @@ public class UcpEndpointTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
+            .setPeerErrorHadnlingMode()
             .setUcpAddress(worker2.getAddress()));
 
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
@@ -291,7 +290,7 @@ public class UcpEndpointTest {
 
         worker2.recvTaggedNonBlocking(dst1, 0, -1, new UcxCallback() {
             @Override
-            public void onSuccess(UcxRequest request) {
+            public void onSuccess(UcpRequest request) {
                 success.set(true);
             }
         });
@@ -306,6 +305,16 @@ public class UcpEndpointTest {
         }
 
         assertTrue(success.get());
+        UcpRequest close = ep.closeNonBlockingForce();
+
+        while (!close.isCompleted()) {
+            try {
+                // Wait until progress thread will close endpoint.
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
 
         progressThread.interrupt();
         try {
@@ -314,7 +323,6 @@ public class UcpEndpointTest {
 
         }
 
-        ep.close();
         worker2.close();
         worker1.close();
         context2.close();
@@ -337,7 +345,7 @@ public class UcpEndpointTest {
         ByteBuffer bigSendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
 
         bigRecvBuffer.position(offset).limit(offset + msgSize);
-        UcxRequest recv = worker1.recvTaggedNonBlocking(bigRecvBuffer, 0,
+        UcpRequest recv = worker1.recvTaggedNonBlocking(bigRecvBuffer, 0,
             0, null);
 
         UcpEndpoint ep = worker2.newEndpoint(new UcpEndpointParams()
@@ -352,7 +360,7 @@ public class UcpEndpointTest {
         bigSendBuffer.put(msg);
         bigSendBuffer.position(offset);
 
-        UcxRequest sent = ep.sendTaggedNonBlocking(bigSendBuffer, 0, null);
+        UcpRequest sent = ep.sendTaggedNonBlocking(bigSendBuffer, 0, null);
 
         while (!sent.isCompleted() || !recv.isCompleted()) {
             worker1.progress();
@@ -399,9 +407,9 @@ public class UcpEndpointTest {
                 UcxUtils.getAddress(dst) + i * blockSize, blockSize);
         }
 
-        UcxRequest request = ep.flushNonBlocking(new UcxCallback() {
+        UcpRequest request = ep.flushNonBlocking(new UcxCallback() {
             @Override
-            public void onSuccess(UcxRequest request) {
+            public void onSuccess(UcpRequest request) {
                 rkey.close();
                 memory.deregister();
                 assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
