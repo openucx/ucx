@@ -142,32 +142,37 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 
 uct_test::uct_test() {
     ucs_status_t status;
-    uct_md_attr_t pd_attr;
-    uct_md_h pd;
+    uct_md_attr_t md_attr;
+    uct_md_h md;
 
     status = uct_md_config_read(GetParam()->component, NULL, NULL, &m_md_config);
     ASSERT_UCS_OK(status);
 
     status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
-                         m_md_config, &pd);
+                         m_md_config, &md);
     ASSERT_UCS_OK(status);
 
-    status = uct_md_query(pd, &pd_attr);
+    status = uct_md_query(md, &md_attr);
     ASSERT_UCS_OK(status);
 
-    if (pd_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-        status = uct_md_iface_config_read(pd, NULL, NULL, NULL, &m_iface_config);
+    if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+        status = uct_md_iface_config_read(md, NULL, NULL, NULL, &m_iface_config);
+    } else if (!strcmp(GetParam()->tl_name.c_str(), "sockaddr")) {
+        m_iface_config = NULL;
+        return;
     } else {
-        status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
+        status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,
                                           NULL, &m_iface_config);
     }
 
     ASSERT_UCS_OK(status);
-    uct_md_close(pd);
+    uct_md_close(md);
 }
 
 uct_test::~uct_test() {
-    uct_config_release(m_iface_config);
+    if (m_iface_config != NULL) {
+        uct_config_release(m_iface_config);
+    }
     uct_config_release(m_md_config);
 }
 
@@ -178,7 +183,7 @@ void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
     rsc->connect_sock_addr.set_sock_addr(*connect_addr, size);
 }
 
-void uct_test::set_interface_rscs(const md_resource& md_rsc,
+void uct_test::set_interface_rscs(uct_component_h cmpt, const char *name,
                                   ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
@@ -187,9 +192,8 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
     /* Create two resources on the same interface. the first one will have the
      * ip of the interface and the second one will have INADDR_ANY */
     for (i = 0; i < 2; i++) {
-        resource rsc(md_rsc.cmpt, std::string(md_rsc.rsc_desc.md_name),
-                     local_cpus, "sockaddr", std::string(ifa->ifa_name),
-                     UCT_DEVICE_TYPE_NET);
+        resource rsc(cmpt, std::string(name), local_cpus, "sockaddr",
+                     std::string(ifa->ifa_name), UCT_DEVICE_TYPE_NET);
 
         if (i == 0) {
             /* first rsc */
@@ -227,36 +231,94 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
     }
 }
 
-void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
-                                      ucs_cpu_set_t local_cpus,
-                                      std::vector<resource>& all_resources) {
+bool uct_test::is_interface_usable(struct ifaddrs *ifa, const char *name) {
+    if (!(ucs_netif_flags_is_active(ifa->ifa_flags)) ||
+        !(ucs::is_inet_addr(ifa->ifa_addr))) {
+        return false;
+    }
+
+    /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
+    if (!strcmp(name, "rdmacm") && !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
+        return false;
+    }
+
+    return true;
+}
+
+void uct_test::set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
+                                         ucs_cpu_set_t local_cpus,
+                                         std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
     ucs_sock_addr_t sock_addr;
 
-    EXPECT_TRUE(getifaddrs(&ifaddr) != -1);
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << "errno: " << errno;
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
-            continue;
-        }
-
-        /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
-        if (!strcmp(md_rsc.rsc_desc.md_name, "rdmacm") &&
-            !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
+        if (!uct_test::is_interface_usable(ifa, md_rsc.rsc_desc.md_name)) {
             continue;
         }
 
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
             uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE))
         {
-            uct_test::set_interface_rscs(md_rsc, local_cpus, ifa, all_resources);
+            uct_test::set_interface_rscs(md_rsc.cmpt, md_rsc.rsc_desc.md_name,
+                                         local_cpus, ifa, all_resources);
         }
     }
 
     freeifaddrs(ifaddr);
+}
+
+void uct_test::set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_name,
+                                         ucs_cpu_set_t local_cpus,
+                                         std::vector<resource>& all_resources) {
+
+    struct ifaddrs *ifaddr, *ifa;
+
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << "errno: " << errno;
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!uct_test::is_interface_usable(ifa, cmpt_name)) {
+            continue;
+        }
+
+        uct_test::set_interface_rscs(cmpt, cmpt_name, local_cpus, ifa, all_resources);
+    }
+
+    freeifaddrs(ifaddr);
+}
+
+void uct_test::set_cm_resources(std::vector<resource>& all_resources)
+{
+    uct_component_h *uct_components;
+    unsigned num_components;
+    ucs_status_t status;
+
+    status = uct_query_components(&uct_components, &num_components);
+    ASSERT_UCS_OK(status);
+
+    for (unsigned cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
+        uct_component_attr_t component_attr = {0};
+
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                                    UCT_COMPONENT_ATTR_FIELD_FLAGS;
+        /* coverity[var_deref_model] */
+        status = uct_component_query(uct_components[cmpt_index], &component_attr);
+        ASSERT_UCS_OK(status);
+
+        if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
+            ucs_cpu_set_t local_cpus;
+            CPU_ZERO(&local_cpus);
+            uct_test::set_cm_sockaddr_resources(uct_components[cmpt_index],
+                                                component_attr.name, local_cpus,
+                                                all_resources);
+        }
+    }
+
+    uct_release_component_list(uct_components);
 }
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name)
@@ -323,9 +385,10 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
                 all_resources.push_back(tcp_fastest_rsc);
             }
 
-            if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                uct_test::set_sockaddr_resources(*iter, md, md_attr.local_cpus,
-                                                 all_resources);
+            if ((md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) &&
+                !(iter->cmpt_attr.flags & UCT_COMPONENT_FLAG_CM)) {
+                uct_test::set_md_sockaddr_resources(*iter, md, md_attr.local_cpus,
+                                                    all_resources);
             }
 
             uct_release_tl_resource_list(tl_resources);
@@ -334,6 +397,8 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
         uct_worker_destroy(worker);
         ucs_async_context_destroy(async);
+
+        set_cm_resources(all_resources);
     }
 
     return filter_resources(all_resources, tl_name);

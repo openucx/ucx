@@ -344,10 +344,15 @@ protected:
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
-    static void set_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
-                                       ucs_cpu_set_t local_cpus,
-                                       std::vector<resource>& all_resources);
-    static void set_interface_rscs(const md_resource& md_rsc,
+    static void set_cm_resources(std::vector<resource>& all_resources);
+    static bool is_interface_usable(struct ifaddrs *ifa, const char *name);
+    static void set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
+                                          ucs_cpu_set_t local_cpus,
+                                          std::vector<resource>& all_resources);
+    static void set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_name,
+                                          ucs_cpu_set_t local_cpus,
+                                          std::vector<resource>& all_resources);
+    static void set_interface_rscs(uct_component_h comt, const char * name,
                                    ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,

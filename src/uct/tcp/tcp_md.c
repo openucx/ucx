@@ -8,7 +8,7 @@
 #endif
 
 #include "tcp.h"
-
+#include "tcp_sockcm.h"
 #include <uct/base/uct_md.h>
 
 
@@ -74,13 +74,13 @@ static ucs_status_t uct_tcp_md_rkey_unpack(uct_component_t *component,
 uct_component_t uct_tcp_component = {
     .query_md_resources = uct_md_query_single_md_resource,
     .md_open            = uct_tcp_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
+    .cm_open            = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_t),
     .rkey_unpack        = uct_tcp_md_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_TCP_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
-    .flags              = 0
+    .flags              = UCT_COMPONENT_FLAG_CM
 };
 UCT_COMPONENT_REGISTER(&uct_tcp_component)

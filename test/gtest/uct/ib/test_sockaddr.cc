@@ -44,7 +44,36 @@ public:
                           server_recv_req(0), delay_conn_reply(false) {
     }
 
+    void check_md_usability() {
+        uct_md_attr_t md_attr;
+        uct_md_config_t *md_config;
+        ucs_status_t status;
+        uct_md_h md;
+
+        status = uct_md_config_read(GetParam()->component, NULL, NULL, &md_config);
+        EXPECT_TRUE(status == UCS_OK);
+
+        status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
+                             md_config, &md);
+        EXPECT_TRUE(status == UCS_OK);
+        uct_config_release(md_config);
+
+        status = uct_md_query(md, &md_attr);
+        ASSERT_UCS_OK(status);
+
+        uct_md_close(md);
+
+        if (!(md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            UCS_TEST_SKIP_R(GetParam()->md_name.c_str() +
+                            std::string(" does not support client-server "
+                                        "connection establishment via sockaddr "
+                                        "without a cm"));
+        }
+    }
+
     void init() {
+        check_md_usability();
+
         uct_iface_params_t server_params, client_params;
         uint16_t port;
 
@@ -375,7 +404,23 @@ public:
 
 protected:
 
+    void skip_tcp_sockcm() {
+        uct_component_attr_t cmpt_attr = {0};
+        ucs_status_t status;
+
+        cmpt_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
+        /* coverity[var_deref_model] */
+        status = uct_component_query(GetParam()->component, &cmpt_attr);
+        ASSERT_UCS_OK(status);
+
+        if (!strcmp(cmpt_attr.name, "tcp")) {
+            UCS_TEST_SKIP_R("tcp cm is not fully implemented");
+        }
+    }
+
     void cm_start_listen() {
+        skip_tcp_sockcm();
+
         uct_listener_params_t params;
 
         params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
@@ -815,6 +860,8 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
+    skip_tcp_sockcm();
+
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
 
