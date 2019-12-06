@@ -11,6 +11,13 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_types.h>
 
+typedef struct ucp_cm_client_connect_progress_arg {
+    ucp_ep_h                   ucp_ep;
+    uct_ep_h                   uct_cm_ep;
+    ucp_wireup_sockaddr_data_t *sa_data;
+    uct_device_addr_t          *dev_addr;
+} ucp_cm_client_connect_progress_arg_t;
+
 unsigned ucp_cm_ep_init_flags(const ucp_worker_h worker,
                               const ucp_ep_params_t *params);
 

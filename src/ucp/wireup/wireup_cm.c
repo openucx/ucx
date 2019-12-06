@@ -204,27 +204,18 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
-static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
-                                     const uct_cm_remote_data_t *remote_data,
-                                     ucs_status_t status)
+static unsigned ucp_cm_client_connect_progress(void *arg)
 {
-    ucp_ep_h                   ucp_ep     = (ucp_ep_h)arg;
-    ucp_worker_h               worker     = ucp_ep->worker;
-    ucp_wireup_ep_t            *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
-    unsigned                   addr_indices[UCP_MAX_RESOURCES];
-    ucp_unpacked_address_t     addr;
-    ucp_wireup_sockaddr_data_t *sa_data;
-    unsigned                   addr_idx;
+    ucp_cm_client_connect_progress_arg_t *progress_arg = arg;
+    ucp_ep_h ucp_ep                                    = progress_arg->ucp_ep;
+    ucp_worker_h worker                                = ucp_ep->worker;
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_unpacked_address_t addr;
+    unsigned addr_idx;
+    unsigned addr_indices[UCP_MAX_RESOURCES];
+    ucs_status_t status;
 
-    if (status != UCS_OK) {
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
-        goto out;
-    }
-
-    ucs_assert(wireup_ep != NULL);
-    sa_data = (ucp_wireup_sockaddr_data_t *)remote_data->conn_priv_data;
-    ucp_ep_update_dest_ep_ptr(ucp_ep, sa_data->ep_ptr);
-    status = ucp_address_unpack(worker, sa_data + 1,
+    status = ucp_address_unpack(worker, progress_arg->sa_data + 1,
                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                                 UCP_ADDRESS_PACK_FLAG_EP_ADDR, &addr);
     if (status != UCS_OK) {
@@ -233,32 +224,112 @@ static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
 
     if (addr.address_count == 0) {
         status = UCS_ERR_UNREACHABLE;
-        goto free_addr_list;
+        goto out_free_addr;
     }
+
+    for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
+        addr.address_list[addr_idx].dev_addr = progress_arg->dev_addr;
+    }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
+    ucs_assert(wireup_ep != NULL);
+
+    ucp_ep_update_dest_ep_ptr(ucp_ep, progress_arg->sa_data->ep_ptr);
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
-    for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
-        addr.address_list[addr_idx].dev_addr = remote_data->dev_addr;
-    }
-
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
     status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags, &addr,
                                    addr_indices);
     if (status != UCS_OK) {
-        goto free_addr_list;
+        goto out_unblock;
     }
 
-    ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    if (status != UCS_OK) {
+        goto out_unblock;
+    }
+
     ucp_wireup_remote_connected(ucp_ep);
 
-free_addr_list:
+out_unblock:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+out_free_addr:
     ucs_free(addr.address_list);
 out:
+    ucs_free(progress_arg->sa_data);
+    ucs_free(progress_arg->dev_addr);
+    ucs_free(progress_arg);
+
     if (status != UCS_OK) {
-        ucp_worker_set_ep_failed(worker, ucp_ep,
-                                 wireup_ep ? &wireup_ep->super.super : ep,
+        ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ucp_ep), status);
     }
+
+    return 1;
+}
+
+static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
+                                     const uct_cm_remote_data_t *remote_data,
+                                     ucs_status_t status)
+{
+    ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
+    ucp_worker_h worker        = ucp_ep->worker;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_cm_client_connect_progress_arg_t *progress_arg;
+
+    if (!ucs_test_all_flags(remote_data->field_mask,
+                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
+                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
+                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
+                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_out;
+    }
+
+    progress_arg = ucs_malloc(sizeof(*progress_arg),
+                              "ucp_cm_client_connect_progress_arg_t");
+    if (progress_arg == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_out;
+    }
+
+    progress_arg->sa_data = ucs_malloc(remote_data->conn_priv_data_length,
+                                        "sa data");
+    if (progress_arg->sa_data == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_arg;
+    }
+
+    progress_arg->dev_addr = ucs_malloc(remote_data->dev_addr_length,
+                                        "device address");
+    if (progress_arg->dev_addr == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_sa_data;
+    }
+
+    progress_arg->ucp_ep    = ucp_ep;
+    progress_arg->uct_cm_ep = uct_cm_ep;
+    memcpy(progress_arg->dev_addr, remote_data->dev_addr,
+           remote_data->dev_addr_length);
+    memcpy(progress_arg->sa_data, remote_data->conn_priv_data,
+           remote_data->conn_priv_data_length);
+
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_cm_client_connect_progress,
+                                      progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+    return;
+
+err_free_sa_data:
+    ucs_free(progress_arg->sa_data);
+err_free_arg:
+    ucs_free(progress_arg);
+err_out:
+    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    ucp_worker_set_ep_failed(worker, ucp_ep, uct_cm_ep,
+                             ucp_ep_get_cm_lane(ucp_ep), status);
 }
 
 /*
@@ -569,10 +640,20 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
+
+static unsigned ucp_cm_server_connect_progress(void *arg)
+{
+    ucp_ep_h ucp_ep = arg;
+
+    ucp_wireup_remote_connected(ucp_ep);
+    return 1;
+}
+
 static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
                                      ucs_status_t status)
 {
-    ucp_ep_h ucp_ep = arg;
+    ucp_ep_h ucp_ep            = arg;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_lane_index_t wireup_idx;
 
     if (status != UCS_OK) {
@@ -583,7 +664,10 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
         return;
     }
 
-    ucp_wireup_remote_connected(ucp_ep);
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_cm_server_connect_progress,
+                                      ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
 }
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
