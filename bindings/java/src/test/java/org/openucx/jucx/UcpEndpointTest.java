@@ -305,22 +305,18 @@ public class UcpEndpointTest {
         }
 
         assertTrue(success.get());
-        UcpRequest close = ep.closeNonBlockingForce();
-
-        while (!close.isCompleted()) {
-            try {
-                // Wait until progress thread will close endpoint.
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
 
         progressThread.interrupt();
         try {
             progressThread.join();
         } catch (InterruptedException e) {
 
+        }
+
+        UcpRequest close = ep.closeNonBlockingForce();
+        while (!close.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
         }
 
         worker2.close();
