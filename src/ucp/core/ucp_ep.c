@@ -772,7 +772,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucp_am_ep_cleanup(ep);
 
     ep->flags &= ~UCP_EP_FLAG_USED;
-    ep->flags |= UCP_EP_FLAG_CLOSED;
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
         && !force) {
@@ -804,8 +803,11 @@ unsigned ucp_ep_local_disconnect_progress(void *arg)
     return 0;
 }
 
-static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request)
+static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
+                                     const char *debug_msg)
 {
+    ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
+
     ucp_ep_flush_state_invalidate(ep);
     ucp_ep_ext_gen(ep)->close_req.req = request;
     ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
@@ -817,13 +819,16 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
     if (ucp_ep_is_cm_local_connected(ep)) {
-        /* Now, when close flush is completed and we are still connected,
-         * we have to notify remote side and wait disconnect notification
-         * from remote side */
+        /* Now, when close flush is completed and we are still locally connected,
+         * we have to notify remote side */
         ucp_ep_cm_disconnect_cm_lane(ep);
-        ucp_ep_set_close_request(ep, req);
-        UCS_ASYNC_UNBLOCK(&ep->worker->async);
-        return;
+        if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+            /* Wait disconnect notification from remote side to complete this
+             * request */
+            ucp_ep_set_close_request(ep, req, "close flushed callback");
+            UCS_ASYNC_UNBLOCK(&ep->worker->async);
+            return;
+        }
     }
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
@@ -852,6 +857,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    ep->flags |= UCP_EP_FLAG_CLOSED;
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
@@ -863,7 +869,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
             /* lanes already flushed, start disconnect on CM lane */
             ucp_ep_cm_disconnect_cm_lane(ep);
             close_req = ucp_ep_cm_close_request_get(ep);
-            ucp_ep_set_close_request(ep, close_req);
+            ucp_ep_set_close_request(ep, close_req, "close");
             request = (close_req != NULL) ? close_req + 1 :
                       UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         } else {
