@@ -131,19 +131,30 @@ struct mlx5_grh_av {
 
 #define UCT_IB_MLX5_XRQ_MIN_UWQ_POST 33
 
+#define UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(_devx_objs) \
+    ((_devx_objs) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT)
+
+#define UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(_obj) \
+    UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(UCS_BIT(UCT_IB_DEVX_OBJ_ ## _obj))
 
 enum {
-    UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0),   /* Device supports KSM */
-    UCT_IB_MLX5_MD_FLAG_DEVX     = UCS_BIT(1),   /* Device supports DEVX */
-    UCT_IB_MLX5_MD_FLAG_DC_TM    = UCS_BIT(2),   /* Device supports TM DC */
-    UCT_IB_MLX5_MD_FLAG_MP_RQ    = UCS_BIT(3),   /* Device supports MP RQ */
+    /* Device supports KSM */
+    UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
+    /* Device supports DEVX */
+    UCT_IB_MLX5_MD_FLAG_DEVX             = UCS_BIT(1),
+    /* Device supports TM DC */
+    UCT_IB_MLX5_MD_FLAG_DC_TM            = UCS_BIT(2),
+    /* Device supports MP RQ */
+    UCT_IB_MLX5_MD_FLAG_MP_RQ            = UCS_BIT(3),
+    /* Device supports creation of indirect MR with atomics access rights */
+    UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS = UCS_BIT(4),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS      = 4,
-    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP     = UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
-    UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ    = UCS_BIT(UCT_IB_DEVX_OBJ_RCSRQ) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
-    UCT_IB_MLX5_MD_FLAG_DEVX_DCT       = UCS_BIT(UCT_IB_DEVX_OBJ_DCT) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
-    UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ    = UCS_BIT(UCT_IB_DEVX_OBJ_DCSRQ) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 5,
+    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
+    UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
 };
 
 

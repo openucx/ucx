@@ -395,6 +395,7 @@ void uct_ib_md_close(uct_md_h uct_md);
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access, struct ibv_mr **mr_p);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
+ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
 ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,

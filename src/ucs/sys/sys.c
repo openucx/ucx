@@ -1094,7 +1094,7 @@ char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t le
                 prev = i;
             }
         } else {
-            if (prev > 0) {
+            if (prev >= 0) {
                 if (prev == i - 1) {
                     p += snprintf(p, str + len - p, "%d,", prev);
                 } else {
