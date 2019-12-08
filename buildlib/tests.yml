@@ -26,8 +26,10 @@ jobs:
           executor_from_agent_name=$(echo $AGENT_NAME | awk -F- '{print $NF}' | sed 's/^0*//g')
           echo "##vso[task.setvariable variable=executor_number]$executor_from_agent_name"
           echo "EXECUTOR_NUMBER=$executor_from_agent_name"
+        displayName: Get executor number
       - bash: |
-          ./contrib/test_jenkins.sh || echo "there are fails"
+          ./contrib/test_jenkins.sh
+        displayName: Run ./contrib/test_jenkins.sh
         env:
           nworkers: ${{ parameters.num_workers }}
           worker: $(worker_id)
