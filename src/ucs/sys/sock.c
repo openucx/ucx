@@ -38,7 +38,7 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
                              struct ifreq *if_req)
 {
     ucs_status_t status;
-    int fd, ret;
+    int fd = -1, ret;
 
     ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
 
@@ -124,6 +124,15 @@ static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
                             str, max_size);
 }
 
+static ucs_status_t ucs_socket_check_errno(int io_errno)
+{
+    if ((io_errno == EAGAIN) || (io_errno == EWOULDBLOCK) || (io_errno == EINTR)) {
+        return UCS_ERR_NO_PROGRESS;
+    }
+
+    return UCS_ERR_IO_ERROR;
+}
+
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
     char dest_str[UCS_SOCKADDR_STRING_LEN];
@@ -173,6 +182,27 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
     return status;
 }
 
+ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_ptr,
+                               int *accept_fd)
+{
+    ucs_status_t status;
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
+    *accept_fd = accept(fd, addr, length_ptr);
+    if (*accept_fd < 0) {
+        status = ucs_socket_check_errno(errno);
+        if (status == UCS_ERR_NO_PROGRESS) {
+            return status;
+        }
+
+        ucs_error("accept() failed (client addr %s): %m",
+                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+        return status;
+    }
+
+    return UCS_OK;
+}
+
 int ucs_socket_is_connected(int fd)
 {
     struct sockaddr_storage peer_addr = {0}; /* Suppress Clang false-positive */
@@ -200,6 +230,61 @@ int ucs_socket_is_connected(int fd)
     return 1;
 }
 
+
+ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
+                                    int backlog, int *listen_fd)
+{
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+    int ret, fd = -1;
+    uint16_t port;
+
+    /* Create the server socket for accepting incoming connections */
+    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &fd);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    /* Set the fd to non-blocking mode (so that accept() won't be blocking) */
+    status = ucs_sys_fcntl_modfl(fd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        goto err_close_socket;
+    }
+
+    status = ucs_sockaddr_get_port(saddr, &port);
+    if (status != UCS_OK) {
+        goto err_close_socket;
+    }
+
+    do {
+        ret = bind(fd, saddr, socklen);
+    } while (!port && (ret < 0) && (errno == EADDRINUSE));
+
+    if (ret < 0) {
+        ucs_error("bind(fd=%d addr=%s) failed: %m",
+                  fd, ucs_sockaddr_str((struct sockaddr *)saddr,
+                                       ip_port_str, sizeof(ip_port_str)));
+        status = (errno == EADDRINUSE) ? UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
+        goto err_close_socket;
+    }
+
+    if (listen(fd, backlog) < 0) {
+        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m",
+                  fd, ucs_sockaddr_str(saddr, ip_port_str, sizeof(ip_port_str)),
+                  backlog);
+        status = UCS_ERR_IO_ERROR;
+        goto err_close_socket;
+    }
+
+    *listen_fd = fd;
+    return UCS_OK;
+
+err_close_socket:
+    close(fd);
+err:
+    return status;
+}
+
 int ucs_socket_max_conn()
 {
     static long somaxconn_val = 0;
@@ -221,14 +306,15 @@ static ucs_status_t
 ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno,
                            ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
-    ucs_status_t status = UCS_ERR_IO_ERROR;
+    ucs_status_t status;
 
     if (io_retval == 0) {
         ucs_trace("fd %d is closed", fd);
         return UCS_ERR_CANCELED; /* Connection closed */
     }
 
-    if ((io_errno == EINTR) || (io_errno == EAGAIN) || (io_errno == EWOULDBLOCK)) {
+    status = ucs_socket_check_errno(io_errno);
+    if (status == UCS_ERR_NO_PROGRESS) {
         return UCS_ERR_NO_PROGRESS;
     }
 

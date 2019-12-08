@@ -252,7 +252,7 @@ void uct_test::set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
     struct ifaddrs *ifaddr, *ifa;
     ucs_sock_addr_t sock_addr;
 
-    EXPECT_EQ(0, getifaddrs(&ifaddr)) << "errno: " << errno;
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << strerror(errno);
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
@@ -278,7 +278,7 @@ void uct_test::set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_
 
     struct ifaddrs *ifaddr, *ifa;
 
-    EXPECT_EQ(0, getifaddrs(&ifaddr)) << "errno: " << errno;
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << strerror(errno);
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (!uct_test::is_interface_usable(ifa, cmpt_name)) {
