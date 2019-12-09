@@ -244,9 +244,9 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     remote_data.dev_addr          = dev_addr;
     remote_data.dev_addr_length   = addr_length;
 
+    cep->flags |= UCT_RDMACM_CM_EP_GOT_CONNECT;
     uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data,
                                        (ucs_status_t)hdr->status);
-    cep->flags |= UCT_RDMACM_CM_EP_CONNECTED;
 
     ucs_free(dev_addr);
 
@@ -263,8 +263,8 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t *cep = event->id->context;
 
     ucs_assert(event->id == cep->id);
+    cep->flags |= UCT_RDMACM_CM_EP_GOT_CONNECT;
     uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
-    cep->flags |= UCT_RDMACM_CM_EP_CONNECTED;
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
@@ -279,8 +279,8 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
                                              UCS_SOCKADDR_STRING_LEN));
 
+    cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
     cep->disconnect_cb(&cep->super.super, cep->user_data);
-    cep->flags &= ~UCT_RDMACM_CM_EP_CONNECTED;
 }
 
 static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
@@ -390,9 +390,13 @@ static void uct_rdmacm_cm_event_handler(int fd, void *arg)
             if ((errno != EAGAIN) && (errno != EINTR)) {
                 ucs_warn("rdma_get_cm_event() failed: %m");
             }
+
             return;
         }
+
+        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_process_event(cm, event);
+        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
     }
 }
 

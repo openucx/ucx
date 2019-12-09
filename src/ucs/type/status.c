@@ -64,6 +64,8 @@ const char *ucs_status_string(ucs_status_t status)
         return "Unsupported operation";
     case UCS_ERR_REJECTED:
         return "Operation rejected by remote peer";
+    case UCS_ERR_NOT_CONNECTED:
+        return "Endpoint is not connected";
     case UCS_ERR_ENDPOINT_TIMEOUT:
         return "Endpoint timeout";
     default:
