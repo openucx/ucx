@@ -337,16 +337,16 @@ ucp_worker_unified_mode(ucp_worker_h worker)
     return worker->context->config.ext.unified_mode;
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
-{
-    return worker->context->config.cm_cmpts_bitmap != 0;
-}
-
 static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
 ucp_worker_num_cm_cmpts(const ucp_worker_h worker)
 {
-    return ucs_popcount(worker->context->config.cm_cmpts_bitmap);
+    return worker->context->config.num_cm_cmpts;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
+{
+    return !!ucp_worker_num_cm_cmpts(worker);
 }
 
 #endif

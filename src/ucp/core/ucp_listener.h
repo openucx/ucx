@@ -24,7 +24,7 @@ typedef struct ucp_listener {
     };
 
     struct sockaddr_storage        sockaddr;  /* Listening sockaddr */
-    ucp_rsc_index_t                num_tls;   /* Number of UCT listening
+    ucp_rsc_index_t                num_rscs;  /* Number of UCT listening
                                                  resources  (wifaces or
                                                  listeners) */
     ucp_listener_accept_callback_t accept_cb; /* Listen accept callback

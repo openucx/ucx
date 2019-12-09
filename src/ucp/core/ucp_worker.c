@@ -1232,8 +1232,9 @@ static void ucp_worker_close_cms(ucp_worker_h worker)
 static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
     ucp_context_h   context = worker->context;
-    ucp_rsc_index_t cmpt_index, cm_index;
     uct_cm_config_t *cm_config;
+    uct_component_h cmpt;
+    ucp_rsc_index_t cmpt_index, cm_cmpt_index, i;
     ucs_status_t    status;
 
     if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
@@ -1251,19 +1252,19 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         goto out;
     }
 
-    cm_index = 0;
-    ucs_for_each_bit(cmpt_index, context->config.cm_cmpts_bitmap) {
-        status = uct_cm_config_read(context->tl_cmpts[cmpt_index].cmpt,
-                                    NULL, NULL, &cm_config);
+    for (i = 0, cm_cmpt_index = 0; cm_cmpt_index < context->config.num_cm_cmpts;
+         ++cm_cmpt_index) {
+        cmpt_index = context->config.cm_cmpt_idxs[cm_cmpt_index];
+        cmpt       = context->tl_cmpts[cmpt_index].cmpt;
+
+        status = uct_cm_config_read(cmpt, NULL, NULL, &cm_config);
         if (status != UCS_OK) {
             ucs_error("failed to read cm configuration on component %s",
                       context->tl_cmpts[cmpt_index].attr.name);
             goto err_free_cms;
         }
 
-        status = uct_cm_open(context->tl_cmpts[cmpt_index].cmpt, worker->uct,
-                             cm_config, &worker->cms[cm_index].cm);
-        uct_config_release(cm_config);
+        status = uct_cm_open(cmpt, worker->uct, cm_config, &worker->cms[i].cm);
         if (status != UCS_OK) {
             ucs_error("failed to open CM on component %s with status %s",
                       context->tl_cmpts[cmpt_index].attr.name,
@@ -1271,7 +1272,8 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
             goto err_free_cms;
         }
 
-        worker->cms[cm_index++].cmpt_idx = cmpt_index;
+        uct_config_release(cm_config);
+        worker->cms[i++].cmpt_idx = cmpt_index;
     }
 
     status = UCS_OK;
