@@ -73,6 +73,24 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
     return uct_mm_md_mapper_ops(md)->iface_addr_pack(md, iface_addr + 1);
 }
 
+static int
+uct_mm_iface_is_reachable(const uct_iface_h tl_iface,
+                          const uct_device_addr_t *dev_addr,
+                          const uct_iface_addr_t *tl_iface_addr)
+{
+    uct_mm_iface_t      *iface      = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    uct_mm_md_t         *md         = ucs_derived_of(iface->super.super.md,
+                                                     uct_mm_md_t);
+    uct_mm_iface_addr_t *iface_addr = (void*)tl_iface_addr;
+
+    if (!uct_sm_iface_is_reachable(tl_iface, dev_addr, tl_iface_addr)) {
+        return 0;
+    }
+
+    return uct_mm_md_mapper_ops(md)->is_reachable(md, iface_addr->fifo_seg_id,
+                                                  iface_addr + 1);
+}
+
 void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     void *mm_desc;
@@ -128,7 +146,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
 
     iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t) +
                                           md->iface_addr_len;
-    iface_attr->device_addr_len         = UCT_SM_IFACE_DEVICE_ADDR_LEN;
+    iface_attr->device_addr_len         = uct_sm_iface_get_device_addr_len();
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_PUT_SHORT           |
@@ -343,7 +361,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_query              = uct_mm_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
     .iface_get_address        = uct_mm_iface_get_address,
-    .iface_is_reachable       = uct_sm_iface_is_reachable
+    .iface_is_reachable       = uct_mm_iface_is_reachable
 };
 
 static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,

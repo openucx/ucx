@@ -30,13 +30,15 @@
                                                        open fd symlink from procfs */
 #define UCT_POSIX_SEG_FLAG_SHM_OPEN     UCS_BIT(62) /* use shm_open() rather than open() */
 #define UCT_POSIX_SEG_FLAG_HUGETLB      UCS_BIT(61) /* use MAP_HUGETLB */
+#define UCT_POSIX_SEG_FLAG_PID_NS       UCS_BIT(60) /* use PID NS in address */
 #define UCT_POSIX_SEG_FLAGS_MASK        (UCT_POSIX_SEG_FLAG_PROCFS | \
                                          UCT_POSIX_SEG_FLAG_SHM_OPEN | \
+                                         UCT_POSIX_SEG_FLAG_PID_NS | \
                                          UCT_POSIX_SEG_FLAG_HUGETLB)
 #define UCT_POSIX_SEG_MMID_MASK         (~UCT_POSIX_SEG_FLAGS_MASK)
 
 /* Packing mmid for procfs mode */
-#define UCT_POSIX_PROCFS_MMID_FD_BITS   31  /* how many bits for file descriptor */
+#define UCT_POSIX_PROCFS_MMID_FD_BITS   30  /* how many bits for file descriptor */
 #define UCT_POSIX_PROCFS_MMID_PID_BITS  30  /* how many bits for pid */
 
 /* Filesystem paths */
@@ -90,8 +92,12 @@ static size_t uct_posix_iface_addr_length(uct_mm_md_t *md)
      * requested backing file is needed so that the user would know how much
      * space to allocate for the rkey.
      */
-    return uct_posix_use_shm_open(posix_config) ? 0 :
-           (strlen(posix_config->dir) + 1);
+    if (posix_config->use_proc_link) {
+        return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ? 0 : sizeof(ucs_sys_ns_t);
+    }
+
+    return uct_posix_use_shm_open(posix_config) ?
+           0 : (strlen(posix_config->dir) + 1);
 }
 
 static ucs_status_t uct_posix_md_query(uct_md_h tl_md, uct_md_attr_t *md_attr)
@@ -354,6 +360,17 @@ uct_posix_mem_attach_common(uct_mm_seg_id_t seg_id, size_t length,
     return status;
 }
 
+static int
+uct_posix_is_reachable(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
+                       const void *iface_addr)
+{
+    if (seg_id & UCT_POSIX_SEG_FLAG_PID_NS) {
+        return ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == *(const ucs_sys_ns_t*)iface_addr;
+    }
+
+    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID);
+}
+
 static ucs_status_t uct_posix_mem_detach_common(const uct_mm_remote_seg_t *rseg)
 {
     return uct_posix_munmap(rseg->address, (size_t)rseg->cookie);
@@ -434,7 +451,9 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
         /* Replace mmid by pid+fd. Keep previous SHM_OPEN flag for mkey_pack() */
         seg->seg_id = uct_posix_mmid_procfs_pack(fd) |
                       (seg->seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) |
-                      UCT_POSIX_SEG_FLAG_PROCFS;
+                      UCT_POSIX_SEG_FLAG_PROCFS |
+                      (ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ? 0 :
+                       UCT_POSIX_SEG_FLAG_PID_NS);
     }
 
     /* mmap the shared memory segment that was created by shm_open */
@@ -544,6 +563,13 @@ static ucs_status_t uct_posix_iface_addr_pack(uct_mm_md_t *md, void *buffer)
     const uct_posix_md_config_t *posix_config =
                      ucs_derived_of(md->config, uct_posix_md_config_t);
 
+    if (posix_config->use_proc_link) {
+        if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+            *(ucs_sys_ns_t*)buffer = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+        }
+        return UCS_OK;
+    }
+
     if (!uct_posix_use_shm_open(posix_config)) {
         uct_posix_copy_dir(md, buffer);
     }
@@ -561,7 +587,8 @@ uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh, void *rkey_buffer)
     packed_rkey->seg_id  = seg->seg_id;
     packed_rkey->address = (uintptr_t)seg->address;
     packed_rkey->length  = seg->length;
-    if (!(seg->seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN)) {
+    if (!(seg->seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) &&
+        !(seg->seg_id & UCT_POSIX_SEG_FLAG_PROCFS)) {
         uct_posix_copy_dir(md, packed_rkey + 1);
     }
 
@@ -640,7 +667,8 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
    .iface_addr_length           = uct_posix_iface_addr_length,
    .iface_addr_pack             = uct_posix_iface_addr_pack,
    .mem_attach                  = uct_posix_mem_attach,
-   .mem_detach                  = uct_posix_mem_detach
+   .mem_detach                  = uct_posix_mem_detach,
+   .is_reachable                = uct_posix_is_reachable
 };
 
 UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,

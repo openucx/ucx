@@ -542,7 +542,8 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
    .iface_addr_length           = uct_xpmem_iface_addr_length,
    .iface_addr_pack             = uct_xpmem_iface_addr_pack,
    .mem_attach                  = uct_xpmem_mem_attach,
-   .mem_detach                  = uct_xpmem_mem_detach
+   .mem_detach                  = uct_xpmem_mem_detach,
+   .is_reachable                = (uct_mm_mapper_is_reachable_func_t)ucs_empty_function_return_one
 };
 
 UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,

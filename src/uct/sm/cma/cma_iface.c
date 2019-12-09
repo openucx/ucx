@@ -12,6 +12,16 @@
 #include <ucs/sys/string.h>
 
 
+typedef struct {
+    pid_t                            id;
+} ucs_cma_iface_base_device_addr_t;
+
+typedef struct {
+    ucs_cma_iface_base_device_addr_t super;
+    ucs_sys_ns_t                     pid_ns;
+} ucs_cma_iface_ext_device_addr_t;
+
+
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap;BW=11145MBs", NULL,
     ucs_offsetof(uct_cma_iface_config_t, super),
@@ -23,7 +33,15 @@ static ucs_config_field_t uct_cma_iface_config_table[] = {
 static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
                                               uct_iface_addr_t *addr)
 {
-    *(pid_t*)addr = getpid();
+    ucs_cma_iface_ext_device_addr_t *iface_addr = (void*)addr;
+
+    ucs_assert(!(getpid() & UCT_CMA_IFACE_ADDR_FLAG_PID_NS));
+
+    iface_addr->super.id = getpid();
+    if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        iface_addr->super.id |= UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
+        iface_addr->pid_ns    = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    }
     return UCS_OK;
 }
 
@@ -51,8 +69,10 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.opt_zcopy_align  = 1;
     iface_attr->cap.am.align_mtu        = iface_attr->cap.am.opt_zcopy_align;
 
-    iface_attr->iface_addr_len          = sizeof(pid_t);
-    iface_attr->device_addr_len         = UCT_SM_IFACE_DEVICE_ADDR_LEN;
+    iface_attr->iface_addr_len          = ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
+                                          sizeof(ucs_cma_iface_base_device_addr_t) :
+                                          sizeof(ucs_cma_iface_ext_device_addr_t);
+    iface_attr->device_addr_len         = uct_sm_iface_get_device_addr_len();
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_GET_ZCOPY |
@@ -66,6 +86,24 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
 
     return UCS_OK;
+}
+
+static int
+uct_cma_iface_is_reachable(const uct_iface_h tl_iface,
+                           const uct_device_addr_t *dev_addr,
+                           const uct_iface_addr_t *tl_iface_addr)
+{
+    ucs_cma_iface_ext_device_addr_t *iface_addr = (void*)tl_iface_addr;
+
+    if (!uct_sm_iface_is_reachable(tl_iface, dev_addr, tl_iface_addr)) {
+        return 0;
+    }
+
+    if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
+        return ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == iface_addr->pid_ns;
+    }
+
+    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID);
 }
 
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
@@ -88,7 +126,7 @@ static uct_iface_ops_t uct_cma_iface_ops = {
     .iface_query              = uct_cma_iface_query,
     .iface_get_address        = uct_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable       = uct_sm_iface_is_reachable
+    .iface_is_reachable       = uct_cma_iface_is_reachable
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,

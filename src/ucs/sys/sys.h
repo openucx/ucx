@@ -67,6 +67,21 @@ BEGIN_C_DECLS
 /** @file sys.h */
 
 
+typedef ino_t ucs_sys_ns_t;
+
+
+/* namespace type used in @ref ucs_sys_get_ns and @ref ucs_sys_ns_is_default */
+typedef enum {
+    UCS_SYS_NS_TYPE_IPC,
+    UCS_SYS_NS_TYPE_MNT,
+    UCS_SYS_NS_TYPE_NET,
+    UCS_SYS_NS_TYPE_PID,
+    UCS_SYS_NS_TYPE_USER,
+    UCS_SYS_NS_TYPE_UTS,
+    UCS_SYS_NS_TYPE_LAST
+} ucs_sys_namespace_type_t;
+
+
 /**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
  */
@@ -412,6 +427,36 @@ int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset);
  * @param [out] dst         Destination
  */
 void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src);
+
+/**
+ * Get namespace id for resource.
+ *
+ * @param [in]  name        Namespace to get value
+ *
+ * @return namespace value or 0 if namespaces are not supported
+ */
+ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t name);
+
+
+/**
+ * Check if namespace is namespace of host system.
+ *
+ * @param [in]  name        Namespace to evaluate
+ *
+ * @return 1 in case if namespace is root, 0 - in other cases
+ */
+int ucs_sys_ns_is_default(ucs_sys_namespace_type_t name);
+
+
+/**
+ * Get 128-bit boot ID value.
+ *
+ * @param [out]  high       Pointer to high 64 bit of 128 boot ID
+ * @param [out]  low        Pointer to low 64 bit of 128 boot ID
+ *
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
 
 END_C_DECLS
 
