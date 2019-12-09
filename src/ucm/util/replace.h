@@ -37,7 +37,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         ucm_trace("%s()", __FUNCTION__); \
         \
         if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
-            return _fail_val; \
+            return (_rettype)_fail_val; \
         } \
         res = _ucm_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
         UCM_BISTRO_EPILOGUE; \

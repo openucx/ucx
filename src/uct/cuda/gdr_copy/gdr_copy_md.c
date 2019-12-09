@@ -132,7 +132,7 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
     }
 
     ucs_trace("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
-              address, address + length, length,
+              address, UCS_PTR_BYTE_OFFSET(address, length), length,
               mem_hndl->info.va, mem_hndl->bar_ptr);
 
     return UCS_OK;
@@ -188,10 +188,12 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
     }
 
     start = ucs_align_down_pow2_ptr(address, GPU_PAGE_SIZE);
-    end   = ucs_align_up_pow2_ptr(address + length, GPU_PAGE_SIZE);
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, length), GPU_PAGE_SIZE);
     ucs_assert_always(start <= end);
 
-    status = uct_gdr_copy_mem_reg_internal(uct_md, start, end - start, 0, mem_hndl);
+    status = uct_gdr_copy_mem_reg_internal(uct_md, start,
+                                           UCS_PTR_BYTE_DIFF(start, end),
+                                           0, mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
         return status;

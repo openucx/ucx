@@ -46,7 +46,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t length,
-                                   int direction, cudaStream_t stream,
+                                   enum cudaMemcpyKind direction, cudaStream_t stream,
                                    ucs_queue_head_t *outstanding_queue,
                                    uct_completion_t *comp)
 {

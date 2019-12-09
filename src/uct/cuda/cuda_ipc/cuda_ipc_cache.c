@@ -157,7 +157,8 @@ ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
             /* unmap all overlapping regions and retry*/
             uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
-                                                  (void *)key->d_bptr + key->b_len);
+                                                  UCS_PTR_BYTE_OFFSET(key->d_bptr,
+                                                                      key->b_len));
             status = uct_cuda_ipc_open_memhandle(key->ph, (CUdeviceptr *)mapped_addr);
             if (ucs_unlikely(status != UCS_OK)) {
                 if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
