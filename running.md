@@ -79,7 +79,7 @@ version 4.0 or higher due to stability and performance improvements.
 
 <br/>
 
-## Running MPI
+## Running OpenMPI
 
 Example of the command line (with optional flag to select IB device mlx5_0 port 1):  
 ```
@@ -134,7 +134,7 @@ $ make install
 
 <br/>
 
-## Running MPI
+## Running MPICH
 Example of the command line (with optional flag to select IB device mlx5_0 port 1):
 ```
 $ mpirun -np 2 -env UCX_NET_DEVICES=mlx5_0:1 ./executable
