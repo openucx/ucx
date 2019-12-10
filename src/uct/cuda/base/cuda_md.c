@@ -20,7 +20,7 @@ ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
                                               ucs_memory_type_t *mem_type_p)
 {
-    CUmemorytype memType = 0;
+    CUmemorytype memType = (CUmemorytype)0;
     uint32_t isManaged   = 0;
     unsigned value       = 1;
     void *attrdata[] = {(void *)&memType, (void *)&isManaged};

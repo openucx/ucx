@@ -45,7 +45,8 @@ ucs_status_t uct_gdr_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
         bar_offset = remote_addr - gdr_copy_key->vaddr;
 #if HAVE_DECL_GDR_COPY_TO_MAPPING
         ret = gdr_copy_to_mapping(gdr_copy_key->mh,
-                                  gdr_copy_key->bar_ptr + bar_offset,
+                                  UCS_PTR_BYTE_OFFSET(gdr_copy_key->bar_ptr,
+                                                      bar_offset),
                                   buffer, length);
         if (ret) {
             ucs_error("gdr_copy_to_mapping failed. ret:%d", ret);
@@ -78,7 +79,9 @@ ucs_status_t uct_gdr_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
         bar_offset = remote_addr - gdr_copy_key->vaddr;
 #if HAVE_DECL_GDR_COPY_TO_MAPPING
         ret = gdr_copy_from_mapping(gdr_copy_key->mh, buffer,
-                                    gdr_copy_key->bar_ptr + bar_offset, length);
+                                    UCS_PTR_BYTE_OFFSET(gdr_copy_key->bar_ptr,
+                                                        bar_offset),
+                                    length);
         if (ret) {
             ucs_error("gdr_copy_from_mapping failed. ret:%d", ret);
             return UCS_ERR_IO_ERROR;

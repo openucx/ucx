@@ -202,7 +202,7 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
     key->dev_num  = (int) cu_device;
     key->d_mapped = 0;
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
-              addr, addr + length, length, (int) cu_device);
+              addr, UCS_PTR_BYTE_OFFSET(addr, length), length, (int) cu_device);
     return UCS_OK;
 }
 
