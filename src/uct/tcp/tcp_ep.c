@@ -443,6 +443,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
         ep = uct_tcp_cm_search_ep(iface, &dest_addr,
                                   UCT_TCP_EP_CTX_TYPE_RX);
         if (ep) {
+            ucs_assert(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)));
             /* Found EP with RX ctx, try to send the connection request
              * to the remote peer, if it successful - assign TX to this EP
              * and return the EP to the user, otherwise - destroy this EP
