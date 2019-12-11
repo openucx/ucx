@@ -497,7 +497,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                                        status);
         if (rndv_req->send.state.dt.offset == rndv_req->send.length) {
             if (rndv_req->send.state.uct_comp.count == 0) {
-                ucp_rndv_complete_rma_get_zcopy(rndv_req);
+                rndv_req->send.state.uct_comp.func(&rndv_req->send.state.uct_comp, status);
             }
             return UCS_OK;
         } else if (!UCS_STATUS_IS_ERR(status)) {
