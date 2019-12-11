@@ -83,8 +83,8 @@ uct_component_t uct_tcp_component = {
     .cm_config          = {
         .name           = "TCP-SOCKCM connection manager",
         .prefix         = "TCP_",
-        .table          = uct_cm_config_table,
-        .size           = sizeof(uct_cm_config_t),
+        .table          = uct_tcp_sockcm_config_table,
+        .size           = sizeof(uct_tcp_sockcm_config_t),
      },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
     .flags              = UCT_COMPONENT_FLAG_CM

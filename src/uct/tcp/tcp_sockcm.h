@@ -15,6 +15,15 @@ typedef struct uct_tcp_sockcm {
     size_t          priv_data_len;
 } uct_tcp_sockcm_t;
 
+/**
+ * TCP SOCKCM configuration.
+ */
+typedef struct uct_tcp_sockcm_config {
+    uct_cm_config_t super;
+    size_t          priv_data_len;
+} uct_tcp_sockcm_config_t;
+
+extern ucs_config_field_t uct_tcp_sockcm_config_table[];
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_tcp_sockcm_t, uct_cm_t, uct_component_h,
                            uct_worker_h, const uct_cm_config_t *);
