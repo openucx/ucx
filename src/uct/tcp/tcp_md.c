@@ -80,7 +80,12 @@ uct_component_t uct_tcp_component = {
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_TCP_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
-    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+    .cm_config          = {
+        .name           = "TCP-SOCKCM connection manager",
+        .prefix         = "TCP_",
+        .table          = uct_cm_config_table,
+        .size           = sizeof(uct_cm_config_t),
+     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
     .flags              = UCT_COMPONENT_FLAG_CM
 };

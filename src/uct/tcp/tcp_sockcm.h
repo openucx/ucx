@@ -16,7 +16,6 @@ typedef struct uct_tcp_sockcm {
 } uct_tcp_sockcm_t;
 
 
-UCS_CLASS_DECLARE(uct_tcp_sockcm_t, uct_component_h, uct_worker_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_tcp_sockcm_t, uct_cm_t, uct_component_h,
-                           uct_worker_h);
+                           uct_worker_h, const uct_cm_config_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_tcp_sockcm_t, uct_cm_t);
