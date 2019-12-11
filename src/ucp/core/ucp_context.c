@@ -162,9 +162,9 @@ static ucs_config_field_t ucp_config_table[] = {
    "Threshold for switching from buffer copy to zero copy protocol",
    ucs_offsetof(ucp_config_t, ctx.zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"BCOPY_BW", "5800mb",
+  {"BCOPY_BW", "auto",
    "Estimation of buffer copy bandwidth",
-   ucs_offsetof(ucp_config_t, ctx.bcopy_bw), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(ucp_config_t, ctx.bcopy_bw), UCS_CONFIG_TYPE_BW},
 
   {"ATOMIC_MODE", "guess",
    "Atomic operations synchronization mode.\n"
@@ -1292,15 +1292,22 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         /* num_eps was set via the env variable. Override current value */
         context->config.est_num_eps = context->config.ext.estimated_num_eps;
     }
-    ucs_debug("Estimated number of endpoints is %d",
+    ucs_debug("estimated number of endpoints is %d",
               context->config.est_num_eps);
 
     if (context->config.ext.estimated_num_ppn != UCS_ULUNITS_AUTO) {
         /* num_ppn was set via the env variable. Override current value */
         context->config.est_num_ppn = context->config.ext.estimated_num_ppn;
     }
-    ucs_debug("Estimated number of endpoints per node is %d",
+    ucs_debug("estimated number of endpoints per node is %d",
               context->config.est_num_ppn);
+
+    if (context->config.ext.bcopy_bw == UCS_BANDWIDTH_AUTO) {
+        /* bcopy_bw wasn't set via the env variable. Calculate the value */
+        context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
+    }
+    ucs_debug("estimated bcopy bandwidth is %f",
+              context->config.ext.bcopy_bw);
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
