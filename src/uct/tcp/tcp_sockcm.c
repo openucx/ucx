@@ -58,7 +58,7 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
 };
 
 UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
-                    uct_worker_h worker)
+                    uct_worker_h worker, const uct_cm_config_t *config)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops, worker, component);
@@ -76,5 +76,5 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_t)
 
 UCS_CLASS_DEFINE(uct_tcp_sockcm_t, uct_cm_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_sockcm_t, uct_cm_t, uct_component_h,
-                          uct_worker_h);
+                          uct_worker_h, const uct_cm_config_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_sockcm_t, uct_cm_t);
