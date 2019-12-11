@@ -308,9 +308,17 @@ static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
 static void ucx_perf_test_init(ucx_perf_context_t *perf,
                                ucx_perf_params_t *params)
 {
+    unsigned group_index;
+
     perf->params            = *params;
     perf->offset            = 0;
-    perf->allocator         = ucx_perf_mem_type_allocators[params->mem_type];
+    group_index             = rte_call(perf, group_index);
+
+    if (0 == group_index) {
+        perf->allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
+    } else {
+        perf->allocator = ucx_perf_mem_type_allocators[params->recv_mem_type];
+    }
 
     ucx_perf_test_prepare_new_run(perf, params);
 }
@@ -455,6 +463,20 @@ static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_
            (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_m :
            (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_m :
            0;
+}
+
+static ucs_status_t uct_perf_test_check_md_support(ucx_perf_params_t *params,
+                                                   ucs_memory_type_t mem_type,
+                                                   uct_md_attr_t *md_attr)
+{
+    if (!(md_attr->cap.access_mem_type == mem_type) &&
+        !(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
+        ucs_error("Unsupported memory type %s by %s/%s",
+                  ucs_memory_type_names[mem_type],
+                  params->uct.tl_name, params->uct.dev_name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+    return UCS_OK;
 }
 
 static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
@@ -648,12 +670,14 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         }
     }
 
-    if (!(md_attr.cap.access_mem_type == params->mem_type) &&
-        !(md_attr.cap.reg_mem_types & UCS_BIT(params->mem_type))) {
-        ucs_error("Unsupported memory type %s by %s/%s",
-                  ucs_memory_type_names[params->mem_type],
-                  params->uct.tl_name, params->uct.dev_name);
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_perf_test_check_md_support(params, params->send_mem_type, &md_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_perf_test_check_md_support(params, params->recv_mem_type, &md_attr);
+    if (status != UCS_OK) {
+        return status;
     }
 
     return UCS_OK;
@@ -1573,8 +1597,9 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
     ucx_perf_test_init(perf, params);
 
     if (perf->allocator == NULL) {
-        ucs_error("Unsupported memory type %s",
-                  ucs_memory_type_names[params->mem_type]);
+        ucs_error("Unsupported memory types %s,%s",
+                  ucs_memory_type_names[params->send_mem_type],
+                  ucs_memory_type_names[params->recv_mem_type]);
         status = UCS_ERR_UNSUPPORTED;
         goto out_free;
     }
