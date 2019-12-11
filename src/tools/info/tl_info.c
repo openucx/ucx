@@ -481,6 +481,8 @@ static void print_cm_attr(uct_worker_h worker, uct_component_h component,
 
     status = uct_cm_config_read(component, NULL, NULL, &cm_config);
     if (status != UCS_OK) {
+        printf("# < failed to read the %s connection manager configuration >\n",
+               comp_name);
         return;
     }
 
@@ -515,11 +517,13 @@ static void print_cm_info(uct_component_h component,
 
     status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
     if (status != UCS_OK) {
+        printf("# < failed to create asynchronous context >\n");
         return;
     }
 
     status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
     if (status != UCS_OK) {
+        printf("# < failed to create uct worker >\n");
         goto out_async_ctx_destroy;
     }
 
