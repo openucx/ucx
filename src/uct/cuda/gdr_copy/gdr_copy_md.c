@@ -427,6 +427,7 @@ uct_component_t uct_gdr_copy_component = {
         .table          = uct_gdr_copy_md_config_table,
         .size           = sizeof(uct_gdr_copy_md_config_t),
     },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gdr_copy_component),
     .flags              = 0
 };

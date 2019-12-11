@@ -90,6 +90,15 @@ typedef struct ucs_config_bw_spec {
 } ucs_config_bw_spec_t;
 
 
+#define UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY \
+    { \
+        .name        = "", \
+        .prefix      = "", \
+        .table       = NULL, \
+        .size        = 0, \
+    }
+
+
 #define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry) \
     UCS_STATIC_INIT { \
         extern ucs_list_link_t ucs_config_global_list; \

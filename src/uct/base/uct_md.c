@@ -42,16 +42,6 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
     {NULL}
 };
 
-/**
- * Keeps information about allocated configuration structure, to be used when
- * releasing the options.
- */
-typedef struct uct_config_bundle {
-    ucs_config_field_t *table;
-    const char         *table_prefix;
-    char               data[];
-} uct_config_bundle_t;
-
 
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
                          const uct_md_config_t *config, uct_md_h *md_p)
@@ -174,43 +164,6 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
     *rkey_p   = 0xdeadbeef;
     *handle_p = NULL;
     return UCS_OK;
-}
-
-static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
-                                    ucs_config_field_t *config_table,
-                                    size_t config_size, const char *env_prefix,
-                                    const char *cfg_prefix)
-{
-    uct_config_bundle_t *config_bundle;
-    ucs_status_t status;
-
-    config_bundle = ucs_calloc(1, sizeof(*config_bundle) + config_size, "uct_config");
-    if (config_bundle == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    /* TODO use env_prefix */
-    status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
-                                         env_prefix, cfg_prefix, 0);
-    if (status != UCS_OK) {
-        goto err_free_bundle;
-    }
-
-    config_bundle->table = config_table;
-    config_bundle->table_prefix = ucs_strdup(cfg_prefix, "uct_config");
-    if (config_bundle->table_prefix == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free_bundle;
-    }
-
-    *bundle = config_bundle;
-    return UCS_OK;
-
-err_free_bundle:
-    ucs_free(config_bundle);
-err:
-    return status;
 }
 
 static uct_tl_t *uct_find_tl(uct_component_h component, uint64_t md_flags,

@@ -1482,7 +1482,8 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
     void *opts;
 
     ucs_list_for_each(entry, &ucs_config_global_list, list) {
-        if (ucs_config_field_is_last(&entry->table[0])) {
+        if ((entry->table == NULL) ||
+            (ucs_config_field_is_last(&entry->table[0]))) {
             /* don't print title for an empty configuration table */
             continue;
         }

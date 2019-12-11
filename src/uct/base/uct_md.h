@@ -20,6 +20,7 @@ typedef struct uct_md_rcache_config {
     double               overhead;     /**< Lookup overhead estimation */
 } uct_md_rcache_config_t;
 
+
 extern ucs_config_field_t uct_md_config_rcache_table[];
 
 /**
@@ -117,7 +118,6 @@ uct_md_fill_md_name(uct_md_h md, void *buffer)
     return buffer;
 #endif
 }
-
 
 /*
  * Base implementation of query_md_resources(), which returns a single md

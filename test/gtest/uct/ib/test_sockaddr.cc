@@ -1022,17 +1022,21 @@ public:
                                           &m_test_async);
         ASSERT_UCS_OK(status);
 
+        status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_test_config);
+        ASSERT_UCS_OK(status);
+
         UCS_TEST_CREATE_HANDLE(uct_worker_h, m_test_worker, uct_worker_destroy,
                                uct_worker_create, m_test_async,
                                UCS_THREAD_MODE_SINGLE)
 
         UCS_TEST_CREATE_HANDLE(uct_cm_h, m_test_cm, uct_cm_close,
                                uct_cm_open, GetParam()->component,
-                               m_test_worker);
+                               m_test_worker, m_test_config);
     }
 
     void cleanup() {
         m_test_cm.reset();
+        uct_config_release(m_test_config);
         m_test_worker.reset();
         ucs_async_context_destroy(m_test_async);
         test_uct_cm_sockaddr::cleanup();
@@ -1051,6 +1055,7 @@ protected:
     ucs::handle<uct_worker_h> m_test_worker;
     ucs::handle<uct_cm_h>     m_test_cm;
     ucs_async_context_t       *m_test_async;
+    uct_cm_config_t           *m_test_config;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)

@@ -1233,6 +1233,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
     ucp_context_h   context = worker->context;
     ucp_rsc_index_t cmpt_index, cm_index;
+    uct_cm_config_t *cm_config;
     ucs_status_t    status;
 
     if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
@@ -1252,8 +1253,17 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 
     cm_index = 0;
     ucs_for_each_bit(cmpt_index, context->config.cm_cmpts_bitmap) {
+        status = uct_cm_config_read(context->tl_cmpts[cmpt_index].cmpt,
+                                    NULL, NULL, &cm_config);
+        if (status != UCS_OK) {
+            ucs_error("failed to read cm configuration on component %s",
+                      context->tl_cmpts[cmpt_index].attr.name);
+            goto err_free_cms;
+        }
+
         status = uct_cm_open(context->tl_cmpts[cmpt_index].cmpt, worker->uct,
-                             &worker->cms[cm_index].cm);
+                             cm_config, &worker->cms[cm_index].cm);
+        uct_config_release(cm_config);
         if (status != UCS_OK) {
             ucs_error("failed to open CM on component %s with status %s",
                       context->tl_cmpts[cmpt_index].attr.name,

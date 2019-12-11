@@ -8,12 +8,17 @@
 
 #include <ucs/sys/math.h>
 #include <uct/base/uct_md.h>
+#include <ucs/sys/string.h>
 
+
+ucs_config_field_t uct_cm_config_table[] = {
+  {NULL}
+};
 
 ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker,
-                         uct_cm_h *cm_p)
+                         const uct_cm_config_t *config, uct_cm_h *cm_p)
 {
-    return component->cm_open(component, worker, cm_p);
+    return component->cm_open(component, worker, config, cm_p);
 }
 
 void uct_cm_close(uct_cm_h cm)
@@ -24,6 +29,26 @@ void uct_cm_close(uct_cm_h cm)
 ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 {
     return cm->ops->cm_query(cm, cm_attr);
+}
+
+ucs_status_t uct_cm_config_read(uct_component_h component,
+                                const char *env_prefix, const char *filename,
+                                uct_cm_config_t **config_p)
+{
+    uct_config_bundle_t *bundle = NULL;
+    ucs_status_t status;
+
+    status = uct_config_read(&bundle, component->cm_config.table,
+                             component->cm_config.size, env_prefix,
+                             component->cm_config.prefix);
+    if (status != UCS_OK) {
+        ucs_error("failed to read CM configuration");
+        return status;
+    }
+
+    *config_p = (uct_cm_config_t*) bundle->data;
+    /* coverity[leaked_storage] */
+    return UCS_OK;
 }
 
 UCS_CLASS_INIT_FUNC(uct_listener_t, uct_cm_h cm)
