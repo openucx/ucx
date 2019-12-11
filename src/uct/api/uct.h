@@ -3001,8 +3001,8 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  *                          as returned from @ref uct_query_components.
  * @param [in]  worker      Worker on which to open the connection manager.
  * @param [in]  config      CM configuration options. Should be obtained
- *                          from uct_cm_config_read() function, or point to
- *                          CM-specific structure which extends uct_cm_config_t.
+ *                          from @ref uct_cm_config_read() function, or point to
+ *                          CM-specific structure which extends @ref uct_cm_config_t.
  * @param [out] cm_p        Filled with a handle to the connection manager.
  *
  * @return Error code.
