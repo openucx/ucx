@@ -3000,9 +3000,9 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  * @param [in]  component   Component on which to open the connection manager,
  *                          as returned from @ref uct_query_components.
  * @param [in]  worker      Worker on which to open the connection manager.
- * @param [in]  config      CM configuration options. Should be obtained
+ * @param [in]  config      CM configuration options. Either obtained
  *                          from @ref uct_cm_config_read() function, or point to
- *                          CM-specific structure which extends @ref uct_cm_config_t.
+ *                          CM-specific structure that extends @ref uct_cm_config_t.
  * @param [out] cm_p        Filled with a handle to the connection manager.
  *
  * @return Error code.
@@ -3043,7 +3043,8 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.
  * @param [in]  filename      If non-NULL, read configuration from this file. If
- *                            the file does not exist, it will be ignored.
+ *                            the file does not exist, or exists but cannot be
+ *                            opened or read, it will be ignored.
  * @param [out] config_p      Filled with a pointer to the configuration.
  *
  * @return Error code.
