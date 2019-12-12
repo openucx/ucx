@@ -1531,8 +1531,8 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Release configuration memory returned from uct_md_iface_config_read() or
- * from uct_md_config_read().
+ * @brief Release configuration memory returned from either
+ * uct_md_iface_config_read(), uct_md_config_read(), or from uct_cm_config_read().
  *
  * @param [in]  config        Configuration to release.
  */
