@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
 
-public class UcpEndpointTest {
+public class UcpEndpointTest extends UcxTest {
     @Test
     public void testConnectToListenerByWorkerAddr() {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
@@ -30,15 +31,15 @@ public class UcpEndpointTest {
         UcpEndpoint endpoint = worker.newEndpoint(epParams);
         assertNotNull(endpoint.getNativeId());
 
-        endpoint.close();
-        worker.close();
-        context.close();
+        Collections.addAll(resources, context, worker, endpoint);
+        closeResources();
     }
 
     @Test
     public void testConnectToListenerBySocketAddr() throws SocketException {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
+        Collections.addAll(resources, context, worker);
         // Iterate over each network interface - got it's sockaddr - try to instantiate listener
         // And pass this sockaddr to endpoint.
         Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
@@ -69,8 +70,7 @@ public class UcpEndpointTest {
             }
         }
 
-        worker.close();
-        context.close();
+        closeResources();
     }
 
     @Test
@@ -138,13 +138,9 @@ public class UcpEndpointTest {
 
         assertTrue(request1.isCompleted() && request2.isCompleted());
 
-        rkey1.close();
-        rkey2.close();
-        endpoint.close();
-        worker1.close();
-        worker2.close();
-        context1.close();
-        context2.close();
+        Collections.addAll(resources, context2, context1, worker2, worker1, endpoint, rkey2,
+            rkey1);
+        closeResources();
     }
 
     @Test
@@ -180,11 +176,8 @@ public class UcpEndpointTest {
 
         assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
 
-        ep.close();
-        worker1.close();
-        worker2.close();
-        context1.close();
-        context2.close();
+        Collections.addAll(resources, context2, context1, worker2, worker1, ep);
+        closeResources();
     }
 
     @Test
@@ -237,13 +230,8 @@ public class UcpEndpointTest {
             worker2.progress();
         }
 
-        ep.close();
-        memory1.deregister();
-        memory2.deregister();
-        worker1.close();
-        worker2.close();
-        context1.close();
-        context2.close();
+        Collections.addAll(resources, context2, context1, worker2, worker1, memory2, memory1, ep);
+        closeResources();
     }
 
     @Test
@@ -323,10 +311,8 @@ public class UcpEndpointTest {
 
         }
 
-        worker2.close();
-        worker1.close();
-        context2.close();
-        context1.close();
+        Collections.addAll(resources, context1, context2, worker1, worker2);
+        closeResources();
     }
 
     @Test
@@ -373,11 +359,8 @@ public class UcpEndpointTest {
         final ByteBuffer recvData = bigRecvBuffer.slice();
         assertEquals("Send buffer not equals to recv buffer", sendData, recvData);
 
-        ep.close();
-        worker1.close();
-        worker2.close();
-        context1.close();
-        context2.close();
+        Collections.addAll(resources, context2, context1, worker2, worker1, ep);
+        closeResources();
     }
 
     @Test
@@ -421,10 +404,37 @@ public class UcpEndpointTest {
             worker2.progress();
         }
 
-        ep.close();
-        worker1.close();
-        worker2.close();
-        context1.close();
-        context2.close();
+        Collections.addAll(resources, context2, context1, worker2, worker1, ep);
+        closeResources();
+    }
+
+    @Test
+    public void testRecvSize() {
+        UcpContext context1 = new UcpContext(new UcpParams().requestTagFeature());
+        UcpContext context2 = new UcpContext(new UcpParams().requestTagFeature());
+
+        UcpWorker worker1 = context1.newWorker(new UcpWorkerParams());
+        UcpWorker worker2 = context2.newWorker(new UcpWorkerParams());
+
+        UcpEndpoint ep = worker1.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
+
+        ByteBuffer sendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+
+        sendBuffer.limit(UcpMemoryTest.MEM_SIZE / 2);
+
+        UcpRequest send = ep.sendTaggedNonBlocking(sendBuffer, null);
+        UcpRequest recv = worker2.recvTaggedNonBlocking(recvBuffer, null);
+
+        while (!send.isCompleted() || !recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        assertEquals(UcpMemoryTest.MEM_SIZE / 2, recv.getRecvSize());
+
+        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
+        closeResources();
     }
 }
