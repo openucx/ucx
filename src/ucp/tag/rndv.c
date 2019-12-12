@@ -597,7 +597,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         frag_size = ucs_min(max_frag_size, (rreq->recv.length - offset));
 
         /* internal fragment recv request allocated on receiver side to receive
-        *  put fragment from sender and to performan put to recv buffer */
+         *  put fragment from sender and to perform a put to recv buffer */
         freq = ucp_request_get(worker);
         if (freq == NULL) {
             ucs_fatal("failed to allocate fragment receive request");
@@ -1056,7 +1056,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
         length = (i == (num_frags - 1)) ? (rndv_size - offset) : max_frag_size;
 
         /* internal fragment send request allocated on sender side to receive
-        *  mem type fragment stage to host and to performan put to receiver */
+         *  mem type fragment stage to host and to perform a put to receiver */
         freq = ucp_request_get(worker);
         if (freq == NULL) {
             ucs_fatal("failed to allocate fragment receive request");
@@ -1153,8 +1153,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
         frag_offset = req->recv.frag.offset;
         ucs_assert_always(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(rreq->recv.mem_type));
 
-        /* performan put zcopy on memtype endpoint to stage from
-        ** frag recv buffer to memtype recv buffer */
+        /* perform a put zcopy on memtype endpoint to stage from
+         * frag recv buffer to memtype recv buffer */
         mem_type_ep       = worker->mem_type_ep[rreq->recv.mem_type];
         mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
         if (mem_type_rma_lane == UCP_NULL_LANE) {
