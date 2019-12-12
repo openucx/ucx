@@ -1531,8 +1531,8 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Release configuration memory returned from either
- * uct_md_iface_config_read(), uct_md_config_read(), or from uct_cm_config_read().
+ * @brief Release configuration memory returned from uct_md_iface_config_read(),
+ * uct_md_config_read(), or from uct_cm_config_read().
  *
  * @param [in]  config        Configuration to release.
  */
@@ -3001,8 +3001,9 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  *                          as returned from @ref uct_query_components.
  * @param [in]  worker      Worker on which to open the connection manager.
  * @param [in]  config      CM configuration options. Either obtained
- *                          from @ref uct_cm_config_read() function, or point to
- *                          CM-specific structure that extends @ref uct_cm_config_t.
+ *                          from @ref uct_cm_config_read() function, or pointer
+ *                          to CM-specific structure that extends
+ *                          @ref uct_cm_config_t.
  * @param [out] cm_p        Filled with a handle to the connection manager.
  *
  * @return Error code.
