@@ -12,6 +12,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
@@ -130,9 +131,11 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_cuda_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                       uint64_t remote_addr, uct_rkey_t rkey,
-                                       uct_completion_t *comp)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_get_zcopy,
+                 (tl_ep, iov, iovcnt, remote_addr, rkey, comp),
+                 uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                 uint64_t remote_addr, uct_rkey_t rkey,
+                 uct_completion_t *comp)
 {
     ucs_status_t status;
 
@@ -149,9 +152,11 @@ ucs_status_t uct_cuda_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
     return status;
 }
 
-ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                       uint64_t remote_addr, uct_rkey_t rkey,
-                                       uct_completion_t *comp)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_zcopy,
+                 (tl_ep, iov, iovcnt, remote_addr, rkey, comp),
+                 uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                 uint64_t remote_addr, uct_rkey_t rkey,
+                 uct_completion_t *comp)
 {
     ucs_status_t status;
 

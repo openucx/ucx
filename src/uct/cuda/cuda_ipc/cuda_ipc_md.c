@@ -12,6 +12,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -143,9 +144,10 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     return (*accessible == 1) ? UCS_OK : UCS_ERR_UNREACHABLE;
 }
 
-static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_component_t *component,
-                                             const void *rkey_buffer,
-                                             uct_rkey_t *rkey_p, void **handle_p)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
+                 (component, rkey_buffer, rkey_p, handle_p),
+                 uct_component_t *component, const void *rkey_buffer,
+                 uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_cuda_ipc_component_t *com = ucs_derived_of(component, uct_cuda_ipc_component_t);
     uct_cuda_ipc_key_t *packed    = (uct_cuda_ipc_key_t *) rkey_buffer;

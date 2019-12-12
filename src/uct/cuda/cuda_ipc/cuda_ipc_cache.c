@@ -102,8 +102,9 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
               cache->name, from, to);
 }
 
-ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key,
-                                              void **mapped_addr)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_cache_map_memhandle,
+                 (arg, key, mapped_addr),
+                 void *arg, uct_cuda_ipc_key_t *key, void **mapped_addr)
 {
     uct_cuda_ipc_cache_t *cache = (uct_cuda_ipc_cache_t *)arg;
     ucs_status_t status;

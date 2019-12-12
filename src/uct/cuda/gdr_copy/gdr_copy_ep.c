@@ -11,6 +11,7 @@
 #include <uct/base/uct_log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
+#include <ucs/profile/profile.h>
 #include <ucs/type/class.h>
 
 
@@ -33,9 +34,10 @@ UCS_CLASS_DEFINE(uct_gdr_copy_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_gdr_copy_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_gdr_copy_ep_t, uct_ep_t);
 
-ucs_status_t uct_gdr_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                       unsigned length, uint64_t remote_addr,
-                                       uct_rkey_t rkey)
+UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_ep_put_short,
+                 (tl_ep, buffer, length, remote_addr, rkey),
+                 uct_ep_h tl_ep, const void *buffer, unsigned length,
+                 uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_gdr_copy_key_t *gdr_copy_key = (uct_gdr_copy_key_t *) rkey;
     size_t bar_offset;
@@ -67,9 +69,10 @@ ucs_status_t uct_gdr_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return UCS_OK;
 }
 
-ucs_status_t uct_gdr_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
-                                       unsigned length, uint64_t remote_addr,
-                                       uct_rkey_t rkey)
+UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_ep_get_short,
+                 (tl_ep, buffer, length, remote_addr, rkey),
+                 uct_ep_h tl_ep, void *buffer, unsigned length,
+                 uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_gdr_copy_key_t *gdr_copy_key = (uct_gdr_copy_key_t *) rkey;
     size_t bar_offset;

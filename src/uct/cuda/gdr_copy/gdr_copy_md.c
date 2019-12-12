@@ -13,6 +13,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
 #include <uct/cuda/base/cuda_iface.h>
 
@@ -98,9 +99,10 @@ static ucs_status_t uct_gdr_copy_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
-                              unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
+UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
+                 (uct_md, address, length, flags, mem_hndl),
+                 uct_md_h uct_md, void *address, size_t length,
+                 unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
@@ -151,9 +153,10 @@ err:
     return UCS_ERR_IO_ERROR;
 }
 
-static ucs_status_t uct_gdr_copy_mem_dereg_internal(uct_md_h uct_md, uct_gdr_copy_mem_t *mem_hndl)
+UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_dereg_internal,
+                 (uct_md, mem_hndl),
+                 uct_md_h uct_md, uct_gdr_copy_mem_t *mem_hndl)
 {
-
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     int ret;
 

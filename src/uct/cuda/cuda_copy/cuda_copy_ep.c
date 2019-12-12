@@ -7,6 +7,7 @@
 #include "cuda_copy_iface.h"
 
 #include <uct/base/uct_log.h>
+#include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
@@ -81,9 +82,11 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uct_completion_t *comp)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
+                 (tl_ep, iov, iovcnt, remote_addr, rkey, comp),
+                 uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                 uint64_t remote_addr, uct_rkey_t rkey,
+                 uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
@@ -102,9 +105,11 @@ ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     return status;
 }
 
-ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uct_completion_t *comp)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
+                 (tl_ep, iov, iovcnt, remote_addr, rkey, comp),
+                 uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                 uint64_t remote_addr, uct_rkey_t rkey,
+                 uct_completion_t *comp)
 {
 
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
@@ -125,10 +130,10 @@ ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
 
 }
 
-
-ucs_status_t uct_cuda_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                        unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t rkey)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
+                 (tl_ep, buffer, length, remote_addr, rkey),
+                 uct_ep_h tl_ep, const void *buffer, unsigned length,
+                 uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
@@ -145,9 +150,10 @@ ucs_status_t uct_cuda_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return status;
 }
 
-ucs_status_t uct_cuda_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
-                                        unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t rkey)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
+                 (tl_ep, buffer, length, remote_addr, rkey),
+                 uct_ep_h tl_ep, void *buffer, unsigned length,
+                 uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
