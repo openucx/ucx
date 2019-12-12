@@ -56,6 +56,7 @@ struct jucx_context {
     volatile jobject jucx_request;
     ucs_status_t status;
     ucs_spinlock_t lock;
+    size_t length;
 };
 
 void jucx_request_init(void *request);
