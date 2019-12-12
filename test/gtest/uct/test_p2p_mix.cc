@@ -124,9 +124,7 @@ void uct_p2p_mix_test::random_op(const mapped_buffer &sendbuf,
 
     for (;;) {
         status = (this->*m_avail_send_funcs[op])(sendbuf, recvbuf, &comp);
-        if (status == UCS_OK) {
-            break;
-        } else if (status == UCS_INPROGRESS) {
+        if (status == UCS_INPROGRESS) {
             /* coverity[loop_condition] */
             while (comp.count > 0) {
                 progress();
@@ -137,6 +135,7 @@ void uct_p2p_mix_test::random_op(const mapped_buffer &sendbuf,
             continue;
         } else {
             ASSERT_UCS_OK(status);
+            break;
         }
     }
 }
@@ -156,7 +155,7 @@ void uct_p2p_mix_test::run(unsigned count) {
         random_op(sendbuf, recvbuf);
     }
 
-    sender().flush();
+    flush();
 }
 
 void uct_p2p_mix_test::init() {
