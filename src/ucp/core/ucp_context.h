@@ -51,7 +51,7 @@ typedef struct ucp_context_config {
     /** Communication scheme in RNDV protocol */
     ucp_rndv_mode_t                        rndv_mode;
     /** Estimation of bcopy bandwidth */
-    size_t                                 bcopy_bw;
+    double                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */

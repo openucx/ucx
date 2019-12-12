@@ -101,7 +101,7 @@ typedef struct ucs_cpu_builtin_memcpy {
 #define UCS_SYS_CACHE_LINE_SIZE    UCS_ARCH_CACHE_LINE_SIZE
 #endif
 
-/* Array of default built-in memcpy settings for different CPU arhitectures */
+/* Array of default built-in memcpy settings for different CPU architectures */
 extern const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST];
 
 
@@ -134,6 +134,13 @@ static inline void ucs_clear_cache(void *start, void *end)
     ucs_arch_clear_cache(start, end);
 #endif
 }
+
+/**
+ * Get memory copy bandwidth.
+ * 
+ * @return Memory copy bandwidth estimation based on CPU used.
+ */
+double ucs_cpu_get_memcpy_bw();
 
 END_C_DECLS
 
