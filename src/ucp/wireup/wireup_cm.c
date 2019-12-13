@@ -204,6 +204,9 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
+/*
+ * The main thread progress part of connection establishment on client side
+ */
 static unsigned ucp_cm_client_connect_progress(void *arg)
 {
     ucp_cm_client_connect_progress_arg_t *progress_arg = arg;
@@ -270,6 +273,9 @@ out:
     return 1;
 }
 
+/*
+ * Async callback on a client side which notifies that server is connected.
+ */
 static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
                                      const uct_cm_remote_data_t *remote_data,
                                      ucs_status_t status)
@@ -288,6 +294,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
                             UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
                             UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
                             UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
+        ucs_error("incompatible client server connection establishment protocol");
         status = UCS_ERR_UNSUPPORTED;
         goto err_out;
     }
@@ -351,10 +358,10 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
+static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
 {
-    ucp_ep_h ucp_ep = arg;
     void *req;
+    ucs_status_t status;
 
     ucs_trace("ep %p: flags %xu cm_remote_disconnect_progress", ucp_ep,
               ucp_ep->flags);
@@ -364,11 +371,21 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     if (ucs_test_all_flags(ucp_ep->flags, UCP_EP_FLAG_CLOSED |
                                           UCP_EP_FLAG_CLOSE_REQ_VALID)) {
+        if (!UCS_PTR_IS_PTR(ucp_ep_ext_gen(ucp_ep)->close_req.req)) {
+            status = UCS_PTR_STATUS(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+            ucs_error("ep %p: invalid close request, %s", ucp_ep,
+                      ucs_status_string(status));
+            goto err;
+        }
+
         ucp_request_complete_send(ucp_ep_ext_gen(ucp_ep)->close_req.req, UCS_OK);
         return 1;
     }
 
     if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+        /* the ep is closed by API but close req is not valid yet (checked
+         * above), it will be set later from scheduled
+         * @ref ucp_ep_close_flushed_callback */
         return 1;
     }
 
@@ -389,14 +406,18 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         /* flush is in progress, wait its completion */
         ucp_request_release(req);
     } else {
+        status = UCS_PTR_STATUS(req);
         ucs_error("ucp_ep_flush_internal completed with error: %s",
-                  ucs_status_string(UCS_PTR_STATUS(req)));
-        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
-                                 ucp_ep_get_cm_uct_ep(ucp_ep),
-                                 ucp_ep_get_cm_lane(ucp_ep),
-                                 UCS_PTR_STATUS(req));
+                  ucs_status_string(status));
+        goto err;
     }
 
+    return 1;
+
+err:
+    ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
+                             ucp_ep_get_cm_uct_ep(ucp_ep),
+                             ucp_ep_get_cm_lane(ucp_ep), status);
     return 1;
 }
 
@@ -406,6 +427,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucp_ep_h ucp_ep                                = progress_arg->ucp_ep;
     uct_ep_h uct_cm_ep                             = progress_arg->uct_cm_ep;
     ucs_async_context_t *async                     = &ucp_ep->worker->async;
+    ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(async);
 
@@ -421,7 +443,13 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         /* if the EP is not local connected, the EP has been flushed and CM lane is
          * disconnected, schedule close request completion and EP destroy */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
-        ucp_ep_local_disconnect_progress(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+        close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+        if (UCS_PTR_IS_PTR(close_req)) {
+            ucp_ep_local_disconnect_progress(close_req);
+        } else {
+            ucs_error("ep %p: invalid close request, %s", ucp_ep,
+                      ucs_status_string(UCS_PTR_STATUS(close_req)));
+        }
     }
 
     UCS_ASYNC_UNBLOCK(async);
@@ -664,15 +692,22 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
-
+/*
+ * The main thread progress part of connection establishment on server side
+ */
 static unsigned ucp_cm_server_connect_progress(void *arg)
 {
     ucp_ep_h ucp_ep = arg;
 
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     ucp_wireup_remote_connected(ucp_ep);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
     return 1;
 }
 
+/*
+ * Async callback on a server side which notifies that client is connected.
+ */
 static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
                                      ucs_status_t status)
 {

@@ -869,9 +869,13 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
             /* lanes already flushed, start disconnect on CM lane */
             ucp_ep_cm_disconnect_cm_lane(ep);
             close_req = ucp_ep_cm_close_request_get(ep);
-            ucp_ep_set_close_request(ep, close_req, "close");
-            request = (close_req != NULL) ? close_req + 1 :
-                      UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+            if (close_req != NULL) {
+                request = close_req + 1;
+                ucp_ep_set_close_request(ep, close_req, "close");
+            } else {
+                request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                ucp_ep_set_close_request(ep, request, "close no memory");
+            }
         } else {
             ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
         }

@@ -50,6 +50,8 @@ enum {
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
+    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
+                                                        close_req is valid */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -60,9 +62,7 @@ enum {
     UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22),/* DEBUG: flush_state is valid */
-    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(23) /* DEBUG: close protocol is started and
-                                                               close_req is valid */
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
 };
 
 

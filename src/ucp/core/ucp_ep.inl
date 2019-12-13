@@ -207,9 +207,7 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 
 static inline void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
 {
-    ucp_ep_flush_state_t *flush_state UCS_V_UNUSED = ucp_ep_flush_state(ep);
-
-    ucs_assert(ucs_queue_is_empty(&flush_state->reqs));
+    ucs_assert(ucs_queue_is_empty(&ucp_ep_flush_state(ep)->reqs));
     ep->flags &= ~UCP_EP_FLAG_FLUSH_STATE_VALID;
 }
 
