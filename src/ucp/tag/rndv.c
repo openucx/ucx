@@ -21,6 +21,11 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
 
+    /* no bw lanes */
+    if (!ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map) {
+        return 0;
+    }
+
     /* check if there is a bw lane to register mem type */
     ucs_for_each_bit(md_index,
                      ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map) {
