@@ -384,6 +384,8 @@ CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
 					#include <string>
 					int main() {
+						int a;
+						typeof(a) b = 0;
 						std::to_string(1);
 						return 0;
 					} ]])],
