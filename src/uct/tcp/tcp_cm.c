@@ -156,6 +156,9 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t eve
                             UCT_TCP_CM_CONN_ACK |
                             UCT_TCP_CM_CONN_WAIT_REQ)),
                 "ep=%p", ep);
+    ucs_assertv(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) ||
+                (ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED),
+                "ep=%p", ep);
 
     pkt_length        = sizeof(*pkt_hdr);
     if (event == UCT_TCP_CM_CONN_REQ) {
