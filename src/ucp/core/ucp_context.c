@@ -947,6 +947,7 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                                             int sockaddr_cm_enable)
 {
     uint64_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
+    uint64_t cm_cmpts_bitmap_safe;
     ucp_rsc_index_t cmpt_idx, cm_idx;
 
     memset(&context->config.cm_cmpt_idxs, UCP_NULL_RESOURCE, UCP_MAX_RESOURCES);
@@ -961,7 +962,8 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
         /* go over the priority list and find the CM's cm_idx in the
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
-        ucs_for_each_bit(cmpt_idx, cm_cmpts_bitmap) {
+        cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
+        ucs_for_each_bit(cmpt_idx, cm_cmpts_bitmap_safe) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
@@ -981,12 +983,6 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
     unsigned num_sockaddr_tls      = config->sockaddr_cm_tls.count;
     int sockaddr_cm_enable         = context->config.ext.sockaddr_cm_enable !=
                                      UCS_NO;
-
-    /* Check if a list of sockaddr transports/CMs exists */
-    if (num_sockaddr_tls == 0) {
-        ucs_debug("no sockaddr transports or connection managers specified");
-        return;
-    }
 
     /* Check if a list of sockaddr transports/CMs has valid length */
     if (num_sockaddr_tls > UCP_MAX_RESOURCES) {
