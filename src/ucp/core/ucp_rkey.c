@@ -187,6 +187,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
     ucs_memory_type_t mem_type;
     uint8_t md_size;
     const uint8_t *p;
+    uint8_t flags;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -208,8 +209,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
      * allocations are done from a memory pool.
      * We keep all of them to handle a future transport switch.
      */
+    flags = 0;
     if (md_count <= UCP_RKEY_MPOOL_MAX_MD) {
-        rkey = ucs_mpool_get_inline(&worker->rkey_mp);
+        rkey  = ucs_mpool_get_inline(&worker->rkey_mp);
+        flags = UCP_RKEY_DESC_FLAG_POOL;
     } else {
         rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->tl_rkey[0]) * md_count),
                           "ucp_rkey");
@@ -224,6 +227,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
 
     rkey->md_map   = md_map;
     rkey->mem_type = mem_type;
+    rkey->flags    = flags;
 #if ENABLE_PARAMS_CHECK
     rkey->ep       = ep;
 #endif
@@ -355,7 +359,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
         ++rkey_index;
     }
 
-    if (ucs_popcount(rkey->md_map) <= UCP_RKEY_MPOOL_MAX_MD) {
+    if (rkey->flags & UCP_RKEY_DESC_FLAG_POOL) {
         worker = ucs_container_of(ucs_mpool_obj_owner(rkey), ucp_worker_t,
                                   rkey_mp);
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
