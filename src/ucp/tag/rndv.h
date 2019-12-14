@@ -61,4 +61,13 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 
 ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq);
 
+static UCS_F_ALWAYS_INLINE int ucp_rndv_is_get_zcopy(ucs_memory_type_t mem_type,
+                                                     ucp_rndv_mode_t rndv_mode)
+{
+    return ((rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
+            ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
+             (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
+              UCP_MEM_IS_ROCM(mem_type))));
+}
+
 #endif

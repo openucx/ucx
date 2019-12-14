@@ -16,14 +16,6 @@
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 
-static int ucp_rndv_is_get_zcopy(ucs_memory_type_t mem_type,
-                                 ucp_rndv_mode_t rndv_mode)
-{
-    return ((rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
-            ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-              (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) || UCP_MEM_IS_ROCM(mem_type))));
-}
-
 static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
                                             ucs_memory_type_t mem_type)
 {
@@ -105,7 +97,7 @@ static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
         rndv_rtr_hdr->address = (uintptr_t)rreq->recv.buffer;
-        rndv_rtr_hdr->size    = rreq->recv.length;
+        rndv_rtr_hdr->size    = rndv_req->send.rndv_rtr.length;
         rndv_rtr_hdr->offset  = rreq->recv.frag.offset;
 
         packed_rkey_size = ucp_rkey_pack_uct(rndv_req->send.ep->worker->context,
@@ -315,7 +307,7 @@ static void ucp_rndv_recv_data_init(ucp_request_t *rreq, size_t size)
 }
 
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                                   uintptr_t sender_reqptr)
+                                  uintptr_t sender_reqptr, size_t recv_length)
 {
     ucp_trace_req(rndv_req, "send rtr remote sreq 0x%lx rreq %p", sender_reqptr,
                   rreq);
@@ -324,6 +316,7 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     rndv_req->send.uct.func                = ucp_proto_progress_rndv_rtr;
     rndv_req->send.rndv_rtr.remote_request = sender_reqptr;
     rndv_req->send.rndv_rtr.rreq           = rreq;
+    rndv_req->send.rndv_rtr.length         = recv_length;
 
     ucp_request_send(rndv_req, 0);
 }
@@ -420,7 +413,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
         ucp_rndv_recv_data_init(rndv_req->send.rndv_get.rreq,
                                 rndv_req->send.length);
         ucp_rndv_req_send_rtr(rndv_req, rndv_req->send.rndv_get.rreq,
-                              rndv_req->send.rndv_get.remote_request);
+                              rndv_req->send.rndv_get.remote_request,
+                              rndv_req->send.length);
         return UCS_OK;
     }
 
@@ -635,14 +629,14 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         frndv_req->send.ep           = rndv_req->send.ep;
         frndv_req->send.pending_lane = UCP_NULL_LANE;
 
-        ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.reqptr);
+        ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.reqptr,
+                              freq->recv.length);
         offset += frag_size;
     }
 
     /* release original rndv reply request */
     ucp_request_put(rndv_req);
 }
-
 
 UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
                       ucp_worker_h worker, ucp_request_t *rreq,
@@ -715,15 +709,17 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
             }
         }
         /* put protocol is allowed - register receive buffer memory for rma */
+        ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
         ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map,
-                                    ucs_min(rreq->recv.length, rndv_rts_hdr->size));
+                                    rndv_rts_hdr->size);
     }
 
     /* The sender didn't specify its address in the RTS, or the rndv mode was
      * configured to PUT, or GET rndv mode is unsupported - send an RTR and
      * the sender will send the data with active message or put_zcopy. */
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
-    ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr);
+    ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr,
+                          rndv_rts_hdr->size);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -948,6 +944,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_send_put_completion, (self, status),
     }
 
     req->send.state.dt.offset += freq->send.length;
+    ucs_assert(req->send.state.dt.offset <= req->send.length);
 
     /* send ATP for last fragment of the rndv request */
     if (req->send.length == req->send.state.dt.offset) {
@@ -1236,6 +1233,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                 if (status != UCS_ERR_UNSUPPORTED) {
                     return status;
                 }
+                /* If we get here, it means that RNDV pipeline protocol is
+                 * unsupported and we have to use PUT_ZCOPY RNDV scheme instead */
             }
 
             if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&

@@ -23,6 +23,7 @@ public:
         VARIANT_DEFAULT,
         VARIANT_ERR_HANDLING,
         VARIANT_RNDV_PUT_ZCOPY,
+        VARIANT_RNDV_GET_ZCOPY,
         VARIANT_RNDV_AUTO,
         VARIANT_SEND_NBR,
     };
@@ -40,6 +41,8 @@ public:
     virtual void init() {
         if (GetParam().variant == VARIANT_RNDV_PUT_ZCOPY) {
             modify_config("RNDV_SCHEME", "put_zcopy");
+        } else if (GetParam().variant == VARIANT_RNDV_GET_ZCOPY) {
+            modify_config("RNDV_SCHEME", "get_zcopy");
         } else if (GetParam().variant == VARIANT_RNDV_AUTO) {
             modify_config("RNDV_SCHEME", "auto");
         }
@@ -73,6 +76,9 @@ public:
         generate_test_params_variant(ctx_params, name,
                                      test_case_name + "/rndv_put_zcopy", tls,
                                      VARIANT_RNDV_PUT_ZCOPY, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_get_zcopy", tls,
+                                     VARIANT_RNDV_GET_ZCOPY, result);
         generate_test_params_variant(ctx_params, name,
                                      test_case_name + "/rndv_auto", tls,
                                      VARIANT_RNDV_AUTO, result);

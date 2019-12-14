@@ -167,7 +167,9 @@ struct ucp_request {
 
                 struct {
                     uintptr_t         remote_request; /* pointer to the send request on receiver side */
-                    ucp_request_t     *rreq;
+                    ucp_request_t     *rreq;          /* pointer to the receive request */
+                    size_t            length;         /* the length of the data that should be fetched
+                                                       * from sender side */
                 } rndv_rtr;
 
                 struct {
