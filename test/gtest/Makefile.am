@@ -3,6 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -212,6 +213,21 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(CUDA_LDFLAGS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
+endif
+
+if HAVE_HIP
+if HAVE_GNUXX11
+gtest_SOURCES += \
+	ucm/rocm_hooks.cc
+gtest_CPPFLAGS += \
+	$(HIP_CPPFLAGS)
+gtest_CXXFLAGS += \
+	$(HIP_CXXFLAGS)
+gtest_LDADD += \
+	$(HIP_LDFLAGS) \
+	$(HIP_LIBS) \
+	$(top_builddir)/src/uct/rocm/libuct_rocm.la
+endif
 endif
 
 noinst_HEADERS = \
