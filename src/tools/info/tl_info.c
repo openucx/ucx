@@ -471,6 +471,69 @@ out:
     ;
 }
 
+static void print_cm_attr(uct_worker_h worker, uct_component_h component,
+                          const char *comp_name)
+{
+    uct_cm_config_t *cm_config;
+    uct_cm_attr_t cm_attr;
+    ucs_status_t status;
+    uct_cm_h cm;
+
+    status = uct_cm_config_read(component, NULL, NULL, &cm_config);
+    if (status != UCS_OK) {
+        printf("# < failed to read the %s connection manager configuration >\n",
+               comp_name);
+        return;
+    }
+
+    status = uct_cm_open(component, worker, cm_config, &cm);
+    uct_config_release(cm_config);
+    if (status != UCS_OK) {
+        printf("# < failed to open connection manager %s >\n", comp_name);
+        /* coverity[leaked_storage] */
+        return;
+    }
+
+    cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+    status = uct_cm_query(cm, &cm_attr);
+    if (status != UCS_OK) {
+        printf("# < failed to query connection manager >\n");
+    } else {
+        printf("#\n");
+        printf("# Connection manager: %s\n", comp_name);
+        printf("#      max_conn_priv: %zu bytes\n", cm_attr.max_conn_priv);
+    }
+
+    uct_cm_close(cm);
+}
+
+static void print_cm_info(uct_component_h component,
+                          const uct_component_attr_t *component_attr)
+{
+    ucs_async_context_t *async;
+    uct_worker_h worker;
+    ucs_status_t status;
+
+    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &async);
+    if (status != UCS_OK) {
+        printf("# < failed to create asynchronous context >\n");
+        return;
+    }
+
+    status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &worker);
+    if (status != UCS_OK) {
+        printf("# < failed to create uct worker >\n");
+        goto out_async_ctx_destroy;
+    }
+
+    print_cm_attr(worker, component, component_attr->name);
+
+    uct_worker_destroy(worker);
+
+out_async_ctx_destroy:
+    ucs_async_context_destroy(async);
+}
+
 static void print_uct_component_info(uct_component_h component,
                                      int print_opts,
                                      ucs_config_print_flags_t print_flags,
@@ -480,8 +543,9 @@ static void print_uct_component_info(uct_component_h component,
     ucs_status_t status;
     unsigned i;
 
-    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME  |
-                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME              |
+                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT |
+                                UCT_COMPONENT_ATTR_FIELD_FLAGS;
     status = uct_component_query(component, &component_attr);
     if (status != UCS_OK) {
         printf("#   < failed to query component >\n");
@@ -493,7 +557,7 @@ static void print_uct_component_info(uct_component_h component,
                                          component_attr.md_resource_count);
     status = uct_component_query(component, &component_attr);
     if (status != UCS_OK) {
-        printf("#   < failed to query component resources >\n");
+        printf("#   < failed to query component md resources >\n");
         return;
     }
 
@@ -501,6 +565,10 @@ static void print_uct_component_info(uct_component_h component,
         print_md_info(component, &component_attr,
                       component_attr.md_resources[i].md_name,
                       print_opts, print_flags, req_tl_name);
+    }
+
+    if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
+        print_cm_info(component, &component_attr);
     }
 }
 

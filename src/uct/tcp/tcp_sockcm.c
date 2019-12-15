@@ -7,6 +7,17 @@
 #include "tcp_sockcm.h"
 
 
+ucs_config_field_t uct_tcp_sockcm_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_tcp_sockcm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
+
+  {"PRIV_DATA_LEN", "2048",
+   "TCP CM private data length",
+   ucs_offsetof(uct_tcp_sockcm_config_t, priv_data_len), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {NULL}
+};
+
 static ucs_status_t uct_tcp_sockcm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 {
     uct_tcp_sockcm_t *tcp_sockcm = ucs_derived_of(cm, uct_tcp_sockcm_t);
@@ -60,10 +71,13 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
 UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
                     uct_worker_h worker, const uct_cm_config_t *config)
 {
+    uct_tcp_sockcm_config_t *cm_config = ucs_derived_of(config,
+                                                        uct_tcp_sockcm_config_t);
+
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops, worker, component);
 
-    self->priv_data_len = 2048; /* TODO make this configurable */
+    self->priv_data_len = cm_config->priv_data_len;
 
     ucs_debug("created tcp_sockcm %p", self);
 
