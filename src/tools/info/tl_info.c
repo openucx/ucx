@@ -501,8 +501,7 @@ static void print_cm_attr(uct_worker_h worker, uct_component_h component,
     } else {
         printf("#\n");
         printf("# Connection manager: %s\n", comp_name);
-        printf("#     Component: %s\n", comp_name);
-        printf("#        max_conn_priv: %zu bytes\n", cm_attr.max_conn_priv);
+        printf("#      max_conn_priv: %zu bytes\n", cm_attr.max_conn_priv);
     }
 
     uct_cm_close(cm);
