@@ -55,7 +55,7 @@ PROJECT_BRIEF          = "Unified Communication X"
 # pixels and the maximum width should not exceed 200 pixels. Doxygen will copy
 # the logo to the output directory.
 
-PROJECT_LOGO           = $(SRCDIR)/doc/doxygen/UCX_Logo_80x80.png
+PROJECT_LOGO           = $(SRCDIR)/docs/doxygen/UCX_Logo_80x80.png
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute) path
 # into which the generated documentation will be written. If a relative path is
@@ -681,7 +681,7 @@ FILE_VERSION_FILTER    =
 # DoxygenLayout.xml, doxygen will parse it automatically even if the LAYOUT_FILE
 # tag is left empty.
 
-LAYOUT_FILE            = $(SRCDIR)/doc/doxygen/ucxlayout.xml
+LAYOUT_FILE            = $(SRCDIR)/docs/doxygen/ucxlayout.xml
 
 # The CITE_BIB_FILES tag can be used to specify one or more bib files containing
 # the reference definitions. This must be a list of .bib files. The .bib
@@ -691,7 +691,7 @@ LAYOUT_FILE            = $(SRCDIR)/doc/doxygen/ucxlayout.xml
 # LATEX_BIB_STYLE. To use this feature you need bibtex and perl available in the
 # search path. See also \cite for info how to create references.
 
-CITE_BIB_FILES         = $(SRCDIR)/doc/doxygen/ucx.bib
+CITE_BIB_FILES         = $(SRCDIR)/docs/doxygen/ucx.bib
 
 #---------------------------------------------------------------------------
 # Configuration options related to warning and progress messages
@@ -770,10 +770,10 @@ INPUT                  = $(SRCDIR)/src/ucp/api/             \
                          $(SRCDIR)/src/ucs/time/            \
                          $(SRCDIR)/src/ucs/type/            \
                          $(SRCDIR)/src/ucs/sys/             \
-                         $(SRCDIR)/doc/doxygen/preface.md   \
-                         $(SRCDIR)/doc/doxygen/intro.md     \
-                         $(SRCDIR)/doc/doxygen/design.md    \
-                         $(SRCDIR)/doc/doxygen/conventions.md
+                         $(SRCDIR)/docs/doxygen/preface.md   \
+                         $(SRCDIR)/docs/doxygen/intro.md     \
+                         $(SRCDIR)/docs/doxygen/design.md    \
+                         $(SRCDIR)/docs/doxygen/conventions.md
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
@@ -872,8 +872,8 @@ EXAMPLE_RECURSIVE      = NO
 # that contain images that are to be included in the documentation (see the
 # \image command).
 
-IMAGE_PATH             = $(SRCDIR)/doc/figures \
-                         $(SRCDIR)/doc/doxygen
+IMAGE_PATH             = $(SRCDIR)/docs/figures \
+                         $(SRCDIR)/docs/doxygen
 
 # The INPUT_FILTER tag can be used to specify a program that doxygen should
 # invoke to filter for each input file. Doxygen will invoke the filter program
@@ -1653,7 +1653,7 @@ EXTRA_PACKAGES         = times
 # to HTML_HEADER.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_HEADER           = doc/doxygen/header.tex
+LATEX_HEADER           = docs/doxygen/header.tex
 
 # The LATEX_FOOTER tag can be used to specify a personal LaTeX footer for the
 # generated LaTeX document. The footer should contain everything after the last
@@ -1683,7 +1683,7 @@ LATEX_EXTRA_STYLESHEET =
 # markers available.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_EXTRA_FILES      = $(SRCDIR)/doc/doxygen/UCX_Logo_930x933.png
+LATEX_EXTRA_FILES      = $(SRCDIR)/docs/doxygen/UCX_Logo_930x933.png
 
 # If the PDF_HYPERLINKS tag is set to YES, the LaTeX that is generated is
 # prepared for conversion to PDF (using ps2pdf or pdflatex). The PDF file will
