@@ -208,17 +208,20 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 
-        /* Cached map of components which support CM capability or 0 if disabled
-         * by user */
+        /* Cached map of components which support CM capability */
         uint64_t                  cm_cmpts_bitmap;
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
 
         /* Array of sockaddr transports indexes.
-         * The indexes appear it the configured priority order */
+         * The indexes appear in the configured priority order */
         ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
-        unsigned                  num_sockaddr_tls;
+        ucp_rsc_index_t           num_sockaddr_tls;
+        /* Array of CMs indexes. The indexes appear in the configured priority
+         * order. */
+        ucp_rsc_index_t           cm_cmpt_idxs[UCP_MAX_RESOURCES];
+        ucp_rsc_index_t           num_cm_cmpts;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;

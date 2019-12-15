@@ -194,14 +194,14 @@ static void ucp_listener_close_uct_listeners(ucp_listener_h listener)
 
     ucs_assert_always(ucp_worker_sockaddr_is_cm_proto(listener->worker));
 
-    for (i = 0; i < listener->num_tls; ++i) {
+    for (i = 0; i < listener->num_rscs; ++i) {
         uct_listener_destroy(listener->listeners[i]);
     }
 
     ucs_free(listener->listeners);
 
     listener->listeners = NULL;
-    listener->num_tls   = 0;
+    listener->num_rscs  = 0;
 }
 
 static void ucp_listener_close_ifaces(ucp_listener_h listener)
@@ -211,7 +211,7 @@ static void ucp_listener_close_ifaces(ucp_listener_h listener)
 
     ucs_assert_always(!ucp_worker_sockaddr_is_cm_proto(listener->worker));
 
-    for (i = 0; i < listener->num_tls; i++) {
+    for (i = 0; i < listener->num_rscs; i++) {
         worker = listener->wifaces[i]->worker;
         ucs_assert_always(worker == listener->worker);
         /* remove pending slow-path progress in case it wasn't removed yet */
@@ -245,7 +245,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
 
-    listener->num_tls           = 0;
+    listener->num_rscs          = 0;
     uct_listeners               = ucs_calloc(num_cms, sizeof(*uct_listeners),
                                              "uct_listeners_arr");
     if (uct_listeners == NULL) {
@@ -259,7 +259,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         ucp_cm = &worker->cms[i];
         status = uct_listener_create(ucp_cm->cm, &addr,
                                      params->sockaddr.addrlen, &uct_params,
-                                     &uct_listeners[listener->num_tls]);
+                                     &uct_listeners[listener->num_rscs]);
         if (status != UCS_OK) {
             ucs_debug("failed to create UCT listener on CM %p (component %s) "
                       "with address %s status %s", ucp_cm->cm,
@@ -270,7 +270,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
             continue;
         }
 
-        ++listener->num_tls;
+        ++listener->num_rscs;
 
         status = ucs_sockaddr_get_port(&addr, &port);
         if (status != UCS_OK) {
@@ -278,7 +278,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         }
 
         uct_attr.field_mask = UCT_LISTENER_ATTR_FIELD_SOCKADDR;
-        status = uct_listener_query(uct_listeners[listener->num_tls - 1],
+        status = uct_listener_query(uct_listeners[listener->num_rscs - 1],
                                     &uct_attr);
         if (status != UCS_OK) {
             goto err_destroy_listeners;
@@ -299,7 +299,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         }
     }
 
-    if (listener->num_tls > 0) {
+    if (listener->num_rscs > 0) {
         status = ucs_sockaddr_copy((struct sockaddr *)&listener->sockaddr,
                                    (struct sockaddr *)&uct_attr.sockaddr);
         if (status != UCS_OK) {
@@ -309,7 +309,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
     /* return the status of the last call of uct_listener_create if no listener
        was created */
-    return (listener->num_tls > 0) ? UCS_OK : status;
+    return (listener->num_rscs > 0) ? UCS_OK : status;
 
 err_destroy_listeners:
     ucp_listener_close_uct_listeners(listener);
@@ -417,7 +417,7 @@ ucp_listen_on_iface(ucp_listener_h listener,
         }
 
         sockaddr_tls++;
-        listener->num_tls = sockaddr_tls;
+        listener->num_rscs = sockaddr_tls;
         ucs_trace("listener %p: accepting connections on %s on %s",
                   listener, tl_md->rsc.md_name,
                   ucs_sockaddr_str(iface_params.mode.sockaddr.listen_sockaddr.addr,
@@ -428,7 +428,7 @@ ucp_listen_on_iface(ucp_listener_h listener,
         ucs_error("none of the available transports can listen for connections on %s",
                   ucs_sockaddr_str(params->sockaddr.addr, saddr_str,
                   sizeof(saddr_str)));
-        listener->num_tls = 0;
+        listener->num_rscs = 0;
         status = UCS_ERR_UNREACHABLE;
         goto err_close_listener_wifaces;
     }
