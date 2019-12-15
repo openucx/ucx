@@ -1224,8 +1224,6 @@ protected:
                        UCS_PTR_BYTE_OFFSET(req, -sizeof(test_ucp_wireup_amo *));
         test_ucp_wireup_amo *self    = *test_p;
         self->rkeys_cleanup();
-        EXPECT_EQ(self->get_amo_value(),
-                  *(elem_type *)self->get_amo_recv_addr());
     }
 };
 
