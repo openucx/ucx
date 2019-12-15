@@ -114,10 +114,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"DEVICE_SPECS", "",
      "Array of custom device specification. Each element is a string of the following format:\n"
-     "  <vendor-id>:<part-id>[:name[:<flags>[:<priority>]]]\n"
+     "  <vendor-id>:<device-id>[:name[:<flags>[:<priority>]]]\n"
      "where:\n"
-     "  <vendor-id> - (mandatory) vendor id, integer or hexadecimal.\n"
-     "  <part-id>   - (mandatory) vendor part id, integer or hexadecimal.\n"
+     "  <vendor-id> - (mandatory) pci vendor id, integer or hexadecimal.\n"
+     "  <device-id> - (mandatory) pci device id, integer or hexadecimal.\n"
      "  <name>      - (optional) device name.\n"
      "  <flags>     - (optional) empty, or a combination of:\n"
      "                             '4' - mlx4 device\n"
@@ -1217,7 +1217,7 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
         spec = &md->custom_devices.specs[i];
         nfields = sscanf(md_config->custom_devices.spec[i],
                          "%hi:%hi:%m[^:]:%m[^:]:%hhu",
-                         &spec->vendor_id, &spec->part_id, &spec->name,
+                         &spec->pci_id.vendor, &spec->pci_id.device, &spec->name,
                          &flags_str, &spec->priority);
         if (nfields < 2) {
             ucs_error("failed to parse device config '%s' (parsed: %d/%d)",
@@ -1248,8 +1248,8 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
             free(flags_str);
         }
 
-        ucs_trace("added device '%s' vendor_id 0x%x part_id %d flags %c%c prio %d",
-                  spec->name, spec->vendor_id, spec->part_id,
+        ucs_trace("added device '%s' vendor_id 0x%x device_id %d flags %c%c prio %d",
+                  spec->name, spec->pci_id.vendor, spec->pci_id.device,
                   (spec->flags & UCT_IB_DEVICE_FLAG_MLX4_PRM) ? '4' : '-',
                   (spec->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) ? '5' : '-',
                   spec->priority);
