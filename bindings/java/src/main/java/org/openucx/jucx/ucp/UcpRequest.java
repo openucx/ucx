@@ -5,9 +5,11 @@
 
 package org.openucx.jucx.ucp;
 
+import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxNativeStruct;
 
 import java.io.Closeable;
+import java.nio.ByteBuffer;
 
 /**
  * Request object, that returns by ucp operations (GET, PUT, SEND, etc.).
@@ -15,8 +17,18 @@ import java.io.Closeable;
  */
 public class UcpRequest extends UcxNativeStruct implements Closeable {
 
+    private long recvSize;
+
     private UcpRequest(long nativeId) {
         setNativeId(nativeId);
+    }
+
+    /**
+     * The size of the received data in bytes, valid only for recv requests, e.g.:
+     * {@link UcpWorker#recvTaggedNonBlocking(ByteBuffer buffer, UcxCallback clb)}
+     */
+    public long getRecvSize() {
+        return recvSize;
     }
 
     /**

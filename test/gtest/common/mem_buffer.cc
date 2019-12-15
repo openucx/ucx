@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -27,6 +28,19 @@
 
 #endif
 
+#if HAVE_ROCM
+#  include <hip_runtime.h>
+
+#define ROCM_CALL(_code) \
+    do { \
+        hipError_t cerr = _code; \
+        if (cerr != hipSuccess) { \
+            UCS_TEST_ABORT(# _code << " failed"); \
+        } \
+    } while (0)
+
+#endif
+
 
 std::vector<ucs_memory_type_t> mem_buffer::supported_mem_types()
 {
@@ -35,6 +49,10 @@ std::vector<ucs_memory_type_t> mem_buffer::supported_mem_types()
 #if HAVE_CUDA
     vec.push_back(UCS_MEMORY_TYPE_CUDA);
     vec.push_back(UCS_MEMORY_TYPE_CUDA_MANAGED);
+#endif
+#if HAVE_ROCM
+    vec.push_back(UCS_MEMORY_TYPE_ROCM);
+    vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
 #endif
     return vec;
 }
@@ -74,6 +92,12 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaFree(ptr));
+        break;
+#endif
+#if HAVE_ROCM
+    case UCS_MEMORY_TYPE_ROCM:
+    case UCS_MEMORY_TYPE_ROCM_MANAGED:
+        ROCM_CALL(hipFree(ptr));
         break;
 #endif
     default:

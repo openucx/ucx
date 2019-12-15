@@ -101,7 +101,7 @@ typedef enum uct_tcp_ep_conn_state {
      * to `UCT_TCP_EP_CONN_STATE_CONNECTED` state upon receiving this message.
      * All AM operations return `UCS_ERR_NO_RESOURCE` error to a caller. */
     UCT_TCP_EP_CONN_STATE_WAITING_REQ,
-    /* EP is connected to a peer and them can comunicate with each other. */
+    /* EP is connected to a peer and they can communicate with each other. */
     UCT_TCP_EP_CONN_STATE_CONNECTED
 } uct_tcp_ep_conn_state_t;
 

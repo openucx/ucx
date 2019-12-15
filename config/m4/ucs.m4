@@ -156,7 +156,7 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
 AC_ARG_WITH([cache-line-size],
         [AC_HELP_STRING([--with-cache-line-size=SIZE],
             [Build UCX with cache line size defined by user. This parameter
-             overwrites defaulf cache line sizes defines in
+             overwrites default cache line sizes defines in
              UCX (x86-64: 64, Power: 128, ARMv8: 64/128). The supported values are: 64, 128])],
         [],
         [with_cache_line_size=no])

@@ -18,6 +18,7 @@ extern "C" {
 static JavaVM *jvm_global;
 static jclass jucx_request_cls;
 static jfieldID native_id_field;
+static jfieldID recv_size_field;
 static jmethodID on_success;
 static jmethodID jucx_request_constructor;
 
@@ -33,6 +34,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
     jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
     native_id_field = env->GetFieldID(jucx_request_cls, "nativeId", "Ljava/lang/Long;");
+    recv_size_field = env->GetFieldID(jucx_request_cls, "recvSize", "J");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
                                   "(Lorg/openucx/jucx/ucp/UcpRequest;)V");
     jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "(J)V");
@@ -136,6 +138,7 @@ static inline void jucx_context_reset(struct jucx_context* ctx)
     ctx->callback = NULL;
     ctx->jucx_request = NULL;
     ctx->status = UCS_INPROGRESS;
+    ctx->length = 0;
 }
 
 void jucx_request_init(void *request)
@@ -153,9 +156,13 @@ JNIEnv* get_jni_env()
     return (JNIEnv*)env;
 }
 
-static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request)
+static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request,
+                                              struct jucx_context *ctx)
 {
     env->SetObjectField(jucx_request, native_id_field, NULL);
+    if ((ctx != NULL) && (ctx->length > 0)) {
+        env->SetLongField(jucx_request, recv_size_field, ctx->length);
+    }
 }
 
 static inline void call_on_success(jobject callback, jobject request)
@@ -198,7 +205,7 @@ UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, u
     }
 
     JNIEnv *env = get_jni_env();
-    set_jucx_request_completed(env, ctx->jucx_request);
+    set_jucx_request_completed(env, ctx->jucx_request, ctx);
 
     if (ctx->callback != NULL) {
         jucx_call_callback(ctx->callback, ctx->jucx_request, status);
@@ -213,6 +220,8 @@ UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, u
 
 void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info)
 {
+    struct jucx_context *ctx = (struct jucx_context *)request;
+    ctx->length = info->length;
     jucx_request_callback(request, status);
 }
 
@@ -250,7 +259,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         } else if (callback != NULL) {
             call_on_success(callback, jucx_request);
         }
-        set_jucx_request_completed(env, jucx_request);
+        set_jucx_request_completed(env, jucx_request, NULL);
     }
     return jucx_request;
 }

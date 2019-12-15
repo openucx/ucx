@@ -33,6 +33,13 @@ typedef struct ucp_tl_rkey {
     uct_component_h               cmpt;
 } ucp_tl_rkey_t;
 
+/**
+ * Rkey flags
+ */
+enum {
+    UCP_RKEY_DESC_FLAG_POOL       = UCS_BIT(0)  /* Descriptor was allocated from pool
+                                                   and must be retuned to pool, not free */
+};
 
 /**
  * Remote memory key structure.
@@ -54,6 +61,7 @@ typedef struct ucp_rkey {
     } cache;
     ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
     ucs_memory_type_t             mem_type;     /* Memory type of remote key memory */
+    uint8_t                       flags;        /* Rkey flags */
 #if ENABLE_PARAMS_CHECK
     ucp_ep_h                      ep;
 #endif
