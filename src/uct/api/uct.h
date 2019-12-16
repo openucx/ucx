@@ -1868,11 +1868,11 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * @param [in] ep       Endpoint to disconnect.
  * @param [in] flags    Reserved for future use.
  *
- * @return UCS_OK                Operation is completed successfully.
- *         UCS_ERR_BUSY          The @a ep is not connected yet
- *                               (@ref uct_ep_client_connect_cb_t or
- *                               @ref uct_ep_server_connect_cb_t correspondingly
- *                               was not invoked).
+ * @return UCS_OK                Operation has completed successfully.
+ *         UCS_ERR_BUSY          The @a ep is not connected yet (either
+ *                               @ref uct_ep_client_connect_cb_t or
+ *                               @ref uct_ep_server_connect_cb_t was not
+ *                               invoked).
  *         UCS_INPROGRESS        The @a ep is disconnected locally but still
  *                               connected remotely (@ref uct_ep_disconnect_cb_t
  *                               was not invoked).
