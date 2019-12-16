@@ -44,16 +44,20 @@
 
 std::vector<ucs_memory_type_t> mem_buffer::supported_mem_types()
 {
-    std::vector<ucs_memory_type_t> vec;
-    vec.push_back(UCS_MEMORY_TYPE_HOST);
+    static std::vector<ucs_memory_type_t> vec;
+
+    if (vec.empty()) {
+        vec.push_back(UCS_MEMORY_TYPE_HOST);
 #if HAVE_CUDA
-    vec.push_back(UCS_MEMORY_TYPE_CUDA);
-    vec.push_back(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        vec.push_back(UCS_MEMORY_TYPE_CUDA);
+        vec.push_back(UCS_MEMORY_TYPE_CUDA_MANAGED);
 #endif
 #if HAVE_ROCM
-    vec.push_back(UCS_MEMORY_TYPE_ROCM);
-    vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
+        vec.push_back(UCS_MEMORY_TYPE_ROCM);
+        vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
 #endif
+    }
+
     return vec;
 }
 
