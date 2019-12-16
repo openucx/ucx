@@ -256,7 +256,10 @@ ucp_tag_offload_do_post(ucp_request_t *req)
 
     mdi = context->tl_rscs[wiface->rsc_index].md_index;
 
-    if (ucs_unlikely(length >= worker->tm.offload.zcopy_thresh)) {
+    /* Do not use bounce buffer for receives to GPU memory to avoid
+     * cost of h2d transfers (i.e. cuda_copy from staging to dest memory). */
+    if ((length >= worker->tm.offload.zcopy_thresh) ||
+        !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
         if (length > wiface->attr.cap.tag.recv.max_zcopy) {
             /* Post maximum allowed length. If sender sends smaller message
              * (which is allowed per MPI standard), max recv should fit it.
