@@ -75,6 +75,8 @@ protected:
 
     void rkeys_cleanup();
 
+    void memhs_cleanup();
+
     elem_type get_amo_value() const;
 
     uint64_t get_amo_recv_addr() const;
@@ -221,9 +223,9 @@ ucp_rkey_h test_ucp_wireup::get_rkey(ucp_ep_h ep, ucp_mem_h memh)
 
 ucp_rkey_h test_ucp_wireup::get_rkey(const entity &e) {
     if (&sender() == &e) {
-        return get_rkey(e.ep(), m_memh_sender);
-    } else if (&receiver() == &e) {
         return get_rkey(e.ep(), m_memh_receiver);
+    } else if (&receiver() == &e) {
+        return get_rkey(e.ep(), m_memh_sender);
     }
 
     return NULL;
@@ -238,6 +240,11 @@ void test_ucp_wireup::rkeys_cleanup() {
     m_rkeys.clear();
 }
 
+void test_ucp_wireup::memhs_cleanup() {
+    m_memh_sender.reset();
+    m_memh_receiver.reset();
+}
+
 test_ucp_wireup::elem_type test_ucp_wireup::get_amo_value() const {
     return m_send_data[0];
 }
@@ -246,11 +253,9 @@ uint64_t test_ucp_wireup::get_amo_recv_addr() const {
     return (uint64_t)&m_recv_data[0];
 }
 
-
 void test_ucp_wireup::cleanup() {
     rkeys_cleanup();
-    m_memh_sender.reset();
-    m_memh_receiver.reset();
+    memhs_cleanup();
     ucp_test::cleanup();
 }
 
@@ -1219,11 +1224,12 @@ public:
     }
 
 protected:
-    static void scomplete_cb(void *req, ucs_status_t status) {
+    static void flush_cb(void *req, ucs_status_t status) {
         test_ucp_wireup_amo **test_p = (test_ucp_wireup_amo **)
                        UCS_PTR_BYTE_OFFSET(req, -sizeof(test_ucp_wireup_amo *));
         test_ucp_wireup_amo *self    = *test_p;
         self->rkeys_cleanup();
+        self->memhs_cleanup();
     }
 };
 
@@ -1240,8 +1246,7 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
                                           get_amo_value(), sizeof(elem_type),
                                           get_amo_recv_addr(), rkey);
     ASSERT_UCS_OK(status);
-    void *req = ucp_ep_flush_nb(sender().ep(), UCT_FLUSH_FLAG_LOCAL,
-                                scomplete_cb);
+    void *req = ucp_ep_flush_nb(sender().ep(), UCT_FLUSH_FLAG_LOCAL, flush_cb);
     if (UCS_PTR_IS_PTR(req)) {
         test_ucp_wireup_amo **req_headroom = (test_ucp_wireup_amo **)
                        UCS_PTR_BYTE_OFFSET(req, -sizeof(test_ucp_wireup_amo *));
