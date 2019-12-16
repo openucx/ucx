@@ -831,7 +831,8 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
 
     ucs_assert(ep->rx.offset == ep->rx.length);
     uct_tcp_ep_ctx_rewind(&ep->rx);
-    memcpy(ep->rx.buf, put_req, sizeof(*put_req));
+    /* Since RX buffer and PUT request can be ovelapped, use memmove() */
+    memmove(ep->rx.buf, put_req, sizeof(*put_req));
     ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
 }
 
