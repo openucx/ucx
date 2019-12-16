@@ -273,6 +273,8 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                                         &req->recv.state, req->recv.mem_type,
                                         req, UCT_MD_MEM_FLAG_HIDE_ERRORS);
         if (status != UCS_OK) {
+            /* Can't register this buffer on the offload iface */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return status;
         }
 

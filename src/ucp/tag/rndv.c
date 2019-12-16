@@ -158,7 +158,11 @@ ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
         status = ucp_request_send_buffer_reg(sreq, md_map);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+            /* Registration may fail if md does not support send memory
+             * type (e.g. CUDA memory). In this case RTS will be sent with
+             * empty key, and sender will fallback to PUT or pipeline
+             * protocols */
             return status;
         }
     }

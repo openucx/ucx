@@ -90,6 +90,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     new_md_map      = 0;
     memh_index      = 0;
     prev_memh_index = 0;
+    status          = UCS_OK;
     ucs_for_each_bit(md_index, reg_md_map) {
         md_attr = &context->tl_mds[md_index].attr;
         if (*md_map_p & UCS_BIT(md_index)) {
@@ -105,23 +106,20 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         } else if (!length) {
             /* don't register zero-length regions */
             continue;
-        } else if ((md_attr->cap.flags & UCT_MD_FLAG_REG) &&
-                   (md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
+        } else if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+            if (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
+                status = new_md_map ? UCS_OK : UCS_ERR_UNSUPPORTED;
+                continue;
+            }
             ucs_assert(address && length);
 
             /* MD supports registration, register new memh on it */
             status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
                                     length, uct_flags, &uct_memh[memh_index]);
             if (status != UCS_OK) {
-                level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
-                        UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
-                ucs_log(level,
-                        "failed to register address %p length %zu on md[%d]=%s: %s",
-                        address, length, md_index, context->tl_mds[md_index].rsc.md_name,
-                        ucs_status_string(status));
                 ucp_mem_rereg_mds(context, 0, NULL, 0, 0, alloc_md, mem_type,
                                   alloc_md_memh_p, uct_memh, md_map_p);
-                return status;
+                break;
             }
 
             ucs_trace("registered address %p length %zu on md[%d] memh[%d]=%p",
@@ -132,10 +130,23 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         }
     }
 
-    /* Update md_map, note that MDs which did not support registration will be
-     * missing from the map.*/
-    *md_map_p = new_md_map;
-    return UCS_OK;
+    if (status == UCS_OK) {
+        /* Update md_map, note that MDs which did not support registration will be
+         * missing from the map.*/
+        *md_map_p = new_md_map;
+        return UCS_OK;
+    }
+
+    level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+            UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_log(level,
+            "failed to register address %p mem_type bit 0x%lx length %zu on "
+            "md[%d]=%s: %s (md reg_mem_types 0x%lx)",
+            address, UCS_BIT(mem_type), length, md_index,
+            context->tl_mds[md_index].rsc.md_name, ucs_status_string(status),
+            md_attr->cap.reg_mem_types);
+    return status;
+
 }
 
 /**
@@ -334,9 +345,12 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         ucs_debug("registering user memory at %p length %zu mem_type %s",
                   address, length, ucs_memory_type_names[memh->mem_type]);
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
-                                   memh->address, memh->length, uct_flags, NULL,
-                                   memh->mem_type, NULL, memh->uct, &memh->md_map);
-        if (status != UCS_OK) {
+                                   memh->address, memh->length,
+                                   uct_flags | UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                   NULL, memh->mem_type, NULL, memh->uct,
+                                   &memh->md_map);
+        /* Some MDs may not support registration for our memory type */
+        if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
             goto err_free_memh;
         }
     }
@@ -452,10 +466,18 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     ucs_status_t status;
     char *rkey_buffer;
 
-    tl_md = &context->tl_mds[md_index];
-    cmpt  = context->tl_cmpts[tl_md->cmpt_index].cmpt;
+    md_attr = &context->tl_mds[md_index].attr;
+    *memh   = UCT_MEM_HANDLE_NULL;
 
-    *memh = UCT_MEM_HANDLE_NULL;
+    if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
+        rkey_bundle->handle = NULL;
+        rkey_bundle->rkey   = UCT_INVALID_RKEY;
+        return UCS_OK;
+    }
+
+    tl_md  = &context->tl_mds[md_index];
+    cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
+
     status = ucp_mem_rereg_mds(context, UCS_BIT(md_index), remote_addr, length,
                                UCT_MD_MEM_ACCESS_ALL, NULL, mem_type,
                                NULL, memh, md_map);
@@ -463,25 +485,19 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
         goto err;
     }
 
-    md_attr = &context->tl_mds[md_index].attr;
-    if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
-        rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-        status      = uct_md_mkey_pack(tl_md->md, memh[0], rkey_buffer);
-        if (status != UCS_OK) {
-            ucs_error("failed to pack key from md[%d]: %s",
-                      md_index, ucs_status_string(status));
-            goto err_dreg_mem;
-        }
+    rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
+    status      = uct_md_mkey_pack(tl_md->md, memh[0], rkey_buffer);
+    if (status != UCS_OK) {
+        ucs_error("failed to pack key from md[%d]: %s",
+                  md_index, ucs_status_string(status));
+        goto err_dreg_mem;
+    }
 
-        status = uct_rkey_unpack(cmpt, rkey_buffer, rkey_bundle);
-        if (status != UCS_OK) {
-            ucs_error("failed to unpack key from md[%d]: %s",
-                      md_index, ucs_status_string(status));
-            goto err_dreg_mem;
-        }
-    } else {
-        rkey_bundle->handle = NULL;
-        rkey_bundle->rkey   = UCT_INVALID_RKEY;
+    status = uct_rkey_unpack(cmpt, rkey_buffer, rkey_bundle);
+    if (status != UCS_OK) {
+        ucs_error("failed to unpack key from md[%d]: %s",
+                  md_index, ucs_status_string(status));
+        goto err_dreg_mem;
     }
 
     return UCS_OK;
