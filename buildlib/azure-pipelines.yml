@@ -44,6 +44,7 @@ stages:
                  echo "##vso[task.logissue type=error]Bad commit title(s), see $url for more info."
                  echo "##vso[task.complete result=Failed;]"
               fi
+            condition: eq(variables['Build.Reason'], 'PullRequest')
 
   - stage: Build
     jobs:
