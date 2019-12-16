@@ -874,7 +874,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                 ucp_ep_set_close_request(ep, close_req, "close");
             } else {
                 request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                ucp_ep_set_close_request(ep, request, "close no memory");
             }
         } else {
             ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);

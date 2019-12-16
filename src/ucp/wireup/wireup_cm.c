@@ -354,7 +354,8 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    ucp_request_complete_send(req, UCS_OK);
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
+    ucp_request_put(req);
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
@@ -371,13 +372,6 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     if (ucs_test_all_flags(ucp_ep->flags, UCP_EP_FLAG_CLOSED |
                                           UCP_EP_FLAG_CLOSE_REQ_VALID)) {
-        if (!UCS_PTR_IS_PTR(ucp_ep_ext_gen(ucp_ep)->close_req.req)) {
-            status = UCS_PTR_STATUS(ucp_ep_ext_gen(ucp_ep)->close_req.req);
-            ucs_error("ep %p: invalid close request, %s", ucp_ep,
-                      ucs_status_string(status));
-            goto err;
-        }
-
         ucp_request_complete_send(ucp_ep_ext_gen(ucp_ep)->close_req.req, UCS_OK);
         return 1;
     }
@@ -402,10 +396,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
         /* flush is successfully completed in place, notify remote peer
          * that we are disconnected, the EP will be destroyed from API call */
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    } else if (UCS_PTR_IS_PTR(req)) {
-        /* flush is in progress, wait its completion */
-        ucp_request_release(req);
-    } else {
+    } else if (UCS_PTR_IS_ERR(req)) {
         status = UCS_PTR_STATUS(req);
         ucs_error("ucp_ep_flush_internal completed with error: %s",
                   ucs_status_string(status));
@@ -444,12 +435,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
          * disconnected, schedule close request completion and EP destroy */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
         close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
-        if (UCS_PTR_IS_PTR(close_req)) {
-            ucp_ep_local_disconnect_progress(close_req);
-        } else {
-            ucs_error("ep %p: invalid close request, %s", ucp_ep,
-                      ucs_status_string(UCS_PTR_STATUS(close_req)));
-        }
+        ucp_ep_local_disconnect_progress(close_req);
     }
 
     UCS_ASYNC_UNBLOCK(async);
