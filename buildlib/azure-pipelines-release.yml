@@ -25,7 +25,7 @@ stages:
           - bash: |
               set -eE
               gcc --version
-              ./contrib/configure-release
+              ./contrib/configure-release --with-java
               ./contrib/buildrpm.sh -s -t -b
             displayName: Build tarball
 
@@ -41,3 +41,7 @@ stages:
               assets: |
                 ./ucx-*.tar.gz
                 ./rpm-dist/ucx-*.src.rpm
+
+          - template: jucx-publish.yml
+            parameters:
+              target: publish-release

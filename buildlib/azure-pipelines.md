@@ -68,7 +68,7 @@ The local container can be entered and checked out using a command sequence
 similar to:
 
 ```shell
-$ cd ..../ucx
+$ cd ../../ucx
 $ docker run --rm -ti -v `pwd`:`pwd` -w `pwd` ucfconsort.azurecr.io/ucx/centos7:1 /bin/bash
 # mkdir build-centos7 && cd build-centos7
 # ../configure
