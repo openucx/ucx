@@ -12,6 +12,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <ifaddrs.h>
 
 #include <unistd.h>
@@ -317,11 +318,18 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
                                "send", err_cb, err_cb_arg);
 }
 
+/* recv is declared as 'always_inline' on some platforms, it leads to
+ * compilation warning. wrap it into static function */
+static ssize_t ucs_socket_recv_io(int fd, void *data, size_t size, int flags)
+{
+    return recv(fd, data, size, flags);
+}
+
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
                                 void *err_cb_arg)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, recv,
+    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io,
                                "recv", err_cb, err_cb_arg);
 }
 
@@ -338,7 +346,7 @@ ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
                              ucs_socket_io_err_cb_t err_cb,
                              void *err_cb_arg)
 {
-    return ucs_socket_do_io_b(fd, data, length, recv,
+    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io,
                               "recv", err_cb, err_cb_arg);
 }
 
