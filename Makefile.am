@@ -64,16 +64,16 @@ EXTRA_DIST += debian
 EXTRA_DIST += ucx.pc.in
 EXTRA_DIST += LICENSE
 endif #!DOCS_ONLY
-EXTRA_DIST += doc/uml/uct.dot
+EXTRA_DIST += docs/uml/uct.dot
 
-include $(srcdir)/doc/doxygen/doxygen.am
+include $(srcdir)/docs/doxygen/doxygen.am
 
 .PHONY: docs docs-clean
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ucx.pc
 
-DOCLIST = doc/doxygen/doxygen-doc/ucx.tag
+DOCLIST = docs/doxygen/doxygen-doc/ucx.tag
 
 FORMAT = pdf
 DOT_CLEANFILES =
@@ -84,8 +84,8 @@ gtest:
 endif
 
 if HAVE_DOT
-DOCLIST += doc/uml/uml.tag doc/uml/uct.$(FORMAT) doc/uml/ucp.$(FORMAT)
-DOT_CLEANFILES += doc/uml/uml.tag doc/uml/uct.$(FORMAT) doc/uml/ucp.$(FORMAT)
+DOCLIST += docs/uml/uml.tag docs/uml/uct.$(FORMAT) docs/uml/ucp.$(FORMAT)
+DOT_CLEANFILES += docs/uml/uml.tag docs/uml/uct.$(FORMAT) docs/uml/ucp.$(FORMAT)
 endif
 
 docs: $(DOCLIST)
@@ -94,10 +94,10 @@ docs-clean:
 	$(RM) $(DX_CLEANFILES)
 	$(RM) $(DOT_CLEANFILES)
 
-doc/doxygen/doxygen-doc/ucx.tag: $(doxygen_doc_files) doxygen-doc
+docs/doxygen/doxygen-doc/ucx.tag: $(doxygen_doc_files) doxygen-doc
 
-doc/uml/uml.tag:
-	mkdir -p doc/uml
+docs/uml/uml.tag:
+	mkdir -p docs/uml
 	echo `date` > $@
 
 .dot.pdf:

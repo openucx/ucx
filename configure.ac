@@ -151,7 +151,7 @@ DX_PS_FEATURE(OFF)
 DX_HTML_FEATURE(ON)
 DX_MAN_FEATURE(ON)
 DX_PDF_FEATURE(ON)
-DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
+DX_INIT_DOXYGEN([UCX],[docs/doxygen/ucxdox],[docs/doxygen-doc])
 
 AS_IF([test "x$with_docs_only" = xyes],
     [AS_MESSAGE([Documents only requested])
@@ -330,7 +330,7 @@ AC_SUBST([build_bindings], [${build_bindings}])
 # Final output
 #
 AC_CONFIG_FILES([Makefile
-                 doc/doxygen/header.tex
+                 docs/doxygen/header.tex
                  src/uct/api/version.h
                  ])
 AS_IF([test "x$with_docs_only" = xyes], [], [
