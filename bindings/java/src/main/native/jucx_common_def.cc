@@ -243,6 +243,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         } else {
             // request was completed whether by progress in other thread or inside
             // ucp_tag_recv_nb function call.
+            set_jucx_request_completed(env, jucx_request, ctx);
             if (callback != NULL) {
                 jucx_call_callback(callback, jucx_request, ctx->status);
             }
