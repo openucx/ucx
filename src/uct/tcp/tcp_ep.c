@@ -708,6 +708,8 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
 
 static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 {
+    uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
+                                                         uct_tcp_iface_t);
     ucs_status_t status;
 
     ucs_assertv(recv_length, "ep=%p", ep);
@@ -723,6 +725,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 
     ep->rx.length += recv_length;
     ucs_trace_data("tcp_ep %p: recvd %zu bytes", ep, recv_length);
+    ucs_assert(ep->rx.length <= (iface->config.rx_seg_size * 2));
 
     return 1;
 }
@@ -788,6 +791,7 @@ static inline ucs_status_t
 uct_tcp_ep_put_rx_advance(uct_tcp_ep_t *ep, uct_tcp_ep_put_req_hdr_t *put_req,
                           size_t recv_length)
 {
+    ucs_assert(recv_length <= put_req->length);
     put_req->addr   += recv_length;
     put_req->length -= recv_length;
 
@@ -848,6 +852,7 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
     ucs_trace_func("ep=%p", ep);
 
     if (!uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
+        ucs_assert(!ep->rx.buf);
         ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
         if (ucs_unlikely(ep->rx.buf == NULL)) {
             ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
@@ -856,14 +861,15 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 
         /* post the entire AM buffer */
         recv_length = iface->config.rx_seg_size;
-    } else if (ep->rx.length - ep->rx.offset < sizeof(*hdr)) {
-        ucs_assert(ep->rx.buf != NULL);
+    } else if (ep->rx.length < sizeof(*hdr)) {
+        ucs_assert((ep->rx.buf != NULL) && (ep->rx.offset == 0));
 
         /* do partial receive of the remaining part of the hdr
          * and post the entire AM buffer */
         recv_length = iface->config.rx_seg_size - ep->rx.length;
     } else {
-        ucs_assert(ep->rx.buf != NULL);
+        ucs_assert((ep->rx.buf != NULL) &&
+                   ((ep->rx.length - ep->rx.offset) >= sizeof(*hdr)));
 
         /* do partial receive of the remaining user data */
         hdr         = UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset);
@@ -888,8 +894,10 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
         }
 
         hdr = UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset);
-        ucs_assert(hdr->length <= (iface->config.rx_seg_size -
-                                   sizeof(uct_tcp_am_hdr_t)));
+        ucs_assertv(hdr->length <= (iface->config.rx_seg_size - sizeof(*hdr)),
+                    "tcp_ep %p (conn state - %s): %u vs %zu",
+                    ep, uct_tcp_ep_cm_state[ep->conn_state].name, hdr->length,
+                    (iface->config.rx_seg_size - sizeof(*hdr)));
 
         if (remainder < (sizeof(*hdr) + hdr->length)) {
             handled++;
@@ -898,6 +906,7 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 
         /* Full message was received */
         ep->rx.offset += sizeof(*hdr) + hdr->length;
+        ucs_assert(ep->rx.offset <= ep->rx.length);
 
         if (ucs_likely(hdr->am_id < UCT_AM_ID_MAX)) {
             uct_tcp_ep_comp_recv_am(iface, ep, hdr);
@@ -920,10 +929,13 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
             handled += 1 + uct_tcp_cm_handle_conn_pkt(&ep, hdr + 1, hdr->length);
+            /* coverity[check_after_deref] */
             if (ep == NULL) {
                 goto out;
             }
         }
+
+        ucs_assert(ep != NULL);
     }
 
     uct_tcp_ep_ctx_reset(&ep->rx);
