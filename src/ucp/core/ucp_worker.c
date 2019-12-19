@@ -1318,7 +1318,60 @@ static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
     }
 }
 
-static void ucp_worker_init_device_atomics(ucp_worker_h worker)
+static int ucp_resources_is_device_shared(const ucp_tl_resource_desc_t *rsc1,
+                                          const ucp_tl_resource_desc_t *rsc2)
+{
+    return (rsc1->md_index == rsc2->md_index) &&
+           !strncmp(rsc1->tl_rsc.dev_name, rsc2->tl_rsc.dev_name,
+                    UCT_DEVICE_NAME_MAX);
+}
+
+static ucs_status_t
+ucp_worker_create_loopback_amo_ep(ucp_worker_h worker,
+                                  const ucp_tl_resource_desc_t *best_rsc)
+{
+    ucp_context_h context = worker->context;
+    uint64_t tl_bitmap = worker->atomic_tls;
+    ucp_tl_resource_desc_t *rsc;
+    ucp_rsc_index_t rsc_index;
+
+    ucs_for_each_bit(rsc_index, worker->atomic_tls) {
+        if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
+            /* disable p2p TLS to check if we need AUX TLS */
+            tl_bitmap &= ~UCS_BIT(rsc_index);
+        }
+    }
+
+    if (tl_bitmap == 0) {
+        /* only p2p, need to enable all TLS on AMO device for wireup */
+        ucs_for_each_bit(rsc_index, context->tl_bitmap) {
+            rsc = &context->tl_rscs[rsc_index];
+            if (ucp_resources_is_device_shared(rsc, best_rsc)) {
+                tl_bitmap |= UCS_BIT(rsc_index);
+            }
+        }
+    } else {
+        ucs_for_each_bit(rsc_index, tl_bitmap) {
+            rsc = &context->tl_rscs[rsc_index];
+            if (rsc == best_rsc) {
+                /* reset used TLs to the best one if possible but prefer
+                 * ep2iface TL to avoid extra consumption of resources */
+                tl_bitmap = UCS_BIT(rsc_index);
+                break;
+            }
+        }
+
+        rsc_index = ucs_ffs64_safe(tl_bitmap);
+        ucs_assert_always(rsc_index < UCP_MAX_RESOURCES);
+        tl_bitmap = UCS_BIT(rsc_index);
+    }
+
+    return ucp_worker_create_loopback_ep(worker, tl_bitmap, 0,
+                                         "atomic loopback",
+                                         &worker->atomic_ep);
+}
+
+static ucs_status_t ucp_worker_init_device_atomics(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_address_iface_attr_t dummy_iface_attr;
@@ -1388,7 +1441,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     if (best_rsc == NULL) {
         ucs_debug("worker %p: no support for atomics", worker);
-        return;
+        return UCS_OK;
     }
 
     ucs_debug("worker %p: using device atomics", worker);
@@ -1397,16 +1450,20 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         rsc = &context->tl_rscs[rsc_index];
         if ((supp_tls & UCS_BIT(rsc_index)) &&
-            (rsc->md_index == best_rsc->md_index) &&
-            !strncmp(rsc->tl_rsc.dev_name, best_rsc->tl_rsc.dev_name,
-                     UCT_DEVICE_NAME_MAX))
+            ucp_resources_is_device_shared(rsc, best_rsc))
         {
             ucp_worker_enable_atomic_tl(worker, "device", rsc_index);
         }
     }
+
+    if (worker->atomic_tls) {
+        return ucp_worker_create_loopback_amo_ep(worker, best_rsc);
+    }
+
+    return UCS_OK;
 }
 
-static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
+static ucs_status_t ucp_worker_init_guess_atomics(ucp_worker_h worker)
 {
     uint64_t accumulated_flags = 0;
     ucp_rsc_index_t iface_id;
@@ -1419,33 +1476,35 @@ static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
-        ucp_worker_init_device_atomics(worker);
-    } else {
-        ucp_worker_init_cpu_atomics(worker);
+        return ucp_worker_init_device_atomics(worker);
     }
+
+    ucp_worker_init_cpu_atomics(worker);
+    return UCS_OK;
 }
 
-static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
+static ucs_status_t ucp_worker_init_atomic_tls(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
 
     worker->atomic_tls = 0;
+    worker->atomic_ep  = NULL;
 
-    if (context->config.features & UCP_FEATURE_AMO) {
-        switch(context->config.ext.atomic_mode) {
-        case UCP_ATOMIC_MODE_CPU:
-            ucp_worker_init_cpu_atomics(worker);
-            break;
-        case UCP_ATOMIC_MODE_DEVICE:
-            ucp_worker_init_device_atomics(worker);
-            break;
-        case UCP_ATOMIC_MODE_GUESS:
-            ucp_worker_init_guess_atomics(worker);
-            break;
-        default:
-            ucs_fatal("unsupported atomic mode: %d",
-                      context->config.ext.atomic_mode);
-        }
+    if (!(context->config.features & UCP_FEATURE_AMO)) {
+        return UCS_OK;
+    }
+
+    switch(context->config.ext.atomic_mode) {
+    case UCP_ATOMIC_MODE_CPU:
+        ucp_worker_init_cpu_atomics(worker);
+        return UCS_OK;
+    case UCP_ATOMIC_MODE_DEVICE:
+        return ucp_worker_init_device_atomics(worker);
+    case UCP_ATOMIC_MODE_GUESS:
+        return ucp_worker_init_guess_atomics(worker);
+    default:
+        ucs_fatal("unsupported atomic mode: %d",
+                  context->config.ext.atomic_mode);
     }
 }
 
@@ -1806,7 +1865,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Select atomic resources */
-    ucp_worker_init_atomic_tls(worker);
+    status = ucp_worker_init_atomic_tls(worker);
+    if (status != UCS_OK) {
+        goto err_close_cms;
+    }
 
     /* At this point all UCT memory domains and interfaces are already created
      * so warn about unused environment variables.

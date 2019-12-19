@@ -194,7 +194,156 @@ DEFINE_AMO_SW_OP(64)
 DEFINE_AMO_SW_FOP(32)
 DEFINE_AMO_SW_FOP(64)
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_flags),
+typedef struct ucp_atomic_flush_ctx {
+    ucp_atomic_req_hdr_t req_hdr;
+    uint64_t             value;
+    ucp_mem_h            memh;
+    ucp_rkey_h           rkey;
+} ucp_atomic_flush_ctx_t;
+
+static void ucp_amo_sw_loopback_send_reply(ucp_worker_h worker,
+                                           ucp_atomic_flush_ctx_t *flush_ctx)
+{
+    ucp_ep_h reply_ep;
+    ucp_request_t *req;
+    ucs_status_t status;
+
+    reply_ep = ucp_worker_get_ep_by_ptr(worker, flush_ctx->req_hdr.req.ep_ptr);
+
+    if (flush_ctx->req_hdr.req.reqptr == 0) {
+        ucp_rma_sw_send_cmpl(reply_ep);
+    } else {
+        req = ucp_request_get(worker);
+        if (req == NULL) {
+            ucs_error("failed to allocate atomic reply");
+        } else {
+            req->send.ep               = reply_ep;
+            req->send.atomic_reply.req = flush_ctx->req_hdr.req.reqptr;
+            req->send.length           = flush_ctx->req_hdr.length;
+            req->send.uct.func         = ucp_progress_atomic_reply;
+            ucp_request_send(req, 0);
+        }
+    }
+
+    ucp_rkey_destroy(flush_ctx->rkey);
+    status = ucp_mem_unmap(worker->context, flush_ctx->memh);
+
+    if (status != UCS_OK) {
+        ucs_error("failed to unmap memory handle %p with error %s",
+                  flush_ctx->memh, ucs_status_string(status));
+    }
+
+    ucs_free(flush_ctx);
+}
+
+static void ucp_amo_sw_loopback_flush_cb(ucp_request_t *req)
+{
+    ucp_atomic_flush_ctx_t *flush_ctx = req->send.flush_ctx;
+    ucp_worker_h worker               = req->send.ep->worker;
+
+    ucp_amo_sw_loopback_send_reply(worker, flush_ctx);
+    ucp_request_put(req);
+}
+
+static ucs_status_t
+ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *atomicreqh)
+{
+    ucp_atomic_flush_ctx_t *flush_ctx;
+    ucp_mem_map_params_t params;
+    void *rkey_buffer;
+    size_t rkey_buffer_size;
+    void *request;
+    ucs_status_t status, status_unmap;
+
+    /* TODO: optimization: can use `am_flags & UCT_CB_PARAM_FLAG_DESC` to avoid
+     *       extra allocation and copy for some transports */
+    flush_ctx = ucs_malloc(sizeof(*flush_ctx), "loop back amo flush ctx");
+    if (flush_ctx == NULL) {
+        ucs_error("failed to allocate loopback AMO flush context");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    flush_ctx->req_hdr = *atomicreqh;
+    flush_ctx->value   = *(uint64_t *)(atomicreqh + 1);
+
+    params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                         UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address     = (void *)atomicreqh->address;
+    params.length      = atomicreqh->length;
+    params.flags       = 0;
+
+    /*
+     * TODO: rkey can be passed as a part of AM to avoid
+     *       mem_map/rkey_pack/rkey_pack.
+     * NOTE: if rcache is enabled then registration should be "for free" since
+     *       destination memory has been registered.
+     */
+    status = ucp_mem_map(worker->context, &params, &flush_ctx->memh);
+    if (status != UCS_OK) {
+        ucs_error("failed to map memory region %p length %zu status %s",
+                  params.address, params.length, ucs_status_string(status));
+        goto err_free_ctx;
+    }
+
+    status = ucp_rkey_pack(worker->context, flush_ctx->memh, &rkey_buffer,
+                           &rkey_buffer_size);
+    if (status != UCS_OK) {
+        ucs_error("failed to pack rkey for region %p length %zu, status %s",
+                  params.address, params.length, ucs_status_string(status));
+        goto err_unmap;
+    }
+
+    status = ucp_ep_rkey_unpack(worker->atomic_ep, rkey_buffer,
+                                &flush_ctx->rkey);
+    ucp_rkey_buffer_release(rkey_buffer);
+    if (status != UCS_OK) {
+        ucs_error("failed to unpack rkey for region %p length %zu, status %s",
+                  params.address, params.length, ucs_status_string(status));
+        goto err_unmap;
+    }
+
+    status = ucp_atomic_post(worker->atomic_ep,
+                             (ucp_atomic_post_op_t)atomicreqh->opcode,
+                             flush_ctx->value, atomicreqh->length,
+                             atomicreqh->address, flush_ctx->rkey);
+    if (status != UCS_OK) {
+        ucs_error("failed to post loopback AMO to ep %p, status %s",
+                  worker->atomic_ep, ucs_status_string(status));
+        goto err_unmap;
+    }
+
+    request = ucp_ep_flush_internal(worker->atomic_ep, UCT_FLUSH_FLAG_LOCAL,
+                                    NULL, 0, NULL, flush_ctx,
+                                    ucp_amo_sw_loopback_flush_cb,
+                                    "sw amo loopback");
+    if (request == NULL) {
+        ucp_amo_sw_loopback_send_reply(worker, flush_ctx);
+        return UCS_OK;
+    }
+
+    if (UCS_PTR_IS_PTR(request)) {
+        return UCS_OK;
+    }
+
+    ucs_error("failed to flush loopback AMO to ep %p, status %s",
+              worker->atomic_ep, ucs_status_string(status));
+    status = UCS_PTR_STATUS(request);
+
+err_unmap:
+    status_unmap = ucp_mem_unmap(worker->context, flush_ctx->memh);
+    if (status_unmap != UCS_OK) {
+        ucs_warn("failed to unmap %p memory handler, %s", flush_ctx->memh,
+                 ucs_status_string(status_unmap));
+    }
+
+err_free_ctx:
+    ucs_free(flush_ctx);
+    return status;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t,
+                 ucp_atomic_req_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
@@ -208,12 +357,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
                      (ucp_worker_iface_get_attr(worker,
                                                 amo_rsc_idx)->cap.flags &
                       UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
-        ucs_error("Unsupported: got software atomic request while device atomics are selected on worker %p",
-                  worker);
-        /* TODO: this situation will be possible then CM wireup is implemented
-         *       and CM lane is bound to suboptimal device, then need to execute
-         *       AMO on fastest resource from worker->atomic_tls using loopback
-         *       EP and continue SW AMO protocol */
+        return ucp_amo_sw_loopback_post(worker, atomicreqh);
     }
 
     if (atomicreqh->req.reqptr == 0) {

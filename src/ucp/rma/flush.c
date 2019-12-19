@@ -236,7 +236,7 @@ void ucp_ep_flush_remote_completed(ucp_request_t *req)
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
-                                       ucp_request_t *worker_req,
+                                       ucp_request_t *worker_req, void *ctx,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name)
 {
@@ -265,6 +265,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->flags                  = req_flags;
     req->status                 = UCS_OK;
     req->send.ep                = ep;
+    req->send.flush_ctx         = ctx;
     req->send.cb                = req_cb;
     req->send.flush.flushed_cb  = flushed_cb;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
@@ -307,7 +308,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, cb,
-                                    UCP_REQUEST_FLAG_CALLBACK, NULL,
+                                    UCP_REQUEST_FLAG_CALLBACK, NULL, NULL,
                                     ucp_ep_flushed_callback, "flush_nb");
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
@@ -401,6 +402,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
 
         ep_flush_request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL,
                                                  UCP_REQUEST_FLAG_RELEASED, req,
+                                                 NULL,
                                                  ucp_worker_flush_ep_flushed_cb,
                                                  "flush_worker");
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
@@ -491,7 +493,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
-                                    ucp_ep_flushed_callback, "flush");
+                                    NULL, ucp_ep_flushed_callback, "flush");
     status = ucp_flush_wait(ep->worker, request);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);

@@ -437,7 +437,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
-                                       ucp_request_t *worker_req,
+                                       ucp_request_t *worker_req, void *ctx,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
 
@@ -476,6 +476,11 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            double bandwidth);
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+
+ucs_status_t ucp_worker_create_loopback_ep(ucp_worker_h worker,
+                                           uint64_t tl_bitmap,
+                                           unsigned ep_init_flags,
+                                           const char *message, ucp_ep_h *ep_p);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 

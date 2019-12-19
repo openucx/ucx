@@ -232,55 +232,186 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
-    ucp_unpacked_address_t local_address;
+    uint64_t tl_bitmap;
     unsigned i, mem_type;
     ucs_status_t status;
-    void *address_buffer;
-    size_t address_length;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
-            !context->mem_type_access_tls[mem_type]) {
+        tl_bitmap = context->mem_type_access_tls[mem_type];
+        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) || !tl_bitmap) {
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL,
-                                  context->mem_type_access_tls[mem_type],
-                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
-                                  &address_length, &address_buffer);
+        status = ucp_worker_create_loopback_ep(worker, tl_bitmap,
+                                               UCP_EP_INIT_FLAG_MEM_TYPE,
+                                               "mem type",
+                                               &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
-
-        status = ucp_address_unpack(worker, address_buffer, UINT64_MAX, &local_address);
-        if (status != UCS_OK) {
-            goto err_free_address_buffer;
-        }
-
-        status = ucp_ep_create_to_worker_addr(worker, &local_address,
-                                              UCP_EP_INIT_FLAG_MEM_TYPE,
-                                              "mem type",
-                                              &worker->mem_type_ep[mem_type]);
-        if (status != UCS_OK) {
-            goto err_free_address_list;
-        }
-
-        ucs_free(local_address.address_list);
-        ucs_free(address_buffer);
     }
 
     return UCS_OK;
 
-err_free_address_list:
-    ucs_free(local_address.address_list);
-err_free_address_buffer:
-    ucs_free(address_buffer);
 err_cleanup_eps:
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
         if (worker->mem_type_ep[i]) {
            ucp_ep_destroy_internal(worker->mem_type_ep[i]);
         }
     }
+    return status;
+}
+
+static ucs_status_t
+ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
+                                 const ucp_ep_params_t *params, ucp_ep_h *ep_p)
+{
+    ucp_unpacked_address_t remote_address;
+    ucp_ep_conn_sn_t conn_sn;
+    ucs_status_t status;
+    unsigned flags;
+    ucp_ep_h ep;
+
+    if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
+        status = UCS_ERR_INVALID_PARAM;
+        ucs_error("remote worker address is missing");
+        goto out;
+    }
+
+    UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
+
+    status = ucp_address_unpack(worker, params->address, UINT64_MAX, &remote_address);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* Check if there is already an unconnected internal endpoint to the same
+     * destination address.
+     * In case of loopback connection, search the hash table for an endpoint with
+     * even/odd matching, so that every 2 endpoints connected to the local worker
+     * with be paired to each other.
+     * Note that if a loopback endpoint had the UCP_EP_PARAMS_FLAGS_NO_LOOPBACK
+     * flag set, it will not be added to ep_match as an unexpected ep. Because
+     * dest_ep_ptr will be initialized, a WIREUP_REQUEST (if sent) will have
+     * dst_ep != 0. So, ucp_wireup_request() will not create an unexpected ep
+     * in ep_match.
+     */
+    conn_sn = ucp_ep_match_get_next_sn(&worker->ep_match_ctx, remote_address.uuid);
+    ep = ucp_ep_match_retrieve_unexp(&worker->ep_match_ctx, remote_address.uuid,
+                                     conn_sn ^ (remote_address.uuid == worker->uuid));
+    if (ep != NULL) {
+        status = ucp_ep_adjust_params(ep, params);
+        if (status != UCS_OK) {
+            ucp_ep_destroy_internal(ep);
+        }
+
+        ucp_ep_flush_state_reset(ep);
+        ucp_stream_ep_activate(ep);
+        goto out_free_address;
+    }
+
+    status = ucp_ep_create_to_worker_addr(worker, &remote_address,
+                                          ucp_ep_init_flags(worker, params),
+                                          "from api call", &ep);
+    if (status != UCS_OK) {
+        goto out_free_address;
+    }
+
+    status = ucp_ep_adjust_params(ep, params);
+    if (status != UCS_OK) {
+        ucp_ep_destroy_internal(ep);
+        goto out_free_address;
+    }
+
+    ep->conn_sn = conn_sn;
+
+    /*
+     * If we are connecting to our own worker, and loopback is allowed, connect
+     * the endpoint to itself by updating dest_ep_ptr.
+     * Otherwise, add the new ep to the matching context as an expected endpoint,
+     * waiting for connection request from the peer endpoint
+     */
+    flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
+    if ((remote_address.uuid == worker->uuid) &&
+        !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
+        ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
+        ucp_ep_flush_state_reset(ep);
+    } else {
+        ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
+    }
+
+    /* if needed, send initial wireup message */
+    if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
+        status = ucp_wireup_send_request(ep);
+        if (status != UCS_OK) {
+            goto out_free_address;
+        }
+    }
+
+    status = UCS_OK;
+
+out_free_address:
+    ucs_free(remote_address.address_list);
+out:
+    if (status == UCS_OK) {
+        *ep_p = ep;
+    }
+    return status;
+}
+
+ucs_status_t ucp_worker_create_loopback_ep(ucp_worker_h worker,
+                                           uint64_t tl_bitmap,
+                                           unsigned ep_init_flags,
+                                           const char *message, ucp_ep_h *ep_p)
+{
+    ucp_ep_params_t ep_params;
+    ucp_unpacked_address_t local_address;
+    void *address_buffer;
+    size_t address_length;
+    int need_wireup;
+    ucp_rsc_index_t rsc_index;
+    ucs_status_t status;
+
+    status = ucp_address_pack(worker, NULL, tl_bitmap,
+                              UCP_ADDRESS_PACK_FLAG_ALL, NULL, &address_length,
+                              &address_buffer);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_address_unpack(worker, address_buffer,
+                                UCP_ADDRESS_PACK_FLAG_ALL, &local_address);
+    if (status != UCS_OK) {
+        goto free_address_buffer;
+    }
+
+    need_wireup = 0;
+    ucs_for_each_bit(rsc_index, tl_bitmap) {
+        need_wireup = ucp_worker_is_tl_p2p(worker, rsc_index);
+        if (need_wireup) {
+            break;
+        }
+    }
+
+    if (need_wireup) {
+        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address    = address_buffer;
+        status = ucp_ep_create_api_to_worker_addr(worker, &ep_params, ep_p);
+    } else {
+        status = ucp_ep_create_to_worker_addr(worker, &local_address,
+                                              ep_init_flags, message, ep_p);
+    }
+
+    if (status != UCS_OK) {
+        goto free_address_buffer;
+    }
+
+    ucs_free(local_address.address_list);
+
+free_address_buffer:
+    ucs_free(address_buffer);
+
     return status;
 }
 
@@ -553,104 +684,6 @@ out:
     return status;
 }
 
-static ucs_status_t
-ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
-                                 const ucp_ep_params_t *params, ucp_ep_h *ep_p)
-{
-    ucp_unpacked_address_t remote_address;
-    ucp_ep_conn_sn_t conn_sn;
-    ucs_status_t status;
-    unsigned flags;
-    ucp_ep_h ep;
-
-    if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
-        status = UCS_ERR_INVALID_PARAM;
-        ucs_error("remote worker address is missing");
-        goto out;
-    }
-
-    UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
-
-    status = ucp_address_unpack(worker, params->address, UINT64_MAX, &remote_address);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    /* Check if there is already an unconnected internal endpoint to the same
-     * destination address.
-     * In case of loopback connection, search the hash table for an endpoint with
-     * even/odd matching, so that every 2 endpoints connected to the local worker
-     * with be paired to each other.
-     * Note that if a loopback endpoint had the UCP_EP_PARAMS_FLAGS_NO_LOOPBACK
-     * flag set, it will not be added to ep_match as an unexpected ep. Because
-     * dest_ep_ptr will be initialized, a WIREUP_REQUEST (if sent) will have
-     * dst_ep != 0. So, ucp_wireup_request() will not create an unexpected ep
-     * in ep_match.
-     */
-    conn_sn = ucp_ep_match_get_next_sn(&worker->ep_match_ctx, remote_address.uuid);
-    ep = ucp_ep_match_retrieve_unexp(&worker->ep_match_ctx, remote_address.uuid,
-                                     conn_sn ^ (remote_address.uuid == worker->uuid));
-    if (ep != NULL) {
-        status = ucp_ep_adjust_params(ep, params);
-        if (status != UCS_OK) {
-            ucp_ep_destroy_internal(ep);
-        }
-
-        ucp_ep_flush_state_reset(ep);
-        ucp_stream_ep_activate(ep);
-        goto out_free_address;
-    }
-
-    status = ucp_ep_create_to_worker_addr(worker, &remote_address,
-                                          ucp_ep_init_flags(worker, params),
-                                          "from api call", &ep);
-    if (status != UCS_OK) {
-        goto out_free_address;
-    }
-
-    status = ucp_ep_adjust_params(ep, params);
-    if (status != UCS_OK) {
-        ucp_ep_destroy_internal(ep);
-        goto out_free_address;
-    }
-
-    ep->conn_sn = conn_sn;
-
-    /*
-     * If we are connecting to our own worker, and loopback is allowed, connect
-     * the endpoint to itself by updating dest_ep_ptr.
-     * Otherwise, add the new ep to the matching context as an expected endpoint,
-     * waiting for connection request from the peer endpoint
-     */
-    flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
-    if ((remote_address.uuid == worker->uuid) &&
-        !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
-        ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
-        ucp_ep_flush_state_reset(ep);
-    } else {
-        ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
-    }
-
-    /* if needed, send initial wireup message */
-    if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
-        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
-        status = ucp_wireup_send_request(ep);
-        if (status != UCS_OK) {
-            goto out_free_address;
-        }
-    }
-
-    status = UCS_OK;
-
-out_free_address:
-    ucs_free(remote_address.address_list);
-out:
-    if (status == UCS_OK) {
-        *ep_p = ep;
-    }
-    return status;
-}
-
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p)
 {
@@ -861,7 +894,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
-                                    NULL, 0, NULL,
+                                    NULL, 0, NULL, NULL,
                                     ucp_ep_close_flushed_callback, "close");
 
     if (!UCS_PTR_IS_PTR(request)) {

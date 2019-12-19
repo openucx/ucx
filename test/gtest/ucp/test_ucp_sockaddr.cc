@@ -42,13 +42,24 @@ public:
                                                          multi-threading */
         CONN_REQ_TAG,                                 /* Accepting by ucp_conn_request_h,
                                                          send/recv by TAG API */
-        CONN_REQ_STREAM                               /* Accepting by ucp_conn_request_h,
+        CONN_REQ_STREAM,                              /* Accepting by ucp_conn_request_h,
                                                          send/recv by STREAM API */
+        /*
+         * double parameters for CM wireup/close protocol.
+         * TODO: remove all duplicates when it's enabled by default
+         */
+        CM_FIRST_PARAM,
+        CM_MT_PARAM_VARIANT = CM_FIRST_PARAM,
+        CM_CONN_REQ_TAG,
+        CM_CONN_REQ_STREAM,
+        CM_CONN_REQ_AMO                               /* Accepting by ucp_conn_request_h,
+                                                         send/recv by AMO API */
     };
 
     typedef enum {
         SEND_RECV_TAG,
-        SEND_RECV_STREAM
+        SEND_RECV_STREAM,
+        SEND_RECV_AMO
     } send_recv_type_t;
 
     ucs::sock_addr_storage test_addr;
@@ -75,6 +86,16 @@ public:
                                      CONN_REQ_TAG, result);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      CONN_REQ_STREAM, result);
+
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CM_MT_PARAM_VARIANT, result,
+                                     MULTI_THREAD_WORKER);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CM_CONN_REQ_TAG, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CM_CONN_REQ_STREAM, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CM_CONN_REQ_AMO, result);
         return result;
     }
 
@@ -234,6 +255,12 @@ public:
                    bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type)
     {
         const uint64_t send_data = ucs_generate_uuid(0);
+        uint64_t recv_data       = 0;
+        ucp_mem_h memh;
+        ucp_rkey_h rkey;
+        void *rkey_buffer;
+        size_t rkey_buffer_size;
+
         void *send_req = NULL;
         if (send_recv_type == SEND_RECV_TAG) {
             send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
@@ -243,6 +270,31 @@ public:
             send_req = ucp_stream_send_nb(from.ep(), &send_data, 1,
                                           ucp_dt_make_contig(sizeof(send_data)),
                                           scomplete_cb, 0);
+        } else if (send_recv_type == SEND_RECV_AMO) {
+            ucp_mem_map_params_t params;
+            params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+            params.address    = &recv_data;
+            params.length     = sizeof(recv_data);
+            params.flags      = 0;
+
+            ucs_status_t status = ucp_mem_map(to.ucph(), &params, &memh);
+            ASSERT_UCS_OK(status);
+
+            status = ucp_rkey_pack(to.ucph(), memh, &rkey_buffer,
+                                   &rkey_buffer_size);
+            ASSERT_UCS_OK(status);
+
+            status = ucp_ep_rkey_unpack(from.ep(), rkey_buffer, &rkey);
+            ASSERT_UCS_OK(status);
+
+            status = ucp_atomic_post(from.ep(), UCP_ATOMIC_POST_OP_ADD,
+                                     send_data, sizeof(send_data),
+                                     (uint64_t)&recv_data, rkey);
+            ASSERT_UCS_OK(status);
+            send_req = ucp_ep_flush_nb(from.ep(), UCT_FLUSH_FLAG_LOCAL,
+                                       scomplete_cb);
         } else {
             ASSERT_TRUE(false) << "unsupported communication type";
         }
@@ -261,6 +313,13 @@ public:
             ucp_request_free(send_req);
         }
 
+        if (send_recv_type == SEND_RECV_AMO) {
+            ucp_rkey_destroy(rkey);
+            ucp_rkey_buffer_release(rkey_buffer);
+            ucs_status_t status = ucp_mem_unmap(to.ucph(), memh);
+            ASSERT_UCS_OK(status);
+        }
+
         if (send_status == UCS_ERR_UNREACHABLE) {
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
@@ -277,14 +336,12 @@ public:
             ASSERT_UCS_OK(send_status);
         }
 
-        uint64_t recv_data = 0;
         void *recv_req;
         if (send_recv_type == SEND_RECV_TAG) {
             recv_req = ucp_tag_recv_nb(to.worker(), &recv_data, 1,
                                        ucp_dt_make_contig(sizeof(recv_data)),
                                        1, 0, rtag_complete_cb);
-        } else {
-            ASSERT_TRUE(send_recv_type == SEND_RECV_STREAM);
+        } else if (send_recv_type == SEND_RECV_STREAM) {
             ucp_stream_poll_ep_t poll_eps;
             ssize_t              ep_count;
             size_t               recv_length;
@@ -300,6 +357,10 @@ public:
                                           ucp_dt_make_contig(sizeof(recv_data)),
                                           rstream_complete_cb, &recv_length,
                                           UCP_STREAM_RECV_FLAG_WAITALL);
+        } else {
+            ASSERT_TRUE(send_recv_type == SEND_RECV_AMO);
+            wait_for_flag(&recv_data);
+            recv_req = NULL;
         }
 
         if (recv_req != NULL) {

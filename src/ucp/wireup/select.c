@@ -765,10 +765,19 @@ static void ucp_wireup_clean_amo_criteria(ucp_wireup_criteria_t *criteria)
  */
 static int ucp_wireup_allow_am_emulation_layer(unsigned ep_init_flags)
 {
+    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        return 0;
+    }
+
+    /* CM lane is responsible for peer failure detection */
+    if (ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
+                         UCP_EP_INIT_CM_WIREUP_SERVER)) {
+        return 1;
+    }
+
     /* disable emulation layer if err handling is required due to lack of
      * keep alive protocol */
-    return !(ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
-                              UCP_EP_INIT_ERR_MODE_PEER_FAILURE));
+    return !(ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE);
 }
 
 static unsigned

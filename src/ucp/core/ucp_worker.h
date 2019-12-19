@@ -210,6 +210,7 @@ typedef struct ucp_worker {
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucs_mpool_t                   rkey_mp;       /* Pool for small memory keys */
     uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
+    ucp_ep_h                      atomic_ep;     /* Loop back EP to device (non-CPU) atomic_tls if it's present */
 
     int                           inprogress;
     char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
