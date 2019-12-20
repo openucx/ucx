@@ -31,7 +31,8 @@ protected:
         TEST_RMA     = UCS_BIT(0),
         TEST_TAG     = UCS_BIT(1),
         TEST_STREAM  = UCS_BIT(2),
-        UNIFIED_MODE = UCS_BIT(3)
+        UNIFIED_MODE = UCS_BIT(3),
+        TEST_AMO     = UCS_BIT(4)
     };
 
     typedef uint64_t               elem_type;
@@ -68,17 +69,24 @@ protected:
     static void tag_recv_completion(void *request, ucs_status_t status,
                                     ucp_tag_recv_info_t *info);
 
-private:
+    void rkeys_cleanup();
+
+    void memhs_cleanup();
+
+    void clear_recv_data();
+
+    void fill_send_data();
+
+    ucp_rkey_h get_rkey(ucp_ep_h ep, ucp_mem_h memh);
+
+protected:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;
     ucs::handle<ucp_mem_h, ucp_context_h>  m_memh_sender;
     ucs::handle<ucp_mem_h, ucp_context_h>  m_memh_receiver;
     std::vector< ucs::handle<ucp_rkey_h> > m_rkeys;
 
-    void clear_recv_data();
-
-    ucp_rkey_h get_rkey(ucp_ep_h ep, ucp_mem_h memh);
-
+private:
     static void stream_recv_completion(void *request, ucs_status_t status,
                                        size_t length);
 
@@ -122,6 +130,12 @@ test_ucp_wireup::enum_test_params_features(const ucp_params_t& ctx_params,
                                      tls, TEST_STREAM | UNIFIED_MODE, result);
     }
 
+    if (features & (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
+        tmp_ctx_params.features = (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64);
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/amo",
+                                     tls, TEST_AMO, result);
+    }
+
     if (test_all) {
         uint64_t all_flags = (TEST_TAG | TEST_RMA | TEST_STREAM);
         tmp_ctx_params.features = features;
@@ -154,7 +168,7 @@ void test_ucp_wireup::init()
     m_send_data.resize(BUFFER_LENGTH, 0);
     m_recv_data.resize(BUFFER_LENGTH, 0);
 
-    if (GetParam().variant & TEST_RMA) {
+    if (GetParam().variant & (TEST_RMA | TEST_AMO)) {
         ucs_status_t status;
         ucp_mem_map_params_t params;
         ucp_mem_h memh;
@@ -200,10 +214,18 @@ ucp_rkey_h test_ucp_wireup::get_rkey(ucp_ep_h ep, ucp_mem_h memh)
     return rkey;
 }
 
-void test_ucp_wireup::cleanup() {
+void test_ucp_wireup::rkeys_cleanup() {
     m_rkeys.clear();
+}
+
+void test_ucp_wireup::memhs_cleanup() {
     m_memh_sender.reset();
     m_memh_receiver.reset();
+}
+
+void test_ucp_wireup::cleanup() {
+    rkeys_cleanup();
+    memhs_cleanup();
     ucp_test::cleanup();
 }
 
@@ -1148,6 +1170,87 @@ public:
         return params;
     }
 };
+
+class test_ucp_wireup_amo : public test_ucp_wireup {
+public:
+    typedef struct {
+        test_ucp_wireup_amo *test;
+    } request_t;
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_wireup::get_ctx_params();
+        params.field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
+        params.request_size = sizeof(request_t);
+        return params;
+    }
+
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        uint64_t amo_features;
+
+        EXPECT_TRUE((sizeof(elem_type) == 4ul) || (sizeof(elem_type) == 8ul));
+        amo_features = (sizeof(elem_type) == 4ul) ? UCP_FEATURE_AMO32 :
+                       UCP_FEATURE_AMO64;
+        return enum_test_params_features(ctx_params, name, test_case_name, tls,
+                                         amo_features, false);
+    }
+
+protected:
+    ucp_rkey_h get_rkey(const entity &e) {
+        if (&sender() == &e) {
+            return test_ucp_wireup::get_rkey(e.ep(), m_memh_receiver);
+        } else if (&receiver() == &e) {
+            return test_ucp_wireup::get_rkey(e.ep(), m_memh_sender);
+        }
+
+        return NULL;
+    }
+
+    void add_rkey(ucp_rkey_h rkey) {
+        ASSERT_NE((ucp_rkey_h)NULL, rkey);
+        m_rkeys.push_back(ucs::handle<ucp_rkey_h>(rkey, ucp_rkey_destroy));
+    }
+
+    void fill_send_data() {
+        m_send_data[0] = ucs_generate_uuid(0);
+    }
+
+    static void flush_cb(void *req, ucs_status_t status) {
+        request_t *request = (request_t *)req;
+
+        ASSERT_UCS_OK(status);
+        request->test->rkeys_cleanup();
+        request->test->memhs_cleanup();
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
+    fill_send_data();
+    clear_recv_data();
+
+    sender().connect(&receiver(), get_ep_params());
+
+    ucp_rkey_h rkey = get_rkey(sender());
+    add_rkey(rkey);
+
+    ucs_status_t status = ucp_atomic_post(sender().ep(), UCP_ATOMIC_POST_OP_ADD,
+                                          m_send_data[0], sizeof(elem_type),
+                                          (uint64_t)&m_recv_data[0], rkey);
+    ASSERT_UCS_OK(status);
+    request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(),
+                                                  UCT_FLUSH_FLAG_LOCAL,
+                                                  flush_cb);
+    if (UCS_PTR_IS_PTR(req)) {
+        req->test = this;
+        wait(req);
+    } else {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_amo)
 
 UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
     std::vector<std::string> tls;
