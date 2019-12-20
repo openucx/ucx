@@ -772,7 +772,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucp_am_ep_cleanup(ep);
 
     ep->flags &= ~UCP_EP_FLAG_USED;
-    ep->flags |= UCP_EP_FLAG_CLOSED;
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
         && !force) {
@@ -788,7 +787,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucp_ep_destroy_internal(ep);
 }
 
-static unsigned ucp_ep_do_disconnect(void *arg)
+unsigned ucp_ep_local_disconnect_progress(void *arg)
 {
     ucp_request_t *req = arg;
 
@@ -804,9 +803,34 @@ static unsigned ucp_ep_do_disconnect(void *arg)
     return 0;
 }
 
+static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
+                                     const char *debug_msg)
+{
+    ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
+
+    ucp_ep_flush_state_invalidate(ep);
+    ucp_ep_ext_gen(ep)->close_req.req = request;
+    ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
+}
+
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
+
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+    if (ucp_ep_is_cm_local_connected(ep)) {
+        /* Now, when close flush is completed and we are still locally connected,
+         * we have to notify remote side */
+        ucp_ep_cm_disconnect_cm_lane(ep);
+        if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+            /* Wait disconnect notification from remote side to complete this
+             * request */
+            ucp_ep_set_close_request(ep, req, "close flushed callback");
+            UCS_ASYNC_UNBLOCK(&ep->worker->async);
+            return;
+        }
+    }
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
@@ -814,15 +838,17 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_ep_local_disconnect_progress,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &req->send.disconnect.prog_id);
 }
 
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
-    ucp_worker_h worker = ep->worker;
-    void         *request;
+    ucp_worker_h  worker = ep->worker;
+    void          *request;
+    ucp_request_t *close_req;
 
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
@@ -831,13 +857,27 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    ep->flags |= UCP_EP_FLAG_CLOSED;
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
                                     NULL, 0, NULL,
                                     ucp_ep_close_flushed_callback, "close");
+
     if (!UCS_PTR_IS_PTR(request)) {
-        ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+        if (ucp_ep_is_cm_local_connected(ep)) {
+            /* lanes already flushed, start disconnect on CM lane */
+            ucp_ep_cm_disconnect_cm_lane(ep);
+            close_req = ucp_ep_cm_close_request_get(ep);
+            if (close_req != NULL) {
+                request = close_req + 1;
+                ucp_ep_set_close_request(ep, close_req, "close");
+            } else {
+                request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+            }
+        } else {
+            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+        }
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1809,6 +1849,26 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 
     return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
            ucs_derived_of(ep->uct_eps[lane], ucp_wireup_ep_t) : NULL;
+}
+
+uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+    ucp_wireup_ep_t *wireup_ep;
+
+    lane = ucp_ep_get_cm_lane(ep);
+    if (lane == UCP_NULL_LANE) {
+        return NULL;
+    }
+
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    return (wireup_ep == NULL) ? ep->uct_eps[lane] : wireup_ep->super.uct_ep;
+}
+
+int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
+{
+    return (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) &&
+           (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)

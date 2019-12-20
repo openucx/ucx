@@ -51,6 +51,7 @@ typedef struct ucp_worker_iface         ucp_worker_iface_t;
 typedef struct ucp_worker_cm            ucp_worker_cm_t;
 typedef struct ucp_rma_proto            ucp_rma_proto_t;
 typedef struct ucp_amo_proto            ucp_amo_proto_t;
+typedef struct ucp_wireup_sockaddr_data ucp_wireup_sockaddr_data_t;
 
 
 /**

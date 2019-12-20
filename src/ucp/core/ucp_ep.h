@@ -50,6 +50,8 @@ enum {
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
+    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
+                                                        close_req is valid */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -60,9 +62,7 @@ enum {
     UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22),/* DEBUG: flush_state is valid */
-    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(23) /* DEBUG: close protocol is started and
-                                                               close_req is valid */
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
 };
 
 
@@ -384,14 +384,14 @@ enum {
 };
 
 
-typedef struct ucp_wireup_sockaddr_data {
+struct ucp_wireup_sockaddr_data {
     uintptr_t                 ep_ptr;        /**< Endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SOCKADDR_CD_xx */
     /* packed worker address follows */
-} UCS_S_PACKED ucp_wireup_sockaddr_data_t;
+} UCS_S_PACKED;
 
 
 typedef struct ucp_conn_request {
@@ -480,5 +480,11 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
+
+uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
+
+int ucp_ep_is_cm_local_connected(ucp_ep_h ep);
+
+unsigned ucp_ep_local_disconnect_progress(void *arg);
 
 #endif

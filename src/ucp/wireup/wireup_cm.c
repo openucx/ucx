@@ -9,8 +9,8 @@
 #endif
 
 #include "wireup_cm.h"
-#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_listener.h>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucs/sys/sock.h>
@@ -192,35 +192,36 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
 free_addr:
     ucs_free(ucp_addr);
 out:
-    if (status != UCS_OK) {
+    if (status == UCS_OK) {
+        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    } else {
         ucp_worker_set_ep_failed(worker, ep,
                                  &ucp_ep_get_cm_wireup_ep(ep)->super.super,
                                  ucp_ep_get_cm_lane(ep), status);
     }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
-static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
-                                     const uct_cm_remote_data_t *remote_data,
-                                     ucs_status_t status)
+/*
+ * The main thread progress part of connection establishment on client side
+ */
+static unsigned ucp_cm_client_connect_progress(void *arg)
 {
-    ucp_ep_h                   ucp_ep     = (ucp_ep_h)arg;
-    ucp_worker_h               worker     = ucp_ep->worker;
-    ucp_wireup_ep_t            *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
-    unsigned                   addr_indices[UCP_MAX_RESOURCES];
-    ucp_unpacked_address_t     addr;
-    ucp_wireup_sockaddr_data_t *sa_data;
-    unsigned                   addr_idx;
+    ucp_cm_client_connect_progress_arg_t *progress_arg = arg;
+    ucp_ep_h ucp_ep                                    = progress_arg->ucp_ep;
+    ucp_worker_h worker                                = ucp_ep->worker;
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_unpacked_address_t addr;
+    unsigned addr_idx;
+    unsigned addr_indices[UCP_MAX_RESOURCES];
+    ucs_status_t status;
 
-    if (status != UCS_OK) {
-        goto out;
-    }
-
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_assert(wireup_ep != NULL);
-    sa_data = (ucp_wireup_sockaddr_data_t *)remote_data->conn_priv_data;
-    ucp_ep_update_dest_ep_ptr(ucp_ep, sa_data->ep_ptr);
-    status = ucp_address_unpack(worker, sa_data + 1,
+
+    status = ucp_address_unpack(worker, progress_arg->sa_data + 1,
                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                                 UCP_ADDRESS_PACK_FLAG_EP_ADDR, &addr);
     if (status != UCS_OK) {
@@ -229,37 +230,237 @@ static void ucp_cm_client_connect_cb(uct_ep_h ep, void *arg,
 
     if (addr.address_count == 0) {
         status = UCS_ERR_UNREACHABLE;
-        goto free_addr_list;
+        goto out_free_addr;
     }
+
+    for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
+        addr.address_list[addr_idx].dev_addr = progress_arg->dev_addr;
+    }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucp_ep_update_dest_ep_ptr(ucp_ep, progress_arg->sa_data->ep_ptr);
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
-    for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
-        addr.address_list[addr_idx].dev_addr = remote_data->dev_addr;
-    }
-
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
     status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags, &addr,
                                    addr_indices);
     if (status != UCS_OK) {
-        goto free_addr_list;
+        goto out_unblock;
     }
 
-    ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    if (status != UCS_OK) {
+        goto out_unblock;
+    }
+
     ucp_wireup_remote_connected(ucp_ep);
 
-free_addr_list:
+out_unblock:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+out_free_addr:
     ucs_free(addr.address_list);
 out:
+    ucs_free(progress_arg->sa_data);
+    ucs_free(progress_arg->dev_addr);
+    ucs_free(progress_arg);
+
     if (status != UCS_OK) {
-        ucp_worker_set_ep_failed(worker, ucp_ep,
-                                 wireup_ep ? &wireup_ep->super.super : ep,
+        ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ucp_ep), status);
     }
+
+    return 1;
 }
 
-static void ucp_cm_disconnect_cb(uct_ep_h ep, void *arg)
+/*
+ * Async callback on a client side which notifies that server is connected.
+ */
+static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
+                                     const uct_cm_remote_data_t *remote_data,
+                                     ucs_status_t status)
 {
-    ucs_error("UCP close protocol is not completely implemented");
+    ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
+    ucp_worker_h worker        = ucp_ep->worker;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_cm_client_connect_progress_arg_t *progress_arg;
+
+    if (status != UCS_OK) {
+        goto err_out;
+    }
+
+    if (!ucs_test_all_flags(remote_data->field_mask,
+                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
+                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
+                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
+                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
+        ucs_error("incompatible client server connection establishment protocol");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_out;
+    }
+
+    progress_arg = ucs_malloc(sizeof(*progress_arg),
+                              "ucp_cm_client_connect_progress_arg_t");
+    if (progress_arg == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_out;
+    }
+
+    progress_arg->sa_data = ucs_malloc(remote_data->conn_priv_data_length,
+                                        "sa data");
+    if (progress_arg->sa_data == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_arg;
+    }
+
+    progress_arg->dev_addr = ucs_malloc(remote_data->dev_addr_length,
+                                        "device address");
+    if (progress_arg->dev_addr == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_sa_data;
+    }
+
+    progress_arg->ucp_ep    = ucp_ep;
+    progress_arg->uct_cm_ep = uct_cm_ep;
+    memcpy(progress_arg->dev_addr, remote_data->dev_addr,
+           remote_data->dev_addr_length);
+    memcpy(progress_arg->sa_data, remote_data->conn_priv_data,
+           remote_data->conn_priv_data_length);
+
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_cm_client_connect_progress,
+                                      progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+    ucp_worker_signal_internal(ucp_ep->worker);
+    return;
+
+err_free_sa_data:
+    ucs_free(progress_arg->sa_data);
+err_free_arg:
+    ucs_free(progress_arg);
+err_out:
+    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    ucp_worker_set_ep_failed(worker, ucp_ep, uct_cm_ep,
+                             ucp_ep_get_cm_lane(ucp_ep), status);
+}
+
+/*
+ * Internal flush completion callback which is a part of close protocol,
+ * this flush was initiated by remote peer in disconnect callback on CM lane.
+ */
+static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
+{
+    ucp_ep_h ucp_ep = req->send.ep;
+
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+    ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
+    ucp_request_put(req);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+}
+
+static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
+{
+    void *req;
+    ucs_status_t status;
+
+    ucs_trace("ep %p: flags %xu cm_remote_disconnect_progress", ucp_ep,
+              ucp_ep->flags);
+
+    ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) != NULL);
+
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+    if (ucs_test_all_flags(ucp_ep->flags, UCP_EP_FLAG_CLOSED |
+                                          UCP_EP_FLAG_CLOSE_REQ_VALID)) {
+        ucp_request_complete_send(ucp_ep_ext_gen(ucp_ep)->close_req.req, UCS_OK);
+        return 1;
+    }
+
+    if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+        /* the ep is closed by API but close req is not valid yet (checked
+         * above), it will be set later from scheduled
+         * @ref ucp_ep_close_flushed_callback */
+        return 1;
+    }
+
+    /*
+     * TODO: set the ucp_ep to error state to prevent user from sending more
+     *       ops.
+     */
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
+    ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSED));
+    req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
+                                ucp_ep_cm_disconnect_flushed_cb,
+                                "cm_disconnected_cb");
+    if (req == NULL) {
+        /* flush is successfully completed in place, notify remote peer
+         * that we are disconnected, the EP will be destroyed from API call */
+        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+    } else if (UCS_PTR_IS_ERR(req)) {
+        status = UCS_PTR_STATUS(req);
+        ucs_error("ucp_ep_flush_internal completed with error: %s",
+                  ucs_status_string(status));
+        goto err;
+    }
+
+    return 1;
+
+err:
+    ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
+                             ucp_ep_get_cm_uct_ep(ucp_ep),
+                             ucp_ep_get_cm_lane(ucp_ep), status);
+    return 1;
+}
+
+static unsigned ucp_ep_cm_disconnect_progress(void *arg)
+{
+    ucp_cm_disconnect_progress_arg_t *progress_arg = arg;
+    ucp_ep_h ucp_ep                                = progress_arg->ucp_ep;
+    uct_ep_h uct_cm_ep                             = progress_arg->uct_cm_ep;
+    ucs_async_context_t *async                     = &ucp_ep->worker->async;
+    ucp_request_t *close_req;
+
+    UCS_ASYNC_BLOCK(async);
+
+    ucs_trace("ep %p: got remote disconnect, cm_ep %p", ucp_ep, uct_cm_ep);
+    ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
+
+    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
+
+    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+        /* if the EP is local connected, need to flush it from main thread first */
+        ucp_ep_cm_remote_disconnect_progress(ucp_ep);
+    } else {
+        /* if the EP is not local connected, the EP has been flushed and CM lane is
+         * disconnected, schedule close request completion and EP destroy */
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
+        close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+        ucp_ep_local_disconnect_progress(close_req);
+    }
+
+    UCS_ASYNC_UNBLOCK(async);
+    return 1;
+}
+
+static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
+{
+    ucp_ep_h ucp_ep            = arg;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_cm_disconnect_progress_arg_t *progress_arg;
+
+    progress_arg = ucs_malloc(sizeof(*progress_arg), "disconnect_progress_arg");
+    if (progress_arg == NULL) {
+        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep, uct_cm_ep,
+                                 ucp_ep_get_cm_lane(ucp_ep), UCS_ERR_NO_MEMORY);
+        return;
+    }
+
+    progress_arg->ucp_ep    = ucp_ep;
+    progress_arg->uct_cm_ep = uct_cm_ep;
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_ep_cm_disconnect_progress,
+                                      progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
 }
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
@@ -296,7 +497,6 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
-    ucp_ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
     ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep);
     ucp_ep_flush_state_reset(ucp_ep);
 
@@ -424,9 +624,7 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_ep_h ep                         = arg;
     ucp_worker_h worker                 = ep->worker;
-    ucp_ep_config_key_t key             = ucp_ep_config(ep)->key;
     uint64_t tl_bitmap                  = 0;
-    ucp_wireup_ep_t *wireup_ep;
     uct_cm_attr_t cm_attr;
     void* ucp_addr;
     size_t ucp_addr_size;
@@ -467,10 +665,12 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
 free_addr:
     ucs_free(ucp_addr);
 out:
-    if (status != UCS_OK) {
-        wireup_ep = (ucp_wireup_ep_t *)ep->uct_eps[key.wireup_lane];
-        ucp_worker_set_ep_failed(worker, ep, &wireup_ep->super.super,
-                                 key.wireup_lane, status);
+    if (status == UCS_OK) {
+        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    } else {
+        ucp_worker_set_ep_failed(worker, ep,
+                                 &ucp_ep_get_cm_wireup_ep(ep)->super.super,
+                                 ucp_ep_get_cm_lane(ep), status);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -478,10 +678,27 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
+/*
+ * The main thread progress part of connection establishment on server side
+ */
+static unsigned ucp_cm_server_connect_progress(void *arg)
+{
+    ucp_ep_h ucp_ep = arg;
+
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+    ucp_wireup_remote_connected(ucp_ep);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+    return 1;
+}
+
+/*
+ * Async callback on a server side which notifies that client is connected.
+ */
 static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
                                      ucs_status_t status)
 {
-    ucp_ep_h ucp_ep = arg;
+    ucp_ep_h ucp_ep            = arg;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_lane_index_t wireup_idx;
 
     if (status != UCS_OK) {
@@ -492,7 +709,11 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
         return;
     }
 
-    ucp_wireup_remote_connected(ucp_ep);
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_cm_server_connect_progress,
+                                      ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+    ucp_worker_signal_internal(ucp_ep->worker);
 }
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
@@ -506,6 +727,12 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
 
     ucs_assert(lane != UCP_NULL_LANE);
     ucs_assert(ep->uct_eps[lane] == NULL);
+
+    /* TODO: split CM and wireup lanes */
+    status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* create a server side CM endpoint */
     ucs_trace("ep %p: uct_ep[%d]", ep, lane);
@@ -533,6 +760,40 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         return status;
     }
 
-    ucp_wireup_assign_lane(ep, lane, uct_ep, "server side cm lane");
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
     return UCS_OK;
+}
+
+void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
+{
+    uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ucp_ep);
+    ucs_status_t status;
+
+    ucs_assert_always(uct_cm_ep != NULL);
+    /* No reason to try disconnect twice */
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+
+    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    /* this will invoke @ref ucp_cm_disconnect_cb on remote side */
+    status = uct_ep_disconnect(uct_cm_ep, 0);
+    if (status != UCS_OK) {
+        ucs_warn("failed to disconnect CM lane %p of ep %p, %s", ucp_ep,
+                  uct_cm_ep, ucs_status_string(status));
+    }
+}
+
+ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
+{
+    ucp_request_t *request = ucp_request_get(ep->worker);
+
+    if (request == NULL) {
+        ucs_error("failed to allocate close request for ep %p", ep);
+        return NULL;
+    }
+
+    request->status  = UCS_OK;
+    request->flags   = 0;
+    request->send.ep = ep;
+
+    return request;
 }
