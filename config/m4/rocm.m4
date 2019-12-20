@@ -57,6 +57,7 @@ AC_ARG_WITH([rocm],
     [with_rocm=guess])
 
 rocm_happy=no
+hip_happy=no
 AS_IF([test "x$with_rocm" != "xno"],
     [AS_CASE(["x$with_rocm"],
         [x|xguess|xyes],
