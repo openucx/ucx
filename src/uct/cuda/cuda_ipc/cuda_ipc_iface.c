@@ -112,9 +112,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_iface_flush,
-                 (tl_iface, flags, comp),
-                 uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp)
+uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                         uct_completion_t *comp)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
