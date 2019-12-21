@@ -10,7 +10,6 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/profile/profile.h>
 
 
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
