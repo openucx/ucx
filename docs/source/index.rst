@@ -23,7 +23,9 @@ memory mechanisms for efficient intra-node communication.
    :maxdepth: 3
    :hidden:
 
+   download
    running
+   faq
 
 
 Quick start
