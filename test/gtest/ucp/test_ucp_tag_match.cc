@@ -8,6 +8,10 @@
 #include "test_ucp_tag.h"
 
 #include <common/test_helpers.h>
+extern "C" {
+#include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_types.h>
+}
 
 using namespace ucs; /* For vector<char> serialization */
 
@@ -169,7 +173,7 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") {
+UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=inf") {
     static const size_t size = 3000000;
 
     entity &sender2 = sender();
@@ -446,7 +450,53 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
     request_release(my_send_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)
+
+class test_ucp_tag_match_rndv : public test_ucp_tag_match {
+public:
+    enum {
+        RNDV_SCHEME_AUTO = 0,
+        RNDV_SCHEME_PUT_ZCOPY,
+        RNDV_SCHEME_GET_ZCOPY
+    };
+
+    static const std::string rndv_schemes[];
+
+    void init() {
+        ASSERT_LE(GetParam().variant, (int)RNDV_SCHEME_GET_ZCOPY);
+        modify_config("RNDV_SCHEME", rndv_schemes[GetParam().variant]);
+
+        test_ucp_tag_match::init();
+    }
+
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_" +
+                                     rndv_schemes[RNDV_SCHEME_AUTO],
+                                     tls, RNDV_SCHEME_AUTO, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_" +
+                                     rndv_schemes[RNDV_SCHEME_PUT_ZCOPY],
+                                     tls, RNDV_SCHEME_PUT_ZCOPY, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_" +
+                                     rndv_schemes[RNDV_SCHEME_GET_ZCOPY],
+                                     tls, RNDV_SCHEME_GET_ZCOPY, result);
+        return result;
+    }
+};
+
+const std::string test_ucp_tag_match_rndv::rndv_schemes[] = { "auto",
+                                                              "put_zcopy",
+                                                              "get_zcopy" };
+
+UCS_TEST_P(test_ucp_tag_match_rndv, sync_send_unexp, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
     request             *my_send_req;
     ucp_tag_recv_info_t info;
@@ -481,7 +531,7 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
     request_release(my_send_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match_rndv, req_exp, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
     request *my_send_req, *my_recv_req;
 
@@ -515,7 +565,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match_rndv, rts_unexp, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
     request             *my_send_req;
     ucp_tag_recv_info_t info;
@@ -547,7 +597,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
     EXPECT_EQ(sendbuf, recvbuf);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match_rndv, truncated, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
     request *my_send_req;
     ucp_tag_recv_info_t info;
@@ -575,7 +625,49 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     wait_and_validate(my_send_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
+UCS_TEST_P(test_ucp_tag_match_rndv, post_larger_recv, "RNDV_THRESH=0") {
+    /* small send size should probably be lower than minimum GET Zcopy
+     * size supported by IB TLs */
+    static const size_t small_send_size = 16;
+    static const size_t small_recv_size = small_send_size * 2;
+    static const size_t large_send_size = 1148576;
+    static const size_t large_recv_size = large_send_size + 1 * UCS_KBYTE;
+    /* array of [send][recv] sizes */
+    static const size_t sizes[][2] = { { small_send_size, small_recv_size },
+                                       { large_send_size, large_recv_size } };
+    request *my_send_req, *my_recv_req;
+
+    for (unsigned i = 0; i < ucs_array_size(sizes); i++) {
+        size_t send_size = sizes[i][0];
+        size_t recv_size = sizes[i][1];
+        std::vector<char> sendbuf(send_size, 0);
+        std::vector<char> recvbuf(recv_size, 0);
+
+        ucs::fill_random(sendbuf);
+        ucs::fill_random(recvbuf);
+
+        my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+        ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+        EXPECT_FALSE(my_recv_req->completed);
+
+        my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+        ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
+
+        wait(my_recv_req);
+
+        EXPECT_EQ(sendbuf.size(), my_recv_req->info.length);
+        EXPECT_EQ(recvbuf.size(), ((ucp_request_t*)my_recv_req - 1)->recv.length);
+        EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+        EXPECT_TRUE(my_recv_req->completed);
+        EXPECT_NE(sendbuf, recvbuf);
+        EXPECT_TRUE(std::equal(sendbuf.begin(), sendbuf.end(), recvbuf.begin()));
+
+        wait_and_validate(my_send_req);
+        request_release(my_recv_req);
+    }
+}
+
+UCS_TEST_P(test_ucp_tag_match_rndv, req_exp_auto_thresh, "RNDV_THRESH=auto") {
     static const size_t size = 1148576;
     request *my_send_req, *my_recv_req;
 
@@ -610,11 +702,11 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_exp_huge_mix) {
+UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
     const size_t sizes[] = { 1000, 2000, 2500ul * UCS_MBYTE };
 
     /* small sizes should warm-up tag cache */
-    for (int i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < ucs_array_size(sizes); ++i) {
         const size_t size = sizes[i] / ucs::test_time_multiplier();
         request *my_send_req, *my_recv_req;
 
@@ -642,4 +734,4 @@ UCS_TEST_P(test_ucp_tag_match, rndv_exp_huge_mix) {
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match_rndv)
