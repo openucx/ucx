@@ -272,9 +272,9 @@ AS_IF([test "x$with_docs_only" = xyes],
                    [enable_mt=no])
      AS_IF([test "x$enable_mt" = xyes],
            [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])
-            mt_enable=Enabled],
+            mt_enable=enabled],
            [AC_DEFINE([ENABLE_MT], [0])
-            mt_enable=Disabled])
+            mt_enable=disabled])
 
 
      #
@@ -293,9 +293,9 @@ AS_IF([test "x$with_docs_only" = xyes],
      #
      AC_ARG_ENABLE([devel-headers],
                    AS_HELP_STRING([--enable-devel-headers],
-                                  [Enable installing development headers, default: NO])
+                                  [Enable installing development headers, default: NO]),
                     [],
-                    [enable_debug_headers=no])
+                    [enable_devel_headers=no])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [test "x$enable_devel_headers" = "xyes"])
 
 
@@ -379,18 +379,19 @@ AC_MSG_NOTICE([Building documents only])
 ],
 [
 AC_MSG_NOTICE([UCX build configuration:])
+AC_MSG_NOTICE([      Build prefix:   ${prefix}])
 AC_MSG_NOTICE([Preprocessor flags:   ${BASE_CPPFLAGS}])
-AC_MSG_NOTICE([           C flags:   ${BASE_CFLAGS}])
-AC_MSG_NOTICE([         C++ flags:   ${BASE_CXXFLAGS}])
+AC_MSG_NOTICE([        C compiler:   ${CC} ${BASE_CFLAGS}])
+AC_MSG_NOTICE([      C++ compiler:   ${CXX} ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
-AC_MSG_NOTICE([          Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([     Devel headers:   ${enable_devel_headers}])
+AC_MSG_NOTICE([          Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([       UCT modules:   <$(echo ${uct_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([      CUDA modules:   <$(echo ${uct_cuda_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([      ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
-AC_MSG_NOTICE([       UCM modules:   <$(echo $ucm_modules|tr ':' ' ') >])
-AC_MSG_NOTICE([      Perf modules:   <$(echo $ucx_perftest_modules|tr ':' ' ') >])
+AC_MSG_NOTICE([       UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
+AC_MSG_NOTICE([      Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
 ])
 AC_MSG_NOTICE([=========================================================])
