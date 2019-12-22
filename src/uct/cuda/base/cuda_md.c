@@ -11,14 +11,16 @@
 #include "cuda_md.h"
 
 #include <ucs/sys/module.h>
+#include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 
 
-ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, const void *addr,
-                                              size_t length,
-                                              ucs_memory_type_t *mem_type_p)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
+                 (md, addr, length, mem_type_p),
+                 uct_md_h md, const void *addr, size_t length,
+                 ucs_memory_type_t *mem_type_p)
 {
     CUmemorytype memType = (CUmemorytype)0;
     uint32_t isManaged   = 0;

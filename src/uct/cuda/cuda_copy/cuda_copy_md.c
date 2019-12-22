@@ -11,6 +11,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
@@ -61,8 +62,10 @@ static ucs_status_t uct_cuda_copy_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t length,
-                                          unsigned flags, uct_mem_h *memh_p)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
+                 (md, address, length, flags, memh_p),
+                 uct_md_h md, void *address, size_t length,
+                 unsigned flags, uct_mem_h *memh_p)
 {
     CUmemorytype memType;
     CUresult result;
@@ -91,7 +94,8 @@ static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t len
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
+                 (md, memh), uct_md_h md, uct_mem_h memh)
 {
     void *address = (void *)memh;
     ucs_status_t status;
