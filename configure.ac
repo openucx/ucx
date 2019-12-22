@@ -31,8 +31,10 @@ AC_CONFIG_HEADERS([config.h])
 
 AC_CHECK_PROG(GITBIN,git,yes)
 AS_IF([test x"${GITBIN}" = x"yes"],
-      [AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse --short=7 HEAD']))],
-      [AC_SUBST(SCM_VERSION, "0000000")])
+      [AC_SUBST(SCM_BRANCH,  esyscmd([sh -c 'git symbolic-ref --short   HEAD']))
+       AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse    --short=7 HEAD']))],
+      [AC_SUBST(SCM_BRANCH,  "<unknown>")
+       AC_SUBST(SCM_VERSION, "0000000")])
 
 AH_TOP([
 #ifndef UCX_CONFIG_H
