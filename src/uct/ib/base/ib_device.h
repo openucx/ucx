@@ -46,6 +46,7 @@
 #define UCT_IB_SITE_LOCAL_PREFIX    be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK      be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP  106  /* Default DSCP for RoCE v2 */
+#define UCT_IB_DEVICE_SYSFS_FMT     "/sys/class/infiniband/%s/device/%s"
 
 
 enum {
@@ -100,12 +101,20 @@ typedef struct uct_ib_address {
 
 
 /**
+ * PCI identifier of a device
+ */
+typedef struct {
+    uint16_t                    vendor;
+    uint16_t                    device;
+} uct_ib_pci_id_t;
+
+
+/**
  * IB device specification.
  */
 typedef struct uct_ib_device_spec {
-    uint16_t                    vendor_id;
-    uint16_t                    part_id;
     const char                  *name;
+    uct_ib_pci_id_t             pci_id;
     unsigned                    flags;
     uint8_t                     priority;
 } uct_ib_device_spec_t;
@@ -127,6 +136,7 @@ typedef struct uct_ib_device {
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
+    uct_ib_pci_id_t             pci_id;
     unsigned                    flags;
     uint8_t                     atomic_arg_sizes;
     uint8_t                     atomic_arg_sizes_be;

@@ -67,91 +67,48 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 #endif
 
 static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
-  {0x02c9, 4099, "ConnectX-3",
+  {"ConnectX-3", {0x15b3, 4099},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
-  {0x02c9, 4103, "ConnectX-3 Pro",
+  {"ConnectX-3 Pro", {0x15b3, 4103},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
-  {0x02c9, 4113, "Connect-IB",
+  {"Connect-IB", {0x15b3, 4113},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Inca FDR 1 port */
-  {0x119f, 0x1b83, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Newsca FDR 1 port */
-  {0x119f, 0x1b93, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Newsca FDR 2 ports */
-  {0x119f, 0x1b94, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Newsca HDR 1 port */
-  {0x119f, 0x1bb4, "ConnectX-4",
+  {"ConnectX-4", {0x15b3, 4115},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  /* Bull Newsca HDR 2 ports */
-  {0x119f, 0x1bb5, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  /* Bull Sequana HDR 1 port */
-  {0x119f, 0x1bc4, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  {0x02c9, 4115, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  {0x02c9, 4116, "ConnectX-4",
+  {"ConnectX-4", {0x15b3, 4116},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 29},
-  {0x02c9, 4117, "ConnectX-4 LX",
+  {"ConnectX-4 LX", {0x15b3, 4117},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 28},
-  {0x02c9, 4118, "ConnectX-4 LX VF",
+  {"ConnectX-4 LX VF", {0x15b3, 4118},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 28},
-  {0x02c9, 4119, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4119},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 38},
-  {0x02c9, 4121, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4121},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 40},
-  {0x02c9, 4120, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4120},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 39},
-  {0x02c9, 41682, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 41682},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 37},
-  {0x02c9, 4122, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4122},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 36},
-  {0x02c9, 4123, "ConnectX-6",
+  {"ConnectX-6", {0x15b3, 4123},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  {0x02c9, 4124, "ConnectX-6 VF",
+  {"ConnectX-6 VF", {0x15b3, 4124},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* Bull Sequana HDR 1 port */
-  {0x119f, 0x1bc5, "ConnectX-6",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* Bull Sequana HDR100 1 port */
-  {0x119f, 0x1bc6, "ConnectX-6",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* Bull Sequana XH2000 ConnectX6 Mezz 2 CX6_0 HDR */
-  {0x119f, 0x1bc7, "ConnectX-6",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* Bull Sequana XH2000 ConnectX6 Mezz 2 CX6_1 HDR */
-  {0x119f, 0x1bc8, "ConnectX-6",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* BullSequana XH2000 ConnectX6 GPU Blade Mezz 1 HDR100 */
-  {0x119f, 0x1bc9, "ConnectX-6",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  {0, 0, "Generic HCA", 0, 0}
+  {"Generic HCA", {0, 0}, 0, 0},
+  {NULL}
 };
 
 static void uct_ib_device_get_locality(const char *dev_name,
@@ -167,9 +124,8 @@ static void uct_ib_device_get_locality(const char *dev_name,
 
     /* Read list of CPUs close to the device */
     CPU_ZERO(cpu_mask);
-    nread = ucs_read_file(buf, sizeof(buf) - 1, 1,
-                          "/sys/class/infiniband/%s/device/local_cpus",
-                          dev_name);
+    nread = ucs_read_file(buf, sizeof(buf) - 1, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                          dev_name, "local_cpus");
     if (nread >= 0) {
         buf[CPU_SETSIZE - 1] = '\0';
         base = 0;
@@ -303,6 +259,26 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     ibv_ack_async_event(&event);
 }
 
+static void uct_ib_device_get_ids(uct_ib_device_t *dev)
+{
+    long vendor_id, device_id;
+
+    if ((ucs_read_file_number(&vendor_id, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                              uct_ib_device_name(dev), "vendor") == UCS_OK) &&
+        (ucs_read_file_number(&device_id, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                              uct_ib_device_name(dev), "device") == UCS_OK)) {
+        dev->pci_id.vendor = vendor_id;
+        dev->pci_id.device = device_id;
+        ucs_debug("%s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
+                  dev->pci_id.vendor, dev->pci_id.device);
+    } else {
+        dev->pci_id.vendor = 0;
+        dev->pci_id.device = 0;
+        ucs_warn("%s: could not read device/vendor id from sysfs, "
+                 "performance may be affected", uct_ib_device_name(dev));
+    }
+}
+
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device)
 {
@@ -345,6 +321,8 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         }
     }
 
+    uct_ib_device_get_ids(dev);
+
     return UCS_OK;
 }
 
@@ -356,7 +334,6 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     dev->async_events = async_events;
 
-    /* Get device locality */
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
                                &dev->numa_node);
 
@@ -426,8 +403,8 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
                                            const uct_ib_device_spec_t *spec)
 {
-    return (spec->vendor_id == IBV_DEV_ATTR(dev, vendor_id)) &&
-           (spec->part_id   == IBV_DEV_ATTR(dev, vendor_part_id));
+    return (spec->pci_id.vendor == dev->pci_id.vendor) &&
+           (spec->pci_id.device == dev->pci_id.device);
 }
 
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
@@ -445,7 +422,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 
     /* search through built-in list of device specifications */
     spec = uct_ib_builtin_device_specs;
-    while ((spec->vendor_id != 0) && !uct_ib_device_spec_match(dev, spec)) {
+    while ((spec->name != NULL) && !uct_ib_device_spec_match(dev, spec)) {
         ++spec;
     }
     return spec; /* if no match is found, return the last entry, which contains
