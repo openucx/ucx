@@ -260,16 +260,15 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 
     for (;;) {
         addrlen = sizeof(peer_addr);
-
-        fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-        if (fd < 0) {
-            if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
-                ucs_error("accept() failed: %m");
+        status  = ucs_socket_accept(iface->listen_fd, (struct sockaddr*)&peer_addr,
+                                    &addrlen, &fd);
+        if (status != UCS_OK) {
+            if (status != UCS_ERR_NO_PROGRESS) {
                 uct_tcp_iface_listen_close(iface);
             }
-
             return;
         }
+        ucs_assert(fd != -1);
 
         status = uct_tcp_cm_handle_incoming_conn(iface, &peer_addr, fd);
         if (status != UCS_OK) {
@@ -339,56 +338,28 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 {
     struct sockaddr_in bind_addr = iface->config.ifaddr;
-    socklen_t addrlen            = sizeof(bind_addr);
-    int backlog                  = ucs_socket_max_conn();
+    socklen_t socklen            = sizeof(bind_addr);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     int ret;
 
-    /* Create the server socket for accepting incoming connections */
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &iface->listen_fd);
+    bind_addr.sin_port = 0;     /* use a random port */
+    status = ucs_socket_server_init((struct sockaddr *)&bind_addr,
+                                    sizeof(bind_addr), ucs_socket_max_conn(),
+                                    &iface->listen_fd);
     if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Set the server socket to non-blocking mode */
-    status = ucs_sys_fcntl_modfl(iface->listen_fd, O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto err_close_sock;
-    }
-
-    /* Loop until unused port found */
-    do {
-        /* Bind socket to random available port */
-        bind_addr.sin_port = 0;
-        ret = bind(iface->listen_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
-    } while ((ret < 0) && (errno == EADDRINUSE));
-
-    if (ret < 0) {
-        ucs_error("bind(fd=%d) failed: %m", iface->listen_fd);
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_sock;
+        goto err;
     }
 
     /* Get the port which was selected for the socket */
-    ret = getsockname(iface->listen_fd, (struct sockaddr*)&bind_addr, &addrlen);
+    ret = getsockname(iface->listen_fd, (struct sockaddr *)&bind_addr, &socklen);
     if (ret < 0) {
         ucs_error("getsockname(fd=%d) failed: %m", iface->listen_fd);
         status = UCS_ERR_IO_ERROR;
         goto err_close_sock;
     }
+
     iface->config.ifaddr.sin_port = bind_addr.sin_port;
-
-    /* Listen for connections */
-    ret = listen(iface->listen_fd, backlog);
-    if (ret < 0) {
-        ucs_error("listen(fd=%d; backlog=%d)",
-                  iface->listen_fd, backlog);
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_sock;
-    }
-
-    ucs_debug("tcp_iface %p: listening for connections on %s:%d", iface,
-              inet_ntoa(bind_addr.sin_addr), ntohs(bind_addr.sin_port));
 
     /* Register event handler for incoming connections */
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
@@ -401,10 +372,14 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
+    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s",
+              iface, iface->listen_fd, ucs_sockaddr_str((struct sockaddr *)&bind_addr,
+                                                       ip_port_str, sizeof(ip_port_str)));
     return UCS_OK;
 
 err_close_sock:
     close(iface->listen_fd);
+err:
     return status;
 }
 

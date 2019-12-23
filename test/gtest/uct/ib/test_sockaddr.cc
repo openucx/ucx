@@ -419,8 +419,6 @@ protected:
     }
 
     void cm_start_listen() {
-        skip_tcp_sockcm();
-
         uct_listener_params_t params;
 
         params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
@@ -447,6 +445,7 @@ protected:
     }
 
     void cm_listen_and_connect() {
+        skip_tcp_sockcm();
         cm_start_listen();
         m_client->connect(0, *m_server, 0, m_connect_addr, client_cm_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
@@ -775,6 +774,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_clients_to_one_server)
     int num_clients = ucs_max(2, 100 / ucs::test_time_multiplier());;
     entity *client_test;
 
+    skip_tcp_sockcm();
     /* Listen */
     cm_start_listen();
 
@@ -828,6 +828,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     m_server_start_disconnect = true;
 
+    skip_tcp_sockcm();
     /* Listen */
     cm_start_listen();
 
@@ -882,6 +883,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 {
+    skip_tcp_sockcm();
     /* Listen */
     cm_start_listen();
 
@@ -906,6 +908,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
     ucs_status_t status;
     size_t size;
 
+    skip_tcp_sockcm();
     /* Listen */
     cm_start_listen();
 

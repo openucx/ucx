@@ -114,6 +114,22 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
 
 
 /**
+ * Accept a connection request on the given socket fd.
+ *
+ * @param [in]  fd                Socket fd.
+ * @param [out] addr              Client socket address that initiated the connection
+ * @param [out] length_ptr        Client address socket's length
+ * @param [out] accept_fd         Upon success, a non-negative file descriptor
+ *                                of the accepted socket. Otherwise, -1.
+ *
+ * @return UCS_OK on success or UCS_ERR_NO_PROGRESS to indicate that no progress
+ *         was made or UCS_ERR_IO_ERROR on failure.
+ */
+ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_ptr,
+                               int *accept_fd);
+
+
+/**
  * Check whether the socket referred to by the file descriptor `fd`
  * is connected to a peer or not.
  *
@@ -122,6 +138,25 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr);
  * @return 1 - connected, 0 - not connected.
  */
 int ucs_socket_is_connected(int fd);
+
+
+/**
+ * Initialize a TCP server.
+ * Open a socket, bind a sockadrr to that socket and start listening on it for
+ * incoming connection requests.
+ *
+ * @param [in]  saddr           Sockaddr for the server to listen on.
+ *                              If the port number inside is set to zero -
+ *                              use a random port.
+ * @param [in]  socklen         Size of saddr.
+ * @param [in]  backlog         Length of the queue for pending connections -
+ *                              for the listen() call.
+ * @param [out] listen_fd       The fd that belongs to the server.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
+                                    int backlog, int *listen_fd);
 
 
 /**

@@ -4,7 +4,8 @@
 * See file LICENSE for terms.
 */
 
-#include "tcp_sockcm.h"
+#include "tcp_listener.h"
+#include <ucs/async/async.h>
 
 
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
@@ -31,8 +32,17 @@ static ucs_status_t uct_tcp_sockcm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 
 static uct_cm_ops_t uct_tcp_sockcm_ops = {
     .close            = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_sockcm_t),
-    .cm_query         = uct_tcp_sockcm_query
+    .cm_query         = uct_tcp_sockcm_query,
+    .listener_create  = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_listener_t),
+    .listener_reject  = uct_tcp_listener_reject,
+    .listener_query   = uct_tcp_listener_query,
+    .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_listener_t)
 };
+
+void uct_tcp_sa_data_handler(int fd, void *arg)
+{
+    ucs_warn("Function not implemented");
+}
 
 static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
@@ -79,6 +89,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 
     self->priv_data_len = cm_config->priv_data_len;
 
+    ucs_list_head_init(&self->sa_arg_list);
+
     ucs_debug("created tcp_sockcm %p", self);
 
     return UCS_OK;
@@ -86,6 +98,17 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_t)
 {
+    uct_tcp_sa_arg_t *sa_arg_ctx, *tmp;
+
+    UCS_ASYNC_BLOCK(self->super.iface.worker->async);
+
+    ucs_list_for_each_safe(sa_arg_ctx, tmp, &self->sa_arg_list, list) {
+        ucs_async_remove_handler(sa_arg_ctx->fd, 1);
+        close(sa_arg_ctx->fd);
+        ucs_free(sa_arg_ctx);
+    }
+
+    UCS_ASYNC_UNBLOCK(self->super.iface.worker->async);
 }
 
 UCS_CLASS_DEFINE(uct_tcp_sockcm_t, uct_cm_t);
