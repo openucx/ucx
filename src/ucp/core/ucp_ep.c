@@ -1572,8 +1572,7 @@ static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
     }
 
     /* print eager bcopy */
-    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) &&
-        (max_bcopy < min_rndv)) {
+    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) && max_bcopy) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
