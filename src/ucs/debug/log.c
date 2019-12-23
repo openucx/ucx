@@ -124,7 +124,8 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
                         ucs_log_level_t level, const char *format, va_list ap)
 {
     size_t buffer_size = ucs_log_get_buffer_size();
-    char *log_line, *saveptr;
+    char *saveptr      = "";
+    char *log_line;
     struct timeval tv;
     char *buf;
 
