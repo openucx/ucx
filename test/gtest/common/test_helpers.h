@@ -10,6 +10,8 @@
 
 #include "gtest.h"
 
+#include <common/mem_buffer.h>
+
 #include <ucs/config/types.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
@@ -811,6 +813,17 @@ private:
 };
 
 } // detail
+
+/**
+ * N-ary Cartesian product over the N vectors provided in the input vector
+ * The cardinality of the result vector:
+ * output.size = input[0].size * input[1].size * ... * input[input.size].size
+ */
+template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &output,
+                       const std::vector<std::vector<T> > &input);
+
+std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
 
 } // ucs
 

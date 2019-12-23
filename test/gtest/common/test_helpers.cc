@@ -607,4 +607,51 @@ message_stream::~message_stream() {
 
 } // detail
 
+template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &final_output,
+                       std::vector<T> &cur_output,
+                       typename std::vector<std::vector<T> >
+                       ::const_iterator cur_input,
+                       typename std::vector<std::vector<T> >
+                       ::const_iterator end_input) {
+    if (cur_input == end_input) {
+        final_output.push_back(cur_output);
+        return;
+    }
+
+    const std::vector<T> &cur_vector = *cur_input;
+
+    cur_input++;
+
+    for (typename std::vector<T>::const_iterator iter =
+            cur_vector.begin(); iter != cur_vector.end(); ++iter) {
+        cur_output.push_back(*iter);
+        ucs::cartesian_product(final_output, cur_output,
+                               cur_input, end_input);
+        cur_output.pop_back();
+    }
+}
+
+template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &output,
+                       const std::vector<std::vector<T> > &input) {
+    std::vector<T> cur_output;
+    cartesian_product(output, cur_output, input.begin(), input.end());
+}
+
+std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
+    static std::vector<std::vector<ucs_memory_type_t> > result;
+
+    if (result.empty()) {
+        std::vector<std::vector<ucs_memory_type_t> > input;
+
+        input.push_back(mem_buffer::supported_mem_types());
+        input.push_back(mem_buffer::supported_mem_types());
+
+        ucs::cartesian_product(result, input);
+    }
+
+    return result;
+}
+
 } // ucs
