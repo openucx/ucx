@@ -339,7 +339,7 @@ class test_profile_perf : public test_profile {
 UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
 
 #if defined(__x86_64__) || defined(__powerpc64__)
-    const double EXP_OVERHEAD_NSEC = 50.0;
+    const double EXP_OVERHEAD_NSEC = 100.0;
 #else
     const double EXP_OVERHEAD_NSEC = 150.0;
 #endif
