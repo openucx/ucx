@@ -38,7 +38,8 @@ static ucs_status_t ucp_amo_basic_progress_post(uct_pending_req_t *self)
     uct_atomic_op_t op   = req->send.amo.uct_op;
     ucs_status_t status;
 
-    req->send.lane = rkey->cache.amo_lane;
+    ucs_assert(req->send.lane == rkey->cache.amo_lane);
+
     if (req->send.length == sizeof(uint64_t)) {
         status = UCS_PROFILE_CALL(uct_ep_atomic64_post,
                                   ep->uct_eps[req->send.lane], op, value,
@@ -64,7 +65,8 @@ static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
     uct_atomic_op_t op    = req->send.amo.uct_op;
     ucs_status_t status;
 
-    req->send.lane = rkey->cache.amo_lane;
+    ucs_assert(req->send.lane == rkey->cache.amo_lane);
+
     if (req->send.length == sizeof(uint64_t)) {
         if (op != UCT_ATOMIC_OP_CSWAP) {
             status = uct_ep_atomic64_fetch(ep->uct_eps[req->send.lane],

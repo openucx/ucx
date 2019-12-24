@@ -266,4 +266,24 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
 
+
+/**
+ * Instantiate the parameterized test case for all transport combinations
+ * with CUDA memory awareness
+ *
+ * @param _test_case  Test case class, derived from ucp_test.
+ */
+#define UCP_INSTANTIATE_TEST_CASE_CUDA_AWARE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,        "dc_x,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,         "ud_v,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,        "ud_x,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,         "rc_v,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,        "rc_x,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,     "shm,ib,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib_ipc, "shm,ib,cuda_ipc,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,       "ugni,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,       "self,cuda_copy") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,        "tcp,cuda_copy")
+
+
 #endif

@@ -28,20 +28,21 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
-    if ((req->send.length <= rma_config->max_put_short) ||
+    if ((req->send.length <= rma_config->put.max_short) &&
         (req->send.length <= ucp_ep_config(ep)->bcopy_thresh))
     {
-        packed_len = ucs_min(req->send.length, rma_config->max_put_short);
+        packed_len = req->send.length;
         status = UCS_PROFILE_CALL(uct_ep_put_short,
                                   ep->uct_eps[lane],
                                   req->send.buffer,
                                   packed_len,
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey);
-    } else if (ucs_likely(req->send.length < rma_config->put_zcopy_thresh)) {
+    } else if (ucs_likely(req->send.length <
+                          rma_config->put.zcopy_thresh[req->send.mem_type])) {
         ucp_memcpy_pack_context_t pack_ctx;
         pack_ctx.src    = req->send.buffer;
-        pack_ctx.length = ucs_min(req->send.length, rma_config->max_put_bcopy);
+        pack_ctx.length = ucs_min(req->send.length, rma_config->put.max_bcopy);
         packed_len = UCS_PROFILE_CALL(uct_ep_put_bcopy,
                                       ep->uct_eps[lane],
                                       ucp_memcpy_pack,
@@ -53,7 +54,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         uct_iov_t iov;
 
         /* TODO: leave last fragment for bcopy */
-        packed_len = ucs_min(req->send.length, rma_config->max_put_zcopy);
+        packed_len = ucs_min(req->send.length, rma_config->put.max_zcopy);
         /* TODO: use ucp_dt_iov_copy_uct */
         iov.buffer = (void *)req->send.buffer;
         iov.length = packed_len;
@@ -86,8 +87,9 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
-    if (ucs_likely(req->send.length < rma_config->get_zcopy_thresh)) {
-        frag_length = ucs_min(rma_config->max_get_bcopy, req->send.length);
+    if (ucs_likely(req->send.length <
+                   rma_config->get.zcopy_thresh[req->send.mem_type])) {
+        frag_length = ucs_min(rma_config->get.max_bcopy, req->send.length);
         status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
                                   ep->uct_eps[lane],
                                   (uct_unpack_callback_t)memcpy,
@@ -98,7 +100,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
                                   &req->send.state.uct_comp);
     } else {
         uct_iov_t iov;
-        frag_length = ucs_min(req->send.length, rma_config->max_get_zcopy);
+        frag_length = ucs_min(req->send.length, rma_config->get.max_zcopy);
         iov.buffer  = (void *)req->send.buffer;
         iov.length  = frag_length;
         iov.count   = 1;

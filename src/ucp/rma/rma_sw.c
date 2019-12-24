@@ -15,6 +15,19 @@
 #include <ucp/core/ucp_request.inl>
 
 
+static inline ucs_status_t
+ucp_rma_sw_progress_start(uct_pending_req_t *self, uct_pending_callback_t rma_cb) {
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    if (ucs_unlikely(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.rma.rkey->mem_type))) {
+        ucp_request_unsupported_mem_type_error(req, "RMA");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    req->send.uct.func = rma_cb;
+    return req->send.uct.func(&req->send.uct);
+}
+
 static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
 {
     ucp_request_t *req  = arg;
@@ -56,6 +69,11 @@ static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
                                    status);
 }
 
+static ucs_status_t ucp_rma_sw_progress_put_start(uct_pending_req_t *self)
+{
+    return ucp_rma_sw_progress_start(self, ucp_rma_sw_progress_put);
+}
+
 static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
 {
     ucp_request_t *req         = arg;
@@ -95,10 +113,15 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_rma_sw_progress_get_start(uct_pending_req_t *self)
+{
+    return ucp_rma_sw_progress_start(self, ucp_rma_sw_progress_get);
+}
+
 ucp_rma_proto_t ucp_rma_sw_proto = {
     .name         = "sw_rma",
-    .progress_put = ucp_rma_sw_progress_put,
-    .progress_get = ucp_rma_sw_progress_get
+    .progress_put = ucp_rma_sw_progress_put_start,
+    .progress_get = ucp_rma_sw_progress_get_start
 };
 
 static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)

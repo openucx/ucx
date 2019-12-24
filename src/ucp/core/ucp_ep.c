@@ -54,6 +54,13 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 };
 #endif
 
+static const ucp_ep_rma_proto_t ucp_ep_rma_proto_dummy = {
+    .max_short    = -1,
+    .max_bcopy    = SIZE_MAX,
+    .zcopy_thresh = { SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX },
+    .max_zcopy    = SIZE_MAX
+};
+
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
@@ -1171,6 +1178,60 @@ static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_sho
     max_eager_short->memtype_on = max_short;
 }
 
+static void
+ucp_ep_config_set_memtype_zcopy_thresh(const uct_md_attr_t *md_attr,
+                                       size_t zcopy_thresh[UCS_MEMORY_TYPE_LAST],
+                                       size_t zcopy_thresh_val)
+{
+    ucs_memory_type_t mem_type;
+
+    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
+    for (mem_type = UCS_MEMORY_TYPE_HOST; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
+            zcopy_thresh[mem_type] = zcopy_thresh_val;
+        } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+            zcopy_thresh[mem_type] = 1;
+        }
+    }
+}
+
+static void
+ucp_ep_config_set_rma(const ucp_context_h context, const uct_md_attr_t *md_attr,
+                      ucp_ep_rma_proto_t *rma_proto, uint64_t flags,
+                      uint64_t short_flag, size_t max_short,
+                      uint64_t bcopy_flag, size_t max_bcopy,
+                      uint64_t zcopy_flag, size_t min_zcopy, size_t max_zcopy)
+{
+    size_t zcopy_thresh;
+
+    /* Zcopy */
+    if (flags & zcopy_flag) {
+        rma_proto->max_zcopy = max_zcopy;
+        /* TODO: formula */
+        if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
+            zcopy_thresh = 16384; 
+        } else {
+            zcopy_thresh = context->config.ext.zcopy_thresh; 
+        }
+        zcopy_thresh = ucs_max(zcopy_thresh, min_zcopy);
+        ucp_ep_config_set_memtype_zcopy_thresh(md_attr, rma_proto->zcopy_thresh,
+                                               zcopy_thresh);
+    }
+
+    /* Bcopy */
+    if (flags & bcopy_flag) {
+        rma_proto->max_bcopy = ucs_min(max_bcopy,
+                                       rma_proto->zcopy_thresh[UCS_MEMORY_TYPE_HOST]);
+    }
+
+    /* Short */
+    if (flags & short_flag) {
+        ucs_assert(max_short <= SSIZE_MAX);
+        rma_proto->max_short = (context->num_mem_type_detect_mds ? -1 :
+                                (ssize_t)ucs_min(max_short, rma_proto->max_bcopy));
+    }
+}
+
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
@@ -1183,7 +1244,6 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     uct_iface_attr_t *iface_attr;
     size_t it;
     size_t zcopy_thresh;
-    int mem_type;
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
@@ -1231,13 +1291,9 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                        config->zcopy_thresh[0]);
     }
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
-        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
-            config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
-        } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
-            config->mem_type_zcopy_thresh[mem_type] = 1;
-        }
-    }
+    ucp_ep_config_set_memtype_zcopy_thresh(md_attr,
+                                           config->mem_type_zcopy_thresh,
+                                           config->zcopy_thresh[0]);
 }
 
 static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
@@ -1472,13 +1528,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
     /* Configuration for remote memory access */
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        rma_config                   = &config->rma[lane];
-        rma_config->put_zcopy_thresh = SIZE_MAX;
-        rma_config->get_zcopy_thresh = SIZE_MAX;
-        rma_config->max_put_short    = SIZE_MAX;
-        rma_config->max_get_short    = SIZE_MAX;
-        rma_config->max_put_bcopy    = SIZE_MAX;
-        rma_config->max_get_bcopy    = SIZE_MAX;
+        rma_config      = &config->rma[lane];
+        rma_config->put = ucp_ep_rma_proto_dummy;
+        rma_config->get = ucp_ep_rma_proto_dummy;
 
         if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
             continue;
@@ -1488,49 +1540,28 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            /* PUT */
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
-                rma_config->max_put_zcopy    = iface_attr->cap.put.max_zcopy;
-                /* TODO: formula */
-                if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
-                    rma_config->put_zcopy_thresh = 16384; 
-                } else {
-                    rma_config->put_zcopy_thresh = context->config.ext.zcopy_thresh; 
-                }
-                rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
-                                                       iface_attr->cap.put.min_zcopy);
-            }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
-                rma_config->max_put_bcopy = ucs_min(iface_attr->cap.put.max_bcopy,
-                                                    rma_config->put_zcopy_thresh);
-            }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
-                rma_config->max_put_short = ucs_min(iface_attr->cap.put.max_short,
-                                                    rma_config->max_put_bcopy);
-            }
+            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
-            /* GET */
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
-                /* TODO: formula */
-                rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
-                if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
-                    rma_config->get_zcopy_thresh = 16384;
-                } else {
-                    rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh; 
-                }
-                rma_config->get_zcopy_thresh = ucs_max(rma_config->get_zcopy_thresh,
-                                                       iface_attr->cap.get.min_zcopy);
-            }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
-                rma_config->max_get_bcopy = ucs_min(iface_attr->cap.get.max_bcopy,
-                                                    rma_config->get_zcopy_thresh);
-            }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
-                rma_config->max_get_short = ucs_min(iface_attr->cap.get.max_short,
-                                                    rma_config->max_get_bcopy);
-            }
+            ucp_ep_config_set_rma(context, md_attr, &rma_config->put,
+                                  iface_attr->cap.flags,
+                                  UCT_IFACE_FLAG_PUT_SHORT,
+                                  iface_attr->cap.put.max_short,
+                                  UCT_IFACE_FLAG_PUT_BCOPY,
+                                  iface_attr->cap.put.max_bcopy,
+                                  UCT_IFACE_FLAG_PUT_ZCOPY,
+                                  iface_attr->cap.put.min_zcopy,
+                                  iface_attr->cap.put.max_zcopy); /* PUT */
+            ucp_ep_config_set_rma(context, md_attr, &rma_config->get,
+                                  iface_attr->cap.flags,
+                                  UCT_IFACE_FLAG_GET_SHORT,
+                                  iface_attr->cap.get.max_short,
+                                  UCT_IFACE_FLAG_GET_BCOPY,
+                                  iface_attr->cap.get.max_bcopy,
+                                  UCT_IFACE_FLAG_GET_ZCOPY,
+                                  iface_attr->cap.get.min_zcopy,
+                                  iface_attr->cap.get.max_zcopy); /* GET */
         } else {
-            rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
+            rma_config->put.max_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
     }
 
@@ -1767,12 +1798,14 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
              if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
                  continue;
              }
+             /* TODO: print for all supported memory types */
              ucp_ep_config_print_rma_proto(stream, "put", lane,
-                                           ucs_max(config->rma[lane].max_put_short + 1,
+                                           ucs_max(config->rma[lane].put.max_short + 1,
                                                    config->bcopy_thresh),
-                                           config->rma[lane].put_zcopy_thresh);
-             ucp_ep_config_print_rma_proto(stream, "get", lane, 0,
-                                           config->rma[lane].get_zcopy_thresh);
+                                           config->rma[lane].put.zcopy_thresh[UCS_MEMORY_TYPE_HOST]);
+             ucp_ep_config_print_rma_proto(stream, "get", lane,
+                                           /* UCP RMA doesn't use UCT GET Short*/
+                                           0, config->rma[lane].get.zcopy_thresh[UCS_MEMORY_TYPE_HOST]);
          }
      }
 

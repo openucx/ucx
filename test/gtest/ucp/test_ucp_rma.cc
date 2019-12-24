@@ -7,6 +7,57 @@
 
 #include "test_ucp_memheap.h"
 #include <ucs/sys/sys.h>
+#include <common/mem_buffer.h>
+extern "C" {
+#include <ucp/core/ucp_ep.inl>
+}
+
+#define TEST_UCP_RMA_BASIC_LENGTH 1000
+
+
+class test_ucp_rma_check_mem_type : public test_ucp_memheap_check_mem_type {
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.features |= UCP_FEATURE_RMA;
+        return params;
+    }
+
+    size_t get_data_size() const {
+        return TEST_UCP_RMA_BASIC_LENGTH;
+    }
+
+    bool check_gpu_direct_support(ucs_memory_type_t mem_type) {
+        return ((m_remote_mem_buf_rkey->cache.rma_lane != UCP_NULL_LANE) &&
+                !strcmp(m_remote_mem_buf_rkey->cache.rma_proto->name,
+                        "basic_rma") &&
+                (ucp_ep_md_attr(sender().ep(),
+                                m_remote_mem_buf_rkey->cache.rma_lane)->
+                 cap.reg_mem_types & UCS_BIT(mem_type)));
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_check_mem_type, basic) {
+    err_exp_str = get_err_exp_str("RMA");
+    scoped_log_handler log_handler(error_handler);
+
+    ucs_status_t status;
+    status = ucp_put_nbi(sender().ep(), m_local_mem_buf->ptr(),
+                         m_local_mem_buf->size(),
+                         (uintptr_t)m_remote_mem_buf->ptr(),
+                         m_remote_mem_buf_rkey);
+    check_mem_type_op_status(status);
+    flush_ep(sender());
+
+    status = ucp_get_nbi(sender().ep(), m_local_mem_buf->ptr(),
+                         m_local_mem_buf->size(),
+                         (uintptr_t)m_remote_mem_buf->ptr(),
+                         m_remote_mem_buf_rkey);
+    check_mem_type_op_status(status);
+    flush_ep(sender());
+}
+
+UCP_INSTANTIATE_TEST_CASE_CUDA_AWARE(test_ucp_rma_check_mem_type)
 
 
 class test_ucp_rma : public test_ucp_memheap {
@@ -315,4 +366,4 @@ UCS_TEST_P(test_ucp_rma, nonblocking_stream_get_nb_flush_ep) {
                        1, true, true);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_rma)
+UCP_INSTANTIATE_TEST_CASE_CUDA_AWARE(test_ucp_rma)

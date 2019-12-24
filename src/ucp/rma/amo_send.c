@@ -93,7 +93,31 @@ ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
 #endif
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE int
+ucp_amo_is_mem_type_supported(const ucp_request_t *req)
+{
+    /* TODO: Currently, some UCTs (e.g. IB RC/DC tranposrts) supports
+     * registration for non-HOST memory types (e.g. GPUDirect is enabled),
+     * but their AMO implementation doesn't support using AMO operation for
+     * the result buffer that is non-accessible from CPU, because it
+     * dereferences the result buffer in order to assign the result of AMO
+     * operation (applicable only for AMO fetch operations) */
+    /* UCP AMO supports the memory type for accessible from CPU
+     * buffers only if: */
+    return (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type) &&
+            (/* - doing Basic RMA for the local buffer that could be
+              *   registerd using this TL */
+             ((req->send.amo.rkey->cache.amo_proto == &ucp_amo_basic_proto) &&
+              (ucp_ep_md_attr(req->send.ep,
+                              req->send.amo.rkey->cache.amo_lane)->
+               cap.reg_mem_types & UCS_BIT(req->send.mem_type))) ||
+             /* - doing SW AMO for the local buffer that is accesible
+              *   from CPU (TODO: check for md_attr->cap.access_mem_type,
+              *   when it will support memory type bitmask) */
+             req->send.amo.rkey->cache.amo_proto == &ucp_amo_sw_proto));
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                    uct_atomic_op_t op, size_t op_size, uint64_t remote_addr,
                    ucp_rkey_h rkey, uint64_t value, const ucp_amo_proto_t *proto)
@@ -101,8 +125,24 @@ ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
-    req->send.uct.func              = proto->progress_fetch;
     req->send.buffer                = buffer;
+    req->send.mem_type              = ucp_memory_type_detect(ep->worker->context,
+                                                             buffer, op_size);
+    if (ucs_unlikely((req->send.mem_type != UCS_MEMORY_TYPE_HOST) &&
+                     !ucp_amo_is_mem_type_supported(req))) {
+        /* first, try to re-select AMO lane */
+        ucp_rkey_select_amo_lane(rkey, ep, req->send.mem_type);
+        if (!ucp_amo_is_mem_type_supported(req)) {
+            /* if the memory type is still unsupported by the selected lane,
+             * fail AMO operation */
+            ucp_request_unsupported_mem_type_error(req, "AMO");
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+    req->send.lane                  = rkey->cache.amo_lane;
+    req->send.uct.func              = proto->progress_fetch;
+
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -110,7 +150,9 @@ void ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
                        size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey,
                        uint64_t value, const ucp_amo_proto_t *proto)
 {
-    ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
+    ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size); 
+    req->send.mem_type = UCS_MEMORY_TYPE_HOST;
+    req->send.lane     = rkey->cache.amo_lane;
     req->send.uct.func = proto->progress_post;
 }
 
@@ -145,14 +187,23 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
         goto out;
     }
 
-    ucp_amo_init_fetch(req, ep, result, ucp_uct_fop_table[opcode], op_size,
-                       remote_addr, rkey, value, rkey->cache.amo_proto);
+    status = ucp_amo_init_fetch(req, ep, result, ucp_uct_fop_table[opcode],
+                                op_size, remote_addr, rkey, value,
+                                rkey->cache.amo_proto);
+    if (ucs_unlikely(status != UCS_OK)) {
+        status_p = UCS_STATUS_PTR(status);
+        goto err;
+    }
 
     status_p = ucp_rma_send_request_cb(req, cb);
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status_p;
+
+err:
+    ucp_request_put(req);
+    goto out;
 }
 
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,

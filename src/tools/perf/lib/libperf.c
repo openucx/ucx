@@ -393,6 +393,22 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if ((params->api == UCX_PERF_API_UCP) &&
+        (params->mem_type != UCS_MEMORY_TYPE_HOST) &&
+        ((params->command == UCX_PERF_CMD_PUT) ||
+         (params->command == UCX_PERF_CMD_GET) ||
+         (params->command == UCX_PERF_CMD_ADD) ||
+         (params->command == UCX_PERF_CMD_FADD) ||
+         (params->command == UCX_PERF_CMD_SWAP) ||
+         (params->command == UCX_PERF_CMD_CSWAP))) {
+        /* TODO: remove when support for non-HOST memory types will be added */
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("UCP doesn't support RMA/AMO for \"%s\" memory type",
+                      ucs_memory_type_names[params->mem_type]);
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (params->max_outstanding < 1) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("max_outstanding, need to be at least 1");
@@ -650,9 +666,11 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
     if (!(md_attr.cap.access_mem_type == params->mem_type) &&
         !(md_attr.cap.reg_mem_types & UCS_BIT(params->mem_type))) {
-        ucs_error("Unsupported memory type %s by %s/%s",
-                  ucs_memory_type_names[params->mem_type],
-                  params->uct.tl_name, params->uct.dev_name);
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Unsupported memory type %s by %s/%s",
+                      ucs_memory_type_names[params->mem_type],
+                      params->uct.tl_name, params->uct.dev_name);
+        }
         return UCS_ERR_INVALID_PARAM;
     }
 

@@ -152,17 +152,23 @@ typedef struct ucp_ep_config_key {
 
 
 /*
+ * Protocol limits for RMA
+ */
+typedef struct ucp_ep_rma_proto {
+    ssize_t                max_short;         /* Maximal payload of short */
+    size_t                 max_bcopy;         /* Maximal total size of bcopy */
+    /* Minimal total size of zcopy for memory types */
+    size_t                 zcopy_thresh[UCS_MEMORY_TYPE_LAST]; 
+    size_t                 max_zcopy;         /* Maximal total size of zcopy */
+} ucp_ep_rma_proto_t;
+
+
+/*
  * Configuration for RMA protocols
  */
 typedef struct ucp_ep_rma_config {
-    size_t                 max_put_short;    /* Maximal payload of put short */
-    size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
-    size_t                 max_put_zcopy;
-    size_t                 max_get_short;    /* Maximal payload of get short */
-    size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
-    size_t                 max_get_zcopy;
-    size_t                 put_zcopy_thresh;
-    size_t                 get_zcopy_thresh;
+    ucp_ep_rma_proto_t     put;               /* Protocol limits for PUT */
+    ucp_ep_rma_proto_t     get;               /* Protocol limits for GET */
 } ucp_ep_rma_config_t;
 
 

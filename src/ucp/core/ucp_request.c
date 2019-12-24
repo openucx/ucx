@@ -417,4 +417,11 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
     return UCS_ERR_MESSAGE_TRUNCATED;
 }
 
-
+void ucp_request_unsupported_mem_type_error(const ucp_request_t *req,
+                                            const char *op_type_str)
+{
+    /* TODO: remove when support for non-HOST memory types will be added */
+    ucs_error("UCP doesn't support %s for \"%s\"<->\"%s\" memory types",
+              op_type_str, ucs_memory_type_names[req->send.mem_type],
+              ucs_memory_type_names[req->send.rma.rkey->mem_type]);
+}

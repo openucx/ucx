@@ -8,7 +8,113 @@
 #include "test_ucp_atomic.h"
 extern "C" {
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_ep.inl>
 }
+
+template <typename T>
+class test_ucp_atomic_check_mem_type :
+    public test_ucp_memheap_check_mem_type {
+public:
+    void init() {
+        // do nothing
+    }
+
+    void cleanup() {
+        // do nothing
+    }
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        if (sizeof(T) == sizeof(uint32_t)) {
+            params.features |= UCP_FEATURE_AMO32;
+        } else if (sizeof(T) == sizeof(uint64_t)) {
+            params.features |= UCP_FEATURE_AMO64;
+        } else {
+            UCS_TEST_ABORT("Unsupported AMO operation type - " <<
+                           sizeof(T));
+        }
+        return params;
+    }
+
+    static void fetch_nb_completion(void *request, ucs_status_t status) {}
+
+    size_t get_data_size() const {
+        return sizeof(T);
+    }
+
+    bool check_gpu_direct_support(ucs_memory_type_t mem_type) {
+        return ((m_remote_mem_buf_rkey->cache.amo_lane != UCP_NULL_LANE) &&
+                !strcmp(m_remote_mem_buf_rkey->cache.amo_proto->name,
+                        "basic_amo") &&
+                (ucp_ep_md_attr(sender().ep(),
+                                m_remote_mem_buf_rkey->cache.amo_lane)->
+                 cap.reg_mem_types & UCS_BIT(mem_type)));
+    }
+
+    void test_mem_type() {
+        for (int amo_mode = UCP_ATOMIC_MODE_CPU;
+             amo_mode < UCP_ATOMIC_MODE_LAST; ++amo_mode) {
+            modify_config("ATOMIC_MODE", ucp_atomic_modes[amo_mode]);
+            test_ucp_memheap_check_mem_type::init();
+
+            // Test AMO post
+            {
+                err_exp_str = get_err_exp_str("AMO", false, true);
+                scoped_log_handler log_handler(error_handler);
+
+                ucs_status_t status = ucp_atomic_post(sender().ep(), UCP_ATOMIC_POST_OP_ADD,
+                                                      1lu, sizeof(T),
+                                                      (uintptr_t)m_remote_mem_buf->ptr(),
+                                                      m_remote_mem_buf_rkey);
+                check_mem_type_op_status(status, false);
+                flush_ep(sender());
+            }
+
+            // Test AMO non-blocking fetch
+            {
+                err_exp_str = get_err_exp_str("AMO");
+                scoped_log_handler log_handler(error_handler);
+
+                ucs_status_ptr_t status_ptr = ucp_atomic_fetch_nb(sender().ep(),
+                                                                  UCP_ATOMIC_FETCH_OP_FADD,
+                                                                  1lu, m_local_mem_buf->ptr(),
+                                                                  sizeof(T),
+                                                                  (uintptr_t)m_remote_mem_buf->ptr(),
+                                                                  m_remote_mem_buf_rkey,
+                                                                  fetch_nb_completion);
+                if (UCS_PTR_IS_PTR(status_ptr)){
+                    wait(status_ptr);
+                } else {
+                    check_mem_type_op_status(UCS_PTR_STATUS(status_ptr), true, true, false, true);
+                }
+                flush_ep(sender());
+            }
+
+            test_ucp_memheap_check_mem_type::cleanup();
+        }
+    }
+};
+
+class test_ucp_atomic32_check_mem_type :
+    public test_ucp_atomic_check_mem_type<uint32_t> {
+};
+
+UCS_TEST_P(test_ucp_atomic32_check_mem_type, basic) {
+    test_mem_type();
+}
+
+UCP_INSTANTIATE_TEST_CASE_CUDA_AWARE(test_ucp_atomic32_check_mem_type)
+
+class test_ucp_atomic64_check_mem_type :
+    public test_ucp_atomic_check_mem_type<uint32_t> {
+};
+
+UCS_TEST_P(test_ucp_atomic64_check_mem_type, basic) {
+    test_mem_type();
+}
+
+UCP_INSTANTIATE_TEST_CASE_CUDA_AWARE(test_ucp_atomic64_check_mem_type)
+
 
 std::vector<ucp_test_param>
 test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
@@ -27,12 +133,7 @@ test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
 }
 
 void test_ucp_atomic::init() {
-    const char *atomic_mode =
-                    (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
-                    (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
-                    (GetParam().variant == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
-                    "";
-    modify_config("ATOMIC_MODE", atomic_mode);
+    modify_config("ATOMIC_MODE", ucp_atomic_modes[GetParam().variant]);
     test_ucp_memheap::init();
 }
 
@@ -190,7 +291,6 @@ void test_ucp_atomic::test(F f, bool malloc_allocate) {
                        sizeof(T),
                        malloc_allocate, false);
 }
-
 
 class test_ucp_atomic32 : public test_ucp_atomic {
 public:

@@ -30,7 +30,7 @@
 
 ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
-static const char *ucp_atomic_modes[] = {
+const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
     [UCP_ATOMIC_MODE_DEVICE] = "device",
     [UCP_ATOMIC_MODE_GUESS]  = "guess",
