@@ -404,25 +404,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
 
-    if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
-                  params->field_mask);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
-        !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
-        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
-                  "should be set");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
-                                UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
-        ucs_error("neither UCT_EP_PARAM_FIELD_SOCKADDR nor "
-                  "UCT_EP_PARAM_FIELD_CONN_REQUEST is set. field_mask 0x%lx",
-                  params->field_mask);
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_cm_check_ep_params(params);
+    if (status != UCS_OK) {
+        return status;
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);

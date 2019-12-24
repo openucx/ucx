@@ -49,9 +49,28 @@ struct uct_cm {
     uct_base_iface_t iface;
 };
 
+typedef struct uct_cm_sockaddr_wireup_cb {
+    /* Callback to fill the user's private data */
+    uct_sockaddr_priv_pack_callback_t  priv_pack_cb;
+    union {
+        struct {
+            /* On the client side - callback to process an incoming
+             * connection response from the server */
+            uct_ep_client_connect_cb_t connect_cb;
+        } client;
+        struct {
+            /* On the server side - callback to process an incoming connection
+             * establishment acknowledgment from the client */
+            uct_ep_server_connect_cb_t connect_cb;
+        } server;
+    };
+} uct_cm_sockaddr_wireup_cb_t;
+
 extern ucs_config_field_t uct_cm_config_table[];
 
 UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
                   uct_component_h);
+
+ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params);
 
 #endif /* UCT_CM_H_ */

@@ -51,6 +51,32 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
     return UCS_OK;
 }
 
+ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
+{
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+                  params->field_mask);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
+        !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
+        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
+                  "should be set");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
+                                UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
+        ucs_error("neither UCT_EP_PARAM_FIELD_SOCKADDR nor "
+                  "UCT_EP_PARAM_FIELD_CONN_REQUEST is set. field_mask 0x%lx",
+                  params->field_mask);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_listener_t, uct_cm_h cm)
 {
     self->cm = cm;

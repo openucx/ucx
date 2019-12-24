@@ -22,8 +22,6 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
 
     ucs_assert(fd == listener->listen_fd);
 
-    async_ctx = listener->super.cm->iface.worker->async;
-
     addrlen   = sizeof(struct sockaddr_storage);
     status    = ucs_socket_accept(listener->listen_fd,
                                   (struct sockaddr*)&client_addr,
@@ -34,9 +32,17 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
 
     ucs_assert(accept_fd != -1);
 
-    ucs_trace("server accepted a connection request from client %s",
-              ucs_sockaddr_str((struct sockaddr*)&client_addr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN));
+    if (!ucs_socket_is_connected(accept_fd)) {
+        ucs_error("tcp listener %p: connection establishment for socket fd %d "
+                  "from %s was unsuccessful", listener, accept_fd,
+                  ucs_sockaddr_str((const struct sockaddr*)&client_addr,
+                                   ip_port_str, UCS_SOCKADDR_STRING_LEN));
+        goto err;
+    }
+
+    ucs_trace("server accepted a connection request (fd=%d) from client %s",
+              accept_fd, ucs_sockaddr_str((struct sockaddr*)&client_addr,
+                                          ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     /* Set the accept_fd to non-blocking mode
      * (so that send/recv won't be blocking) */
@@ -52,10 +58,12 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
     }
 
     sa_arg_ctx->fd = accept_fd;
+    sa_arg_ctx->ep = NULL;
 
     /* Adding the arg to a list on the cm for cleanup purposes */
     ucs_list_add_tail(&listener->sockcm->sa_arg_list, &sa_arg_ctx->list);
 
+    async_ctx = listener->super.cm->iface.worker->async;
     status = ucs_async_set_event_handler(async_ctx->mode, accept_fd,
                                          UCS_EVENT_SET_EVREAD |
                                          UCS_EVENT_SET_EVERR,
