@@ -150,12 +150,11 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 
     do {
         ret = connect(fd, dest_addr, dest_addr_size);
-
-        /* Save errno to separate variable to not override it
-         * when calling getsockname() below */
-        conn_errno = errno;
-
         if (ret < 0) {
+            /* Save errno to separate variable to not override it
+             * when calling getsockname() below */
+            conn_errno = errno;
+
             if (errno == EINPROGRESS) {
                 status = UCS_INPROGRESS;
                 break;
@@ -172,6 +171,8 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
                                            UCS_SOCKADDR_STRING_LEN));
                 return UCS_ERR_UNREACHABLE;
             }
+        } else {
+            conn_errno = 0;
         }
     } while ((ret < 0) && (errno == EINTR));
 
