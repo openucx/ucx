@@ -389,7 +389,11 @@ struct ucp_wireup_sockaddr_data {
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
-                                                  UCP_WIREUP_SOCKADDR_CD_xx */
+                                                  UCP_WIREUP_SA_DATA_xx */
+    uint8_t                   dev_index;     /**< Device address index used to
+                                                  build remote address in
+                                                  UCP_WIREUP_SA_DATA_CM_ADDR
+                                                  mode */
     /* packed worker address follows */
 } UCS_S_PACKED;
 
