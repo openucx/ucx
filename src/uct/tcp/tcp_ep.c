@@ -12,33 +12,46 @@
 #include <ucs/async/async.h>
 
 
-/* Forward declaration */
+/* Forward declarations */
 static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep);
+static unsigned uct_tcp_ep_progress_data_rx(uct_tcp_ep_t *ep);
+static unsigned uct_tcp_ep_progress_magic_number_rx(uct_tcp_ep_t *ep);
 
 const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     [UCT_TCP_EP_CONN_STATE_CLOSED]      = {
         .name        = "CLOSED",
-        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+        .rx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
     },
     [UCT_TCP_EP_CONN_STATE_CONNECTING]  = {
         .name        = "CONNECTING",
-        .tx_progress = uct_tcp_cm_conn_progress
+        .tx_progress = uct_tcp_cm_conn_progress,
+        .rx_progress = uct_tcp_ep_progress_data_rx
     },
     [UCT_TCP_EP_CONN_STATE_WAITING_ACK] = {
         .name        = "WAITING_ACK",
-        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+        .rx_progress = uct_tcp_ep_progress_data_rx
+    },
+    [UCT_TCP_EP_CONN_STATE_RECV_MAGIC_NUMBER]   = {
+        .name        = "RECV_MAGIC_NUMBER",
+        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+        .rx_progress = uct_tcp_ep_progress_magic_number_rx
     },
     [UCT_TCP_EP_CONN_STATE_ACCEPTING]   = {
         .name        = "ACCEPTING",
-        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+        .rx_progress = uct_tcp_ep_progress_data_rx
     },
     [UCT_TCP_EP_CONN_STATE_WAITING_REQ] = {
         .name        = "WAITING_REQ",
-        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero
+        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
+        .rx_progress = uct_tcp_ep_progress_data_rx
     },
     [UCT_TCP_EP_CONN_STATE_CONNECTED]   = {
         .name        = "CONNECTED",
-        .tx_progress = uct_tcp_ep_progress_data_tx
+        .tx_progress = uct_tcp_ep_progress_data_tx,
+        .rx_progress = uct_tcp_ep_progress_data_rx
     }
 };
 
@@ -135,11 +148,11 @@ static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
 {
     uct_tcp_ep_addr_cleanup(&ep->peer_addr);
 
-    if (ep->tx.buf) {
+    if (ep->tx.buf != NULL) {
         uct_tcp_ep_ctx_reset(&ep->tx);
     }
 
-    if (ep->rx.buf) {
+    if (ep->rx.buf != NULL) {
         uct_tcp_ep_ctx_reset(&ep->rx);
     }
 
@@ -552,8 +565,9 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
 
         uct_tcp_ep_mod_events(ep, 0, ep->events);
         uct_tcp_ep_close_fd(&ep->fd);
-    } else if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) {
-        /* If the EP supports RX only, destroy it */
+    } else if ((ep->ctx_caps == 0) ||
+               (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))) {
+        /* If the EP supports RX only or no capabilities set, destroy it */
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }
 }
@@ -676,8 +690,9 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
 
     if ((io_errno == ECONNRESET) &&
-        (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
-        (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */) {
+        ((ep->conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING) ||
+         ((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
+          (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */))) {
         ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
                   "connection was dropped by the peer",
                   ep, io_errno, strerror(io_errno),
@@ -698,7 +713,7 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
         /* If no data were read to the allocated buffer,
          * we can safely reset it for futher re-use and to
          * avoid overwriting this buffer, because `rx::length == 0` */
-        if (!ep->rx.length) {
+        if (ep->rx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->rx);
         }
     } else {
@@ -714,7 +729,8 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 
     ucs_assertv(recv_length, "ep=%p", ep);
 
-    status = ucs_socket_recv_nb(ep->fd, UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.length),
+    status = ucs_socket_recv_nb(ep->fd, UCS_PTR_BYTE_OFFSET(ep->rx.buf,
+                                                            ep->rx.length),
                                 &recv_length, uct_tcp_ep_io_err_handler_cb, ep);
     if (ucs_unlikely(status != UCS_OK)) {
         uct_tcp_ep_handle_recv_err(ep, status);
@@ -840,7 +856,7 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
     ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
 }
 
-unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
+static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
@@ -852,7 +868,7 @@ unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
     ucs_trace_func("ep=%p", ep);
 
     if (!uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
-        ucs_assert(!ep->rx.buf);
+        ucs_assert(ep->rx.buf == NULL);
         ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
         if (ucs_unlikely(ep->rx.buf == NULL)) {
             ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
@@ -978,7 +994,7 @@ err_no_res:
     return UCS_ERR_NO_RESOURCE;
 }
 
-unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
+static unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_ep_put_req_hdr_t *put_req;
     size_t recv_length;
@@ -999,6 +1015,65 @@ unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
     uct_tcp_ep_put_rx_advance(ep, put_req, recv_length);
 
     return 1;
+}
+
+static unsigned uct_tcp_ep_progress_data_rx(uct_tcp_ep_t *ep)
+{
+    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))) {
+        return uct_tcp_ep_progress_am_rx(ep);
+    } else {
+        return uct_tcp_ep_progress_put_rx(ep);
+    }
+}
+
+static unsigned uct_tcp_ep_progress_magic_number_rx(uct_tcp_ep_t *ep)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
+    char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
+    size_t recv_length, prev_length;
+    uint64_t magic_number;
+
+    if (ep->rx.buf == NULL) {
+        ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
+        if (ucs_unlikely(ep->rx.buf == NULL)) {
+            ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
+            return 0;
+        }
+    }
+
+    prev_length = ep->rx.length;
+    recv_length = sizeof(magic_number) - ep->rx.length;
+
+    if (!uct_tcp_ep_recv(ep, recv_length) ||
+        (ep->rx.length < sizeof(magic_number))) {
+        return ((ep->rx.length - prev_length) > 0);
+    }
+
+    magic_number = *(uint64_t*)ep->rx.buf;
+
+    if (magic_number != UCT_TCP_MAGIC_NUMBER) {
+        /* Silently close this connection and destroy its EP */
+        ucs_debug("tcp_iface %p (%s): received wrong magic number (expected: "
+                  "%zu, received: %zu) for ep=%p (fd=%d) from %s", iface,
+                  ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
+                                   str_local_addr, UCS_SOCKADDR_STRING_LEN),
+                  UCT_TCP_MAGIC_NUMBER, magic_number, ep,
+                  ep->fd, ucs_socket_getname_str(ep->fd, str_remote_addr,
+                                                 UCS_SOCKADDR_STRING_LEN));
+        goto err;
+    }
+
+    uct_tcp_ep_ctx_reset(&ep->rx);
+
+    uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_ACCEPTING);
+
+    return 1;
+
+err:
+    uct_tcp_ep_destroy_internal(&ep->super.super);
+    return 0;
 }
 
 static inline void

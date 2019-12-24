@@ -111,6 +111,7 @@ gtest_SOURCES = \
 	ucs/test_stats_filter.cc \
 	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
+	uct/tcp/test_tcp.cc \
 	\
 	ucp/test_ucp_am.cc \
 	ucp/test_ucp_stream.cc \
