@@ -157,12 +157,14 @@ ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
 
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
-        status = ucp_request_send_buffer_reg(sreq, md_map);
-        if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
-            /* Registration may fail if md does not support send memory
-             * type (e.g. CUDA memory). In this case RTS will be sent with
-             * empty key, and sender will fallback to PUT or pipeline
-             * protocols */
+
+        /* Pass UCT_MD_MEM_FLAG_HIDE_ERRORS flag, because registration may fail
+         * if md does not support send memory type (e.g. CUDA memory). In this
+         * case RTS will be sent with empty key, and sender will fallback to
+         * PUT or pipeline protocols. */
+        status = ucp_request_send_buffer_reg(sreq, md_map,
+                                             UCT_MD_MEM_FLAG_HIDE_ERRORS);
+        if (status != UCS_OK) {
             return status;
         }
     }
@@ -847,7 +849,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     ucp_dt_state_t state;
 
     if (!sreq->send.mdesc) {
-        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
+        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane, 0);
         ucs_assert_always(status == UCS_OK);
     }
 
@@ -1269,7 +1271,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         (sreq->send.length >=
          ucp_ep_config(ep)->am.mem_type_zcopy_thresh[sreq->send.mem_type]))
     {
-        status = ucp_request_send_buffer_reg_lane(sreq, ucp_ep_get_am_lane(ep));
+        status = ucp_request_send_buffer_reg_lane(sreq, ucp_ep_get_am_lane(ep), 0);
         ucs_assert_always(status == UCS_OK);
 
         ucp_request_send_state_reset(sreq, ucp_rndv_am_zcopy_completion,
