@@ -361,9 +361,8 @@ void ucs_async_context_cleanup(ucs_async_context_t *async)
         pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
         kh_foreach_value(&ucs_async_global_context.handlers, handler, {
             if (async == handler->async) {
-                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" %s() not released",
-                         async, UCS_ASYNC_HANDLER_ARG(handler),
-                         ucs_debug_get_symbol_name(handler->cb));
+                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" not released",
+                         async, UCS_ASYNC_HANDLER_ARG(handler));
             }
         });
         ucs_warn("releasing async context with %d handlers", async->num_handlers);
