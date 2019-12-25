@@ -1327,13 +1327,22 @@ static int ucp_resources_is_device_shared(const ucp_tl_resource_desc_t *rsc1,
 }
 
 static ucs_status_t
-ucp_worker_create_loopback_amo_ep(ucp_worker_h worker,
-                                  const ucp_tl_resource_desc_t *best_rsc)
+ucp_worker_loopback_amo_ep_init(ucp_worker_h worker,
+                                const ucp_tl_resource_desc_t *best_rsc)
 {
     ucp_context_h context = worker->context;
-    uint64_t tl_bitmap = worker->atomic_tls;
+    uint64_t tl_bitmap    = worker->atomic_tls;
     ucp_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
+
+    /*
+     * NOTE: worker->atomic_tls can contain more than 1 transport with AMO
+     *       capabilities to the same device and/or no one EP2IFACE for wireup
+     *       needs.
+     *       If there are p2p only TLS, need to add other TLs for wireup.
+     *       If there are at leat 1 EP2IFACE transport with AMO capabilities, we
+     *       can optimize consumption of resources reducing bitmap to 1 TL.
+     */
 
     ucs_for_each_bit(rsc_index, worker->atomic_tls) {
         if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
@@ -1366,6 +1375,8 @@ ucp_worker_create_loopback_amo_ep(ucp_worker_h worker,
         tl_bitmap = UCS_BIT(rsc_index);
     }
 
+    /* Create loopback EP to handle SW AMO requests via network device to avoid
+     * race conditions */
     return ucp_worker_create_loopback_ep(worker, tl_bitmap, 0,
                                          "atomic loopback",
                                          &worker->atomic_ep);
@@ -1457,7 +1468,7 @@ static ucs_status_t ucp_worker_init_device_atomics(ucp_worker_h worker)
     }
 
     if (worker->atomic_tls) {
-        return ucp_worker_create_loopback_amo_ep(worker, best_rsc);
+        return ucp_worker_loopback_amo_ep_init(worker, best_rsc);
     }
 
     return UCS_OK;
@@ -1647,6 +1658,13 @@ err_release_am_mpool:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 out:
     return status;
+}
+
+static void ucp_worker_destroy_mpools(ucp_worker_h worker, int leak_check)
+{
+    ucs_mpool_cleanup(&worker->rndv_frag_mp, leak_check);
+    ucs_mpool_cleanup(&worker->reg_mp, leak_check);
+    ucs_mpool_cleanup(&worker->am_mp, leak_check);
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
@@ -1867,7 +1885,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Select atomic resources */
     status = ucp_worker_init_atomic_tls(worker);
     if (status != UCS_OK) {
-        goto err_close_cms;
+        goto err_destroy_mpools;
     }
 
     /* At this point all UCT memory domains and interfaces are already created
@@ -1878,6 +1896,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     *worker_p = worker;
     return UCS_OK;
 
+err_destroy_mpools:
+    ucp_worker_destroy_mpools(worker, 0);
 err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
@@ -1936,9 +1956,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);
-    ucs_mpool_cleanup(&worker->am_mp, 1);
-    ucs_mpool_cleanup(&worker->reg_mp, 1);
-    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
+    ucp_worker_destroy_mpools(worker, 1);
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);

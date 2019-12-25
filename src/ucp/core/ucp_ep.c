@@ -242,6 +242,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             continue;
         }
 
+        /* EP to access accelerators memory like CUDA/ROCM/etc */
         status = ucp_worker_create_loopback_ep(worker, tl_bitmap,
                                                UCP_EP_INIT_FLAG_MEM_TYPE,
                                                "mem type",

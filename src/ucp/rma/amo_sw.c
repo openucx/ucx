@@ -135,12 +135,12 @@ static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
 }
 
 #define DEFINE_AMO_SW_OP(_bits) \
-    static void ucp_amo_sw_do_op##_bits(const ucp_atomic_req_hdr_t *atomicreqh) \
+    static void ucp_amo_sw_do_op##_bits(const ucp_atomic_req_hdr_t *amo_req_hdr) \
     { \
-        uint##_bits##_t *ptr  = (void*)atomicreqh->address; \
-        uint##_bits##_t *args = (void*)(atomicreqh + 1); \
+        uint##_bits##_t *ptr  = (void*)amo_req_hdr->address; \
+        uint##_bits##_t *args = (void*)(amo_req_hdr + 1); \
         \
-       switch (atomicreqh->opcode) { \
+       switch (amo_req_hdr->opcode) { \
         case UCT_ATOMIC_OP_ADD: \
             ucs_atomic_add##_bits(ptr, args[0]); \
             break; \
@@ -154,18 +154,18 @@ static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
             ucs_atomic_xor##_bits(ptr, args[0]); \
             break; \
         default: \
-            ucs_fatal("invalid opcode: %d", atomicreqh->opcode); \
+            ucs_fatal("invalid opcode: %d", amo_req_hdr->opcode); \
         } \
     }
 
 #define DEFINE_AMO_SW_FOP(_bits) \
-    static void ucp_amo_sw_do_fop##_bits(const ucp_atomic_req_hdr_t *atomicreqh, \
+    static void ucp_amo_sw_do_fop##_bits(const ucp_atomic_req_hdr_t *amo_req_hdr, \
                                          ucp_atomic_reply_t *result) \
     { \
-        uint##_bits##_t *ptr  = (void*)atomicreqh->address; \
-        uint##_bits##_t *args = (void*)(atomicreqh + 1); \
+        uint##_bits##_t *ptr  = (void*)amo_req_hdr->address; \
+        uint##_bits##_t *args = (void*)(amo_req_hdr + 1); \
         \
-        switch (atomicreqh->opcode) { \
+        switch (amo_req_hdr->opcode) { \
         case UCT_ATOMIC_OP_ADD: \
             result->reply##_bits = ucs_atomic_fadd##_bits(ptr, args[0]); \
             break; \
@@ -185,7 +185,7 @@ static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
             result->reply##_bits = ucs_atomic_cswap##_bits(ptr, args[0], args[1]); \
             break; \
         default: \
-            ucs_fatal("invalid opcode: %d", atomicreqh->opcode); \
+            ucs_fatal("invalid opcode: %d", amo_req_hdr->opcode); \
         } \
     }
 
@@ -227,7 +227,6 @@ static void ucp_amo_sw_loopback_send_reply(ucp_worker_h worker,
 
     ucp_rkey_destroy(flush_ctx->rkey);
     status = ucp_mem_unmap(worker->context, flush_ctx->memh);
-
     if (status != UCS_OK) {
         ucs_error("failed to unmap memory handle %p with error %s",
                   flush_ctx->memh, ucs_status_string(status));
@@ -246,7 +245,7 @@ static void ucp_amo_sw_loopback_flush_cb(ucp_request_t *req)
 }
 
 static ucs_status_t
-ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *atomicreqh)
+ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *amo_req_hdr)
 {
     ucp_atomic_flush_ctx_t *flush_ctx;
     ucp_mem_map_params_t params;
@@ -263,14 +262,14 @@ ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *atomicreqh)
         return UCS_ERR_NO_MEMORY;
     }
 
-    flush_ctx->req_hdr = *atomicreqh;
-    flush_ctx->value   = *(uint64_t *)(atomicreqh + 1);
+    flush_ctx->req_hdr = *amo_req_hdr;
+    flush_ctx->value   = *(uint64_t *)(amo_req_hdr + 1);
 
     params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                          UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
                          UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.address     = (void *)atomicreqh->address;
-    params.length      = atomicreqh->length;
+    params.address     = (void *)amo_req_hdr->address;
+    params.length      = amo_req_hdr->length;
     params.flags       = 0;
 
     /*
@@ -304,9 +303,9 @@ ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *atomicreqh)
     }
 
     status = ucp_atomic_post(worker->atomic_ep,
-                             (ucp_atomic_post_op_t)atomicreqh->opcode,
-                             flush_ctx->value, atomicreqh->length,
-                             atomicreqh->address, flush_ctx->rkey);
+                             (ucp_atomic_post_op_t)amo_req_hdr->opcode,
+                             flush_ctx->value, amo_req_hdr->length,
+                             amo_req_hdr->address, flush_ctx->rkey);
     if (status != UCS_OK) {
         ucs_error("failed to post loopback AMO to ep %p, status %s",
                   worker->atomic_ep, ucs_status_string(status));
@@ -346,31 +345,31 @@ UCS_PROFILE_FUNC(ucs_status_t,
                  ucp_atomic_req_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    ucp_atomic_req_hdr_t *atomicreqh = data;
-    ucp_worker_h worker              = arg;
-    ucp_ep_h ep                      = ucp_worker_get_ep_by_ptr(worker,
-                                                                atomicreqh->req.ep_ptr);
-    ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
+    ucp_atomic_req_hdr_t *amo_req_hdr = data;
+    ucp_worker_h worker               = arg;
+    ucp_ep_h ep                       = ucp_worker_get_ep_by_ptr(worker,
+                                                    amo_req_hdr->req.ep_ptr);
+    ucp_rsc_index_t amo_rsc_idx       = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
 
     if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
                      (ucp_worker_iface_get_attr(worker,
                                                 amo_rsc_idx)->cap.flags &
                       UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
-        return ucp_amo_sw_loopback_post(worker, atomicreqh);
+        return ucp_amo_sw_loopback_post(worker, amo_req_hdr);
     }
 
-    if (atomicreqh->req.reqptr == 0) {
+    if (amo_req_hdr->req.reqptr == 0) {
         /* atomic operation without result */
-        switch (atomicreqh->length) {
+        switch (amo_req_hdr->length) {
         case sizeof(uint32_t):
-            ucp_amo_sw_do_op32(atomicreqh);
+            ucp_amo_sw_do_op32(amo_req_hdr);
             break;
         case sizeof(uint64_t):
-            ucp_amo_sw_do_op64(atomicreqh);
+            ucp_amo_sw_do_op64(amo_req_hdr);
             break;
         default:
-            ucs_fatal("invalid atomic length: %u", atomicreqh->length);
+            ucs_fatal("invalid atomic length: %u", amo_req_hdr->length);
         }
         ucp_rma_sw_send_cmpl(ep);
     } else {
@@ -381,20 +380,20 @@ UCS_PROFILE_FUNC(ucs_status_t,
             return UCS_OK;
         }
 
-        switch (atomicreqh->length) {
+        switch (amo_req_hdr->length) {
         case sizeof(uint32_t):
-            ucp_amo_sw_do_fop32(atomicreqh, &req->send.atomic_reply.data);
+            ucp_amo_sw_do_fop32(amo_req_hdr, &req->send.atomic_reply.data);
             break;
         case sizeof(uint64_t):
-            ucp_amo_sw_do_fop64(atomicreqh, &req->send.atomic_reply.data);
+            ucp_amo_sw_do_fop64(amo_req_hdr, &req->send.atomic_reply.data);
             break;
         default:
-            ucs_fatal("invalid atomic length: %u", atomicreqh->length);
+            ucs_fatal("invalid atomic length: %u", amo_req_hdr->length);
         }
 
         req->send.ep               = ep;
-        req->send.atomic_reply.req = atomicreqh->req.reqptr;
-        req->send.length           = atomicreqh->length;
+        req->send.atomic_reply.req = amo_req_hdr->req.reqptr;
+        req->send.length           = amo_req_hdr->length;
         req->send.uct.func         = ucp_progress_atomic_reply;
         ucp_request_send(req, 0);
     }

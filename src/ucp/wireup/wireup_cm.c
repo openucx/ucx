@@ -390,7 +390,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSED));
     req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
-                                ucp_ep_cm_disconnect_flushed_cb,
+                                NULL, ucp_ep_cm_disconnect_flushed_cb,
                                 "cm_disconnected_cb");
     if (req == NULL) {
         /* flush is successfully completed in place, notify remote peer
