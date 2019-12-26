@@ -669,10 +669,9 @@ UCS_TEST_P(test_ucp_tag_offload_stats_cuda, block_cuda_no_gpu_direct,
     activate_offload(sender());
 
     size_t size   = 2048;
-
     // Test will be skipped here if CUDA mem is not supported
-    void *rbuf    = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
-    request *rreq = recv_nb_and_check(rbuf, size, DATATYPE, 0x11,
+    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    request *rreq = recv_nb_and_check(rbuf.ptr(), size, DATATYPE, 0x11,
                                       UCP_TAG_MASK_FULL);
 
     wait_counter(worker_offload_stats(receiver()),
