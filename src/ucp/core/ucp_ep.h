@@ -487,4 +487,6 @@ int ucp_ep_is_cm_local_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_local_disconnect_progress(void *arg);
 
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
+
 #endif
