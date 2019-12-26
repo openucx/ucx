@@ -78,15 +78,13 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
 
     if (cep != NULL) {  /* TODO remove this check once the server's ep is implemented. */
         switch (cep->state) {
-        case (UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_INIT):
+        case (UCT_TCP_SOCKCM_EP_ON_CLIENT):
             /* connect() completed */
             if (!uct_tcp_is_fd_connected(cep->fd)) {
                 return;
             }
 
-            cep->state &= ~UCT_TCP_SOCKCM_EP_INIT;
             cep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
-
             /* TODO: start sending the user's data */
             uct_tcp_close_sa_arg(sa_arg_ctx);
             break;
@@ -101,7 +99,7 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
 }
 
 static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_disconnect            = uct_tcp_sockcm_ep_disconnect,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_sockcm_ep_t),
     .ep_put_short             = (uct_ep_put_short_func_t)ucs_empty_function_return_unsupported,

@@ -11,16 +11,12 @@
  * RDMACM endpoint that is opened on a connection manager
  */
 typedef struct uct_rdmacm_cm_ep {
-    uct_base_ep_t               super;
-    struct rdma_cm_id           *id;  /* The rdmacm id that is created per this ep */
-    struct ibv_cq               *cq;  /* Dummy cq used for creating a dummy qp */
-    struct ibv_qp               *qp;  /* Dummy qp used for generating a unique qp_num */
-    void                        *user_data;    /* User data associated with the endpoint */
-    uct_ep_disconnect_cb_t      disconnect_cb; /* Callback to handle the disconnection
-                                                  of the remote peer */
-    uint8_t                     flags;
-    ucs_status_t                status;
-    uct_cm_sockaddr_wireup_cb_t wireup;
+    uct_cm_base_ep_t  super;
+    struct rdma_cm_id *id;  /* The rdmacm id that is created per this ep */
+    struct ibv_cq     *cq;  /* Dummy cq used for creating a dummy qp */
+    struct ibv_qp     *qp;  /* Dummy qp used for generating a unique qp_num */
+    uint8_t           flags;
+    ucs_status_t      status;
 } uct_rdmacm_cm_ep_t;
 
 enum {

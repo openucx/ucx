@@ -34,14 +34,15 @@ void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         uct_cm_remote_data_t *remote_data,
                                         ucs_status_t status)
 {
-    cep->wireup.client.connect_cb(&cep->super.super, cep->user_data,
-                                  remote_data, status);
+    cep->super.wireup.client.connect_cb(&cep->super.super.super,
+                                        cep->super.user_data, remote_data, status);
 }
 
 void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         ucs_status_t status)
 {
-    cep->wireup.server.connect_cb(&cep->super.super, cep->user_data, status);
+    cep->super.wireup.server.connect_cb(&cep->super.super.super,
+                                        cep->super.user_data, status);
 }
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
@@ -57,7 +58,7 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
     cep->status = status;
 
     if (cep->flags & UCT_RDMACM_CM_EP_GOT_CONNECT) {
-        cep->disconnect_cb(&cep->super.super, cep->user_data);
+        cep->super.disconnect_cb(&cep->super.super.super, cep->super.user_data);
     } else if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
         uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
     } else {
@@ -70,7 +71,7 @@ static UCS_F_ALWAYS_INLINE
 uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
 {
     /* return the rdmacm connection manager this ep is using */
-    return ucs_container_of(cep->super.super.iface, uct_rdmacm_cm_t,
+    return ucs_container_of(cep->super.super.super.iface, uct_rdmacm_cm_t,
                             super.iface);
 }
 
@@ -183,7 +184,8 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
 
     /* Pack data to send inside rdmacm's conn_param to the remote peer */
     hdr           = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
-    priv_data_ret = cep->wireup.priv_pack_cb(cep->user_data, dev_name, hdr + 1);
+    priv_data_ret = cep->super.wireup.priv_pack_cb(cep->super.user_data,
+                                                   dev_name, hdr + 1);
 
     if (priv_data_ret < 0) {
         ucs_assert(priv_data_ret > UCS_ERR_LAST);
@@ -226,8 +228,7 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     ucs_status_t status;
 
-    cep->flags                   |= UCT_RDMACM_CM_EP_ON_CLIENT;
-    cep->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
+    cep->flags |= UCT_RDMACM_CM_EP_ON_CLIENT;
 
     ucs_trace("%s: rdma_create_id on client (rdmacm %p, event_channel=%p)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
@@ -291,9 +292,9 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
     }
 
-    cep->wireup.server.connect_cb = params->sockaddr_connect_cb.server;
-    cep->id                       = event->id;
-    cep->id->context              = cep;
+    cep->super.wireup.server.connect_cb = params->sockaddr_connect_cb.server;
+    cep->id                             = event->id;
+    cep->id->context                    = cep;
 
     memset(&conn_param, 0, sizeof(conn_param));
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
@@ -404,26 +405,12 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
 
-    status = uct_cm_check_ep_params(params);
-    if (status != UCS_OK) {
-        return status;
-    }
+    UCS_CLASS_CALL_SUPER_INIT(uct_cm_base_ep_t, params);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
-
-    self->wireup.priv_pack_cb = (params->field_mask &
-                                 UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
-                                params->sockaddr_pack_cb : NULL;
-    self->disconnect_cb       = (params->field_mask &
-                                 UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
-                                params->disconnect_cb : NULL;
-    self->user_data           = (params->field_mask &
-                                 UCT_EP_PARAM_FIELD_USER_DATA) ?
-                                params->user_data : NULL;
-    self->cq                  = NULL;
-    self->qp                  = NULL;
-    self->flags               = 0;
-    self->status              = UCS_OK;
+    self->cq     = NULL;
+    self->qp     = NULL;
+    self->flags  = 0;
+    self->status = UCS_OK;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_ep_client_init(self, params);

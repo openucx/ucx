@@ -62,7 +62,8 @@ ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
         !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
         ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
-                  "should be set");
+                  "should be set. field_mask 0x%lx, sockaddr_cb_flags 0x%x",
+                  params->field_mask, params->sockaddr_cb_flags);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -76,6 +77,40 @@ ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
 
     return UCS_OK;
 }
+
+
+UCS_CLASS_INIT_FUNC(uct_cm_base_ep_t, const uct_ep_params_t *params)
+{
+    ucs_status_t status;
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
+
+    status = uct_cm_check_ep_params(params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    self->wireup.priv_pack_cb      = (params->field_mask &
+                                      UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
+                                     params->sockaddr_pack_cb : NULL;
+    self->disconnect_cb            = (params->field_mask &
+                                      UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
+                                     params->disconnect_cb : NULL;
+    self->user_data                = (params->field_mask &
+                                      UCT_EP_PARAM_FIELD_USER_DATA) ?
+                                     params->user_data : NULL;
+
+    self->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
+
+    return UCS_OK;
+}
+
+UCS_CLASS_CLEANUP_FUNC(uct_cm_base_ep_t){}
+
+UCS_CLASS_DEFINE(uct_cm_base_ep_t, uct_base_ep_t);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_base_ep_t, uct_base_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_base_ep_t, uct_base_ep_t);
+
 
 UCS_CLASS_INIT_FUNC(uct_listener_t, uct_cm_h cm)
 {

@@ -49,7 +49,8 @@ struct uct_cm {
     uct_base_iface_t iface;
 };
 
-typedef struct uct_cm_sockaddr_wireup_cb {
+
+typedef struct uct_cm_sockaddr_wireup {
     /* Callback to fill the user's private data */
     uct_sockaddr_priv_pack_callback_t  priv_pack_cb;
     union {
@@ -64,7 +65,25 @@ typedef struct uct_cm_sockaddr_wireup_cb {
             uct_ep_server_connect_cb_t connect_cb;
         } server;
     };
-} uct_cm_sockaddr_wireup_cb_t;
+} uct_cm_sockaddr_wireup_t;
+
+
+/**
+ * Connection manager base endpoint
+ */
+typedef struct uct_cm_base_ep {
+    uct_base_ep_t            super;
+    void                     *user_data;    /* User data associated with the endpoint */
+    uct_ep_disconnect_cb_t   disconnect_cb; /* Callback to handle the disconnection
+                                               of the remote peer */
+    uct_cm_sockaddr_wireup_t wireup;
+} uct_cm_base_ep_t;
+
+
+UCS_CLASS_DECLARE(uct_cm_base_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_base_ep_t, uct_base_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_base_ep_t, uct_base_ep_t);
+
 
 extern ucs_config_field_t uct_cm_config_table[];
 

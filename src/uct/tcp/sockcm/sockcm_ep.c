@@ -166,7 +166,10 @@ static void uct_sockcm_handle_sock_connect(uct_sockcm_ep_t *ep)
     return;
 
 err:
-    ucs_async_modify_handler(fd, 0);
+    status = ucs_async_modify_handler(fd, 0);
+    if (status != UCS_OK) {
+        ucs_debug("unable to modify handler");
+    }
 }
 
 static void uct_sockcm_handle_info_sent(uct_sockcm_ep_t *ep)

@@ -15,7 +15,8 @@ static UCS_F_ALWAYS_INLINE
 uct_tcp_sockcm_t *uct_tcp_sockcm_ep_get_cm(uct_tcp_sockcm_ep_t *cep)
 {
     /* return the tcp sockcm connection manager this ep is using */
-    return ucs_container_of(cep->super.super.iface, uct_tcp_sockcm_t, super.iface);
+    return ucs_container_of(cep->super.super.super.iface, uct_tcp_sockcm_t,
+                            super.iface);
 }
 
 ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags)
@@ -38,11 +39,8 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     ucs_async_context_t *async_ctx;
     uct_tcp_sa_arg_t *sa_arg_ctx;
     ucs_status_t status;
-    int events;
 
-    cep->state                   |= UCT_TCP_SOCKCM_EP_ON_CLIENT |
-                                    UCT_TCP_SOCKCM_EP_INIT;
-    cep->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
+    cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
 
     server_addr = params->sockaddr->addr;
     status = ucs_socket_create(server_addr->sa_family, SOCK_STREAM, &cep->fd);
@@ -62,10 +60,9 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     if (UCS_STATUS_IS_ERR(status)) {
         goto err_close_socket;
     }
-    ucs_assert ((status == UCS_OK) || (status == UCS_INPROGRESS));
+    ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
 
     if (status == UCS_OK) {
-        cep->state &= ~UCT_TCP_SOCKCM_EP_INIT;
         cep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
         /* TODO: start sending the user's data */
 
@@ -85,13 +82,14 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     /* Adding the arg to a list on the cm for cleanup purposes */
     ucs_list_add_tail(&tcp_sockcm->sa_arg_list, &sa_arg_ctx->list);
 
-    events    = UCS_EVENT_SET_EVWRITE;    /* wait until connect() completes */
     async_ctx = tcp_sockcm->super.iface.worker->async;
-    status    = ucs_async_set_event_handler(async_ctx->mode, cep->fd, events,
+    status    = ucs_async_set_event_handler(async_ctx->mode, cep->fd,
+                                            /* wait until connect() completes */
+                                            UCS_EVENT_SET_EVWRITE,
                                             uct_tcp_sa_data_handler, sa_arg_ctx,
                                             async_ctx);
     if (status != UCS_OK) {
-        goto err_close_socket;
+        goto err_free_sa_arg_ctx;
     }
 
 out_print:
@@ -101,6 +99,9 @@ out_print:
 
     return status;
 
+err_free_sa_arg_ctx:
+    ucs_list_del(&sa_arg_ctx->list);
+    free(sa_arg_ctx);
 err_close_socket:
     close(cep->fd);
 err:
@@ -111,25 +112,11 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
 
-    status = uct_cm_check_ep_params(params);
-    if (status != UCS_OK) {
-        return status;
-    }
+    UCS_CLASS_CALL_SUPER_INIT(uct_cm_base_ep_t, params);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
-
-    self->wireup.priv_pack_cb = (params->field_mask &
-                                 UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
-                                params->sockaddr_pack_cb : NULL;
-    self->disconnect_cb       = (params->field_mask &
-                                 UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
-                                params->disconnect_cb : NULL;
-    self->user_data           = (params->field_mask &
-                                 UCT_EP_PARAM_FIELD_USER_DATA) ?
-                                params->user_data : NULL;
-    self->state               = 0;
-    self->send.buf            = NULL;
-    self->send.offset         = 0;
+    self->state           = 0;
+    self->comm_ctx.buf    = NULL;
+    self->comm_ctx.offset = 0;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_tcp_sockcm_ep_client_init(self, params);

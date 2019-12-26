@@ -23,7 +23,7 @@ typedef struct uct_tcp_sa_arg {
 typedef struct uct_tcp_sockcm {
     uct_cm_t            super;
     size_t              priv_data_len;
-    /** List of open file descriptors. One per client */
+    /** List of async handler contexes. One per client */
     ucs_list_link_t     sa_arg_list;
 } uct_tcp_sockcm_t;
 
