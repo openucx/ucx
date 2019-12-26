@@ -1331,7 +1331,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->am_u.reply_proto            = &ucp_am_reply_proto;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
-    min_rndv_thresh                     = 0;
     min_am_rndv_thresh                  = 0;
 
     config->tag.offload.max_eager_short.memtype_on   = -1;
