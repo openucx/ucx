@@ -151,6 +151,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
             tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
             status = uct_ep_create(&tl_ep_params, &tl_ep);
             if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
                 goto out;
             }
 
