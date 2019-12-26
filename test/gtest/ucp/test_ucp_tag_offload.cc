@@ -500,10 +500,11 @@ UCS_TEST_P(test_ucp_tag_offload_cuda, sw_rndv_to_cuda_mem, "TM_SW_RNDV=y")
     activate_offload(sender());
 
     size_t size   = 2048;
-    ucp_tag_t tag = 0xCAFEBABE;
+    ucp_tag_t tag = 0xCAFEBABEul;
     // Test will be skipped here if CUDA mem is not supported
-    void *rbuf    = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
-    request *rreq = recv_nb_exp(rbuf, size, DATATYPE, tag, UCP_TAG_MASK_FULL);
+    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    request *rreq = recv_nb_exp(rbuf.ptr(), size, DATATYPE, tag,
+                                UCP_TAG_MASK_FULL);
 
     std::vector<uint8_t> sendbuf(size); // can send from any memory
     request *sreq = (request*)ucp_tag_send_nb(sender().ep(), &sendbuf[0],

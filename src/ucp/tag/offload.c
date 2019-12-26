@@ -154,7 +154,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
     if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
         ucp_rndv_matched(req->recv.worker, req, header);
     } else {
-        /* SW rendezvous request is stored in the user buffer (temporaly)
+        /* SW rendezvous request is stored in the user buffer (temporarily)
            when matched. If user buffer allocated on GPU memory, need to "pack"
            it to the host memory staging buffer for further processing. */
         header_host_copy = ucs_alloca(header_length);
