@@ -288,7 +288,9 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state, req->recv.mem_type,
                                         req, UCT_MD_MEM_FLAG_HIDE_ERRORS);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) || !req->recv.state.dt.contig.md_map) {
+            /* Can't register this buffer on the offload iface */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return status;
         }
 
@@ -627,6 +629,8 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 {
     ucp_ep_t      *ep      = sreq->send.ep;
     ucp_context_t *context = ep->worker->context;
+    ucp_md_index_t mdi     = ucp_ep_md_index(ep, sreq->send.lane);
+    uct_md_attr_t *md_attr = &context->tl_mds[mdi].attr;
     ucs_status_t status;
 
     /* should be set by ucp_tag_send_req_init() */
@@ -634,13 +638,14 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         !context->config.ext.tm_sw_rndv       &&
-        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
+        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy) &&
+        (md_attr->cap.reg_mem_types & UCS_BIT(sreq->send.mem_type))) {
         ucp_request_send_state_reset(sreq, ucp_tag_offload_rndv_zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
         /* Register send buffer with tag lane, because tag offload rndv
          * protocol will perform RDMA_READ on it (if it arrives expectedly) */
-        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
+        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane, 0);
         if (status != UCS_OK) {
             return status;
         }

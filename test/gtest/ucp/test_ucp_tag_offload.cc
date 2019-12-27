@@ -704,4 +704,34 @@ UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_stats)
 
+
+class test_ucp_tag_offload_stats_cuda : public test_ucp_tag_offload_stats {
+public:
+    test_ucp_tag_offload_stats_cuda() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_offload_stats_cuda, block_cuda_no_gpu_direct,
+           "TM_THRESH=1")
+{
+    activate_offload(sender());
+
+    size_t size   = 2048;
+    // Test will be skipped here if CUDA mem is not supported
+    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    request *rreq = recv_nb_and_check(rbuf.ptr(), size, DATATYPE, 0x11,
+                                      UCP_TAG_MASK_FULL);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_MEM_REG);
+
+    validate_offload_counter(UCP_WORKER_STAT_TAG_OFFLOAD_POSTED, 0ul);
+
+    req_cancel(receiver(), rreq);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_stats_cuda, rc_dc_cuda,
+                              "dc_x,rc_x,cuda_copy")
+
 #endif

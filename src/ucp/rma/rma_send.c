@@ -146,7 +146,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
         return UCS_OK;
     }
 
-    return ucp_request_send_buffer_reg_lane(req, req->send.lane);
+    return ucp_request_send_buffer_reg_lane(req, req->send.lane, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
