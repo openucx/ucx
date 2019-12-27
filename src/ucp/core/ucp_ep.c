@@ -265,7 +265,9 @@ err_cleanup_eps:
 
 static ucs_status_t
 ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
-                                 const ucp_ep_params_t *params, ucp_ep_h *ep_p)
+                                 const ucp_ep_params_t *params,
+                                 unsigned ep_init_flags, const char *message,
+                                 ucp_ep_h *ep_p)
 {
     ucp_unpacked_address_t remote_address;
     ucp_ep_conn_sn_t conn_sn;
@@ -312,8 +314,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     }
 
     status = ucp_ep_create_to_worker_addr(worker, &remote_address,
-                                          ucp_ep_init_flags(worker, params),
-                                          "from api call", &ep);
+                                          ucp_ep_init_flags(worker, params) |
+                                          ep_init_flags, message, &ep);
     if (status != UCS_OK) {
         goto out_free_address;
     }
@@ -367,11 +369,8 @@ ucs_status_t ucp_worker_create_loopback_ep(ucp_worker_h worker,
                                            const char *message, ucp_ep_h *ep_p)
 {
     ucp_ep_params_t ep_params;
-    ucp_unpacked_address_t local_address;
     void *address_buffer;
     size_t address_length;
-    int need_wireup;
-    ucp_rsc_index_t rsc_index;
     ucs_status_t status;
 
     status = ucp_address_pack(worker, NULL, tl_bitmap,
@@ -381,39 +380,17 @@ ucs_status_t ucp_worker_create_loopback_ep(ucp_worker_h worker,
         return status;
     }
 
-    status = ucp_address_unpack(worker, address_buffer,
-                                UCP_ADDRESS_PACK_FLAG_ALL, &local_address);
+    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address    = address_buffer;
+
+    status = ucp_ep_create_api_to_worker_addr(worker, &ep_params, ep_init_flags,
+                                              message, ep_p);
     if (status != UCS_OK) {
-        goto free_address_buffer;
+        ucs_free(address_buffer);
+        return status;
     }
 
-    need_wireup = 0;
-    ucs_for_each_bit(rsc_index, tl_bitmap) {
-        need_wireup = ucp_worker_is_tl_p2p(worker, rsc_index);
-        if (need_wireup) {
-            break;
-        }
-    }
-
-    if (need_wireup) {
-        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-        ep_params.address    = address_buffer;
-        status = ucp_ep_create_api_to_worker_addr(worker, &ep_params, ep_p);
-    } else {
-        status = ucp_ep_create_to_worker_addr(worker, &local_address,
-                                              ep_init_flags, message, ep_p);
-    }
-
-    if (status != UCS_OK) {
-        goto free_address_buffer;
-    }
-
-    ucs_free(local_address.address_list);
-
-free_address_buffer:
-    ucs_free(address_buffer);
-
-    return status;
+    return UCS_OK;
 }
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
@@ -700,7 +677,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     } else if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
         status = ucp_ep_create_api_conn_request(worker, params, &ep);
     } else if (params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) {
-        status = ucp_ep_create_api_to_worker_addr(worker, params, &ep);
+        status = ucp_ep_create_api_to_worker_addr(worker, params, 0,
+                                                  "from api call", &ep);
     } else {
         status = UCS_ERR_INVALID_PARAM;
     }
@@ -895,7 +873,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
-                                    NULL, 0, NULL, NULL,
+                                    NULL, 0, NULL,
                                     ucp_ep_close_flushed_callback, "close");
 
     if (!UCS_PTR_IS_PTR(request)) {

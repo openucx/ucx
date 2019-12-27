@@ -1321,65 +1321,8 @@ static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
 static int ucp_resources_is_device_shared(const ucp_tl_resource_desc_t *rsc1,
                                           const ucp_tl_resource_desc_t *rsc2)
 {
-    return (rsc1->md_index == rsc2->md_index) &&
-           !strncmp(rsc1->tl_rsc.dev_name, rsc2->tl_rsc.dev_name,
-                    UCT_DEVICE_NAME_MAX);
-}
-
-static ucs_status_t
-ucp_worker_loopback_amo_ep_init(ucp_worker_h worker,
-                                const ucp_tl_resource_desc_t *best_rsc)
-{
-    ucp_context_h context = worker->context;
-    uint64_t tl_bitmap    = worker->atomic_tls;
-    ucp_tl_resource_desc_t *rsc;
-    ucp_rsc_index_t rsc_index;
-
-    /*
-     * NOTE: worker->atomic_tls can contain more than 1 transport with AMO
-     *       capabilities to the same device and/or no one EP2IFACE for wireup
-     *       needs.
-     *       If there are p2p only TLS, need to add other TLs for wireup.
-     *       If there are at leat 1 EP2IFACE transport with AMO capabilities, we
-     *       can optimize consumption of resources reducing bitmap to 1 TL.
-     */
-
-    ucs_for_each_bit(rsc_index, worker->atomic_tls) {
-        if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
-            /* disable p2p TLS to check if we need AUX TLS */
-            tl_bitmap &= ~UCS_BIT(rsc_index);
-        }
-    }
-
-    if (tl_bitmap == 0) {
-        /* only p2p, need to enable all TLS on AMO device for wireup */
-        ucs_for_each_bit(rsc_index, context->tl_bitmap) {
-            rsc = &context->tl_rscs[rsc_index];
-            if (ucp_resources_is_device_shared(rsc, best_rsc)) {
-                tl_bitmap |= UCS_BIT(rsc_index);
-            }
-        }
-    } else {
-        ucs_for_each_bit(rsc_index, tl_bitmap) {
-            rsc = &context->tl_rscs[rsc_index];
-            if (rsc == best_rsc) {
-                /* reset used TLs to the best one if possible but prefer
-                 * ep2iface TL to avoid extra consumption of resources */
-                tl_bitmap = UCS_BIT(rsc_index);
-                break;
-            }
-        }
-
-        rsc_index = ucs_ffs64_safe(tl_bitmap);
-        ucs_assert_always(rsc_index < UCP_MAX_RESOURCES);
-        tl_bitmap = UCS_BIT(rsc_index);
-    }
-
-    /* Create loopback EP to handle SW AMO requests via network device to avoid
-     * race conditions */
-    return ucp_worker_create_loopback_ep(worker, tl_bitmap, 0,
-                                         "atomic loopback",
-                                         &worker->atomic_ep);
+    return (rsc1->md_index  == rsc2->md_index) &&
+           (rsc1->dev_index == rsc2->dev_index);
 }
 
 static ucs_status_t ucp_worker_init_device_atomics(ucp_worker_h worker)
@@ -1395,7 +1338,7 @@ static ucs_status_t ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_rsc_index_t md_index;
     ucp_worker_iface_t *wiface;
     uct_md_attr_t *md_attr;
-    uint64_t supp_tls;
+    uint64_t supp_tls, all_tls;
     uint8_t priority, best_priority;
     ucp_tl_iface_atomic_flags_t atomic;
 
@@ -1411,6 +1354,7 @@ static ucs_status_t ucp_worker_init_device_atomics(ucp_worker_h worker)
     dummy_iface_attr.lat_ovh             = 0;
 
     supp_tls                             = 0;
+    all_tls                              = 0;
     best_score                           = -1;
     best_rsc                             = NULL;
     best_priority                        = 0;
@@ -1460,15 +1404,20 @@ static ucs_status_t ucp_worker_init_device_atomics(ucp_worker_h worker)
     /* Enable atomics on all resources using same device as the "best" resource */
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         rsc = &context->tl_rscs[rsc_index];
-        if ((supp_tls & UCS_BIT(rsc_index)) &&
-            ucp_resources_is_device_shared(rsc, best_rsc))
-        {
-            ucp_worker_enable_atomic_tl(worker, "device", rsc_index);
+        if (ucp_resources_is_device_shared(rsc, best_rsc)) {
+            all_tls |= UCS_BIT(rsc_index);
+            if (supp_tls & UCS_BIT(rsc_index)) {
+                ucp_worker_enable_atomic_tl(worker, "device", rsc_index);
+            }
         }
     }
 
     if (worker->atomic_tls) {
-        return ucp_worker_loopback_amo_ep_init(worker, best_rsc);
+        /* Create loopback EP to handle SW AMO requests via network device to
+         * avoid race conditions. */
+        return ucp_worker_create_loopback_ep(worker, all_tls, 0,
+                                             "atomic loopback",
+                                             &worker->atomic_ep);
     }
 
     return UCS_OK;
@@ -1488,10 +1437,10 @@ static ucs_status_t ucp_worker_init_guess_atomics(ucp_worker_h worker)
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
         return ucp_worker_init_device_atomics(worker);
+    } else {
+        ucp_worker_init_cpu_atomics(worker);
+        return UCS_OK;
     }
-
-    ucp_worker_init_cpu_atomics(worker);
-    return UCS_OK;
 }
 
 static ucs_status_t ucp_worker_init_atomic_tls(ucp_worker_h worker)

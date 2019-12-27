@@ -69,6 +69,12 @@ typedef struct {
     uint8_t                   opcode;
 } UCS_S_PACKED ucp_atomic_req_hdr_t;
 
+typedef struct {
+    ucp_request_hdr_t         req; /* NULL if no reply */
+    ucp_atomic_reply_t        reply_data;
+    ucp_mem_h                 memh;
+    ucp_rkey_h                rkey;
+} ucp_atomic_loopback_ctx_t;
 
 extern ucp_rma_proto_t ucp_rma_basic_proto;
 extern ucp_rma_proto_t ucp_rma_sw_proto;
@@ -82,5 +88,11 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
 
 void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
+
+ucs_status_t ucp_atomic_post_internal(ucp_ep_h ep, ucp_atomic_post_op_t opcode,
+                                      uint64_t value, size_t op_size,
+                                      uint64_t remote_addr, ucp_rkey_h rkey,
+                                      const ucp_atomic_loopback_ctx_t *loopback_ctx,
+                                      ucp_send_callback_t completion_cb);
 
 #endif

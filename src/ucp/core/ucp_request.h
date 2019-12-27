@@ -110,10 +110,7 @@ struct ucp_request {
          * operations */
         struct {
             ucp_ep_h              ep;
-            union {
-                void              *buffer;    /* Send buffer */
-                void              *flush_ctx; /* flush context */
-            };
+            void                  *buffer;    /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
             ucs_memory_type_t     mem_type; /* Memory type */
@@ -197,6 +194,7 @@ struct ucp_request {
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
                     uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
+                    ucp_atomic_loopback_ctx_t looback_ctx; /* valid only for loopback op */
                 } amo;
 
                 struct {
