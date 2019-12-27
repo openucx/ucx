@@ -20,8 +20,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_ib_iface_md(&iface->super.super), uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = &md->super.dev;
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_xrq_in)] = {};
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_xrq_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_xrq_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_xrq_out)] = {};
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_cq dvcq = {};
@@ -123,10 +123,10 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr)
 {
-    uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
-    uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
-    uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
-    uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
+    char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
+    char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
+    char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]  = {};
     struct mlx5_wqe_av mlx5_av;
     ucs_status_t status;
     struct ibv_ah *ah;
