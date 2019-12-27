@@ -311,6 +311,12 @@ int uct_ib_iface_is_roce(uct_ib_iface_t *iface);
 
 
 /**
+ * @return Whether the port used by this interface is IB
+ */
+int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
+
+
+/**
  * @return IB address size of the given link scope.
  */
 size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
