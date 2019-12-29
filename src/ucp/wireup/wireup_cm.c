@@ -447,6 +447,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     }
 
     UCS_ASYNC_UNBLOCK(async);
+    ucs_free(progress_arg);
     return 1;
 }
 
@@ -533,6 +534,7 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
                   conn_request, ucs_status_string(status));
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
+    ucs_free(conn_request->remote_dev_addr);
     ucs_free(conn_request);
     return 1;
 }
@@ -807,6 +809,7 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
     request->status  = UCS_OK;
     request->flags   = 0;
     request->send.ep = ep;
+    request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
 
     return request;
 }

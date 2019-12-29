@@ -240,7 +240,10 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     ucs_status_t          status;
 
     addr = (struct sockaddr *)&addr_storage;
-    ucs_sockaddr_copy(addr, params->sockaddr.addr);
+    status = ucs_sockaddr_copy(addr, params->sockaddr.addr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ucs_assert_always(num_cms > 0);
 

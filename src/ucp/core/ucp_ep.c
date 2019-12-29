@@ -547,7 +547,11 @@ out:
         }
     }
 
-    ucs_free(params->conn_request);
+    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+        ucs_free(conn_request->remote_dev_addr);
+    }
+
+    ucs_free(conn_request);
 
     if (status == UCS_OK) {
         *ep_p = ep;
