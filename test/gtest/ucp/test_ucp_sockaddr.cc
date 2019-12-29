@@ -52,15 +52,34 @@ public:
         CM_MT_PARAM_VARIANT = CM_FIRST_PARAM,
         CM_CONN_REQ_TAG,
         CM_CONN_REQ_STREAM,
-        CM_CONN_REQ_AMO                               /* Accepting by ucp_conn_request_h,
+        CM_CONN_REQ_AMO,                              /* Accepting by ucp_conn_request_h,
                                                          send/recv by AMO API */
+        CM_CONN_REQ_FAMO                              /* Accepting by ucp_conn_request_h,
+                                                         send/recv by fetch AMO API */
     };
 
     typedef enum {
         SEND_RECV_TAG,
         SEND_RECV_STREAM,
-        SEND_RECV_AMO
+        SEND_RECV_AMO,
+        SEND_RECV_FAMO
     } send_recv_type_t;
+
+    send_recv_type_t send_recv_type() {
+        switch (GetParam().variant) {
+        case CONN_REQ_STREAM:
+        case CM_CONN_REQ_STREAM:
+            return SEND_RECV_STREAM;
+        case CM_CONN_REQ_AMO:
+            return SEND_RECV_AMO;
+        case CM_CONN_REQ_FAMO:
+            return SEND_RECV_FAMO;
+        case CONN_REQ_TAG:
+        case CM_CONN_REQ_TAG:
+        default:
+            return SEND_RECV_TAG;
+        }
+    }
 
     ucs::sock_addr_storage test_addr;
 
@@ -94,8 +113,6 @@ public:
                                      CM_CONN_REQ_TAG, result);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      CM_CONN_REQ_STREAM, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CM_CONN_REQ_AMO, result);
         return result;
     }
 
@@ -256,6 +273,7 @@ public:
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         uint64_t recv_data       = 0;
+        uint64_t recv_famo_result;
         ucp_mem_h memh;
         ucp_rkey_h rkey;
         void *rkey_buffer;
@@ -270,7 +288,8 @@ public:
             send_req = ucp_stream_send_nb(from.ep(), &send_data, 1,
                                           ucp_dt_make_contig(sizeof(send_data)),
                                           scomplete_cb, 0);
-        } else if (send_recv_type == SEND_RECV_AMO) {
+        } else if ((send_recv_type == SEND_RECV_AMO) ||
+                   (send_recv_type == SEND_RECV_FAMO)) {
             ucp_mem_map_params_t params;
             params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
@@ -289,12 +308,22 @@ public:
             status = ucp_ep_rkey_unpack(from.ep(), rkey_buffer, &rkey);
             ASSERT_UCS_OK(status);
 
-            status = ucp_atomic_post(from.ep(), UCP_ATOMIC_POST_OP_ADD,
-                                     send_data, sizeof(send_data),
-                                     (uint64_t)&recv_data, rkey);
-            ASSERT_UCS_OK(status);
-            send_req = ucp_ep_flush_nb(from.ep(), UCT_FLUSH_FLAG_LOCAL,
-                                       scomplete_cb);
+            if (send_recv_type == SEND_RECV_AMO) {
+                status = ucp_atomic_post(from.ep(), UCP_ATOMIC_POST_OP_ADD,
+                                         send_data, sizeof(send_data),
+                                         (uint64_t)&recv_data, rkey);
+                ASSERT_UCS_OK(status);
+                send_req = ucp_ep_flush_nb(from.ep(), UCT_FLUSH_FLAG_LOCAL,
+                                           scomplete_cb);
+            } else {
+                ASSERT_EQ(SEND_RECV_FAMO, send_recv_type);
+                send_req = ucp_atomic_fetch_nb(from.ep(),
+                                               UCP_ATOMIC_FETCH_OP_FADD,
+                                               send_data, &recv_famo_result,
+                                               sizeof(send_data),
+                                               (uint64_t)&recv_data, rkey,
+                                               scomplete_cb);
+            }
         } else {
             ASSERT_TRUE(false) << "unsupported communication type";
         }
@@ -313,7 +342,8 @@ public:
             ucp_request_free(send_req);
         }
 
-        if (send_recv_type == SEND_RECV_AMO) {
+        if ((send_recv_type == SEND_RECV_AMO) ||
+            (send_recv_type == SEND_RECV_FAMO)) {
             ucp_rkey_destroy(rkey);
             ucp_rkey_buffer_release(rkey_buffer);
             ucs_status_t status = ucp_mem_unmap(to.ucph(), memh);
@@ -357,9 +387,11 @@ public:
                                           ucp_dt_make_contig(sizeof(recv_data)),
                                           rstream_complete_cb, &recv_length,
                                           UCP_STREAM_RECV_FLAG_WAITALL);
-        } else {
-            ASSERT_TRUE(send_recv_type == SEND_RECV_AMO);
+        } else if (send_recv_type == SEND_RECV_AMO) {
             wait_for_flag(&recv_data);
+            recv_req = NULL;
+        } else {
+            ASSERT_EQ(SEND_RECV_FAMO, send_recv_type);
             recv_req = NULL;
         }
 
@@ -372,6 +404,9 @@ public:
         }
 
         EXPECT_EQ(send_data, recv_data);
+        if (send_recv_type == SEND_RECV_FAMO) {
+            EXPECT_EQ(0ul, recv_famo_result);
+        }
     }
 
     bool wait_for_server_ep(bool wakeup)
@@ -434,9 +469,7 @@ public:
             }
         }
 
-        send_recv(sender(), receiver(),
-                  (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
-                  SEND_RECV_TAG, wakeup, cb_type());
+        send_recv(sender(), receiver(), send_recv_type(), wakeup, cb_type());
     }
 
     void connect_and_reject(const struct sockaddr *connect_addr, bool wakeup)
@@ -496,11 +529,17 @@ public:
 
 protected:
     ucp_test_base::entity::listen_cb_type_t cb_type() const {
-        if ((GetParam().variant == CONN_REQ_TAG) ||
-            (GetParam().variant == CONN_REQ_STREAM)) {
-            return ucp_test_base::entity::LISTEN_CB_CONN;
+        switch (GetParam().variant) {
+            case CONN_REQ_TAG:
+            case CONN_REQ_STREAM:
+            case CM_CONN_REQ_TAG:
+            case CM_CONN_REQ_STREAM:
+            case CM_CONN_REQ_AMO:
+            case CM_CONN_REQ_FAMO:
+                return ucp_test_base::entity::LISTEN_CB_CONN;
+            default:
+                return ucp_test_base::entity::LISTEN_CB_EP;
         }
-        return ucp_test_base::entity::LISTEN_CB_EP;
     }
 };
 
@@ -619,6 +658,23 @@ public:
                               UCP_FEATURE_AMO64;
         return params;
     }
+
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params,
+                     const std::string& name,
+                     const std::string& test_case_name,
+                     const std::string& tls)
+    {
+        std::vector<ucp_test_param> result =
+            test_ucp_sockaddr::enum_test_params(ctx_params, name,
+                                                test_case_name, tls);
+
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CM_CONN_REQ_AMO, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CM_CONN_REQ_FAMO, result);
+        return result;
+    }
 };
 
 UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
@@ -645,8 +701,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
         EXPECT_EQ(0, m_err_handler_count);
         /* even if server EP is created, in case of long address, wireup will be
          * done later, need to communicate */
-        send_recv(sender(), receiver(), (GetParam().variant == CONN_REQ_STREAM) ?
-                  SEND_RECV_STREAM : SEND_RECV_TAG, false, cb_type());
+        send_recv(sender(), receiver(), send_recv_type(), false, cb_type());
     }
 }
 

@@ -20,6 +20,10 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
     ucs_status_t status = ucp_request_send(req, 0);
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        if (cb != NULL) {
+            cb(req + 1, req->status);
+        }
+
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
         ucp_request_put(req);

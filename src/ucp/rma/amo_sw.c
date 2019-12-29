@@ -221,29 +221,34 @@ ucp_amo_sw_send_cmpl(ucp_worker_h worker, uint64_t reply_ep_ptr,
     }
 }
 
-static void ucp_amo_sw_loopback_completion_cb(void *request,
-                                              ucs_status_t status)
+#if !ENABLE_DEBUG_DATA
+static
+#endif
+void ucp_amo_sw_loopback_completion_cb(void *request, ucs_status_t status)
 {
-    ucp_request_t *req  = UCS_PTR_BYTE_OFFSET(request, -sizeof(*req));
+    ucp_request_t *req  = (ucp_request_t *)request - 1;
     ucp_worker_h worker = req->send.ep->worker;
+    uintptr_t req_ptr   = req->send.amo.looback_ctx->req.reqptr;
 
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_error("loopback amo failed on ep %p with status %s",
                   req->send.ep, ucs_status_string(status));
     }
 
-    ucp_amo_sw_send_cmpl(worker, req->send.amo.looback_ctx.req.ep_ptr,
-                         req->send.amo.looback_ctx.req.reqptr,
-                         req->send.amo.looback_ctx.reply_data,
+    ucp_amo_sw_send_cmpl(worker, req->send.amo.looback_ctx->req.ep_ptr, req_ptr,
+                         req->send.amo.looback_ctx->reply_data,
                          req->send.length);
     ucp_rkey_destroy(req->send.amo.rkey);
-    status = ucp_mem_unmap(worker->context, req->send.amo.looback_ctx.memh);
+    status = ucp_mem_unmap(worker->context, req->send.amo.looback_ctx->memh);
     if (status != UCS_OK) {
         ucs_error("failed to unmap memory handle %p with error %s",
-                  req->send.amo.looback_ctx.memh, ucs_status_string(status));
+                  req->send.amo.looback_ctx->memh, ucs_status_string(status));
     }
 
-    ucp_request_put(req);
+    ucs_free(req->send.amo.looback_ctx);
+    if (req_ptr != 0) {
+        ucp_request_put(req);
+    }
 }
 
 static ucs_status_t
@@ -252,9 +257,11 @@ ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *amo_req_hdr)
     uint64_t value = *(uint64_t *)(amo_req_hdr + 1);
     ucp_atomic_loopback_ctx_t ctx;
     ucp_mem_map_params_t params;
+    ucp_rkey_h rkey;
     void *rkey_buffer;
     size_t rkey_buffer_size;
     ucs_status_t status, status_unmap;
+    ucs_status_ptr_t status_ptr;
 
     /* TODO: optimization: can use `am_flags & UCT_CB_PARAM_FLAG_DESC` to avoid
      *       extra allocation and copy for some transports */
@@ -290,7 +297,7 @@ ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *amo_req_hdr)
         goto err_unmap;
     }
 
-    status = ucp_ep_rkey_unpack(worker->atomic_ep, rkey_buffer, &ctx.rkey);
+    status = ucp_ep_rkey_unpack(worker->atomic_ep, rkey_buffer, &rkey);
     ucp_rkey_buffer_release(rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("failed to unpack rkey for region %p length %zu, status %s",
@@ -298,15 +305,31 @@ ucp_amo_sw_loopback_post(ucp_worker_h worker, ucp_atomic_req_hdr_t *amo_req_hdr)
         goto err_unmap;
     }
 
-    status = ucp_atomic_post_internal(worker->atomic_ep,
-                                      (ucp_atomic_post_op_t)amo_req_hdr->opcode,
-                                      value, amo_req_hdr->length,
-                                      amo_req_hdr->address, ctx.rkey, &ctx,
-                                      ucp_amo_sw_loopback_completion_cb);
+    ctx.req = amo_req_hdr->req;
+
+    if (amo_req_hdr->req.reqptr == 0) {
+        /* atomic operation without result */
+        status = ucp_atomic_post_internal(worker->atomic_ep,
+                                          (ucp_atomic_post_op_t)amo_req_hdr->opcode,
+                                          value, amo_req_hdr->length,
+                                          amo_req_hdr->address, rkey, &ctx,
+                                          ucp_amo_sw_loopback_completion_cb);
+    } else {
+        status_ptr = ucp_atomic_fetch_internal(worker->atomic_ep,
+                                               (ucp_atomic_fetch_op_t)amo_req_hdr->opcode,
+                                               value, NULL, amo_req_hdr->length,
+                                               amo_req_hdr->address, rkey, &ctx,
+                                               ucp_amo_sw_loopback_completion_cb);
+        status = UCS_PTR_IS_PTR(status_ptr) ? UCS_OK : UCS_PTR_STATUS(status_ptr);
+    }
+
     if (status != UCS_OK) {
         ucs_error("failed to post loopback AMO to ep %p, status %s",
                   worker->atomic_ep, ucs_status_string(status));
+        goto err_unmap;
     }
+
+    return UCS_OK;
 
 err_unmap:
     status_unmap = ucp_mem_unmap(worker->context, ctx.memh);

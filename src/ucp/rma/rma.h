@@ -73,7 +73,6 @@ typedef struct {
     ucp_request_hdr_t         req; /* NULL if no reply */
     ucp_atomic_reply_t        reply_data;
     ucp_mem_h                 memh;
-    ucp_rkey_h                rkey;
 } ucp_atomic_loopback_ctx_t;
 
 extern ucp_rma_proto_t ucp_rma_basic_proto;
@@ -94,5 +93,16 @@ ucs_status_t ucp_atomic_post_internal(ucp_ep_h ep, ucp_atomic_post_op_t opcode,
                                       uint64_t remote_addr, ucp_rkey_h rkey,
                                       const ucp_atomic_loopback_ctx_t *loopback_ctx,
                                       ucp_send_callback_t completion_cb);
+
+ucs_status_ptr_t
+ucp_atomic_fetch_internal(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
+                          uint64_t value, void *result, size_t op_size,
+                          uint64_t remote_addr, ucp_rkey_h rkey,
+                          const ucp_atomic_loopback_ctx_t *loopback_ctx,
+                          ucp_send_callback_t cb);
+
+#if ENABLE_DEBUG_DATA
+void ucp_amo_sw_loopback_completion_cb(void *request, ucs_status_t status);
+#endif
 
 #endif

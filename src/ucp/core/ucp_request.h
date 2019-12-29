@@ -194,7 +194,7 @@ struct ucp_request {
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
                     uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
-                    ucp_atomic_loopback_ctx_t looback_ctx; /* valid only for loopback op */
+                    ucp_atomic_loopback_ctx_t *looback_ctx; /* Valid only for loopback op */
                 } amo;
 
                 struct {

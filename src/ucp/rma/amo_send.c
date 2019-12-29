@@ -76,7 +76,7 @@ static void ucp_amo_completed_single(uct_completion_t *self,
     ucp_request_complete_send(req, status);
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
                     uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value,
                     size_t size, const ucp_atomic_loopback_ctx_t *loopback_ctx)
@@ -90,35 +90,94 @@ ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
     req->send.amo.value       = value;
 
     if (ucs_unlikely(loopback_ctx != NULL)) {
-        req->send.amo.looback_ctx = *loopback_ctx;
+        req->send.amo.looback_ctx = ucs_malloc(sizeof(*loopback_ctx),
+                                               "amo loopback context");
+        if (req->send.amo.looback_ctx == NULL) {
+            ucs_error("failed to allocate amo loopback context");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        *req->send.amo.looback_ctx = *loopback_ctx;
     }
 
 #if UCS_ENABLE_ASSERT
     req->send.lane            = UCP_NULL_LANE;
 #endif
+    return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                    uct_atomic_op_t op, size_t op_size, uint64_t remote_addr,
-                   ucp_rkey_h rkey, uint64_t value, const ucp_amo_proto_t *proto)
+                   ucp_rkey_h rkey, uint64_t value,
+                   const ucp_amo_proto_t *proto,
+                   const ucp_atomic_loopback_ctx_t *loopback_ctx)
 {
-    ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size, NULL);
+    ucs_status_t status = ucp_amo_init_common(req, ep, op, remote_addr, rkey,
+                                              value, op_size, loopback_ctx);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
     req->send.uct.func              = proto->progress_fetch;
-    req->send.buffer                = buffer;
+    if (ucs_likely(loopback_ctx == NULL)) {
+        req->send.buffer            = buffer;
+    } else {
+        ucs_assert(buffer == NULL);
+        req->send.buffer            = &req->send.amo.looback_ctx->reply_data;
+    }
+
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE
-void ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
-                       size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey,
-                       uint64_t value, const ucp_amo_proto_t *proto,
-                       const ucp_atomic_loopback_ctx_t *loopback_ctx)
+ucs_status_t ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep,
+                               uct_atomic_op_t op, size_t op_size,
+                               uint64_t remote_addr, ucp_rkey_h rkey,
+                               uint64_t value, const ucp_amo_proto_t *proto,
+                               const ucp_atomic_loopback_ctx_t *loopback_ctx)
 {
-    ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size,
-                        loopback_ctx);
+    ucs_status_t status = ucp_amo_init_common(req, ep, op, remote_addr, rkey,
+                                              value, op_size, loopback_ctx);
+
     req->send.uct.func = proto->progress_post;
+    return status;
+}
+
+ucs_status_ptr_t
+ucp_atomic_fetch_internal(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
+                          uint64_t value, void *result, size_t op_size,
+                          uint64_t remote_addr, ucp_rkey_h rkey,
+                          const ucp_atomic_loopback_ctx_t *loopback_ctx,
+                          ucp_send_callback_t cb)
+{
+    ucs_status_t status = UCP_RKEY_RESOLVE(rkey, ep, amo);
+    ucp_request_t *req;
+
+    if (status != UCS_OK) {
+        return UCS_STATUS_PTR(UCS_ERR_UNREACHABLE);
+    }
+
+    req = ucp_request_get(ep->worker);
+    if (ucs_unlikely(NULL == req)) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    if (ucs_unlikely(result == NULL)) {
+        ucs_assert(cb == ucp_amo_sw_loopback_completion_cb);
+        status = ucp_amo_init_fetch(req, ep, NULL, ucp_uct_fop_table[opcode],
+                                    op_size, remote_addr, rkey, value,
+                                    rkey->cache.amo_proto, loopback_ctx);
+    } else {
+        status = ucp_amo_init_fetch(req, ep, result, ucp_uct_fop_table[opcode],
+                                    op_size, remote_addr, rkey, value,
+                                    rkey->cache.amo_proto, loopback_ctx);
+    }
+
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucp_request_put(req);
+        return UCS_STATUS_PTR(status);
+    }
+
+    return ucp_rma_send_request_cb(req, cb);
 }
 
 ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
@@ -127,8 +186,6 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                                      ucp_send_callback_t cb)
 {
     ucs_status_ptr_t status_p;
-    ucs_status_t status;
-    ucp_request_t *req;
 
     UCP_AMO_CHECK_PARAM(ep->worker->context, remote_addr, op_size, opcode,
                         UCP_ATOMIC_FETCH_OP_LAST,
@@ -140,24 +197,9 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                   opcode, value, result, op_size, remote_addr, rkey,
                   ucp_ep_peer_name(ep), cb);
 
-    status = UCP_RKEY_RESOLVE(rkey, ep, amo);
-    if (status != UCS_OK) {
-        status_p = UCS_STATUS_PTR(UCS_ERR_UNREACHABLE);
-        goto out;
-    }
+    status_p = ucp_atomic_fetch_internal(ep, opcode, value, result, op_size,
+                                         remote_addr, rkey, NULL, cb);
 
-    req = ucp_request_get(ep->worker);
-    if (ucs_unlikely(NULL == req)) {
-        status_p = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-        goto out;
-    }
-
-    ucp_amo_init_fetch(req, ep, result, ucp_uct_fop_table[opcode], op_size,
-                       remote_addr, rkey, value, rkey->cache.amo_proto);
-
-    status_p = ucp_rma_send_request_cb(req, cb);
-
-out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status_p;
 }
@@ -181,8 +223,13 @@ ucs_status_t ucp_atomic_post_internal(ucp_ep_h ep, ucp_atomic_post_op_t opcode,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucp_amo_init_post(req, ep, ucp_uct_op_table[opcode], op_size, remote_addr,
-                      rkey, value, rkey->cache.amo_proto, loopback_ctx);
+    status = ucp_amo_init_post(req, ep, ucp_uct_op_table[opcode], op_size,
+                               remote_addr, rkey, value, rkey->cache.amo_proto,
+                               loopback_ctx);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucp_request_put(req);
+        return status;
+    }
 
     status_p = ucp_rma_send_request_cb(req, completion_cb);
     if (UCS_PTR_IS_PTR(status_p)) {
