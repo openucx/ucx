@@ -1408,13 +1408,29 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
             /* Parse with sub-table prefix.
              * We start the leaf prefix and continue up the hierarchy.
              */
-            inner_prefix.prefix = field->name;
-            ucs_list_add_tail(prefix_list, &inner_prefix.list);
+            /* Do not add the same prefix several times in a sequence. It can
+             * happen when similiar prefix names were used during config
+             * table inheritance, e.g. "IB_" -> "RC_" -> "RC_". We check the
+             * previous entry only, since it is currently impossible if
+             * something like "RC_" -> "IB_" -> "RC_" will be used. */
+            if (ucs_list_is_empty(prefix_list) ||
+                strcmp(ucs_list_tail(prefix_list,
+                                     ucs_config_parser_prefix_t,
+                                     list)->prefix, field->name)) {
+                inner_prefix.prefix = field->name;
+                ucs_list_add_tail(prefix_list, &inner_prefix.list);
+            } else {
+                inner_prefix.prefix = NULL;
+            }
+
             ucs_config_parser_print_opts_recurs(stream,
                                                 UCS_PTR_BYTE_OFFSET(opts, field->offset),
                                                 field->parser.arg, flags,
                                                 env_prefix, prefix_list);
-            ucs_list_del(&inner_prefix.list);
+
+            if (inner_prefix.prefix != NULL) {
+                ucs_list_del(&inner_prefix.list);
+            }
         } else if (ucs_config_is_alias_field(field)) {
             if (flags & UCS_CONFIG_PRINT_HIDDEN) {
                 aliased_field =
