@@ -41,6 +41,23 @@ UCS_TEST_F(test_string_buffer, appendf) {
     ucs_string_buffer_cleanup(&strb);
 }
 
+UCS_TEST_F(test_string_buffer, rtrim) {
+    static const char *test_string = "wabbalubbadabdab";
+    ucs_string_buffer_t strb;
+
+    ucs_string_buffer_init(&strb);
+    ucs_string_buffer_appendf(&strb, "%s%s", test_string, ",,");
+    ucs_string_buffer_rtrim(&strb, ",");
+    EXPECT_EQ(std::string(test_string), ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
+
+    ucs_string_buffer_init(&strb);
+    ucs_string_buffer_appendf(&strb, "%s%s", test_string, " \t  \n \r  ");
+    ucs_string_buffer_rtrim(&strb, NULL);
+    EXPECT_EQ(std::string(test_string), ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
+}
+
 class test_string_set : public ucs::test {
 };
 
