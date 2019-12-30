@@ -129,22 +129,23 @@ size_t ucs_string_quantity_prefix_value(char prefix)
     }
 }
 
-void ucs_memunits_to_str(size_t value, char *buf, size_t max)
+char *ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
     static const char * suffixes[] = {"", "K", "M", "G", "T", NULL};
 
     const char **suffix;
 
     if (value == SIZE_MAX) {
-        strncpy(buf, "(inf)", max);
+        ucs_strncpy_safe(buf, "(inf)", max);
     } else {
         suffix = &suffixes[0];
         while ((value >= 1024) && ((value % 1024) == 0) && *(suffix + 1)) {
             value /= 1024;
             ++suffix;
         }
-        snprintf(buf, max, "%zu%s", value, *suffix);
+        ucs_snprintf_safe(buf, max, "%zu%s", value, *suffix);
     }
+    return buf;
 }
 
 ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
