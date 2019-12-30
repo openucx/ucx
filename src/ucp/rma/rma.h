@@ -7,7 +7,9 @@
 #ifndef UCP_RMA_H_
 #define UCP_RMA_H_
 
-#include <ucp/proto/proto.h>
+#include <ucp/core/ucp_types.h>
+#include <ucp/proto/proto_am.h>
+#include <uct/api/uct.h>
 
 
 /**

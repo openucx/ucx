@@ -49,7 +49,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  const ucp_ep_msg_config_t* msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
-                 ucp_send_callback_t cb, const ucp_proto_t *proto,
+                 ucp_send_callback_t cb, const ucp_request_send_proto_t *proto,
                  int enable_zcopy)
 {
     size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, dt_count,

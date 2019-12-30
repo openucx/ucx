@@ -12,7 +12,6 @@
 
 #include "ucp_context.h"
 #include "ucp_request.h"
-#include <ucp/proto/proto.h>
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
