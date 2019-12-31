@@ -26,9 +26,9 @@ static const char *uct_rc_fence_mode_values[] = {
 };
 
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
-  {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
+  {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095;SEG_SIZE=8256", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),
-                UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+   UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
   {"PATH_MTU", "default",
    "Path MTU. \"default\" will select the best MTU for the device.",
