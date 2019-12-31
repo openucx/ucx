@@ -44,8 +44,8 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb);
 /**
  * Append a formatted string to the string buffer.
  *
- * @param [inout] strb   String buffer to append to
- * @param [in]    fmt    Format string
+ * @param [inout] strb   String buffer to append to.
+ * @param [in]    fmt    Format string.
  *
  * @return UCS_OK on success or UCS_ERR_NO_MEOMRY if could not allocate memory
  * to grow the string.
@@ -53,6 +53,20 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb);
 ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
                                        const char *fmt, ...)
     UCS_F_PRINTF(2, 3);
+
+
+/**
+ * Remove specific characters from the end of the string.
+ *
+ * @param [inout] strb     String buffer remote characters from.
+ * @param [in]    charset  C-string with the set of characters to remove.
+ *                         If NULL, this function removes whitespace characters,
+ *                         as defined by isspace (3).
+ *
+ * This function removes the largest contiguous suffix from the input string
+ * 'strb', which consists entirely of characters in 'charset'.
+ */
+void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset);
 
 
 /**
