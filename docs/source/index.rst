@@ -21,8 +21,8 @@ low-level details, while maintaining high-performance and scalability.
 
 UCX implements best practices for transfer of messages of all sizes, based on
 accumulated experience gained from applications running on the world's largest
-datacenters and supercomputers. The full list of features and capabilities and
-can be found :ref:`here<ucx_features>`.
+datacenters and supercomputers. The full list of features and capabilities can
+be found :ref:`here<ucx_features>`.
 
 UCX is a member of `UCF consortium <https://www.ucfconsortium.org>`_.
 
@@ -59,7 +59,7 @@ and run a simple client/server example:
           -Iinstall/include -Linstall/lib
     $ export LD_LIBRARY_PATH=$PWD/instal/lib
     $ ./ucp_client_server &
-    $ ./ucp_client_server -a 2.1.3.20
+    $ ./ucp_client_server -a <ip-address>
     ...
     ----- UCP TEST SUCCESS -------
 
@@ -81,7 +81,8 @@ Projects using UCX
 * `UCX-PY <https://ucx-py.readthedocs.io/en/latest>`_
 * `Dask <https://blog.dask.org/2019/06/09/ucx-dgx>`_
 * `SparkUCX <http://github.com/openucx/sparkucx>`_
-* `NCCL <https://github.com/Sergei-Lebedev/nccl/tree/ucx>`_
+* `NCCL <https://developer.nvidia.com/nccl>`_
 * `OpenMPI <http://www.open-mpi.org>`_
 * `MPICH <http://www.mpich.org>`_
+* `Charm++ <https://www.hpccharm.com>`_
 * `OSSS shmem <http://github.com/openshmem-org/osss-ucx>`_

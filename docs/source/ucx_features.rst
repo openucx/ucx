@@ -13,8 +13,9 @@ UCX main features
 High-level API features
 ***********************
 - Select either a client/server connection establishment (similar to TCP), or
-  connect directly by passing remote address blob. 
-- Support sharing resources between threads, or allocating dedicated resources per thread.
+  connect directly by passing remote address blob.
+- Support sharing resources between threads, or allocating dedicated resources
+  per thread.
 - Event-driven or polling-driven progress.
 - Seamless handling of GPU memory.
 
@@ -32,6 +33,13 @@ Fabrics support
 - TCP sockets
 - Shared memory (CMA, knem, xpmem, SysV, mmap)
 - Cray Gemini
+
+Platforms support
+*****************
+- Supported architectures: x86_64, ARM, Power.
+- Runs on virtual machines (using SRIOV) and containers (docker, singularity).
+- Can utilize either MLNX_OFED or Inbox RDMA drivers.
+- Tested on major Linux distributions (RedHat/Ubuntu/SLES).
 
 GPU support
 ***********
