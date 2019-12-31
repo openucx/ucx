@@ -8,12 +8,24 @@
 OpenUCX
 *******
 
-Unified Communication X (UCX) provides an optimized communication layer for
-Message Passing (MPI), PGAS/OpenSHMEM libraries and RPC/data-centric
-applications.
+Unified Communication X (UCX) is an `award winning <https://losalamosreporter.com/2019/11/07/nine-los-alamos-national-laboratory-projects-win-rd-100-awards>`_,
+optimized production proven communication framework for modern, high-bandwidth
+and low-latency networks.
 
-UCX utilizes high-speed networks for inter-node communication, and shared
-memory mechanisms for efficient intra-node communication.
+UCX exposes a set of abstract communication primitives which utilize the best of
+available hardware resources and offloads. These include RDMA (InfiniBand and RoCE),
+TCP, GPUs, shared Memory, and network atomic operations.
+
+UCX facilitates rapid development by providing a high-level API, masking the
+low-level details, while maintaining high-performance and scalability.
+
+UCX implements best practices for transfer of messages of all sizes, based on
+accumulated experience gained from applications running on the world's largest
+datacenters and supercomputers. The full list of features and capabilities and
+can be found :ref:`here<ucx_features>`.
+
+UCX is a member of `UCF consortium <https://www.ucfconsortium.org>`_.
+
 
 .. image:: _static/UCX_Layers.png
    :alt: UCX layer diagram
@@ -23,6 +35,7 @@ memory mechanisms for efficient intra-node communication.
    :maxdepth: 3
    :hidden:
 
+   ucx_features
    download
    running
    faq
@@ -31,7 +44,8 @@ memory mechanisms for efficient intra-node communication.
 Quick start
 ***********
 
-The following commands will download and build UCX v1.6 :doc:`release <download>`:
+The following commands will download UCX latest v1.6.1 release, build the code,
+and run a simple client/server example:
 
 .. code-block:: console
 
@@ -41,34 +55,33 @@ The following commands will download and build UCX v1.6 :doc:`release <download>
     $ ./contrib/configure-release --prefix=$PWD/install
     $ make -j8 install
 
+    $ gcc test/examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
+          -Iinstall/include -Linstall/lib
+    $ export LD_LIBRARY_PATH=$PWD/instal/lib
+    $ ./ucp_client_server &
+    $ ./ucp_client_server -a 2.1.3.20
+    ...
+    ----- UCP TEST SUCCESS -------
+
+    UCX Client-Server Hello World
+
+    ------------------------------
+
 
 Documentation
 *************
 
-* TODO API
+*  API doc: `HTML <api/v1.6/html>`_ `PDF <api/v1.6/ucx.pdf>`_
 * `Examples <https://github.com/openucx/ucx/tree/v1.6.x/test/examples>`_
 
 
 Projects using UCX
 ******************
 
+* `UCX-PY <https://ucx-py.readthedocs.io/en/latest>`_
+* `Dask <https://blog.dask.org/2019/06/09/ucx-dgx>`_
+* `SparkUCX <http://github.com/openucx/sparkucx>`_
+* `NCCL <https://github.com/Sergei-Lebedev/nccl/tree/ucx>`_
 * `OpenMPI <http://www.open-mpi.org>`_
 * `MPICH <http://www.mpich.org>`_
 * `OSSS shmem <http://github.com/openshmem-org/osss-ucx>`_
-* `SparkUCX <http://github.com/openucx/sparkucx>`_
-
-
-Developers section
-******************
-
-* `UCX on github <http://github.com/openucx/ucx>`_
-* `Dev wiki <http://github.com/openucx/ucx/wiki>`_
-* `Issue tracker <http://github.com/openucx/ucx/issues>`_
-* `UCX mailing list <elist.ornl.gov/mailman/listinfo/ucx-group>`_
-
-
-Buzz
-****
-
-* `UCX wins R&D 100 award <https://losalamosreporter.com/2019/11/07/nine-los-alamos-national-laboratory-projects-win-rd-100-awards>`_
-* `UCX @ OpenSHMEM workshop <http://www.openucx.org/wp-content/uploads/2015/08/UCX_OpenSHMEM_2015.pdf>`_
