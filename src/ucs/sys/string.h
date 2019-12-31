@@ -91,8 +91,10 @@ uint64_t ucs_string_to_id(const char *str);
  * @param value  Value to convert.
  * @param buf    Buffer to place the string.
  * @param max    Maximal length of the buffer.
+ *
+ * @return Pointer to 'buf', which holds the resulting string.
  */
-void ucs_memunits_to_str(size_t value, char *buf, size_t max);
+char *ucs_memunits_to_str(size_t value, char *buf, size_t max);
 
 
 /**
