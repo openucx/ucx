@@ -1263,6 +1263,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 {
     ucp_context_h context         = worker->context;
     ucp_lane_index_t tag_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
+    ucp_lane_index_t get_zcopy_lane_count;
+    ucp_lane_index_t put_zcopy_lane_count;
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
@@ -1314,6 +1316,12 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.rndv_send_nbr.rma_thresh = SIZE_MAX;
     config->tag.rndv.rkey_size          = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map);
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        config->tag.rndv.get_zcopy_lanes[lane] = UCP_NULL_LANE;
+        config->tag.rndv.put_zcopy_lanes[lane] = UCP_NULL_LANE;
+    }
+
+    config->tag.rndv.rkey_ptr_dst_mds   = 0;
     config->stream.proto                = &ucp_stream_am_proto;
     config->am_u.proto                  = &ucp_am_proto;
     config->am_u.reply_proto            = &ucp_am_reply_proto;
@@ -1338,7 +1346,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     }
 
     /* configuration for rndv */
-    rndv_max_bw = 0;
+    get_zcopy_lane_count = 0;
+    put_zcopy_lane_count = 0;
+    rndv_max_bw          = 0;
     for (i = 0; (i < config->key.num_lanes) &&
                 (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
         lane      = config->key.rma_bw_lanes[i];
@@ -1346,22 +1356,36 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+
+            /* Rkey_ptr */
+            if (md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) {
+                config->tag.rndv.rkey_ptr_dst_mds |=
+                        UCS_BIT(config->key.lanes[lane].dst_md_index);
+            }
 
             /* GET Zcopy */
-            config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
-                                                     iface_attr->cap.get.min_zcopy);
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+                config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
+                                                         iface_attr->cap.get.min_zcopy);
 
-            config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
-                                                     iface_attr->cap.get.max_zcopy);
+                config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
+                                                         iface_attr->cap.get.max_zcopy);
+                config->tag.rndv.get_zcopy_lanes[get_zcopy_lane_count++] = lane;
+            }
 
             /* PUT Zcopy */
-            config->tag.rndv.min_put_zcopy = ucs_max(config->tag.rndv.min_put_zcopy,
-                                                     iface_attr->cap.put.min_zcopy);
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+                config->tag.rndv.min_put_zcopy = ucs_max(config->tag.rndv.min_put_zcopy,
+                                                         iface_attr->cap.put.min_zcopy);
 
-            config->tag.rndv.max_put_zcopy = ucs_min(config->tag.rndv.max_put_zcopy,
-                                                     iface_attr->cap.put.max_zcopy);
+                config->tag.rndv.max_put_zcopy = ucs_min(config->tag.rndv.max_put_zcopy,
+                                                         iface_attr->cap.put.max_zcopy);
+                config->tag.rndv.put_zcopy_lanes[put_zcopy_lane_count++] = lane;
+            }
 
-            rndv_max_bw = ucs_max(rndv_max_bw, ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth));
+            rndv_max_bw = ucs_max(rndv_max_bw,
+                                  ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth));
         }
     }
 
@@ -1373,7 +1397,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
             if (rsc_index != UCP_NULL_RESOURCE) {
                 iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-                config->tag.rndv.scale[lane] = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) / rndv_max_bw;
+                config->tag.rndv.scale[lane] =
+                        ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
+                        rndv_max_bw;
             }
         }
     }

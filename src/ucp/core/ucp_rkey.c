@@ -275,6 +275,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
         p += md_size;
     }
 
+    /* Silence clang checker - assert that if some rkeys are unpacked, then
+     * rkey->md_map is nozero.
+     */
+    ucs_assert((rkey_index > 0) || (rkey->md_map == 0));
+
     ucp_rkey_resolve_inner(rkey, ep);
     *rkey_p = rkey;
     status  = UCS_OK;
@@ -370,13 +375,13 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     }
 }
 
-static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
-                                                 const ucp_ep_config_t *config,
-                                                 ucs_memory_type_t mem_type,
-                                                 const ucp_lane_index_t *lanes,
-                                                 ucp_rkey_h rkey,
-                                                 ucp_lane_map_t ignore,
-                                                 uct_rkey_t *uct_rkey_p)
+ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
+                                        const ucp_ep_config_t *config,
+                                        ucs_memory_type_t mem_type,
+                                        const ucp_lane_index_t *lanes,
+                                        ucp_rkey_h rkey,
+                                        ucp_lane_map_t ignore,
+                                        uct_rkey_t *uct_rkey_p)
 {
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
@@ -432,10 +437,10 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     uct_rkey_t uct_rkey;
     int rma_sw, amo_sw;
 
-    rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
-                                                    UCS_MEMORY_TYPE_HOST,
-                                                    config->key.rma_lanes, rkey,
-                                                    0, &uct_rkey);
+    rkey->cache.rma_lane = ucp_rkey_find_rma_lane(context, config,
+                                                  UCS_MEMORY_TYPE_HOST,
+                                                  config->key.rma_lanes, rkey,
+                                                  0, &uct_rkey);
     rma_sw = (rkey->cache.rma_lane == UCP_NULL_LANE);
     if (rma_sw) {
         rkey->cache.rma_proto     = &ucp_rma_sw_proto;
@@ -448,10 +453,10 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
         rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
     }
 
-    rkey->cache.amo_lane = ucp_config_find_rma_lane(context, config,
-                                                    UCS_MEMORY_TYPE_HOST,
-                                                    config->key.amo_lanes, rkey,
-                                                    0, &uct_rkey);
+    rkey->cache.amo_lane = ucp_rkey_find_rma_lane(context, config,
+                                                  UCS_MEMORY_TYPE_HOST,
+                                                  config->key.amo_lanes, rkey,
+                                                  0, &uct_rkey);
     amo_sw = (rkey->cache.amo_lane == UCP_NULL_LANE);
     if (amo_sw) {
         rkey->cache.amo_proto     = &ucp_amo_sw_proto;
@@ -489,15 +494,4 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
               rkey, ep, ep->cfg_index,
               rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
               rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);
-}
-
-ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
-                                          ucs_memory_type_t mem_type,
-                                          uct_rkey_t *uct_rkey_p,
-                                          ucp_lane_map_t ignore)
-{
-    ucp_ep_config_t *config = ucp_ep_config(ep);
-    return ucp_config_find_rma_lane(ep->worker->context, config, mem_type,
-                                    config->key.rma_bw_lanes, rkey,
-                                    ignore, uct_rkey_p);
 }

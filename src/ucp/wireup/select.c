@@ -1161,18 +1161,17 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_RNDV_MODE_GET_ZCOPY,
         UCP_RNDV_MODE_PUT_ZCOPY
     };
-    size_t added_lanes;
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
+    size_t added_lanes;
+    uint64_t md_reg_flag;
     uint8_t i;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
-        bw_info.criteria.remote_md_flags = 0;
-        bw_info.criteria.local_md_flags  = 0;
+        md_reg_flag = 0;
     } else if (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) {
         /* if needed for RNDV, need only access for remote registered memory */
-        bw_info.criteria.remote_md_flags = UCT_MD_FLAG_REG;
-        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_REG;
+        md_reg_flag = UCT_MD_FLAG_REG;
     } else {
         return UCS_OK;
     }
@@ -1196,7 +1195,29 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.max_lanes         = context->config.ext.max_rndv_lanes;
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
+    /* check rkey_ptr */
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+         (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO)) {
+
+        /* We require remote memory registration and local ability to obtain
+         * a pointer to the remote key. Only one is needed since we are doing
+         * memory copy on the CPU.
+         * Allow selecting additional lanes in case the remote memory will not be
+         * registered with this memory domain, i.e wit GPU memory.
+         */
+        bw_info.criteria.remote_md_flags = md_reg_flag;
+        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_RKEY_PTR;
+        bw_info.max_lanes                = 1;
+
+        ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                context->mem_type_access_tls[UCS_MEMORY_TYPE_HOST],
+                                select_ctx);
+    }
+
     /* First checked RNDV mode has to be a mode specified in config */
+    bw_info.criteria.remote_md_flags = md_reg_flag;
+    bw_info.criteria.local_md_flags  = md_reg_flag;
+    bw_info.max_lanes                = context->config.ext.max_rndv_lanes;
     ucs_assert(rndv_modes[0] == context->config.ext.rndv_mode);
 
     /* RNDV protocol can't mix different schemes, i.e. wireup has to

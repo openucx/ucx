@@ -97,10 +97,13 @@ typedef struct ucp_mem_desc {
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
-ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
-                                          ucs_memory_type_t mem_type,
-                                          uct_rkey_t *uct_rkey_p,
-                                          ucp_lane_map_t ignore);
+ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
+                                        const ucp_ep_config_t *config,
+                                        ucs_memory_type_t mem_type,
+                                        const ucp_lane_index_t *lanes,
+                                        ucp_rkey_h rkey,
+                                        ucp_lane_map_t ignore,
+                                        uct_rkey_t *uct_rkey_p);
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
@@ -164,6 +167,12 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
                                 ucp_md_index_t md_index, uct_mem_h *memh,
                                 ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle);
+
+static UCS_F_ALWAYS_INLINE ucp_md_map_t
+ucp_rkey_packed_md_map(const void *rkey_buffer)
+{
+    return *(const ucp_md_map_t*)rkey_buffer;
+}
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)

@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_ep.inl>
 }
 
 class test_ucp_mmap : public test_ucp_memheap {
@@ -79,7 +80,12 @@ bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
     ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
 
-    lane = ucp_rkey_get_rma_bw_lane(rkey, e->ep(), UCS_MEMORY_TYPE_HOST, &uct_rkey, 0);
+    ucp_ep_h ep                = e->ep();
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+
+    lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
+                                  ep_config->tag.rndv.get_zcopy_lanes, rkey, 0,
+                                  &uct_rkey);
     if (lane != UCP_NULL_LANE) {
         return true;
     } else {
@@ -112,6 +118,9 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
         return;
     }
     ASSERT_UCS_OK(status);
+
+    /* Test ucp_rkey_packed_md_map() */
+    EXPECT_EQ(rkey->md_map, ucp_rkey_packed_md_map(rkey_buffer));
 
     bool have_rma    = resolve_rma(e, rkey);
     bool have_amo    = resolve_amo(e, rkey);
