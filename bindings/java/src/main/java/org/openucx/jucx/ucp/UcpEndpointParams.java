@@ -11,8 +11,6 @@ import org.openucx.jucx.UcxParams;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
-import static org.openucx.jucx.ucp.UcpConstants.*;
-
 /**
  * Tuning parameters for the UCP endpoint.
  */
@@ -26,6 +24,7 @@ public class UcpEndpointParams extends UcxParams {
         userData = null;
         flags = 0;
         socketAddress = null;
+        connectionRequest = 0;
         return this;
     }
 
@@ -39,11 +38,13 @@ public class UcpEndpointParams extends UcxParams {
 
     private InetSocketAddress socketAddress;
 
+    private long connectionRequest;
+
     /**
      * Destination address in form of workerAddress.
      */
     public UcpEndpointParams setUcpAddress(ByteBuffer ucpAddress) {
-        this.fieldMask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         this.ucpAddress = ucpAddress;
         return this;
     }
@@ -54,8 +55,8 @@ public class UcpEndpointParams extends UcxParams {
      * behavior in case of peer failure, may affect performance and memory footprint.
      */
     public UcpEndpointParams setPeerErrorHadnlingMode() {
-        this.fieldMask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-        this.errorHandlingMode = UCP_ERR_HANDLING_MODE_PEER;
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        this.errorHandlingMode = UcpConstants.UCP_ERR_HANDLING_MODE_PEER;
         return this;
     }
 
@@ -66,7 +67,7 @@ public class UcpEndpointParams extends UcxParams {
         if (!userData.isDirect()) {
             throw new UcxException("User data must be of type DirectByteBuffer.");
         }
-        this.fieldMask |= UCP_EP_PARAM_FIELD_USER_DATA;
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_USER_DATA;
         this.userData = userData;
         return this;
     }
@@ -75,8 +76,9 @@ public class UcpEndpointParams extends UcxParams {
      * Destination address in form of InetSocketAddress.
      */
     public UcpEndpointParams setSocketAddress(InetSocketAddress socketAddress) {
-        this.fieldMask |= UCP_EP_PARAM_FIELD_SOCK_ADDR | UCP_EP_PARAM_FIELD_FLAGS;
-        this.flags |= UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_SOCK_ADDR |
+                          UcpConstants.UCP_EP_PARAM_FIELD_FLAGS;
+        this.flags |= UcpConstants.UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         this.socketAddress = socketAddress;
         return this;
     }
@@ -87,8 +89,17 @@ public class UcpEndpointParams extends UcxParams {
      * remote endpoint, for example stream.
      */
     public UcpEndpointParams setNoLoopbackMode() {
-        this.fieldMask |= UCP_EP_PARAM_FIELD_FLAGS;
-        this.flags |= UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_FLAGS;
+        this.flags |= UcpConstants.UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+        return this;
+    }
+
+    /**
+     * Connection request from client.
+     */
+    public UcpEndpointParams setConnectionRequest(UcpConnectionRequest connectionRequest) {
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_CONN_REQUEST;
+        this.connectionRequest = connectionRequest.getNativeId();
         return this;
     }
 }

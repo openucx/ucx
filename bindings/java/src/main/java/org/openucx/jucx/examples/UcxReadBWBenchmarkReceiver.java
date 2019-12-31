@@ -13,6 +13,7 @@ import org.openucx.jucx.ucp.*;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
@@ -25,14 +26,32 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         String serverHost = argsMap.get("s");
         InetSocketAddress sockaddr = new InetSocketAddress(serverHost, serverPort);
+        AtomicReference<UcpConnectionRequest> connRequest = new AtomicReference<>(null);
         UcpListener listener = worker.newListener(
-            new UcpListenerParams().setSockAddr(sockaddr));
+            new UcpListenerParams()
+                .setConnectionHandler(connRequest::set)
+                .setSockAddr(sockaddr));
         resources.push(listener);
+        System.out.println("Waiting for connections on " + sockaddr + " ...");
+
+        while (connRequest.get() == null) {
+            worker.progress();
+        }
+
+        UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
+            .setConnectionRequest(connRequest.get())
+            .setPeerErrorHadnlingMode());
+
+        // Temporary workaround until new connection establishment protocol in UCX.
+        for (int i = 0; i < 10; i++) {
+            worker.progress();
+            try {
+                Thread.sleep(10);
+            } catch (Exception ignored) { }
+        }
 
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
         UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
-
-        System.out.println("Waiting for connections on " + sockaddr + " ...");
 
         worker.progressRequest(recvRequest);
 
@@ -42,16 +61,9 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         int rkeyBufferOffset = recvBuffer.position();
 
         recvBuffer.position(rkeyBufferOffset + remoteKeySize);
-        int workerAdressSize = recvBuffer.getInt();
-        ByteBuffer workerAddress = ByteBuffer.allocateDirect(workerAdressSize);
-        copyBuffer(recvBuffer, workerAddress, workerAdressSize);
-
         int remoteHashCode = recvBuffer.getInt();
         System.out.printf("Received connection. Will read %d bytes from remote address %d%n",
             remoteSize, remoteAddress);
-
-        UcpEndpoint endpoint = worker.newEndpoint(
-            new UcpEndpointParams().setUcpAddress(workerAddress).setPeerErrorHadnlingMode());
 
         recvBuffer.position(rkeyBufferOffset);
         UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(recvBuffer);
@@ -89,8 +101,10 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         UcpRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
         worker.progressRequest(sent);
 
-        UcpRequest close = endpoint.closeNonBlockingFlush();
-        worker.progressRequest(close);
+        UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
+        worker.progressRequest(closeRequest);
+        // Close request won't be return to pull automatically, since there's no callback.
+        resources.push(closeRequest);
 
         closeResources();
     }

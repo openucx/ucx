@@ -19,6 +19,8 @@ public class UcpListenerParams extends UcxParams {
 
     private InetSocketAddress sockAddr;
 
+    private UcpListenerConnectionHandler connectionHandler;
+
     /**
      *  An address, on which {@link UcpListener} would bind.
      */
@@ -30,5 +32,14 @@ public class UcpListenerParams extends UcxParams {
 
     public InetSocketAddress getSockAddr() {
         return sockAddr;
+    }
+
+    /**
+     *  Handler of an incoming connection request in a client-server connection flow.
+     */
+    public UcpListenerParams setConnectionHandler(UcpListenerConnectionHandler handler) {
+        this.connectionHandler = handler;
+        this.fieldMask |= UcpConstants.UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        return this;
     }
 }
