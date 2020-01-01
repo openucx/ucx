@@ -40,7 +40,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, rc_mlx5_common),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
-    {"", "", NULL,
+    {"UD_", "", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
@@ -82,7 +82,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
     {"DC_", "", NULL, 0,
      UCS_CONFIG_TYPE_TABLE(uct_dc_mlx5_iface_config_sub_table)},
 
-    {"", "", NULL,
+    {"UD_", "", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_ud),
      UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
 

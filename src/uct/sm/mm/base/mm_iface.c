@@ -25,7 +25,7 @@
 
 
 ucs_config_field_t uct_mm_iface_config_table[] = {
-    {"", "ALLOC=md,mmap,heap", NULL,
+    {"SM_", "ALLOC=md,mmap,heap", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
 
