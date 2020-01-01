@@ -257,7 +257,7 @@ struct ucp_request {
                     ssize_t                 remaining; /* How much more data to be received */
 
                     /* Can use union, because rdesc is used in expected flow,
-                     * while gen_buf is used in unexpected flow only. */
+                     * while non_contig_buf is used in unexpected flow only. */
                     union {
                         ucp_mem_desc_t      *rdesc;   /* Offload bounce buffer */
                         void                *non_contig_buf; /* Used for assembling
