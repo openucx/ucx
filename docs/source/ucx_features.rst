@@ -17,6 +17,7 @@ High-level API features
 - Support sharing resources between threads, or allocating dedicated resources
   per thread.
 - Event-driven or polling-driven progress.
+- Java and Python bindings.
 - Seamless handling of GPU memory.
 
 Main APIs
@@ -46,11 +47,15 @@ GPU support
 - Cuda (for NVIDIA GPUs)
 - ROCm (for AMD GPUs)
 
-Protocols and optimizations
-***************************
+Protocols, Optimizations, and Advanced Features
+***********************************************
 - Automatic selection of best transports and devices.
 - Zero-copy with registration cache.
 - Scalable flow control algorithms.
 - Optimized memory pools.
 - Accelerated direct-verbs transport for Mellanox devices.
 - Pipeline protocols for GPU memory
+- QoS and traffic isolation for RDMA transports
+- Platform specific optimizations (such as memcpy)
+- Multi-rail support
+- Bare-metal, containers and cloud environments support
