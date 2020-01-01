@@ -47,8 +47,8 @@ GPU support
 - Cuda (for NVIDIA GPUs)
 - ROCm (for AMD GPUs)
 
-Protocols, Optimizations, and Advanced Features
-***********************************************
+Protocols, Optimizations and Advanced Features
+**********************************************
 - Automatic selection of best transports and devices.
 - Zero-copy with registration cache.
 - Scalable flow control algorithms.
@@ -59,3 +59,4 @@ Protocols, Optimizations, and Advanced Features
 - Platform specific optimizations (such as memcpy)
 - Multi-rail support
 - Bare-metal, containers and cloud environments support
+- Advanced protocols for transfer messages of different sizes

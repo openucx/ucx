@@ -55,15 +55,11 @@ and run a simple client/server example:
     $ ./contrib/configure-release --prefix=$PWD/install
     $ make -j8 install
 
-    # find the first RDMA-capable network interface with IPv4 address
-    $ ipaddr=$(ls -d /sys/class/net/*/device/infiniband | cut -d/ -f5 | \
-               xargs -n1 ifconfig | awk '/inet / {print $2}' | head -1)
-
     $ gcc test/examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
           -Iinstall/include -Linstall/lib
     $ export LD_LIBRARY_PATH=$PWD/instal/lib
     $ ./ucp_client_server &
-    $ ./ucp_client_server -a ${ipaddr}
+    $ ./ucp_client_server -a <ip-addr>   # <ip-addr>: Address of a local RoCE or IPoIB interface
     ...
     ----- UCP TEST SUCCESS -------
 
