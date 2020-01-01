@@ -59,7 +59,7 @@ and run a simple client/server example:
           -Iinstall/include -Linstall/lib
     $ export LD_LIBRARY_PATH=$PWD/instal/lib
     $ ./ucp_client_server &
-    $ ./ucp_client_server -a <ip-addr>   # <ip-addr>: Address of a local RoCE or IPoIB interface
+    $ ./ucp_client_server -a <ip-addr>   # <ip-addr>: IP address of a local RoCE or IPoIB interface
     ...
     ----- UCP TEST SUCCESS -------
 
