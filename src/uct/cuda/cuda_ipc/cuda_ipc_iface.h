@@ -19,6 +19,16 @@
 #define UCT_CUDA_IPC_MAX_PEERS  16
 
 
+typedef struct uct_cuda_ipc_event_desc {
+    CUevent           event;
+    void              *mapped_addr;
+    uct_completion_t  *comp;
+    ucs_queue_elem_t  queue;
+    void              *cache;
+    uintptr_t         d_bptr;
+} uct_cuda_ipc_event_desc_t;
+
+
 typedef struct uct_cuda_ipc_iface {
     uct_base_iface_t super;
     ucs_mpool_t      event_desc;              /* cuda event desc */
@@ -34,7 +44,8 @@ typedef struct uct_cuda_ipc_iface {
     } config;
     ucs_status_t     (*map_memhandle)(void *context, uct_cuda_ipc_key_t *key,
                                       void **map_addr);
-    ucs_status_t     (*unmap_memhandle)(void *map_addr);
+    ucs_status_t     (*unmap_memhandle)(void *rem_cache, uintptr_t d_bptr,
+                                        void *mapped_addr);
 } uct_cuda_ipc_iface_t;
 
 
@@ -43,15 +54,6 @@ typedef struct uct_cuda_ipc_iface_config {
     unsigned                max_poll;
     int                     enable_cache;
 } uct_cuda_ipc_iface_config_t;
-
-
-typedef struct uct_cuda_ipc_event_desc {
-    CUevent           event;
-    void              *mapped_addr;
-    uct_completion_t  *comp;
-    ucs_queue_elem_t  queue;
-    uct_cuda_ipc_ep_t *ep;
-} uct_cuda_ipc_event_desc_t;
 
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface);

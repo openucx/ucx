@@ -102,6 +102,35 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
               cache->name, from, to);
 }
 
+ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, void *mapped_addr)
+{
+    uct_cuda_ipc_cache_t *cache = (uct_cuda_ipc_cache_t *) rem_cache;
+    ucs_status_t status         = UCS_OK;
+    ucs_pgt_region_t *pgt_region;
+    uct_cuda_ipc_cache_region_t *region;
+
+    pthread_rwlock_rdlock(&cache->lock);
+    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, d_bptr);
+    region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+
+    region->refcount--;
+    ucs_assert(region->refcount >= 0);
+
+    if (!region->refcount) {
+        status = ucs_pgtable_remove(&cache->pgtable, &region->super);
+        if (status != UCS_OK) {
+            ucs_error("failed to remove address:%p from cache (%s)",
+                      (void *)region->key.d_bptr, ucs_status_string(status));
+        }
+        ucs_assert(region->mapped_addr == mapped_addr);
+        status = UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr) region->mapped_addr));
+        ucs_free(region);
+    }
+
+    pthread_rwlock_unlock(&cache->lock);
+    return status;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_cache_map_memhandle,
                  (arg, key, mapped_addr),
                  void *arg, uct_cuda_ipc_key_t *key, void **mapped_addr)
@@ -125,6 +154,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_cache_map_memhandle,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
             *mapped_addr = region->mapped_addr;
+            region->refcount++;
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
         } else {
@@ -200,6 +230,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_cache_map_memhandle,
                                                UCS_PGT_ADDR_ALIGN);
     region->key         = *key;
     region->mapped_addr = *mapped_addr;
+    region->refcount    = 1;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);

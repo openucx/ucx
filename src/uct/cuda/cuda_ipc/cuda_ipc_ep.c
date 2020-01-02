@@ -28,15 +28,15 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
     self->remote_memh_cache = NULL;
 
-    if (iface->config.enable_cache) {
-        snprintf(target_name, sizeof(target_name), "dest:%d",
-                 *(pid_t*)params->iface_addr);
-        status = uct_cuda_ipc_create_cache(&self->remote_memh_cache, target_name);
-        if (status != UCS_OK) {
-            ucs_error("could not create create cuda ipc cache: %s",
-                       ucs_status_string(status));
-            return status;
-        }
+    /* create a cache by default; disabling implies remove mapping immediately
+     * after use */
+    snprintf(target_name, sizeof(target_name), "dest:%d",
+            *(pid_t*)params->iface_addr);
+    status = uct_cuda_ipc_create_cache(&self->remote_memh_cache, target_name);
+    if (status != UCS_OK) {
+        ucs_error("could not create create cuda ipc cache: %s",
+                  ucs_status_string(status));
+        return status;
     }
 
     return UCS_OK;
@@ -126,6 +126,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
     cuda_ipc_event->comp        = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;
+    cuda_ipc_event->cache       = ep->remote_memh_cache;
+    cuda_ipc_event->d_bptr      = (uintptr_t)key->d_bptr;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     return UCS_INPROGRESS;
