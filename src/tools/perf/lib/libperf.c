@@ -310,9 +310,9 @@ static void ucx_perf_test_init(ucx_perf_context_t *perf,
 {
     unsigned group_index;
 
-    perf->params            = *params;
-    perf->offset            = 0;
-    group_index             = rte_call(perf, group_index);
+    perf->params = *params;
+    perf->offset = 0;
+    group_index  = rte_call(perf, group_index);
 
     if (0 == group_index) {
         perf->allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
@@ -1597,7 +1597,7 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
     ucx_perf_test_init(perf, params);
 
     if (perf->allocator == NULL) {
-        ucs_error("Unsupported memory types %s,%s",
+        ucs_error("Unsupported memory types %s<->%s",
                   ucs_memory_type_names[params->send_mem_type],
                   ucs_memory_type_names[params->recv_mem_type]);
         status = UCS_ERR_UNSUPPORTED;

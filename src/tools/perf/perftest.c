@@ -243,7 +243,6 @@ static void print_progress(char **test_names, unsigned num_names,
 
 static void print_header(struct perftest_context *ctx)
 {
-    char test_mem_str[100];
     const char *test_api_str;
     const char *test_data_str;
     test_type_t *test;
@@ -275,9 +274,6 @@ static void print_header(struct perftest_context *ctx)
             } else if (test->api == UCX_PERF_API_UCP) {
                 test_api_str = "protocol layer";
                 test_data_str = "(automatic)"; /* TODO contig/stride/stream */
-                ucs_snprintf_zero(test_mem_str, sizeof(test_mem_str), "%s,%s",
-                                  ucs_memory_type_names[ctx->params.send_mem_type],
-                                  ucs_memory_type_names[ctx->params.recv_mem_type]);
             } else {
                 return;
             }
@@ -286,7 +282,8 @@ static void print_header(struct perftest_context *ctx)
             printf("| API:          %-60s               |\n", test_api_str);
             printf("| Test:         %-60s               |\n", test->desc);
             printf("| Data layout:  %-60s               |\n", test_data_str);
-            printf("| Memory types: %-60s               |\n", test_mem_str);
+            printf("| Send memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.send_mem_type]);
+            printf("| Recv memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.recv_mem_type]);
             printf("| Message size: %-60zu               |\n", ucx_perf_get_message_size(&ctx->params));
         }
     }
@@ -486,7 +483,7 @@ static ucs_status_t parse_mem_type_params(const char *optarg,
                                           ucs_memory_type_t *recv_mem_type)
 {
     const char *delim = ",";
-    char *token = strtok((char*)optarg, delim);
+    char *token       = strtok((char*)optarg, delim);
 
     if (UCS_OK != parse_mem_type(token, send_mem_type)) {
         return UCS_ERR_INVALID_PARAM;
