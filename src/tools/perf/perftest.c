@@ -338,7 +338,7 @@ static void print_test_name(struct perftest_context *ctx)
 static void print_memory_type_usage(void)
 {
     ucs_memory_type_t it;
-    for (it = 0; it < UCS_MEMORY_TYPE_LAST; it++) {
+    for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
         if (ucx_perf_mem_type_allocators[it] != NULL) {
             printf("                        %s - %s\n",
                    ucs_memory_type_names[it],
@@ -470,7 +470,7 @@ static ucs_status_t parse_mem_type(const char *optarg,
                                    ucs_memory_type_t *mem_type)
 {
     ucs_memory_type_t it;
-    for (it = 0; it < UCS_MEMORY_TYPE_LAST; it++) {
+    for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
         if(!strcmp(optarg, ucs_memory_type_names[it]) &&
            (ucx_perf_mem_type_allocators[it] != NULL)) {
             *mem_type = it;
