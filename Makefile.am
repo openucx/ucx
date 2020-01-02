@@ -35,6 +35,7 @@ SUBDIRS = \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \
+	bindings/java \
 	test/apps \
 	test/examples
 
@@ -46,11 +47,6 @@ if HAVE_MPICC
 SUBDIRS += test/mpi
 endif
 
-if HAVE_JAVA
-SUBDIRS += bindings/java/src/main/native
-endif
-
-EXTRA_DIST += bindings/java
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
