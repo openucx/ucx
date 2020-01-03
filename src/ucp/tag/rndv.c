@@ -669,7 +669,7 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr, ucp_ep_h ep,
            (rndv_rts_hdr->address != 0) &&
            /* remove key must be on a memory domain for which we support rkey_ptr */
            (ucp_rkey_packed_md_map(rndv_rts_hdr + 1) &
-                   ep_config->tag.rndv.rkey_ptr_dst_mds) &&
+            ep_config->tag.rndv.rkey_ptr_dst_mds) &&
            /* rendezvous mode must not be forced to put/get */
            (rndv_mode == UCP_RNDV_MODE_AUTO) &&
            /* need local memory access for data unpack */
@@ -706,7 +706,7 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
         }
     }
 
-    if (lane == UCP_NULL_LANE) {
+    if (ucs_unlikely(lane == UCP_NULL_LANE)) {
         /* We should be able to find a lane, because ucp_rndv_is_rkey_ptr()
          * already checked that (rkey->md_map & ep_config->rkey_ptr_dst_mds) != 0
          */

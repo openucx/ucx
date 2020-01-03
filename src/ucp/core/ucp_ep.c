@@ -1371,6 +1371,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
                 config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
                                                          iface_attr->cap.get.max_zcopy);
+                ucs_assert(get_zcopy_lane_count < UCP_MAX_LANES);
                 config->tag.rndv.get_zcopy_lanes[get_zcopy_lane_count++] = lane;
             }
 
@@ -1381,6 +1382,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
                 config->tag.rndv.max_put_zcopy = ucs_min(config->tag.rndv.max_put_zcopy,
                                                          iface_attr->cap.put.max_zcopy);
+                ucs_assert(put_zcopy_lane_count < UCP_MAX_LANES);
                 config->tag.rndv.put_zcopy_lanes[put_zcopy_lane_count++] = lane;
             }
 

@@ -1176,11 +1176,13 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
+    bw_info.usage                       = UCP_WIREUP_LANE_USAGE_RMA_BW;
     bw_info.criteria.title              = "high-bw remote memory access";
     bw_info.criteria.remote_iface_flags = 0;
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_PENDING;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
+    bw_info.criteria.remote_md_flags    = md_reg_flag;
     ucp_wireup_clean_amo_criteria(&bw_info.criteria);
     ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
 
@@ -1192,8 +1194,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
     bw_info.md_map            = 0;
-    bw_info.max_lanes         = context->config.ext.max_rndv_lanes;
-    bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
     /* check rkey_ptr */
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
@@ -1203,9 +1203,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * a pointer to the remote key. Only one is needed since we are doing
          * memory copy on the CPU.
          * Allow selecting additional lanes in case the remote memory will not be
-         * registered with this memory domain, i.e wit GPU memory.
+         * registered with this memory domain, i.e with GPU memory.
          */
-        bw_info.criteria.remote_md_flags = md_reg_flag;
         bw_info.criteria.local_md_flags  = UCT_MD_FLAG_RKEY_PTR;
         bw_info.max_lanes                = 1;
 
@@ -1215,7 +1214,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     /* First checked RNDV mode has to be a mode specified in config */
-    bw_info.criteria.remote_md_flags = md_reg_flag;
     bw_info.criteria.local_md_flags  = md_reg_flag;
     bw_info.max_lanes                = context->config.ext.max_rndv_lanes;
     ucs_assert(rndv_modes[0] == context->config.ext.rndv_mode);

@@ -77,11 +77,9 @@ bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
 
 bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
 {
+    ucp_ep_config_t *ep_config = ucp_ep_config(e->ep());
     ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
-
-    ucp_ep_h ep                = e->ep();
-    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
 
     lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
                                   ep_config->tag.rndv.get_zcopy_lanes, rkey, 0,
