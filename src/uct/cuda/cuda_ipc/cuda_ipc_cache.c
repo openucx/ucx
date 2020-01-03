@@ -111,6 +111,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, voi
 
     pthread_rwlock_rdlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, d_bptr);
+    ucs_assert(pgt_region != NULL);
     region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
 
     region->refcount--;

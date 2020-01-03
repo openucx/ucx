@@ -26,7 +26,7 @@ struct uct_cuda_ipc_cache_region {
     ucs_list_link_t         list;         /**< List element */
     uct_cuda_ipc_key_t      key;          /**< Remote memory key */
     void                    *mapped_addr; /**< Local mapped address */
-    unsigned                refcount;     /**< Track inflight ops before unmapping*/
+    int                     refcount;     /**< Track inflight ops before unmapping*/
 };
 
 
