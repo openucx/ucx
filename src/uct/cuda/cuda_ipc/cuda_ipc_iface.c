@@ -209,6 +209,7 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
         }
 
         ucs_trace_poll("CUDA_IPC Event Done :%p", cuda_ipc_event);
+        iface->stream_refcount[cuda_ipc_event->stream_id]--;
         ucs_mpool_put(cuda_ipc_event);
         count++;
 
@@ -264,16 +265,18 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
 
     if (iface->streams_initialized) {
         for (i = 0; i < iface->device_count; i++) {
+            if (iface->stream_refcount[i]) {
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-            status = UCT_CUDADRV_FUNC(cuLaunchHostFunc(iface->stream_d2d[i],
-                                                       myHostFn, iface));
+                status = UCT_CUDADRV_FUNC(cuLaunchHostFunc(iface->stream_d2d[i],
+                            myHostFn, iface));
 #else
-            status = UCT_CUDADRV_FUNC(cuStreamAddCallback(iface->stream_d2d[i],
-                                                          myHostCallback, iface,
-                                                          0));
+                status = UCT_CUDADRV_FUNC(cuStreamAddCallback(iface->stream_d2d[i],
+                            myHostCallback, iface,
+                            0));
 #endif
-            if (UCS_OK != status) {
-                return status;
+                if (UCS_OK != status) {
+                    return status;
+                }
             }
         }
     }
@@ -329,6 +332,8 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
         if (UCS_OK != status) {
             return status;
         }
+
+        iface->stream_refcount[i] = 0;
     }
 
     iface->streams_initialized = 1;
@@ -430,6 +435,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
             if (UCS_OK != status) {
                 continue;
             }
+
+            ucs_assert(self->stream_refcount[i] == 0);
         }
         self->streams_initialized = 0;
     }
