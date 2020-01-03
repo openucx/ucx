@@ -50,22 +50,22 @@ enum {
 typedef struct ucp_rkey {
     /* cached values for the most recent endpoint configuration */
     struct {
-        ucp_ep_cfg_index_t        ep_cfg_index; /* EP configuration relevant for the cache */
-        ucp_lane_index_t          rma_lane;     /* Lane to use for RMAs */
-        ucp_lane_index_t          amo_lane;     /* Lane to use for AMOs */
-        unsigned                  max_put_short;/* Cached value of max_put_short */
-        uct_rkey_t                rma_rkey;     /* Key to use for RMAs */
-        uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
-        ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
-        ucp_rma_proto_t           *rma_proto;   /* Protocol for RMAs */
+        ucp_ep_cfg_index_t        ep_cfg_index;  /* EP configuration relevant for the cache */
+        ucp_lane_index_t          rma_lane;      /* Lane to use for RMAs */
+        ucp_lane_index_t          amo_lane;      /* Lane to use for AMOs */
+        ssize_t                   max_put_short; /* Cached value of max_put_short */
+        uct_rkey_t                rma_rkey;      /* Key to use for RMAs */
+        uct_rkey_t                amo_rkey;      /* Key to use for AMOs */
+        ucp_amo_proto_t           *amo_proto;    /* Protocol for AMOs */
+        ucp_rma_proto_t           *rma_proto;    /* Protocol for RMAs */
     } cache;
-    ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
-    ucs_memory_type_t             mem_type;     /* Memory type of remote key memory */
-    uint8_t                       flags;        /* Rkey flags */
+    ucp_md_map_t                  md_map;        /* Which *remote* MDs have valid memory handles */
+    ucs_memory_type_t             mem_type;      /* Memory type of remote key memory */
+    uint8_t                       flags;         /* Rkey flags */
 #if ENABLE_PARAMS_CHECK
     ucp_ep_h                      ep;
 #endif
-    ucp_tl_rkey_t                 tl_rkey[0];   /* UCT rkey for every remote MD */
+    ucp_tl_rkey_t                 tl_rkey[0];    /* UCT rkey for every remote MD */
 } ucp_rkey_t;
 
 
@@ -153,6 +153,12 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                           void *rkey_buffer);
 
 void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
+
+void ucp_rkey_select_rma_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                              ucs_memory_type_t local_mem_type);
+
+void ucp_rkey_select_amo_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                              ucs_memory_type_t local_mem_type);
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,

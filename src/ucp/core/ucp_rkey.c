@@ -19,6 +19,15 @@
 #include <inttypes.h>
 
 
+#define UCP_RKEY_DESC_FMT \
+    "rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIx64
+#define UCP_RKEY_DESC_ARG(_rkey_p, _ep_p, _op_name) \
+        _rkey_p, _ep_p, (_rkey_p)->cache.ep_cfg_index, \
+        (_rkey_p)->cache.UCS_PP_TOKENPASTE(_op_name, _proto)->name, \
+        (_rkey_p)->cache.UCS_PP_TOKENPASTE(_op_name, _lane), \
+        (_rkey_p)->cache.UCS_PP_TOKENPASTE(_op_name, _rkey)
+
+
 static struct {
     ucp_md_map_t md_map;
     uint8_t      mem_type;
@@ -424,71 +433,86 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
     return UCP_NULL_LANE;
 }
 
-void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
+/* If we use sw rma/amo need to resolve destination endpoint in order to
+ * receive responses and completion messages */
+static void ucp_rkey_resolve_dest_ep_ptr(ucp_ep_h ep, ucp_lane_index_t *lane)
+{
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    ucs_status_t status;
+
+    if (config->key.am_lane != UCP_NULL_LANE) {
+        status = ucp_ep_resolve_dest_ep_ptr(ep, config->key.am_lane);
+        if (status != UCS_OK) {
+            ucs_debug("ep %p: failed to resolve destination ep, "
+                      "sw rma/amo cannot be used", ep);
+        } else {
+            /* if we can resolve destination ep, save the active message lane
+             * as the rma/amo lane in the rkey cache
+             */
+            *lane = config->key.am_lane;
+        }
+    }
+}
+
+void ucp_rkey_select_rma_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                              ucs_memory_type_t local_mem_type)
 {
     ucp_context_h context   = ep->worker->context;
     ucp_ep_config_t *config = ucp_ep_config(ep);
-    ucs_status_t status;
     uct_rkey_t uct_rkey;
-    int rma_sw, amo_sw;
+    int rma_sw;
 
     rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
-                                                    UCS_MEMORY_TYPE_HOST,
-                                                    config->key.rma_lanes, rkey,
-                                                    0, &uct_rkey);
+                                                    local_mem_type,
+                                                    config->key.rma_lanes,
+                                                    rkey, 0, &uct_rkey);
     rma_sw = (rkey->cache.rma_lane == UCP_NULL_LANE);
     if (rma_sw) {
         rkey->cache.rma_proto     = &ucp_rma_sw_proto;
         rkey->cache.rma_rkey      = UCT_INVALID_RKEY;
-        rkey->cache.max_put_short = 0;
+        rkey->cache.max_put_short = -1;
+        ucp_rkey_resolve_dest_ep_ptr(ep, &rkey->cache.rma_lane);
     } else {
         rkey->cache.rma_proto     = &ucp_rma_basic_proto;
         rkey->cache.rma_rkey      = uct_rkey;
-        rkey->cache.rma_proto     = &ucp_rma_basic_proto;
-        rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
+        rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].put.max_short;
     }
 
+    ucs_trace(UCP_RKEY_DESC_FMT, UCP_RKEY_DESC_ARG(rkey, ep, rma));
+}
+
+void ucp_rkey_select_amo_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                              ucs_memory_type_t local_mem_type)
+{
+    ucp_context_h context   = ep->worker->context;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    uct_rkey_t uct_rkey;
+    int amo_sw;
+
     rkey->cache.amo_lane = ucp_config_find_rma_lane(context, config,
-                                                    UCS_MEMORY_TYPE_HOST,
-                                                    config->key.amo_lanes, rkey,
-                                                    0, &uct_rkey);
+                                                    local_mem_type,
+                                                    config->key.amo_lanes,
+                                                    rkey, 0, &uct_rkey);
     amo_sw = (rkey->cache.amo_lane == UCP_NULL_LANE);
     if (amo_sw) {
         rkey->cache.amo_proto     = &ucp_amo_sw_proto;
         rkey->cache.amo_rkey      = UCT_INVALID_RKEY;
+        ucp_rkey_resolve_dest_ep_ptr(ep, &rkey->cache.amo_lane);
     } else {
         rkey->cache.amo_proto     = &ucp_amo_basic_proto;
         rkey->cache.amo_rkey      = uct_rkey;
     }
 
-    /* If we use sw rma/amo need to resolve destination endpoint in order to
-     * receive responses and completion messages
-     */
-    if ((amo_sw || rma_sw) && (config->key.am_lane != UCP_NULL_LANE)) {
-        status = ucp_ep_resolve_dest_ep_ptr(ep, config->key.am_lane);
-        if (status != UCS_OK) {
-            ucs_debug("ep %p: failed to resolve destination ep, "
-                      "sw rma cannot be used", ep);
-        } else {
-            /* if we can resolve destination ep, save the active message lane
-             * as the rma/amo lane in the rkey cache
-             */
-            if (amo_sw) {
-                rkey->cache.amo_lane = config->key.am_lane;
-            }
-            if (rma_sw) {
-                rkey->cache.rma_lane = config->key.am_lane;
-            }
-        }
-    }
+    ucs_trace(UCP_RKEY_DESC_FMT, UCP_RKEY_DESC_ARG(rkey, ep, amo));
+}
 
-    rkey->cache.ep_cfg_index  = ep->cfg_index;
-
-    ucs_trace("rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIx64" "
-              "%s: lane[%d] rkey 0x%"PRIx64"",
-              rkey, ep, ep->cfg_index,
-              rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
-              rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);
+void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
+{
+    rkey->cache.ep_cfg_index = ep->cfg_index;
+    /* when resolving rkey, assume that local memory buffer is a HOST buffer,
+     * if it is wrong assumption, it will be re-selected during RMA/AMO */
+    ucp_rkey_select_rma_lane(rkey, ep, UCS_MEMORY_TYPE_HOST);
+    ucp_rkey_select_amo_lane(rkey, ep, UCS_MEMORY_TYPE_HOST);
 }
 
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,

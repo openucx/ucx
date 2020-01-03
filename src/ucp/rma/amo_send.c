@@ -101,8 +101,11 @@ ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
-    req->send.uct.func              = proto->progress_fetch;
     req->send.buffer                = buffer;
+    req->send.mem_type              = ucp_memory_type_detect(ep->worker->context,
+                                                             buffer, op_size);
+    req->send.lane                  = rkey->cache.amo_lane;
+    req->send.uct.func              = proto->progress_fetch;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -111,6 +114,8 @@ void ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
                        uint64_t value, const ucp_amo_proto_t *proto)
 {
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
+    req->send.mem_type = UCS_MEMORY_TYPE_HOST;
+    req->send.lane     = rkey->cache.amo_lane;
     req->send.uct.func = proto->progress_post;
 }
 

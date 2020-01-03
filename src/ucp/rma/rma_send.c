@@ -121,28 +121,31 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                      size_t length, uint64_t remote_addr, ucp_rkey_h rkey,
-                     uct_pending_callback_t cb, size_t zcopy_thresh, int flags)
+                     uct_pending_callback_t cb,
+                     const ucp_ep_rma_proto_t *rma_proto, int flags)
 {
     req->flags                = flags; /* Implicit release */
     req->send.ep              = ep;
     req->send.buffer          = (void*)buffer;
     req->send.datatype        = ucp_dt_make_contig(1);
-    req->send.mem_type        = UCS_MEMORY_TYPE_HOST;
     req->send.length          = length;
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
+    req->send.mem_type        = ucp_memory_type_detect(ep->worker->context,
+                                                       buffer, length);
     req->send.uct.func        = cb;
     req->send.lane            = rkey->cache.rma_lane;
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), length);
     ucp_request_send_state_reset(req,
-                                 (length < zcopy_thresh) ?
+                                 (length <
+                                  rma_proto->zcopy_thresh[req->send.mem_type]) ?
                                  ucp_rma_request_bcopy_completion :
                                  ucp_rma_request_zcopy_completion,
                                  UCP_REQUEST_SEND_PROTO_RMA);
 #if UCS_ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
-    if (length < zcopy_thresh) {
+    if (length < rma_proto->zcopy_thresh[req->send.mem_type]) {
         return UCS_OK;
     }
 
@@ -152,7 +155,8 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
                     uint64_t remote_addr, ucp_rkey_h rkey,
-                    uct_pending_callback_t progress_cb, size_t zcopy_thresh)
+                    uct_pending_callback_t progress_cb,
+                    const ucp_ep_rma_proto_t *rma_proto)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -163,9 +167,10 @@ ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     status = ucp_rma_request_init(req, ep, buffer, length, remote_addr, rkey,
-                                  progress_cb, zcopy_thresh,
+                                  progress_cb, rma_proto,
                                   UCP_REQUEST_FLAG_RELEASED);
     if (ucs_unlikely(status != UCS_OK)) {
+        ucp_request_put(req);
         return status;
     }
 
@@ -175,8 +180,9 @@ ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_rma_nonblocking_cb(ucp_ep_h ep, const void *buffer, size_t length,
                        uint64_t remote_addr, ucp_rkey_h rkey,
-                       uct_pending_callback_t progress_cb, size_t zcopy_thresh,
-                       ucp_send_callback_t cb)
+                       uct_pending_callback_t progress_cb,
+                       ucp_send_callback_t cb,
+                       const ucp_ep_rma_proto_t *rma_proto)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -187,8 +193,9 @@ ucp_rma_nonblocking_cb(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     status = ucp_rma_request_init(req, ep, buffer, length, remote_addr, rkey,
-                                  progress_cb, zcopy_thresh, 0);
+                                  progress_cb, rma_proto, 0);
     if (ucs_unlikely(status != UCS_OK)) {
+        ucp_request_put(req);
         return UCS_STATUS_PTR(status);
     }
 
@@ -225,7 +232,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                                  rkey->cache.rma_proto->progress_put,
-                                 rma_config->put_zcopy_thresh);
+                                 &rma_config->put);
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
@@ -264,7 +271,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     ptr_status = ucp_rma_nonblocking_cb(ep, buffer, length, remote_addr, rkey,
                                         rkey->cache.rma_proto->progress_put,
-                                        rma_config->put_zcopy_thresh, cb);
+                                        cb, &rma_config->put);
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;
@@ -290,7 +297,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                                  rkey->cache.rma_proto->progress_get,
-                                 rma_config->get_zcopy_thresh);
+                                 &rma_config->get);
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
@@ -319,7 +326,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     ptr_status = ucp_rma_nonblocking_cb(ep, buffer, length, remote_addr, rkey,
                                         rkey->cache.rma_proto->progress_get,
-                                        rma_config->get_zcopy_thresh, cb);
+                                        cb, &rma_config->get);
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;

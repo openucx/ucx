@@ -59,6 +59,8 @@ static ucs_status_t ucp_amo_sw_progress(uct_pending_req_t *self,
     ucs_status_t status;
     ssize_t packed_len;
 
+    ucs_assert(req->send.lane == ucp_ep_get_am_lane(ep));
+
     req->send.lane = ucp_ep_get_am_lane(ep);
     packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane],
                                  UCP_AM_ID_ATOMIC_REQ, pack_cb, req, 0);
