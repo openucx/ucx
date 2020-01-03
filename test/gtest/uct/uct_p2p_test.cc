@@ -110,12 +110,11 @@ uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
                                      : UCS_LOG_FUNC_RC_STOP;
 }
 
-template <typename O>
-void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
+void uct_p2p_test::test_xfer_print(send_func_t send, size_t length,
                                    unsigned flags, ucs_memory_type_t mem_type)
 {
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-        os << ucs::size_value(length) << " " << std::flush;
+        UCS_TEST_MESSAGE << ucs::size_value(length) << " " << std::flush;
     }
 
     /*
@@ -167,10 +166,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
 void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
                                             size_t max_length, unsigned flags,
                                             ucs_memory_type_t mem_type) {
-
-    ucs::detail::message_stream ms("INFO");
-
-    ms << "memory_type:" << ucs_memory_type_names[mem_type] << " " << std::flush;
+    UCS_TEST_MESSAGE << "memory_type:" << ucs_memory_type_names[mem_type]
+                     << " " << std::flush;
 
     /* Trim at 4.1 GB */
     max_length = ucs_min(max_length, (size_t)(4.1 * (double)UCS_GBYTE));
@@ -199,8 +196,8 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     m_null_completion = false;
 
     /* Run with min and max values */
-    test_xfer_print(ms, send, min_length, flags, mem_type);
-    test_xfer_print(ms, send, max_length, flags, mem_type);
+    test_xfer_print(send, min_length, flags, mem_type);
+    test_xfer_print(send, max_length, flags, mem_type);
 
     /*
      * Generate SQRT( log(max/min) ) random sizes
@@ -220,8 +217,9 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     }
 
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-        ms << repeat_count << "x{" << ucs::size_value(min_length) << ".."
-           << ucs::size_value(max_length) << "} " << std::flush;
+        UCS_TEST_MESSAGE << repeat_count << "x{" << ucs::size_value(min_length)
+                         << ".." << ucs::size_value(max_length) << "} "
+                         << std::flush;
     }
 
     for (int i = 0; i < repeat_count; ++i) {
@@ -233,8 +231,8 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
 
     /* Run a test with implicit non-blocking mode */
     m_null_completion = true;
-    ms << "nocomp ";
-    test_xfer_print(ms, send, (long)sqrt((min_length + 1.0) * max_length),
+    UCS_TEST_MESSAGE << "nocomp ";
+    test_xfer_print(send, (long)sqrt((min_length + 1.0) * max_length),
                     flags, mem_type);
 
     sender().flush();

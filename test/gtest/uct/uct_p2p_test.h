@@ -63,8 +63,7 @@ protected:
     uct_completion_t *comp();
 
 private:
-    template <typename O>
-    void test_xfer_print(O& os, send_func_t send, size_t length,
+    void test_xfer_print(send_func_t send, size_t length,
                          unsigned flags, ucs_memory_type_t mem_type);
 
     static void completion_cb(uct_completion_t *self, ucs_status_t status);

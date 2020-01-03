@@ -148,17 +148,16 @@ int check_buffers(const std::vector<char> &sendbuf, const std::vector<char> &rec
     int buffers_equal = memcmp(sendbuf.data(), recvbuf.data(), recvd);
     if (buffers_equal) {
         std::cout << "\n";
-        ucs::detail::message_stream ms("INFO");
         for (size_t it = 0; it < recvd; ++it) {
             if (sendbuf[it] != recvbuf[it]) {
-                ms << datatype << ':'
-                   << " send_iovcnt=" << std::dec << send_iovcnt
-                   << " recv_iovcnt=" << recv_iovcnt << " size=" << size
-                   << " expected=" << expected << " sync=" << sync
-                   << " Sendbuf[" << std::dec << it << "]=0x"
-                   << std::hex << (static_cast<int>(sendbuf[it]) & 0xff) << ','
-                   << " Recvbuf[" << std::dec << it << "]=0x"
-                   << std::hex << (static_cast<int>(recvbuf[it]) & 0xff) << std::endl;
+                UCS_TEST_MESSAGE << datatype << ':'
+                                 << " send_iovcnt=" << std::dec << send_iovcnt
+                                 << " recv_iovcnt=" << recv_iovcnt << " size=" << size
+                                 << " expected=" << expected << " sync=" << sync
+                                 << " Sendbuf[" << std::dec << it << "]=0x"
+                                 << std::hex << (static_cast<int>(sendbuf[it]) & 0xff) << ','
+                                 << " Recvbuf[" << std::dec << it << "]=0x"
+                                 << std::hex << (static_cast<int>(recvbuf[it]) & 0xff) << std::endl;
                 break;
             }
         }
@@ -173,9 +172,7 @@ void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync,
         skip_err_handling();
     }
 
-    ucs::detail::message_stream ms("INFO");
-
-    ms << "0 " << std::flush;
+    UCS_TEST_MESSAGE << "0 " << std::flush;
     (this->*func)(0, expected, sync, false);
 
     for (unsigned i = 1; i <= 7; ++i) {
@@ -186,7 +183,7 @@ void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync,
         if (!expected) {
             count = ucs_min(count, 50);
         }
-        ms << count << "x10^" << i << " " << std::flush;
+        UCS_TEST_MESSAGE << count << "x10^" << i << " " << std::flush;
         for (long j = 0; j < count; ++j) {
             size_t size = ucs::rand() % max + 1;
             (this->*func)(size, expected, sync, truncated);
@@ -522,10 +519,9 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     const size_t buf_size    = max_length + max_offset + 2;
     ucp_datatype_t type      = ucp_dt_make_contig(1);
     void *send_buf           = 0;
-    void *recv_buf           = 0;;
+    void *recv_buf           = 0;
     size_t offset;
     size_t length;
-    ucs::detail::message_stream *ms;
 
     skip_err_handling();
 
@@ -536,15 +532,9 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     memset(recv_buf, 0, buf_size);
 
     for (offset = 0; offset <= max_offset; offset += offset_step) {
-        if (!offset || ucs_is_pow2(offset)) {
-            ms = new ucs::detail::message_stream("INFO");
-            *ms << "offset: " << offset << ": ";
-        } else {
-            ms = NULL;
-        }
         for (length = min_length; length <= max_length; length += length_step) {
-            if (ms && ucs_is_pow2(length)) {
-                *ms << length << " ";
+            if ((!offset || ucs_is_pow2(offset)) && ucs_is_pow2(length)) {
+                UCS_TEST_MESSAGE << "offset: " << offset << ": " << length << " ";
                 fflush(stdout);
             }
 
@@ -553,9 +543,6 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
             do_xfer((char*)send_buf + max_offset - offset,
                     (char*)recv_buf + max_offset - offset,
                     length, type, type, true, true, false);
-        }
-        if (ms) {
-            delete(ms);
         }
     }
 
