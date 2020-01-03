@@ -225,6 +225,13 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
     jucx_request_callback(request, status);
 }
 
+void stream_recv_callback(void *request, ucs_status_t status, size_t length)
+{
+    struct jucx_context *ctx = (struct jucx_context *)request;
+    ctx->length = length;
+    jucx_request_callback(request, status);
+}
+
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();

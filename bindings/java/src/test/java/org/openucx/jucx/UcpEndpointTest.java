@@ -232,9 +232,7 @@ public class UcpEndpointTest extends UcxTest {
 
         try {
             Thread.sleep(5);
-        } catch (InterruptedException e) {
-
-        }
+        } catch (InterruptedException ignored) { }
 
         AtomicBoolean success = new AtomicBoolean(false);
 
@@ -251,9 +249,7 @@ public class UcpEndpointTest extends UcxTest {
             while ((++count < 100) && !success.get()) {
                 Thread.sleep(50);
             }
-        } catch (InterruptedException e) {
-
-        }
+        } catch (InterruptedException ignored) { }
 
         assertTrue(success.get());
         UcpRequest closeRequest = ep.closeNonBlockingForce();
@@ -272,9 +268,7 @@ public class UcpEndpointTest extends UcxTest {
         progressThread.interrupt();
         try {
             progressThread.join();
-        } catch (InterruptedException e) {
-
-        }
+        } catch (InterruptedException ignored) { }
 
         Collections.addAll(resources, context1, context2, worker1, worker2);
         closeResources();

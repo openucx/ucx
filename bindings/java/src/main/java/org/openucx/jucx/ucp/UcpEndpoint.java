@@ -180,13 +180,44 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
             localAddress, size, tag, callback);
     }
 
-
     /**
      * Non blocking send operation. Invokes
      * {@link UcpEndpoint#sendTaggedNonBlocking(ByteBuffer, long, UcxCallback)} with default 0 tag.
      */
     public UcpRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, UcxCallback callback) {
         return sendTaggedNonBlocking(sendBuffer, 0, callback);
+    }
+
+    /**
+     * This routine sends data that is described by the local address to the destination endpoint.
+     * The routine is non-blocking and therefore returns immediately, however the actual send
+     * operation may be delayed. The send operation is considered completed when it is safe
+     * to reuse the source buffer. The UCP library will schedule invocation of the call-back upon
+     * completion of the send operation.
+     */
+    public UcpRequest sendStreamNonBlocking(long localAddress, long size, UcxCallback callback) {
+        return sendStreamNonBlockingNative(getNativeId(), localAddress, size, callback);
+    }
+
+    public UcpRequest sendStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
+        return sendStreamNonBlockingNative(getNativeId(), UcxUtils.getAddress(buffer),
+            buffer.remaining(), callback);
+    }
+
+    /**
+     * This routine receives data that is described by the local address and a size on the endpoint.
+     * The routine is non-blocking and therefore returns immediately. The receive operation is
+     * considered complete when the message is delivered to the buffer.
+     * In order to notify the application about completion of a scheduled receive operation,
+     * the UCP library will invoke the call-back when data is in the receive buffer
+     * and ready for application access.
+     */
+    public UcpRequest recvStreamNonBlocking(long localAddress, long size, UcxCallback callback) {
+        return recvStreamNonBlockingNative(getNativeId(), localAddress, size, callback);
+    }
+
+    public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
+        return recvStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(), callback);
     }
 
     /**
@@ -241,6 +272,12 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     private static native UcpRequest sendTaggedNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long tag,
                                                                  UcxCallback callback);
+
+    private static native UcpRequest sendStreamNonBlockingNative(long enpointId, long localAddress,
+                                                                 long size, UcxCallback callback);
+
+    private static native UcpRequest recvStreamNonBlockingNative(long enpointId, long localAddress,
+                                                                 long size, UcxCallback callback);
 
     private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
 
