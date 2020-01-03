@@ -114,8 +114,8 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, voi
     ucs_assert(pgt_region != NULL);
     region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
 
+    ucs_assert(region->refcount >= 1);
     region->refcount--;
-    ucs_assert(region->refcount >= 0);
 
     if (!region->refcount) {
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
@@ -155,6 +155,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_cache_map_memhandle,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
             *mapped_addr = region->mapped_addr;
+            ucs_assert(region->refcount < UINT_MAX);
             region->refcount++;
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
