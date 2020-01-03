@@ -235,15 +235,111 @@ protected:
 
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
+
+#define UCP_TEST_NO_SELF_TLS_NAMES \
+    dcx, udx, ud, rcx, rc, shm_ib, ugni, tcp
+
+
+#define UCP_TEST_NO_SELF_TLS \
+    "dc_x", "ud_x", "ud_v", "rc_x", "rc_v", "shm,ib", "ugni", "tcp"
+
+
+#define UCP_TEST_TLS_NAMES \
+    UCP_TEST_NO_SELF_TLS_NAMES, \
+    self
+
+
+#define UCP_TEST_TLS \
+    UCP_TEST_NO_SELF_TLS, \
+    "self"
+
+
+#define _UCP_INSTANTIATE_VECTOR(_vector, _entry) \
+    (_vector)->push_back(UCS_PP_QUOTE(_entry));
+
+
+static inline std::string
+_ucp_test_get_tls_by_name(const std::string &name)
+{
+    static std::map<std::string, std::string> name_tls_map;
+
+    if (name_tls_map.empty()) {
+        std::vector<std::string> tls_names, tls;
+
+        UCS_PP_FOREACH(_UCP_INSTANTIATE_VECTOR, &tls_names, UCP_TEST_TLS_NAMES);
+        UCS_PP_FOREACH(_UCP_INSTANTIATE_VECTOR, &tls      , UCP_TEST_TLS);
+
+        ucs_assert(tls_names.size() == tls.size());
+
+        for (size_t i = 0; i < tls_names.size(); i++) {
+            name_tls_map[tls_names[i]] = tls[i];
+        }
+    }
+
+    return name_tls_map.find(name)->second;
+}
+
+
+/**
+ * Helper macro to Instantiate the parameterized test case a combination
+ * of transports.
+ *
+ * @param _test_case    Test case class, derived from ucp_test.
+ * @param _name         Instantiation name.
+ * @param _extra_tls    Extra transport names.
+ */
+#define _UCP_INSTANTIATE_TEST_CASE_TLS_HELPER(_test_case, _name, _extra_tls) \
+    INSTANTIATE_TEST_CASE_P(_name, _test_case, \
+                            testing::ValuesIn(_test_case::enum_test_params(_test_case::get_ctx_params(), \
+                                                                           UCS_PP_QUOTE(_name), \
+                                                                           UCS_PP_QUOTE(_test_case), \
+                                                                           _ucp_test_get_tls_by_name( \
+                                                                               UCS_PP_QUOTE(_name)) + \
+                                                                           _extra_tls \
+                                                                           )));
+
+
+/**
+ * Instantiate the parameterized test case a combination of transports.
+ *
+ * @param _test_case    Test case class, derived from ucp_test.
+ * @param _name         Instantiation name.
+ */
+#define _UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name) \
+    _UCP_INSTANTIATE_TEST_CASE_TLS_HELPER(_test_case, _name, "")
+
+
+/**
+ * Instantiate the parameterized test case a combination of transports with
+ * CUDA awareness..
+ *
+ * @param _test_case    Test case class, derived from ucp_test.
+ * @param _name         Instantiation name.
+ */
+#define _UCP_INSTANTIATE_TEST_CASE_TLS_CUDA_AWARE(_test_case, _name) \
+    _UCP_INSTANTIATE_TEST_CASE_TLS_HELPER(_test_case, _name ## _cuda, "cuda_copy")
+
+
+/**
+ * Instantiate the parameterized test case a combination of transports with
+ * ROCm awareness.
+ *
+ * @param _test_case    Test case class, derived from ucp_test.
+ * @param _name         Instantiation name.
+ */
+#define _UCP_INSTANTIATE_TEST_CASE_TLS_ROCM_AWARE(_test_case, _name) \
+    _UCP_INSTANTIATE_TEST_CASE_TLS_HELPER(_test_case, _name ## _rocm, "rocm_copy")
+
+
 /**
  * Instantiate the parameterized test case a combination of transports.
  *
  * @param _test_case   Test case class, derived from ucp_test.
  * @param _name        Instantiation name.
- * @param ...          Transport names.
+ * @param _tls         Transport names.
  */
 #define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
-    INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
+    INSTANTIATE_TEST_CASE_P(_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_test_params(_test_case::get_ctx_params(), \
                                                                            #_name, \
                                                                            #_test_case, \
@@ -256,14 +352,24 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
  * @param _test_case  Test case class, derived from ucp_test.
  */
 #define UCP_INSTANTIATE_TEST_CASE(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,    "dc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,     "ud_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,    "ud_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,     "rc_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,    "rc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib, "shm,ib") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,   "ugni") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
+    UCS_PP_FOREACH(_UCP_INSTANTIATE_TEST_CASE_TLS, _test_case, UCP_TEST_TLS_NAMES)
+
+
+/**
+ * Instantiate the parameterized test case for all transport combinations
+ * with GPU memory awareness
+ *
+ * @param _test_case  Test case class, derived from ucp_test.
+ */
+#define UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(_test_case) \
+    UCS_PP_FOREACH(_UCP_INSTANTIATE_TEST_CASE_TLS_CUDA_AWARE, \
+                   _test_case, UCP_TEST_NO_SELF_TLS_NAMES) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib_ipc_cuda, \
+                                  "shm,ib,cuda_copy,cuda_ipc") \
+    UCS_PP_FOREACH(_UCP_INSTANTIATE_TEST_CASE_TLS_ROCM_AWARE, \
+                   _test_case, UCP_TEST_NO_SELF_TLS_NAMES) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib_ipc_rocm, \
+                                  "shm,ib,rocm_copy,rocm_ipc")
+
 
 #endif
