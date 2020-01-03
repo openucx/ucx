@@ -266,13 +266,13 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
     if (iface->streams_initialized) {
         for (i = 0; i < iface->device_count; i++) {
             if (iface->stream_refcount[i]) {
+                status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-                status = UCT_CUDADRV_FUNC(cuLaunchHostFunc(iface->stream_d2d[i],
-                            myHostFn, iface));
+                UCT_CUDADRV_FUNC(cuLaunchHostFunc(iface->stream_d2d[i],
+                                                  myHostFn, iface));
 #else
-                status = UCT_CUDADRV_FUNC(cuStreamAddCallback(iface->stream_d2d[i],
-                            myHostCallback, iface,
-                            0));
+                UCT_CUDADRV_FUNC(cuStreamAddCallback(iface->stream_d2d[i],
+                                                     myHostCallback, iface, 0));
 #endif
                 if (UCS_OK != status) {
                     return status;
