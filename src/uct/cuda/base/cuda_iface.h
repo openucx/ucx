@@ -50,6 +50,18 @@
     })
 
 
+#define UCT_CUDADRV_CTX_ACTIVE(state)                           \
+    do {                                                        \
+        CUdevice dev;                                           \
+        unsigned int flags;                                     \
+        /* if ctx destroyed, then resources are freed */        \
+        UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev));                 \
+        UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(dev,        \
+                                                    &flags,     \
+                                                    &state));   \
+    } while(0);
+
+
 ucs_status_t
 uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p);
