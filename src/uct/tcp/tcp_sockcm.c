@@ -66,6 +66,7 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
 
     if (!ucs_socket_is_connected(fd)) {
         ucs_debug("fd %d is not connected", fd);
+        /* coverity[check_return] */
         ucs_async_modify_handler(fd, 0);
         return;
     }
