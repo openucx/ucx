@@ -34,15 +34,15 @@ void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         uct_cm_remote_data_t *remote_data,
                                         ucs_status_t status)
 {
-    cep->super.wireup.client.connect_cb(&cep->super.super.super,
-                                        cep->super.user_data, remote_data, status);
+    cep->super.client.connect_cb(&cep->super.super.super,
+                                 cep->super.user_data, remote_data, status);
 }
 
 void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         ucs_status_t status)
 {
-    cep->super.wireup.server.connect_cb(&cep->super.super.super,
-                                        cep->super.user_data, status);
+    cep->super.server.connect_cb(&cep->super.super.super,
+                                 cep->super.user_data, status);
 }
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
@@ -184,8 +184,8 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
 
     /* Pack data to send inside rdmacm's conn_param to the remote peer */
     hdr           = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
-    priv_data_ret = cep->super.wireup.priv_pack_cb(cep->super.user_data,
-                                                   dev_name, hdr + 1);
+    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data,
+                                            dev_name, hdr + 1);
 
     if (priv_data_ret < 0) {
         ucs_assert(priv_data_ret > UCS_ERR_LAST);
@@ -292,9 +292,9 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
     }
 
-    cep->super.wireup.server.connect_cb = params->sockaddr_connect_cb.server;
-    cep->id                             = event->id;
-    cep->id->context                    = cep;
+    cep->super.server.connect_cb = params->sockaddr_connect_cb.server;
+    cep->id                      = event->id;
+    cep->id->context             = cep;
 
     memset(&conn_param, 0, sizeof(conn_param));
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +

@@ -90,17 +90,17 @@ UCS_CLASS_INIT_FUNC(uct_cm_base_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
-    self->wireup.priv_pack_cb      = (params->field_mask &
-                                      UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
-                                     params->sockaddr_pack_cb : NULL;
-    self->disconnect_cb            = (params->field_mask &
-                                      UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
-                                     params->disconnect_cb : NULL;
-    self->user_data                = (params->field_mask &
-                                      UCT_EP_PARAM_FIELD_USER_DATA) ?
-                                     params->user_data : NULL;
+    self->priv_pack_cb      = (params->field_mask &
+                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
+                              params->sockaddr_pack_cb : NULL;
+    self->disconnect_cb     = (params->field_mask &
+                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
+                              params->disconnect_cb : NULL;
+    self->user_data         = (params->field_mask &
+                               UCT_EP_PARAM_FIELD_USER_DATA) ?
+                              params->user_data : NULL;
 
-    self->wireup.client.connect_cb = params->sockaddr_connect_cb.client;
+    self->client.connect_cb = params->sockaddr_connect_cb.client;
 
     return UCS_OK;
 }

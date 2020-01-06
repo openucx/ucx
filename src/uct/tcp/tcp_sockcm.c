@@ -5,6 +5,7 @@
 */
 
 #include "tcp_sockcm_ep.h"
+
 #include <ucs/async/async.h>
 #include <ucs/sys/sock.h>
 
@@ -41,60 +42,46 @@ static uct_cm_ops_t uct_tcp_sockcm_ops = {
     .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_ep_t)
 };
 
-static void uct_tcp_close_sa_arg(uct_tcp_sa_arg_t *sa_arg_ctx)
+static void uct_tcp_close_ep(uct_tcp_sockcm_ep_t *ep)
 {
-    ucs_list_del(&sa_arg_ctx->list);
-    ucs_async_remove_handler(sa_arg_ctx->fd, 1);
-    close(sa_arg_ctx->fd);
-    ucs_free(sa_arg_ctx);
-}
-
-static int uct_tcp_is_fd_connected(int fd)
-{
-    ucs_status_t status;
-    int ret;
-
-    ret = ucs_socket_is_connected(fd);
-    if (!ret) {
-        ucs_error("connection establishment for fd %d was unsuccessful", fd);
-
-        status = ucs_async_modify_handler(fd, 0);
-        if (status != UCS_OK) {
-            ucs_error("failed to modify %d event handler to 0: %s",
-                      fd, ucs_status_string(status));
-        }
-    }
-
-    return ret;
+    ucs_list_del(&ep->list);
+    ucs_async_remove_handler(ep->fd, 1);
+    close(ep->fd);
+    ep->fd = -1;
+    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
 void uct_tcp_sa_data_handler(int fd, void *arg)
 {
-    uct_tcp_sa_arg_t *sa_arg_ctx = (uct_tcp_sa_arg_t *)arg;
-    uct_tcp_sockcm_ep_t *cep     = sa_arg_ctx->ep;
+    uct_tcp_sockcm_ep_t *ep = (uct_tcp_sockcm_ep_t*)arg;
 
-    ucs_assertv(sa_arg_ctx->fd == fd, "sa_arg_ctx->fd %d fd %d, ep_state %d",
-                sa_arg_ctx->fd, fd, cep->state);
+    ucs_assertv(ep->fd == fd, "ep->fd %d fd %d, ep_state %d", ep->fd, fd, ep->state);
 
-    if (cep != NULL) {  /* TODO remove this check once the server's ep is implemented. */
-        switch (cep->state) {
-        case (UCT_TCP_SOCKCM_EP_ON_CLIENT):
-            /* connect() completed */
-            if (!uct_tcp_is_fd_connected(cep->fd)) {
-                return;
-            }
+    if (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) {
+        /* server side - the client disconnected and the server is waiting
+         * for EVREAD events */
+        uct_tcp_close_ep(ep);
+        return;
+    }
 
-            cep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
-            /* TODO: start sending the user's data */
-            uct_tcp_close_sa_arg(sa_arg_ctx);
-            break;
-        default:
-            ucs_error("unexpected event on client ep %p (state=%d)", cep, cep->state);
-        }
-    } else {
-        /* if we got here, it should be on the server side after the client
-         * disconnected and the server is waiting for EVREAD events */
-        uct_tcp_close_sa_arg(sa_arg_ctx);
+    if (!ucs_socket_is_connected(fd)) {
+        ucs_debug("fd %d is not connected", fd);
+        ucs_async_modify_handler(fd, 0);
+        return;
+    }
+
+    switch (ep->state) {
+    case UCT_TCP_SOCKCM_EP_ON_CLIENT:
+        /* connect() completed */
+        ep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
+        /* TODO: start sending the user's data */
+
+        ucs_async_remove_handler(ep->fd, 1);
+        close(ep->fd);
+        ep->fd = -1;
+        break;
+    default:
+        ucs_error("unexpected event on client ep %p (state=%d)", ep, ep->state);
     }
 }
 
@@ -143,7 +130,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 
     self->priv_data_len = cm_config->priv_data_len;
 
-    ucs_list_head_init(&self->sa_arg_list);
+    ucs_list_head_init(&self->ep_list);
 
     ucs_debug("created tcp_sockcm %p", self);
 
@@ -152,12 +139,12 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_t)
 {
-    uct_tcp_sa_arg_t *sa_arg_ctx, *tmp;
+    uct_tcp_sockcm_ep_t *ep, *tmp;
 
     UCS_ASYNC_BLOCK(self->super.iface.worker->async);
 
-    ucs_list_for_each_safe(sa_arg_ctx, tmp, &self->sa_arg_list, list) {
-        uct_tcp_close_sa_arg(sa_arg_ctx);
+    ucs_list_for_each_safe(ep, tmp, &self->ep_list, list) {
+        uct_tcp_close_ep(ep);
     }
 
     UCS_ASYNC_UNBLOCK(self->super.iface.worker->async);

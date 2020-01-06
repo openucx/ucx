@@ -209,6 +209,7 @@ out:
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
+    /* coverity[leaked_storage] */
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 

@@ -10,21 +10,13 @@
 typedef struct uct_tcp_sockcm_ep   uct_tcp_sockcm_ep_t;
 
 
-typedef struct uct_tcp_sa_arg {
-    int                 fd;
-    ucs_list_link_t     list;
-    uct_tcp_sockcm_ep_t *ep;
-} uct_tcp_sa_arg_t;
-
-
 /**
  * A TCP connection manager
  */
 typedef struct uct_tcp_sockcm {
     uct_cm_t            super;
     size_t              priv_data_len;
-    /** List of async handler contexes. One per client */
-    ucs_list_link_t     sa_arg_list;
+    ucs_list_link_t     ep_list;      /** List of endpoints */
 } uct_tcp_sockcm_t;
 
 /**

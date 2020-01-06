@@ -27,7 +27,8 @@ ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags)
 static ucs_status_t uct_tcp_sockcm_ep_server_init(uct_tcp_sockcm_ep_t *cep,
                                                   const uct_ep_params_t *params)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    cep->state |= UCT_TCP_SOCKCM_EP_ON_SERVER;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
@@ -37,7 +38,6 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     const struct sockaddr *server_addr;
     ucs_async_context_t *async_ctx;
-    uct_tcp_sa_arg_t *sa_arg_ctx;
     ucs_status_t status;
 
     cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
@@ -69,27 +69,14 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
         goto out_print;
     }
 
-    sa_arg_ctx = ucs_malloc(sizeof(uct_tcp_sa_arg_t), "client sa_arg_ctx");
-    if (sa_arg_ctx == NULL) {
-        ucs_error("failed to allocate memory for a client_ctx");
-        status = UCS_ERR_NO_MEMORY;
-        goto err_close_socket;
-    }
-
-    sa_arg_ctx->fd = cep->fd;
-    sa_arg_ctx->ep = cep;
-
-    /* Adding the arg to a list on the cm for cleanup purposes */
-    ucs_list_add_tail(&tcp_sockcm->sa_arg_list, &sa_arg_ctx->list);
-
     async_ctx = tcp_sockcm->super.iface.worker->async;
     status    = ucs_async_set_event_handler(async_ctx->mode, cep->fd,
                                             /* wait until connect() completes */
                                             UCS_EVENT_SET_EVWRITE,
-                                            uct_tcp_sa_data_handler, sa_arg_ctx,
+                                            uct_tcp_sa_data_handler, cep,
                                             async_ctx);
     if (status != UCS_OK) {
-        goto err_free_sa_arg_ctx;
+        goto err_close_socket;
     }
 
 out_print:
@@ -99,9 +86,6 @@ out_print:
 
     return status;
 
-err_free_sa_arg_ctx:
-    ucs_list_del(&sa_arg_ctx->list);
-    free(sa_arg_ctx);
 err_close_socket:
     close(cep->fd);
 err:
@@ -129,8 +113,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_ep_t, const uct_ep_params_t *params)
     }
 
     if (status == UCS_OK) {
-        ucs_debug("created an endpoint on tcp_sockcm %p id: %d",
-                  uct_tcp_sockcm_ep_get_cm(self), self->fd);
+        ucs_debug("created an endpoint on tcp_sockcm %p id: %d state: %d",
+                  uct_tcp_sockcm_ep_get_cm(self), self->fd, self->state);
     }
 
     return status;
@@ -139,17 +123,14 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_ep_t, const uct_ep_params_t *params)
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_ep_t)
 {
     uct_tcp_sockcm_t *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(self);
-    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
 
-    status = ucs_async_remove_handler(self->fd, 1);
-    if (status != UCS_OK) {
-        ucs_debug("failed to remove event handler for fd %d: %s",
-                  self->fd, ucs_status_string(status));
-    }
+    ucs_async_remove_handler(self->fd, 1);
 
-    close(self->fd);
+    if (self->fd != -1) {
+        close(self->fd);
+    }
     UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
 }
 
