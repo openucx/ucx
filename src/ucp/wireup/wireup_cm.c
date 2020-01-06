@@ -89,6 +89,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
     ucp_ep_h ep                         = arg;
     ucp_worker_h worker                 = ep->worker;
     uct_cm_h cm                         = worker->cms[/*cm_idx = */ 0].cm;
+    ucp_rsc_index_t dev_index           = UCP_NULL_RESOURCE;
     ucp_ep_config_key_t key;
     uint64_t tl_bitmap;
     uct_ep_h tl_ep;
@@ -145,6 +146,10 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
             goto out;
         }
 
+        ucs_assert((dev_index == UCP_NULL_RESOURCE) ||
+                   (dev_index == worker->context->tl_rscs[rsc_idx].dev_index));
+        dev_index = worker->context->tl_rscs[rsc_idx].dev_index;
+
         tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_worker_is_tl_p2p(worker, rsc_idx)) {
             tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
@@ -188,6 +193,8 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
     sa_data->ep_ptr    = (uintptr_t)ep;
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
     sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
+    sa_data->dev_index = dev_index;
+    ucs_assert(sa_data->dev_index != UCP_NULL_RESOURCE);
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
 
 free_addr:
@@ -235,7 +242,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     }
 
     for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
-        addr.address_list[addr_idx].dev_addr = progress_arg->dev_addr;
+        addr.address_list[addr_idx].dev_addr  = progress_arg->dev_addr;
+        addr.address_list[addr_idx].dev_index = progress_arg->sa_data->dev_index;
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -625,10 +633,11 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_ep_h ep                         = arg;
     ucp_worker_h worker                 = ep->worker;
-    uint64_t tl_bitmap                  = 0;
+    uint64_t tl_bitmap;
     uct_cm_attr_t cm_attr;
     void* ucp_addr;
     size_t ucp_addr_size;
+    ucp_rsc_index_t rsc_index;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -658,9 +667,13 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
         goto free_addr;
     }
 
+    rsc_index = ucs_ffs64_safe(tl_bitmap);
+    ucs_assert(rsc_index != UCP_NULL_RESOURCE);
+
     sa_data->ep_ptr    = (uintptr_t)ep;
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
     sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
+    sa_data->dev_index = worker->context->tl_rscs[rsc_index].dev_index;
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
 
 free_addr:

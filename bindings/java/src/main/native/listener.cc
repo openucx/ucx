@@ -40,6 +40,14 @@ Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
     params.sockaddr.addr = (const struct sockaddr*)&listen_addr;
     params.sockaddr.addrlen = addrlen;
 
+    if (params.field_mask & UCP_LISTENER_PARAM_FIELD_CONN_HANDLER) {
+        field = env->GetFieldID(jucx_listener_param_class,
+                                "connectionHandler", "Lorg/openucx/jucx/ucp/UcpListenerConnectionHandler;");
+        jobject jucx_conn_handler = env->GetObjectField(ucp_listener_params, field);
+        params.conn_handler.arg = env->NewGlobalRef(jucx_conn_handler);
+        params.conn_handler.cb = jucx_connection_handler;
+    }
+
     ucs_status_t status = ucp_listener_create(ucp_worker, &params, &listener);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);

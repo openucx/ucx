@@ -13,7 +13,7 @@
 
 
 static ucs_config_field_t uct_knem_iface_config_table[] = {
-    {"", "BW=13862MBs", NULL,
+    {"SM_", "BW=13862MBs", NULL,
     ucs_offsetof(uct_knem_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
 

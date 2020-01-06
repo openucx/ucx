@@ -138,6 +138,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
                       ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
+    void *header_host_copy;
 
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED_SW_RNDV);
 
@@ -149,7 +150,19 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
     }
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
-    ucp_rndv_matched(req->recv.worker, req, header);
+
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
+        ucp_rndv_matched(req->recv.worker, req, header);
+    } else {
+        /* SW rendezvous request is stored in the user buffer (temporarily)
+           when matched. If user buffer allocated on GPU memory, need to "pack"
+           it to the host memory staging buffer for further processing. */
+        header_host_copy = ucs_alloca(header_length);
+        ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
+                          header_length, req->recv.mem_type);
+        ucp_rndv_matched(req->recv.worker, req, header_host_copy);
+    }
+
     ucp_tag_offload_release_buf(req, 0);
 }
 
@@ -275,7 +288,9 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state, req->recv.mem_type,
                                         req, UCT_MD_MEM_FLAG_HIDE_ERRORS);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) || !req->recv.state.dt.contig.md_map) {
+            /* Can't register this buffer on the offload iface */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return status;
         }
 
@@ -614,6 +629,8 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 {
     ucp_ep_t      *ep      = sreq->send.ep;
     ucp_context_t *context = ep->worker->context;
+    ucp_md_index_t mdi     = ucp_ep_md_index(ep, sreq->send.lane);
+    uct_md_attr_t *md_attr = &context->tl_mds[mdi].attr;
     ucs_status_t status;
 
     /* should be set by ucp_tag_send_req_init() */
@@ -621,13 +638,14 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         !context->config.ext.tm_sw_rndv       &&
-        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
+        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy) &&
+        (md_attr->cap.reg_mem_types & UCS_BIT(sreq->send.mem_type))) {
         ucp_request_send_state_reset(sreq, ucp_tag_offload_rndv_zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
         /* Register send buffer with tag lane, because tag offload rndv
          * protocol will perform RDMA_READ on it (if it arrives expectedly) */
-        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
+        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane, 0);
         if (status != UCS_OK) {
             return status;
         }

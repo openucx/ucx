@@ -26,16 +26,16 @@ BEGIN_C_DECLS
 
 #define ucs_min(_a, _b) \
 ({ \
-    typeof(_a) a = (_a); \
-    typeof(_b) b = (_b); \
-    a < b ? a : b; \
+    typeof(_a) __a = (_a); \
+    typeof(_b) __b = (_b); \
+    (__a < __b) ? __a : __b; \
 })
 
 #define ucs_max(_a, _b) \
 ({ \
-    typeof(_a) a = (_a); \
-    typeof(_b) b = (_b); \
-    a > b ? a : b; \
+    typeof(_a) __a = (_a); \
+    typeof(_b) __b = (_b); \
+    (__a > __b) ? __a : __b; \
 })
 
 #define ucs_is_pow2_or_zero(_n) \

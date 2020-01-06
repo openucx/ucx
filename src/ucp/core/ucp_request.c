@@ -349,7 +349,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         /* zcopy */
         ucp_request_send_state_reset(req, proto->zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM);
-        status = ucp_request_send_buffer_reg_lane(req, req->send.lane);
+        status = ucp_request_send_buffer_reg_lane(req, req->send.lane, 0);
         if (status != UCS_OK) {
             return status;
         }

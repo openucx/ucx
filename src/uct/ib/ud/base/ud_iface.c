@@ -559,7 +559,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
     {"IB_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-    {"", "", NULL,
+    {"UD_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 

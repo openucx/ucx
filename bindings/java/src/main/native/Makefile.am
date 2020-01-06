@@ -5,11 +5,16 @@
 
 if HAVE_JAVA
 
-topdir=$(abs_top_builddir)
-java_build_dir=$(builddir)/build-java
-javadir=$(top_srcdir)/bindings/java
-MVNCMD=$(MVN) -B -T 1C -f $(topdir)/bindings/java/pom.xml -Dmaven.repo.local=$(java_build_dir)/.deps \
-              -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+jardir         = $(libdir)
+topdir         = $(abs_top_builddir)
+java_build_dir = $(builddir)/build-java
+jarfile        = $(java_build_dir)/jucx-@VERSION@.jar
+javadir        = $(top_srcdir)/bindings/java
+
+MVNCMD = $(MVN) -B -T 1C -f \
+         $(topdir)/bindings/java/pom.xml \
+         -Dmaven.repo.local=$(java_build_dir)/.deps \
+         -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
                          org_openucx_jucx_ucp_UcpContext.h               \
@@ -24,24 +29,28 @@ JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
 
 BUILT_SOURCES = $(JUCX_GENERATED_H_FILES)
 
-MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES) native_headers.stamp
+STAMP_FILE = native_headers.stamp
+
+MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES) $(STAMP_FILE)
 
 #
 # Create a timestamp file to avoid regenerating header files every time
 # See https://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html
 #
-native_headers.stamp: \
+$(STAMP_FILE): \
 		$(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
 		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java
 	$(MVNCMD) compile native:javah
-	touch native_headers.stamp
+	touch $(STAMP_FILE)
 
-$(JUCX_GENERATED_H_FILES): native_headers.stamp
+$(JUCX_GENERATED_H_FILES): $(STAMP_FILE)
 
 lib_LTLIBRARIES = libjucx.la
 
 libjucx_la_CPPFLAGS = -I$(JDK)/include -I$(JDK)/include/linux \
                       -I$(topdir)/src -I$(top_srcdir)/src
+
+noinst_HEADERS = jucx_common_def.h
 
 libjucx_la_SOURCES = context.cc \
                      endpoint.cc \
@@ -63,12 +72,15 @@ libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \
 libjucx_la_DEPENDENCIES = Makefile.am Makefile.in Makefile
 
 # Compile Java source code and pack to jar
-package:
+$(jarfile):
 	$(MVNCMD) package -DskipTests
 
+package : $(jarfile)
+
+.PHONY: package
+
 # Maven install phase
-install-data-hook: package
-	cp -fp $(java_build_dir)/jucx-@VERSION@.jar $(DESTDIR)@libdir@
+jar_DATA = $(jarfile)
 
 # Remove all compiled Java files
 clean-local:

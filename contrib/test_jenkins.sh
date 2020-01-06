@@ -339,7 +339,7 @@ build_release_pkg() {
 		dpkg-buildpackage -us -uc
 	else
 		echo "==== Build RPM ===="
-		../contrib/buildrpm.sh -s -b --nodeps
+		../contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
 	fi
 
 	# check that UCX version is present in spec file

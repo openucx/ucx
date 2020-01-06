@@ -114,10 +114,10 @@ static size_t uct_ib_mlx5_calc_mkey_inlen(int list_size)
            UCT_IB_MLX5DV_ST_SZ_BYTES(klm) * list_size;
 }
 
-static ucs_status_t uct_ib_mlx5_alloc_mkey_inbox(int list_size, uint32_t **in_p)
+static ucs_status_t uct_ib_mlx5_alloc_mkey_inbox(int list_size, char **in_p)
 {
     size_t inlen;
-    uint32_t *in;
+    char *in;
 
     inlen = uct_ib_mlx5_calc_mkey_inlen(list_size);
     in    = ucs_calloc(1, inlen, "mkey mailbox");
@@ -132,13 +132,13 @@ static ucs_status_t uct_ib_mlx5_alloc_mkey_inbox(int list_size, uint32_t **in_p)
 static ucs_status_t uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md,
                                              intptr_t addr, size_t length,
                                              int list_size, size_t entity_size,
-                                             uint32_t *in,
+                                             char *in,
                                              struct mlx5dv_devx_obj **mr_p,
                                              uint32_t *mkey)
 {
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {};
-    struct mlx5dv_pd dvpd                                 = {};
-    struct mlx5dv_obj dv                                  = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_mkey_out)] = {};
+    struct mlx5dv_pd dvpd                                = {};
+    struct mlx5dv_obj dv                                 = {};
     struct mlx5dv_devx_obj *mr;
     void *mkc;
 
@@ -187,7 +187,7 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md,
                               uint32_t *mkey)
 {
     ucs_status_t status;
-    uint32_t *in;
+    char *in;
     void *klm;
     int i;
 
@@ -222,7 +222,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     ucs_status_t status;
     int list_size, i;
     void *klm;
-    uint32_t *in;
+    char *in;
     intptr_t addr;
 
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_KSM)) {
@@ -438,8 +438,8 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md, void *cap)
 {
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     void *odp;
     int ret;
 
@@ -504,8 +504,8 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
                                              uct_ib_md_t **p_md)
 {
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     struct mlx5dv_context_attr dv_attr = {};
     ucs_status_t status = UCS_OK;
     struct ibv_context *ctx;
