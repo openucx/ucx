@@ -54,11 +54,12 @@
     do {                                                           \
         CUcontext cur_ctx;                                         \
         CUdevice dev;                                              \
-        unsigned int flags;                                        \
+        unsigned flags;                                            \
+                                                                   \
         _state = 0;                                                \
-        /* avoid active state check if no cuda activity*/          \
-        if (CUDA_SUCCESS == cuCtxGetCurrent(&cur_ctx)              \
-            && NULL != cur_ctx) {                                  \
+        /* avoid active state check if no cuda activity */         \
+        if ((CUDA_SUCCESS == cuCtxGetCurrent(&cur_ctx))            \
+            && (NULL != cur_ctx)) {                                \
             UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev));                \
             UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(dev,       \
                                                         &flags,    \
