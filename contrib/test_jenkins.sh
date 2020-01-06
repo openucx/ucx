@@ -26,6 +26,7 @@ WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda10.1"
 GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
+ROCM_MODULE="dev/rocm-3.0"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -116,6 +117,24 @@ try_load_cuda_env() {
 unload_cuda_env() {
 	module unload $CUDA_MODULE
 	module unload $GDRCOPY_MODULE
+}
+
+#
+# try load rocm modules if amd driver is installed
+#
+try_load_rocm_env() {
+	num_gpus=0
+	have_rocm=no
+	have_gdrcopy=no
+    if (lsmod | grep -q amdgpu) ; then
+		have_rocm=yes
+		module_load $ROCM_MODULE || have_rocm=no
+		num_gpus=$(rocm-smi -i | grep "GPU" | wc -l)
+	fi
+}
+
+unload_rocm_env() {
+	module unload $ROCM_MODULE
 }
 
 #
@@ -493,6 +512,32 @@ build_cuda() {
 		echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
 	fi
 	unload_cuda_env
+}
+
+#
+# Build ROCM
+#
+build_rocm() {
+	echo 1..1 > build_rocm.tap
+	if module_load $ROCM_MODULE
+	then
+		echo "==== Build with enable rocm, no gdr_copy ===="
+		../contrib/configure-devel --prefix=$ucx_inst --with-rocm
+		$MAKEP clean
+		$MAKEP
+
+		module unload $ROCM_MODULE
+
+		echo "==== Running test_link_map with rocm build but no rocm module ===="
+		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
+
+		$MAKEP distclean
+		echo "ok 1 - build successful " >> build_rocm.tap
+	else
+		echo "==== Not building with rocm flags ===="
+		echo "ok 1 - # SKIP because rocm not installed" >> build_rocm.tap
+	fi
+	unload_rocm_env
 }
 
 #
@@ -978,6 +1023,86 @@ run_ucx_perftest() {
 		fi
 
 		unset CUDA_VISIBLE_DEVICES
+	fi
+
+	# run rocm tests if rocm module was loaded and GPU is found
+	if [ "X$have_rocm" == "Xyes" ]
+	then
+		tls_list="all "
+		gdr_options="n "
+		if (lsmod | grep -q "amdgpu")
+		then
+			echo "ROCr module () is present.."
+			tls_list+="rc,rocm_copy "
+		fi
+
+		if [ $num_gpus -gt 1 ]; then
+			export HIP_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
+		fi
+
+		cat $ucx_inst_ptest/test_types_ucp | grep rocm | sort -R > $ucx_inst_ptest/test_types_short_ucp
+		sed -s 's,-n [0-9]*,-n 10 -w 1,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
+
+		echo "==== Running ucx_perf with rocm memory===="
+
+		for tls in $tls_list
+		do
+			for memtype_cache in y n
+			do
+				for gdr in $gdr_options
+				do
+					if [ $with_mpi -eq 1 ]
+					then
+						$MPIRUN -np 2 -x UCX_TLS=$tls -x UCX_MEMTYPE_CACHE=$memtype_cache \
+									 -x UCX_IB_GPU_DIRECT_RDMA=$gdr $AFFINITY $ucx_perftest $ucp_test_args
+					else
+						export UCX_TLS=$tls
+						export UCX_MEMTYPE_CACHE=$memtype_cache
+						export UCX_IB_GPU_DIRECT_RDMA=$gdr
+						run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+						unset UCX_TLS
+						unset UCX_MEMTYPE_CACHE
+						unset UCX_IB_GPU_DIRECT_RDMA
+					fi
+				done
+			done
+		done
+
+		if [ $with_mpi -eq 1 ]
+		then
+			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,rocm_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
+		else
+			export UCX_TLS=self,shm,cma,rocm_copy
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+			unset UCX_TLS
+
+			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		fi
+
+		# Specifically test rocm_ipc for large message sizes
+	        cat $ucx_inst_ptest/test_types_ucp | grep -v rocm | sort -R > $ucx_inst_ptest/test_types_rocm_ucp
+		ucp_test_args_large="-b $ucx_inst_ptest/test_types_rocm_ucp \
+			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
+		if [ $with_mpi -eq 1 ]
+		then
+			for ipc_cache in y n
+			do
+				$MPIRUN -np 2 -x UCX_TLS=self,sm,rocm_copy,rocm_ipc \
+					-x UCX_ROCM_IPC_CACHE=$ipc_cache $AFFINITY $ucx_perftest $ucp_test_args_large
+			done
+		else
+			for ipc_cache in y n
+			do
+				export UCX_TLS=self,sm,rocm_copy,rocm_ipc
+				export UCX_ROCM_IPC_CACHE=$ipc_cache
+				run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
+				unset UCX_TLS
+				unset UCX_ROCM_IPC_CACHE
+			done
+		fi
+
+		unset HIP_VISIBLE_DEVICES
 	fi
 }
 
@@ -1478,6 +1603,12 @@ run_tests() {
 
 	# load cuda env only if GPU available for remaining tests
 	try_load_cuda_env
+
+	# test rocm build if rocm modules available
+	do_distributed_task 2 4 build_rocm
+
+	# load rocm env only if GPU available for remaining tests
+	try_load_rocm_env
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 0 4 build_pgi

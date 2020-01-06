@@ -29,4 +29,17 @@ ucp_contig_cuda_mng_stream_bw        -t stream_bw  -r recv_data -m cuda-managed
 ucp_contig_cuda_mng_stream_lat       -t stream_lat -r recv_data -m cuda-managed
 ucp_contig_cuda_mng_stream_bw        -t stream_bw  -r recv -m cuda-managed
 ucp_contig_cuda_mng_stream_lat       -t stream_lat -r recv -m cuda-managed
+#ROCM
+ucp_contig_contig_rocm_tag_lat   -t tag_lat -D contig,contig -m rocm
+ucp_contig_contig_rocm_tag_bw    -t tag_bw  -D contig,contig -m rocm
+ucp_contig_rocm_stream_bw        -t stream_bw  -r recv_data -m rocm
+ucp_contig_rocm_stream_lat       -t stream_lat -r recv_data -m rocm
+ucp_contig_rocm_stream_bw        -t stream_bw  -r recv -m rocm
+ucp_contig_rocm_stream_lat       -t stream_lat -r recv -m rocm
+ucp_contig_contig_rocm_mng_tag_lat   -t tag_lat -D contig,contig -m rocm-managed
+ucp_contig_contig_rocm_mng_tag_bw    -t tag_bw  -D contig,contig -m rocm-managed
+ucp_contig_rocm_mng_stream_bw        -t stream_bw  -r recv_data -m rocm-managed
+ucp_contig_rocm_mng_stream_lat       -t stream_lat -r recv_data -m rocm-managed
+ucp_contig_rocm_mng_stream_bw        -t stream_bw  -r recv -m rocm-managed
+ucp_contig_rocm_mng_stream_lat       -t stream_lat -r recv -m rocm-managed
 
