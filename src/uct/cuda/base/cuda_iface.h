@@ -50,15 +50,20 @@
     })
 
 
-#define UCT_CUDADRV_CTX_ACTIVE(state)                           \
-    do {                                                        \
-        CUdevice dev;                                           \
-        unsigned int flags;                                     \
-        /* if ctx destroyed, then resources are freed */        \
-        UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev));                 \
-        UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(dev,        \
-                                                    &flags,     \
-                                                    &state));   \
+#define UCT_CUDADRV_CTX_ACTIVE(_state)                             \
+    do {                                                           \
+        CUcontext cur_ctx;                                         \
+        CUdevice dev;                                              \
+        unsigned int flags;                                        \
+        _state = 0;                                                \
+        /* avoid active state check if no cuda activity*/          \
+        if (CUDA_SUCCESS == cuCtxGetCurrent(&cur_ctx)              \
+            && NULL != cur_ctx) {                                  \
+            UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev));                \
+            UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(dev,       \
+                                                        &flags,    \
+                                                        &_state)); \
+        }                                                          \
     } while(0);
 
 
