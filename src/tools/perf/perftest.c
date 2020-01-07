@@ -379,7 +379,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
-    printf("     -m <mem type>[,<mem type>]\n");
+    printf("     -m <send mem type>[,<recv mem type>]\n");
     printf("                    memory type of message for sender and receiver (host)\n");
     print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
