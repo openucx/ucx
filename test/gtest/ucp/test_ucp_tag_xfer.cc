@@ -33,7 +33,11 @@ public:
         enable_tag_mp_offload();
 
         if (RUNNING_ON_VALGRIND) {
-            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
+            // Alow using TM MP offload for messages with a size of at least
+            // 10000 bytes by setting HW TM segment size to 10 kB, since each
+            // packet in TM MP offload is MTU-size buffer (i.e., in most cases
+            // it is 4 kB segments)
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "10k"));
             m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
         }
     }
@@ -586,6 +590,10 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_exp_truncated) {
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_unexp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_truncated) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_exp) {

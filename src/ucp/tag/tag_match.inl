@@ -213,6 +213,14 @@ ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
     return NULL;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_recv_request_release_non_contig_buffer(ucp_request_t *req)
+{
+    ucs_assert(!UCP_DT_IS_CONTIG(req->recv.datatype));
+    ucs_free(req->recv.tag.non_contig_buf);
+    req->recv.tag.non_contig_buf = NULL;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
                               size_t length, unsigned recv_flags)
@@ -243,7 +251,13 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
      * until last fragment arrives, so it is initialized to SIZE_MAX. */
     offset = SIZE_MAX - req->recv.tag.remaining;
 
-    if (ucs_unlikely(req->recv.length < length + offset)) {
+    if (ucs_unlikely(req->recv.length < (length + offset))) {
+        /* We have to release non-contig buffer only in case of 
+         * this is not the first segment and the datatype is
+         * non-contig */
+        if ((offset != 0) && !UCP_DT_IS_CONTIG(req->recv.datatype)) {
+            ucp_tag_recv_request_release_non_contig_buffer(req);
+        }
         return ucp_request_recv_msg_truncated(req, length, offset);
     }
 
@@ -257,7 +271,7 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
         if (offset == 0) {
             req->recv.tag.non_contig_buf = ucs_malloc(req->recv.length,
                                                       "tag gen buffer");
-            if (ucs_unlikely(req->recv.tag.non_contig_buf == NULL)){
+            if (ucs_unlikely(req->recv.tag.non_contig_buf == NULL)) {
                return UCS_ERR_NO_MEMORY;
             }
         }
@@ -271,13 +285,13 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
     if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST) {
         /* Need to update recv info length. In tag offload protocol we do not
          * know the total message length until the last fragment arrives. */
-         req->recv.tag.info.length = offset + length;
+        req->recv.tag.info.length = offset + length;
 
         if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
             status = ucp_request_recv_data_unpack(req, req->recv.tag.non_contig_buf,
                                                   req->recv.tag.info.length,
                                                   0, 1);
-            ucs_free(req->recv.tag.non_contig_buf);
+            ucp_tag_recv_request_release_non_contig_buffer(req);
         }
     }
 
