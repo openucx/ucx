@@ -12,7 +12,6 @@
 #include "ucp_context.h"
 #include "ucp_thread.h"
 
-#include <ucp/proto/proto.h>
 #include <ucp/tag/tag_match.h>
 #include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>

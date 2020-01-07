@@ -12,7 +12,6 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_ep.inl>
-#include <ucp/proto/proto.h>
 
 
 /*

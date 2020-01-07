@@ -223,8 +223,8 @@ typedef struct ucp_ep_config {
     struct {
         /* Protocols used for tag matching operations
          * (can be AM based or tag offload). */
-        const ucp_proto_t   *proto;
-        const ucp_proto_t   *sync_proto;
+        const ucp_request_send_proto_t   *proto;
+        const ucp_request_send_proto_t   *sync_proto;
 
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
@@ -277,13 +277,13 @@ typedef struct ucp_ep_config {
     struct {
         /* Protocols used for stream operations
          * (currently it's only AM based). */
-        const ucp_proto_t   *proto;
+        const ucp_request_send_proto_t   *proto;
     } stream;
     
     struct {
         /* Protocols used for am operations */
-        const ucp_proto_t *proto;
-        const ucp_proto_t *reply_proto;
+        const ucp_request_send_proto_t   *proto;
+        const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
 } ucp_ep_config_t;

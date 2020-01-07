@@ -11,7 +11,7 @@
 #include "offload.h"
 #include "eager.h"
 #include "rndv.h"
-#include <ucp/proto/proto.h>
+
 #include <ucp/proto/proto_am.inl>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.h>
@@ -669,16 +669,14 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
     return UCS_OK;
 }
 
-const ucp_proto_t ucp_tag_offload_proto = {
+const ucp_request_send_proto_t ucp_tag_offload_proto = {
     .contig_short     = ucp_tag_offload_eager_short,
     .bcopy_single     = ucp_tag_offload_eager_bcopy,
     .bcopy_multi      = NULL,
     .zcopy_single     = ucp_tag_offload_eager_zcopy,
     .zcopy_multi      = NULL,
     .zcopy_completion = ucp_proto_am_zcopy_completion,
-    .only_hdr_size    = 0,
-    .first_hdr_size   = 0,
-    .mid_hdr_size     = 0
+    .only_hdr_size    = 0
 };
 
 /* Eager sync */
@@ -741,14 +739,12 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
     ucp_request_send(req, 0);
 }
 
-const ucp_proto_t ucp_tag_offload_sync_proto = {
+const ucp_request_send_proto_t ucp_tag_offload_sync_proto = {
     .contig_short     = NULL,
     .bcopy_single     = ucp_tag_offload_eager_sync_bcopy,
     .bcopy_multi      = NULL,
     .zcopy_single     = ucp_tag_offload_eager_sync_zcopy,
     .zcopy_multi      = NULL,
     .zcopy_completion = ucp_tag_eager_sync_zcopy_completion,
-    .only_hdr_size    = 0,
-    .first_hdr_size   = 0,
-    .mid_hdr_size     = 0
+    .only_hdr_size    = 0
 };
