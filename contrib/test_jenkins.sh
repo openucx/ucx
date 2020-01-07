@@ -877,9 +877,9 @@ run_ucx_perftest() {
 
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
-	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types_uct |                sort -R > $ucx_inst_ptest/test_types_short_uct
-	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
+	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2   | sort -R > $ucx_inst_ptest/msg_pow2_short
+	cat $ucx_inst_ptest/test_types_uct |                        sort -R > $ucx_inst_ptest/test_types_short_uct
+	cat $ucx_inst_ptest/test_types_ucp | grep -Ev "cuda|rocm" | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 	uct_test_args="-b $ucx_inst_ptest/test_types_short_uct \
