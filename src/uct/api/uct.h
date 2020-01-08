@@ -1867,6 +1867,19 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  *
  * @param [in] ep       Endpoint to disconnect.
  * @param [in] flags    Reserved for future use.
+ *
+ * @return UCS_OK                Operation has completed successfully.
+ *         UCS_ERR_BUSY          The @a ep is not connected yet (either
+ *                               @ref uct_ep_client_connect_cb_t or
+ *                               @ref uct_ep_server_connect_cb_t was not
+ *                               invoked).
+ *         UCS_INPROGRESS        The disconnect request has been initiated, but
+ *                               the remote peer has not yet responded to this
+ *                               request, and consequently the registered
+ *                               callback @ref uct_ep_disconnect_cb_t has not
+ *                               been invoked to handle the request.
+ *         UCS_ERR_NOT_CONNECTED The @a ep is disconnected locally and remotely.
+ *         Other error codes as defined by @ref ucs_status_t .
  */
 ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags);
 
