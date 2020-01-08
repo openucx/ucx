@@ -11,6 +11,7 @@
 
 #include "mem_buffer.h"
 
+#include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
 
@@ -185,9 +186,7 @@ void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
 void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
                                ucs_memory_type_t mem_type)
 {
-    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) ||
-        (mem_type == UCS_MEMORY_TYPE_ROCM_MANAGED)) {
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         pattern_check(buffer, length, seed);
     } else {
         ucs::auto_buffer temp(length);
@@ -250,9 +249,7 @@ void mem_buffer::copy_from(void *dst, const void *src, size_t length,
 bool mem_buffer::compare(const void *expected, const void *buffer,
                          size_t length, ucs_memory_type_t mem_type)
 {
-    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) ||
-        (mem_type == UCS_MEMORY_TYPE_ROCM_MANAGED)) {
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         return memcmp(expected, buffer, length) == 0;
     } else {
         ucs::auto_buffer temp(length);
