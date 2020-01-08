@@ -249,7 +249,8 @@ typedef struct uct_tcp_ep_ctx {
                                                    * or received PUT operation */
     void                          *buf;           /* Partial send/recv data */
     size_t                        length;         /* How much data in the buffer */
-    size_t                        offset;         /* Next offset to send/recv */
+    size_t                        offset;         /* How much data was sent (TX) or was
+                                                   * handled after receiving (RX) */
 } uct_tcp_ep_ctx_t;
 
 
