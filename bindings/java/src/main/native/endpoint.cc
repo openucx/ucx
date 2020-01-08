@@ -113,9 +113,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
-    jclass ucp_rkey_cls = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
-    jmethodID constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
-    jobject result = env->NewObject(ucp_rkey_cls, constructor, (native_ptr)rkey);
+    jobject result = new_rkey_instance(env, rkey);
 
     /* Coverity thinks that rkey is a leaked object here,
      * but it's stored in a UcpRemoteKey object */
