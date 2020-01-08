@@ -798,7 +798,7 @@ uct_tcp_ep_put_rx_advance(uct_tcp_ep_t *ep, uct_tcp_ep_put_req_hdr_t *put_req,
     if (!put_req->length) {
         uct_tcp_ep_post_put_ack(ep);
 
-        /* EP's ctx_caps doen't have UCT_TCP_EP_CTX_TYPE_PUT_RX flag
+        /* EP's ctx_caps doesn't have UCT_TCP_EP_CTX_TYPE_PUT_RX flag
          * set in case of entire PUT payload was received through
          * AM protocol */
         if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX)) {
