@@ -229,6 +229,7 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     ucs_status_t status;
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_CLIENT;
+    cep->super.client.connect_cb = params->sockaddr_connect_cb.client;
 
     ucs_trace("%s: rdma_create_id on client (rdmacm %p, event_channel=%p)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),

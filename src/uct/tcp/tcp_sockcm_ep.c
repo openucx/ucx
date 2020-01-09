@@ -28,6 +28,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_init(uct_tcp_sockcm_ep_t *cep,
                                                   const uct_ep_params_t *params)
 {
     cep->state |= UCT_TCP_SOCKCM_EP_ON_SERVER;
+    cep->super.server.connect_cb = params->sockaddr_connect_cb.server;
     return UCS_OK;
 }
 
@@ -41,6 +42,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     ucs_status_t status;
 
     cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
+    cep->super.client.connect_cb = params->sockaddr_connect_cb.client;
 
     server_addr = params->sockaddr->addr;
     status = ucs_socket_create(server_addr->sa_family, SOCK_STREAM, &cep->fd);

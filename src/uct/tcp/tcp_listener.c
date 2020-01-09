@@ -45,11 +45,12 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
         goto err;
     }
 
-    params.field_mask        = UCT_EP_PARAM_FIELD_CM                |
-                               UCT_EP_PARAM_FIELD_CONN_REQUEST      |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS ;
-    params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
+    params.field_mask        = UCT_EP_PARAM_FIELD_CM               |
+                               UCT_EP_PARAM_FIELD_CONN_REQUEST     |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS;
     params.cm                = listener->super.cm;
+    params.conn_request      = NULL;
+    params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
 
     status = UCS_CLASS_NEW(uct_tcp_sockcm_ep_t, &ep, &params);
     if (status != UCS_OK) {
