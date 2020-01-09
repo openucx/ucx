@@ -367,7 +367,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
     hdr->method = mem.method;
     hdr->length = mem.length;
     hdr->memh   = mem.memh;
-    *size_p       = mem.length - sizeof(*hdr);
+    *size_p     = mem.length - sizeof(*hdr);
     *chunk_p    = hdr + 1;
     return UCS_OK;
 }
