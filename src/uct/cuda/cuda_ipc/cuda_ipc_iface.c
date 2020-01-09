@@ -203,12 +203,6 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
-        /*
-         * Case when IPC cache is not used:
-         * there could be an in-flight transfer using the same mapping
-         * eg: osu bandwidth benchmark; two ops directed towards same peer that
-         * use same cuda region but different offsets and lengths
-         */
         status = iface->unmap_memhandle(cuda_ipc_event->cache,
                                         cuda_ipc_event->d_bptr,
                                         cuda_ipc_event->mapped_addr);

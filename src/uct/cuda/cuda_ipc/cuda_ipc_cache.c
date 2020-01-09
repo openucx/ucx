@@ -117,6 +117,9 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, voi
     ucs_assert(region->refcount >= 1);
     region->refcount--;
 
+    /*
+     * check refcount to see if an in-flight transfer is using the same mapping
+     */
     if (!region->refcount) {
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
@@ -124,7 +127,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, voi
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr) region->mapped_addr));
+        status = UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
         ucs_free(region);
     }
 
