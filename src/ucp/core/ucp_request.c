@@ -12,7 +12,7 @@
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 
-#include <ucp/proto/proto.h>
+#include <ucp/proto/proto_am.h>
 
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
@@ -314,7 +314,7 @@ ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                        size_t zcopy_thresh, size_t zcopy_max, size_t dt_count,
                        const ucp_ep_msg_config_t* msg_config,
-                       const ucp_proto_t *proto)
+                       const ucp_request_send_proto_t *proto)
 {
     size_t       length = req->send.length;
     ucs_status_t status;

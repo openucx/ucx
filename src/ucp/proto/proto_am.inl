@@ -4,12 +4,18 @@
  * See file LICENSE for terms.
  */
 
+#ifndef UCP_PROTO_AM_INL_
+#define UCP_PROTO_AM_INL_
+
+#include "proto_am.h"
+
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
+
 
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 
@@ -428,3 +434,5 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, uintptr_t ep_ptr)
 
     return req;
 }
+
+#endif

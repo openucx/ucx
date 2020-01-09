@@ -38,9 +38,9 @@ typedef struct {
     size_t bw;
 } ucp_ep_thresh_params_t;
 
-extern const ucp_proto_t ucp_stream_am_proto;
-extern const ucp_proto_t ucp_am_proto;
-extern const ucp_proto_t ucp_am_reply_proto;
+extern const ucp_request_send_proto_t ucp_stream_am_proto;
+extern const ucp_request_send_proto_t ucp_am_proto;
+extern const ucp_request_send_proto_t ucp_am_reply_proto;
 
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {

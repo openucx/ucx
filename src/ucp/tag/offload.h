@@ -10,7 +10,6 @@
 #include <ucp/tag/eager.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/core/ucp_request.h>
-#include <ucp/proto/proto.h>
 #include <ucs/datastruct/queue.h>
 
 
@@ -48,9 +47,8 @@ typedef struct {
 } UCS_S_PACKED ucp_offload_last_ssend_hdr_t;
 
 
-extern const ucp_proto_t ucp_tag_offload_proto;
-
-extern const ucp_proto_t ucp_tag_offload_sync_proto;
+extern const ucp_request_send_proto_t ucp_tag_offload_proto;
+extern const ucp_request_send_proto_t ucp_tag_offload_sync_proto;
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self);
 

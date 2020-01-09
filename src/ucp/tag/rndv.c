@@ -10,9 +10,8 @@
 
 #include "rndv.h"
 #include "tag_match.inl"
-
 #include "offload.h"
-#include <ucp/proto/proto.h>
+
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 
