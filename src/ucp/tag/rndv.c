@@ -817,7 +817,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
     } else {
         status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA,
-                                       sizeof(ucp_rndv_data_hdr_t),
                                        ucp_rndv_pack_data,
                                        ucp_rndv_pack_data, 1);
     }

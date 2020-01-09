@@ -239,7 +239,7 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
     
-    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY, 
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY,
                                     ucp_am_bcopy_pack_args_single_reply);
     if (status == UCS_OK) {
         ucp_request_send_generic_dt_finish(req);
@@ -252,8 +252,7 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_MULTI,
-                                                UCP_AM_ID_MULTI, 
-                                                sizeof(ucp_am_long_hdr_t),
+                                                UCP_AM_ID_MULTI,
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 0);
     ucp_request_t *req;
@@ -272,8 +271,7 @@ static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
 static ucs_status_t ucp_am_bcopy_multi_reply(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_MULTI_REPLY,
-                                                UCP_AM_ID_MULTI_REPLY, 
-                                                sizeof(ucp_am_long_hdr_t),
+                                                UCP_AM_ID_MULTI_REPLY,
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 0);
     ucp_request_t *req;

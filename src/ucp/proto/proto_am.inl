@@ -26,16 +26,23 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
                        uct_pack_callback_t pack_cb)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
+    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep         = req->send.ep;
+    ucp_dt_state_t state = req->send.state.dt;
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
     packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb,
                                      req, 0);
-    if (packed_len < 0) {
+    if (ucs_unlikely(packed_len < 0)) {
+        /* Reset the state to the previous one */
+        req->send.state.dt = state;
         return (ucs_status_t)packed_len;
     }
+
+    ucs_assertv((size_t)packed_len <= ucp_ep_get_max_bcopy(ep, req->send.lane),
+                "packed_len=%zd max_bcopy=%zu",
+                packed_len, ucp_ep_get_max_bcopy(ep, req->send.lane));
 
     return UCS_OK;
 }
@@ -43,53 +50,41 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
 static UCS_F_ALWAYS_INLINE
 ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                    uint8_t am_id_middle,
-                                   size_t hdr_size_middle,
                                    uct_pack_callback_t pack_first,
                                    uct_pack_callback_t pack_middle,
                                    int enable_am_bw)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
+    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep         = req->send.ep;
+    ucp_dt_state_t state = req->send.state.dt;
     ucs_status_t status;
-    size_t UCS_V_UNUSED max_middle;
     ssize_t packed_len;
     uct_ep_h uct_ep;
-    size_t offset;
     int pending_adde_res;
 
-    offset         = req->send.state.dt.offset;
-    req->send.lane = (!enable_am_bw || !offset) ? /* first part of message must be sent */
-                     ucp_ep_get_am_lane(ep) :     /* via AM lane */
+    req->send.lane = (!enable_am_bw || (state.offset == 0)) ? /* first part of message must be sent */
+                     ucp_ep_get_am_lane(ep) :                 /* via AM lane */
                      ucp_send_request_get_next_am_bw_lane(req);
     uct_ep         = ep->uct_eps[req->send.lane];
-    max_middle     = ucp_ep_get_max_bcopy(ep, req->send.lane) - hdr_size_middle;
 
     for (;;) {
-        if (offset == 0) {
+        if (state.offset == 0) {
             /* First */
             packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req, 0);
-            UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first", packed_len,
-                                                   packed_len);
-            ucs_assertv(req->send.state.dt.offset < req->send.length,
-                        "offset=%zd", req->send.state.dt.offset);
+            UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first",
+                                                   packed_len, packed_len);
         } else {
-            ucs_assert(offset < req->send.length);
+            ucs_assert(state.offset < req->send.length);
             /* Middle or last */
             packed_len = uct_ep_am_bcopy(uct_ep, am_id_middle, pack_middle, req, 0);
-            ucs_assertv((packed_len < 0) || (packed_len <= max_middle + hdr_size_middle),
-                        "packed_len=%zd max_middle=%zu hdr_size_middle=%zu",
-                        packed_len, max_middle, hdr_size_middle);
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_middle",
                                                    packed_len, packed_len);
-            ucs_assert((packed_len < 0) ||
-                       (offset + packed_len - hdr_size_middle <= req->send.length));
-            if ((packed_len > 0) && (offset + packed_len - hdr_size_middle == req->send.length)) {
-                /* Last */
-                return UCS_OK;
-            }
         }
 
         if (ucs_unlikely(packed_len < 0)) {
+            /* Reset the state to the previous one */
+            req->send.state.dt = state;
+
             if (req->send.lane != req->send.pending_lane) {
                 /* switch to new pending lane */
                 pending_adde_res = ucp_request_pending_add(req, &status, 0);
@@ -103,7 +98,23 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 return (ucs_status_t)packed_len;
             }
         } else {
-            return UCS_INPROGRESS;
+            ucs_assertv(/* The packed length has to be the same as maximum
+                         * AM Bcopy for the first and middle segments */
+                        ((req->send.state.dt.offset < req->send.length) &&
+                         (packed_len == ucp_ep_get_max_bcopy(ep, req->send.lane))) ||
+                        /* The packed length has to be the same or less than
+                         * maximum AM Bcopy for the last segment */
+                        (packed_len <= ucp_ep_get_max_bcopy(ep, req->send.lane)),
+                        "packed_len=%zd max_bcopy=%zu",
+                        packed_len, ucp_ep_get_max_bcopy(ep, req->send.lane));
+            ucs_assertv(req->send.state.dt.offset <= req->send.length,
+                        "offset=%zd length=%zu",
+                        req->send.state.dt.offset, req->send.length);
+            ucs_assert(state.offset < req->send.state.dt.offset);
+            /* If the last segment was sent, return UCS_OK,
+             * otherwise - UCS_INPROGRESS */
+            return ((req->send.state.dt.offset < req->send.length) ?
+                    UCS_INPROGRESS : UCS_OK);
         }
     }
 }
