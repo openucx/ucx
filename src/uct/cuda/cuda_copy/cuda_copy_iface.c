@@ -204,7 +204,6 @@ static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chun
 static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
-    ucs_status_t status;
     int active;
 
     UCT_CUDADRV_CTX_ACTIVE(active);
