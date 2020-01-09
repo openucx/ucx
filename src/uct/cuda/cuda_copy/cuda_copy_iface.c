@@ -210,10 +210,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     UCT_CUDADRV_CTX_ACTIVE(active);
 
     if (active) {
-        status = UCT_CUDA_FUNC(cudaEventDestroy(base->event));
-        if (UCS_OK != status) {
-            ucs_error("cudaEventDestroy Failed");
-        }
+        UCT_CUDA_FUNC(cudaEventDestroy(base->event));
     }
 }
 
