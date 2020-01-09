@@ -1097,6 +1097,8 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 
     ucs_trace("ep %p: connect lane %d to remote peer", ep, lane);
 
+    ucs_assert(lane != UCP_NULL_LANE);
+
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
     /* checking again, with lock held, if already connected or connection is
