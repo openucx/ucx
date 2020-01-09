@@ -106,7 +106,7 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
-static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
+const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
 {
     struct sockaddr_storage sock_addr = {0}; /* Suppress Clang false-positive */
     socklen_t addr_size;
