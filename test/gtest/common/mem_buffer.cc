@@ -172,9 +172,7 @@ void mem_buffer::pattern_check(const void *buffer, size_t length)
 void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
                               ucs_memory_type_t mem_type)
 {
-    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) ||
-        (mem_type == UCS_MEMORY_TYPE_ROCM_MANAGED)) {
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         pattern_fill(buffer, length, seed);
     } else {
         ucs::auto_buffer temp(length);
@@ -201,6 +199,7 @@ void mem_buffer::copy_to(void *dst, const void *src, size_t length,
     switch (dst_mem_type) {
     case UCS_MEMORY_TYPE_HOST:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
+    case UCS_MEMORY_TYPE_ROCM_MANAGED:
         memcpy(dst, src, length);
         break;
 #if HAVE_CUDA
