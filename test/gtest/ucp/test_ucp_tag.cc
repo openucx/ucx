@@ -390,9 +390,9 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0
         size_t min_rndv = ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config(sender().ep()));
 
         EXPECT_GT(min_rndv, 0ul); // min_rndv should be RTS size at least
-        EXPECT_EQ(min_rndv,
+        EXPECT_GE(min_rndv,
                   ucp_ep_config(sender().ep())->tag.rndv_send_nbr.am_thresh);
-        EXPECT_EQ(min_rndv,
+        EXPECT_GE(min_rndv,
                   ucp_ep_config(sender().ep())->tag.rndv_send_nbr.rma_thresh);
     }
 }

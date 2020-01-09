@@ -1083,7 +1083,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
                                              size_t max_rndv_thresh)
 {
     ucp_context_h context = worker->context;
-    size_t rndv_thresh, rndv_nbr_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh, min_thresh;
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
@@ -1108,12 +1108,14 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
                                        rndv_thresh);
     }
 
+    min_thresh = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
+
     config->tag.rndv.am_thresh = ucp_ep_thresh(rndv_thresh,
-                                               min_rndv_thresh,
+                                               min_thresh,
                                                max_rndv_thresh);
 
     config->tag.rndv_send_nbr.am_thresh = ucp_ep_thresh(rndv_nbr_thresh,
-                                                        min_rndv_thresh,
+                                                        min_thresh,
                                                         max_rndv_thresh);
 
     ucs_trace("Active Message rndv threshold is %zu (send_nbr: %zu)",
@@ -1129,7 +1131,8 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     ucp_context_t *context = worker->context;
     ucp_lane_index_t lane  = lanes[0];
     ucp_rsc_index_t rsc_index;
-    size_t rndv_thresh, rndv_nbr_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh, min_thresh;
+    uct_iface_attr_t *iface_attr;
 
     if (lane == UCP_NULL_LANE) {
         ucs_debug("rendezvous (get_zcopy) protocol is not supported");
@@ -1140,6 +1143,8 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     if (rsc_index == UCP_NULL_RESOURCE) {
         return;
     }
+
+    iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
     if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         /* Disable RNDV */
@@ -1159,13 +1164,15 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                        rndv_thresh);
     }
 
+    min_thresh = ucs_max(iface_attr->cap.get.min_zcopy, min_rndv_thresh);
+
     /* TODO: need to check minimal PUT Zcopy */
     config->tag.rndv.rma_thresh = ucp_ep_thresh(rndv_thresh,
-                                                min_rndv_thresh,
+                                                min_thresh,
                                                 max_rndv_thresh);
 
     config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
-                                                         min_rndv_thresh,
+                                                         min_thresh,
                                                          max_rndv_thresh);
 
     ucs_trace("rndv threshold is %zu (send_nbr: %zu)",
