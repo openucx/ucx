@@ -386,7 +386,7 @@ enum {
 
 struct ucp_wireup_sockaddr_data {
     uintptr_t                 ep_ptr;        /**< Endpoint pointer */
-    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
+    uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SA_DATA_xx */

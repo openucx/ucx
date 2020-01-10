@@ -82,6 +82,20 @@ out:
     return status;
 }
 
+static void ucp_cm_priv_data_pack(ucp_wireup_sockaddr_data_t *sa_data,
+                                  ucp_ep_h ep, ucp_rsc_index_t dev_index,
+                                  const ucp_address_t *addr, size_t addr_size)
+{
+    ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
+    ucs_assert(dev_index != UCP_NULL_RESOURCE);
+
+    sa_data->ep_ptr    = (uintptr_t)ep;
+    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
+    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
+    sa_data->dev_index = dev_index;
+    memcpy(sa_data + 1, addr, addr_size);
+}
+
 static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
                                           void *priv_data)
 {
@@ -189,12 +203,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
         goto free_addr;
     }
 
-    sa_data->ep_ptr    = (uintptr_t)ep;
-    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
-    sa_data->dev_index = dev_index;
-    ucs_assert(sa_data->dev_index != UCP_NULL_RESOURCE);
-    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+    ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
 
 free_addr:
     ucs_free(ucp_addr);
@@ -654,6 +663,7 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
     void* ucp_addr;
     size_t ucp_addr_size;
     ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t dev_index;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -685,12 +695,8 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
 
     rsc_index = ucs_ffs64_safe(tl_bitmap);
     ucs_assert(rsc_index != UCP_NULL_RESOURCE);
-
-    sa_data->ep_ptr    = (uintptr_t)ep;
-    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
-    sa_data->dev_index = worker->context->tl_rscs[rsc_index].dev_index;
-    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+    dev_index = worker->context->tl_rscs[rsc_index].dev_index;
+    ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
 
 free_addr:
     ucs_free(ucp_addr);

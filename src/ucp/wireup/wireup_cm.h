@@ -32,9 +32,6 @@ unsigned ucp_cm_ep_init_flags(const ucp_worker_h worker,
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            ucp_conn_request_h conn_request);
 
-unsigned
-ucp_cm_ep_init_flags(const ucp_worker_h worker, const ucp_ep_params_t *params);
-
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
                                             const ucp_ep_params_t *params);
 

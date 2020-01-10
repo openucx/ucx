@@ -517,6 +517,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     conn_priv_len = sizeof(*sa_data) + address_length;
 
     /* pack client data */
+    ucs_assert((int)ucp_ep_config(ucp_ep)->key.err_mode <= UINT8_MAX);
     sa_data->err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
     sa_data->ep_ptr    = (uintptr_t)ucp_ep;
     sa_data->dev_index = UCP_NULL_RESOURCE; /* Not used */
