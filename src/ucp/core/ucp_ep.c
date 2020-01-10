@@ -20,6 +20,7 @@
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/tag/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucs/datastruct/queue.h>
@@ -1072,12 +1073,24 @@ static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
     ucs_assert(*max_short >= -1);
 }
 
-static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr_t *iface_attr,
-                                             uct_md_attr_t *md_attr, ucp_ep_config_t *config,
+/* With tag offload, SW RNDV requests are temporarily stored in the receiver
+ * user buffer when matched. Thus, minimum message size allowed to be sent with
+ * RNDV protocol should be bigger than maximal possible SW RNDV request
+ * (i.e. header plus packed keys size). */
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config)
+{
+    return sizeof(ucp_rndv_rts_hdr_t) + config->tag.rndv.rkey_size;
+}
+
+static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
+                                             uct_iface_attr_t *iface_attr,
+                                             uct_md_attr_t *md_attr,
+                                             ucp_ep_config_t *config,
+                                             size_t min_rndv_thresh,
                                              size_t max_rndv_thresh)
 {
     ucp_context_h context = worker->context;
-    size_t rndv_thresh, rndv_nbr_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh, min_thresh;
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
@@ -1102,12 +1115,14 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
                                        rndv_thresh);
     }
 
+    min_thresh = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
+
     config->tag.rndv.am_thresh = ucp_ep_thresh(rndv_thresh,
-                                               iface_attr->cap.am.min_zcopy,
+                                               min_thresh,
                                                max_rndv_thresh);
 
     config->tag.rndv_send_nbr.am_thresh = ucp_ep_thresh(rndv_nbr_thresh,
-                                                        iface_attr->cap.am.min_zcopy,
+                                                        min_thresh,
                                                         max_rndv_thresh);
 
     ucs_trace("Active Message rndv threshold is %zu (send_nbr: %zu)",
@@ -1117,12 +1132,13 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                           ucp_ep_config_t *config,
                                           ucp_lane_index_t *lanes,
+                                          size_t min_rndv_thresh,
                                           size_t max_rndv_thresh)
 {
     ucp_context_t *context = worker->context;
     ucp_lane_index_t lane  = lanes[0];
     ucp_rsc_index_t rsc_index;
-    size_t rndv_thresh, rndv_nbr_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh, min_thresh;
     uct_iface_attr_t *iface_attr;
 
     if (lane == UCP_NULL_LANE) {
@@ -1155,13 +1171,15 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                        rndv_thresh);
     }
 
+    min_thresh = ucs_max(iface_attr->cap.get.min_zcopy, min_rndv_thresh);
+
     /* TODO: need to check minimal PUT Zcopy */
     config->tag.rndv.rma_thresh = ucp_ep_thresh(rndv_thresh,
-                                                iface_attr->cap.get.min_zcopy,
+                                                min_thresh,
                                                 max_rndv_thresh);
 
     config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
-                                                         iface_attr->cap.get.min_zcopy,
+                                                         min_thresh,
                                                          max_rndv_thresh);
 
     ucs_trace("rndv threshold is %zu (send_nbr: %zu)",
@@ -1278,6 +1296,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     size_t it;
     size_t max_rndv_thresh;
     size_t max_am_rndv_thresh;
+    size_t min_rndv_thresh;
+    size_t min_am_rndv_thresh;
     ucs_status_t status;
     double rndv_max_bw;
     int i;
@@ -1325,6 +1345,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->am_u.reply_proto            = &ucp_am_reply_proto;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
+    min_am_rndv_thresh                  = 0;
 
     config->tag.offload.max_eager_short.memtype_on   = -1;
     config->tag.offload.max_eager_short.memtype_off  = -1;
@@ -1400,13 +1421,15 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
                                      iface_attr->cap.tag.eager.max_bcopy);
 
-            config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
-            config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
-            config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
-            config->tag.proto                   = &ucp_tag_offload_proto;
-            config->tag.lane                    = lane;
-            max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
-            max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
+            config->tag.offload.max_rndv_iov   = iface_attr->cap.tag.rndv.max_iov;
+            config->tag.offload.max_rndv_zcopy = iface_attr->cap.tag.rndv.max_zcopy;
+            config->tag.sync_proto             = &ucp_tag_offload_sync_proto;
+            config->tag.proto                  = &ucp_tag_offload_proto;
+            config->tag.lane                   = lane;
+            max_rndv_thresh                    = iface_attr->cap.tag.eager.max_zcopy;
+            max_am_rndv_thresh                 = iface_attr->cap.tag.eager.max_bcopy;
+            min_rndv_thresh                    = ucp_ep_tag_offload_min_rndv_thresh(config);
+            min_am_rndv_thresh                 = min_rndv_thresh;
 
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
@@ -1415,7 +1438,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 /* Must have active messages for using rendezvous */
                 tag_lanes[0] = lane;
                 ucp_ep_config_set_rndv_thresh(worker, config, tag_lanes,
-                                              max_rndv_thresh);
+                                              min_rndv_thresh, max_rndv_thresh);
             }
 
             /* Max Eager short has to be set after Zcopy and RNDV thresholds */
@@ -1452,11 +1475,14 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                  * tag-matching protocols */
                 /* TODO: set threshold level based on all available lanes */
 
-                config->tag.eager = config->am;
-                config->tag.lane  = lane;
+                config->tag.eager  = config->am;
+                config->tag.lane   = lane;
+                min_rndv_thresh    = iface_attr->cap.get.min_zcopy;
+                min_am_rndv_thresh = iface_attr->cap.am.min_zcopy;
 
                 ucp_ep_config_set_rndv_thresh(worker, config,
                                               config->key.rma_bw_lanes,
+                                              min_rndv_thresh,
                                               max_rndv_thresh);
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
@@ -1468,6 +1494,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             /* Calculate rndv threshold for AM Rendezvous, which may be used by
              * any tag-matching protocol (AM and offload). */
             ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
+                                             min_am_rndv_thresh,
                                              max_am_rndv_thresh);
         } else {
             /* Stub endpoint */

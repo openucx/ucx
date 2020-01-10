@@ -305,6 +305,20 @@ UCS_TEST_P(test_ucp_tag_offload, connect)
     e->connect(&receiver(), get_ep_params());
 }
 
+UCS_TEST_P(test_ucp_tag_offload, small_rndv, "RNDV_THRESH=0", "TM_THRESH=0")
+{
+    activate_offload(sender());
+    send_recv(sender(), 0x11ul, 0ul);
+    send_recv(sender(), 0x11ul, 1ul);
+}
+
+UCS_TEST_P(test_ucp_tag_offload, small_sw_rndv, "RNDV_THRESH=0", "TM_THRESH=0",
+                                                "TM_SW_RNDV=y")
+{
+    activate_offload(sender());
+    send_recv(sender(), 0x11ul, 0ul);
+    send_recv(sender(), 0x11ul, 1ul);
+}
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload)
 

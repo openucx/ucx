@@ -381,6 +381,20 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0
               ucp_ep_config(sender().ep())->tag.rndv_send_nbr.am_thresh);
     EXPECT_LE(max_short,
               ucp_ep_config(sender().ep())->tag.rndv_send_nbr.rma_thresh);
+
+    if (m_test_offload) {
+        // There is a lower bound for rndv threshold with tag offload. We should
+        // not send messages smaller than SW RNDV request size, because receiver
+        // may temporarily store this request in the user buffer (which will
+        // result in crash if the request does not fit user buffer).
+        size_t min_rndv = ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config(sender().ep()));
+
+        EXPECT_GT(min_rndv, 0ul); // min_rndv should be RTS size at least
+        EXPECT_GE(min_rndv,
+                  ucp_ep_config(sender().ep())->tag.rndv_send_nbr.am_thresh);
+        EXPECT_GE(min_rndv,
+                  ucp_ep_config(sender().ep())->tag.rndv_send_nbr.rma_thresh);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH=0") {
