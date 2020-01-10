@@ -68,7 +68,7 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     }
 
     if (lane == UCP_NULL_LANE) {
-        ucs_fatal("ep %p to %s: could not fine a lane to send CONN_%s%s",
+        ucs_fatal("ep %p to %s: could not find a lane to send CONN_%s%s",
                   ep, ucp_ep_peer_name(ep), ucp_wireup_msg_str(msg_type),
                   context->config.ext.unified_mode ?
                   ". try to set UCX_UNIFIED_MODE=n." : "");
