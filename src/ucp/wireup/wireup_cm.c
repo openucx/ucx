@@ -281,6 +281,21 @@ out:
     return 1;
 }
 
+static ucs_status_t
+ucp_cm_remote_data_check(const uct_cm_remote_data_t *remote_data)
+{
+    if (ucs_test_all_flags(remote_data->field_mask,
+                           UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
+                           UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
+                           UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
+                           UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
+        return UCS_OK;
+    }
+
+    ucs_error("incompatible client server connection establishment protocol");
+    return UCS_ERR_UNSUPPORTED;
+}
+
 /*
  * Async callback on a client side which notifies that server is connected.
  */
@@ -297,13 +312,8 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
         goto err_out;
     }
 
-    if (!ucs_test_all_flags(remote_data->field_mask,
-                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
-                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
-                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
-                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
-        ucs_error("incompatible client server connection establishment protocol");
-        status = UCS_ERR_UNSUPPORTED;
+    status = ucp_cm_remote_data_check(remote_data);
+    if (status != UCS_OK) {
         goto err_out;
     }
 
@@ -447,6 +457,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     }
 
     UCS_ASYNC_UNBLOCK(async);
+    ucs_free(progress_arg);
     return 1;
 }
 
@@ -533,6 +544,7 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
                   conn_request, ucs_status_string(status));
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
+    ucs_free(conn_request->remote_dev_addr);
     ucs_free(conn_request);
     return 1;
 }
@@ -546,6 +558,11 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
     ucp_conn_request_h ucp_conn_request;
     ucs_status_t status;
+
+    status = ucp_cm_remote_data_check(remote_data);
+    if (status != UCS_OK) {
+        goto err_reject;
+    }
 
     ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
                                   remote_data->conn_priv_data_length,
@@ -807,6 +824,7 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
     request->status  = UCS_OK;
     request->flags   = 0;
     request->send.ep = ep;
+    request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
 
     return request;
 }

@@ -294,19 +294,21 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
     key.num_lanes             = 1;
+    /* all operations will use the first lane, which is a stub endpoint before
+     * reconfiguration */
+    key.am_lane = 0;
     if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
-        key.cm_lane           = 0;
+        key.cm_lane = 0;
     } else {
-        /* all operations will use the first lane, which is a stub endpoint */
-        key.wireup_lane       = 0;
-        key.am_lane           = 0;
+        key.wireup_lane = 0;
     }
+
     status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    ep->am_lane = key.wireup_lane;
+    ep->am_lane = key.am_lane;
     ep->flags  |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
@@ -545,7 +547,11 @@ out:
         }
     }
 
-    ucs_free(params->conn_request);
+    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+        ucs_free(conn_request->remote_dev_addr);
+    }
+
+    ucs_free(conn_request);
 
     if (status == UCS_OK) {
         *ep_p = ep;
