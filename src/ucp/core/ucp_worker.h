@@ -153,7 +153,7 @@ enum {
     ({ \
         ucp_mem_desc_t *rdesc = ucs_mpool_get_inline((_mp)); \
         if (rdesc != NULL) { \
-            VALGRIND_MAKE_MEM_DEFINED(rdesc, (_mp)->data->elem_size - sizeof(ucs_mpool_elem_t)); \
+            VALGRIND_MAKE_MEM_DEFINED(rdesc, sizeof(*rdesc)); \
         } \
         rdesc; \
     })
