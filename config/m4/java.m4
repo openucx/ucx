@@ -77,5 +77,6 @@ AC_SUBST([JDK], [${java_dir}])
 AM_CONDITIONAL([HAVE_JAVA], [test "x$java_happy" != "xno"])
 #Set MVN according to whether user has Java and Maven or not
 AM_COND_IF([HAVE_JAVA],
-           [AC_SUBST([MVN], ["mvn"])]
+           [AC_SUBST([MVN], ["mvn"]),
+           build_bindings="${build_bindings}:java"]
           )

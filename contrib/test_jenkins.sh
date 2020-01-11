@@ -339,7 +339,7 @@ build_release_pkg() {
 		dpkg-buildpackage -us -uc
 	else
 		echo "==== Build RPM ===="
-		../contrib/buildrpm.sh -s -b --nodeps
+		../contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
 	fi
 
 	# check that UCX version is present in spec file
@@ -1132,12 +1132,14 @@ test_jucx() {
                         echo "Running standalone benchamrk on $iface"
 
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+                                -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
 			         -cp "bindings/java/src/main/native/build-java/*" \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+				 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
 			         -cp "bindings/java/src/main/native/build-java/*"  \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
