@@ -21,6 +21,9 @@
 
 #define UCT_TCP_CONFIG_PREFIX                 "TCP_"
 
+/* Magic number that is used by TCP to identify its peers */
+#define UCT_TCP_MAGIC_NUMBER                  0xCAFEBABE12345678lu
+
 /* Maximum number of events to wait on event set */
 #define UCT_TCP_MAX_EVENTS                    16
 
@@ -71,9 +74,13 @@ typedef enum uct_tcp_ep_conn_state {
      * After it is done, it sends `UCT_TCP_CM_CONN_REQ` to the peer.
      * All AM operations return `UCS_ERR_NO_RESOURCE` error to a caller. */
     UCT_TCP_EP_CONN_STATE_CONNECTING,
+    /* EP is receiving the magic number in order to verify a peer. EP is moved
+     * to this state after accept() completed. */
+    UCT_TCP_EP_CONN_STATE_RECV_MAGIC_NUMBER,
     /* EP is accepting connection from a peer, i.e. accept() returns socket fd
      * on which a connection was accepted, this EP was created using this socket
-     * and now it is waiting for `UCT_TCP_CM_CONN_REQ` from a peer. */
+     * fd and the magic number was received and verified by EP and now it is
+     * waiting for `UCT_TCP_CM_CONN_REQ` from a peer. */
     UCT_TCP_EP_CONN_STATE_ACCEPTING,
     /* EP is waiting for `UCT_TCP_CM_CONN_ACK` message from a peer after sending
      * `UCT_TCP_CM_CONN_REQ`.
@@ -129,6 +136,7 @@ KHASH_INIT(uct_tcp_cm_eps, struct sockaddr_in, ucs_list_link_t*,
 typedef struct uct_tcp_cm_state {
     const char            *name;       /* CM state name */
     uct_tcp_ep_progress_t tx_progress; /* TX progress function */
+    uct_tcp_ep_progress_t rx_progress; /* RX progress function */
 } uct_tcp_cm_state_t;
 
 
@@ -353,8 +361,6 @@ void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
-unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep);
-
 void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove);
 
 void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
@@ -408,12 +414,6 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
-
-static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
-{
-    return uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
-}
-
 
 /**
  * Query for active network devices under /sys/class/net, as determined by
