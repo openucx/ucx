@@ -14,6 +14,10 @@ extern "C" {
 #include <ucp/tag/tag_match.h>
 }
 
+#define UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx, "dc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx, "rc_x")
+
 class test_ucp_tag_offload : public test_ucp_tag {
 public:
     test_ucp_tag_offload() {
@@ -320,7 +324,7 @@ UCS_TEST_P(test_ucp_tag_offload, small_sw_rndv, "RNDV_THRESH=0", "TM_THRESH=0",
     send_recv(sender(), 0x11ul, 1ul);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload)
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload)
 
 
 class test_ucp_tag_offload_multi : public test_ucp_tag_offload {
@@ -495,7 +499,7 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_selection);
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_selection);
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_selection, self_rcx,
                               "self,rc_x");
 
@@ -716,7 +720,7 @@ UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
 }
 
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_stats)
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_stats)
 
 
 class test_ucp_tag_offload_stats_cuda : public test_ucp_tag_offload_stats {
