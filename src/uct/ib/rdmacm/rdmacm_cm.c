@@ -280,7 +280,7 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
                                              UCS_SOCKADDR_STRING_LEN));
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
-    cep->disconnect_cb(&cep->super.super, cep->user_data);
+    cep->super.disconnect_cb(&cep->super.super.super, cep->super.user_data);
 }
 
 static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)

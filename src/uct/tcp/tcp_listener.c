@@ -4,7 +4,8 @@
 * See file LICENSE for terms.
 */
 
-#include "tcp_listener.h"
+#include "tcp_sockcm_ep.h"
+
 #include <ucs/sys/sock.h>
 #include <ucs/async/async.h>
 
@@ -15,62 +16,70 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr_storage client_addr;
     ucs_async_context_t *async_ctx;
-    uct_tcp_sa_arg_t *sa_arg_ctx;
+    uct_tcp_sockcm_ep_t *ep;
+    uct_ep_params_t params;
     ucs_status_t status;
     socklen_t addrlen;
-    int accept_fd;
+    int conn_fd;
 
     ucs_assert(fd == listener->listen_fd);
-
-    async_ctx = listener->super.cm->iface.worker->async;
 
     addrlen   = sizeof(struct sockaddr_storage);
     status    = ucs_socket_accept(listener->listen_fd,
                                   (struct sockaddr*)&client_addr,
-                                  &addrlen, &accept_fd);
+                                  &addrlen, &conn_fd);
     if (status != UCS_OK) {
         return;
     }
 
-    ucs_assert(accept_fd != -1);
+    ucs_assert(conn_fd != -1);
 
-    ucs_trace("server accepted a connection request from client %s",
-              ucs_sockaddr_str((struct sockaddr*)&client_addr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN));
+    ucs_trace("server accepted a connection request (fd=%d) from client %s",
+              conn_fd, ucs_sockaddr_str((struct sockaddr*)&client_addr,
+                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     /* Set the accept_fd to non-blocking mode
      * (so that send/recv won't be blocking) */
-    status = ucs_sys_fcntl_modfl(accept_fd, O_NONBLOCK, 0);
+    status = ucs_sys_fcntl_modfl(conn_fd, O_NONBLOCK, 0);
     if (status != UCS_OK) {
         goto err;
     }
 
-    sa_arg_ctx = ucs_malloc(sizeof(uct_tcp_sa_arg_t), "accept sa_arg_ctx");
-    if (sa_arg_ctx == NULL) {
-        ucs_error("failed to allocate memory for a listen_ctx");
+    params.field_mask        = UCT_EP_PARAM_FIELD_CM               |
+                               UCT_EP_PARAM_FIELD_CONN_REQUEST     |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS;
+    params.cm                = listener->super.cm;
+    params.conn_request      = NULL;
+    params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
+
+    status = UCS_CLASS_NEW(uct_tcp_sockcm_ep_t, &ep, &params);
+    if (status != UCS_OK) {
+        ucs_error("failed to create a new tcp_sockcm ep");
         goto err;
     }
 
-    sa_arg_ctx->fd = accept_fd;
+    /* coverity[uninit_use] */
+    ep->fd = conn_fd;
 
-    /* Adding the arg to a list on the cm for cleanup purposes */
-    ucs_list_add_tail(&listener->sockcm->sa_arg_list, &sa_arg_ctx->list);
+    /* Adding the ep to a list on the cm for cleanup purposes */
+    ucs_list_add_tail(&listener->sockcm->ep_list, &ep->list);
 
-    status = ucs_async_set_event_handler(async_ctx->mode, accept_fd,
+    async_ctx = listener->super.cm->iface.worker->async;
+    status = ucs_async_set_event_handler(async_ctx->mode, conn_fd,
                                          UCS_EVENT_SET_EVREAD |
                                          UCS_EVENT_SET_EVERR,
                                          uct_tcp_sa_data_handler,
-                                         sa_arg_ctx, async_ctx);
+                                         ep, async_ctx);
     if (status != UCS_OK) {
-        goto err_free_ctx;
+        goto err_delete_ep;
     }
 
     return;
 
-err_free_ctx:
-    ucs_free(sa_arg_ctx);
+err_delete_ep:
+    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 err:
-    close(accept_fd);
+    close(conn_fd);
 }
 
 UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
