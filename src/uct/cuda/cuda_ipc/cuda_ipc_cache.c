@@ -102,7 +102,8 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
               cache->name, from, to);
 }
 
-ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, void *mapped_addr)
+ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr,
+                                          void *mapped_addr, int cache_enabled)
 {
     uct_cuda_ipc_cache_t *cache = (uct_cuda_ipc_cache_t *) rem_cache;
     ucs_status_t status         = UCS_OK;
@@ -120,7 +121,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, voi
     /*
      * check refcount to see if an in-flight transfer is using the same mapping
      */
-    if (!region->refcount) {
+    if (!region->refcount && !cache_enabled) {
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
             ucs_error("failed to remove address:%p from cache (%s)",
@@ -135,7 +136,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr, voi
     return status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_cache_map_memhandle,
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                  (arg, key, mapped_addr),
                  void *arg, uct_cuda_ipc_key_t *key, void **mapped_addr)
 {

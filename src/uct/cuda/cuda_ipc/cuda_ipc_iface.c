@@ -205,7 +205,8 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
 
         status = iface->unmap_memhandle(cuda_ipc_event->cache,
                                         cuda_ipc_event->d_bptr,
-                                        cuda_ipc_event->mapped_addr);
+                                        cuda_ipc_event->mapped_addr,
+                                        iface->config.enable_cache);
         if (status != UCS_OK) {
             ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
         }
@@ -374,12 +375,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->config.max_poll     = config->max_poll;
     self->config.enable_cache = config->enable_cache;
 
-    self->map_memhandle   = uct_cuda_ipc_cache_map_memhandle;
-    if (self->config.enable_cache) {
-        self->unmap_memhandle = ucs_empty_function_return_success;
-    } else {
-        self->unmap_memhandle = uct_cuda_ipc_unmap_memhandle;
-    }
+    self->map_memhandle   = uct_cuda_ipc_map_memhandle;
+    self->unmap_memhandle = uct_cuda_ipc_unmap_memhandle;
 
     status = ucs_mpool_init(&self->event_desc,
                             0,

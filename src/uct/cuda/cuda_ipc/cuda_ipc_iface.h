@@ -45,7 +45,7 @@ typedef struct uct_cuda_ipc_iface {
     ucs_status_t     (*map_memhandle)(void *context, uct_cuda_ipc_key_t *key,
                                       void **map_addr);
     ucs_status_t     (*unmap_memhandle)(void *rem_cache, uintptr_t d_bptr,
-                                        void *mapped_addr);
+                                        void *mapped_addr, int cache_enabled);
 } uct_cuda_ipc_iface_t;
 
 
