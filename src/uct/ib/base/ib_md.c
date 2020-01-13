@@ -30,9 +30,6 @@
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
-/* define string to use it in debug messages */
-#define UCT_IB_MD_PCI_DATA_PATH_FMT "/sys/class/infiniband/%s/device/%s"
-
 typedef struct uct_ib_md_pci_info {
     double      bw;       /* bandwidth */
     uint16_t    payload;  /* payload used to data transfer */
@@ -1309,19 +1306,21 @@ static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
     ssize_t len;
     size_t i;
 
-    len = ucs_read_file(pci_width_str, sizeof(pci_width_str) - 1, 1, UCT_IB_MD_PCI_DATA_PATH_FMT,
-                        ib_device->name, pci_width_file_name);
+    len = ucs_read_file(pci_width_str, sizeof(pci_width_str) - 1, 1,
+                        UCT_IB_DEVICE_SYSFS_FMT, ib_device->name,
+                        pci_width_file_name);
     if (len < 1) {
-        ucs_debug("failed to read file: " UCT_IB_MD_PCI_DATA_PATH_FMT,
+        ucs_debug("failed to read file: " UCT_IB_DEVICE_SYSFS_FMT,
                   ib_device->name, pci_width_file_name);
         return DBL_MAX; /* failed to read file */
     }
     pci_width_str[len] = '\0';
 
-    len = ucs_read_file(pci_speed_str, sizeof(pci_speed_str) - 1, 1, UCT_IB_MD_PCI_DATA_PATH_FMT,
-                        ib_device->name, pci_speed_file_name);
+    len = ucs_read_file(pci_speed_str, sizeof(pci_speed_str) - 1, 1,
+                        UCT_IB_DEVICE_SYSFS_FMT, ib_device->name,
+                        pci_speed_file_name);
     if (len < 1) {
-        ucs_debug("failed to read file: " UCT_IB_MD_PCI_DATA_PATH_FMT,
+        ucs_debug("failed to read file: " UCT_IB_DEVICE_SYSFS_FMT,
                   ib_device->name, pci_speed_file_name);
         return DBL_MAX; /* failed to read file */
     }
