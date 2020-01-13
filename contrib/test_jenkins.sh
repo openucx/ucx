@@ -26,7 +26,7 @@ WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda10.1"
 GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
-ROCM_MODULE="dev/rocm-3.0"
+ROCM_MODULE="dev/rocm"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -1001,7 +1001,7 @@ run_ucx_perftest() {
 		fi
 
 		# Specifically test cuda_ipc for large message sizes
-	        cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
+	        cat $ucx_inst_ptest/test_types_ucp | grep -Ev "cuda|rocm" | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
 		ucp_test_args_large="-b $ucx_inst_ptest/test_types_cuda_ucp \
 			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
 		if [ $with_mpi -eq 1 ]
@@ -1081,7 +1081,7 @@ run_ucx_perftest() {
 		fi
 
 		# Specifically test rocm_ipc for large message sizes
-	        cat $ucx_inst_ptest/test_types_ucp | grep -v rocm | sort -R > $ucx_inst_ptest/test_types_rocm_ucp
+	        cat $ucx_inst_ptest/test_types_ucp | grep -Ev "cuda|rocm" | sort -R > $ucx_inst_ptest/test_types_rocm_ucp
 		ucp_test_args_large="-b $ucx_inst_ptest/test_types_rocm_ucp \
 			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
 		if [ $with_mpi -eq 1 ]
