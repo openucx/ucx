@@ -17,7 +17,7 @@
 
 Name: ucx
 Version: @VERSION@
-Release: 1%{?dist}
+Release: 1%{?dist}%{?devel:.devel}
 Summary: UCX is a communication library implementing high-performance messaging
 Group: System Environment/Libraries
 
@@ -94,10 +94,10 @@ Provides header files and examples for developing with UCX.
 %define _with_arg()   %{expand:%%{?with_%{1}:--with-%{2}}%%{!?with_%{1}:--without-%{2}}}
 %define _enable_arg() %{expand:%%{?with_%{1}:--enable-%{2}}%%{!?with_%{1}:--disable-%{2}}}
 %configure --disable-optimizations \
-           --disable-logging \
-           --disable-debug \
-           --disable-assertions \
-           --disable-params-check \
+           %{!?devel:--disable-logging} \
+           %{!?devel:--disable-debug} \
+           %{!?devel:--disable-assertions} \
+           %{!?devel:--disable-params-check} \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
