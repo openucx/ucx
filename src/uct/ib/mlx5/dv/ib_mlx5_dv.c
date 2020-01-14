@@ -37,10 +37,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = &md->super.dev;
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_in)] = {};
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_qp_out)] = {};
-    uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
-    uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_in)]           = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)]         = {};
+    char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
+    char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_cq dvscq = {};
@@ -243,8 +243,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state)
 {
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(modify_qp_in)] = {};
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(modify_qp_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(modify_qp_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(modify_qp_out)] = {};
 
     switch (state) {
     case IBV_QPS_ERR:

@@ -14,8 +14,8 @@
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_in)]   = {};
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_dct_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
     struct mlx5dv_pd dvpd   = {};
     struct mlx5dv_cq dvcq   = {};
     struct mlx5dv_srq dvsrq = {};
@@ -82,12 +82,12 @@ ucs_status_t
 uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                                    uct_ib_mlx5_qp_t *qp)
 {
-    uint32_t in_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_in)] = {};
-    uint32_t out_2init[UCT_IB_MLX5DV_ST_SZ_DW(rst2init_qp_out)] = {};
-    uint32_t in_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_in)] = {};
-    uint32_t out_2rtr[UCT_IB_MLX5DV_ST_SZ_DW(init2rtr_qp_out)] = {};
-    uint32_t in_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_in)] = {};
-    uint32_t out_2rts[UCT_IB_MLX5DV_ST_SZ_DW(rtr2rts_qp_out)] = {};
+    char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
+    char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
+    char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]    = {};
+    char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)]  = {};
+    char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]     = {};
+    char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]   = {};
     ucs_status_t status;
     void *qpc;
 
@@ -140,8 +140,8 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
 {
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_in)]   = {};
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(set_xrq_dc_params_entry_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_out)] = {};
     int ret;
 
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index, iface->super.super.super.pkey_index);

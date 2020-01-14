@@ -38,6 +38,11 @@ typedef enum ucs_memory_type {
  */
 extern const char *ucs_memory_type_names[];
 
+/**
+ * Array of string descriptions for each memory type
+ */
+extern const char *ucs_memory_type_descs[];
+
 
 END_C_DECLS
 

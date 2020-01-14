@@ -12,7 +12,6 @@
 #include "ucp_context.h"
 #include "ucp_thread.h"
 
-#include <ucp/proto/proto.h>
 #include <ucp/tag/tag_match.h>
 #include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>
@@ -113,6 +112,7 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_WILDCARD,
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_SW_PEND,
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NO_IFACE,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_MEM_REG,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV,

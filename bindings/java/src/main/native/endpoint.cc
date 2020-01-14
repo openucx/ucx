@@ -70,6 +70,11 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass c
         }
     }
 
+    if (ep_params.field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
+        field = env->GetFieldID(ucp_ep_params_class, "connectionRequest", "J");
+        ep_params.conn_request = reinterpret_cast<ucp_conn_request_h>(env->GetLongField(ucp_ep_params, field));
+    }
+
     ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLER;
     ep_params.err_handler.cb = error_handler;
 

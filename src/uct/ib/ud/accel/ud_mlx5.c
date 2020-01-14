@@ -32,11 +32,11 @@ static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
    ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
-  {"", "", NULL,
+  {"IB_", "", NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, mlx5_common),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
-  {"", "", NULL,
+  {"UD_", "", NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, ud_mlx5_common),
    UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
 

@@ -48,6 +48,7 @@ static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
     address = shmat(shmid, NULL, 0);
     if (address == MAP_FAILED) {
         ucs_error("shmat(shmid=%d) failed: %m", shmid);
+        *address_p = NULL; /* GCC 8.3.1 reports error without it */
         return UCS_ERR_SHMEM_SEGMENT;
     }
 

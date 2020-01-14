@@ -168,7 +168,8 @@ typedef struct ucx_perf_params {
     unsigned               thread_count;    /* Number of threads in the test program */
     ucs_async_mode_t       async_mode;      /* how async progress and locking is done */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
-    ucs_memory_type_t      mem_type;        /* memory type */
+    ucs_memory_type_t      send_mem_type;   /* Send memory type */
+    ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size

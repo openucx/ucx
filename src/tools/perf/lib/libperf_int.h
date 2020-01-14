@@ -221,7 +221,6 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
     return length;
 }
 
-
 END_C_DECLS
 
 #endif

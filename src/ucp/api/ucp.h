@@ -2792,11 +2792,11 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  * @e buffer.
  *
  * @param [in]  ep           Remote endpoint handle.
- * @param [in]  buffer       Pointer to the local source address.
+ * @param [in]  buffer       Pointer to the local destination address.
  * @param [in]  length       Length of the data (in bytes) stored under the
- *                           source address.
- * @param [in]  remote_addr  Pointer to the destination remote memory address
- *                           to write to.
+ *                           destination address.
+ * @param [in]  remote_addr  Pointer to the source remote memory address
+ *                           to read from.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address.
  *
@@ -2827,11 +2827,11 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
  * in order to guarantee re-usability of the source address @e buffer.
  *
  * @param [in]  ep           Remote endpoint handle.
- * @param [in]  buffer       Pointer to the local source address.
+ * @param [in]  buffer       Pointer to the local destination address.
  * @param [in]  length       Length of the data (in bytes) stored under the
- *                           source address.
- * @param [in]  remote_addr  Pointer to the destination remote memory address
- *                           to write to.
+ *                           destination address.
+ * @param [in]  remote_addr  Pointer to the source remote memory address
+ *                           to read from.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address.
  * @param [in]  cb           Call-back function that is invoked whenever the

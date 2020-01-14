@@ -39,7 +39,7 @@ noinst_HEADERS = \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
 	dt/dt_generic.h \
-	proto/proto.h \
+	proto/proto_am.h \
 	proto/proto_am.inl \
 	rma/rma.h \
 	rma/rma.inl \

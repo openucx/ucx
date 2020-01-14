@@ -223,8 +223,8 @@ typedef struct ucp_ep_config {
     struct {
         /* Protocols used for tag matching operations
          * (can be AM based or tag offload). */
-        const ucp_proto_t   *proto;
-        const ucp_proto_t   *sync_proto;
+        const ucp_request_send_proto_t   *proto;
+        const ucp_request_send_proto_t   *sync_proto;
 
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
@@ -277,13 +277,13 @@ typedef struct ucp_ep_config {
     struct {
         /* Protocols used for stream operations
          * (currently it's only AM based). */
-        const ucp_proto_t   *proto;
+        const ucp_request_send_proto_t   *proto;
     } stream;
     
     struct {
         /* Protocols used for am operations */
-        const ucp_proto_t *proto;
-        const ucp_proto_t *reply_proto;
+        const ucp_request_send_proto_t   *proto;
+        const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
 } ucp_ep_config_t;
@@ -386,10 +386,14 @@ enum {
 
 struct ucp_wireup_sockaddr_data {
     uintptr_t                 ep_ptr;        /**< Endpoint pointer */
-    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
+    uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
-                                                  UCP_WIREUP_SOCKADDR_CD_xx */
+                                                  UCP_WIREUP_SA_DATA_xx */
+    uint8_t                   dev_index;     /**< Device address index used to
+                                                  build remote address in
+                                                  UCP_WIREUP_SA_DATA_CM_ADDR
+                                                  mode */
     /* packed worker address follows */
 } UCS_S_PACKED;
 
@@ -491,5 +495,7 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 int ucp_ep_is_cm_local_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_local_disconnect_progress(void *arg);
+
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
 
 #endif

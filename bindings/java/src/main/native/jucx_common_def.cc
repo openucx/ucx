@@ -264,3 +264,24 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
     }
     return jucx_request;
 }
+
+
+void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
+{
+    jobject jucx_conn_handler = reinterpret_cast<jobject>(arg);
+
+    JNIEnv *env = get_jni_env();
+
+    // Construct connection request class instance
+    jclass conn_request_cls = env->FindClass("org/openucx/jucx/ucp/UcpConnectionRequest");
+    jmethodID conn_request_constructor = env->GetMethodID(conn_request_cls, "<init>", "(J)V");
+    jobject jucx_conn_request = env->NewObject(conn_request_cls, conn_request_constructor,
+                                               (native_ptr)conn_request);
+
+    // Call onConnectionRequest method
+    jclass jucx_conn_hndl_cls = env->FindClass("org/openucx/jucx/ucp/UcpListenerConnectionHandler");
+    jmethodID on_conn_request = env->GetMethodID(jucx_conn_hndl_cls, "onConnectionRequest",
+                                       "(Lorg/openucx/jucx/ucp/UcpConnectionRequest;)V");
+    env->CallVoidMethod(jucx_conn_handler, on_conn_request, jucx_conn_request);
+    env->DeleteGlobalRef(jucx_conn_handler);
+}

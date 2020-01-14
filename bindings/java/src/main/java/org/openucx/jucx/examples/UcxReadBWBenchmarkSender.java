@@ -31,42 +31,40 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
 
         UcpMemory memory = context.memoryMap(allocationParams);
+        resources.push(memory);
         ByteBuffer data = UcxUtils.getByteBufferView(memory.getAddress(),
             (int)Math.min(Integer.MAX_VALUE, totalSize));
 
         // Send worker and memory address and Rkey to receiver.
         ByteBuffer rkeyBuffer = memory.getRemoteKeyBuffer();
-        ByteBuffer workerAddress = worker.getAddress();
 
-        ByteBuffer sendData = ByteBuffer.allocateDirect(28 + rkeyBuffer.capacity() +
-            workerAddress.capacity());
+        // 24b = 8b buffer address + 8b buffer size + 4b rkeyBuffer size + 4b hashCode
+        ByteBuffer sendData = ByteBuffer.allocateDirect(24 + rkeyBuffer.capacity());
         sendData.putLong(memory.getAddress());
         sendData.putLong(totalSize);
         sendData.putInt(rkeyBuffer.capacity());
         sendData.put(rkeyBuffer);
-        sendData.putInt(workerAddress.capacity());
-        sendData.put(workerAddress);
         sendData.putInt(data.hashCode());
         sendData.clear();
 
+        // Send memory metadata and wait until receiver will finish benchmark.
         endpoint.sendTaggedNonBlocking(sendData, null);
-
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
         UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer,
             new UcxCallback() {
                 @Override
                 public void onSuccess(UcpRequest request) {
                     System.out.println("Received a message:");
-                    System.out.println(recvBuffer.asCharBuffer().toString());
+                    System.out.println(recvBuffer.asCharBuffer().toString().trim());
                 }
             });
 
         worker.progressRequest(recvRequest);
 
-        UcpRequest close = endpoint.closeNonBlockingFlush();
-        worker.progressRequest(close);
+        UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
+        worker.progressRequest(closeRequest);
+        resources.push(closeRequest);
 
-        memory.deregister();
         closeResources();
     }
 }

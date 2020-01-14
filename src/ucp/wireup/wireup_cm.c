@@ -82,6 +82,20 @@ out:
     return status;
 }
 
+static void ucp_cm_priv_data_pack(ucp_wireup_sockaddr_data_t *sa_data,
+                                  ucp_ep_h ep, ucp_rsc_index_t dev_index,
+                                  const ucp_address_t *addr, size_t addr_size)
+{
+    ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
+    ucs_assert(dev_index != UCP_NULL_RESOURCE);
+
+    sa_data->ep_ptr    = (uintptr_t)ep;
+    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
+    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
+    sa_data->dev_index = dev_index;
+    memcpy(sa_data + 1, addr, addr_size);
+}
+
 static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
                                           void *priv_data)
 {
@@ -89,6 +103,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
     ucp_ep_h ep                         = arg;
     ucp_worker_h worker                 = ep->worker;
     uct_cm_h cm                         = worker->cms[/*cm_idx = */ 0].cm;
+    ucp_rsc_index_t dev_index           = UCP_NULL_RESOURCE;
     ucp_ep_config_key_t key;
     uint64_t tl_bitmap;
     uct_ep_h tl_ep;
@@ -145,12 +160,17 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
             goto out;
         }
 
+        ucs_assert((dev_index == UCP_NULL_RESOURCE) ||
+                   (dev_index == worker->context->tl_rscs[rsc_idx].dev_index));
+        dev_index = worker->context->tl_rscs[rsc_idx].dev_index;
+
         tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_worker_is_tl_p2p(worker, rsc_idx)) {
             tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
             tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
             status = uct_ep_create(&tl_ep_params, &tl_ep);
             if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
                 goto out;
             }
 
@@ -184,10 +204,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg, const char *dev_name,
         goto free_addr;
     }
 
-    sa_data->ep_ptr    = (uintptr_t)ep;
-    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
-    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+    ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
 
 free_addr:
     ucs_free(ucp_addr);
@@ -201,6 +218,7 @@ out:
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
+    /* coverity[leaked_storage] */
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
@@ -234,7 +252,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     }
 
     for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
-        addr.address_list[addr_idx].dev_addr = progress_arg->dev_addr;
+        addr.address_list[addr_idx].dev_addr  = progress_arg->dev_addr;
+        addr.address_list[addr_idx].dev_index = progress_arg->sa_data->dev_index;
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -273,6 +292,21 @@ out:
     return 1;
 }
 
+static ucs_status_t
+ucp_cm_remote_data_check(const uct_cm_remote_data_t *remote_data)
+{
+    if (ucs_test_all_flags(remote_data->field_mask,
+                           UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
+                           UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
+                           UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
+                           UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
+        return UCS_OK;
+    }
+
+    ucs_error("incompatible client server connection establishment protocol");
+    return UCS_ERR_UNSUPPORTED;
+}
+
 /*
  * Async callback on a client side which notifies that server is connected.
  */
@@ -289,13 +323,8 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
         goto err_out;
     }
 
-    if (!ucs_test_all_flags(remote_data->field_mask,
-                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
-                            UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
-                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
-                            UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH)) {
-        ucs_error("incompatible client server connection establishment protocol");
-        status = UCS_ERR_UNSUPPORTED;
+    status = ucp_cm_remote_data_check(remote_data);
+    if (status != UCS_OK) {
         goto err_out;
     }
 
@@ -439,6 +468,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     }
 
     UCS_ASYNC_UNBLOCK(async);
+    ucs_free(progress_arg);
     return 1;
 }
 
@@ -525,6 +555,7 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
                   conn_request, ucs_status_string(status));
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
+    ucs_free(conn_request->remote_dev_addr);
     ucs_free(conn_request);
     return 1;
 }
@@ -538,6 +569,11 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
     ucp_conn_request_h ucp_conn_request;
     ucs_status_t status;
+
+    status = ucp_cm_remote_data_check(remote_data);
+    if (status != UCS_OK) {
+        goto err_reject;
+    }
 
     ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
                                   remote_data->conn_priv_data_length,
@@ -624,10 +660,12 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_ep_h ep                         = arg;
     ucp_worker_h worker                 = ep->worker;
-    uint64_t tl_bitmap                  = 0;
+    uint64_t tl_bitmap;
     uct_cm_attr_t cm_attr;
     void* ucp_addr;
     size_t ucp_addr_size;
+    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t dev_index;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -657,10 +695,10 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg, const char *dev_name,
         goto free_addr;
     }
 
-    sa_data->ep_ptr    = (uintptr_t)ep;
-    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
-    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+    rsc_index = ucs_ffs64_safe(tl_bitmap);
+    ucs_assert(rsc_index != UCP_NULL_RESOURCE);
+    dev_index = worker->context->tl_rscs[rsc_index].dev_index;
+    ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
 
 free_addr:
     ucs_free(ucp_addr);
@@ -794,6 +832,7 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
     request->status  = UCS_OK;
     request->flags   = 0;
     request->send.ep = ep;
+    request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
 
     return request;
 }

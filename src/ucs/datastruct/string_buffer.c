@@ -10,6 +10,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
+#include <string.h>
+#include <ctype.h>
 
 
 #define UCS_STRING_BUFFER_INITIAL_CAPACITY    32
@@ -104,6 +106,26 @@ ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
     ucs_assert(strb->buffer[strb->length] == '\0'); /* \0 is written by vsnprintf */
 
     return UCS_OK;
+}
+
+void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
+{
+    char *ptr;
+
+    ptr = &strb->buffer[strb->length];
+    while (strb->length > 0) {
+        --ptr;
+        if (((charset == NULL) && !isspace(*ptr)) ||
+            ((charset != NULL) && (strchr(charset, *ptr) == NULL))) {
+            /* if the last character should NOT be removed - stop */
+            break;
+        }
+
+        --strb->length;
+    }
+
+    /* mark the new end of string */
+    *(ptr + 1) = '\0';
 }
 
 const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)

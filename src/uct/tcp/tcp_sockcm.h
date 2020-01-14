@@ -7,29 +7,30 @@
 #include <uct/base/uct_cm.h>
 
 
-typedef struct uct_tcp_sa_arg {
-    int             fd;
-    ucs_list_link_t list;
-} uct_tcp_sa_arg_t;
+typedef struct uct_tcp_sockcm_ep   uct_tcp_sockcm_ep_t;
 
 
 /**
  * A TCP connection manager
  */
 typedef struct uct_tcp_sockcm {
-    uct_cm_t        super;
-    size_t          priv_data_len;
-    /** List of open file descriptors. One per client */
-    ucs_list_link_t sa_arg_list;
+    uct_cm_t            super;
+    size_t              priv_data_len;
+    ucs_list_link_t     ep_list;      /** List of endpoints */
 } uct_tcp_sockcm_t;
 
 /**
  * TCP SOCKCM configuration.
  */
 typedef struct uct_tcp_sockcm_config {
-    uct_cm_config_t super;
-    size_t          priv_data_len;
+    uct_cm_config_t     super;
+    size_t              priv_data_len;
 } uct_tcp_sockcm_config_t;
+
+
+typedef struct uct_tcp_sockcm_priv_data_hdr {
+    uint8_t             length;       /* length of the private data */
+} uct_tcp_sockcm_priv_data_hdr_t;
 
 extern ucs_config_field_t uct_tcp_sockcm_config_table[];
 

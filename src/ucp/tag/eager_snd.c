@@ -12,7 +12,6 @@
 #include "offload.h"
 
 #include <ucp/core/ucp_worker.h>
-#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 
 
@@ -195,16 +194,14 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
 
-const ucp_proto_t ucp_tag_eager_proto = {
+const ucp_request_send_proto_t ucp_tag_eager_proto = {
     .contig_short            = ucp_tag_eager_contig_short,
     .bcopy_single            = ucp_tag_eager_bcopy_single,
     .bcopy_multi             = ucp_tag_eager_bcopy_multi,
     .zcopy_single            = ucp_tag_eager_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_zcopy_multi,
     .zcopy_completion        = ucp_proto_am_zcopy_completion,
-    .only_hdr_size           = sizeof(ucp_eager_hdr_t),
-    .first_hdr_size          = sizeof(ucp_eager_first_hdr_t),
-    .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
+    .only_hdr_size           = sizeof(ucp_eager_hdr_t)
 };
 
 /* eager sync */
@@ -312,16 +309,14 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
                                  ucp_tag_eager_sync_zcopy_req_complete, 1);
 }
 
-const ucp_proto_t ucp_tag_eager_sync_proto = {
+const ucp_request_send_proto_t ucp_tag_eager_sync_proto = {
     .contig_short            = NULL,
     .bcopy_single            = ucp_tag_eager_sync_bcopy_single,
     .bcopy_multi             = ucp_tag_eager_sync_bcopy_multi,
     .zcopy_single            = ucp_tag_eager_sync_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_sync_zcopy_multi,
     .zcopy_completion        = ucp_tag_eager_sync_zcopy_completion,
-    .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t),
-    .first_hdr_size          = sizeof(ucp_eager_sync_first_hdr_t),
-    .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
+    .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t)
 };
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_flags)

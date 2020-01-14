@@ -13,16 +13,6 @@ class test_ucp_rma : public test_ucp_memheap {
 private:
     static void send_completion(void *request, ucs_status_t status){}
 public:
-    void init() {        
-        // TODO: need to investigate the slowness of the disabled tests
-        if ((GetParam().transports.front().compare("dc_x") == 0) &&
-            (GetParam().variant == UCP_MEM_MAP_NONBLOCK)) {
-            UCS_TEST_SKIP_R("skipping this test until the slowness is resolved");
-        }
-
-        ucp_test::init();
-    }
-
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_RMA;

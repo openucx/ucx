@@ -337,6 +337,19 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
 
 /**
+ * Extract the IP address from a given socket fd and return it as a string.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [out]  str         A string filled with the IP address.
+ * @param [in]   max_size    Size of a string (considering '\0'-terminated symbol)
+ *
+ * @return ip_str if the sock_addr has a valid IP address or 'Invalid address'
+ *         otherwise.
+ */
+const char *ucs_socket_getname_str(int fd, char *str, size_t max_size);
+
+
+/**
  * Return a value indicating the relationships between passed sockaddr structures.
  *
  * @param [in]     sa1        Pointer to sockaddr structure #1.

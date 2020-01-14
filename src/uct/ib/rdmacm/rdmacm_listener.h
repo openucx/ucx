@@ -4,7 +4,6 @@
 * See file LICENSE for terms.
 */
 
-#include <uct/base/uct_cm.h>
 #include "rdmacm_cm.h"
 
 /**

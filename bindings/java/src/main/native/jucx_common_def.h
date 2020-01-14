@@ -83,4 +83,6 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
  */
 jobject process_request(void *request, jobject callback);
 
+void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
+
 #endif
