@@ -88,6 +88,8 @@ ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
     req->send.amo.remote_addr = remote_addr;
     req->send.amo.rkey        = rkey;
     req->send.amo.value       = value;
+    /* for error handling request completion */
+    req->send.state.uct_comp.func = NULL;
 
     if (ucs_unlikely(loopback_ctx != NULL)) {
         req->send.amo.looback_ctx = ucs_malloc(sizeof(*loopback_ctx),
