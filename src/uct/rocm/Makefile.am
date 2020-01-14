@@ -4,15 +4,18 @@
 #
 
 if HAVE_ROCM
+if HAVE_HIP
 
 SUBDIRS = . gdr
 
 module_LTLIBRARIES      = libuct_rocm.la
-libuct_rocm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS)
-libuct_rocm_la_CFLAGS   = $(BASE_CFLAGS)
+libuct_rocm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS) $(HIP_CPPFLAGS)
+libuct_rocm_la_CFLAGS   = $(BASE_CFLAGS) $(ROCM_CFLAGS) $(HIP_CFLAGS)
 libuct_rocm_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
-libuct_rocm_la_LDFLAGS  = $(ROCM_LDFLAGS) $(ROCM_LIBS) -version-info $(SOVERSION)
+libuct_rocm_la_LDFLAGS  = $(ROCM_LDFLAGS) $(ROCM_LIBS) \
+						  $(HIP_LDFLAGS) $(HIP_LIBS) \
+						  -version-info $(SOVERSION)
 
 noinst_HEADERS = \
 	base/rocm_base.h
@@ -44,4 +47,5 @@ libuct_rocm_la_SOURCES += \
 
 include $(top_srcdir)/config/module.am
 
+endif
 endif
