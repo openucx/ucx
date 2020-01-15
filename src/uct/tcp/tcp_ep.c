@@ -807,6 +807,7 @@ static inline ucs_status_t
 uct_tcp_ep_put_rx_advance(uct_tcp_ep_t *ep, uct_tcp_ep_put_req_hdr_t *put_req,
                           size_t recv_length)
 {
+    ucs_assert(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK)));
     ucs_assert(recv_length <= put_req->length);
     put_req->addr   += recv_length;
     put_req->length -= recv_length;
@@ -843,6 +844,12 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
            copied_length);
     ep->rx.offset += copied_length;
     ep->rx.put_sn  = put_req->sn;
+
+    /* Remove the flag that indicates that EP is sending PUT RX ACK in order
+     * to not ack the uncompleted PUT RX operation for which PUT REQ is being
+     * handled here. ACK for both operations will be sent after the completion
+     * of the last received PUT operation */
+    ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK);
 
     status = uct_tcp_ep_put_rx_advance(ep, put_req, copied_length);
     if (status == UCS_OK) {
