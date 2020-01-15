@@ -39,7 +39,7 @@ static uct_cm_ops_t uct_tcp_sockcm_ops = {
     .listener_reject  = uct_tcp_listener_reject,
     .listener_query   = uct_tcp_listener_query,
     .listener_destroy = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_listener_t),
-    .ep_create        = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_ep_t)
+    .ep_create        = uct_tcp_sockcm_ep_create
 };
 
 static void uct_tcp_close_ep(uct_tcp_sockcm_ep_t *ep)
@@ -54,18 +54,12 @@ static void uct_tcp_close_ep(uct_tcp_sockcm_ep_t *ep)
 void uct_tcp_sa_data_handler(int fd, void *arg)
 {
     uct_tcp_sockcm_ep_t *ep = (uct_tcp_sockcm_ep_t*)arg;
+    ucs_status_t status;
 
     ucs_assertv(ep->fd == fd, "ep->fd %d fd %d, ep_state %d", ep->fd, fd, ep->state);
 
-    if (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) {
-        /* server side - the client disconnected and the server is waiting
-         * for EVREAD events */
-        uct_tcp_close_ep(ep);
-        return;
-    }
-
     if (!ucs_socket_is_connected(fd)) {
-        ucs_debug("fd %d is not connected", fd);
+        ucs_debug("fd %d is not connected. ep state: %d", fd, ep->state);
         /* coverity[check_return] */
         ucs_async_modify_handler(fd, 0);
         return;
@@ -73,14 +67,47 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
 
     switch (ep->state) {
     case UCT_TCP_SOCKCM_EP_ON_CLIENT:
-        /* connect() completed */
+        /* connect() completed, send data to the server */
         ep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
-        /* TODO: start sending the user's data */
 
-        ucs_async_remove_handler(ep->fd, 1);
-        close(ep->fd);
-        ep->fd = -1;
+        status = uct_tcp_sockcm_ep_send_priv_data(ep, 1);
+        if (status != UCS_OK) {
+            ucs_async_modify_handler(fd, 0);
+        }
         break;
+    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONNECTED |
+         UCT_TCP_SOCKCM_EP_SENDING:
+         /* can send, progress the sending */
+         status = uct_tcp_sockcm_ep_progress_send(ep, 1);
+         if (status != UCS_OK) {
+             ucs_async_modify_handler(fd, 0);
+         }
+         break;
+    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONNECTED |
+         UCT_TCP_SOCKCM_EP_SENDING   | UCT_TCP_SOCKCM_EP_DATA_SENT:
+         /* finished sending. TODO recv data from the server */
+         ucs_async_modify_handler(fd, 0);
+         break;
+    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONNECTED:
+        /* receive data from the client */
+        status = uct_tcp_sockcm_ep_recv(ep);
+        if (status != UCS_OK) {
+            uct_tcp_close_ep(ep);
+        }
+        break;
+    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONNECTED |
+         UCT_TCP_SOCKCM_EP_RECEIVING:
+         /* can read, progress the receving */
+         status = uct_tcp_sockcm_ep_progress_recv(ep);
+         if (status != UCS_OK) {
+             uct_tcp_close_ep(ep);
+         }
+         break;
+    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONNECTED |
+         UCT_TCP_SOCKCM_EP_RECEIVING | UCT_TCP_SOCKCM_EP_DATA_RECEIVED:
+         /* finished recv, can send. TODO send data to the client */
+         ucs_async_modify_handler(fd, 0);
+         break;
     default:
         ucs_error("unexpected event on client ep %p (state=%d)", ep, ep->state);
     }

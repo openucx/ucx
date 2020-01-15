@@ -92,4 +92,10 @@ UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params);
 
+void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
+                                 uct_cm_remote_data_t *remote_data,
+                                 ucs_status_t status);
+
+void uct_cm_ep_server_connect_cb(uct_cm_base_ep_t *cep, ucs_status_t status);
+
 #endif /* UCT_CM_H_ */

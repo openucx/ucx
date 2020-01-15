@@ -205,22 +205,34 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
     return UCS_OK;
 }
 
-int ucs_socket_is_connected(int fd)
+ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage *peer_addr)
 {
-    struct sockaddr_storage peer_addr = {0}; /* Suppress Clang false-positive */
-    char peer_str[UCS_SOCKADDR_STRING_LEN];
-    char local_str[UCS_SOCKADDR_STRING_LEN];
     socklen_t peer_addr_len;
     int ret;
 
-    peer_addr_len = sizeof(peer_addr);
-    ret           = getpeername(fd, (struct sockaddr*)&peer_addr,
+    peer_addr_len = sizeof(*peer_addr);
+    ret           = getpeername(fd, (struct sockaddr*)peer_addr,
                                 &peer_addr_len);
     if (ret < 0) {
         if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
             ucs_error("getpeername(fd=%d) failed: %m", fd);
         }
 
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+int ucs_socket_is_connected(int fd)
+{
+    struct sockaddr_storage peer_addr = {0}; /* Suppress Clang false-positive */
+    char peer_str[UCS_SOCKADDR_STRING_LEN];
+    char local_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    status = ucs_socket_getpeername(fd, &peer_addr);
+    if (status != UCS_OK) {
         return 0;
     }
 

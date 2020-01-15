@@ -45,6 +45,7 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
         goto err;
     }
 
+    /* create the server's endpoint here. uct_ep_create() will return this one */
     params.field_mask        = UCT_EP_PARAM_FIELD_CM               |
                                UCT_EP_PARAM_FIELD_CONN_REQUEST     |
                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS;
@@ -59,7 +60,9 @@ static void uct_tcp_listener_conn_req_handler(int fd, void *arg)
     }
 
     /* coverity[uninit_use] */
-    ep->fd = conn_fd;
+    ep->fd       = conn_fd;
+    ep->state   |= UCT_TCP_SOCKCM_EP_CONNECTED;
+    ep->listener = listener;
 
     /* Adding the ep to a list on the cm for cleanup purposes */
     ucs_list_add_tail(&listener->sockcm->ep_list, &ep->list);

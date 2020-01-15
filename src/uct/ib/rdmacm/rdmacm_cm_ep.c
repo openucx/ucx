@@ -30,21 +30,6 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
     return str;
 }
 
-void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
-                                        uct_cm_remote_data_t *remote_data,
-                                        ucs_status_t status)
-{
-    cep->super.client.connect_cb(&cep->super.super.super,
-                                 cep->super.user_data, remote_data, status);
-}
-
-void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
-                                        ucs_status_t status)
-{
-    cep->super.server.connect_cb(&cep->super.super.super,
-                                 cep->super.user_data, status);
-}
-
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
                                uct_cm_remote_data_t *remote_data,
                                ucs_status_t status)
@@ -60,10 +45,10 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
     if (cep->flags & UCT_RDMACM_CM_EP_GOT_CONNECT) {
         cep->super.disconnect_cb(&cep->super.super.super, cep->super.user_data);
     } else if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
-        uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
+        uct_cm_ep_client_connect_cb(&cep->super, remote_data, status);
     } else {
         ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
-        uct_rdmacm_cm_ep_server_connect_cb(cep, status);
+        uct_cm_ep_server_connect_cb(&cep->super, status);
     }
 }
 
