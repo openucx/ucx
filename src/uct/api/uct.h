@@ -1541,7 +1541,7 @@ void uct_config_release(void *config);
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Get value by name from interface/MD configuration.
+ * @brief Get value by name from interface/MD/CM configuration.
  *
  * @param [in]  config        Configuration to get from.
  * @param [in]  name          Configuration variable name.
@@ -1558,7 +1558,7 @@ ucs_status_t uct_config_get(void *config, const char *name, char *value,
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Modify interface/MD configuration.
+ * @brief Modify interface/MD/CM configuration.
  *
  * @param [in]  config        Configuration to modify.
  * @param [in]  name          Configuration variable name.
