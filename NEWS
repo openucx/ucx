@@ -9,7 +9,7 @@
 
 ## Current
 
-## 1.7.0-rc2 (January 16, 2019)
+## 1.7.0-rc2 (January 16, 2020)
 Features:
 - Added support for multiple listening transports
 - Added UCT socket-based connection manager transport
@@ -24,12 +24,12 @@ Features:
 - Updated support for Mellanox DevX API
 - Added multiple UCT/TCP transport performance optimizations
 - Optimized memcpy() for Intel platforms
-- Adding protection from non-UCX socket based app connections
+- Added protection from non-UCX socket based app connections
 - Improved search time for PKEY object
 - Enable gtest over IPv6 interfaces
 - Updated Mellanox and Bull device IDs
 - Added support for CUDA_VISIBLE_DEVICES
-- Increasing limits for CUDA IPC registration
+- Increased limits for CUDA IPC registration
 
 Bugfixes:
 - Multiple fixes in UCP, UCT, UCM libraries
