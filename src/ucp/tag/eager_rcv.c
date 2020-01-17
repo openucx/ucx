@@ -164,6 +164,7 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, void *data, size_t length,
     int ret;
 
     iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
+    ucs_assert(ret >= 0);
     matchq = &kh_value(&worker->tm.frag_hash, iter);
     if (ret != 0) {
         /* initialize a previously empty hash entry */
