@@ -221,7 +221,7 @@ ucp_amo_sw_send_cmpl(ucp_worker_h worker, uint64_t reply_ep_ptr,
     }
 }
 
-#if !ENABLE_DEBUG_DATA
+#if !UCS_ENABLE_ASSERT
 static
 #endif
 void ucp_amo_sw_loopback_completion_cb(void *request, ucs_status_t status)

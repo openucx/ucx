@@ -103,7 +103,7 @@ ucp_atomic_fetch_internal(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                           const ucp_atomic_loopback_ctx_t *loopback_ctx,
                           ucp_send_callback_t cb);
 
-#if ENABLE_DEBUG_DATA
+#if UCS_ENABLE_ASSERT
 void ucp_amo_sw_loopback_completion_cb(void *request, ucs_status_t status);
 #endif
 

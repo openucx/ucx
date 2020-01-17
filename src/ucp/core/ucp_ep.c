@@ -386,12 +386,8 @@ ucs_status_t ucp_worker_create_loopback_ep(ucp_worker_h worker,
 
     status = ucp_ep_create_api_to_worker_addr(worker, &ep_params, ep_init_flags,
                                               message, ep_p);
-    if (status != UCS_OK) {
-        ucs_free(address_buffer);
-        return status;
-    }
-
-    return UCS_OK;
+    ucs_free(address_buffer);
+    return status;
 }
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,

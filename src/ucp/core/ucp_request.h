@@ -110,7 +110,7 @@ struct ucp_request {
          * operations */
         struct {
             ucp_ep_h              ep;
-            void                  *buffer;    /* Send buffer */
+            void                  *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
             ucs_memory_type_t     mem_type; /* Memory type */
