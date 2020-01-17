@@ -491,6 +491,7 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
                                       ucp_ep_cm_disconnect_progress,
                                       progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
+    ucp_worker_signal_internal(ucp_ep->worker);
 }
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
