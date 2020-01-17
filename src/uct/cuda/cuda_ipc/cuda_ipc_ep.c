@@ -117,6 +117,9 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
+    iface->stream_refcount[key->dev_num]++;
+    cuda_ipc_event->stream_id = key->dev_num;
+
     status = UCT_CUDADRV_FUNC(cuEventRecord(cuda_ipc_event->event, stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
