@@ -50,6 +50,24 @@
     })
 
 
+#define UCT_CUDADRV_CTX_ACTIVE(_state)                             \
+    {                                                              \
+        CUcontext cur_ctx;                                         \
+        CUdevice dev;                                              \
+        unsigned flags;                                            \
+                                                                   \
+        _state = 0;                                                \
+        /* avoid active state check if no cuda activity */         \
+        if ((CUDA_SUCCESS == cuCtxGetCurrent(&cur_ctx)) &&         \
+            (NULL != cur_ctx)) {                                   \
+            UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev));                \
+            UCT_CUDADRV_FUNC(cuDevicePrimaryCtxGetState(dev,       \
+                                                        &flags,    \
+                                                        &_state)); \
+        }                                                          \
+    }
+
+
 ucs_status_t
 uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p);

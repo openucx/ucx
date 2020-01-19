@@ -85,4 +85,9 @@ jobject process_request(void *request, jobject callback);
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
 
+/**
+ * @brief Creates new jucx rkey class.
+ */
+jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey);
+
 #endif

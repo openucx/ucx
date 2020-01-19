@@ -28,6 +28,8 @@ typedef struct uct_cuda_ipc_iface {
     int              streams_initialized;     /* indicates if stream created */
     CUstream         stream_d2d[UCT_CUDA_IPC_MAX_PEERS];
                                               /* per-peer stream */
+    unsigned long    stream_refcount[UCT_CUDA_IPC_MAX_PEERS];
+                                              /* per stream outstanding ops */
     struct {
         unsigned     max_poll;                /* query attempts w.o success */
         int          enable_cache;            /* enable/disable ipc handle cache */
@@ -48,6 +50,7 @@ typedef struct uct_cuda_ipc_iface_config {
 typedef struct uct_cuda_ipc_event_desc {
     CUevent           event;
     void              *mapped_addr;
+    unsigned          stream_id;
     uct_completion_t  *comp;
     ucs_queue_elem_t  queue;
     uct_cuda_ipc_ep_t *ep;
