@@ -9,7 +9,7 @@
 
 ## Current
 
-## 1.7.0-rc2 (January 16, 2020)
+## 1.7.0 (January 19, 2020)
 Features:
 - Added support for multiple listening transports
 - Added UCT socket-based connection manager transport
