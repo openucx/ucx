@@ -75,16 +75,14 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
             ucs_async_modify_handler(fd, 0);
         }
         break;
-    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONNECTED |
-         UCT_TCP_SOCKCM_EP_SENDING:
+    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONN_SENDING:
          /* can send, progress the sending */
          status = uct_tcp_sockcm_ep_progress_send(ep, 1);
          if (status != UCS_OK) {
              ucs_async_modify_handler(fd, 0);
          }
          break;
-    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONNECTED |
-         UCT_TCP_SOCKCM_EP_SENDING   | UCT_TCP_SOCKCM_EP_DATA_SENT:
+    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONN_SENT:
          /* finished sending. TODO recv data from the server */
          ucs_async_modify_handler(fd, 0);
          break;
@@ -95,16 +93,14 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
             uct_tcp_close_ep(ep);
         }
         break;
-    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONNECTED |
-         UCT_TCP_SOCKCM_EP_RECEIVING:
+    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONN_RECEIVING:
          /* can read, progress the receving */
          status = uct_tcp_sockcm_ep_progress_recv(ep);
          if (status != UCS_OK) {
              uct_tcp_close_ep(ep);
          }
          break;
-    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONNECTED |
-         UCT_TCP_SOCKCM_EP_RECEIVING | UCT_TCP_SOCKCM_EP_DATA_RECEIVED:
+    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONN_RECEIVED:
          /* finished recv, can send. TODO send data to the client */
          ucs_async_modify_handler(fd, 0);
          break;

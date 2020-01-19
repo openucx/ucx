@@ -29,7 +29,7 @@ typedef struct uct_tcp_sockcm_config {
 
 
 typedef struct uct_tcp_sockcm_priv_data_hdr {
-    size_t             length;       /* length of the private data */
+    size_t             length;       /** Length of the private data */
 } uct_tcp_sockcm_priv_data_hdr_t;
 
 extern ucs_config_field_t uct_tcp_sockcm_config_table[];

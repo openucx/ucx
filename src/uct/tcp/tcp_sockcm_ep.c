@@ -26,8 +26,8 @@ ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags)
 
 static void uct_tcp_sockcm_ep_init_comm_ctx(uct_tcp_sockcm_ep_t *cep)
 {
-    cep->comm_ctx.offset       = 0;
-    cep->comm_ctx.total_length = 0;
+    cep->comm_ctx.offset = 0;
+    cep->comm_ctx.length = 0;
 }
 
 static void uct_tcp_sockcm_ep_handle_disconnect(uct_tcp_sockcm_ep_t *cep,
@@ -52,41 +52,42 @@ static void uct_tcp_sockcm_ep_handle_disconnect(uct_tcp_sockcm_ep_t *cep,
 
 static int uct_tcp_sockcm_ep_is_tx_rx_done(uct_tcp_sockcm_ep_t *cep)
 {
-    return ((cep->comm_ctx.total_length != 0) &&
-            (cep->comm_ctx.offset == cep->comm_ctx.total_length));
+    ucs_assert((cep->comm_ctx.length != 0));
+    return (cep->comm_ctx.offset == cep->comm_ctx.length);
 }
 
 ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep,
-                                             int is_on_async)
+                                             int is_async)
 {
     ucs_status_t status;
     size_t sent_length;
 
-    ucs_assert(cep->comm_ctx.offset < cep->comm_ctx.total_length);
+    ucs_assert(cep->comm_ctx.offset < cep->comm_ctx.length);
 
-    sent_length = cep->comm_ctx.total_length - cep->comm_ctx.offset;
+    sent_length = cep->comm_ctx.length - cep->comm_ctx.offset;
 
     status = ucs_socket_send_nb(cep->fd,
                                 UCS_PTR_BYTE_OFFSET(cep->comm_ctx.buf,
                                                     cep->comm_ctx.offset),
                                 &sent_length, NULL, NULL);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
-        if ((status == UCS_ERR_CANCELED) && (sent_length == 0)) {
+        if (!ucs_socket_is_connected(cep->fd)) {
             uct_tcp_sockcm_ep_handle_disconnect(cep, status);
         } else {
             ucs_error("ep %p failed to send client's data (len=%zu offset=%zu)",
-                      cep, cep->comm_ctx.total_length, cep->comm_ctx.offset);
+                      cep, cep->comm_ctx.length, cep->comm_ctx.offset);
         }
         return status;
     }
 
     cep->comm_ctx.offset += sent_length;
+    ucs_assert(cep->comm_ctx.offset <= cep->comm_ctx.length);
 
     if (uct_tcp_sockcm_ep_is_tx_rx_done(cep)) {
         cep->state |= UCT_TCP_SOCKCM_EP_DATA_SENT;
         uct_tcp_sockcm_ep_init_comm_ctx(cep);
 
-        if (is_on_async) {
+        if (is_async) {
             /* wait for a reply from the peer */
             status = ucs_async_modify_handler(cep->fd, UCS_EVENT_SET_EVREAD);
             if (status != UCS_OK) {
@@ -103,7 +104,7 @@ ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep,
 }
 
 ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep,
-                                              int is_on_async)
+                                              int is_async)
 {
     char ifname_str[UCT_DEVICE_NAME_MAX];
     uct_tcp_sockcm_priv_data_hdr_t *hdr;
@@ -135,10 +136,10 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep,
         goto out;
     }
 
-    hdr->length                = priv_data_ret;
-    cep->comm_ctx.total_length = sizeof(*hdr) + hdr->length;
+    hdr->length          = priv_data_ret;
+    cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
 
-    status = uct_tcp_sockcm_ep_progress_send(cep, is_on_async);
+    status = uct_tcp_sockcm_ep_progress_send(cep, is_async);
 
 out:
     return status;
@@ -180,9 +181,9 @@ static ucs_status_t uct_tcp_sockcm_ep_fd_to_remote_dev_addr(int fd,
 
 static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
 {
-    char ifname_str[UCT_DEVICE_NAME_MAX];
     uct_tcp_sockcm_priv_data_hdr_t *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
                                           cep->comm_ctx.buf;
+    char                 ifname_str[UCT_DEVICE_NAME_MAX];
     uct_cm_remote_data_t remote_data;
     uct_device_addr_t    *dev_addr;
     size_t               addr_length;
@@ -236,6 +237,7 @@ ucs_status_t uct_tcp_sockcm_ep_handle_data_received(uct_tcp_sockcm_ep_t *cep)
     if (status != UCS_OK) {
         ucs_error("failed to modify %d event handler to UCS_EVENT_SET_EVWRITE: %s",
                   cep->fd, ucs_status_string(status));
+        goto out;
     }
 
 out:
@@ -252,7 +254,7 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
                                                              cep->comm_ctx.offset),
                                 &recv_length, NULL, NULL);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
-        if ((status == UCS_ERR_CANCELED) && (recv_length == 0)) {
+        if (status == UCS_ERR_CANCELED) {
             uct_tcp_sockcm_ep_handle_disconnect(cep, status);
         } else {
             ucs_error("ep %p (fd=%d) failed to recv client's data (offset=%zu)",
@@ -262,6 +264,9 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
     }
 
     cep->comm_ctx.offset += recv_length;
+    ucs_assertv((cep->comm_ctx.length ?
+                 cep->comm_ctx.offset <= cep->comm_ctx.length : 1), "%zu %zu",
+                cep->comm_ctx.offset, cep->comm_ctx.length);
     return UCS_OK;
 }
 
@@ -296,8 +301,8 @@ ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep)
     }
 
     hdr = (uct_tcp_sockcm_priv_data_hdr_t *)cep->comm_ctx.buf;
-    cep->comm_ctx.total_length = sizeof(*hdr) + hdr->length;
-    cep->state |= UCT_TCP_SOCKCM_EP_RECEIVING;
+    cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
+    cep->state          |= UCT_TCP_SOCKCM_EP_RECEIVING;
 
     if (uct_tcp_sockcm_ep_is_tx_rx_done(cep)) {
         status = uct_tcp_sockcm_ep_handle_data_received(cep);
@@ -350,7 +355,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
 
     if (status == UCS_OK) {
         cep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
-        status = uct_tcp_sockcm_ep_send_priv_data(cep, 0);
+        status      = uct_tcp_sockcm_ep_send_priv_data(cep, 0);
         if (status != UCS_OK) {
             goto err_close_socket;
         }

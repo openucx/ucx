@@ -216,9 +216,10 @@ ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage *peer_addr)
     if (ret < 0) {
         if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
             ucs_error("getpeername(fd=%d) failed: %m", fd);
+            return UCS_ERR_IO_ERROR;
         }
 
-        return UCS_ERR_IO_ERROR;
+        return UCS_ERR_NOT_CONNECTED;
     }
 
     return UCS_OK;
