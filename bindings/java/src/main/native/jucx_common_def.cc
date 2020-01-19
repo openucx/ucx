@@ -21,6 +21,8 @@ static jfieldID native_id_field;
 static jfieldID recv_size_field;
 static jmethodID on_success;
 static jmethodID jucx_request_constructor;
+static jclass ucp_rkey_cls;
+static jmethodID ucp_rkey_cls_constructor;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     ucs_debug_disable_signals();
@@ -38,6 +40,10 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
                                   "(Lorg/openucx/jucx/ucp/UcpRequest;)V");
     jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "(J)V");
+
+    jclass ucp_rkey_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
+    ucp_rkey_cls = (jclass) env->NewGlobalRef(ucp_rkey_cls_local);
+    ucp_rkey_cls_constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
     return JNI_VERSION_1_1;
 }
 
@@ -284,4 +290,10 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
                                        "(Lorg/openucx/jucx/ucp/UcpConnectionRequest;)V");
     env->CallVoidMethod(jucx_conn_handler, on_conn_request, jucx_conn_request);
     env->DeleteGlobalRef(jucx_conn_handler);
+}
+
+
+jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey)
+{
+    return env->NewObject(ucp_rkey_cls, ucp_rkey_cls_constructor, (native_ptr)rkey);
 }
