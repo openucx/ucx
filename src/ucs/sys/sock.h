@@ -30,10 +30,23 @@ BEGIN_C_DECLS
 #define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
 
 
-/* Returns an error if the default error handling should be
- * done (the error value will be returned to a caller),
- * otherwise `UCS_OK` */
-typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg, int io_errno);
+/**
+ * Error callback to handle errno and status of a given socket IO operation.
+ *
+ * @param [in] arg       User's argument for the error callback.
+ * @param [in] io_status Status set for a given IO operation.
+ *
+ * @return UCS_OK if error handling was done in the callback and no other
+ *         actions are required from a caller (UCS_ERR_CANCELED will be
+ *         returned as the result of the IO operation), UCS_ERR_NO_PROGRESS
+ *         if error handling was done in the callback and the IO operation
+ *         should be continued (UCS_ERR_NO_PROGRESS will be retuned as the
+ *         result of the IO operation), otherwise - the default error handling
+ *         should be done and the returned status will be the result of
+ *         the IO operation.
+ */
+typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg,
+                                               ucs_status_t io_status);
 
 
 /**
@@ -196,9 +209,12 @@ int ucs_socket_max_conn();
  * @param [in]      err_cb          Error callback.
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
- * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_NO_PROGRESS if system call was interrupted or
- *         would block, UCS_ERR_IO_ERROR on failure.
+ * @return UCS_OK on success, UCS_ERR_CANCELED if some error happened, but it
+ *         was handled in a user's err_cb and no other actions are required,
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or would block,
+ *         UCS_ERR_NOT_CONNECTED if the connection was destroyed,
+ *         UCS_ERR_IO_ERROR on failure, or any other errors returned from a
+ *         user's error callback.
  */
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
@@ -218,9 +234,12 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
  * @param [in]      err_cb          Error callback.
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
- * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_NO_PROGRESS if system call was interrupted or
- *         would block, UCS_ERR_IO_ERROR on failure.
+ * @return UCS_OK on success, UCS_ERR_CANCELED if some error happened, but it
+ *         was handled in user's err_cb and no other actions are required,
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or would block,
+ *         UCS_ERR_NOT_CONNECTED if the connection was destroyed,
+ *         UCS_ERR_IO_ERROR on failure, or any other errors returned from a
+ *         user's error callback.
  */
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
@@ -239,8 +258,11 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
  * @param [in]      err_cb          Error callback.
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
- * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ * @return UCS_OK on success, UCS_ERR_CANCELED if some error happened, but it
+ *         was handled in user's err_cb and no other actions are required,
+ *         UCS_ERR_NOT_CONNECTED if the connection was destroyed,
+ *         UCS_ERR_IO_ERROR on failure, or any other errors returned from a
+ *         user's error callback.
  */
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
                              ucs_socket_io_err_cb_t err_cb,
@@ -260,9 +282,12 @@ ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
  * @param [in]      err_cb          Error callback.
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
- * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_NO_PROGRESS if system call was interrupted or
- *         would block, UCS_ERR_IO_ERROR on failure.
+ * @return UCS_OK on success, UCS_ERR_CANCELED if some error happened, but it
+ *         was handled in user's err_cb and no other actions are required,
+ *         UCS_ERR_NO_PROGRESS if system call was interrupted or would block,
+ *         UCS_ERR_NOT_CONNECTED if the connection was destroyed,
+ *         UCS_ERR_IO_ERROR on failure, or any other errors returned from a
+ *         user's error callback.
  */
 ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
                                  size_t *length_p, ucs_socket_io_err_cb_t err_cb,
@@ -281,8 +306,11 @@ ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
  * @param [in]      err_cb          Error callback.
  * @param [in]      err_cb_arg      User's argument for the error callback.
  *
- * @return UCS_OK on success, UCS_ERR_CANCELED if connection closed,
- *         UCS_ERR_IO_ERROR on failure.
+ * @return UCS_OK on success, UCS_ERR_CANCELED if some error happened, but it
+ *         was handled in user's err_cb and no other actions are required,
+ *         UCS_ERR_NOT_CONNECTED if the connection was destroyed,
+ *         UCS_ERR_IO_ERROR on failure, or any other errors returned from a
+ *         user's error callback.
  */
 ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
                              ucs_socket_io_err_cb_t err_cb,

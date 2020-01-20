@@ -615,7 +615,8 @@ static inline ssize_t uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
     size_t sent_length;
     ucs_status_t status;
 
-    ucs_assertv(ep->tx.offset < ep->tx.length, "ep=%p", ep);
+    ucs_assertv((ep->tx.offset < ep->tx.length) &&
+                (ctx->iov_cnt > 0), "ep=%p", ep);
 
     status = ucs_socket_sendv_nb(ep->fd, &ctx->iov[ctx->iov_index],
                                  ctx->iov_cnt - ctx->iov_index,
@@ -645,7 +646,14 @@ static inline ssize_t uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
     return sent_length;
 }
 
-ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep, int io_errno)
+static int uct_tcp_ep_is_conn_closed_by_peer(ucs_status_t io_status)
+{
+    return (io_status == UCS_ERR_REJECTED) ||
+           (io_status == UCS_ERR_CONNECTION_RESET);
+}
+
+ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
+                                               ucs_status_t io_status)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
@@ -656,32 +664,32 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep, int io_errno)
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
-        ((io_errno == ECONNRESET) || (io_errno == ECONNREFUSED) ||
-         /* connection establishment procedure timed out */
-         (io_errno == ETIMEDOUT))) {
+        (uct_tcp_ep_is_conn_closed_by_peer(io_status) ||
+         (io_status == UCS_ERR_TIMED_OUT))) {
         uct_tcp_ep_mod_events(ep, 0, ep->events);
         uct_tcp_ep_close_fd(&ep->fd);
 
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
 
         status = uct_tcp_ep_create_socket_and_connect(iface, NULL, &ep);
-        if (status != UCS_OK) {
-            ucs_error("try to increase \"net.core.somaxconn\", "
-                      "\"net.core.netdev_max_backlog\", "
-                      "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
-                      "on the remote node or increase %s%s%s (=%u)",
-                      UCS_CONFIG_PREFIX, UCT_TCP_CONFIG_PREFIX,
-                      UCT_TCP_CONFIG_MAX_CONN_RETRIES,
-                      iface->config.max_conn_retries);
+        if (status == UCS_OK) {
+            return UCS_OK;
         }
 
-        return status;
+        ucs_error("try to increase \"net.core.somaxconn\", "
+                  "\"net.core.netdev_max_backlog\", "
+                  "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
+                  "on the remote node or increase %s%s%s (=%u)",
+                  UCS_CONFIG_PREFIX, UCT_TCP_CONFIG_PREFIX,
+                  UCT_TCP_CONFIG_MAX_CONN_RETRIES,
+                  iface->config.max_conn_retries);
     }
 
-    return UCS_ERR_IO_ERROR;
+    return io_status;
 }
 
-static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
+static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg,
+                                                 ucs_status_t io_status)
 {
     uct_tcp_ep_t *ep                    = (uct_tcp_ep_t*)arg;
     uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
@@ -689,27 +697,26 @@ static ucs_status_t uct_tcp_ep_io_err_handler_cb(void *arg, int io_errno)
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
 
-    if ((io_errno == ECONNRESET) &&
+    if (uct_tcp_ep_is_conn_closed_by_peer(io_status) &&
         ((ep->conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING) ||
          ((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
           (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */))) {
-        ucs_debug("tcp_ep %p: detected %d (%s) error, the [%s <-> %s] "
-                  "connection was dropped by the peer",
-                  ep, io_errno, strerror(io_errno),
+        ucs_debug("tcp_ep %p: detected that [%s <-> %s] connection was "
+                  "dropped by the peer", ep,
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
-                                   str_local_addr, UCS_SOCKADDR_STRING_LEN),
+                                       str_local_addr, UCS_SOCKADDR_STRING_LEN),
                   ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
                                    str_remote_addr, UCS_SOCKADDR_STRING_LEN));
         return UCS_OK;
     }
 
-    return uct_tcp_ep_handle_dropped_connect(ep, io_errno);
+    return uct_tcp_ep_handle_dropped_connect(ep, io_status);
 }
 
 static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
                                               ucs_status_t status)
 {
-    if (status == UCS_ERR_NO_PROGRESS) {
+    if ((status == UCS_ERR_NO_PROGRESS) || (status == UCS_ERR_CANCELED)) {
         /* If no data were read to the allocated buffer,
          * we can safely reset it for futher re-use and to
          * avoid overwriting this buffer, because `rx::length == 0` */
@@ -727,7 +734,7 @@ static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
                                                          uct_tcp_iface_t);
     ucs_status_t status;
 
-    ucs_assertv(recv_length, "ep=%p", ep);
+    ucs_assertv(recv_length != 0, "ep=%p", ep);
 
     status = ucs_socket_recv_nb(ep->fd, UCS_PTR_BYTE_OFFSET(ep->rx.buf,
                                                             ep->rx.length),
@@ -1163,7 +1170,8 @@ uct_tcp_ep_am_sendv(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
 
     ep->tx.length += hdr->length + sizeof(*hdr);
 
-    ucs_assertv(ep->tx.length <= send_limit, "ep=%p", ep);
+    ucs_assertv((ep->tx.length <= send_limit) &&
+                (iov_cnt > 0), "ep=%p", ep);
 
     status = ucs_socket_sendv_nb(ep->fd, iov, iov_cnt,
                                  &ep->tx.offset, NULL, NULL);
