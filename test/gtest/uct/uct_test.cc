@@ -508,7 +508,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
         }
     }
 
-    ASSERT_TRUE(status == UCS_ERR_NO_ELEM);
+    ucs_assert(status == UCS_ERR_NO_ELEM);
 
     status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
