@@ -251,8 +251,14 @@ typedef struct ucp_ep_config {
             size_t          am_thresh;
             /* Total size of packed rkey, according to high-bw md_map */
             size_t          rkey_size;
+            /* remote memory domains which support rkey_ptr */
+            ucp_md_map_t    rkey_ptr_dst_mds;
+            /* Lanes for GET zcopy */
+            ucp_lane_index_t get_zcopy_lanes[UCP_MAX_LANES];
+            /* Lanes for PUT zcopy */
+            ucp_lane_index_t put_zcopy_lanes[UCP_MAX_LANES];
             /* BW based scale factor */
-            double          scale[UCP_MAX_LANES];
+            double           scale[UCP_MAX_LANES];
         } rndv;
 
         /* special thresholds for the ucp_tag_send_nbr() */
