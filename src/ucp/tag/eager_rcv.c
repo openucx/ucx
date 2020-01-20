@@ -175,10 +175,22 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, void *data, size_t length,
         /* add new received descriptor to the queue */
         status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
                                     hdr_len, flags, priv_length, &rdesc);
-        if (!UCS_STATUS_IS_ERR(status)) {
+        if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
             ucp_tag_frag_match_add_unexp(matchq, rdesc, hdr->offset);
+        } else if (ucs_queue_is_empty(&matchq->unexp_q)) {
+            /* If adding the first fragment to the unexpected queue fails,
+             * remove the element from the hash. Otherwise hash would contain an
+             * empty queue, which is not allowed, because queue implementation
+             * relies on the address of its head for certain operations (e.g.
+             * ucs_queue_is_empty). And khash may change address of its elements
+             * during resize (provoked by kh_put). */
+            kh_del(ucp_tag_frag_hash, &worker->tm.frag_hash, iter);
         }
     } else {
+        /* If fragment is expected, the corresponding element must be present
+         * in the hash (added in ucp_tag_frag_list_process_queue). */
+        ucs_assert(ret == 0);
+
         /* hash entry contains a request, copy data to user buffer */
         req      = matchq->exp_req;
         recv_len = length - hdr_len;
@@ -197,6 +209,10 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, void *data, size_t length,
 
         status = UCS_OK;
     }
+
+    /* If hash contains queue of unexpected fragments, it should not be empty */
+    ucs_assert(!ucp_tag_frag_match_is_unexp(matchq) ||
+               !ucs_queue_is_empty(&matchq->unexp_q));
 
     return status;
 }
