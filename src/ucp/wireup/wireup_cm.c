@@ -454,6 +454,8 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucs_trace("ep %p: got remote disconnect, cm_ep %p", ucp_ep, uct_cm_ep);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
 
+    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
+
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
@@ -737,13 +739,14 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
 {
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-    ucp_lane_index_t wireup_idx;
+    ucp_lane_index_t cm_lane;
 
     if (status != UCS_OK) {
-        wireup_idx = ucp_ep_config(ucp_ep)->key.wireup_lane;
+        cm_lane = ucp_ep_get_cm_lane(ucp_ep);
         ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
-                                 ucp_ep->uct_eps[wireup_idx], wireup_idx,
-                                 status);
+                                 ucp_ep->uct_eps[cm_lane], cm_lane,
+                                 (status == UCS_ERR_REJECTED) ?
+                                 UCS_ERR_CONNECTION_RESET : status);
         return;
     }
 
@@ -835,4 +838,31 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
     request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
 
     return request;
+}
+
+static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    ucp_ep_h ep = arg;
+    ucp_cm_disconnect_progress_arg_t *disconnect_arg;
+    ucp_cm_client_connect_progress_arg_t *client_connect_arg;
+
+    if (elem->cb == ucp_ep_cm_disconnect_progress) {
+        disconnect_arg = elem->arg;
+        return disconnect_arg->ucp_ep == ep;
+    } else if (elem->cb == (ucs_callback_t)ucp_ep_cm_remote_disconnect_progress) {
+        return ep == elem->arg;
+    } else if (elem->cb == ucp_cm_client_connect_progress) {
+        client_connect_arg = elem->arg;
+        return client_connect_arg->ucp_ep == ep;
+    } else if (elem->cb == ucp_cm_server_connect_progress) {
+        return ep == elem->arg;
+    } else {
+        return 0;
+    }
+}
+
+void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep)
+{
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_cm_cbs_remove_filter, ep);
 }

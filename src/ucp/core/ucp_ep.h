@@ -499,4 +499,6 @@ unsigned ucp_ep_local_disconnect_progress(void *arg);
 
 size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
 
+void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
+
 #endif

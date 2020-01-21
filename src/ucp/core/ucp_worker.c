@@ -458,15 +458,11 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 
     ucp_ep->am_lane = 0;
 
-    if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_USED);
-        ucs_debug("ep %p: calling user error callback %p with arg %p", ucp_ep,
-                  ucp_ep_ext_gen(ucp_ep)->err_cb,  ucp_ep_ext_gen(ucp_ep)->user_data);
-        ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
-                                       key.status);
-    } else if (!(ucp_ep->flags & UCP_EP_FLAG_USED)) {
+    if (!(ucp_ep->flags & UCP_EP_FLAG_USED)) {
         ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
+    } else {
+        ucp_ep_invoke_err_cb(ucp_ep, key.status);
     }
 
     ucs_free(err_handle_arg);
@@ -498,7 +494,8 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     }
 
     /* In case if this is a local failure we need to notify remote side */
-    if (ucp_ep_is_cm_local_connected(ucp_ep)) {
+    if (ucp_ep_is_cm_local_connected(ucp_ep) &&
+        (status != UCS_ERR_CONNECTION_RESET)) {
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     }
 
