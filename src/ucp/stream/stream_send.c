@@ -216,7 +216,6 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_STREAM_DATA,
                                                 UCP_AM_ID_STREAM_DATA,
-                                                sizeof(ucp_stream_am_hdr_t),
                                                 ucp_stream_pack_am_first_dt,
                                                 ucp_stream_pack_am_middle_dt, 0);
     if (status == UCS_OK) {

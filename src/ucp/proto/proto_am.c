@@ -53,15 +53,14 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
     ssize_t packed_len;
     uint64_t *buffer;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-
     /* if packed data can fit short active message, use it, because it should
      * be faster than bcopy.
      */
     if ((max_packed_size <= UCS_ALLOCA_MAX_SIZE) &&
         (max_packed_size <= ucp_ep_config(ep)->am.max_short)) {
-        buffer     = ucs_alloca(max_packed_size);
-        packed_len = pack_cb(buffer, req);
+        req->send.lane = ucp_ep_get_am_lane(ep);
+        buffer         = ucs_alloca(max_packed_size);
+        packed_len     = pack_cb(buffer, req);
         ucs_assertv((packed_len >= 0) && (packed_len <= max_packed_size),
                     "packed_len=%zd max_packed_size=%zu", packed_len,
                     max_packed_size);
@@ -69,9 +68,7 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
         return uct_ep_am_short(ep->uct_eps[req->send.lane], am_id, buffer[0],
                                &buffer[1], packed_len - sizeof(uint64_t));
     } else {
-        packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id,
-                                     pack_cb, req, 0);
-        return ucs_unlikely(packed_len < 0) ? (ucs_status_t)packed_len : UCS_OK;
+        return ucp_do_am_bcopy_single(self, am_id, pack_cb);
     }
 }
 
