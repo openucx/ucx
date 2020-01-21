@@ -61,12 +61,12 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h* e
 
 ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags);
 
-ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep,
-                                              int is_on_async);
+ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep);
 
-ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep,
-                                             int is_on_async);
+ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep);
 
 ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep);
 
 ucs_status_t uct_tcp_sockcm_ep_progress_recv(uct_tcp_sockcm_ep_t *cep);
+
+size_t uct_tcp_sockcm_ep_get_priv_data_len(uct_tcp_sockcm_ep_t *cep);

@@ -70,14 +70,14 @@ void uct_tcp_sa_data_handler(int fd, void *arg)
         /* connect() completed, send data to the server */
         ep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
 
-        status = uct_tcp_sockcm_ep_send_priv_data(ep, 1);
+        status = uct_tcp_sockcm_ep_send_priv_data(ep);
         if (status != UCS_OK) {
             ucs_async_modify_handler(fd, 0);
         }
         break;
     case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONN_SENDING:
          /* can send, progress the sending */
-         status = uct_tcp_sockcm_ep_progress_send(ep, 1);
+         status = uct_tcp_sockcm_ep_progress_send(ep);
          if (status != UCS_OK) {
              ucs_async_modify_handler(fd, 0);
          }
@@ -152,7 +152,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops, worker, component);
 
-    self->priv_data_len = cm_config->priv_data_len;
+    self->priv_data_len = cm_config->priv_data_len -
+                          sizeof(uct_tcp_sockcm_priv_data_hdr_t);
 
     ucs_list_head_init(&self->ep_list);
 

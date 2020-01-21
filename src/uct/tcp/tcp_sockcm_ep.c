@@ -39,6 +39,7 @@ static void uct_tcp_sockcm_ep_handle_disconnect(uct_tcp_sockcm_ep_t *cep,
     ucs_debug("ep %p (fd=%d): remote peer disconnected", cep, cep->fd);
     uct_tcp_sockcm_ep_init_comm_ctx(cep);
 
+    ucs_assert(status != UCS_OK);
     if (cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) {
         uct_cm_ep_server_connect_cb(&cep->super, status);
     } else {
@@ -56,12 +57,13 @@ static int uct_tcp_sockcm_ep_is_tx_rx_done(uct_tcp_sockcm_ep_t *cep)
     return (cep->comm_ctx.offset == cep->comm_ctx.length);
 }
 
-ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep,
-                                             int is_async)
+ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
 {
     ucs_status_t status;
     size_t sent_length;
 
+    ucs_assert(ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT |
+                                              UCT_TCP_SOCKCM_EP_CONNECTED));
     ucs_assert(cep->comm_ctx.offset < cep->comm_ctx.length);
 
     sent_length = cep->comm_ctx.length - cep->comm_ctx.offset;
@@ -71,7 +73,7 @@ ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep,
                                                     cep->comm_ctx.offset),
                                 &sent_length, NULL, NULL);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
-        if (!ucs_socket_is_connected(cep->fd)) {
+        if (status == UCS_ERR_NOT_CONNECTED) {
             uct_tcp_sockcm_ep_handle_disconnect(cep, status);
         } else {
             ucs_error("ep %p failed to send client's data (len=%zu offset=%zu)",
@@ -82,29 +84,25 @@ ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep,
 
     cep->comm_ctx.offset += sent_length;
     ucs_assert(cep->comm_ctx.offset <= cep->comm_ctx.length);
+    cep->state           |= UCT_TCP_SOCKCM_EP_SENDING;
 
     if (uct_tcp_sockcm_ep_is_tx_rx_done(cep)) {
         cep->state |= UCT_TCP_SOCKCM_EP_DATA_SENT;
         uct_tcp_sockcm_ep_init_comm_ctx(cep);
 
-        if (is_async) {
-            /* wait for a reply from the peer */
-            status = ucs_async_modify_handler(cep->fd, UCS_EVENT_SET_EVREAD);
-            if (status != UCS_OK) {
-                ucs_error("failed to modify %d event handler to "
-                          "UCS_EVENT_SET_EVREAD: %s", cep->fd,
-                          ucs_status_string(status));
-            }
+        /* wait for a reply from the peer */
+        status = ucs_async_modify_handler(cep->fd, UCS_EVENT_SET_EVREAD);
+        if (status != UCS_OK) {
+            ucs_error("failed to modify %d event handler to "
+                      "UCS_EVENT_SET_EVREAD: %s", cep->fd,
+                      ucs_status_string(status));
         }
-    } else {
-        cep->state |= UCT_TCP_SOCKCM_EP_SENDING;
     }
 
     return UCS_OK;
 }
 
-ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep,
-                                              int is_async)
+ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
 {
     char ifname_str[UCT_DEVICE_NAME_MAX];
     uct_tcp_sockcm_priv_data_hdr_t *hdr;
@@ -112,7 +110,7 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep,
     ucs_status_t status;
 
     /* get interface name associated with the connected client fd */
-    status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, UCT_DEVICE_NAME_MAX);
+    status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, sizeof(ifname_str));
     if (UCS_OK != status) {
         goto out;
     }
@@ -126,68 +124,33 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep,
         ucs_error("tcp_sockcm private data pack function failed with error: %s",
                   ucs_status_string(status));
         goto out;
-    } else if (priv_data_ret > (uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len -
-                                sizeof(uct_tcp_sockcm_priv_data_hdr_t))) {
+    } else if (priv_data_ret > (uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len)) {
         status = UCS_ERR_EXCEEDS_LIMIT;
         ucs_error("tcp_sockcm private data pack function returned %zd "
                   "(max: %zu)", priv_data_ret,
-                  uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len -
-                  sizeof(uct_tcp_sockcm_priv_data_hdr_t));
+                  uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len);
         goto out;
     }
 
     hdr->length          = priv_data_ret;
     cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
 
-    status = uct_tcp_sockcm_ep_progress_send(cep, is_async);
+    status = uct_tcp_sockcm_ep_progress_send(cep);
 
 out:
     return status;
-}
-
-static ucs_status_t uct_tcp_sockcm_ep_fd_to_remote_dev_addr(int fd,
-                                                            uct_device_addr_t **dev_addr_p,
-                                                            size_t *dev_addr_len_p)
-{
-    struct sockaddr_storage peer_addr = {0};
-    char peer_str[UCS_SOCKADDR_STRING_LEN];
-    size_t peer_addr_len;
-    ucs_status_t status;
-
-    status = ucs_socket_getpeername(fd, &peer_addr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = ucs_sockaddr_sizeof((struct sockaddr*)&peer_addr, &peer_addr_len);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *dev_addr_p = ucs_malloc(peer_addr_len, "IB device address");
-    if (*dev_addr_p == NULL) {
-        ucs_error("failed to allocate device address");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_debug("fd %d: peer_addr: %s of length: %zu", fd,
-              ucs_sockaddr_str((const struct sockaddr*)&peer_addr, peer_str,
-                               UCS_SOCKADDR_STRING_LEN), peer_addr_len);
-
-    memcpy(*dev_addr_p, &peer_addr, peer_addr_len);
-    *dev_addr_len_p = peer_addr_len;
-    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
 {
     uct_tcp_sockcm_priv_data_hdr_t *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
                                           cep->comm_ctx.buf;
-    char                 ifname_str[UCT_DEVICE_NAME_MAX];
-    uct_cm_remote_data_t remote_data;
-    uct_device_addr_t    *dev_addr;
-    size_t               addr_length;
-    ucs_status_t         status;
+    struct sockaddr_storage remote_dev_addr = {0};
+    socklen_t               remote_dev_addr_len;
+    char peer_str[UCS_SOCKADDR_STRING_LEN];
+    char                    ifname_str[UCT_DEVICE_NAME_MAX];
+    uct_cm_remote_data_t    remote_data;
+    ucs_status_t            status;
 
     /* get the local interface name associated with the connected fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, UCT_DEVICE_NAME_MAX);
@@ -196,8 +159,8 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     }
 
     /* get the device address of the remote peer associated with the connected fd */
-    status = uct_tcp_sockcm_ep_fd_to_remote_dev_addr(cep->fd, &dev_addr, &addr_length);
-    if (UCS_OK != status) {
+    status = ucs_socket_getpeername(cep->fd, &remote_dev_addr, &remote_dev_addr_len);
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -205,10 +168,16 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
                                         UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
-    remote_data.dev_addr              = dev_addr;
-    remote_data.dev_addr_length       = addr_length;
+    remote_data.dev_addr              = (uct_device_addr_t *)&remote_dev_addr;
+    remote_data.dev_addr_length       = remote_dev_addr_len;
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
+
+    ucs_debug("fd %d: remote_data: (field_mask=%zu) dev_addr: %s (length=%zu), "
+              "conn_priv_data_length=%zu", cep->fd, remote_data.field_mask,
+              ucs_sockaddr_str((const struct sockaddr*)remote_data.dev_addr,
+                               peer_str, UCS_SOCKADDR_STRING_LEN),
+              remote_data.dev_addr_length, remote_data.conn_priv_data_length);
 
     /* the endpoint, passed as the conn_request to the callback, will be passed
      * to uct_ep_create() which will be invoked by the user and therefore moving
@@ -217,7 +186,6 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     cep->listener->conn_request_cb(&cep->listener->super, cep->listener->user_data,
                                    ifname_str, cep, &remote_data);
 
-    ucs_free(dev_addr);
     return UCS_OK;
 }
 
@@ -249,12 +217,13 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
     size_t recv_length;
     ucs_status_t status;
 
-    recv_length = uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len - cep->comm_ctx.offset;
+    recv_length = uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len +
+                  sizeof(uct_tcp_sockcm_priv_data_hdr_t) - cep->comm_ctx.offset;
     status = ucs_socket_recv_nb(cep->fd, UCS_PTR_BYTE_OFFSET(cep->comm_ctx.buf,
                                                              cep->comm_ctx.offset),
                                 &recv_length, NULL, NULL);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
-        if (status == UCS_ERR_CANCELED) {
+        if (status == UCS_ERR_NOT_CONNECTED) {
             uct_tcp_sockcm_ep_handle_disconnect(cep, status);
         } else {
             ucs_error("ep %p (fd=%d) failed to recv client's data (offset=%zu)",
@@ -328,7 +297,6 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     const struct sockaddr *server_addr;
     ucs_async_context_t *async_ctx;
     ucs_status_t status;
-    int event;
 
     cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
     cep->super.client.connect_cb = params->sockaddr_connect_cb.client;
@@ -353,24 +321,9 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     }
     ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
 
-    if (status == UCS_OK) {
-        cep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
-        status      = uct_tcp_sockcm_ep_send_priv_data(cep, 0);
-        if (status != UCS_OK) {
-            goto err_close_socket;
-        }
-
-        if (!uct_tcp_sockcm_ep_is_tx_rx_done(cep)) {
-            event = UCS_EVENT_SET_EVWRITE; /* continue sending */
-        } else {
-            event = UCS_EVENT_SET_EVREAD;  /* wait for a reply from the server */
-        }
-    } else {
-        event = UCS_EVENT_SET_EVWRITE;     /* wait until connect() completes */
-    }
-
     async_ctx = tcp_sockcm->super.iface.worker->async;
-    status    = ucs_async_set_event_handler(async_ctx->mode, cep->fd, event,
+    status    = ucs_async_set_event_handler(async_ctx->mode, cep->fd,
+                                            UCS_EVENT_SET_EVWRITE,
                                             uct_tcp_sa_data_handler, cep,
                                             async_ctx);
     if (status != UCS_OK) {
@@ -397,7 +350,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_ep_t, const uct_ep_params_t *params)
 
     uct_tcp_sockcm_ep_init_comm_ctx(self);
     self->state        = 0;
-    self->comm_ctx.buf = ucs_malloc(uct_tcp_sockcm_ep_get_cm(self)->priv_data_len,
+    self->comm_ctx.buf = ucs_malloc(uct_tcp_sockcm_ep_get_cm(self)->priv_data_len +
+                                    sizeof(uct_tcp_sockcm_priv_data_hdr_t),
                                     "tcp_sockcm priv data");
     if (self->comm_ctx.buf == NULL) {
         ucs_error("failed to allocate memory for the ep's send/recv buf");

@@ -137,7 +137,8 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
  *
  * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
  */
-ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage* peer_addr);
+ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage *peer_addr,
+                                    socklen_t *peer_addr_len);
 
 
 /**
