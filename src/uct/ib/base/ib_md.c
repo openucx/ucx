@@ -1475,6 +1475,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     }
 
     if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
+        ucs_debug("%s: disabling ODP because it's not supported for DevX QP",
+                  ibv_get_device_name(ib_device));
         md->config.odp.max_size = 0;
     }
 
