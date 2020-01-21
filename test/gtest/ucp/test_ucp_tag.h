@@ -15,6 +15,20 @@ class test_ucp_tag : public ucp_test {
 public:
     static ucp_params_t get_ctx_params();
 
+    enum send_type_t {
+        SEND_NB,
+        SEND_NBR,
+        SEND_B,
+        SEND_SYNC_NB
+    };
+
+    enum recv_type_t {
+        RECV_NB,
+        RECV_NBR,
+        RECV_B,
+        RECV_BR
+    };
+
 protected:
     enum {
         RECV_REQ_INTERNAL = DEFAULT_PARAM_VARIANT,
@@ -47,17 +61,26 @@ protected:
     static void recv_callback(void *request, ucs_status_t status,
                                   ucp_tag_recv_info_t *info);
 
-    request * send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, int ep_index = 0);
+    request* send(entity &sender, send_type_t type, const void *buffer,
+                  size_t count, ucp_datatype_t datatype, ucp_tag_t tag,
+                  int ep_index = 0);
 
-    request * send_nbr(const void *buffer, size_t count, ucp_datatype_t datatype,
-                       ucp_tag_t tag, int ep_index = 0);
+    request* send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                     ucp_tag_t tag, int ep_index = 0);
+
+    request* send_nbr(const void *buffer, size_t count, ucp_datatype_t datatype,
+                      ucp_tag_t tag, int ep_index = 0);
 
     void send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
                 ucp_tag_t tag, int buf_index = 0);
 
-    request * send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                           ucp_tag_t tag, int buf_index = 0);
+    request* send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                          ucp_tag_t tag, int buf_index = 0);
+
+    request* recv(entity &receiver, recv_type_t type, void *buffer,
+                  size_t count, ucp_datatype_t dt, ucp_tag_t tag,
+                  ucp_tag_t tag_mask, ucp_tag_recv_info_t *info,
+                  int buf_index = 0);
 
     request* recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
                      ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);

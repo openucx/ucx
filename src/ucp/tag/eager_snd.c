@@ -149,7 +149,6 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_EAGER_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
-                                                sizeof(ucp_eager_middle_hdr_t),
                                                 ucp_tag_pack_eager_first_dt,
                                                 ucp_tag_pack_eager_middle_dt, 1);
     if (status == UCS_OK) {
@@ -228,8 +227,6 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_single(uct_pending_req_t *self)
         ucp_request_send_generic_dt_finish(req);
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
                                       UCS_OK);
-    } else if (status == UCP_STATUS_PENDING_SWITCH) {
-        status = UCS_OK;
     }
     return status;
 }
@@ -239,7 +236,6 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_EAGER_SYNC_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
-                                                sizeof(ucp_eager_middle_hdr_t),
                                                 ucp_tag_pack_eager_sync_first_dt,
                                                 ucp_tag_pack_eager_middle_dt, 1);
     if (status == UCS_OK) {
