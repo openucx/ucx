@@ -118,7 +118,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
 
     memset(&params, 0, sizeof(params));
     params.field_mask        = UCP_PARAM_FIELD_FEATURES |
-                               UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
+                               UCP_PARAM_FIELD_ESTIMATED_NUM_EPS |
+                               UCP_PARAM_FIELD_ESTIMATED_NUM_PPN;
     params.features          = ctx_features;
     params.estimated_num_eps = estimated_num_eps;
     params.estimated_num_ppn = estimated_num_ppn;
