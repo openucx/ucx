@@ -165,7 +165,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "DEVX support\n",
      ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
 
-    {"MLX5_DEVX_OBJECTS", "dct,dcsrq",
+    {"MLX5_DEVX_OBJECTS", "rcqp,rcsrq,dct,dcsrq",
      "Objects to be created by DevX\n",
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
@@ -1468,10 +1468,15 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_component;
-    md->config          = md_config->ext;
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+    }
+
+    if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
+        ucs_debug("%s: disabling ODP because it's not supported for DevX QP",
+                  ibv_get_device_name(ib_device));
+        md->config.odp.max_size = 0;
     }
 
     /* Create statistics */
@@ -1578,6 +1583,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
+
+    md->config = md_config->ext;
 
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
