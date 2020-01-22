@@ -810,8 +810,10 @@ void ucp_worker_iface_event(int fd, void *arg)
 
 static void ucp_worker_uct_iface_close(ucp_worker_iface_t *wiface)
 {
-    uct_iface_close(wiface->iface);
-    wiface->iface = NULL;
+    if (wiface->iface != NULL) {
+        uct_iface_close(wiface->iface);
+        wiface->iface = NULL;
+    }
 }
 
 static int ucp_worker_iface_find_better(ucp_worker_h worker,
@@ -1046,7 +1048,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     UCS_ASYNC_BLOCK(&worker->async);
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface = worker->ifaces[iface_id];
-        if (wiface->iface != NULL) {
+        if (wiface != NULL) {
             ucp_worker_iface_cleanup(wiface);
         }
     }
