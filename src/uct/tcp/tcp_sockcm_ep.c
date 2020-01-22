@@ -234,7 +234,7 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
 
     cep->comm_ctx.offset += recv_length;
     ucs_assertv((cep->comm_ctx.length ?
-                 cep->comm_ctx.offset <= cep->comm_ctx.length : 1), "%zu %zu",
+                 cep->comm_ctx.offset <= cep->comm_ctx.length : 1), "%zu > %zu",
                 cep->comm_ctx.offset, cep->comm_ctx.length);
     return UCS_OK;
 }
@@ -269,8 +269,11 @@ ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep)
         goto out;
     }
 
-    hdr = (uct_tcp_sockcm_priv_data_hdr_t *)cep->comm_ctx.buf;
+    hdr                  = (uct_tcp_sockcm_priv_data_hdr_t *)cep->comm_ctx.buf;
     cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
+    ucs_assertv(cep->comm_ctx.offset <= cep->comm_ctx.length , "%zu > %zu",
+                cep->comm_ctx.offset, cep->comm_ctx.length);
+
     cep->state          |= UCT_TCP_SOCKCM_EP_RECEIVING;
 
     if (uct_tcp_sockcm_ep_is_tx_rx_done(cep)) {

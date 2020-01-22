@@ -134,6 +134,7 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
  *
  * @param [in]  fd                Socket fd.
  * @param [out] peer_addr         Address of the remote peer.
+ * @param [out] peer_addr_len     Length of the remote peer's address.
  *
  * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
  */
