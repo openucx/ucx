@@ -20,7 +20,7 @@
 
 
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -44,6 +44,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"PREFER_DEFAULT", "y",
    "Give higher priority to the default network interface on the host",
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
+
+  {"PUT_ENABLE", "y",
+   "Enable PUT Zcopy support",
+   ucs_offsetof(uct_tcp_iface_config_t, put_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"CONN_NB", "n",
    "Enable non-blocking connection establishment. It may improve startup "
@@ -148,13 +152,15 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->cap.am.opt_zcopy_align  = 1;
         attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
 
-        /* PUT */
-        attr->cap.put.max_iov          = iface->config.zcopy.max_iov -
-                                         UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
-        attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
-                                         UCT_TCP_EP_PUT_SERVICE_LENGTH;
-        attr->cap.put.opt_zcopy_align  = 1;
-        attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
+        if (iface->config.put_enable) {
+            /* PUT */
+            attr->cap.put.max_iov          = iface->config.zcopy.max_iov -
+                                             UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
+            attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
+                                             UCT_TCP_EP_PUT_SERVICE_LENGTH;
+            attr->cap.put.opt_zcopy_align  = 1;
+            attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
+        }
     }
 
     attr->bandwidth.dedicated = 0;
@@ -454,6 +460,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.zcopy.max_hdr     = self->config.tx_seg_size -
                                      self->config.zcopy.hdr_offset;
     self->config.prefer_default    = config->prefer_default;
+    self->config.put_enable        = config->put_enable;
     self->config.conn_nb           = config->conn_nb;
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;

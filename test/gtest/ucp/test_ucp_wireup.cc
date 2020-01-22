@@ -965,13 +965,17 @@ UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
  * as its iface max_num_eps attribute = 256 by default */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               rc_ud, "rc_x,rc_v,ud_x,ud_v")
+/* Test fallback selection of UD only TLs, since TCP shouldn't
+ * be used for any lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              ud_tcp, "ud_x,ud_v,tcp")
 /* Test two scalable enough transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               dc_ud, "dc_x,ud_x,ud_v")
 /* Test unsacalable transports only */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               rc, "rc_x,rc_v")
-/* Test all available ib transports */
+/* Test all available IB transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               ib, "ib")
 
