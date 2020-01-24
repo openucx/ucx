@@ -337,8 +337,6 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
 
     knem_md->super.ops         = &md_ops;
     knem_md->super.component   = &uct_knem_component;
-    knem_md->reg_cost.overhead = 1200.0e-9;
-    knem_md->reg_cost.growth   = 0.007e-9;
     knem_md->rcache            = NULL;
 
     knem_md->knem_fd = open("/dev/knem", O_RDWR);
@@ -374,6 +372,12 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
                           ucs_status_string(status));
             }
         }
+
+        knem_md->reg_cost.overhead = md_config->rcache.overhead;
+        knem_md->reg_cost.growth   = 0; /* It's close enough to 0 */
+    } else {
+        knem_md->reg_cost.overhead = 1200.0e-9;
+        knem_md->reg_cost.growth   = 0.007e-9;
     }
 
     *md_p = (uct_md_h)knem_md;
