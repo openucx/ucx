@@ -382,12 +382,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
-    ucp_tag_offload_unexp(wiface, stag, length);
-
     /* Fast path - single-fragment, non-sync eager message */
     if (ucs_likely((tl_flags & UCT_CB_PARAM_FLAG_FIRST) &&
                    !(tl_flags & UCT_CB_PARAM_FLAG_MORE) &&
                    !imm)) {
+        ucp_tag_offload_unexp(wiface, stag, length);
+
         return ucp_eager_offload_handler(wiface->worker, data, length, tl_flags,
                                          flags | UCP_RECV_DESC_FLAG_EAGER_ONLY,
                                          stag);
@@ -398,7 +398,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
         return ucp_tag_offload_eager_middle_handler(worker, data, length,
                                                     tl_flags, stag, imm, flags,
                                                     context);
-    } else if (tl_flags & UCT_CB_PARAM_FLAG_MORE) {
+    }
+
+    /* Either first eager fragment or entire sync eager message */
+    ucp_tag_offload_unexp(wiface, stag, length);
+
+    if (tl_flags & UCT_CB_PARAM_FLAG_MORE) {
         /* First part of the fragmented message */
         return ucp_tag_offload_eager_first_handler(worker, data, length,
                                                    tl_flags, stag, flags,
