@@ -16,7 +16,7 @@ typedef struct uct_tcp_sockcm_ep   uct_tcp_sockcm_ep_t;
 typedef struct uct_tcp_sockcm {
     uct_cm_t            super;
     size_t              priv_data_len;
-    ucs_list_link_t     ep_list;      /** List of endpoints */
+    ucs_list_link_t     ep_list;     /** List of endpoints */
 } uct_tcp_sockcm_t;
 
 /**
@@ -29,7 +29,7 @@ typedef struct uct_tcp_sockcm_config {
 
 
 typedef struct uct_tcp_sockcm_priv_data_hdr {
-    uint8_t             length;       /* length of the private data */
+    size_t             length;       /** Length of the private data */
 } uct_tcp_sockcm_priv_data_hdr_t;
 
 extern ucs_config_field_t uct_tcp_sockcm_config_table[];
