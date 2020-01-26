@@ -244,7 +244,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"MEMTYPE_CACHE", "y",
-   "Enable memory type(cuda) cache \n",
+   "Enable memory type (cuda/rocm) cache \n",
    ucs_offsetof(ucp_config_t, ctx.enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
