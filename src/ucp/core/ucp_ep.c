@@ -877,11 +877,16 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 }
 
 static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode) {
+    /* CM lane tracks remote state, so it can be used with any modes of close
+     * and error handling */
     if ((mode == UCP_EP_CLOSE_MODE_FLUSH) ||
         (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE)) {
         return UCS_OK;
     }
 
+    /* In case of close in force mode, remote peer failure detection mechanism
+     * should be enabled (CM lane is handled above) to prevent hang or any
+     * other undefined behavior */
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
         (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
         return UCS_OK;
@@ -2001,8 +2006,11 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
 {
+    /* Do not invoke error handler if it's not enabled */
     if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+        /* error callback is not set */
         (ucp_ep_ext_gen(ep)->err_cb == NULL) ||
+        /* the EP is not valid for usage outside of UCP */
         (ep->flags & UCP_EP_FLAG_CLOSED) || !(ep->flags & UCP_EP_FLAG_USED)) {
         return;
     }
