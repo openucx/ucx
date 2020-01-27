@@ -48,7 +48,7 @@ static uint16_t server_port = DEFAULT_PORT;
  * It holds the server's handle to an incoming connection request.
  */
 typedef struct ucx_server_ctx {
-    ucp_conn_request_h conn_request;
+    volatile ucp_conn_request_h conn_request;
 } ucx_server_ctx_t;
 
 
