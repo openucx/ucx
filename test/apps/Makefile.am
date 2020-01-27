@@ -6,8 +6,14 @@
 # See file LICENSE for terms.
 #
 
+SUBDIRS =
+
+if HAVE_GLIBCXX_NOTHROW
+SUBDIRS += iodemo
+endif
+
 if HAVE_CXX11
-SUBDIRS = sockaddr
+SUBDIRS += sockaddr
 endif
 
 noinst_PROGRAMS = \
