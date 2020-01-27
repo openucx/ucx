@@ -19,28 +19,15 @@
 #include <ucs/datastruct/queue.h>
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
-                               ucp_tag_recv_info_t *info, const char *function)
-{
-    ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
-                  function, req, req + 1, info->sender_tag, info->length,
-                  ucs_status_string(status));
-
-    req->status = status;
-    if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
-        ucp_request_put(req);
-    }
-    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
-}
-
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                    ucp_request_t *req, uint32_t req_flags, ucp_tag_recv_callback_t cb,
-                    ucp_recv_desc_t *rdesc, const char *debug_name)
+                    ucp_request_t *req, ucp_recv_desc_t *rdesc,
+                    const ucp_request_param_t *param, const char *debug_name)
 {
     unsigned common_flags = UCP_REQUEST_FLAG_RECV | UCP_REQUEST_FLAG_EXPECTED;
+    uint32_t req_flags    = (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
+                            UCP_REQUEST_FLAG_CALLBACK : 0;
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
     ucs_memory_type_t mem_type;
@@ -76,12 +63,30 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                                     recv_len, 1);
         ucp_recv_desc_release(rdesc);
 
-        if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {
-            cb(req + 1, status, &req->recv.tag.info);
+        req->status = status;
+        req->flags |= UCP_REQUEST_FLAG_COMPLETED;
+        UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
+
+        if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
+            ucp_tag_match_cb(param, req, recv, &req->recv.tag.info);
+            ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
+                          debug_name, req, req + 1, req->recv.tag.info.sender_tag,
+                          req->recv.tag.info.length,
+                          ucs_status_string(status));
+            return req + 1;
         }
-        ucp_tag_recv_request_completed(req, status, &req->recv.tag.info,
-                                       debug_name);
-        return;
+
+        ucp_tag_match_request_put(param, req);
+        return UCS_STATUS_PTR(UCS_OK);
+    }
+
+    /* TODO: allocate request only in case if flag
+     * UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not set */
+    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
+        if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+            ucp_request_put(req);
+        }
+        return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
     }
 
     /* Initialize receive request */
@@ -103,7 +108,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                                                      req->recv.length);
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
-    req->recv.tag.cb        = cb;
+    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
+        req->recv.tag.cb    = param->cb.recv;
+        req->user_data      = param->user_data;
+    }
+
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;
     }
@@ -121,7 +130,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
-        return;
+        return req + 1;
     }
 
     /* Check rendezvous case */
@@ -129,7 +138,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
         UCP_WORKER_STAT_RNDV(worker, UNEXP);
         ucp_recv_desc_release(rdesc);
-        return;
+        return req + 1;
     }
 
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)) {
@@ -152,6 +161,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     /* process additional fragments */
     ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id
                                     UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
+    return req + 1;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
@@ -160,20 +170,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
                  uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                  void *request)
 {
-    ucp_request_t *req = (ucp_request_t *)request - 1;
-    ucp_recv_desc_t *rdesc;
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                        UCP_OP_ATTR_FIELD_REQUEST  |
+                        UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+        .request      = request,
+        .datatype     = datatype
+    };
+    ucs_status_ptr_t status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
-                                    return UCS_ERR_INVALID_PARAM);
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbr");
-    ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask,
-                        req, UCP_REQUEST_DEBUG_FLAG_EXTERNAL, NULL, rdesc,
-                        "recv_nbr");
-
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-    return UCS_OK;
+    status = ucp_tag_recv_nbx(worker, buffer, count, tag, tag_mask, &param);
+    return UCS_PTR_IS_ERR(status) ? UCS_PTR_STATUS(status) : UCS_OK;
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
@@ -182,24 +189,44 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
                  uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                  ucp_tag_recv_callback_t cb)
 {
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                        UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+        .cb.recv      = (ucp_tag_recv_nbx_callback_t)cb,
+        .datatype     = datatype
+    };
+
+    return ucp_tag_recv_nbx(worker, buffer, count, tag, tag_mask, &param);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
+                 (worker, buffer, count, tag, tag_mask, param),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 ucp_tag_t tag, ucp_tag_t tag_mask,
+                 const ucp_request_param_t *param)
+{
     ucp_recv_desc_t *rdesc;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
+    ucp_datatype_t datatype;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    req = ucp_request_get(worker);
-    if (ucs_likely(req != NULL)) {
-        rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nb");
-        ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask, req,
-                            UCP_REQUEST_FLAG_CALLBACK, cb, rdesc,"recv_nb");
-        ret = req + 1;
-    } else {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-    }
+    datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
+               param->datatype : ucp_dt_make_contig(1);
 
+    ucp_tag_match_request_get(worker, param, req,
+                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                               goto out;});
+
+    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbx");
+    ret   = ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask, req,
+                                rdesc, param, "recv_nbx");
+
+out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }
@@ -210,6 +237,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
                  uintptr_t datatype, ucp_tag_message_h message,
                  ucp_tag_recv_callback_t cb)
 {
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+        .cb.recv      = (ucp_tag_recv_nbx_callback_t)cb
+    };
     ucp_recv_desc_t *rdesc = message;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
@@ -220,23 +252,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
 
     req = ucp_request_get(worker);
     if (ucs_likely(req != NULL)) {
-        ucp_tag_recv_common(worker, buffer, count, datatype,
-                            ucp_rdesc_get_tag(rdesc), UCP_TAG_MASK_FULL, req,
-                            UCP_REQUEST_FLAG_CALLBACK, cb, rdesc, "msg_recv_nb");
-        ret = req + 1;
+        ret = ucp_tag_recv_common(worker, buffer, count, datatype,
+                                  ucp_rdesc_get_tag(rdesc), UCP_TAG_MASK_FULL,
+                                  req, rdesc, &param, "msg_recv_nb");
     } else {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
-}
-
-UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
-                 (worker, buffer, count, tag, tag_mask, param),
-                 ucp_worker_h worker, void *buffer, size_t count,
-                 ucp_tag_t tag, ucp_tag_t tag_mask,
-                 const ucp_request_param_t *param)
-{
-    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
