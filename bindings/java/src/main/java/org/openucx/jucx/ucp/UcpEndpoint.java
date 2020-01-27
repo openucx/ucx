@@ -212,12 +212,14 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * the UCP library will invoke the call-back when data is in the receive buffer
      * and ready for application access.
      */
-    public UcpRequest recvStreamNonBlocking(long localAddress, long size, UcxCallback callback) {
-        return recvStreamNonBlockingNative(getNativeId(), localAddress, size, callback);
+    public UcpRequest recvStreamNonBlocking(long localAddress, long size, long flags,
+                                            UcxCallback callback) {
+        return recvStreamNonBlockingNative(getNativeId(), localAddress, size, flags, callback);
     }
 
     public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
-        return recvStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(), callback);
+        return recvStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(),
+          UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL, callback);
     }
 
     /**
@@ -277,7 +279,8 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                                  long size, UcxCallback callback);
 
     private static native UcpRequest recvStreamNonBlockingNative(long enpointId, long localAddress,
-                                                                 long size, UcxCallback callback);
+                                                                 long size, long flags,
+                                                                 UcxCallback callback);
 
     private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
 

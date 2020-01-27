@@ -209,15 +209,22 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, j
 JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, jclass cls,
                                                                   jlong ep_ptr, jlong addr,
-                                                                  jlong size, jobject callback)
+                                                                  jlong size, jlong flags,
+                                                                  jobject callback)
 {
     size_t rlength;
     ucs_status_ptr_t request = ucp_stream_recv_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                   ucp_dt_make_contig(1), stream_recv_callback,
-                                                  &rlength, UCP_STREAM_RECV_FLAG_WAITALL);
+                                                  &rlength, flags);
 
     ucs_trace_req("JUCX: recv_stream_nb request %p to %s, size: %zu",
                   request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size);
+
+    if (request == NULL) {
+        // If request completed immidiately.
+        return process_completed_stream_recv(rlength, callback);
+    }
+
     return process_request(request, callback);
 }
 

@@ -88,6 +88,11 @@ void stream_recv_callback(void *request, ucs_status_t status, size_t length);
  */
 jobject process_request(void *request, jobject callback);
 
+/**
+ * @brief Call java callback on completed stream recv operation, that didn't invoke callback.
+ */
+jobject process_completed_stream_recv(size_t length, jobject callback);
+
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
 
 #endif

@@ -272,6 +272,16 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
     return jucx_request;
 }
 
+jobject process_completed_stream_recv(size_t length, jobject callback)
+{
+    JNIEnv *env = get_jni_env();
+    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor, NULL);
+    if (callback != NULL) {
+        jucx_call_callback(callback, jucx_request, UCS_OK);
+    }
+    env->SetLongField(jucx_request, recv_size_field, length);
+    return jucx_request;
+}
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
 {

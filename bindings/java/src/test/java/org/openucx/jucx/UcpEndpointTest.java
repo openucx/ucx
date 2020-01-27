@@ -396,4 +396,46 @@ public class UcpEndpointTest extends UcxTest {
         Collections.addAll(resources, context1, context2, worker1, worker2, ep);
         closeResources();
     }
+
+    @Test
+    public void testStreamingAPI() {
+        UcpParams params = new UcpParams().requestStreamFeature().requestRmaFeature();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+
+        UcpWorker worker1 = context1.newWorker(new UcpWorkerParams());
+        UcpWorker worker2 = context2.newWorker(new UcpWorkerParams());
+
+        UcpEndpoint clientToServer = worker1.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
+
+        UcpEndpoint serverToClient = worker2.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
+
+        ByteBuffer sendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+
+        AtomicBoolean received = new AtomicBoolean(false);
+        UcpRequest recvRequest = serverToClient.recvStreamNonBlocking(
+            UcxUtils.getAddress(recvBuffer), UcpMemoryTest.MEM_SIZE, 0,
+            new UcxCallback() {
+                @Override
+                public void onSuccess(UcpRequest request) {
+                    received.set(true);
+                }
+            });
+
+        clientToServer.sendStreamNonBlocking(sendBuffer, null);
+
+        while (!received.get()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        assertEquals(recvRequest.getRecvSize(), UcpMemoryTest.MEM_SIZE);
+
+        Collections.addAll(resources, context1, context2, worker1, worker2, clientToServer,
+            serverToClient);
+        closeResources();
+    }
 }
