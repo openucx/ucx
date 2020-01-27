@@ -245,8 +245,8 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     remote_data.dev_addr_length   = addr_length;
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_CONNECT;
-    uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data,
-                                       (ucs_status_t)hdr->status);
+    uct_cm_ep_client_connect_cb(&cep->super, &remote_data,
+                                (ucs_status_t)hdr->status);
 
     ucs_free(dev_addr);
 
@@ -264,7 +264,7 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
 
     ucs_assert(event->id == cep->id);
     cep->flags |= UCT_RDMACM_CM_EP_GOT_CONNECT;
-    uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
+    uct_cm_ep_server_connect_cb(&cep->super, UCS_OK);
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)

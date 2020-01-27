@@ -665,9 +665,9 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr, ucp_ep_h ep,
 {
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
 
-    return /* must have remove address */
+    return /* must have remote address */
            (rndv_rts_hdr->address != 0) &&
-           /* remove key must be on a memory domain for which we support rkey_ptr */
+           /* remote key must be on a memory domain for which we support rkey_ptr */
            (ucp_rkey_packed_md_map(rndv_rts_hdr + 1) &
             ep_config->tag.rndv.rkey_ptr_dst_mds) &&
            /* rendezvous mode must not be forced to put/get */
