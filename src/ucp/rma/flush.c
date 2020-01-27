@@ -286,7 +286,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->flags                    = req_flags;
     req->status                   = UCS_OK;
     req->send.ep                  = ep;
-    req->send.cb                  = req_cb;
+    req->send.cb                  = (ucp_send_nbx_callback_t)req_cb;
     req->send.flush.flushed_cb    = flushed_cb;
     req->send.flush.prog_id       = UCS_CALLBACKQ_ID_NULL;
     req->send.flush.uct_flags     = uct_flags;
