@@ -155,7 +155,9 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     }
 
     addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
-                                      qp_attr.ah_attr.is_global,
+                                      qp_attr.ah_attr.is_global ?
+                                      UCT_IB_GLOBAL_ADDR_AUTO :
+                                      UCT_IB_GLOBAL_ADDR_NONE,
                                       IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr));
 
     dev_addr = ucs_malloc(addr_length, "IB device address");
@@ -164,9 +166,12 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
+    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid,
+                        qp_attr.ah_attr.dlid,
                         IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr),
-                        qp_attr.ah_attr.is_global,
+                        qp_attr.ah_attr.is_global ?
+                        UCT_IB_GLOBAL_ADDR_AUTO :
+                        UCT_IB_GLOBAL_ADDR_NONE,
                         dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;

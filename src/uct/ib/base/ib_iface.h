@@ -58,6 +58,16 @@ enum {
 #endif
 };
 
+/**
+ * IB global address usage.
+ */
+typedef enum {
+    UCT_IB_GLOBAL_ADDR_NONE = 0, /**< Do not use GRH */
+    UCT_IB_GLOBAL_ADDR_AUTO,     /**< Auto detection of GRH required */
+    UCT_IB_GLOBAL_ADDR_ALWAYS    /**< Always use GRH */
+} uct_ib_iface_global_addr_t;
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -319,7 +329,8 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
 /**
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
+size_t uct_ib_address_size(const union ibv_gid *gid,
+                           uct_ib_iface_global_addr_t global_addr,
                            int is_link_layer_eth);
 
 
@@ -339,7 +350,8 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
  *                         returns for the given scope.
  */
 void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         int is_link_layer_eth, uint8_t is_global_addr,
+                         int is_link_layer_eth,
+                         uct_ib_iface_global_addr_t global_addr,
                          uct_ib_address_t *ib_addr);
 
 
