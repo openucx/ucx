@@ -168,39 +168,6 @@ static unsigned ucs_callbackq_get_fast_idx(ucs_callbackq_t *cbq)
     return idx;
 }
 
-static void ucs_callbackq_remove_common(ucs_callbackq_t *cbq,
-                                        ucs_callbackq_elem_t *elems,
-                                        unsigned idx, unsigned last_idx,
-                                        unsigned idx_slow_flag,
-                                        uint64_t *remove_mask)
-{
-    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
-    int id;
-
-    ucs_trace_func("cbq=%p idx=%u last_idx=%u slow_flag=0x%x", cbq, idx,
-                   last_idx, idx_slow_flag);
-
-    ucs_assert(idx <= last_idx);
-
-    /* replace removed with last */
-    elems[idx] = elems[last_idx];
-    ucs_callbackq_elem_reset(cbq, &elems[last_idx]);
-
-    if (*remove_mask & UCS_BIT(last_idx)) {
-        /* replaced by marked-for-removal element, still need to remove 'idx' */
-        ucs_assert(*remove_mask & UCS_BIT(idx));
-        *remove_mask &= ~UCS_BIT(last_idx);
-    } else {
-        /* replaced by a live element, remove from the mask and update 'idxs' */
-        *remove_mask &= ~UCS_BIT(idx);
-        if (last_idx != idx) {
-            id = elems[idx].id;
-            ucs_assert(id != UCS_CALLBACKQ_ID_NULL);
-            priv->idxs[id] = idx | idx_slow_flag;
-        }
-    }
-}
-
 static int ucs_callbackq_add_fast(ucs_callbackq_t *cbq, ucs_callback_t cb,
                                   void *arg, unsigned flags)
 {
@@ -224,15 +191,33 @@ static int ucs_callbackq_add_fast(ucs_callbackq_t *cbq, ucs_callback_t cb,
 /* should be called from dispatch thread only */
 static void ucs_callbackq_remove_fast(ucs_callbackq_t *cbq, unsigned idx)
 {
-    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_priv_t *priv     = ucs_callbackq_priv(cbq);
+    ucs_callbackq_elem_t *dst_elem = &cbq->fast_elems[idx];
     unsigned last_idx;
+    int id;
 
     ucs_trace_func("cbq=%p idx=%u", cbq, idx);
 
     ucs_assert(priv->num_fast_elems > 0);
     last_idx = --priv->num_fast_elems;
-    ucs_callbackq_remove_common(cbq, cbq->fast_elems, idx, last_idx, 0,
-                                &priv->fast_remove_mask);
+
+    /* replace removed with last */
+    *dst_elem = cbq->fast_elems[last_idx];
+    ucs_callbackq_elem_reset(cbq, &cbq->fast_elems[last_idx]);
+
+    if (priv->fast_remove_mask & UCS_BIT(last_idx)) {
+        /* replaced by marked-for-removal element, still need to remove 'idx' */
+        ucs_assert(priv->fast_remove_mask & UCS_BIT(idx));
+        priv->fast_remove_mask &= ~UCS_BIT(last_idx);
+    } else {
+        /* replaced by a live element, remove from the mask and update 'idxs' */
+        priv->fast_remove_mask &= ~UCS_BIT(idx);
+        if (last_idx != idx) {
+            id = dst_elem->id;
+            ucs_assert(id != UCS_CALLBACKQ_ID_NULL);
+            priv->idxs[id] = idx;
+        }
+    }
 }
 
 /* should be called from dispatch thread only */
