@@ -21,6 +21,11 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
 
+    /* no bw lanes */
+    if (!ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map) {
+        return 0;
+    }
+
     /* check if there is a bw lane to register mem type */
     ucs_for_each_bit(md_index,
                      ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map) {
@@ -606,10 +611,10 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     unsigned memh_index;
 
     offset    = 0;
-    num_frags = ucs_div_round_up(rreq->send.length, max_frag_size);
+    num_frags = ucs_div_round_up(rndv_rts_hdr->size, max_frag_size);
 
     for (i = 0; i < num_frags; i++) {
-        frag_size = ucs_min(max_frag_size, (rreq->recv.length - offset));
+        frag_size = ucs_min(max_frag_size, (rndv_rts_hdr->size - offset));
 
         /* internal fragment recv request allocated on receiver side to receive
          *  put fragment from sender and to perform a put to recv buffer */
@@ -1114,7 +1119,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
         return UCS_ERR_UNSUPPORTED;
     }
 
-    rndv_size        = rndv_rtr_hdr->size;
+    rndv_size        = ucs_min(rndv_rtr_hdr->size, sreq->send.length);
     max_frag_size    = context->config.ext.rndv_frag_size;
     rndv_base_offset = rndv_rtr_hdr->offset;
     num_frags        = ucs_div_round_up(rndv_size, max_frag_size);
