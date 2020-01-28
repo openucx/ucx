@@ -855,6 +855,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     dev              = &md->super.dev;
     dev->ibv_context = ctx;
+    md->super.config = md_config->ext;
 
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {

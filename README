@@ -93,7 +93,6 @@ $ make docs
 
 Start server:
 
-
 ```sh
 $ ./src/tools/perf/ucx_perftest -c 0
 ```
@@ -101,8 +100,9 @@ $ ./src/tools/perf/ucx_perftest -c 0
 Connect client:
 
 ```sh
-$ ./src/tools/perf/ucx_perftest <server-hostname> -t tag_lat -c 0
+$ ./src/tools/perf/ucx_perftest <server-hostname> -t tag_lat -c 1
 ```
+Note: the `-c` flag sets CPU affinity. If running both commands on same host, make sure you set the affinity to different CPU cores.
 
 ## Our Community
 
@@ -124,7 +124,7 @@ In order to contribute to UCX, please sign up with an appropriate
 [Contributor Agreement](http://www.openucx.org/license/).
 
 Follow these
-[instructions](https://github.com/openucx/ucx/blob/master/CONTRIBUTING.md)
+[instructions](https://github.com/openucx/ucx/wiki/Guidance-for-contributors)
 when submitting contributions and changes.
 
 ## UCX Publications

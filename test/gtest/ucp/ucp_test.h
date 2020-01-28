@@ -266,4 +266,29 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
 
+
+/**
+ * The list of GPU copy TLs
+ */
+#define UCP_TEST_GPU_COPY_TLS "cuda_copy,rocm_copy"
+
+
+/**
+ * Instantiate the parameterized test case for all transport combinations
+ * with GPU memory awareness
+ *
+ * @param _test_case  Test case class, derived from ucp_test.
+ */
+#define UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,        "dc_x," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,         "ud_v," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,        "ud_x," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,         "rc_v," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,        "rc_x," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,     "shm,ib," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib_ipc, "shm,ib,cuda_ipc,rocm_ipc," \
+                                                          UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,       "ugni," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,        "tcp," UCP_TEST_GPU_COPY_TLS)
+
 #endif
