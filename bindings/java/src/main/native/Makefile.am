@@ -40,7 +40,7 @@ MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES) $(STAMP_FILE)
 $(STAMP_FILE): \
 		$(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
 		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java
-	$(MVNCMD) compile native:javah
+	$(MVNCMD) compile
 	touch $(STAMP_FILE)
 
 $(JUCX_GENERATED_H_FILES): $(STAMP_FILE)
