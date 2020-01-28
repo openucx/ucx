@@ -1541,8 +1541,9 @@ void uct_config_release(void *config);
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Get value by name from interface/memory domain/connection manager
- *        configuration.
+ * @brief Get value by name from interface configuration (@ref uct_iface_config_t),
+ *        memory domain configuration (@ref uct_md_config_t)
+ *        or connection manager configuration (@ref uct_cm_config_t).
  *
  * @param [in]  config        Configuration to get from.
  * @param [in]  name          Configuration variable name.
@@ -1559,7 +1560,9 @@ ucs_status_t uct_config_get(void *config, const char *name, char *value,
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Modify interface/memory domain/connection manager configuration.
+ * @brief Modify interface configuration (@ref uct_iface_config_t),
+ *        memory domain configuration (@ref uct_md_config_t)
+ *        or connection manager configuration (@ref uct_cm_config_t).
  *
  * @param [in]  config        Configuration to modify.
  * @param [in]  name          Configuration variable name.
