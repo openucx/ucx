@@ -431,10 +431,10 @@ static void server_conn_handle_cb(ucp_conn_request_h conn_request, void *arg)
     if (context->conn_request == NULL) {
         context->conn_request = conn_request;
     } else {
-        /* The server is already handeling a connection request from a client,
+        /* The server is already handling a connection request from a client,
          * reject this new one */
         printf("Rejecting a connection request. "
-               "One client at a time is supported.\n");
+               "Only one client at a time is supported.\n");
         status = ucp_listener_reject(context->listener, conn_request);
         if (status != UCS_OK) {
             fprintf(stderr, "server failed to reject a connection request: (%s)\n",
@@ -524,7 +524,6 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
 {
     ucx_server_ctx_t context;
     ucp_worker_h     ucp_data_worker;
-    ucp_listener_h   listener;
     ucp_ep_h         server_ep;
     ucs_status_t     status;
     int              ret;
@@ -543,13 +542,11 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
      * worker' - used for connection establishment between client and server.
      * This listener will stay open for listening to incoming connection
      * requests from the client */
-    status = start_server(ucp_worker, &context, &listener, listen_addr);
+    status = start_server(ucp_worker, &context, &context.listener, listen_addr);
     if (status != UCS_OK) {
         ret = -1;
         goto err_worker;
     }
-
-    context.listener = listener;
 
     /* Server is always up listening */
     while (1) {
@@ -581,7 +578,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     }
 
 err_listener:
-    ucp_listener_destroy(listener);
+    ucp_listener_destroy(context.listener);
 err_worker:
     ucp_worker_destroy(ucp_data_worker);
 err:
