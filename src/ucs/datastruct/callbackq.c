@@ -31,7 +31,6 @@ typedef struct ucs_callbackq_priv {
     ucs_callbackq_elem_t   *slow_elems;    /**< Array of slow-path elements */
     unsigned               num_slow_elems; /**< Number of slow-path elements */
     unsigned               max_slow_elems; /**< Maximal number of slow-path elements */
-    unsigned               slow_idx;       /**< Iterator over slow-path elements */
     int                    slow_proxy_id;  /**< ID of slow-path proxy in fast-path array.
                                                 keep track while this moves around. */
 
@@ -189,6 +188,7 @@ static void ucs_callbackq_remove_common(ucs_callbackq_t *cbq,
 
     if (*remove_mask & UCS_BIT(last_idx)) {
         /* replaced by marked-for-removal element, still need to remove 'idx' */
+        ucs_assert(*remove_mask & UCS_BIT(idx));
         *remove_mask &= ~UCS_BIT(last_idx);
     } else {
         /* replaced by a live element, remove from the mask and update 'idxs' */
@@ -337,24 +337,41 @@ static int ucs_callbackq_add_slow(ucs_callbackq_t *cbq, ucs_callback_t cb,
 static void ucs_callbackq_remove_slow(ucs_callbackq_t *cbq, unsigned idx)
 {
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
-    unsigned last_idx;
-    uint64_t dummy = 0;
 
     ucs_trace_func("cbq=%p idx=%u", cbq, idx);
 
-    /* When the slow-path proxy callback sees there are no more elements, it
-     * will disable itself.
-     */
-    ucs_assert(priv->num_slow_elems > 0);
-    last_idx = --priv->num_slow_elems;
-    ucs_callbackq_remove_common(cbq, priv->slow_elems, idx, last_idx,
-                                UCS_CALLBACKQ_IDX_FLAG_SLOW, &dummy);
+    /* Mark for removal by ucs_callbackq_purge_slow() */
+    ucs_callbackq_elem_reset(cbq, &priv->slow_elems[idx]);
+}
 
-    /* Make the slow-path iterator go over the element we moved from the end of
-     * the array, otherwise it would be skipped. */
-    if (idx <= priv->slow_idx) {
-        priv->slow_idx = idx;
+static void ucs_callbackq_purge_slow(ucs_callbackq_t *cbq)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_elem_t *src_elem;
+    unsigned src_idx, dst_idx;
+
+    ucs_trace_func("cbq=%p", cbq);
+
+    /*
+     * Copy valid elements from src_idx to dst_idx, essentially rebuilding the
+     * array of elements in-place, keeping only the valid ones.
+     * As an optimization, if no elements are actually removed, then src_idx will
+     * always be equal to dst_idx, so nothing will be actually copied/moved.
+     */
+    dst_idx = 0;
+    for (src_idx = 0; src_idx < priv->num_slow_elems; ++src_idx) {
+        src_elem = &priv->slow_elems[src_idx];
+        if (src_elem->id != UCS_CALLBACKQ_ID_NULL) {
+            ucs_assert(dst_idx <= src_idx);
+            if (dst_idx != src_idx) {
+                priv->idxs[src_elem->id]  = dst_idx | UCS_CALLBACKQ_IDX_FLAG_SLOW;
+                priv->slow_elems[dst_idx] = *src_elem;
+            }
+            ++dst_idx;
+        }
     }
+
+    priv->num_slow_elems = dst_idx;
 }
 
 static unsigned ucs_callbackq_slow_proxy(void *arg)
@@ -372,10 +389,11 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
     ucs_callbackq_enter(cbq);
 
     /* Execute and update slow-path callbacks */
-    while ( (slow_idx = priv->slow_idx) < priv->num_slow_elems ) {
+    for (slow_idx = 0; slow_idx < priv->num_slow_elems; ++slow_idx) {
         elem = &priv->slow_elems[slow_idx];
-        priv->slow_idx++; /* Increment slow_idx here to give the remove functions
-                             an opportunity to rewind it */
+        if (elem->id == UCS_CALLBACKQ_ID_NULL) {
+            continue;
+        }
 
         tmp_elem = *elem;
         if (elem->flags & UCS_CALLBACKQ_FLAG_FAST) {
@@ -399,9 +417,8 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
         ucs_callbackq_enter(cbq);
     }
 
-    priv->slow_idx = 0;
-
     ucs_callbackq_purge_fast(cbq);
+    ucs_callbackq_purge_slow(cbq);
 
     /* Disable this proxy if no more work to do */
     if (!priv->fast_remove_mask && (priv->num_slow_elems == 0)) {
@@ -426,7 +443,6 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
     priv->slow_elems        = NULL;
     priv->num_slow_elems    = 0;
     priv->max_slow_elems    = 0;
-    priv->slow_idx          = 0;
     priv->slow_proxy_id     = UCS_CALLBACKQ_ID_NULL;
     priv->fast_remove_mask  = 0;
     priv->num_fast_elems    = 0;
@@ -441,6 +457,8 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
 
     ucs_callbackq_disable_proxy(cbq);
+    ucs_callbackq_purge_fast(cbq);
+    ucs_callbackq_purge_slow(cbq);
 
     if ((priv->num_fast_elems) > 0 || (priv->num_slow_elems > 0)) {
         ucs_warn("%d fast-path and %d slow-path callbacks remain in the queue",
