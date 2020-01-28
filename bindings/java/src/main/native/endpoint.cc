@@ -199,7 +199,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, j
                                                                   jlong size, jobject callback)
 {
     ucs_status_ptr_t request = ucp_stream_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
-                                               ucp_dt_make_contig(1), jucx_request_callback, 0);
+                                                  ucp_dt_make_contig(1), jucx_request_callback, 0);
 
     ucs_trace_req("JUCX: send_stream_nb request %p to %s, size: %zu",
                   request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size);

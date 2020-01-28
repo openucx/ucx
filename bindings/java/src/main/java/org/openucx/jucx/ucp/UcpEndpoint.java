@@ -217,9 +217,9 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         return recvStreamNonBlockingNative(getNativeId(), localAddress, size, flags, callback);
     }
 
-    public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
-        return recvStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(),
-          UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL, callback);
+    public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, long flags, UcxCallback callback) {
+        return recvStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(), flags,
+            callback);
     }
 
     /**

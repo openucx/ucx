@@ -127,7 +127,7 @@ public class UcpListenerTest  extends UcxTest {
         UcpRequest sent = serverToClient.sendStreamNonBlocking(
             ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
         UcpRequest recv = clientToServer.recvStreamNonBlocking(
-            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
+            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), 0, null);
 
         while (!sent.isCompleted() || !recv.isCompleted()) {
             serverWorker1.progress();

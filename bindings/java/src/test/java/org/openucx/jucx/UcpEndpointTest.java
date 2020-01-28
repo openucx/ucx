@@ -413,26 +413,42 @@ public class UcpEndpointTest extends UcxTest {
             new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
 
         ByteBuffer sendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
-        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        sendBuffer.put(0, (byte)1);
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE * 2);
+
+        UcpRequest[] sends = new UcpRequest[2];
+
+        sends[0] = clientToServer.sendStreamNonBlocking(sendBuffer, new UcxCallback() {
+            @Override
+            public void onSuccess(UcpRequest request) {
+                sendBuffer.put(0, (byte)2);
+                sends[1] = clientToServer.sendStreamNonBlocking(sendBuffer, null);
+            }
+        });
+
+        while (sends[1] == null || !sends[1].isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
 
         AtomicBoolean received = new AtomicBoolean(false);
-        UcpRequest recvRequest = serverToClient.recvStreamNonBlocking(
-            UcxUtils.getAddress(recvBuffer), UcpMemoryTest.MEM_SIZE, 0,
+        serverToClient.recvStreamNonBlocking(
+            UcxUtils.getAddress(recvBuffer), UcpMemoryTest.MEM_SIZE * 2,
+            UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
             new UcxCallback() {
                 @Override
                 public void onSuccess(UcpRequest request) {
+                    assertEquals(request.getRecvSize(), UcpMemoryTest.MEM_SIZE * 2);
+                    assertEquals((byte)1, recvBuffer.get(0));
+                    assertEquals((byte)2, recvBuffer.get(UcpMemoryTest.MEM_SIZE));
                     received.set(true);
                 }
             });
-
-        clientToServer.sendStreamNonBlocking(sendBuffer, null);
 
         while (!received.get()) {
             worker1.progress();
             worker2.progress();
         }
-
-        assertEquals(recvRequest.getRecvSize(), UcpMemoryTest.MEM_SIZE);
 
         Collections.addAll(resources, context1, context2, worker1, worker2, clientToServer,
             serverToClient);
