@@ -56,7 +56,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     path->sgid                      = iface->super.gid;
     path->dlid                      = htons(ep->dlid);
     path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
-    if (iface->super.is_global_addr) {
+    if (iface->super.config.force_global_addr) {
         ucs_assert_always(ep->dgid.global.interface_id != 0);
         path->dgid                  = ep->dgid;
         path->hop_limit             = iface->super.config.hop_limit;

@@ -74,6 +74,10 @@ size_t test_uct_ib::m_ib_am_handler_counter = 0;
 
 class test_uct_ib_addr : public test_uct_ib {
 public:
+    uct_ib_iface_config_t *ib_config() {
+        return ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
+    }
+
     void test_address_pack(uint64_t subnet_prefix) {
         uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
@@ -90,12 +94,12 @@ public:
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
         if (uct_ib_iface_is_roce(iface)) {
-            EXPECT_TRUE(iface->is_global_addr);
+            EXPECT_TRUE(iface->config.force_global_addr);
         } else {
             EXPECT_EQ(lid_in, lid_out);
         }
 
-        if (iface->is_global_addr) {
+        if (ib_config()->is_global) {
             EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
@@ -108,35 +112,27 @@ public:
         static const uint16_t lid = 0x1ee7;
         union ibv_gid gid;
         struct ibv_ah_attr ah_attr;
-        uct_ib_iface_config_t *ib_config;
 
-        ib_config = ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
-        ASSERT_EQ(iface->is_global_addr,
-                  ib_config->is_global || uct_ib_iface_is_roce(iface));
+        ASSERT_EQ(iface->config.force_global_addr,
+                  ib_config()->is_global || uct_ib_iface_is_roce(iface));
 
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
 
-        if ((iface->gid.global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) &&
-            (gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX)) {
-            UCS_TEST_SKIP_R("not applicable");
-        }
-
         uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, &ah_attr);
 
         if (uct_ib_iface_is_roce(iface)) {
-            EXPECT_EQ(1, ah_attr.is_global);
-        }
-
-        if (iface->is_global_addr) {
-            /* in case if global address is forced - ah_attr should use GRH */
-            EXPECT_EQ(1, ah_attr.is_global);
+            /* in case of roce, should be global */
+            EXPECT_TRUE(ah_attr.is_global);
+        } else if (ib_config()->is_global) {
+            /* in case of global address is forced - ah_attr should use GRH */
+            EXPECT_TRUE(ah_attr.is_global);
         } else if (iface->gid.global.subnet_prefix == gid.global.subnet_prefix) {
-            /* in case if subnets are same - ah_attr depend from forced/nonforced GRH */
-            EXPECT_EQ(!ah_attr.is_global, !iface->is_global_addr);
+            /* in case of subnets are same - ah_attr depend from forced/nonforced GRH */
+            EXPECT_FALSE(ah_attr.is_global);
         } else if (iface->gid.global.subnet_prefix != gid.global.subnet_prefix) {
-            /* in case if subnets are different - ah_attr should use GRH */
-            EXPECT_EQ(1, ah_attr.is_global);
+            /* in case of subnets are different - ah_attr should use GRH */
+            EXPECT_TRUE(ah_attr.is_global);
         }
     }
 };
@@ -148,6 +144,19 @@ UCS_TEST_P(test_uct_ib_addr, address_pack) {
 }
 
 UCS_TEST_P(test_uct_ib_addr, fill_ah_attr) {
+    test_fill_ah_attr(UCT_IB_LINK_LOCAL_PREFIX);
+    test_fill_ah_attr(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_fill_ah_attr(0xdeadfeedbeefa880ul);
+    test_fill_ah_attr(0l);
+}
+
+UCS_TEST_P(test_uct_ib_addr, address_pack_global, "IB_IS_GLOBAL=y") {
+    test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_address_pack(0xdeadfeedbeefa880ul);
+}
+
+UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
     test_fill_ah_attr(UCT_IB_LINK_LOCAL_PREFIX);
     test_fill_ah_attr(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_fill_ah_attr(0xdeadfeedbeefa880ul);
