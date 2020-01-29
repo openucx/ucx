@@ -303,17 +303,25 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
+    ucs_log_level_t log_level;
+    ucs_status_t status;
 
-    ucs_error("%s: got error event %s, status %d peer %s",
-              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-              rdma_event_str(event->event), event->status,
-              ucs_sockaddr_str(remote_addr, ip_port_str,
-                               UCS_SOCKADDR_STRING_LEN));
+    if (event->event == RDMA_CM_EVENT_REJECTED) {
+        status    = UCS_ERR_REJECTED;
+        log_level = UCS_LOG_LEVEL_DEBUG;
+    } else {
+        status    = UCS_ERR_IO_ERROR;
+        log_level = UCS_LOG_LEVEL_ERROR;
+    }
+
+    ucs_log(log_level, "%s: got error event %s, status %d peer %s",
+            uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+            rdma_event_str(event->event), event->status,
+            ucs_sockaddr_str(remote_addr, ip_port_str,
+                             UCS_SOCKADDR_STRING_LEN));
 
     remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_error_cb(cep, &remote_data,
-                              (event->event == RDMA_CM_EVENT_REJECTED ?
-                               UCS_ERR_REJECTED : UCS_ERR_IO_ERROR));
+    uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
 }
 
 static void
