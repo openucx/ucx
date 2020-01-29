@@ -33,7 +33,7 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      "Size of the receive FIFO in the memory-map UCTs.",
      ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
 
-    {"SEG_SIZE", "8k",
+    {"SEG_SIZE", "8256",
      "Size of send/receive buffers for copy-out sends.",
      ucs_offsetof(uct_mm_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
