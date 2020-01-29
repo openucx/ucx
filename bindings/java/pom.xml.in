@@ -80,6 +80,65 @@
     </repository>
   </distributionManagement>
 
+  <repositories>
+    <repository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!--
+        This is used as a fallback when the first try fails.
+      -->
+      <id>central</id>
+      <name>Maven Repository</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>central</id>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
   <dependencies>
     <dependency>
       <groupId>junit</groupId>
@@ -267,28 +326,13 @@
       </plugin>
 
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>native-maven-plugin</artifactId>
-        <version>1.0-alpha-9</version>
-        <extensions>true</extensions>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
         <configuration>
-          <javahOutputDirectory>${native.dir}</javahOutputDirectory>
-          <javahClassNames>
-            <javahClassName>org.openucx.jucx.ucp.UcpConstants</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpContext</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpEndpoint</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpListener</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpMemory</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpRequest</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpRemoteKey</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpWorker</javahClassName>
-            <javahClassName>org.openucx.jucx.ucs.UcsConstants</javahClassName>
-          </javahClassNames>
-          <sources>
-            <source>
-              <directory>${jucx.src.dir}/src/main/native</directory>
-            </source>
-          </sources>
+          <compilerArgs>
+            <arg>-h</arg>
+            <arg>${native.dir}</arg>
+          </compilerArgs>
         </configuration>
       </plugin>
 
