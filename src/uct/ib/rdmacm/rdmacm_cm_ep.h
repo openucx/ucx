@@ -22,8 +22,7 @@ typedef struct uct_rdmacm_cm_ep {
 enum {
     UCT_RDMACM_CM_EP_ON_CLIENT      = UCS_BIT(0),
     UCT_RDMACM_CM_EP_ON_SERVER      = UCS_BIT(1),
-    UCT_RDMACM_CM_EP_GOT_CONNECT    = UCS_BIT(2), /* connection was successfully
-                                                     established */
+    UCT_RDMACM_CM_EP_CONNECTED      = UCS_BIT(2),  /* Connect callback was invoked */
     UCT_RDMACM_CM_EP_GOT_DISCONNECT = UCS_BIT(3), /* got disconnect event */
     UCT_RDMACM_CM_EP_DISCONNECTING  = UCS_BIT(4), /* uct_ep_disconnect was
                                                      called on the ep. */
@@ -50,3 +49,10 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
 
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len);
+
+void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
+                                        uct_cm_remote_data_t *remote_data,
+                                        ucs_status_t status);
+
+void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
+                                        ucs_status_t status);
