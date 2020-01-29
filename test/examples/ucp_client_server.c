@@ -34,13 +34,21 @@
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
 
-#define TEST_STRING_LEN sizeof(test_message)
-#define DEFAULT_PORT    13337
-#define IP_STRING_LEN   50
-#define PORT_STRING_LEN 8
+#define TEST_STRING_LEN    sizeof(test_message)
+#define DEFAULT_PORT       13337
+#define IP_STRING_LEN      50
+#define PORT_STRING_LEN    8
+#define TAG                0xCAFE
+#define COMM_TYPE_DEFAULT  "STREAM"
 
 const char test_message[]   = "UCX Client-Server Hello World";
 static uint16_t server_port = DEFAULT_PORT;
+
+typedef enum {
+    CLIENT_SERVER_SEND_RECV_STREAM  = UCS_BIT(0),
+    CLIENT_SERVER_SEND_RECV_TAG     = UCS_BIT(1),
+    CLIENT_SERVER_SEND_RECV_DEFAULT = CLIENT_SERVER_SEND_RECV_STREAM
+} send_recv_type_t;
 
 /**
  * Server's application context to be used in the user's connection request
@@ -62,6 +70,18 @@ typedef struct test_req {
 } test_req_t;
 
 
+static void tag_recv_cb(void *request, ucs_status_t status,
+                        ucp_tag_recv_info_t *info)
+{
+    test_req_t *req = request;
+
+    req->complete = 1;
+
+    printf("tag_recv_cb returned with status %d (%s), length: %lu, "
+           "sender_tag: 0x%lX\n",
+           status, ucs_status_string(status), info->length, info->sender_tag);
+}
+
 /**
  * The callback on the receiving side, which is invoked upon receiving the
  * stream message.
@@ -78,15 +98,15 @@ static void stream_recv_cb(void *request, ucs_status_t status, size_t length)
 
 /**
  * The callback on the sending side, which is invoked after finishing sending
- * the stream message.
+ * the message.
  */
-static void stream_send_cb(void *request, ucs_status_t status)
+static void send_cb(void *request, ucs_status_t status)
 {
     test_req_t *req = request;
 
     req->complete = 1;
 
-    printf("stream_send_cb returned with status %d (%s)\n",
+    printf("send_cb returned with status %d (%s)\n",
            status, ucs_status_string(status));
 }
 
@@ -215,6 +235,24 @@ static ucs_status_t request_wait(ucp_worker_h ucp_worker, test_req_t *request)
     return status;
 }
 
+static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
+                            int is_server, char *recv_message)
+{
+    ucs_status_t status;
+    int ret = 0;
+
+    status = request_wait(ucp_worker, request);
+    if (status != UCS_OK){
+        fprintf(stderr, "unable to %s UCX message (%s)\n",
+                is_server ? "receive": "send", ucs_status_string(status));
+        ret = -1;
+    } else {
+        print_result(is_server, recv_message);
+    }
+
+    return ret;
+}
+
 /**
  * Send and receive a message using the Stream API.
  * The client sends a message to the server and waits until the send it completed.
@@ -225,14 +263,12 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
     char recv_message[TEST_STRING_LEN]= "";
     test_req_t *request;
     size_t length;
-    int ret = 0;
-    ucs_status_t status;
 
     if (!is_server) {
         /* Client sends a message to the server using the stream API */
         request = ucp_stream_send_nb(ep, test_message, 1,
                                      ucp_dt_make_contig(TEST_STRING_LEN),
-                                     stream_send_cb, 0);
+                                     send_cb, 0);
     } else {
         /* Server receives a message from the client using the stream API */
         request = ucp_stream_recv_nb(ep, &recv_message, 1,
@@ -241,17 +277,32 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
                                      UCP_STREAM_RECV_FLAG_WAITALL);
     }
 
-    status = request_wait(ucp_worker, request);
-    if (status != UCS_OK){
-        fprintf(stderr, "unable to %s UCX message (%s)\n",
-                is_server ? "receive": "send",
-                ucs_status_string(status));
-        ret = -1;
+    return request_finalize(ucp_worker, request, is_server, recv_message);
+}
+
+/**
+ * Send and receive a message using the Tag-Matching API.
+ * The client sends a message to the server and waits until the send it completed.
+ * The server receives a message from the client and waits for its completion.
+ */
+static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
+{
+    char recv_message[TEST_STRING_LEN]= "";
+    test_req_t *request;
+
+    if (!is_server) {
+        /* Client sends a message to the server using the Tag-Matching API */
+        request = ucp_tag_send_nb(ep, test_message, 1,
+                                  ucp_dt_make_contig(TEST_STRING_LEN), TAG,
+                                  send_cb);
     } else {
-        print_result(is_server, recv_message);
+        /* Server receives a message from the client using the Tag-Matching API */
+        request = ucp_tag_recv_nb(ucp_worker, &recv_message, 1,
+                                  ucp_dt_make_contig(TEST_STRING_LEN),
+                                  TAG, 0, tag_recv_cb);
     }
 
-    return ret;
+    return request_finalize(ucp_worker, request, is_server, recv_message);
 }
 
 /**
@@ -302,25 +353,42 @@ static void usage()
                     "(If not specified, server uses INADDR_ANY; "
                     "Irrelevant at client)\n");
     fprintf(stderr, " -p Port number to listen/connect to (default = %d). "
-                    "0 on the server side means select a random port and print it",
+                    "0 on the server side means select a random port and print it\n",
                     DEFAULT_PORT);
+    fprintf(stderr, " -c Communication type for the client and server. "
+                    " Valid values are:\n"
+                    "     's' : Stream API\n"
+                    "     't' : Tag API\n"
+                    "    If not specified, %s API will be used.\n", COMM_TYPE_DEFAULT);
     fprintf(stderr, "\n");
 }
 
 /**
  * Parse the command line arguments.
  */
-static int parse_cmd(int argc, char *const argv[], char **server_addr, char **listen_addr)
+static int parse_cmd(int argc, char *const argv[], char **server_addr,
+                     char **listen_addr, send_recv_type_t *send_recv_type)
 {
     int c = 0;
     int port;
 
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "a:l:p:")) != -1) {
+    while ((c = getopt(argc, argv, "a:l:p:c:")) != -1) {
         switch (c) {
         case 'a':
             *server_addr = optarg;
+            break;
+        case 'c':
+            if (!strcmp(optarg, "s")) {
+                *send_recv_type = CLIENT_SERVER_SEND_RECV_STREAM;
+            } else if (!strcmp(optarg, "t")) {
+                *send_recv_type = CLIENT_SERVER_SEND_RECV_TAG;
+            } else {
+                fprintf(stderr, "Wrong communication type %s. "
+                        "Using %s as default\n", optarg, COMM_TYPE_DEFAULT);
+                *send_recv_type = CLIENT_SERVER_SEND_RECV_DEFAULT;
+            }
             break;
         case 'l':
             *listen_addr = optarg;
@@ -383,12 +451,24 @@ static char* sockaddr_get_port_str(const struct sockaddr_storage *sock_addr,
 }
 
 static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
+                                       send_recv_type_t send_recv_type,
                                        int is_server)
 {
     int ret;
 
-    /* Client-Server communication via Stream API */
-    ret = send_recv_stream(worker, ep, is_server);
+    switch (send_recv_type) {
+    case CLIENT_SERVER_SEND_RECV_STREAM:
+        /* Client-Server communication via Stream API */
+        ret = send_recv_stream(worker, ep, is_server);
+        break;
+    case CLIENT_SERVER_SEND_RECV_TAG:
+        /* Client-Server communication via Tag-Matching API */
+        ret = send_recv_tag(worker, ep, is_server);
+        break;
+    default:
+        fprintf(stderr, "unknown send-recv type %d\n", send_recv_type);
+        return 0;
+    }
 
     /* Close the endpoint to the peer */
     ep_close(worker, ep);
@@ -520,7 +600,7 @@ out:
 }
 
 static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
-                      char *listen_addr)
+                      char *listen_addr, send_recv_type_t send_recv_type)
 {
     ucx_server_ctx_t context;
     ucp_worker_h     ucp_data_worker;
@@ -569,7 +649,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
             goto err_listener;
         }
 
-        client_server_communication(ucp_data_worker, server_ep, 1);
+        client_server_communication(ucp_data_worker, server_ep, send_recv_type, 1);
 
         /* Reinitialize the server's context to be used for the next client */
         context.conn_request = NULL;
@@ -586,7 +666,7 @@ err:
 }
 
 static int run_client(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
-                      char *server_addr)
+                      char *server_addr, send_recv_type_t send_recv_type)
 {
     ucp_ep_h     client_ep;
     ucs_status_t status;
@@ -599,7 +679,7 @@ static int run_client(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         goto out;
     }
 
-    ret = client_server_communication(ucp_worker, client_ep, 0);
+    ret = client_server_communication(ucp_worker, client_ep, send_recv_type, 0);
 
 out:
     return ret;
@@ -621,8 +701,7 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES     |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
                               UCP_PARAM_FIELD_REQUEST_INIT;
-    ucp_params.features     = UCP_FEATURE_STREAM;
-
+    ucp_params.features     = UCP_FEATURE_STREAM | UCP_FEATURE_TAG;
     ucp_params.request_size = sizeof(test_req_t);
     ucp_params.request_init = request_init;
 
@@ -649,6 +728,7 @@ err:
 
 int main(int argc, char **argv)
 {
+    send_recv_type_t send_recv_type = CLIENT_SERVER_SEND_RECV_DEFAULT;
     char *server_addr = NULL;
     char *listen_addr = NULL;
     int ret;
@@ -657,7 +737,7 @@ int main(int argc, char **argv)
     ucp_context_h ucp_context;
     ucp_worker_h  ucp_worker;
 
-    ret = parse_cmd(argc, argv, &server_addr, &listen_addr);
+    ret = parse_cmd(argc, argv, &server_addr, &listen_addr, &send_recv_type);
     if (ret != 0) {
         goto err;
     }
@@ -671,10 +751,10 @@ int main(int argc, char **argv)
     /* Client-Server initialization */
     if (server_addr == NULL) {
         /* Server side */
-        ret = run_server(ucp_context, ucp_worker, listen_addr);
+        ret = run_server(ucp_context, ucp_worker, listen_addr, send_recv_type);
     } else {
         /* Client side */
-        ret = run_client(ucp_context, ucp_worker, server_addr);
+        ret = run_client(ucp_context, ucp_worker, server_addr, send_recv_type);
     }
 
     ucp_worker_destroy(ucp_worker);
