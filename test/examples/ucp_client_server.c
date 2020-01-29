@@ -357,8 +357,8 @@ static void usage()
                     DEFAULT_PORT);
     fprintf(stderr, " -c Communication type for the client and server. "
                     " Valid values are:\n"
-                    "     's' : Stream API\n"
-                    "     't' : Tag API\n"
+                    "     'stream' : Stream API\n"
+                    "     'tag'    : Tag API\n"
                     "    If not specified, %s API will be used.\n", COMM_TYPE_DEFAULT);
     fprintf(stderr, "\n");
 }
@@ -380,9 +380,9 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
             *server_addr = optarg;
             break;
         case 'c':
-            if (!strcmp(optarg, "s")) {
+            if (!strcasecmp(optarg, "stream")) {
                 *send_recv_type = CLIENT_SERVER_SEND_RECV_STREAM;
-            } else if (!strcmp(optarg, "t")) {
+            } else if (!strcasecmp(optarg, "tag")) {
                 *send_recv_type = CLIENT_SERVER_SEND_RECV_TAG;
             } else {
                 fprintf(stderr, "Wrong communication type %s. "
