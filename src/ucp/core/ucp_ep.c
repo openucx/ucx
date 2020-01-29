@@ -823,34 +823,18 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
     ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
 }
 
-static void ucp_ep_destroy_cm_lane(ucp_ep_h ep) {
-    ucp_wireup_ep_t *wireup_ep;
-    uct_ep_h cm_uct_ep;
-
-    ucs_assert(ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE);
-
-    wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    if (wireup_ep != NULL) {
-        cm_uct_ep = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
-        uct_ep_destroy(&wireup_ep->super.super);
-    } else {
-        cm_uct_ep = ucp_ep_get_cm_uct_ep(ep);
-    }
-
-    uct_ep_destroy(cm_uct_ep);
-    ep->uct_eps[ucp_ep_get_cm_lane(ep)] = NULL;
-}
-
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
 
-    UCS_ASYNC_BLOCK(&ep->worker->async);
+    /* in case of force close, schedule ucp_ep_local_disconnect_progress to
+     * destroy the ep and all its lanes */
+    if (req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) {
+        goto out;
+    }
 
-    if ((ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) &&
-        (req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL)) {
-        ucp_ep_destroy_cm_lane(ep);
-    } else if (ucp_ep_is_cm_local_connected(ep)) {
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+    if (ucp_ep_is_cm_local_connected(ep)) {
         /* Now, when close flush is completed and we are still locally connected,
          * we have to notify remote side */
         ucp_ep_cm_disconnect_cm_lane(ep);
@@ -864,6 +848,7 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
     }
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
+out:
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
      * endpoint cannot be released from pending/completion callback context.
@@ -917,10 +902,8 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     ucp_ep_close_flushed_callback, "close");
 
     if (!UCS_PTR_IS_PTR(request)) {
-        if ((ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) &&
-            (mode == UCP_EP_CLOSE_MODE_FORCE)) {
-            ucp_ep_destroy_cm_lane(ep);
-        } else if (ucp_ep_is_cm_local_connected(ep)) {
+        if (ucp_ep_is_cm_local_connected(ep) &&
+            (mode == UCP_EP_CLOSE_MODE_FLUSH)) {
             /* lanes already flushed, start disconnect on CM lane */
             ucp_ep_cm_disconnect_cm_lane(ep);
             close_req = ucp_ep_cm_close_request_get(ep);
@@ -1142,8 +1125,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if ((config->key.cm_lane  == UCP_NULL_LANE) &&
-        (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
+    if (!ucp_ep_config_test_rndv_support(config)) {
         /* Disable RNDV */
         rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
@@ -1201,8 +1183,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if ((config->key.cm_lane  == UCP_NULL_LANE) &&
-        (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
+    if (!ucp_ep_config_test_rndv_support(config)) {
         /* Disable RNDV */
         rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
@@ -1957,8 +1938,7 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
         return NULL;
     }
 
-    return ((ep->uct_eps[lane] != NULL) &&
-            ucp_wireup_ep_test(ep->uct_eps[lane])) ?
+    return ucp_wireup_ep_test(ep->uct_eps[lane]) ?
            ucs_derived_of(ep->uct_eps[lane], ucp_wireup_ep_t) : NULL;
 }
 
@@ -2010,13 +1990,20 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
         /* error callback is not set */
         (ucp_ep_ext_gen(ep)->err_cb == NULL) ||
-        /* the EP is not valid for usage outside of UCP */
-        (ep->flags & UCP_EP_FLAG_CLOSED) || !(ep->flags & UCP_EP_FLAG_USED)) {
+        /* the EP has been closed by user */
+        (ep->flags & UCP_EP_FLAG_CLOSED)) {
         return;
     }
 
+    ucs_assert(ep->flags & UCP_EP_FLAG_USED);
     ucs_debug("ep %p: calling user error callback %p with arg %p and status %s",
               ep, ucp_ep_ext_gen(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
               ucs_status_string(status));
     ucp_ep_ext_gen(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
+}
+
+int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
+{
+    return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+           (config->key.cm_lane  != UCP_NULL_LANE);
 }

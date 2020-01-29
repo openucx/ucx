@@ -743,10 +743,13 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
 
     if (status != UCS_OK) {
         cm_lane = ucp_ep_get_cm_lane(ucp_ep);
+        if (status == UCS_ERR_REJECTED) {
+            ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+            status = UCS_ERR_CONNECTION_RESET;
+        }
+
         ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
-                                 ucp_ep->uct_eps[cm_lane], cm_lane,
-                                 (status == UCS_ERR_REJECTED) ?
-                                 UCS_ERR_CONNECTION_RESET : status);
+                                 ucp_ep->uct_eps[cm_lane], cm_lane, status);
         return;
     }
 

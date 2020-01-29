@@ -501,4 +501,6 @@ size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
+int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
+
 #endif
