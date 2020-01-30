@@ -41,6 +41,7 @@ static ucs_stats_class_t uct_rc_txqp_stats_class = {
     .num_counters = UCT_RC_TXQP_STAT_LAST,
     .counter_names = {
         [UCT_RC_TXQP_STAT_QP_FULL]          = "qp_full",
+        [UCT_RC_TXQP_STAT_NO_READS]         = "no_reads",
         [UCT_RC_TXQP_STAT_SIGNAL]           = "signal"
     }
 };
@@ -160,8 +161,11 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    uct_rc_iface_t *iface          = ucs_container_of(ucs_mpool_obj_owner(desc),
+                                                      uct_rc_iface_t, tx.mp);
 
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
+    ++iface->tx.reads_available;
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
@@ -174,12 +178,22 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    uct_rc_iface_t *iface          = ucs_container_of(ucs_mpool_obj_owner(desc),
+                                                      uct_rc_iface_t, tx.mp);
 
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
+    ++iface->tx.reads_available;
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
     ucs_mpool_put(desc);
+}
+
+void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp)
+{
+    ++op->iface->tx.reads_available;
+    uct_rc_ep_send_op_completion_handler(op, resp);
 }
 
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,

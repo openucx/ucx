@@ -151,6 +151,8 @@ typedef struct uct_rc_iface_common_config {
         unsigned             retry_count;
         double               rnr_timeout;
         unsigned             rnr_retry_count;
+        unsigned             max_get_ops;
+        size_t               max_get_zcopy;
     } tx;
 
     struct {
@@ -204,6 +206,7 @@ struct uct_rc_iface {
          * In case of verbs TL we use QWE number, so 1 post always takes 1
          * credit */
         signed                  cq_available;
+        unsigned                reads_available;
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
@@ -247,6 +250,7 @@ struct uct_rc_iface {
 #endif
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
+        size_t               max_get_zcopy;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
@@ -277,9 +281,10 @@ struct uct_rc_iface_send_op {
     uint16_t                      flags;
     unsigned                      length;
     union {
-        void                      *buffer;        /* atomics / desc */
-        void                      *unpack_arg;    /* get_bcopy / desc */
-        uct_rc_iface_t            *iface;         /* zcopy / op */
+        void                      *buffer;     /* atomics / desc */
+        void                      *unpack_arg; /* get_bcopy / desc */
+        uct_rc_iface_t            *iface;      /* should not be used with
+                                                  get_bcopy completions */
     };
     uct_completion_t              *user_comp;
 };
@@ -433,7 +438,8 @@ static inline void uct_rc_zcopy_desc_set_header(uct_rc_hdr_t *rch,
 static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {
     return uct_rc_iface_have_tx_cqe_avail(iface) &&
-           !ucs_mpool_is_empty(&iface->tx.mp);
+           !ucs_mpool_is_empty(&iface->tx.mp) &&
+           (iface->tx.reads_available != 0);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_send_handler_t

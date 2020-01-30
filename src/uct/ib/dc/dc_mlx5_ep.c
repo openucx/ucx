@@ -66,7 +66,8 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                    MLX5_WQE_CTRL_CQ_UPDATE | send_flags,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
 
-    uct_rc_txqp_add_send_comp(&iface->super.super, txqp, comp, sn,
+    uct_rc_txqp_add_send_comp(&iface->super.super, txqp,
+                              uct_rc_ep_send_op_completion_handler, comp, sn,
                               UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
 }
 
