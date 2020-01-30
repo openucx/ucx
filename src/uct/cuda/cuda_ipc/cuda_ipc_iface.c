@@ -28,6 +28,10 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 
+    {"MAX_EVENTS", "inf",
+     "Max number of cuda events. -1 is infinite",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -378,7 +382,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
-    int dev_count;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops, md, worker,
@@ -391,15 +394,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_NO_DEVICE;
     }
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&dev_count));
-    if (UCS_OK != status) {
-        return status;
-    }
-    ucs_assert(dev_count <= UCT_CUDA_IPC_MAX_PEERS);
-
-    self->device_count        = dev_count;
-    self->config.max_poll     = config->max_poll;
-    self->config.enable_cache = config->enable_cache;
+    self->device_count               = UCT_CUDA_IPC_MAX_PEERS;
+    self->config.max_poll            = config->max_poll;
+    self->config.enable_cache        = config->enable_cache;
+    self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
 
     if (self->config.enable_cache) {
         self->map_memhandle   = uct_cuda_ipc_cache_map_memhandle;
@@ -415,7 +413,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
                             0,
                             UCS_SYS_CACHE_LINE_SIZE,
                             128,
-                            1024,
+                            self->config.max_cuda_ipc_events,
                             &uct_cuda_ipc_event_desc_mpool_ops,
                             "CUDA_IPC EVENT objects");
     if (UCS_OK != status) {

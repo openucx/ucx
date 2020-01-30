@@ -32,6 +32,7 @@ typedef struct uct_cuda_ipc_iface {
                                               /* per stream outstanding ops */
     struct {
         unsigned     max_poll;                /* query attempts w.o success */
+        unsigned     max_cuda_ipc_events;     /* max mpool entries */
         int          enable_cache;            /* enable/disable ipc handle cache */
     } config;
     ucs_status_t     (*map_memhandle)(void *context, uct_cuda_ipc_key_t *key,
@@ -44,6 +45,7 @@ typedef struct uct_cuda_ipc_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     int                     enable_cache;
+    unsigned                max_cuda_ipc_events;
 } uct_cuda_ipc_iface_config_t;
 
 

@@ -70,7 +70,6 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     ucs_queue_head_t *outstanding_queue;
     ucs_status_t status;
     CUdeviceptr dst, src;
-    CUdevice cu_device;
     CUstream stream;
     size_t offset;
 
@@ -78,8 +77,6 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
-
-    UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     status = iface->map_memhandle((void *)ep->remote_memh_cache, key, &mapped_addr);
     if (status != UCS_OK) {
@@ -96,6 +93,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
             return status;
         }
     }
+
+    key->dev_num %= UCT_CUDA_IPC_MAX_PEERS; /* round-robin */
 
     stream            = iface->stream_d2d[key->dev_num];
     outstanding_queue = &iface->outstanding_d2d_event_q;
