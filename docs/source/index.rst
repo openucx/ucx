@@ -44,14 +44,14 @@ UCX is a member of `UCF consortium <https://www.ucfconsortium.org>`_.
 Quick start
 ***********
 
-The following commands will download UCX latest v1.6.1 release, build the code,
+The following commands will download UCX latest v{RELEASE} release, build the code,
 and run a simple client/server example:
 
 .. code-block:: console
 
-    $ wget https://github.com/openucx/ucx/releases/download/v1.6.1/ucx-1.6.1.tar.gz
-    $ tar xzf ucx-1.6.1.tar.gz
-    $ cd ucx-1.6.1
+    $ wget https://github.com/openucx/ucx/releases/download/v{RELEASE}/ucx-{RELEASE}.tar.gz
+    $ tar xzf ucx-{RELEASE}tar.gz
+    $ cd ucx-{RELEASE}
     $ ./contrib/configure-release --prefix=$PWD/install
     $ make -j8 install
 
@@ -71,8 +71,8 @@ and run a simple client/server example:
 Documentation
 *************
 
-*  API doc: `HTML <api/v1.6/html>`_ `PDF <api/v1.6/ucx.pdf>`_
-* `Examples <https://github.com/openucx/ucx/tree/v1.6.x/test/examples>`_
+*  API doc: `HTML <http://openucx.github.io/ucx/api/v{VERSION}/html/index.html>`_ `PDF <http://openucx.github.io/ucx/api/v{VERSION}/ucx-v{VERSION}.pdf>`_
+* `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/test/examples>`_
 
 
 Projects using UCX
