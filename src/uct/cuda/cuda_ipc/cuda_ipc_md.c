@@ -111,11 +111,6 @@ ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
     uct_cuda_ipc_uuid_copy(&md->uuid_map[md->uuid_map_size], &rkey->uuid);
     *idx = md->uuid_map_size++;
 
-    /* overwrite dev_num with a unique ID; this means that relative remote
-     * device number of multiple peers do not map on the same stream and reduces
-     * stream sequentialization */
-    rkey->dev_num = *idx;
-
     return UCS_OK;
 }
 
@@ -132,6 +127,11 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
+
+    /* overwrite dev_num with a unique ID; this means that relative remote
+     * device number of multiple peers do not map on the same stream and reduces
+     * stream sequentialization */
+    rkey->dev_num = peer_idx;
 
     UCT_CUDA_IPC_GET_DEVICE(this_device);
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
