@@ -330,7 +330,7 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
 /**
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(const union ibv_gid *gid, unsigned flags);
+size_t uct_ib_address_size(const union ibv_gid *gid, unsigned pack_flags);
 
 
 /**
@@ -350,7 +350,7 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
  *                         returns for the given scope.
  */
 void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         unsigned flags, uct_ib_address_t *ib_addr);
+                         unsigned pack_flags, uct_ib_address_t *ib_addr);
 
 
 /**
