@@ -467,7 +467,7 @@ static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
         break;
     default:
         fprintf(stderr, "unknown send-recv type %d\n", send_recv_type);
-        return 0;
+        return -1;
     }
 
     /* Close the endpoint to the peer */
