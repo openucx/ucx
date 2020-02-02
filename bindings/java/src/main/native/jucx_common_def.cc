@@ -231,6 +231,13 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
     jucx_request_callback(request, status);
 }
 
+void stream_recv_callback(void *request, ucs_status_t status, size_t length)
+{
+    struct jucx_context *ctx = (struct jucx_context *)request;
+    ctx->length = length;
+    jucx_request_callback(request, status);
+}
+
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
@@ -258,6 +265,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         }
         ucs_spin_unlock(&ctx->lock);
     } else {
+        set_jucx_request_completed(env, jucx_request, NULL);
         if (UCS_PTR_IS_ERR(request)) {
             JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
             if (callback != NULL) {
@@ -266,11 +274,20 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         } else if (callback != NULL) {
             call_on_success(callback, jucx_request);
         }
-        set_jucx_request_completed(env, jucx_request, NULL);
     }
     return jucx_request;
 }
 
+jobject process_completed_stream_recv(size_t length, jobject callback)
+{
+    JNIEnv *env = get_jni_env();
+    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor, NULL);
+    env->SetLongField(jucx_request, recv_size_field, length);
+    if (callback != NULL) {
+        jucx_call_callback(callback, jucx_request, UCS_OK);
+    }
+    return jucx_request;
+}
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
 {

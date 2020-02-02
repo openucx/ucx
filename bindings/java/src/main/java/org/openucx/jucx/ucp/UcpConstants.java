@@ -6,8 +6,9 @@
 package org.openucx.jucx.ucp;
 
 import org.openucx.jucx.NativeLibs;
+import org.openucx.jucx.UcxCallback;
 
-class UcpConstants {
+public class UcpConstants {
     static {
         NativeLibs.load();
         loadConstants();
@@ -111,6 +112,12 @@ class UcpConstants {
     static long UCP_MEM_MAP_NONBLOCK;
     static long UCP_MEM_MAP_ALLOCATE;
     static long UCP_MEM_MAP_FIXED;
+
+    /**
+     * The enumeration defines behavior of
+     * {@link UcpEndpoint#recvStreamNonBlocking(long, long, long, UcxCallback)}  function.
+     */
+    public static long UCP_STREAM_RECV_FLAG_WAITALL;
 
     private static native void loadConstants();
 }

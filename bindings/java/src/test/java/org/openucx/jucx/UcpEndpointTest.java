@@ -232,9 +232,7 @@ public class UcpEndpointTest extends UcxTest {
 
         try {
             Thread.sleep(5);
-        } catch (InterruptedException e) {
-
-        }
+        } catch (InterruptedException ignored) { }
 
         AtomicBoolean success = new AtomicBoolean(false);
 
@@ -251,9 +249,7 @@ public class UcpEndpointTest extends UcxTest {
             while ((++count < 100) && !success.get()) {
                 Thread.sleep(50);
             }
-        } catch (InterruptedException e) {
-
-        }
+        } catch (InterruptedException ignored) { }
 
         assertTrue(success.get());
         UcpRequest closeRequest = ep.closeNonBlockingForce();
@@ -272,9 +268,7 @@ public class UcpEndpointTest extends UcxTest {
         progressThread.interrupt();
         try {
             progressThread.join();
-        } catch (InterruptedException e) {
-
-        }
+        } catch (InterruptedException ignored) { }
 
         Collections.addAll(resources, context1, context2, worker1, worker2);
         closeResources();
@@ -400,6 +394,64 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals(UcpMemoryTest.MEM_SIZE / 2, recv.getRecvSize());
 
         Collections.addAll(resources, context1, context2, worker1, worker2, ep);
+        closeResources();
+    }
+
+    @Test
+    public void testStreamingAPI() {
+        UcpParams params = new UcpParams().requestStreamFeature().requestRmaFeature();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+
+        UcpWorker worker1 = context1.newWorker(new UcpWorkerParams());
+        UcpWorker worker2 = context2.newWorker(new UcpWorkerParams());
+
+        UcpEndpoint clientToServer = worker1.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
+
+        UcpEndpoint serverToClient = worker2.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
+
+        ByteBuffer sendBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        sendBuffer.put(0, (byte)1);
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE * 2);
+
+        UcpRequest[] sends = new UcpRequest[2];
+
+        sends[0] = clientToServer.sendStreamNonBlocking(sendBuffer, new UcxCallback() {
+            @Override
+            public void onSuccess(UcpRequest request) {
+                sendBuffer.put(0, (byte)2);
+                sends[1] = clientToServer.sendStreamNonBlocking(sendBuffer, null);
+            }
+        });
+
+        while (sends[1] == null || !sends[1].isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        AtomicBoolean received = new AtomicBoolean(false);
+        serverToClient.recvStreamNonBlocking(
+            UcxUtils.getAddress(recvBuffer), UcpMemoryTest.MEM_SIZE * 2,
+            UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
+            new UcxCallback() {
+                @Override
+                public void onSuccess(UcpRequest request) {
+                    assertEquals(request.getRecvSize(), UcpMemoryTest.MEM_SIZE * 2);
+                    assertEquals((byte)1, recvBuffer.get(0));
+                    assertEquals((byte)2, recvBuffer.get(UcpMemoryTest.MEM_SIZE));
+                    received.set(true);
+                }
+            });
+
+        while (!received.get()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        Collections.addAll(resources, context1, context2, worker1, worker2, clientToServer,
+            serverToClient);
         closeResources();
     }
 }
