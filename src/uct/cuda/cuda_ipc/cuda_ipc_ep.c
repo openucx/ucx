@@ -94,7 +94,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         }
     }
 
-    key->dev_num %= UCT_CUDA_IPC_MAX_PEERS; /* round-robin */
+    key->dev_num %= iface->config.max_streams; /* round-robin */
 
     stream            = iface->stream_d2d[key->dev_num];
     outstanding_queue = &iface->outstanding_d2d_event_q;
