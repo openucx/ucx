@@ -86,7 +86,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -109,7 +109,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
         return;
     }
 
@@ -122,7 +122,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -240,7 +240,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
                   "from server %s.", cep, event->id,
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
         /* notify remote side about local error */
         rdma_disconnect(cep->id);
         return;
@@ -259,7 +259,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
         ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
                   cep, ucs_sockaddr_str(remote_addr, ip_port_str,
                                         UCS_SOCKADDR_STRING_LEN));
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -268,7 +268,7 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t *cep = event->id->context;
 
     ucs_assert(event->id == cep->id);
-    /* Do not notify user on disconnected EP, RDMACM out of order case */
+    /* do not call connect callback again, RDMACM out of order case */
     if (cep->flags & UCT_RDMACM_CM_EP_GOT_DISCONNECT) {
         return;
     }
@@ -327,7 +327,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
                              UCS_SOCKADDR_STRING_LEN));
 
     remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
+    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
 }
 
 static void

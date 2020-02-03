@@ -15,12 +15,12 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
     char flags_buf[UCT_RDMACM_EP_FLAGS_STRING_LEN];
 
     static const char *ep_flag_to_str[] = {
-        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_CLIENT)]      = "client",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_SERVER)]      = "server",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_CONNECTED)]      = "connect_cb_invoked",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_GOT_DISCONNECT)] = "got_disconnect",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)]  = "disconnecting",
-        [ucs_ilog2(UCT_RDMACM_CM_EP_FAILED)]         = "failed",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_CLIENT)]       = "client",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_ON_SERVER)]       = "server",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_CONN_CB_INVOKED)] = "connect_cb_invoked",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_GOT_DISCONNECT)]  = "got_disconnect",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_DISCONNECTING)]   = "disconnecting",
+        [ucs_ilog2(UCT_RDMACM_CM_EP_FAILED)]          = "failed",
         NULL
     };
 
@@ -34,14 +34,14 @@ void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         uct_cm_remote_data_t *remote_data,
                                         ucs_status_t status)
 {
-    cep->flags |= UCT_RDMACM_CM_EP_CONNECTED;
+    cep->flags |= UCT_RDMACM_CM_EP_CONN_CB_INVOKED;
     uct_cm_ep_client_connect_cb(&cep->super, remote_data, status);
 }
 
 void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
                                         ucs_status_t status)
 {
-    cep->flags |= UCT_RDMACM_CM_EP_CONNECTED;
+    cep->flags |= UCT_RDMACM_CM_EP_CONN_CB_INVOKED;
     uct_cm_ep_server_connect_cb(&cep->super, status);
 }
 
@@ -54,21 +54,29 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
     }
 
     ucs_assert(status != UCS_OK);
-    /* Do not set local EP failed on normal disconnect event */
-    if (status != UCS_ERR_CONNECTION_RESET) {
-        cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-    }
-
     cep->status = status;
 
-    if (cep->flags & UCT_RDMACM_CM_EP_CONNECTED) {
+    if (cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED) {
+        /* already connected, so call disconnect callback */
         cep->super.disconnect_cb(&cep->super.super.super, cep->super.user_data);
     } else if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
+        /* not connected yet, so call client side connect callback with err
+         * status */
         uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
     } else {
         ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
+        /* not connected yet, so call server side connect callback with err
+         * status */
         uct_rdmacm_cm_ep_server_connect_cb(cep, status);
     }
+}
+
+void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
+                                 uct_cm_remote_data_t *remote_data,
+                                 ucs_status_t status)
+{
+    uct_rdmacm_cm_ep_error_cb(cep, remote_data, status);
+    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -277,6 +285,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     struct rdma_conn_param conn_param;
     ucs_status_t           status;
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_cm_remote_data_t   remote_data;
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
 
@@ -326,7 +335,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     return UCS_OK;
 
 err_server_cb:
-    uct_rdmacm_cm_ep_error_cb(cep, NULL, status);
+    remote_data.field_mask = 0;
+    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
     uct_rdmacm_cm_destroy_id(event->id);
     uct_rdmacm_cm_ack_event(event);
     return status;
@@ -373,7 +383,7 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
         goto out;
     }
 
-    if (!(cep->flags & UCT_RDMACM_CM_EP_CONNECTED)) {
+    if (!(cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED)) {
         ucs_debug("%s: calling uct_ep_disconnect on an ep that is not "
                   "connected yet (id=%p to peer %s)",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
