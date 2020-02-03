@@ -349,8 +349,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
         goto err_free_sa_data;
     }
 
-    progress_arg->ucp_ep    = ucp_ep;
-    progress_arg->uct_cm_ep = uct_cm_ep;
+    progress_arg->ucp_ep = ucp_ep;
     memcpy(progress_arg->dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
     memcpy(progress_arg->sa_data, remote_data->conn_priv_data,
@@ -388,8 +387,9 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 }
 
-static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
+static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
 {
+    ucp_ep_h ucp_ep = arg;
     void *req;
     ucs_status_t status;
 
@@ -443,10 +443,9 @@ err:
 
 static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 {
-    ucp_cm_disconnect_progress_arg_t *progress_arg = arg;
-    ucp_ep_h ucp_ep                                = progress_arg->ucp_ep;
-    uct_ep_h uct_cm_ep                             = progress_arg->uct_cm_ep;
-    ucs_async_context_t *async                     = &ucp_ep->worker->async;
+    ucp_ep_h ucp_ep            = arg;
+    uct_ep_h uct_cm_ep         = ucp_ep_get_cm_uct_ep(ucp_ep);
+    ucs_async_context_t *async = &ucp_ep->worker->async;
     ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(async);
@@ -470,7 +469,6 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     }
 
     UCS_ASYNC_UNBLOCK(async);
-    ucs_free(progress_arg);
     return 1;
 }
 
@@ -478,21 +476,15 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
 {
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-    ucp_cm_disconnect_progress_arg_t *progress_arg;
 
-    progress_arg = ucs_malloc(sizeof(*progress_arg), "disconnect_progress_arg");
-    if (progress_arg == NULL) {
-        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep, uct_cm_ep,
-                                 ucp_ep_get_cm_lane(ucp_ep), UCS_ERR_NO_MEMORY);
-        return;
-    }
+    ucs_debug("ep %p: CM remote disconnect callback invoked, flags 0x%x",
+              ucp_ep, ucp_ep->flags);
 
-    progress_arg->ucp_ep    = ucp_ep;
-    progress_arg->uct_cm_ep = uct_cm_ep;
     uct_worker_progress_register_safe(ucp_ep->worker->uct,
                                       ucp_ep_cm_disconnect_progress,
-                                      progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
+    ucp_worker_signal_internal(ucp_ep->worker);
 }
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
@@ -845,20 +837,11 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
 
 static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
-    ucp_ep_h ep = arg;
-    ucp_cm_disconnect_progress_arg_t *disconnect_arg;
-    ucp_cm_client_connect_progress_arg_t *client_connect_arg;
-
-    if (elem->cb == ucp_ep_cm_disconnect_progress) {
-        disconnect_arg = elem->arg;
-        return disconnect_arg->ucp_ep == ep;
-    } else if (elem->cb == (ucs_callback_t)ucp_ep_cm_remote_disconnect_progress) {
-        return ep == elem->arg;
-    } else if (elem->cb == ucp_cm_client_connect_progress) {
-        client_connect_arg = elem->arg;
-        return client_connect_arg->ucp_ep == ep;
-    } else if (elem->cb == ucp_cm_server_connect_progress) {
-        return ep == elem->arg;
+    if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
+        (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
+        (elem->cb == ucp_cm_client_connect_progress)       ||
+        (elem->cb == ucp_cm_server_connect_progress)) {
+        return arg == elem->arg;
     } else {
         return 0;
     }

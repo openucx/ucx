@@ -186,8 +186,43 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
     ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                ucp_dt_make_contig(1), tag, jucx_request_callback);
 
-    ucs_trace_req("JUCX: send_nb request %p to %s, size: %zu, tag: %ld",
+    ucs_trace_req("JUCX: send_tag_nb request %p to %s, size: %zu, tag: %ld",
                   request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, tag);
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                  jlong ep_ptr, jlong addr,
+                                                                  jlong size, jobject callback)
+{
+    ucs_status_ptr_t request = ucp_stream_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
+                                                  ucp_dt_make_contig(1), jucx_request_callback, 0);
+
+    ucs_trace_req("JUCX: send_stream_nb request %p to %s, size: %zu",
+                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size);
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                  jlong ep_ptr, jlong addr,
+                                                                  jlong size, jlong flags,
+                                                                  jobject callback)
+{
+    size_t rlength;
+    ucs_status_ptr_t request = ucp_stream_recv_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
+                                                  ucp_dt_make_contig(1), stream_recv_callback,
+                                                  &rlength, flags);
+
+    ucs_trace_req("JUCX: recv_stream_nb request %p to %s, size: %zu",
+                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size);
+
+    if (request == NULL) {
+        // If request completed immidiately.
+        return process_completed_stream_recv(rlength, callback);
+    }
+
     return process_request(request, callback);
 }
 

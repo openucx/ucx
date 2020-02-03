@@ -130,6 +130,19 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
 
 
 /**
+ * Get the address of the peer's socket that the given fd is connected to
+ *
+ * @param [in]  fd                Socket fd.
+ * @param [out] peer_addr         Address of the remote peer.
+ * @param [out] peer_addr_len     Length of the remote peer's address.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
+ */
+ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage *peer_addr,
+                                    socklen_t *peer_addr_len);
+
+
+/**
  * Check whether the socket referred to by the file descriptor `fd`
  * is connected to a peer or not.
  *

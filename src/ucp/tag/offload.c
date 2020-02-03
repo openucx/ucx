@@ -549,6 +549,8 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
                (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
                !UCP_DT_IS_CONTIG(req->send.datatype) ||
+               !(ep->worker->context->tl_mds[ucp_ep_md_index(ep, req->send.lane)].attr.cap.
+                 reg_mem_types & UCS_BIT(req->send.mem_type)) ||
                ep->worker->context->config.ext.tm_sw_rndv);
 
     /* send RTS to allow fallback to SW RNDV on receiver */
@@ -623,6 +625,8 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
     if (status != UCS_OK) {
         ucs_error("Failed to cancel tag rndv op %s", ucs_status_string(status));
     }
+
+    req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED;
 }
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)

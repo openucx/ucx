@@ -81,4 +81,7 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_NONBLOCK);
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_ALLOCATE);
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_FIXED);
+
+    // The enumeration defines behavior of @ref ucp_stream_recv_nb function
+    JUCX_DEFINE_LONG_CONSTANT(UCP_STREAM_RECV_FLAG_WAITALL);
 }

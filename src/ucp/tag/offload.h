@@ -146,13 +146,16 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
     if (ucs_unlikely((length >= worker->tm.offload.thresh) &&
                      (worker->num_active_ifaces > 1))) {
         tag_key = worker->context->config.tag_sender_mask & tag;
+        hash_it = kh_get(ucp_tag_offload_hash, &worker->tm.offload.tag_hash,
+                         tag_key);
+        if (ucs_likely(hash_it != kh_end(&worker->tm.offload.tag_hash))) {
+            return;
+        }
+
         hash_it = kh_put(ucp_tag_offload_hash, &worker->tm.offload.tag_hash,
                          tag_key, &ret);
-
-        /* khash returns 1 or 2 if key is not present and value can be set */
-        if (ret > 0) {
-            kh_value(&worker->tm.offload.tag_hash, hash_it) = wiface;
-        }
+        ucs_assertv((ret == 1) || (ret == 2), "ret=%d", ret);
+        kh_value(&worker->tm.offload.tag_hash, hash_it) = wiface;
     }
 }
 

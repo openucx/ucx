@@ -825,7 +825,8 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep                = req->send.ep;
+    ucs_async_context_t *async = &ep->worker->async;
 
     /* in case of force close, schedule ucp_ep_local_disconnect_progress to
      * destroy the ep and all its lanes */
@@ -833,7 +834,11 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
         goto out;
     }
 
-    UCS_ASYNC_BLOCK(&ep->worker->async);
+    UCS_ASYNC_BLOCK(async);
+
+    ucs_debug("ep %p: flags 0x%x close flushed callback for request %p", ep,
+              ep->flags, req);
+
     if (ucp_ep_is_cm_local_connected(ep)) {
         /* Now, when close flush is completed and we are still locally connected,
          * we have to notify remote side */
@@ -842,11 +847,11 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
             /* Wait disconnect notification from remote side to complete this
              * request */
             ucp_ep_set_close_request(ep, req, "close flushed callback");
-            UCS_ASYNC_UNBLOCK(&ep->worker->async);
+            UCS_ASYNC_UNBLOCK(async);
             return;
         }
     }
-    UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    UCS_ASYNC_UNBLOCK(async);
 
 out:
     /* If a flush is completed from a pending/completion callback, we need to
