@@ -328,6 +328,11 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
 
 
 /**
+ * Get the expected size of IB packed address.
+ *
+ * @param [in]  gid        GID address to pack.
+ * @param [in]  pack_flags Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx
+ *
  * @return IB address size of the given link scope.
  */
 size_t uct_ib_address_size(const union ibv_gid *gid, unsigned pack_flags);
@@ -344,7 +349,7 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
  *
  * @param [in]  gid        GID address to pack.
  * @param [in]  lid        LID address to pack.
- * @param [in]  flags      Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx
+ * @param [in]  pack_flags Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx
  * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
  *                         must be at least what @ref uct_ib_address_size()
  *                         returns for the given scope.
