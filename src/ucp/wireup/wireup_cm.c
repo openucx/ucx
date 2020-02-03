@@ -734,12 +734,10 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
     ucp_lane_index_t cm_lane;
 
     if (status != UCS_OK) {
+        /* if reject is arrived on server side, then UCT does something wrong */
+        ucs_assert(status != UCS_ERR_REJECTED);
         cm_lane = ucp_ep_get_cm_lane(ucp_ep);
-        if (status == UCS_ERR_REJECTED) {
-            ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
-            status = UCS_ERR_CONNECTION_RESET;
-        }
-
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                                  ucp_ep->uct_eps[cm_lane], cm_lane, status);
         return;

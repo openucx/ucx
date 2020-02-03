@@ -866,7 +866,8 @@ out:
                                       &req->send.disconnect.prog_id);
 }
 
-static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode) {
+static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode)
+{
     /* CM lane tracks remote state, so it can be used with any modes of close
      * and error handling */
     if ((mode == UCP_EP_CLOSE_MODE_FLUSH) ||
