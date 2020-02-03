@@ -307,7 +307,13 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     ucs_status_t status;
 
     if (event->event == RDMA_CM_EVENT_REJECTED) {
-        status    = UCS_ERR_REJECTED;
+        if (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER) {
+            status = UCS_ERR_CONNECTION_RESET;
+        } else {
+            ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
+            status = UCS_ERR_REJECTED;
+        }
+
         log_level = UCS_LOG_LEVEL_DEBUG;
     } else {
         status    = UCS_ERR_IO_ERROR;
