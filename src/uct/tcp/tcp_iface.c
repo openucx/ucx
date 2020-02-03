@@ -54,7 +54,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
-  {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "5",
+  {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "25",
    "How many connection establishment attmepts should be done if dropped "
    "connection was detected due to lack of system resources",
    ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
