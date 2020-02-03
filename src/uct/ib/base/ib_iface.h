@@ -187,6 +187,7 @@ struct uct_ib_iface {
     uint16_t                pkey_value;
     uint8_t                 addr_size;
     union ibv_gid           gid;
+    int                     is_roce_v2;
 
     struct {
         unsigned            rx_payload_offset;   /* offset from desc to payload */

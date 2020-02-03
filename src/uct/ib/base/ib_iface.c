@@ -789,7 +789,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     int preferred_cpu;
     ucs_status_t status;
     uint8_t port_num;
-    int is_roce_v2;
     size_t inl;
 
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
@@ -860,13 +859,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     status = uct_ib_device_query_gid(dev, self->config.port_num,
                                      self->config.gid_index, &self->gid,
-                                     &is_roce_v2);
+                                     &self->is_roce_v2);
     if (status != UCS_OK) {
         goto err;
     }
 
     if (config->traffic_class == UCS_ULUNITS_AUTO) {
-        self->config.traffic_class = is_roce_v2 ? UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
+        self->config.traffic_class = self->is_roce_v2 ?
+                                     UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
     } else {
         self->config.traffic_class = config->traffic_class;
     }
