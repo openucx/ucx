@@ -14,6 +14,7 @@
 #  - JOB_URL           : jenkins job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
 #  - JENKINS_RUN_TESTS : whether to run unit tests
+#  - RUN_TESTS         : same as JENKINS_RUN_TESTS, but for Azure
 #  - JENKINS_TEST_PERF : whether to validate performance
 #
 # Optional environment variables (could be set by job configuration):
@@ -1537,7 +1538,7 @@ do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
 do_distributed_task 1 4 check_make_distcheck
 
-if [ -n "$JENKINS_RUN_TESTS" ]
+if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
 	run_tests
 fi

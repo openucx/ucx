@@ -16,17 +16,7 @@ jobs:
         ${{ each wid in parameters.worker_ids }}:
           ${{ wid }}:
             worker_id: ${{ wid }}
-    variables:
-      executor_number: 1
     steps:
-      # Agent name is expected to be like 'hostname-<id>'. Since one
-      # azure agent == one job, this number is uniq on the host with multiple
-      # agents on it.
-      - bash: |
-          executor_from_agent_name=$(echo $AGENT_NAME | awk -F- '{print $NF}' | sed 's/^0*//g')
-          echo "##vso[task.setvariable variable=executor_number]$executor_from_agent_name"
-          echo "EXECUTOR_NUMBER=$executor_from_agent_name"
-        displayName: Get executor number
       - bash: |
           ./contrib/test_jenkins.sh
         displayName: Run ./contrib/test_jenkins.sh
@@ -35,6 +25,8 @@ jobs:
           worker: $(worker_id)
           BUILD_NUMBER: "$(Build.BuildId)-$(Build.BuildNumber)"
           JOB_URL: "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
-          EXECUTOR_NUMBER: $(executor_number)
-          JENKINS_RUN_TESTS: 1
+          JENKINS_RUN_TESTS: ""
+          EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+          RUN_TESTS: yes
           JENKINS_TEST_PERF: 0
+

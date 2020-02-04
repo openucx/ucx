@@ -142,4 +142,4 @@ stages:
     - template: tests.yml
       parameters:
         name: althca
-        demands: althca -equals yes
+        demands: ucx_althca -equals yes
