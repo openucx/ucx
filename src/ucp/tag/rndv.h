@@ -19,9 +19,12 @@
  */
 typedef struct {
     ucp_tag_hdr_t             super;
-    ucp_request_hdr_t         sreq;     /* send request on the rndv initiator side */
-    uint64_t                  address;  /* holds the address of the data buffer on the sender's side */
-    size_t                    size;     /* size of the data for sending */
+    uint8_t                   put_zcopy_allowed; /* shows whether sender can use PUT Zcopy
+                                                  * for RNDV data transferring */
+    ucp_request_hdr_t         sreq;              /* send request on the rndv initiator side */
+    uint64_t                  address;           /* holds the address of the data buffer on
+                                                  * the sender's side */
+    size_t                    size;              /* size of the data for sending */
     /* packed rkeys follow */
 } UCS_S_PACKED ucp_rndv_rts_hdr_t;
 

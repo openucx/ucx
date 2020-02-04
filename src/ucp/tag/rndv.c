@@ -51,6 +51,17 @@ ucp_rndv_req_get_zcopy_rma_lane(ucp_request_t *rndv_req, ucp_lane_map_t ignore,
                                  rndv_req->send.rndv_get.rkey, ignore, uct_rkey_p);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_rndv_is_put_zcopy_supported(const ucp_request_t *sreq)
+{
+    ucp_ep_h ep           = sreq->send.ep;
+    ucp_context_h context = ep->worker->context;
+    return (((context->config.ext.rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
+             (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO)) &&
+            (sreq->send.length >= ucp_ep_config(ep)->tag.rndv.min_put_zcopy) &&
+            (ucp_ep_config(ep)->tag.rndv.max_put_zcopy != 0));
+}
+
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
     ucp_request_t *sreq              = arg;   /* send request */
@@ -58,10 +69,17 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     ucp_worker_h worker              = sreq->send.ep->worker;
     ssize_t packed_rkey_size;
 
-    rndv_rts_hdr->super.tag        = sreq->send.tag.tag;
-    rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
-    rndv_rts_hdr->sreq.ep_ptr      = ucp_request_get_dest_ep_ptr(sreq);
-    rndv_rts_hdr->size             = sreq->send.length;
+    rndv_rts_hdr->super.tag         = sreq->send.tag.tag;
+    rndv_rts_hdr->sreq.reqptr       = (uintptr_t)sreq;
+    rndv_rts_hdr->sreq.ep_ptr       = ucp_request_get_dest_ep_ptr(sreq);
+    rndv_rts_hdr->size              = sreq->send.length;
+    /* This is an optimziation to avoid memory buffer registration for
+     * RNDV PUT Zcopy on the receiver side in case of the sender doesn't
+     * support RNDV PUT Zcopy scheme or send datatype is non contiguous.
+     * This flag will be check by the receiver when it can't use GET Zcopy
+     * and RNDV pipeline is not needed */
+    rndv_rts_hdr->put_zcopy_allowed = UCP_DT_IS_CONTIG(sreq->send.datatype) &&
+                                      ucp_tag_rndv_is_put_zcopy_supported(sreq);
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
@@ -790,12 +808,12 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     }
 
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
-        if (rndv_rts_hdr->address &&
+        if ((rndv_rts_hdr->address != 0) &&
             (ucp_rndv_is_get_zcopy(rreq->recv.mem_type, rndv_mode)) &&
             /* is it allowed to use GET Zcopy for the current message? */
             (rndv_rts_hdr->size >= ucp_ep_config(ep)->tag.rndv.min_get_zcopy) &&
             /* is GET Zcopy operation supported? */
-            ucp_ep_config(ep)->tag.rndv.max_get_zcopy) {
+            (ucp_ep_config(ep)->tag.rndv.max_get_zcopy != 0)) {
             /* try to fetch the data with a get_zcopy operation */
             ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr);
             goto out;
@@ -809,10 +827,16 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
                 goto out;
             }
         }
-        /* put protocol is allowed - register receive buffer memory for rma */
-        ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
-        ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map,
-                                    rndv_rts_hdr->size);
+
+        if (rndv_rts_hdr->put_zcopy_allowed) {
+            /* PUT protocol is allowed on the receiver side (i.e. RNDV mode is
+             * not GET Zcopy and RNDV pipeline protocol shouldn't be used and
+             * the sender indicated that RNDV PUT Zcopy can be used for this
+             * message - register receive buffer memory for RMA */   
+            ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
+            ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map,
+                                        rndv_rts_hdr->size);
+        }
     }
 
     /* The sender didn't specify its address in the RTS, or the rndv mode was
@@ -1340,11 +1364,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                  * unsupported and we have to use PUT_ZCOPY RNDV scheme instead */
             }
 
-            if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
-                /* is it allowed to use PUT Zcopy for the current message? */
-                (sreq->send.length >= ucp_ep_config(ep)->tag.rndv.min_put_zcopy) &&
-                /* is PUT Zcopy operation supported? */
-                ucp_ep_config(ep)->tag.rndv.max_put_zcopy) {
+            if (ucp_tag_rndv_is_put_zcopy_supported(sreq)) {
                 ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
                                              UCP_REQUEST_SEND_PROTO_RNDV_PUT);
                 sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;

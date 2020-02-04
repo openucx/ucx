@@ -194,12 +194,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         /* Build the dummy RTS packet, copy meta-data from unexpected rndv header
          * and remote key from rkey_buf.
          */
-        dummy_rts                   = ucs_alloca(dummy_rts_size);
-        dummy_rts->super.tag        = stag;
-        dummy_rts->sreq.ep_ptr      = rndv_hdr->ep_ptr;
-        dummy_rts->sreq.reqptr      = rndv_hdr->reqptr;
-        dummy_rts->address          = remote_addr;
-        dummy_rts->size             = length;
+        dummy_rts                    = ucs_alloca(dummy_rts_size);
+        dummy_rts->super.tag         = stag;
+        dummy_rts->sreq.ep_ptr       = rndv_hdr->ep_ptr;
+        dummy_rts->sreq.reqptr       = rndv_hdr->reqptr;
+        dummy_rts->address           = remote_addr;
+        dummy_rts->size              = length;
+        /* Since we don't know whether the sender supports RNDV PUT Zcopy scheme
+         * or not, we set the indicator to `true` in order to force memory
+         * registration */
+        dummy_rts->put_zcopy_allowed = 1;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
                              UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);
