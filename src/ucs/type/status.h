@@ -74,6 +74,7 @@ typedef enum {
     UCS_ERR_UNSUPPORTED            = -22,
     UCS_ERR_REJECTED               = -23,
     UCS_ERR_NOT_CONNECTED          = -24,
+    UCS_ERR_CONNECTION_RESET       = -25,
 
     UCS_ERR_FIRST_LINK_FAILURE     = -40,
     UCS_ERR_LAST_LINK_FAILURE      = -59,
