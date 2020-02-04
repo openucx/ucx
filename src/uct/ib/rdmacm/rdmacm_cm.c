@@ -136,6 +136,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     size_t addr_length;
     int qp_attr_mask;
     char dev_name[UCT_DEVICE_NAME_MAX];
+    unsigned address_pack_flags;
 
     /* get the qp attributes in order to modify the qp state.
      * the ah_attr fields from them are required to extract the device address
@@ -154,9 +155,21 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_IO_ERROR;
     }
 
+    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+        /* Ethernet address */
+        ucs_assert(qp_attr.ah_attr.is_global);
+        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_ETH;
+    } else if (qp_attr.ah_attr.is_global) {
+        /* IB global address */
+        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
+                             UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+    } else {
+        /* IB local address - need just LID */
+        address_pack_flags = 0;
+    }
+
     addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
-                                      qp_attr.ah_attr.is_global,
-                                      IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr));
+                                      address_pack_flags);
 
     dev_addr = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
@@ -165,9 +178,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     }
 
     uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
-                        IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr),
-                        qp_attr.ah_attr.is_global,
-                        dev_addr);
+                        address_pack_flags, dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;
