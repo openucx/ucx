@@ -14,16 +14,9 @@
 
 typedef struct ucp_cm_client_connect_progress_arg {
     ucp_ep_h                   ucp_ep;
-    uct_ep_h                   uct_cm_ep;
     ucp_wireup_sockaddr_data_t *sa_data;
     uct_device_addr_t          *dev_addr;
 } ucp_cm_client_connect_progress_arg_t;
-
-
-typedef struct ucp_cm_disconnect_progress_arg {
-    ucp_ep_h                   ucp_ep;
-    uct_ep_h                   uct_cm_ep;
-} ucp_cm_disconnect_progress_arg_t;
 
 
 unsigned ucp_cm_ep_init_flags(const ucp_worker_h worker,
@@ -49,5 +42,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep);
 
 ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep);
+
+void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep);
 
 #endif /* WIREUP_CM_H_ */

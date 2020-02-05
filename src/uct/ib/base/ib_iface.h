@@ -58,6 +58,17 @@ enum {
 #endif
 };
 
+
+/**
+ * IB address packing flags
+ */
+enum {
+    UCT_IB_ADDRESS_PACK_FLAG_ETH           = UCS_BIT(0),
+    UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID  = UCS_BIT(1),
+    UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2)
+};
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -92,7 +103,7 @@ struct uct_ib_iface_config {
     /* Change the address type */
     int                     addr_type;
 
-    /* Forice global routing */
+    /* Force global routing */
     int                     is_global;
 
     /* IB SL to use */
@@ -174,7 +185,6 @@ struct uct_ib_iface {
     unsigned                path_bits_count;
     uint16_t                pkey_index;
     uint16_t                pkey_value;
-    uint8_t                 is_global_addr;
     uint8_t                 addr_size;
     union ibv_gid           gid;
 
@@ -194,6 +204,7 @@ struct uct_ib_iface {
         uint8_t             gid_index;           /* IB GID index to use  */
         uint8_t             enable_res_domain;   /* Disable multiple resource domains */
         uint8_t             qp_type;
+        uint8_t             force_global_addr;
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
 
@@ -317,10 +328,14 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
 
 
 /**
+ * Get the expected size of IB packed address.
+ *
+ * @param [in]  gid        GID address to pack.
+ * @param [in]  pack_flags Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
+ *
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
-                           int is_link_layer_eth);
+size_t uct_ib_address_size(const union ibv_gid *gid, unsigned pack_flags);
 
 
 /**
@@ -334,13 +349,13 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
  *
  * @param [in]  gid        GID address to pack.
  * @param [in]  lid        LID address to pack.
+ * @param [in]  pack_flags Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
  * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
  *                         must be at least what @ref uct_ib_address_size()
  *                         returns for the given scope.
  */
 void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         int is_link_layer_eth, uint8_t is_global_addr,
-                         uct_ib_address_t *ib_addr);
+                         unsigned pack_flags, uct_ib_address_t *ib_addr);
 
 
 /**
@@ -535,7 +550,7 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     ah_attr->port_num          = iface->config.port_num;
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
-    if (iface->is_global_addr ||
+    if (iface->config.force_global_addr ||
         (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
         ucs_assert_always(gid->global.interface_id != 0);
         ah_attr->is_global      = 1;
@@ -555,8 +570,10 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     union ibv_gid  gid;
     uint16_t       lid;
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
+    ucs_assert(!uct_ib_iface_is_roce(iface) ==
+               !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
 
+    uct_ib_address_unpack(ib_addr, &lid, &gid);
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, ah_attr);
 }
 

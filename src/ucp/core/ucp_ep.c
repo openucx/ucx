@@ -776,6 +776,8 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
+    ucp_ep_cm_slow_cbq_cleanup(ep);
+
     ucp_stream_ep_cleanup(ep);
     ucp_am_ep_cleanup(ep);
 
@@ -823,9 +825,20 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep                = req->send.ep;
+    ucs_async_context_t *async = &ep->worker->async;
 
-    UCS_ASYNC_BLOCK(&ep->worker->async);
+    /* in case of force close, schedule ucp_ep_local_disconnect_progress to
+     * destroy the ep and all its lanes */
+    if (req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) {
+        goto out;
+    }
+
+    UCS_ASYNC_BLOCK(async);
+
+    ucs_debug("ep %p: flags 0x%x close flushed callback for request %p", ep,
+              ep->flags, req);
+
     if (ucp_ep_is_cm_local_connected(ep)) {
         /* Now, when close flush is completed and we are still locally connected,
          * we have to notify remote side */
@@ -834,12 +847,13 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
             /* Wait disconnect notification from remote side to complete this
              * request */
             ucp_ep_set_close_request(ep, req, "close flushed callback");
-            UCS_ASYNC_UNBLOCK(&ep->worker->async);
+            UCS_ASYNC_UNBLOCK(async);
             return;
         }
     }
-    UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    UCS_ASYNC_UNBLOCK(async);
 
+out:
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
      * endpoint cannot be released from pending/completion callback context.
@@ -852,15 +866,36 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
                                       &req->send.disconnect.prog_id);
 }
 
+static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode)
+{
+    /* CM lane tracks remote state, so it can be used with any modes of close
+     * and error handling */
+    if ((mode == UCP_EP_CLOSE_MODE_FLUSH) ||
+        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE)) {
+        return UCS_OK;
+    }
+
+    /* In case of close in force mode, remote peer failure detection mechanism
+     * should be enabled (CM lane is handled above) to prevent hang or any
+     * other undefined behavior */
+    if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
+        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
+        return UCS_OK;
+    }
+
+    return UCS_ERR_INVALID_PARAM;
+}
+
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h  worker = ep->worker;
     void          *request;
     ucp_request_t *close_req;
+    ucs_status_t  status;
 
-    if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
-        (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
-        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    status = ucp_ep_close_nb_check_params(ep, mode);
+    if (status != UCS_OK) {
+        return UCS_STATUS_PTR(status);
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -873,7 +908,8 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     ucp_ep_close_flushed_callback, "close");
 
     if (!UCS_PTR_IS_PTR(request)) {
-        if (ucp_ep_is_cm_local_connected(ep)) {
+        if (ucp_ep_is_cm_local_connected(ep) &&
+            (mode == UCP_EP_CLOSE_MODE_FLUSH)) {
             /* lanes already flushed, start disconnect on CM lane */
             ucp_ep_cm_disconnect_cm_lane(ep);
             close_req = ucp_ep_cm_close_request_get(ep);
@@ -1095,7 +1131,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+    if (!ucp_ep_config_test_rndv_support(config)) {
         /* Disable RNDV */
         rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
@@ -1153,7 +1189,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+    if (!ucp_ep_config_test_rndv_support(config)) {
         /* Disable RNDV */
         rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
@@ -1952,4 +1988,28 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
     }
 
     return tl_bitmap;
+}
+
+void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
+{
+    /* Do not invoke error handler if it's not enabled */
+    if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+        /* error callback is not set */
+        (ucp_ep_ext_gen(ep)->err_cb == NULL) ||
+        /* the EP has been closed by user */
+        (ep->flags & UCP_EP_FLAG_CLOSED)) {
+        return;
+    }
+
+    ucs_assert(ep->flags & UCP_EP_FLAG_USED);
+    ucs_debug("ep %p: calling user error callback %p with arg %p and status %s",
+              ep, ucp_ep_ext_gen(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
+              ucs_status_string(status));
+    ucp_ep_ext_gen(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
+}
+
+int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
+{
+    return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+           (config->key.cm_lane  != UCP_NULL_LANE);
 }

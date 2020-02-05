@@ -125,7 +125,8 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
-        entity(const resource& resource, uct_md_config_t *md_config);
+        entity(const resource& resource, uct_md_config_t *md_config,
+               uct_cm_config_t *cm_config);
 
         void mem_alloc_host(size_t length, uct_allocated_memory_t *mem) const;
 
@@ -378,6 +379,7 @@ protected:
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
     uct_md_config_t         *m_md_config;
+    uct_cm_config_t         *m_cm_config;
 };
 
 std::ostream& operator<<(std::ostream& os, const resource* resource);

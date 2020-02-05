@@ -389,7 +389,7 @@ UCS_TEST_F(test_callbackq_noflags, ordering) {
         // with key=-1
         init_ctx(&r_ctx);
         unsigned cb_flags = 0;
-        if (rand() % 2) {
+        if (ucs::rand() % 2) {
             // oneshot callback, which must stay in order
             r_ctx.key     = i;
             r_ctx.command = COMMAND_ENQUEUE_KEY;
@@ -398,7 +398,7 @@ UCS_TEST_F(test_callbackq_noflags, ordering) {
         } else {
             // permanent
             r_ctx.key     = UNUSED_CB_KEY;
-            if (rand() % 2) {
+            if (ucs::rand() % 2) {
                 // do-nothing callback
                 r_ctx.command = COMMAND_NONE;
             } else {
