@@ -319,6 +319,8 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
 
     if (event->event == RDMA_CM_EVENT_REJECTED) {
         if (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER) {
+            /* response was rejected by the client in the middle of
+             * connection establishment, so report connection reset */
             status = UCS_ERR_CONNECTION_RESET;
         } else {
             ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
