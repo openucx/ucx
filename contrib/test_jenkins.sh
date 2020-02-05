@@ -45,7 +45,9 @@ fi
 
 
 #
-# Set affinity to 2 cores according to Jenkins executor number
+# Set affinity to 2 cores according to Jenkins executor number.
+# Affinity is inherited fomr agent in Azure CI.
+# TODO: remove or rename after CI migration.
 #
 if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
 then

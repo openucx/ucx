@@ -26,6 +26,7 @@ jobs:
           BUILD_NUMBER: "$(Build.BuildId)-$(Build.BuildNumber)"
           JOB_URL: "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
           JENKINS_RUN_TESTS: ""
+          # $AZP_AGENT_ID is set for every self-hosted Azure agent (uniq for one host)
           EXECUTOR_NUMBER: $(AZP_AGENT_ID)
           RUN_TESTS: yes
           JENKINS_TEST_PERF: 0
