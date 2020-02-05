@@ -52,12 +52,11 @@ void test_rc::test_iface_ops(int cq_len)
     comp.func  = NULL;
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                            sendbuf.memh(),
-                            m_e1->iface_attr().cap.am.max_iov);
+                            sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
     // For _x transports several CQEs can be consumed per WQE, post less put zcopy
     // ops, so that flush would be sucessfull (otherwise flush will return
     // NO_RESOURCES and completion will not be added for it).
-    for (int i = 0; i < cq_len / 3; i++) {
+    for (int i = 0; i < cq_len / 5; i++) {
         ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
                                                      recvbuf.addr(),
                                                      recvbuf.rkey(), &comp));
