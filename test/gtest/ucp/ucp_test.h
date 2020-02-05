@@ -100,9 +100,13 @@ public:
 
         int get_num_eps(int worker_index = 0) const;
 
-        void inc_rejected_cntr();
+        void add_err(ucs_status_t status);
 
-        size_t get_rejected_cntr() const;
+        size_t get_err_num(ucs_status_t status) const;
+
+        size_t get_err_num() const;
+
+        size_t &get_err_flag();
 
         void warn_existing_eps() const;
 
@@ -113,11 +117,11 @@ public:
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
     protected:
-        const ucp_test_base             *m_test_owner;
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
+        size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
 
     private:
@@ -190,7 +194,6 @@ protected:
     bool has_only_transports(const std::vector<std::string>& tl_names) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
-    entity* get_entity_by_ep(ucp_ep_h ep);
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
@@ -201,8 +204,8 @@ protected:
     int max_connections();
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        ucp_test *self = reinterpret_cast<ucp_test*>(arg);
-        self->m_err_handler_count++;
+        entity *e = reinterpret_cast<entity*>(arg);
+        e->add_err(status);
     }
 
     template <typename T>
@@ -213,7 +216,6 @@ protected:
         }
     }
 
-    volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
 

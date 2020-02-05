@@ -37,7 +37,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 const ucp_datatype_t ucp_test::DATATYPE     = ucp_dt_make_contig(1);
 const ucp_datatype_t ucp_test::DATATYPE_IOV = ucp_dt_make_iov();
 
-ucp_test::ucp_test() : m_err_handler_count(0) {
+ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
     ASSERT_UCS_OK(status);
@@ -122,20 +122,6 @@ ucp_test::create_entity(bool add_in_front, const ucp_test_param &test_param) {
     return e;
 }
 
-ucp_test::entity* ucp_test::get_entity_by_ep(ucp_ep_h ep) {
-    ucs::ptr_vector<entity>::const_iterator e_it;
-    for (e_it = entities().begin(); e_it != entities().end(); ++e_it) {
-        for (int w_idx = 0; w_idx < (*e_it)->get_num_workers(); ++w_idx) {
-            for (int ep_idx = 0; ep_idx < (*e_it)->get_num_eps(w_idx); ++ep_idx) {
-                if (ep == (*e_it)->ep(w_idx, ep_idx)) {
-                    return *e_it;
-                }
-            }
-        }
-    }
-    return NULL;
-}
-
 ucp_params_t ucp_test::get_ctx_params() {
     ucp_params_t params;
     memset(&params, 0, sizeof(params));
@@ -187,16 +173,25 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     wait(request, worker_index);
 }
 
-void ucp_test::disconnect(const entity& entity) {
-    for (int i = 0; i < entity.get_num_workers(); i++) {
-        if (m_err_handler_count == 0) {
-            flush_worker(entity, i);
+void ucp_test::disconnect(const entity& e) {
+    bool has_failed_entity = false;
+    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+         !has_failed_entity && (iter != entities().end()); ++iter) {
+        has_failed_entity = ((*iter)->get_err_num() > 0);
+    }
+
+    for (int i = 0; i < e.get_num_workers(); i++) {
+        enum ucp_ep_close_mode close_mode;
+
+        if (has_failed_entity) {
+            close_mode = UCP_EP_CLOSE_MODE_FORCE;
+        } else {
+            flush_worker(e, i);
+            close_mode = UCP_EP_CLOSE_MODE_FLUSH;
         }
 
-        for (int j = 0; j < entity.get_num_eps(i); j++) {
-            void *dreq = entity.disconnect_nb(i, j, m_err_handler_count == 0 ?
-                                                    UCP_EP_CLOSE_MODE_FLUSH :
-                                                    UCP_EP_CLOSE_MODE_FORCE);
+        for (int j = 0; j < e.get_num_eps(i); j++) {
+            void *dreq = e.disconnect_nb(i, j, close_mode);
             if (!UCS_PTR_IS_PTR(dreq)) {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
             }
@@ -382,7 +377,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
                               const ucp_test_base *test_owner)
-    : m_test_owner(test_owner), m_rejected_cntr(0)
+    : m_err_cntr(0), m_rejected_cntr(0)
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
@@ -649,7 +644,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     if (!m_conn_reqs.empty()) {
         ucp_conn_request_h conn_req = m_conn_reqs.back();
         m_conn_reqs.pop();
-        ucp_ep_h ep = accept(ucp_worker, conn_req, m_test_owner);
+        ucp_ep_h ep = accept(ucp_worker, conn_req, this);
         set_ep(ep, worker_index, std::numeric_limits<int>::max());
         ++progress_count;
     }
@@ -665,14 +660,30 @@ int ucp_test_base::entity::get_num_eps(int worker_index) const {
     return m_workers[worker_index].second.size();
 }
 
-size_t ucp_test_base::entity::get_rejected_cntr() const {
+void ucp_test_base::entity::add_err(ucs_status_t status) {
+    switch (status) {
+    case UCS_ERR_REJECTED:
+        ++m_rejected_cntr;
+        /* fall through */
+    default:
+        ++m_err_cntr;
+    }
+}
+
+size_t ucp_test_base::entity::get_err_num(ucs_status_t status) const {
+    EXPECT_EQ(UCS_ERR_REJECTED, status) << "Missed counter for "
+                                        << ucs_status_string(status)
+                                        << " type of errors";
     return m_rejected_cntr;
 }
 
-void ucp_test_base::entity::inc_rejected_cntr() {
-    ++m_rejected_cntr;
+size_t ucp_test_base::entity::get_err_num() const {
+    return m_err_cntr;
 }
 
+size_t &ucp_test_base::entity::get_err_flag() {
+    return m_err_cntr;
+}
 
 void ucp_test_base::entity::warn_existing_eps() const {
     for (size_t worker_index = 0; worker_index < m_workers.size(); ++worker_index) {

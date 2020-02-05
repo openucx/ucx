@@ -321,9 +321,9 @@ public:
                 progress();
                 ep_count = ucp_stream_worker_poll(to.worker(), &poll_eps, 1, 0);
             } while (ep_count == 0);
-            ASSERT_EQ(1,                  ep_count);
-            EXPECT_EQ(to.ep(),            poll_eps.ep);
-            EXPECT_EQ(this, poll_eps.user_data);
+            ASSERT_EQ(1,       ep_count);
+            EXPECT_EQ(to.ep(), poll_eps.ep);
+            EXPECT_EQ(&to,     poll_eps.user_data);
 
             recv_req = ucp_stream_recv_nb(to.ep(), &recv_data, 1,
                                           ucp_dt_make_contig(sizeof(recv_data)),
@@ -346,38 +346,38 @@ public:
     {
         ucs_time_t deadline = ucs::get_deadline();
 
-        while ((receiver().get_num_eps() == 0) && (m_err_handler_count == 0) &&
-               (ucs_get_time() < deadline)) {
+        while ((receiver().get_num_eps() == 0) &&
+               (sender().get_err_num() == 0) && (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
-        return (m_err_handler_count == 0) && (receiver().get_num_eps() > 0);
+
+        return (sender().get_err_num() == 0) && (receiver().get_num_eps() > 0);
     }
 
     void wait_for_reject(entity &e, bool wakeup)
     {
         ucs_time_t deadline = ucs::get_deadline();
 
-        while ((e.get_rejected_cntr() == 0) &&
+        while ((e.get_err_num(UCS_ERR_REJECTED) == 0) &&
                (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
+
         EXPECT_GT(deadline, ucs_get_time());
-        EXPECT_EQ(1ul, e.get_rejected_cntr());
+        EXPECT_EQ(1ul, e.get_err_num(UCS_ERR_REJECTED));
     }
 
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                     UCP_EP_PARAM_FIELD_ERR_HANDLER |
-                                     UCP_EP_PARAM_FIELD_USER_DATA;
+                                     UCP_EP_PARAM_FIELD_ERR_HANDLER;
         /* The error handling requirement is needed since we need to take
          * care of a case where the client gets an error. In case ucp needs to
          * handle a large worker address but neither ud nor ud_x are present */
         ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
-        ep_params.user_data        = reinterpret_cast<void*>(this);
         return ep_params;
     }
 
@@ -385,10 +385,12 @@ public:
     {
         ucp_ep_params_t ep_params = get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                     UCP_EP_PARAM_FIELD_SOCK_ADDR;
+                                     UCP_EP_PARAM_FIELD_SOCK_ADDR |
+                                     UCP_EP_PARAM_FIELD_USER_DATA;
         ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = connect_addr;
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
+        ep_params.user_data        = &sender();
         sender().connect(&receiver(), ep_params);
     }
 
@@ -488,23 +490,18 @@ public:
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
-        ucp_test::err_handler_cb(static_cast<ucp_test *>(self), ep, status);
-
-        if (status == UCS_ERR_REJECTED) {
-            entity *e = self->get_entity_by_ep(ep);
-            if (e != NULL) {
-                e->inc_rejected_cntr();
-                return;
-            }
-        }
+        ucp_test::err_handler_cb(arg, ep, status);
 
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
          * long as well */
-        if (status != UCS_ERR_UNREACHABLE) {
-            UCS_TEST_ABORT("Error: " << ucs_status_string(status));
+        switch (status) {
+            case UCS_ERR_REJECTED:
+            case UCS_ERR_UNREACHABLE:
+                return;
+            default:
+                UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
 
@@ -668,10 +665,10 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
         scoped_log_handler slh(wrap_errors_logger);
         client_ep_connect(listen_addr.get_sock_addr_ptr());
         /* allow for the unreachable event to arrive before restoring errors */
-        wait_for_flag(&m_err_handler_count);
+        wait_for_flag(&sender().get_err_flag());
     }
 
-    EXPECT_EQ(1, m_err_handler_count);
+    EXPECT_EQ(1u, sender().get_err_num());
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
@@ -742,11 +739,11 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
 
         /* allow the err_handler callback to be invoked if needed */
         if (!wait_for_server_ep(false)) {
-            EXPECT_EQ(1, m_err_handler_count);
+            EXPECT_EQ(1ul, sender().get_err_num());
             UCS_TEST_SKIP_R("cannot connect to server");
         }
 
-        EXPECT_EQ(0, m_err_handler_count);
+        EXPECT_EQ(0ul, sender().get_err_num());
         /* even if server EP is created, in case of long address, wireup will be
          * done later, need to communicate */
         send_recv(sender(), receiver(), send_recv_type(), false, cb_type());
