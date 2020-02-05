@@ -1296,8 +1296,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_request_t *sreq              = (ucp_request_t*)rndv_rtr_hdr->sreq_ptr;
     ucp_ep_h ep                      = sreq->send.ep;
     ucp_ep_config_t *ep_config       = ucp_ep_config(ep);
-    ucp_context_h context;
+    ucp_context_h context            = ep->worker->context;
     ucs_status_t status;
+    int is_pipeline_rndv;
 
     ucp_trace_req(sreq, "received rtr address 0x%lx remote rreq 0x%lx",
                   rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_ptr);
@@ -1317,8 +1318,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                       ucp_ep_peer_name(ep), ucs_status_string(status));
         }
 
+        is_pipeline_rndv = ((!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type) ||
+                             (sreq->send.length != rndv_rtr_hdr->size)) &&
+                            (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY));
+
         sreq->send.lane = ucp_rkey_find_rma_lane(ep->worker->context, ep_config,
-                                                 sreq->send.rndv_put.rkey->mem_type,
+                                                 (is_pipeline_rndv ?
+                                                  sreq->send.rndv_put.rkey->mem_type :
+                                                  sreq->send.mem_type),
                                                  ep_config->tag.rndv.put_zcopy_lanes,
                                                  sreq->send.rndv_put.rkey, 0,
                                                  &sreq->send.rndv_put.uct_rkey);
@@ -1328,10 +1335,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
              * not explicitly required. If pipeline is UNSUPPORTED, fallback to
              * PUT_ZCOPY anyway.
              */
-            context = ep->worker->context;
-            if ((!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type) ||
-                 (sreq->send.length != rndv_rtr_hdr->size)) &&
-                (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY)) {
+            if (is_pipeline_rndv) {
                 status = ucp_rndv_pipeline(sreq, rndv_rtr_hdr);
                 if (status != UCS_ERR_UNSUPPORTED) {
                     return status;
