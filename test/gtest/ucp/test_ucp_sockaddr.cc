@@ -497,11 +497,11 @@ public:
          * are not present, or ud/ud_x are present but their addresses are too
          * long as well */
         switch (status) {
-            case UCS_ERR_REJECTED:
-            case UCS_ERR_UNREACHABLE:
-                return;
-            default:
-                UCS_TEST_ABORT("Error: " << ucs_status_string(status));
+        case UCS_ERR_REJECTED:
+        case UCS_ERR_UNREACHABLE:
+            return;
+        default:
+            UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
 
