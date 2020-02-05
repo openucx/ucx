@@ -34,18 +34,18 @@
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
 
-#define TEST_STRING_LEN    sizeof(test_message)
-#define DEFAULT_PORT       13337
-#define IP_STRING_LEN      50
-#define PORT_STRING_LEN    8
-#define TAG                0xCAFE
-#define COMM_TYPE_DEFAULT  "STREAM"
-#define PRINT_CONST        2000
+#define TEST_STRING_LEN        sizeof(test_message)
+#define DEFAULT_PORT           13337
+#define IP_STRING_LEN          50
+#define PORT_STRING_LEN        8
+#define TAG                    0xCAFE
+#define COMM_TYPE_DEFAULT      "STREAM"
+#define PRINT_INTERVAL         2000
+#define DEFAULT_NUM_ITERATIONS 1
 
 const  char test_message[]           = "UCX Client-Server Hello World";
 static uint16_t server_port          = DEFAULT_PORT;
-static int client_server_iterations  = 1;
-static volatile int server_iters_cnt = 1;
+static int num_iterations            = DEFAULT_NUM_ITERATIONS;
 
 
 typedef enum {
@@ -190,13 +190,13 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
 static void print_result(int is_server, char *recv_message, int current_iter)
 {
     if (is_server) {
-        printf("Server: iteration #%d\n", current_iter);
+        printf("Server: iteration #%d\n", (current_iter + 1));
         printf("UCX data message was received\n");
         printf("\n\n----- UCP TEST SUCCESS -------\n\n");
         printf("%s", recv_message);
         printf("\n\n------------------------------\n\n");
     } else {
-        printf("Client: iteration #%d\n", current_iter);
+        printf("Client: iteration #%d\n", (current_iter + 1));
         printf("\n\n-----------------------------------------\n\n");
         printf("Client sent message: \n%s.\nlength: %ld\n",
                test_message, TEST_STRING_LEN);
@@ -245,13 +245,9 @@ static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
         return -1;
     }
 
-    if (is_server) {
-        server_iters_cnt++;
-    }
-
-    /* Print the output of the first, last and every PRINT_CONST iteration */
-    if ((current_iter == 1) || (current_iter == client_server_iterations) ||
-        !(current_iter % PRINT_CONST)) {
+    /* Print the output of the first, last and every PRINT_INTERVAL iteration */
+    if ((current_iter == 0) || (current_iter == (num_iterations - 1)) ||
+        !((current_iter + 1) % (PRINT_INTERVAL))) {
         print_result(is_server, recv_message, current_iter);
     }
 
@@ -371,7 +367,7 @@ static void usage()
                     "    If not specified, %s API will be used.\n", COMM_TYPE_DEFAULT);
     fprintf(stderr, " -i Number of iterations to run. Client and server must "
                     "have the same value. (default = %d).\n",
-                    client_server_iterations);
+                    num_iterations);
     fprintf(stderr, "\n");
 }
 
@@ -379,8 +375,7 @@ static void usage()
  * Parse the command line arguments.
  */
 static int parse_cmd(int argc, char *const argv[], char **server_addr,
-                     char **listen_addr, send_recv_type_t *send_recv_type,
-                     int *iters)
+                     char **listen_addr, send_recv_type_t *send_recv_type)
 {
     int c = 0;
     int port;
@@ -415,7 +410,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
             server_port = port;
             break;
         case 'i':
-            *iters = atoi(optarg);
+            num_iterations = atoi(optarg);
             break;
         default:
             usage();
@@ -612,9 +607,27 @@ out:
     return status;
 }
 
+static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
+                                 send_recv_type_t send_recv_type, int is_server)
+{
+    int i, ret = 0;
+
+    for (i = 0; i < num_iterations; i++) {
+        ret = client_server_communication(ucp_worker, ep, send_recv_type,
+                                          is_server, i);
+        if (ret != 0) {
+            fprintf(stderr, "%s failed on iteration #%d\n",
+                    (is_server ? "server": "client"), i);
+            goto out;
+        }
+    }
+
+out:
+    return ret;
+}
+
 static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
-                      char *listen_addr, send_recv_type_t send_recv_type,
-                      int iters)
+                      char *listen_addr, send_recv_type_t send_recv_type)
 {
     ucx_server_ctx_t context;
     ucp_worker_h     ucp_data_worker;
@@ -665,15 +678,11 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
 
         /* The server waits for all the iterations to complete before moving on
          * to the next client */
-        while (server_iters_cnt < (iters + 1)) {
-            ret = client_server_communication(ucp_data_worker, server_ep,
-                                              send_recv_type, 1, server_iters_cnt);
-            if (ret != 0) {
-                goto err_ep;
-            }
+        ret = client_server_do_work(ucp_data_worker, server_ep, send_recv_type,
+                                    1);
+        if (ret != 0) {
+            goto err_ep;
         }
-
-        server_iters_cnt = 1;
 
         /* Close the endpoint to the client */
         ep_close(ucp_data_worker, server_ep);
@@ -695,11 +704,11 @@ err:
 }
 
 static int run_client(ucp_worker_h ucp_worker, char *server_addr,
-                      send_recv_type_t send_recv_type, int iters)
+                      send_recv_type_t send_recv_type)
 {
     ucp_ep_h     client_ep;
     ucs_status_t status;
-    int          ret, i;
+    int          ret;
 
     status = start_client(ucp_worker, server_addr, &client_ep);
     if (status != UCS_OK) {
@@ -708,14 +717,7 @@ static int run_client(ucp_worker_h ucp_worker, char *server_addr,
         goto out;
     }
 
-    for (i = 1; i < (iters + 1); i++) {
-        ret = client_server_communication(ucp_worker, client_ep, send_recv_type,
-                                          0, i);
-        if (ret != 0) {
-            fprintf(stderr, "client failed on iteration #%d\n", i);
-            goto out;
-        }
-    }
+    ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0);
 
     /* Close the endpoint to the server */
     ep_close(ucp_worker, client_ep);
@@ -776,8 +778,7 @@ int main(int argc, char **argv)
     ucp_context_h ucp_context;
     ucp_worker_h  ucp_worker;
 
-    ret = parse_cmd(argc, argv, &server_addr, &listen_addr, &send_recv_type,
-                    &client_server_iterations);
+    ret = parse_cmd(argc, argv, &server_addr, &listen_addr, &send_recv_type);
     if (ret != 0) {
         goto err;
     }
@@ -791,12 +792,10 @@ int main(int argc, char **argv)
     /* Client-Server initialization */
     if (server_addr == NULL) {
         /* Server side */
-        ret = run_server(ucp_context, ucp_worker, listen_addr, send_recv_type,
-                         client_server_iterations);
+        ret = run_server(ucp_context, ucp_worker, listen_addr, send_recv_type);
     } else {
         /* Client side */
-        ret = run_client(ucp_worker, server_addr, send_recv_type,
-                         client_server_iterations);
+        ret = run_client(ucp_worker, server_addr, send_recv_type);
     }
 
     ucp_worker_destroy(ucp_worker);
