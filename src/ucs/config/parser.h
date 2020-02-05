@@ -322,7 +322,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_STRING_ARRAY \
     UCS_CONFIG_TYPE_ARRAY(string)
 
-UCS_CONFIG_DECLARE_ARRAY(string);
+UCS_CONFIG_DECLARE_ARRAY(string)
 
 /**
  * Set default values for options.
