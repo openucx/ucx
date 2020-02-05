@@ -104,9 +104,7 @@ public:
 
         size_t get_err_num(ucs_status_t status) const;
 
-        size_t get_err_num() const;
-
-        size_t &get_err_flag();
+        const size_t &get_err_num() const;
 
         void warn_existing_eps() const;
 

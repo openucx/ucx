@@ -665,7 +665,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
         scoped_log_handler slh(wrap_errors_logger);
         client_ep_connect(listen_addr.get_sock_addr_ptr());
         /* allow for the unreachable event to arrive before restoring errors */
-        wait_for_flag(&sender().get_err_flag());
+        wait_for_flag(&sender().get_err_num());
     }
 
     EXPECT_EQ(1u, sender().get_err_num());

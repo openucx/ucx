@@ -677,11 +677,7 @@ size_t ucp_test_base::entity::get_err_num(ucs_status_t status) const {
     return m_rejected_cntr;
 }
 
-size_t ucp_test_base::entity::get_err_num() const {
-    return m_err_cntr;
-}
-
-size_t &ucp_test_base::entity::get_err_flag() {
+const size_t &ucp_test_base::entity::get_err_num() const {
     return m_err_cntr;
 }
 
