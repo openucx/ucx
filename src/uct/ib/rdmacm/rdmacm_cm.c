@@ -86,7 +86,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -109,7 +109,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
         return;
     }
 
@@ -122,7 +122,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -235,6 +235,11 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
 
     ucs_assert(event->id == cep->id);
 
+    /* Do not notify user on disconnected EP, RDMACM out of order case */
+    if (cep->flags & UCT_RDMACM_CM_EP_GOT_DISCONNECT) {
+        return;
+    }
+
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
     remote_data.conn_priv_data        = hdr + 1;
@@ -246,7 +251,9 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
                   "from server %s.", cep, event->id,
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+        /* notify remote side about local error */
+        rdma_disconnect(cep->id);
         return;
     }
 
@@ -255,17 +262,15 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     remote_data.dev_addr          = dev_addr;
     remote_data.dev_addr_length   = addr_length;
 
-    cep->flags |= UCT_RDMACM_CM_EP_GOT_CONNECT;
-    uct_cm_ep_client_connect_cb(&cep->super, &remote_data,
-                                (ucs_status_t)hdr->status);
-
+    uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data,
+                                       (ucs_status_t)hdr->status);
     ucs_free(dev_addr);
 
     if (rdma_establish(event->id)) {
         ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
                   cep, ucs_sockaddr_str(remote_addr, ip_port_str,
                                         UCS_SOCKADDR_STRING_LEN));
-        uct_rdmacm_cm_ep_error_cb(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -274,16 +279,21 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_t *cep = event->id->context;
 
     ucs_assert(event->id == cep->id);
-    cep->flags |= UCT_RDMACM_CM_EP_GOT_CONNECT;
-    uct_cm_ep_server_connect_cb(&cep->super, UCS_OK);
+    /* do not call connect callback again, RDMACM out of order case */
+    if (cep->flags & UCT_RDMACM_CM_EP_GOT_DISCONNECT) {
+        return;
+    }
+
+    uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t *cep      = event->id->context;
-    struct sockaddr    *remote_addr = rdma_get_peer_addr(event->id);
-    char               ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    char               ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_rdmacm_cm_ep_t   *cep         = event->id->context;
+    struct sockaddr      *remote_addr = rdma_get_peer_addr(event->id);
+    char                 ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                 ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_cm_remote_data_t remote_data;
 
     ucs_debug("%s: got disconnect event, status %d peer %s",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
@@ -291,7 +301,10 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
                                              UCS_SOCKADDR_STRING_LEN));
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
-    cep->super.disconnect_cb(&cep->super.super.super, cep->super.user_data);
+    /* calling error_cb instead of disconnect CB directly handles out-of-order
+     * disconnect event prior connect_response/connect_established event */
+    remote_data.field_mask = 0;
+    uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_CONNECTION_RESET);
 }
 
 static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
@@ -301,10 +314,25 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
-    int log_level;
+    ucs_log_level_t log_level;
+    ucs_status_t status;
 
-    log_level = (event->event == RDMA_CM_EVENT_REJECTED) ? UCS_LOG_LEVEL_DEBUG :
-                UCS_LOG_LEVEL_ERROR;
+    if (event->event == RDMA_CM_EVENT_REJECTED) {
+        if (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER) {
+            /* response was rejected by the client in the middle of
+             * connection establishment, so report connection reset */
+            status = UCS_ERR_CONNECTION_RESET;
+        } else {
+            ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
+            status = UCS_ERR_REJECTED;
+        }
+
+        log_level = UCS_LOG_LEVEL_DEBUG;
+    } else {
+        status    = UCS_ERR_IO_ERROR;
+        log_level = UCS_LOG_LEVEL_ERROR;
+    }
+
     ucs_log(log_level, "%s: got error event %s, status %d peer %s",
             uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
             rdma_event_str(event->event), event->status,
@@ -312,9 +340,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
                              UCS_SOCKADDR_STRING_LEN));
 
     remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_error_cb(cep, &remote_data,
-                              (event->event == RDMA_CM_EVENT_REJECTED ?
-                               UCS_ERR_REJECTED : UCS_ERR_IO_ERROR));
+    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
 }
 
 static void
