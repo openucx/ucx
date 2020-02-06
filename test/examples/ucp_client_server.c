@@ -34,21 +34,26 @@
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
 
-#define TEST_STRING_LEN    sizeof(test_message)
-#define DEFAULT_PORT       13337
-#define IP_STRING_LEN      50
-#define PORT_STRING_LEN    8
-#define TAG                0xCAFE
-#define COMM_TYPE_DEFAULT  "STREAM"
+#define TEST_STRING_LEN        sizeof(test_message)
+#define DEFAULT_PORT           13337
+#define IP_STRING_LEN          50
+#define PORT_STRING_LEN        8
+#define TAG                    0xCAFE
+#define COMM_TYPE_DEFAULT      "STREAM"
+#define PRINT_INTERVAL         2000
+#define DEFAULT_NUM_ITERATIONS 1
 
-const char test_message[]   = "UCX Client-Server Hello World";
-static uint16_t server_port = DEFAULT_PORT;
+const  char test_message[]           = "UCX Client-Server Hello World";
+static uint16_t server_port          = DEFAULT_PORT;
+static int num_iterations            = DEFAULT_NUM_ITERATIONS;
+
 
 typedef enum {
     CLIENT_SERVER_SEND_RECV_STREAM  = UCS_BIT(0),
     CLIENT_SERVER_SEND_RECV_TAG     = UCS_BIT(1),
     CLIENT_SERVER_SEND_RECV_DEFAULT = CLIENT_SERVER_SEND_RECV_STREAM
 } send_recv_type_t;
+
 
 /**
  * Server's application context to be used in the user's connection request
@@ -76,10 +81,6 @@ static void tag_recv_cb(void *request, ucs_status_t status,
     test_req_t *req = request;
 
     req->complete = 1;
-
-    printf("tag_recv_cb returned with status %d (%s), length: %lu, "
-           "sender_tag: 0x%lX\n",
-           status, ucs_status_string(status), info->length, info->sender_tag);
 }
 
 /**
@@ -91,9 +92,6 @@ static void stream_recv_cb(void *request, ucs_status_t status, size_t length)
     test_req_t *req = request;
 
     req->complete = 1;
-
-    printf("stream_recv_cb returned with status %d (%s), length: %lu\n",
-           status, ucs_status_string(status), length);
 }
 
 /**
@@ -105,9 +103,6 @@ static void send_cb(void *request, ucs_status_t status)
     test_req_t *req = request;
 
     req->complete = 1;
-
-    printf("send_cb returned with status %d (%s)\n",
-           status, ucs_status_string(status));
 }
 
 /**
@@ -192,14 +187,16 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
  * Print the received message on the server side or the sent data on the client
  * side.
  */
-static void print_result(int is_server, char *recv_message)
+static void print_result(int is_server, char *recv_message, int current_iter)
 {
     if (is_server) {
+        printf("Server: iteration #%d\n", (current_iter + 1));
         printf("UCX data message was received\n");
         printf("\n\n----- UCP TEST SUCCESS -------\n\n");
         printf("%s", recv_message);
         printf("\n\n------------------------------\n\n");
     } else {
+        printf("Client: iteration #%d\n", (current_iter + 1));
         printf("\n\n-----------------------------------------\n\n");
         printf("Client sent message: \n%s.\nlength: %ld\n",
                test_message, TEST_STRING_LEN);
@@ -214,7 +211,7 @@ static ucs_status_t request_wait(ucp_worker_h ucp_worker, test_req_t *request)
 {
     ucs_status_t status;
 
-    /*  if operation was completed immediately */
+    /* if operation was completed immediately */
     if (request == NULL) {
         return UCS_OK;
     }
@@ -236,18 +233,22 @@ static ucs_status_t request_wait(ucp_worker_h ucp_worker, test_req_t *request)
 }
 
 static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
-                            int is_server, char *recv_message)
+                            int is_server, char *recv_message, int current_iter)
 {
     ucs_status_t status;
     int ret = 0;
 
     status = request_wait(ucp_worker, request);
-    if (status != UCS_OK){
+    if (status != UCS_OK) {
         fprintf(stderr, "unable to %s UCX message (%s)\n",
                 is_server ? "receive": "send", ucs_status_string(status));
-        ret = -1;
-    } else {
-        print_result(is_server, recv_message);
+        return -1;
+    }
+
+    /* Print the output of the first, last and every PRINT_INTERVAL iteration */
+    if ((current_iter == 0) || (current_iter == (num_iterations - 1)) ||
+        !((current_iter + 1) % (PRINT_INTERVAL))) {
+        print_result(is_server, recv_message, current_iter);
     }
 
     return ret;
@@ -258,7 +259,8 @@ static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
  * The client sends a message to the server and waits until the send it completed.
  * The server receives a message from the client and waits for its completion.
  */
-static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
+static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
+                            int current_iter)
 {
     char recv_message[TEST_STRING_LEN]= "";
     test_req_t *request;
@@ -277,7 +279,8 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
                                      UCP_STREAM_RECV_FLAG_WAITALL);
     }
 
-    return request_finalize(ucp_worker, request, is_server, recv_message);
+    return request_finalize(ucp_worker, request, is_server, recv_message,
+                            current_iter);
 }
 
 /**
@@ -285,7 +288,8 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
  * The client sends a message to the server and waits until the send it completed.
  * The server receives a message from the client and waits for its completion.
  */
-static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
+static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
+                         int current_iter)
 {
     char recv_message[TEST_STRING_LEN]= "";
     test_req_t *request;
@@ -302,7 +306,8 @@ static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
                                   TAG, 0, tag_recv_cb);
     }
 
-    return request_finalize(ucp_worker, request, is_server, recv_message);
+    return request_finalize(ucp_worker, request, is_server, recv_message,
+                            current_iter);
 }
 
 /**
@@ -360,6 +365,9 @@ static void usage()
                     "     'stream' : Stream API\n"
                     "     'tag'    : Tag API\n"
                     "    If not specified, %s API will be used.\n", COMM_TYPE_DEFAULT);
+    fprintf(stderr, " -i Number of iterations to run. Client and server must "
+                    "have the same value. (default = %d).\n",
+                    num_iterations);
     fprintf(stderr, "\n");
 }
 
@@ -374,7 +382,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
 
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "a:l:p:c:")) != -1) {
+    while ((c = getopt(argc, argv, "a:l:p:c:i:")) != -1) {
         switch (c) {
         case 'a':
             *server_addr = optarg;
@@ -400,6 +408,9 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
                 return -1;
             }
             server_port = port;
+            break;
+        case 'i':
+            num_iterations = atoi(optarg);
             break;
         default:
             usage();
@@ -452,26 +463,23 @@ static char* sockaddr_get_port_str(const struct sockaddr_storage *sock_addr,
 
 static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
                                        send_recv_type_t send_recv_type,
-                                       int is_server)
+                                       int is_server, int current_iter)
 {
     int ret;
 
     switch (send_recv_type) {
     case CLIENT_SERVER_SEND_RECV_STREAM:
         /* Client-Server communication via Stream API */
-        ret = send_recv_stream(worker, ep, is_server);
+        ret = send_recv_stream(worker, ep, is_server, current_iter);
         break;
     case CLIENT_SERVER_SEND_RECV_TAG:
         /* Client-Server communication via Tag-Matching API */
-        ret = send_recv_tag(worker, ep, is_server);
+        ret = send_recv_tag(worker, ep, is_server, current_iter);
         break;
     default:
         fprintf(stderr, "unknown send-recv type %d\n", send_recv_type);
         return -1;
     }
-
-    /* Close the endpoint to the peer */
-    ep_close(worker, ep);
 
     return ret;
 }
@@ -599,6 +607,25 @@ out:
     return status;
 }
 
+static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
+                                 send_recv_type_t send_recv_type, int is_server)
+{
+    int i, ret = 0;
+
+    for (i = 0; i < num_iterations; i++) {
+        ret = client_server_communication(ucp_worker, ep, send_recv_type,
+                                          is_server, i);
+        if (ret != 0) {
+            fprintf(stderr, "%s failed on iteration #%d\n",
+                    (is_server ? "server": "client"), i);
+            goto out;
+        }
+    }
+
+out:
+    return ret;
+}
+
 static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
                       char *listen_addr, send_recv_type_t send_recv_type)
 {
@@ -615,7 +642,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         goto err;
     }
 
-    /* Initialiaze the server's context. */
+    /* Initialize the server's context. */
     context.conn_request = NULL;
 
     /* Create a listener on the worker created at first. The 'connection
@@ -632,7 +659,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     while (1) {
         /* Wait for the server to receive a connection request from the client.
          * If there are multiple clients for which the server's connection request
-         * callback is involked, i.e. several clients are trying to connect in
+         * callback is invoked, i.e. several clients are trying to connect in
          * parallel, the server will handle only the first one and reject the rest */
         while (context.conn_request == NULL) {
             ucp_worker_progress(ucp_worker);
@@ -649,7 +676,16 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
             goto err_listener;
         }
 
-        client_server_communication(ucp_data_worker, server_ep, send_recv_type, 1);
+        /* The server waits for all the iterations to complete before moving on
+         * to the next client */
+        ret = client_server_do_work(ucp_data_worker, server_ep, send_recv_type,
+                                    1);
+        if (ret != 0) {
+            goto err_ep;
+        }
+
+        /* Close the endpoint to the client */
+        ep_close(ucp_data_worker, server_ep);
 
         /* Reinitialize the server's context to be used for the next client */
         context.conn_request = NULL;
@@ -657,6 +693,8 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         printf("Waiting for connection...\n");
     }
 
+err_ep:
+    ep_close(ucp_data_worker, server_ep);
 err_listener:
     ucp_listener_destroy(context.listener);
 err_worker:
@@ -665,8 +703,8 @@ err:
     return ret;
 }
 
-static int run_client(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
-                      char *server_addr, send_recv_type_t send_recv_type)
+static int run_client(ucp_worker_h ucp_worker, char *server_addr,
+                      send_recv_type_t send_recv_type)
 {
     ucp_ep_h     client_ep;
     ucs_status_t status;
@@ -679,7 +717,10 @@ static int run_client(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         goto out;
     }
 
-    ret = client_server_communication(ucp_worker, client_ep, send_recv_type, 0);
+    ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0);
+
+    /* Close the endpoint to the server */
+    ep_close(ucp_worker, client_ep);
 
 out:
     return ret;
@@ -754,7 +795,7 @@ int main(int argc, char **argv)
         ret = run_server(ucp_context, ucp_worker, listen_addr, send_recv_type);
     } else {
         /* Client side */
-        ret = run_client(ucp_context, ucp_worker, server_addr, send_recv_type);
+        ret = run_client(ucp_worker, server_addr, send_recv_type);
     }
 
     ucp_worker_destroy(ucp_worker);
