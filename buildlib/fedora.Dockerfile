@@ -18,6 +18,7 @@ RUN dnf install -y \
     make \
     maven \
     numactl-devel \
+    pinentry \
     rdma-core-devel \
     rpm-build \
     && dnf clean dbcache packages
