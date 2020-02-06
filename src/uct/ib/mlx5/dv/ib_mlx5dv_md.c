@@ -498,6 +498,28 @@ no_odp:
     return UCS_OK;
 }
 
+static struct ibv_context *
+uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device,
+                             struct mlx5dv_context_attr *dv_attr)
+{
+    struct ibv_context *ctx;
+    struct ibv_cq *cq;
+
+    ctx = mlx5dv_open_device(ibv_device, dv_attr);
+    if (ctx == NULL) {
+        return NULL;
+    }
+
+    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        ibv_close_device(ctx);
+        return NULL;
+    }
+
+    ibv_destroy_cq(cq);
+    return ctx;
+}
+
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops;
 
 static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
@@ -525,7 +547,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
-    ctx = mlx5dv_open_device(ibv_device, &dv_attr);
+    ctx = uct_ib_mlx5_devx_open_device(ibv_device, &dv_attr);
     if (ctx == NULL) {
         if (md_config->devx == UCS_YES) {
             status = UCS_ERR_IO_ERROR;
