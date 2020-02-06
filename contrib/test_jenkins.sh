@@ -230,8 +230,12 @@ prepare() {
 	echo " ==== Prepare ===="
 	env
 	cd ${WORKSPACE}
+	if [ -d build-test ]
+	then
+		chmod u+rwx build-test -R
+		rm -rf build-test
+	fi
 	./autogen.sh
-	rm -rf build-test
 	mkdir -p build-test
 	cd build-test
 }
