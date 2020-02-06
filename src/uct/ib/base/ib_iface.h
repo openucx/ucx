@@ -204,7 +204,6 @@ struct uct_ib_iface {
         uint8_t               enable_res_domain;   /* Disable multiple resource domains */
         uint8_t               qp_type;
         uint8_t               force_global_addr;
-        size_t                max_iov;             /* Maximum buffers in IOV array */
     } config;
 
     uct_ib_iface_ops_t        *ops;
@@ -543,26 +542,6 @@ size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
 
     return sge_it;
 }
-
-
-static UCS_F_ALWAYS_INLINE
-size_t uct_ib_iface_get_max_iov(uct_ib_iface_t *iface)
-{
-    return iface->config.max_iov;
-}
-
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
-{
-    size_t min_iov_requested;
-
-    ucs_assert((ssize_t)max_iov > 0);
-
-    min_iov_requested = ucs_max(max_iov, 1UL); /* max_iov mustn't be 0 */
-    iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, min_iov_requested);
-}
-
 
 static UCS_F_ALWAYS_INLINE
 size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)

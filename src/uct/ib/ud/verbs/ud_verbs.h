@@ -20,6 +20,7 @@ typedef struct {
     struct ibv_ah       *ah;
 } uct_ud_verbs_ep_t;
 
+
 typedef struct {
     uct_ud_iface_t          super;
     struct {
@@ -27,8 +28,16 @@ typedef struct {
         struct ibv_send_wr  wr_inl;
         struct ibv_send_wr  wr_skb;
     } tx;
+    struct {
+        size_t              max_send_sge;
+    } config;
 } uct_ud_verbs_iface_t;
 
+
 UCS_CLASS_DECLARE(uct_ud_verbs_ep_t, const uct_ep_params_t *)
+
+
+ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
+                                          size_t *max_send_sge);
 
 #endif

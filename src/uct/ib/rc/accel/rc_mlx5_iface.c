@@ -154,13 +154,14 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
-                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0),
-                                sizeof(uct_rc_mlx5_hdr_t));
+                                sizeof(uct_rc_mlx5_hdr_t),
+                                UCT_RC_MLX5_RMA_MAX_IOV(0));
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline, 0);
+    uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
+                                   UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
     iface_attr->ep_addr_len     = sizeof(uct_rc_mlx5_ep_address_t);
     iface_attr->iface_addr_len  = sizeof(uint8_t);
@@ -729,13 +730,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     if (status != UCS_OK) {
         return status;
     }
-
-    /* Set max_iov for put_zcopy and get_zcopy */
-    uct_ib_iface_set_max_iov(&self->super.super.super,
-                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
-                             sizeof(struct mlx5_wqe_raddr_seg) -
-                             sizeof(struct mlx5_wqe_ctrl_seg)) /
-                             sizeof(struct mlx5_wqe_data_seg));
 
     return UCS_OK;
 }

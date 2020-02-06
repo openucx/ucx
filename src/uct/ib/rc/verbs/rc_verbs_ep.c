@@ -80,6 +80,10 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     struct ibv_send_wr wr;
     size_t sge_cnt;
 
+    ucs_assertv(iovcnt <= ucs_min(UCT_IB_MAX_IOV, iface->config.max_send_sge),
+                "iovcnt %zu, maxcnt (%zu, %zu)",
+                iovcnt, UCT_IB_MAX_IOV, iface->config.max_send_sge);
+
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
@@ -168,13 +172,13 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_ib_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
-                                                        uct_ib_iface_t);
-    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep,
-                                                        uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                              uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep                    = ucs_derived_of(tl_ep,
+                                                              uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
                        "uct_rc_verbs_ep_put_zcopy");
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_WRITE);
@@ -212,13 +216,13 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_ib_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
-                                                        uct_ib_iface_t);
-    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep,
-                                                        uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                              uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep                    = ucs_derived_of(tl_ep,
+                                                              uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
                        "uct_rc_verbs_ep_get_zcopy");
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_READ);
@@ -287,7 +291,8 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     int send_flags;
     size_t sge_cnt;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
+    /* 1 iov consumed by am header */
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge - 1,
                        "uct_rc_verbs_ep_am_zcopy");
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
                           iface->config.short_desc_size,
