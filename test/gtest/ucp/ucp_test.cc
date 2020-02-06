@@ -670,10 +670,7 @@ void ucp_test_base::entity::add_err(ucs_status_t status) {
     }
 }
 
-size_t ucp_test_base::entity::get_err_num(ucs_status_t status) const {
-    EXPECT_EQ(UCS_ERR_REJECTED, status) << "counter for \""
-                                        << ucs_status_string(status)
-                                        << "\" type of errors is not implemented";
+const size_t &ucp_test_base::entity::get_err_num_rejected() const {
     return m_rejected_cntr;
 }
 

@@ -102,7 +102,7 @@ public:
 
         void add_err(ucs_status_t status);
 
-        size_t get_err_num(ucs_status_t status) const;
+        const size_t &get_err_num_rejected() const;
 
         const size_t &get_err_num() const;
 

@@ -358,13 +358,12 @@ public:
     {
         ucs_time_t deadline = ucs::get_deadline();
 
-        while ((e.get_err_num(UCS_ERR_REJECTED) == 0) &&
-               (ucs_get_time() < deadline)) {
+        while ((e.get_err_num_rejected() == 0) && (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
 
         EXPECT_GT(deadline, ucs_get_time());
-        EXPECT_EQ(1ul, e.get_err_num(UCS_ERR_REJECTED));
+        EXPECT_EQ(1ul, e.get_err_num_rejected());
     }
 
     virtual ucp_ep_params_t get_ep_params()
