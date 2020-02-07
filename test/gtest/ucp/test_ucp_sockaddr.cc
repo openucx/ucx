@@ -38,12 +38,22 @@ public:
     }
 
     enum {
-        MT_PARAM_VARIANT = DEFAULT_PARAM_VARIANT + 1, /* Enabled worker level
-                                                         multi-threading */
-        CONN_REQ_TAG,                                 /* Accepting by ucp_conn_request_h,
+        CONN_REQ_TAG = DEFAULT_PARAM_VARIANT + 1,     /* Accepting by ucp_conn_request_h,
                                                          send/recv by TAG API */
         CONN_REQ_STREAM                               /* Accepting by ucp_conn_request_h,
                                                          send/recv by STREAM API */
+    };
+
+    enum {
+        TEST_MODIFIER_MASK      = UCS_MASK(16),
+        TEST_MODIFIER_MT        = UCS_BIT(16),
+        TEST_MODIFIER_CM        = UCS_BIT(17)
+    };
+
+    enum {
+        SEND_DIRECTION_C2S  = UCS_BIT(0), /* send data from client to server */
+        SEND_DIRECTION_S2C  = UCS_BIT(1), /* send data from server to client */
+        SEND_DIRECTION_BIDI = SEND_DIRECTION_C2S | SEND_DIRECTION_S2C /* bidirectional send */
     };
 
     typedef enum {
@@ -54,6 +64,9 @@ public:
     ucs::sock_addr_storage test_addr;
 
     void init() {
+        if (GetParam().variant & TEST_MODIFIER_CM) {
+            modify_config("SOCKADDR_CM_ENABLE", "yes");
+        }
         get_sockaddr();
         ucp_test::init();
         skip_loopback();
@@ -69,12 +82,28 @@ public:
             ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
 
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     MT_PARAM_VARIANT, result,
-                                     MULTI_THREAD_WORKER);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      CONN_REQ_TAG, result);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CONN_REQ_TAG | TEST_MODIFIER_MT, result,
+                                     MULTI_THREAD_WORKER);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CONN_REQ_TAG | TEST_MODIFIER_CM, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CONN_REQ_TAG | TEST_MODIFIER_MT |
+                                     TEST_MODIFIER_CM, result,
+                                     MULTI_THREAD_WORKER);
+
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      CONN_REQ_STREAM, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CONN_REQ_STREAM | TEST_MODIFIER_MT, result,
+                                     MULTI_THREAD_WORKER);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CONN_REQ_STREAM | TEST_MODIFIER_CM, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     CONN_REQ_STREAM | TEST_MODIFIER_MT |
+                                     TEST_MODIFIER_CM, result,
+                                     MULTI_THREAD_WORKER);
         return result;
     }
 
@@ -292,9 +321,9 @@ public:
                 progress();
                 ep_count = ucp_stream_worker_poll(to.worker(), &poll_eps, 1, 0);
             } while (ep_count == 0);
-            ASSERT_EQ(1,                  ep_count);
-            EXPECT_EQ(to.ep(),            poll_eps.ep);
-            EXPECT_EQ((void *)0xdeadbeef, poll_eps.user_data);
+            ASSERT_EQ(1,       ep_count);
+            EXPECT_EQ(to.ep(), poll_eps.ep);
+            EXPECT_EQ(&to,     poll_eps.user_data);
 
             recv_req = ucp_stream_recv_nb(to.ep(), &recv_data, 1,
                                           ucp_dt_make_contig(sizeof(recv_data)),
@@ -317,38 +346,37 @@ public:
     {
         ucs_time_t deadline = ucs::get_deadline();
 
-        while ((receiver().get_num_eps() == 0) && (m_err_handler_count == 0) &&
-               (ucs_get_time() < deadline)) {
+        while ((receiver().get_num_eps() == 0) &&
+               (sender().get_err_num() == 0) && (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
-        return (m_err_handler_count == 0) && (receiver().get_num_eps() > 0);
+
+        return (sender().get_err_num() == 0) && (receiver().get_num_eps() > 0);
     }
 
     void wait_for_reject(entity &e, bool wakeup)
     {
         ucs_time_t deadline = ucs::get_deadline();
 
-        while ((e.get_rejected_cntr() == 0) &&
-               (ucs_get_time() < deadline)) {
+        while ((e.get_err_num_rejected() == 0) && (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
+
         EXPECT_GT(deadline, ucs_get_time());
-        EXPECT_EQ(1ul, e.get_rejected_cntr());
+        EXPECT_EQ(1ul, e.get_err_num_rejected());
     }
 
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                     UCP_EP_PARAM_FIELD_ERR_HANDLER |
-                                     UCP_EP_PARAM_FIELD_USER_DATA;
+                                     UCP_EP_PARAM_FIELD_ERR_HANDLER;
         /* The error handling requirement is needed since we need to take
          * care of a case where the client gets an error. In case ucp needs to
          * handle a large worker address but neither ud nor ud_x are present */
         ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
-        ep_params.user_data        = reinterpret_cast<void*>(this);
         return ep_params;
     }
 
@@ -356,14 +384,17 @@ public:
     {
         ucp_ep_params_t ep_params = get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                     UCP_EP_PARAM_FIELD_SOCK_ADDR;
+                                     UCP_EP_PARAM_FIELD_SOCK_ADDR |
+                                     UCP_EP_PARAM_FIELD_USER_DATA;
         ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = connect_addr;
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
+        ep_params.user_data        = &sender();
         sender().connect(&receiver(), ep_params);
     }
 
-    void connect_and_send_recv(const struct sockaddr *connect_addr, bool wakeup)
+    void connect_and_send_recv(const struct sockaddr *connect_addr, bool wakeup,
+                               uint64_t flags)
     {
         {
             scoped_log_handler slh(detect_error_logger);
@@ -373,9 +404,15 @@ public:
             }
         }
 
-        send_recv(sender(), receiver(),
-                  (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
-                  SEND_RECV_TAG, wakeup, cb_type());
+        if (flags & SEND_DIRECTION_C2S) {
+            send_recv(sender(), receiver(), send_recv_type(), wakeup,
+                      cb_type());
+        }
+
+        if (flags & SEND_DIRECTION_S2C) {
+            send_recv(receiver(), sender(), send_recv_type(), wakeup,
+                      cb_type());
+        }
     }
 
     void connect_and_reject(const struct sockaddr *connect_addr, bool wakeup)
@@ -392,13 +429,13 @@ public:
     }
 
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
-                                bool wakeup)
+                                bool wakeup, uint64_t flags)
     {
         UCS_TEST_MESSAGE << "Testing "
                          << ucs::sockaddr_to_str(test_addr.get_sock_addr_ptr());
 
         start_listener(cb_type, test_addr.get_sock_addr_ptr(), test_addr.get_addr_size());
-        connect_and_send_recv(test_addr.get_sock_addr_ptr(), wakeup);
+        connect_and_send_recv(test_addr.get_sock_addr_ptr(), wakeup, flags);
     }
 
     void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
@@ -411,40 +448,151 @@ public:
         connect_and_reject(test_addr.get_sock_addr_ptr(), wakeup);
     }
 
+    void one_sided_disconnect(entity &e) {
+        void *dreq = e.disconnect_nb();
+        if (dreq == NULL) {
+            return;
+        }
+
+        ASSERT_EQ(UCS_INPROGRESS, UCS_PTR_STATUS(dreq));
+
+        ucs_status_t status;
+        ucs_time_t loop_end_limit = ucs_time_from_sec(10.0) + ucs_get_time();
+        do {
+            /* TODO: replace the progress() with e().progress() when
+                     async progress is implemented. */
+            progress();
+            status = ucp_request_check_status(dreq);
+            if (status != UCS_INPROGRESS) {
+                break;
+            }
+        } while (ucs_get_time() < loop_end_limit);
+        EXPECT_EQ(UCS_OK, status);
+        ucp_request_release(dreq);
+    }
+
+    void concurrent_disconnect() {
+        std::vector<void *> reqs;
+
+        ASSERT_EQ(2ul, entities().size());
+        ASSERT_EQ(1, sender().get_num_workers());
+        ASSERT_EQ(1, sender().get_num_eps());
+        ASSERT_EQ(1, receiver().get_num_workers());
+        ASSERT_EQ(1, receiver().get_num_eps());
+
+        reqs.push_back(sender().disconnect_nb());
+        reqs.push_back(receiver().disconnect_nb());
+        while (!reqs.empty()) {
+            wait(reqs.back());
+            reqs.pop_back();
+        }
+    }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
-        ucp_test::err_handler_cb(static_cast<ucp_test *>(self), ep, status);
-
-        if (status == UCS_ERR_REJECTED) {
-            entity *e = self->get_entity_by_ep(ep);
-            if (e != NULL) {
-                e->inc_rejected_cntr();
-                return;
-            }
-        }
+        ucp_test::err_handler_cb(arg, ep, status);
 
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
          * long as well */
-        if (status != UCS_ERR_UNREACHABLE) {
+        switch (status) {
+        case UCS_ERR_REJECTED:
+        case UCS_ERR_UNREACHABLE:
+            return;
+        default:
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
 
 protected:
     ucp_test_base::entity::listen_cb_type_t cb_type() const {
-        if ((GetParam().variant == CONN_REQ_TAG) ||
-            (GetParam().variant == CONN_REQ_STREAM)) {
+        const int variant = (GetParam().variant & TEST_MODIFIER_MASK);
+        if ((variant == CONN_REQ_TAG) || (variant == CONN_REQ_STREAM)) {
             return ucp_test_base::entity::LISTEN_CB_CONN;
         }
         return ucp_test_base::entity::LISTEN_CB_EP;
     }
+
+    send_recv_type_t send_recv_type() const {
+        switch (GetParam().variant & TEST_MODIFIER_MASK) {
+            case CONN_REQ_STREAM:
+                return SEND_RECV_STREAM;
+            case CONN_REQ_TAG:
+                /* fallthrough */
+            default:
+                return SEND_RECV_TAG;
+        }
+    }
+
+    bool nonparameterized_test() const {
+        return (GetParam().variant != DEFAULT_PARAM_VARIANT) &&
+               (GetParam().variant != (CONN_REQ_TAG | TEST_MODIFIER_CM));
+    }
+
+    bool no_close_protocol() const {
+        return !(GetParam().variant & TEST_MODIFIER_CM);
+    }
 };
 
-UCS_TEST_P(test_ucp_sockaddr, listen) {
-    listen_and_communicate(cb_type(), false);
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listen, no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, 0);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, listen_c2s) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_C2S);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listen_s2c, no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_S2C);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_BIDI);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, 0);
+    one_sided_disconnect(sender());
+}
+
+UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_c2s) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_C2S);
+    one_sided_disconnect(sender());
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_S2C);
+    one_sided_disconnect(sender());
+}
+
+UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_BIDI);
+    one_sided_disconnect(sender());
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, 0);
+    concurrent_disconnect();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_c2s,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_C2S);
+    concurrent_disconnect();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_S2C);
+    concurrent_disconnect();
+}
+
+UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_bidi) {
+    listen_and_communicate(cb_type(), false, SEND_DIRECTION_BIDI);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -472,11 +620,11 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
 
     start_listener(cb_type(), (const struct sockaddr*)&inaddr_any_listen_addr,
                    size);
-    connect_and_send_recv(test_addr.get_sock_addr_ptr(), false);
+    connect_and_send_recv(test_addr.get_sock_addr_ptr(), false,
+                          SEND_DIRECTION_C2S);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, reject,
-                     (GetParam().variant > 0)) {
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, reject, nonparameterized_test()) {
     listen_and_reject(ucp_test_base::entity::LISTEN_CB_REJECT, false);
 }
 
@@ -516,10 +664,10 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
         scoped_log_handler slh(wrap_errors_logger);
         client_ep_connect(listen_addr.get_sock_addr_ptr());
         /* allow for the unreachable event to arrive before restoring errors */
-        wait_for_flag(&m_err_handler_count);
+        wait_for_flag(&sender().get_err_num());
     }
 
-    EXPECT_EQ(1, m_err_handler_count);
+    EXPECT_EQ(1u, sender().get_err_num());
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
@@ -527,7 +675,6 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
 class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
 public:
-
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
         params.features    |= UCP_FEATURE_WAKEUP;
@@ -535,12 +682,26 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup) {
-    listen_and_communicate(cb_type(), true);
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_with_wakeup, wakeup,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), true, 0);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup_c2s) {
+    listen_and_communicate(cb_type(), true, SEND_DIRECTION_C2S);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_with_wakeup, wakeup_s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(cb_type(), true, SEND_DIRECTION_S2C);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup_bidi) {
+    listen_and_communicate(cb_type(), true, SEND_DIRECTION_BIDI);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_with_wakeup, reject,
-                     (GetParam().variant > 0)) {
+                     nonparameterized_test()) {
     listen_and_reject(ucp_test_base::entity::LISTEN_CB_REJECT, true);
 }
 
@@ -577,15 +738,14 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
 
         /* allow the err_handler callback to be invoked if needed */
         if (!wait_for_server_ep(false)) {
-            EXPECT_EQ(1, m_err_handler_count);
+            EXPECT_EQ(1ul, sender().get_err_num());
             UCS_TEST_SKIP_R("cannot connect to server");
         }
 
-        EXPECT_EQ(0, m_err_handler_count);
+        EXPECT_EQ(0ul, sender().get_err_num());
         /* even if server EP is created, in case of long address, wireup will be
          * done later, need to communicate */
-        send_recv(sender(), receiver(), (GetParam().variant == CONN_REQ_STREAM) ?
-                  SEND_RECV_STREAM : SEND_RECV_TAG, false, cb_type());
+        send_recv(sender(), receiver(), send_recv_type(), false, cb_type());
     }
 }
 

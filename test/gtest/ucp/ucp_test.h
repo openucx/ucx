@@ -55,14 +55,16 @@ public:
         } listen_cb_type_t;
 
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
-               const ucp_worker_params_t& worker_params);
+               const ucp_worker_params_t& worker_params,
+               const ucp_test_base* test_owner);
 
         ~entity();
 
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
 
-        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
+        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request,
+                        const void *ep_user_data);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -98,9 +100,11 @@ public:
 
         int get_num_eps(int worker_index = 0) const;
 
-        void inc_rejected_cntr();
+        void add_err(ucs_status_t status);
 
-        size_t get_rejected_cntr() const;
+        const size_t &get_err_num_rejected() const;
+
+        const size_t &get_err_num() const;
 
         void warn_existing_eps() const;
 
@@ -115,6 +119,7 @@ public:
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
+        size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
 
     private:
@@ -187,7 +192,6 @@ protected:
     bool has_only_transports(const std::vector<std::string>& tl_names) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
-    entity* get_entity_by_ep(ucp_ep_h ep);
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
@@ -198,8 +202,8 @@ protected:
     int max_connections();
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        ucp_test *self = reinterpret_cast<ucp_test*>(arg);
-        self->m_err_handler_count++;
+        entity *e = reinterpret_cast<entity*>(arg);
+        e->add_err(status);
     }
 
     template <typename T>
@@ -210,7 +214,6 @@ protected:
         }
     }
 
-    volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
 
