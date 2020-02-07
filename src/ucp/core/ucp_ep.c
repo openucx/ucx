@@ -1929,7 +1929,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     zcopy_thresh = (iovcnt * reg_cost->overhead) /
                    ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->growth));
 
-    if ((zcopy_thresh < 0.0) || (zcopy_thresh > SIZE_MAX)) {
+    if (zcopy_thresh < 0.0) {
         return SIZE_MAX;
     }
 
