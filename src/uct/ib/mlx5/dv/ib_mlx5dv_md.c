@@ -805,6 +805,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 
     /* always set global address parameters, in case the port is RoCE or SRIOV */
     attr.qp_state                  = IBV_QPS_RTR;
+    attr.min_rnr_timer             = 1;
     attr.path_mtu                  = IBV_MTU_256;
     attr.ah_attr.port_num          = 1;
     attr.ah_attr.sl                = 0;
