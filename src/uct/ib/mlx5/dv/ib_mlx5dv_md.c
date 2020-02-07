@@ -746,6 +746,8 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     struct ibv_qp *qp;
     int ret;
 
+    ucs_debug("checking for DC support on %s", uct_ib_device_name(dev));
+
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
         ucs_error("ibv_alloc_pd() failed: %m");
@@ -782,6 +784,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     /* create DCT qp successful means DC is supported */
     qp = mlx5dv_create_qp(ctx, &qp_attr, &dv_attr);
     if (qp == NULL) {
+        ucs_debug("failed to create DCT on %s: %m", uct_ib_device_name(dev));
         goto err_qp;
     }
 
@@ -795,12 +798,20 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
                                    IBV_QP_PORT |
                                    IBV_QP_ACCESS_FLAGS);
     if (ret != 0) {
+        ucs_debug("failed to ibv_modify_qp(DCT, INIT) on %s: %m",
+                  uct_ib_device_name(dev));
         goto err;
     }
 
-    attr.qp_state         = IBV_QPS_RTR;
-    attr.path_mtu         = IBV_MTU_256;
-    attr.ah_attr.port_num = 1;
+    /* always set global address parameters, in case the port is RoCE or SRIOV */
+    attr.qp_state                  = IBV_QPS_RTR;
+    attr.path_mtu                  = IBV_MTU_256;
+    attr.ah_attr.port_num          = 1;
+    attr.ah_attr.sl                = 0;
+    attr.ah_attr.is_global         = 1;
+    attr.ah_attr.grh.hop_limit     = 1;
+    attr.ah_attr.grh.traffic_class = 0;
+    attr.ah_attr.grh.sgid_index    = 0;
 
     ret = ibv_modify_qp(qp, &attr, IBV_QP_STATE |
                                    IBV_QP_MIN_RNR_TIMER |
@@ -808,7 +819,11 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
                                    IBV_QP_PATH_MTU);
 
     if (ret == 0) {
+        ucs_debug("DC is supported on %s", uct_ib_device_name(dev));
         dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    } else {
+        ucs_debug("failed to ibv_modify_qp(DCT, RTR) on %s: %m",
+                  uct_ib_device_name(dev));
     }
 
 err:
