@@ -1028,8 +1028,9 @@ void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
                                    remote_dctn, iface->rx.dct.qp_num);
 }
 
-static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
-                                             void *arg, ucs_status_t status)
+static ucs_status_t uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+                                                     void *arg,
+                                                     ucs_status_t status)
 {
     uct_dc_mlx5_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
     struct mlx5_cqe64    *cqe    = arg;
@@ -1048,13 +1049,12 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
     }
 
     if (ep == NULL) {
-        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dcis[dci].txwq,
-                                        level);
-        return;
+        uct_ib_mlx5_completion_with_err(ib_iface, arg,
+                                        &iface->tx.dcis[dci].txwq, level);
+        return UCS_OK;
     }
 
-    ep = uct_dc_mlx5_ep_from_dci(iface, dci);
-    uct_dc_mlx5_ep_handle_failure(ep, arg, status);
+    return uct_dc_mlx5_ep_handle_failure(ep, arg, status);
 }
 
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {

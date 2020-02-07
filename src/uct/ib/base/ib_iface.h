@@ -157,8 +157,9 @@ typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
 typedef void (*uct_ib_iface_event_cq_func_t)(uct_ib_iface_t *iface,
                                              uct_ib_dir_t dir);
 
-typedef void (*uct_ib_iface_handle_failure_func_t)(uct_ib_iface_t *iface, void *arg,
-                                                   ucs_status_t status);
+typedef ucs_status_t (*uct_ib_iface_handle_failure_func_t)(uct_ib_iface_t *iface,
+                                                           void *arg,
+                                                           ucs_status_t status);
 
 typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface, uct_ep_h ep,
                                                           ucs_status_t status);

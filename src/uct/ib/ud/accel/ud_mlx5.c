@@ -686,18 +686,19 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
 
-static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
-                                             ucs_status_t status)
+static ucs_status_t uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+                                                     void *arg,
+                                                     ucs_status_t status)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
 
     if (status == UCS_ERR_ENDPOINT_TIMEOUT) {
-        uct_ud_iface_handle_failure(ib_iface, arg, status);
-    } else {
-        /* Local side failure - treat as fatal */
-        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.wq,
-                                        UCS_LOG_LEVEL_FATAL);
+        return uct_ud_iface_handle_failure(ib_iface, arg, status);
     }
+
+    /* Local side failure - treat as fatal */
+    return uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.wq,
+                                           UCS_LOG_LEVEL_FATAL);
 }
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {

@@ -27,7 +27,12 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     struct ibv_send_wr *bad_wr;
     int ret;
 
-    ucs_assertv(ep->qp->state == IBV_QPS_RTS, "QP 0x%x state is %d",
+    /* IBV_QPS_ERR is possible after flush(cancel),
+     * according to IB spec, posting to err QP is OK and it will generate WQE
+     * with Flushed Err, this is what we need to return all credits before EP
+     * destroy */
+    ucs_assertv((ep->qp->state == IBV_QPS_RTS) ||
+                (ep->qp->state == IBV_QPS_ERR), "QP 0x%x state is %d",
                 ep->qp->qp_num, ep->qp->state);
 
     if (!(send_flags & IBV_SEND_SIGNALED)) {
@@ -370,8 +375,11 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_verbs_ep_handle_failure(ep, UCS_ERR_CANCELED);
-        return UCS_OK;
+        if (iface->super.config.fc_enabled) {
+            ep->super.fc.fc_wnd = iface->super.config.fc_wnd_size;
+        }
+        uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
+        return UCS_INPROGRESS;
     }
 
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);

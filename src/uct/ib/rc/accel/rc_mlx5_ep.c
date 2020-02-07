@@ -513,8 +513,13 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_mlx5_ep_handle_failure(ep, UCS_ERR_CANCELED);
-        return UCS_OK;
+        if (iface->super.config.fc_enabled) {
+            ep->super.fc.fc_wnd = iface->super.config.fc_wnd_size;
+        }
+
+        uct_ib_modify_qp(ep->tx.wq.super.verbs.qp, IBV_QPS_ERR);
+        /* NOTE: do not reset HW TM QP since it does not generate TX CQEs */
+        return UCS_INPROGRESS;
     }
 
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);

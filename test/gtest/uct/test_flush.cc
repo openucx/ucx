@@ -243,40 +243,68 @@ public:
     }
 
     void flush_ep_no_comp() {
+        unsigned flags      = m_flush_flags;
+        ucs_time_t deadline = ucs::get_deadline();
         ucs_status_t status;
         do {
             progress();
-            status = uct_ep_flush(sender().ep(0), m_flush_flags, NULL);
-        } while ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS));
+            status = uct_ep_flush(sender().ep(0), flags, NULL);
+            if (flags & UCT_FLUSH_FLAG_CANCEL) {
+                ASSERT_UCS_OK_OR_INPROGRESS(status);
+                flags = UCT_FLUSH_FLAG_LOCAL;
+                continue;
+            }
+        } while (((status == UCS_ERR_NO_RESOURCE) ||
+                  (status == UCS_INPROGRESS)) &&
+                 (ucs_get_time() < deadline));
         ASSERT_UCS_OK(status);
     }
 
     void flush_iface_no_comp() {
+        unsigned flags      = m_flush_flags;
+        ucs_time_t deadline = ucs::get_deadline();
         ucs_status_t status;
+
         do {
             progress();
-            status = uct_iface_flush(sender().iface(), m_flush_flags, NULL);
-        } while ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS));
+            status = uct_iface_flush(sender().iface(), flags, NULL);
+            if (flags & UCT_FLUSH_FLAG_CANCEL) {
+                ASSERT_UCS_OK_OR_INPROGRESS(status);
+                flags = UCT_FLUSH_FLAG_LOCAL;
+                continue;
+            }
+        } while (((status == UCS_ERR_NO_RESOURCE) ||
+                  (status == UCS_INPROGRESS)) &&
+                 (ucs_get_time() < deadline));
         ASSERT_UCS_OK(status);
     }
 
     void flush_ep_nb() {
-        uct_completion_t comp;
         ucs_status_t status;
-        comp.count = 2;
-        comp.func  = NULL;
+        uct_completion_t comp;
+        comp.count          = 2;
+        comp.func           = NULL;
+        unsigned flags      = m_flush_flags;
+        ucs_time_t deadline = ucs::get_deadline();
         do {
-            progress();
-            status = uct_ep_flush(sender().ep(0), m_flush_flags, &comp);
-        } while (status == UCS_ERR_NO_RESOURCE);
+            for (;;) {
+                progress();
+                status = uct_ep_flush(sender().ep(0), flags, &comp);
+                if (flags & UCT_FLUSH_FLAG_CANCEL) {
+                    ASSERT_UCS_OK_OR_INPROGRESS(status);
+                    flags = UCT_FLUSH_FLAG_LOCAL;
+                    continue;
+                }
+                break;
+            }
+        } while ((status == UCS_ERR_NO_RESOURCE) &&
+                 (ucs_get_time() < deadline));
         ASSERT_UCS_OK_OR_INPROGRESS(status);
         if (status == UCS_OK) {
             return;
         }
-        /* coverity[loop_condition] */
-        while (comp.count != 1) {
-            progress();
-        }
+
+        wait_for_value(&comp.count, 1, true, 60.);
     }
 
     void test_flush_am_pending(flush_func_t flush, bool destroy_ep);
@@ -369,11 +397,12 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      flush_req.comp.count = 2;
      flush_req.comp.func  = NULL;
 
-     for (;;) {
-         status = uct_ep_flush(sender().ep(0), m_flush_flags, &flush_req.comp);
+     for (unsigned flags = m_flush_flags;; flags = UCT_FLUSH_FLAG_LOCAL) {
+         status = uct_ep_flush(sender().ep(0), flags, &flush_req.comp);
          if (status == UCS_OK) {
              --flush_req.comp.count;
          } else if (status == UCS_ERR_NO_RESOURCE) {
+             EXPECT_FALSE(flags & UCT_FLUSH_FLAG_CANCEL);
              /* If flush returned NO_RESOURCE, add to pending must succeed */
              flush_req.test      = this;
              flush_req.uct.func  = flush_progress;
@@ -383,6 +412,10 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
              }
              EXPECT_EQ(UCS_OK, status);
          } else if (status == UCS_INPROGRESS) {
+             if (flags & UCT_FLUSH_FLAG_CANCEL) {
+                 short_progress_loop();
+                 continue;
+             }
          } else {
              UCS_TEST_ABORT("failed to flush ep: " << ucs_status_string(status));
          }

@@ -262,8 +262,8 @@ enum uct_dc_mlx5_ep_flags {
 };
 
 
-void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
-                                   ucs_status_t status);
+ucs_status_t uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
+                                           ucs_status_t status);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)

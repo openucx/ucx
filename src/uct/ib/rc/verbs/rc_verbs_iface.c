@@ -42,27 +42,39 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
-static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
-                                        ucs_status_t status)
+static ucs_status_t uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
+                                                ucs_status_t status)
 {
     struct ibv_wc     *wc      = arg;
     uct_rc_iface_t    *iface   = ucs_derived_of(ib_iface, uct_rc_iface_t);
-    ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
+    ucs_log_level_t    log_lvl;
     uct_rc_verbs_ep_t *ep;
 
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
-    if (!ep) {
-        return;
+    if (ep == NULL) {
+        log_lvl = UCS_LOG_LEVEL_DEBUG;
+        status  = UCS_OK;
+        goto out;
     }
 
-    if (uct_rc_verbs_ep_handle_failure(ep, status) == UCS_OK) {
+    if (status == UCS_ERR_CANCELED) {
+        log_lvl = UCS_LOG_LEVEL_DEBUG;
+        goto out;
+    }
+
+    status = uct_rc_verbs_ep_handle_failure(ep, status);
+    if (status == UCS_OK) {
         log_lvl = iface->super.super.config.failure_level;
+        goto out;
     }
 
+    log_lvl = UCS_LOG_LEVEL_FATAL;
+out:
     ucs_log(log_lvl,
             "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
             ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
+    return status;
 }
 
 static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
@@ -78,6 +90,8 @@ ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
     {
     case IBV_WC_SUCCESS:
         return UCS_OK;
+    case IBV_WC_WR_FLUSH_ERR:
+        return UCS_ERR_CANCELED;
     case IBV_WC_RETRY_EXC_ERR:
     case IBV_WC_RNR_RETRY_EXC_ERR:
         return UCS_ERR_ENDPOINT_TIMEOUT;
@@ -99,11 +113,13 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super, i, wc, num_wcs) {
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
-        if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
+        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
             status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
-            iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
-                                                   status);
-            continue;
+            status = iface->super.super.ops->handle_failure(&iface->super.super,
+                                                            &wc[i], status);
+            if (status != UCS_ERR_CANCELED) {
+                continue;
+            }
         }
 
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i], &ep->super.txqp);

@@ -1243,8 +1243,8 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
     return UCS_OK;
 }
 
-void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
-                                   ucs_status_t ep_status)
+ucs_status_t uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
+                                           ucs_status_t ep_status)
 {
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci                = ep->dci;
@@ -1283,14 +1283,14 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
          */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
-    } else {
+    } else if (ep_status != UCS_ERR_CANCELED) {
         status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
                                               ep_status);
         if (status != UCS_OK) {
             uct_ib_mlx5_completion_with_err(ib_iface, arg,
                                             &iface->tx.dcis[dci].txwq,
                                             UCS_LOG_LEVEL_FATAL);
-            return;
+            return status;
         }
     }
 
@@ -1310,4 +1310,6 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci, txwq->super.qp_num, ucs_status_string(status));
     }
+
+    return UCS_OK;
 }

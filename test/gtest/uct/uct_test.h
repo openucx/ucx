@@ -329,6 +329,7 @@ protected:
                 twait();
             }
         }
+        EXPECT_EQ(value, *var);
     }
 
     virtual void init();

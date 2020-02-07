@@ -875,11 +875,12 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ud_leave(iface);
 }
 
-void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
-                                 ucs_status_t status)
+ucs_status_t uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
+                                         ucs_status_t status)
 {
     uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
                                     (uct_ud_ep_t *)arg, status);
+    return UCS_OK;
 }
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)

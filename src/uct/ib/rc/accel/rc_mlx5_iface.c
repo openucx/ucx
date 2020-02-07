@@ -182,7 +182,7 @@ static ucs_status_t uct_rc_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
 #endif
 }
 
-static void
+static ucs_status_t
 uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                  ucs_status_t status)
 {
@@ -197,8 +197,12 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_ib_mlx5_txwq_t txwq_copy;
     size_t             txwq_size;
 
-    if (!ep) {
-        return;
+    if (ep == NULL) {
+        return UCS_OK;
+    }
+
+    if (status == UCS_ERR_CANCELED) {
+        return UCS_ERR_CANCELED;
     }
 
     /* Create a copy of RC txwq for completion error reporting, since the QP
@@ -211,7 +215,8 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         txwq_copy.qend = UCS_PTR_BYTE_OFFSET(txwq_copy.qstart, txwq_size);
     }
 
-    if (uct_rc_mlx5_ep_handle_failure(ep, status) == UCS_OK) {
+    status = uct_rc_mlx5_ep_handle_failure(ep, status);
+    if (status == UCS_OK) {
         log_lvl = ib_iface->super.config.failure_level;
     }
 
@@ -219,6 +224,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                     txwq_copy.qstart ? &txwq_copy : NULL,
                                     log_lvl);
     ucs_free(txwq_copy.qstart);
+    return status;
 }
 
 static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
