@@ -374,6 +374,11 @@ build_icc() {
 		$MAKEP clean
 		$MAKEP
 		$MAKEP distclean
+		echo "==== Build with Intel compiler (clang) ===="
+		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		$MAKEP clean
+		$MAKEP
+		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
