@@ -790,12 +790,12 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     }
 
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
-        if (rndv_rts_hdr->address &&
+        if ((rndv_rts_hdr->address != 0) &&
             (ucp_rndv_is_get_zcopy(rreq->recv.mem_type, rndv_mode)) &&
             /* is it allowed to use GET Zcopy for the current message? */
             (rndv_rts_hdr->size >= ucp_ep_config(ep)->tag.rndv.min_get_zcopy) &&
             /* is GET Zcopy operation supported? */
-            ucp_ep_config(ep)->tag.rndv.max_get_zcopy) {
+            (ucp_ep_config(ep)->tag.rndv.max_get_zcopy != 0)) {
             /* try to fetch the data with a get_zcopy operation */
             ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr);
             goto out;
@@ -1348,7 +1348,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                 /* is it allowed to use PUT Zcopy for the current message? */
                 (sreq->send.length >= ucp_ep_config(ep)->tag.rndv.min_put_zcopy) &&
                 /* is PUT Zcopy operation supported? */
-                ucp_ep_config(ep)->tag.rndv.max_put_zcopy) {
+                (ucp_ep_config(ep)->tag.rndv.max_put_zcopy != 0)) {
                 ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
                                              UCP_REQUEST_SEND_PROTO_RNDV_PUT);
                 sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;

@@ -1454,6 +1454,20 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
+    if (get_zcopy_lane_count == 0) {
+        /* if there are no RNDV RMA BW lanes that support GET Zcopy, reset
+         * min/max values to show that the scheme is unsupported */
+        config->tag.rndv.min_get_zcopy = SIZE_MAX;
+        config->tag.rndv.max_get_zcopy = 0;
+    }
+
+    if (put_zcopy_lane_count == 0) {
+        /* if there are no RNDV RMA BW lanes that support PUT Zcopy, reset
+         * min/max values to show that the scheme is unsupported */
+        config->tag.rndv.min_put_zcopy = SIZE_MAX;
+        config->tag.rndv.max_put_zcopy = 0;
+    }
+
     if (rndv_max_bw > 0) {
         for (i = 0; (i < config->key.num_lanes) &&
                     (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
