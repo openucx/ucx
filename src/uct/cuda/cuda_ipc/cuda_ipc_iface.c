@@ -23,10 +23,18 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
+    {"MAX_STREAMS", "16",
+     "Max number of CUDA streams to make concurrent progress on",
+      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_streams), UCS_CONFIG_TYPE_UINT},
+
     {"CACHE", "y",
      "Enable remote endpoint IPC memhandle mapping cache",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
      UCS_CONFIG_TYPE_BOOL},
+
+    {"MAX_EVENTS", "inf",
+     "Max number of cuda events. -1 is infinite",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -265,7 +273,7 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
     } while (ret != 0);
 
     if (iface->streams_initialized) {
-        for (i = 0; i < iface->device_count; i++) {
+        for (i = 0; i < iface->config.max_streams; i++) {
             if (iface->stream_refcount[i]) {
                 status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
@@ -332,7 +340,7 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
     ucs_status_t status;
     int i;
 
-    for (i = 0; i < iface->device_count; i++) {
+    for (i = 0; i < iface->config.max_streams; i++) {
         status = UCT_CUDADRV_FUNC(cuStreamCreate(&iface->stream_d2d[i],
                                                  CU_STREAM_NON_BLOCKING));
         if (UCS_OK != status) {
@@ -378,7 +386,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
-    int dev_count;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops, md, worker,
@@ -391,15 +398,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_NO_DEVICE;
     }
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&dev_count));
-    if (UCS_OK != status) {
-        return status;
-    }
-    ucs_assert(dev_count <= UCT_CUDA_IPC_MAX_PEERS);
-
-    self->device_count        = dev_count;
-    self->config.max_poll     = config->max_poll;
-    self->config.enable_cache = config->enable_cache;
+    self->config.max_poll            = config->max_poll;
+    self->config.max_streams         = config->max_streams;
+    self->config.enable_cache        = config->enable_cache;
+    self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
 
     if (self->config.enable_cache) {
         self->map_memhandle   = uct_cuda_ipc_cache_map_memhandle;
@@ -415,7 +417,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
                             0,
                             UCS_SYS_CACHE_LINE_SIZE,
                             128,
-                            1024,
+                            self->config.max_cuda_ipc_events,
                             &uct_cuda_ipc_event_desc_mpool_ops,
                             "CUDA_IPC EVENT objects");
     if (UCS_OK != status) {
@@ -439,7 +441,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     UCT_CUDADRV_CTX_ACTIVE(active);
 
     if (self->streams_initialized && active) {
-        for (i = 0; i < self->device_count; i++) {
+        for (i = 0; i < self->config.max_streams; i++) {
             status = UCT_CUDADRV_FUNC(cuStreamDestroy(self->stream_d2d[i]));
             if (UCS_OK != status) {
                 continue;
