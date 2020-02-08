@@ -436,12 +436,19 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
 };
 
 static UCS_F_MAYBE_UNUSED ucs_status_t
-uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md, void *cap)
+uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
+                           const uct_ib_md_config_t *md_config, void *cap)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     void *odp;
     int ret;
+
+    if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
+        ucs_debug("%s: disable ODP because it's not supported for DevX QP",
+                  uct_ib_device_name(&md->super.dev));
+        goto no_odp;
+    }
 
     if (uct_ib_mlx5_has_roce_port(&md->super.dev)) {
         ucs_debug("%s: disable ODP on RoCE", uct_ib_device_name(&md->super.dev));
@@ -626,7 +633,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS;
     }
 
-    status = uct_ib_mlx5_devx_check_odp(md, cap);
+    status = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
     if (status != UCS_OK) {
         goto err_free;
     }
