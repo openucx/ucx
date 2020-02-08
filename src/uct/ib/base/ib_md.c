@@ -1436,11 +1436,15 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
         status = md_ops_entry->ops->open(ib_device, md_config, &md);
         if (status == UCS_OK) {
+            ucs_debug("%s: md open by '%s' is successful", md_name,
+                      md_ops_entry->name);
             md->ops = md_ops_entry->ops;
             break;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;
         }
+        ucs_debug("%s: md open by '%s' failed, trying next", md_name,
+                  md_ops_entry->name);
     }
 
     if (status != UCS_OK) {
