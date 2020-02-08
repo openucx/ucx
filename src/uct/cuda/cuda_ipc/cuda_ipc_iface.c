@@ -172,10 +172,10 @@ static void uct_cuda_ipc_common_cb(void *cuda_ipc_iface)
 }
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-static void CUDA_CB myHostFn(void *iface)
+void CUDA_CB myHostFn(void *iface)
 #else
-static void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
-                                   void *iface)
+void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
+                            void *iface)
 #endif
 {
     uct_cuda_ipc_common_cb(iface);
@@ -264,6 +264,8 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
         }
     } while (ret != 0);
 
+    iface->armed_but_unlaunched = 1;
+
     if (iface->streams_initialized) {
         for (i = 0; i < iface->device_count; i++) {
             if (iface->stream_refcount[i]) {
@@ -278,9 +280,12 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
                 if (UCS_OK != status) {
                     return status;
                 }
+                iface->armed_but_unlaunched = 0;
             }
         }
     }
+
+
     return UCS_OK;
 }
 
@@ -397,9 +402,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     }
     ucs_assert(dev_count <= UCT_CUDA_IPC_MAX_PEERS);
 
-    self->device_count        = dev_count;
-    self->config.max_poll     = config->max_poll;
-    self->config.enable_cache = config->enable_cache;
+    self->device_count         = dev_count;
+    self->config.max_poll      = config->max_poll;
+    self->config.enable_cache  = config->enable_cache;
+    self->armed_but_unlaunched = 0;
 
     if (self->config.enable_cache) {
         self->map_memhandle   = uct_cuda_ipc_cache_map_memhandle;

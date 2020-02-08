@@ -126,6 +126,21 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
+    if (iface->armed_but_unlaunched) {
+        status =
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+            UCT_CUDADRV_FUNC(cuLaunchHostFunc(stream, myHostFn, iface));
+#else
+            UCT_CUDADRV_FUNC(cuStreamAddCallback(stream, myHostCallback, iface,
+                                                 0));
+#endif
+        if (UCS_OK != status) {
+            return status;
+        }
+        iface->armed_but_unlaunched = 0;
+    }
+
+
     ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
     cuda_ipc_event->comp        = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;

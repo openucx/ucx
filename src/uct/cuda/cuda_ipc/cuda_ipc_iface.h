@@ -30,6 +30,7 @@ typedef struct uct_cuda_ipc_iface {
                                               /* per-peer stream */
     unsigned long    stream_refcount[UCT_CUDA_IPC_MAX_PEERS];
                                               /* per stream outstanding ops */
+    unsigned int     armed_but_unlaunched;
     struct {
         unsigned     max_poll;                /* query attempts w.o success */
         int          enable_cache;            /* enable/disable ipc handle cache */
@@ -58,4 +59,11 @@ typedef struct uct_cuda_ipc_event_desc {
 
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface);
+
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+void CUDA_CB myHostFn(void *iface);
+#else
+void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
+                            void *iface);
+#endif
 #endif
