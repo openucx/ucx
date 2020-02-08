@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -613,7 +613,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
 
     /* Make sure that ep does not hold dci when sends completed */
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_mlx5_iface_t);
-    ucs_time_t deadline   = ucs::get_deadline();
+    ucs_time_t deadline        = ucs::get_deadline();
     while (iface->tx.stack_top && (ucs_get_time() < deadline)) {
         progress();
     }
@@ -630,6 +630,66 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
 }
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control)
+
+
+class test_dc_fc_deadlock : public test_dc_flow_control {
+public:
+    test_dc_fc_deadlock() {
+        modify_config("IB_TX_QUEUE_LEN", "8");
+        modify_config("RC_FC_WND_SIZE", "128");
+        modify_config("DC_TX_POLICY", "rand");
+    }
+
+protected:
+    struct dc_pending {
+        uct_pending_req_t uct_req;
+        entity *e;
+    };
+
+    static ucs_status_t am_pending(uct_pending_req_t *req) {
+        struct dc_pending *pr = reinterpret_cast<struct dc_pending *>(req);
+        return uct_ep_am_short(pr->e->ep(0), 0, 0, NULL, 0);
+    }
+};
+
+UCS_TEST_P(test_dc_fc_deadlock, basic, "DC_NUM_DCI=1")
+{
+    // Send to m_e2 until dci resources are exhausted.
+    // Also set FC window to 0 emulating lack of all TX resources
+    ucs_status_t status;
+    do {
+        status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    } while (status == UCS_OK);
+    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
+    get_fc_ptr(m_e1)->fc_wnd = 0;
+
+    // Add am send to pending
+    struct dc_pending preq;
+    preq.e            = m_e1;
+    preq.uct_req.func = am_pending;
+    EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &preq.uct_req, 0));
+
+    // Send whole FC window to m_e1, which will force sending grant request.
+    // This grant request will be added to pending on m_e1, because it has no
+    // resources.
+    int wnd = 5;
+    set_fc_attributes(m_e2, true, wnd,
+                      ucs_max((int)(wnd*0.5), 1),
+                      ucs_max((int)(wnd*0.25), 1));
+    send_am_and_flush(m_e2, wnd);
+
+    // Now, make sure that m_e1 will send grant to m_e2 even though FC window
+    // is still empty (dci resources will be restored during progression).
+    // If grant was not sent, this would be a deadlock situation due to lack
+    // of FC resources.
+    validate_grant(m_e2);
+
+    // Restore m_e1 for proper cleanup
+    ucs_derived_of(m_e1->iface(), uct_dc_mlx5_iface_t)->tx.fc_grants = 0;
+    uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+}
+
+UCT_DC_INSTANTIATE_TEST_CASE(test_dc_fc_deadlock)
 
 
 #if ENABLE_STATS

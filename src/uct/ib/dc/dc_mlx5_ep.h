@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2016-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 
 * See file LICENSE for terms.
 */
@@ -185,6 +185,10 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
 ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags);
 void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
+
+void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
+                                   uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
+                                   unsigned flags, int push_to_head);
 
 void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
 
