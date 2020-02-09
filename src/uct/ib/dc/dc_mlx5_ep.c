@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -894,7 +894,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_dc_mlx5_iface_t);
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super, NULL, NULL);
-    ucs_arbiter_group_cleanup(uct_dc_mlx5_ep_arb_group(iface, self));
     uct_rc_fc_cleanup(&self->fc);
 
     ucs_assert_always(self->flags & UCT_DC_MLX5_EP_FLAG_VALID);
@@ -907,6 +906,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     /* TODO: this is good for dcs policy only.
      * Need to change if eps share dci
      */
+    ucs_arbiter_group_cleanup(uct_dc_mlx5_ep_arb_group(iface, self));
     ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(iface, self->dci),
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
@@ -974,6 +974,47 @@ void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep)
     ucs_free(ep);
 }
 
+void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
+                                   uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
+                                   unsigned flags, int push_to_head)
+{
+    int no_dci = (ep->dci == UCT_DC_MLX5_EP_NO_DCI);
+    ucs_arbiter_group_t *group;
+
+    UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
+                      UCT_PENDING_REQ_PRIV_LEN);
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        uct_dc_mlx5_pending_req_priv(r)->ep = ep;
+        group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
+    } else {
+        group = &ep->arb_group;
+    }
+
+    if (push_to_head) {
+        uct_pending_req_arb_group_push_head(no_dci ?
+                                            uct_dc_mlx5_iface_dci_waitq(iface) :
+                                            uct_dc_mlx5_iface_tx_waitq(iface),
+                                            group, r);
+    } else {
+        uct_pending_req_arb_group_push(group, r);
+    }
+
+    if (no_dci) {
+        /* no dci:
+         *  Do not grab dci here. Instead put the group on dci allocation arbiter.
+         *  This way we can assure fairness between all eps waiting for
+         *  dci allocation. Relevant for dcs and dcs_quota policies.
+         */
+        uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
+    } else {
+        uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
+    }
+
+    UCT_TL_EP_STAT_PEND(&ep->super);
+}
+
+
 /* TODO:
    currently pending code supports only dcs policy
    support hash/random policies
@@ -982,8 +1023,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
-    uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    ucs_arbiter_group_t *group;
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
     /* ep can tx iff
      * - iface has resources: cqe and tx skb
@@ -1002,30 +1042,8 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
         }
     }
 
-    UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
-                      UCT_PENDING_REQ_PRIV_LEN);
+    uct_dc_mlx5_ep_pending_common(iface, ep, r, flags, 0);
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        uct_dc_mlx5_pending_req_priv(r)->ep = ep;
-        group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
-    } else {
-        group = &ep->arb_group;
-    }
-    uct_pending_req_arb_group_push(group, r);
-
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        /* no dci:
-         *  Do not grab dci here. Instead put the group on dci allocation arbiter.
-         *  This way we can assure fairness between all eps waiting for
-         *  dci allocation. Relevant for dcs and dcs_quota policies.
-         */
-        uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
-        UCT_TL_EP_STAT_PEND(&ep->super);
-        return UCS_OK;
-    }
-
-    uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
-    UCT_TL_EP_STAT_PEND(&ep->super);
     return UCS_OK;
 }
 

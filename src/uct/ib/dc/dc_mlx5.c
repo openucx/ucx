@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -972,11 +972,12 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &dc_req->super.super,
-                                        0);
+            uct_dc_mlx5_ep_pending_common(iface, ep, &dc_req->super.super, 0, 1);
+        } else {
+            ucs_assertv_always(status == UCS_OK,
+                               "Failed to send FC grant msg: %s",
+                               ucs_status_string(status));
         }
-        ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
-                           ucs_status_string(status));
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         ep = *((uct_dc_mlx5_ep_t**)(hdr + 1));
 
