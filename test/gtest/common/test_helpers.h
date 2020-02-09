@@ -766,6 +766,12 @@ private:
 };
 
 
+template <typename T>
+static void deleter(T *ptr) {
+    delete ptr;
+}
+
+
 extern int    perf_retry_count;
 extern double perf_retry_interval;
 

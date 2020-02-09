@@ -180,7 +180,8 @@ public:
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
                         const struct sockaddr* addr, size_t addrlen)
     {
-        ucs_status_t status = receiver().listen(cb_type, addr, addrlen);
+        ucs_status_t status = receiver().listen(cb_type, addr, addrlen,
+                                                get_ep_params());
         if (status == UCS_ERR_UNREACHABLE) {
             UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(addr));
         }
@@ -494,10 +495,15 @@ public:
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
-         * long as well */
+         * long as well, in addition we can get disconnect events during test
+         * teardown.
+         */
         switch (status) {
         case UCS_ERR_REJECTED:
         case UCS_ERR_UNREACHABLE:
+        case UCS_ERR_CONNECTION_RESET:
+            UCS_TEST_MESSAGE << "ignoring error " <<ucs_status_string(status)
+                             << " on endpoint " << ep;
             return;
         default:
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
@@ -652,7 +658,8 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     ucs::sock_addr_storage listen_addr(test_addr.to_ucs_sock_addr());
     ucs_status_t status = receiver().listen(cb_type(),
                                             listen_addr.get_sock_addr_ptr(),
-                                            listen_addr.get_addr_size());
+                                            listen_addr.get_addr_size(),
+                                            get_ep_params());
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(&listen_addr));
     }

@@ -63,8 +63,7 @@ public:
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
 
-        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request,
-                        const void *ep_user_data);
+        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -82,6 +81,7 @@ public:
 
         ucs_status_t listen(listen_cb_type_t cb_type,
                             const struct sockaddr *saddr, socklen_t addrlen,
+                            const ucp_ep_params_t& ep_params,
                             int worker_index = 0);
 
         ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;
@@ -121,6 +121,7 @@ public:
         std::queue<ucp_conn_request_h>  m_conn_reqs;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
+        ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
