@@ -459,14 +459,14 @@ void ucp_test_base::entity::connect(const entity* other,
 }
 
 ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
-                                       ucp_conn_request_h conn_request,
-                                       const void *ep_user_data)
+                                       ucp_conn_request_h conn_request)
 {
+    ucp_ep_params_t ep_params = *m_server_ep_params;
     ucp_ep_h        ep;
-    ucp_ep_params_t ep_params;
-    ep_params.field_mask   = UCP_EP_PARAM_FIELD_USER_DATA |
-                             UCP_EP_PARAM_FIELD_CONN_REQUEST;
-    ep_params.user_data    = (void *)ep_user_data;
+
+    ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST |
+                             UCP_EP_PARAM_FIELD_USER_DATA;
+    ep_params.user_data    = reinterpret_cast<void*>(this);
     ep_params.conn_request = conn_request;
 
     ucs_status_t status    = ucp_ep_create(worker, &ep_params, &ep);
@@ -502,6 +502,16 @@ void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) 
 void ucp_test_base::entity::accept_ep_cb(ucp_ep_h ep, void *arg) {
     entity *self = reinterpret_cast<entity*>(arg);
     int worker_index = 0; /* TODO pass worker index in arg */
+
+    /* take error handler from test fixture and add user data */
+    ucp_ep_params_t ep_params = *self->m_server_ep_params;
+    ep_params.field_mask &= UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_USER_DATA;
+    ep_params.user_data   = reinterpret_cast<void*>(self);
+
+    void *req = ucp_ep_modify_nb(ep, &ep_params);
+    ASSERT_UCS_PTR_OK(req); /* don't expect this operation to block */
+
     self->set_ep(ep, worker_index, self->get_num_eps(worker_index));
 }
 
@@ -571,7 +581,9 @@ ucp_ep_h ucp_test_base::entity::revoke_ep(int worker_index, int ep_index) const 
 
 ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
                                            const struct sockaddr* saddr,
-                                           socklen_t addrlen, int worker_index)
+                                           socklen_t addrlen,
+                                           const ucp_ep_params_t& ep_params,
+                                           int worker_index)
 {
     ucp_listener_params_t params;
     ucp_listener_h        listener;
@@ -599,6 +611,8 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
     default:
         UCS_TEST_ABORT("invalid test parameter");
     }
+
+    m_server_ep_params.reset(new ucp_ep_params_t(ep_params));
 
     ucs_status_t status;
     {
@@ -644,7 +658,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     if (!m_conn_reqs.empty()) {
         ucp_conn_request_h conn_req = m_conn_reqs.back();
         m_conn_reqs.pop();
-        ucp_ep_h ep = accept(ucp_worker, conn_req, this);
+        ucp_ep_h ep = accept(ucp_worker, conn_req);
         set_ep(ep, worker_index, std::numeric_limits<int>::max());
         ++progress_count;
     }
