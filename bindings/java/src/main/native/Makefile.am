@@ -86,6 +86,21 @@ jar_DATA = $(jarfile)
 clean-local:
 	-rm -rf $(java_build_dir)
 
+set-version:
+	$(MVNCMD) versions:set -DnewVersion=${JUCX_VERSION}
+
+# Publish JUCX jar to maven central
+publish-snapshot:
+	@make set-version JUCX_VERSION=@VERSION@-SNAPSHOT
+	@make publish
+
+publish-release:
+	@make set-version JUCX_VERSION=${JUCX_VERSION}
+	@make publish
+
+publish:
+	$(MVNCMD) deploy -DskipTests ${ARGS}
+
 test:
 	$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
 docs:

@@ -36,6 +36,8 @@
   </scm>
 
   <properties>
+    <gpg.defaultKeyring>false</gpg.defaultKeyring>
+    <gpg.passphrase>${env.GPG_PASSPHRASE}</gpg.passphrase>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>
     <jucx.src.dir>${ucx.src.dir}/../bindings/java</jucx.src.dir>
@@ -45,7 +47,6 @@
     <ucs.lib.path>${ucx.build.dir}/src/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.build.dir}/src/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.build.dir}/src/ucp/.libs</ucp.lib.path>
-    <ucx.inst.dir>@(DESTDIR)@/@libdir@</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -164,7 +165,7 @@
       <resource>
         <directory>resources</directory>
         <includes>
-          <include>**/*</include>
+          <include>libjucx.so</include>
         </includes>
       </resource>
     </resources>
@@ -189,6 +190,12 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
         <version>1.6</version>
+        <configuration>
+          <gpgArguments>
+            <arg>--pinentry-mode</arg>
+            <arg>loopback</arg>
+          </gpgArguments>
+        </configuration>
         <executions>
           <execution>
             <id>sign-artifacts</id>
@@ -205,6 +212,10 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.1</version>
         <configuration>
+          <compilerArgs>
+            <arg>-h</arg>
+            <arg>${native.dir}</arg>
+          </compilerArgs>
           <source>1.8</source>
           <target>1.8</target>
           <includes>
@@ -252,12 +263,6 @@
               <skip>${skipCopy}</skip>
               <outputDirectory>${basedir}/resources</outputDirectory>
               <resources>
-                <resource>
-                  <directory>${ucx.inst.dir}</directory>
-                  <includes>
-                    <include>**/*.so</include>
-                  </includes>
-                </resource>
                 <resource>
                   <directory>${native.dir}/.libs</directory>
                   <includes>
@@ -323,17 +328,6 @@
             </goals>
           </execution>
         </executions>
-      </plugin>
-
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <configuration>
-          <compilerArgs>
-            <arg>-h</arg>
-            <arg>${native.dir}</arg>
-          </compilerArgs>
-        </configuration>
       </plugin>
 
       <plugin>

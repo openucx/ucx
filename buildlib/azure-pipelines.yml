@@ -136,6 +136,25 @@ stages:
               ./contrib/buildrpm.sh -s -t -b
             displayName: Build tarball
 
+      # Publish JUCX to maven central
+      - job: publish_jucx
+        displayName: Publish JUCX SNAPSHOT artifact to maven central
+        container: fedora
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        steps:
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              ./contrib/configure-release --with-java
+              make -s -j`nproc`
+            displayName: Build ucx
+
+          - template: jucx-publish.yml
+            parameters:
+              target: publish-snapshot
+
   - stage: Tests
     dependsOn: [Codestyle]
     jobs:
