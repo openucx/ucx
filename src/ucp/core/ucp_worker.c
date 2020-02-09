@@ -475,8 +475,14 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
 {
     ucp_worker_err_handle_arg_t *err_handle_arg = elem->arg;
 
-    return (elem->cb == ucp_worker_iface_err_handle_progress) &&
-           (err_handle_arg->ucp_ep == arg);
+    if ((elem->cb == ucp_worker_iface_err_handle_progress) &&
+        (err_handle_arg->ucp_ep == arg)) {
+        /* release err handling argument to avoid memory leak */
+        ucs_free(err_handle_arg);
+        return 1;
+    }
+
+    return 0;
 }
 
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
