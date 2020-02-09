@@ -766,6 +766,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
+/* Must be called with async lock held */
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     /* remove pending slow-path progress in case it wasn't removed yet */
@@ -799,12 +800,15 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
 unsigned ucp_ep_local_disconnect_progress(void *arg)
 {
-    ucp_request_t *req = arg;
+    ucp_request_t *req         = arg;
+    ucp_ep_h ep                = req->send.ep;
+    ucs_async_context_t *async = &ep->worker->async; /* ep becomes invalid */
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
-    ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
-                                      UCT_FLUSH_FLAG_CANCEL);
+    UCS_ASYNC_BLOCK(async);
+    ucp_ep_disconnected(ep, req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL);
+    UCS_ASYNC_UNBLOCK(async);
 
     /* Complete send request from here, to avoid releasing the request while
      * slow-path element is still pending */
