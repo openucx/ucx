@@ -17,7 +17,6 @@
 
 #include <common/test.h>
 
-#include <memory>
 #include <queue>
 
 #define MT_TEST_NUM_THREADS       4
@@ -122,7 +121,7 @@ public:
         std::queue<ucp_conn_request_h>  m_conn_reqs;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
-        std::auto_ptr<ucp_ep_params_t>  m_server_ep_params;
+        ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);

@@ -612,7 +612,8 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         UCS_TEST_ABORT("invalid test parameter");
     }
 
-    m_server_ep_params.reset(new ucp_ep_params_t(ep_params));
+    m_server_ep_params.reset(new ucp_ep_params_t(ep_params),
+                             ucs::deleter<ucp_ep_params_t>);
 
     ucs_status_t status;
     {
