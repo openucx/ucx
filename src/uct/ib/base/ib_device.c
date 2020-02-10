@@ -1077,3 +1077,17 @@ int uct_ib_get_cqe_size(int cqe_size_min)
 
     return cqe_size;
 }
+
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev)
+{
+    ucs_status_t status;
+    long lag_enable;
+
+    status = ucs_read_file_number(&lag_enable, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                                  uct_ib_device_name(dev), "roce_lag_enable");
+    if ((status == UCS_OK) && lag_enable) {
+        return UCT_IB_DEV_MAX_PORTS;
+    } else {
+        return 1; /* default is no LAG */
+    }
+}

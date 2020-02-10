@@ -156,7 +156,20 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "IB Hop limit / RoCEv2 Time to Live. Should be between 0 and 255.\n",
    ucs_offsetof(uct_ib_iface_config_t, hop_limit), UCS_CONFIG_TYPE_UINT},
 
-  {"LID_PATH_BITS", "0-17",
+  {"NUM_PATHS", "auto",
+   "Number of paths to expose for the interface. 'auto' means use "
+   UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " paths\n"
+   "for RoCE LAG devices and 2^LMC paths for InfiniBand fabric. In some\n"
+   "cases using multiple paths can get higher bandwidth overall.",
+   ucs_offsetof(uct_ib_iface_config_t, num_paths), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"ROCE_PATH_FACTOR", "1",
+   "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
+   "is typically used by switches and network adapters to select a different\n"
+   "path for the same pair of endpoints.",
+   ucs_offsetof(uct_ib_iface_config_t, roce_path_factor), UCS_CONFIG_TYPE_UINT},
+
+  {"LID_PATH_BITS", "0",
    "List of IB Path bits separated by comma (a,b,c) "
    "which will be the low portion of the LID, according to the LMC in the fabric.",
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
@@ -437,15 +450,27 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
+                                            unsigned path_index,
                                             struct ibv_ah_attr *ah_attr)
 {
+    uint8_t path_bits;
+
     memset(ah_attr, 0, sizeof(*ah_attr));
 
     ah_attr->sl                = iface->config.sl;
-    ah_attr->src_path_bits     = iface->path_bits[0];
-    ah_attr->dlid              = lid | iface->path_bits[0];
     ah_attr->port_num          = iface->config.port_num;
     ah_attr->grh.traffic_class = iface->config.traffic_class;
+
+    if (uct_ib_iface_is_roce(iface)) {
+        ah_attr->dlid          = UCT_IB_ROCE_UDP_SPORT_BASE |
+                                 (iface->config.roce_path_factor * path_index);
+    } else {
+        /* TODO iface->path_bits should be removed and replaced by path_index */
+        path_bits              = iface->path_bits[path_index %
+                                                  iface->path_bits_count];
+        ah_attr->dlid          = lid | path_bits;
+        ah_attr->src_path_bits = path_bits;
+    }
 
     if (iface->config.force_global_addr ||
         (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
@@ -461,6 +486,7 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
 
 void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
+                                         unsigned path_index,
                                          struct ibv_ah_attr *ah_attr)
 {
     union ibv_gid  gid;
@@ -470,7 +496,8 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
 
     uct_ib_address_unpack(ib_addr, &lid, &gid);
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, ah_attr);
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_index,
+                                           ah_attr);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -813,6 +840,25 @@ static ucs_status_t uct_ib_iface_set_moderation(struct ibv_cq *cq,
     return UCS_OK;
 }
 
+static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
+                                       const uct_ib_iface_config_t *config)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    if (config->num_paths == UCS_ULUNITS_AUTO) {
+        if (uct_ib_iface_is_roce(iface)) {
+            /* RoCE - number of paths is RoCE LAG level */
+            iface->num_paths = uct_ib_device_get_roce_lag_level(dev);
+        } else {
+            /* IB - number of paths is LMC level */
+            ucs_assert(iface->path_bits_count > 0);
+            iface->num_paths = iface->path_bits_count;
+        }
+    } else {
+        iface->num_paths = config->num_paths;
+    }
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
@@ -867,6 +913,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
+    self->config.roce_path_factor   = config->roce_path_factor;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
@@ -913,6 +960,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err;
     }
+
+    uct_ib_iface_set_num_paths(self, config);
 
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
@@ -1129,6 +1178,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     }
 
     iface_attr->device_addr_len = iface->addr_size;
+    iface_attr->dev_num_paths   = iface->num_paths;
 
     switch (active_speed) {
     case 1: /* SDR */

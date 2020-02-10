@@ -469,7 +469,8 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
 
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
+                                        ep->super.path_index, &ah_attr);
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
 
     return uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr);
@@ -487,7 +488,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->qp->qp_num);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->qp->qp_num,
+                              params);
 
     status = uct_rc_iface_qp_init(&iface->super, self->qp);
     if (status != UCS_OK) {

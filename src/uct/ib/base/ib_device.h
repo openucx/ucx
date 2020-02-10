@@ -46,6 +46,7 @@
 #define UCT_IB_SITE_LOCAL_PREFIX    be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK      be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP  106  /* Default DSCP for RoCE v2 */
+#define UCT_IB_ROCE_UDP_SPORT_BASE  0xC000
 #define UCT_IB_DEVICE_SYSFS_FMT     "/sys/class/infiniband/%s/device/%s"
 
 
@@ -280,6 +281,9 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                             struct ibv_ah **ah_p);
 
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
+
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev);
+
 
 static inline struct ibv_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)

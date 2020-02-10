@@ -101,15 +101,18 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     int is_global;
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
+    unsigned path_index;
 
     ucs_trace_func("");
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    ib_addr = (const uct_ib_address_t *)params->dev_addr;
-    if_addr = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
+    ib_addr    = (const uct_ib_address_t *)params->dev_addr;
+    if_addr    = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
+    path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
 
-    status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
-                                      ib_addr, &av, &grh_av, &is_global);
+    status = uct_ud_mlx5_iface_get_av(&iface->super.super.super,
+                                      &iface->ud_common, ib_addr, path_index,
+                                      &av, &grh_av, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -1017,14 +1020,6 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     }
 
     return UCS_OK;
-}
-
-void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
-                                    uct_ib_mlx5_base_av_t *av,
-                                    uint32_t remote_dctn)
-{
-    uct_ib_mlx5_iface_set_av_sport(&iface->super.super.super, av,
-                                   remote_dctn, iface->rx.dct.qp_num);
 }
 
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,

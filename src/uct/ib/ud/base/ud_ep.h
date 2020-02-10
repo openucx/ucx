@@ -248,6 +248,7 @@ struct uct_ud_ep {
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
     uint16_t         flags;
     uint8_t          rx_creq_count; /* TODO: remove when reason for DUP/OOO CREQ is found */
+    uint8_t          path_index;
     ucs_wtimer_t     slow_timer;
     ucs_time_t       close_time;   /* timestamp of closure */
     UCS_STATS_NODE_DECLARE(stats)
@@ -257,7 +258,7 @@ struct uct_ud_ep {
 #endif
 };
 
-UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
+UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*, const uct_ep_params_t*)
 
 /**
  * UD pending request private data
@@ -303,6 +304,7 @@ void   uct_ud_ep_disconnect(uct_ep_h ep);
 ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
                                                const uct_ib_address_t *ib_addr,
                                                const uct_ud_iface_addr_t *if_addr,
+                                               unsigned path_index,
                                                uct_ud_ep_t **new_ep_p,
                                                uct_ud_send_skb_t **skb_p);
 
