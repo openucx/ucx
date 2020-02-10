@@ -108,11 +108,7 @@ static const char *size_limit_to_str(size_t min_size, size_t max_size)
 static void print_iface_info(uct_worker_h worker, uct_md_h md,
                              uct_tl_resource_desc_t *resource)
 {
-    uct_iface_config_t *iface_config;
-    uct_iface_attr_t iface_attr;
-    ucs_status_t status;
-    uct_iface_h iface;
-    char buf[200] = {0};
+    char buf[200]                   = {0};
     uct_iface_params_t iface_params = {
         .field_mask            = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
@@ -125,6 +121,11 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         .stats_root            = ucs_stats_get_root(),
         .rx_headroom           = 0
     };
+    uct_iface_config_t *iface_config;
+    uct_iface_attr_t iface_attr;
+    char max_eps_str[32];
+    ucs_status_t status;
+    uct_iface_h iface;
 
     UCS_CPU_ZERO(&iface_params.cpu_mask);
     status = uct_md_iface_config_read(md, resource->tl_name, NULL, NULL, &iface_config);
@@ -263,7 +264,11 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         }
         printf("#           connection:%s\n", buf);
 
-        printf("#             priority: %d\n", iface_attr.priority);
+        printf("#      device priority: %d\n", iface_attr.priority);
+        printf("#     device num paths: %d\n", iface_attr.dev_num_paths);
+        printf("#              max eps: %s\n",
+               ucs_memunits_to_str(iface_attr.max_num_eps, max_eps_str,
+                                   sizeof(max_eps_str)));
 
         printf("#       device address: %zu bytes\n", iface_attr.device_addr_len);
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
