@@ -441,6 +441,14 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p);
 
+void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
+                                            const union ibv_gid *gid,
+                                            struct ibv_ah_attr *ah_attr);
+
+void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                         const uct_ib_address_t *ib_addr,
+                                         struct ibv_ah_attr *ah_attr);
+
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
@@ -537,46 +545,6 @@ void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
     iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, min_iov_requested);
 }
 
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
-                                            const union ibv_gid *gid,
-                                            struct ibv_ah_attr *ah_attr)
-{
-    memset(ah_attr, 0, sizeof(*ah_attr));
-
-    ah_attr->sl                = iface->config.sl;
-    ah_attr->src_path_bits     = iface->path_bits[0];
-    ah_attr->dlid              = lid | iface->path_bits[0];
-    ah_attr->port_num          = iface->config.port_num;
-    ah_attr->grh.traffic_class = iface->config.traffic_class;
-
-    if (iface->config.force_global_addr ||
-        (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
-        ucs_assert_always(gid->global.interface_id != 0);
-        ah_attr->is_global      = 1;
-        ah_attr->grh.dgid       = *gid;
-        ah_attr->grh.sgid_index = iface->config.gid_index;
-        ah_attr->grh.hop_limit  = iface->config.hop_limit;
-    } else {
-        ah_attr->is_global      = 0;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         struct ibv_ah_attr *ah_attr)
-{
-    union ibv_gid  gid;
-    uint16_t       lid;
-
-    ucs_assert(!uct_ib_iface_is_roce(iface) ==
-               !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
-
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, ah_attr);
-}
 
 static UCS_F_ALWAYS_INLINE
 size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
