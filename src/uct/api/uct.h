@@ -771,7 +771,10 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    = UCS_BIT(9),
 
     /** Enables @ref uct_ep_params::disconnect_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB = UCS_BIT(10)
+    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB = UCS_BIT(10),
+
+    /** Enables @ref uct_ep_params::path_index */
+    UCT_EP_PARAM_FIELD_PATH_INDEX             = UCS_BIT(11)
 };
 
 
@@ -921,6 +924,14 @@ struct uct_iface_attr {
     uct_linear_growth_t      latency;      /**< Latency model */
     uint8_t                  priority;     /**< Priority of device */
     size_t                   max_num_eps;  /**< Maximum number of endpoints */
+    unsigned                 dev_num_paths;/**< How many different network paths
+                                                exist on the device used by the
+                                                interface. Endpoints which connect
+                                                to the same remote address but
+                                                use different paths can potentially
+                                                achieve higher total bandwidth
+                                                compared to using only a single
+                                                endpoint. */
 };
 
 
@@ -1088,6 +1099,12 @@ struct uct_ep_params {
      * Callback that will be invoked when the endpoint is disconnected.
      */
     uct_ep_disconnect_cb_t              disconnect_cb;
+
+    /**
+     * Index of the path which the endpoint should use, must be in the range
+     * 0..@ref uct_iface_attr_t.dev_num_paths - 1.
+     */
+    unsigned                            path_index;
 };
 
 
