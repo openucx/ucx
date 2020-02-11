@@ -378,13 +378,16 @@ err_out:
  */
 static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
 {
-    ucp_ep_h ucp_ep = req->send.ep;
+    ucp_ep_h ucp_ep            = req->send.ep;
+    /* the EP can be closed/destroyed from err callback */
+    ucs_async_context_t *async = &ucp_ep->worker->async;
 
-    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+    UCS_ASYNC_BLOCK(async);
     ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
     ucp_request_put(req);
-    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
+    UCS_ASYNC_UNBLOCK(async);
 }
 
 static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
@@ -409,6 +412,8 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         /* the ep is closed by API but close req is not valid yet (checked
          * above), it will be set later from scheduled
          * @ref ucp_ep_close_flushed_callback */
+        ucs_debug("ep %p: ep closed but request is not set, waiting flushing",
+                  ucp_ep);
         return 1;
     }
 
@@ -425,6 +430,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         /* flush is successfully completed in place, notify remote peer
          * that we are disconnected, the EP will be destroyed from API call */
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+        ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
     } else if (UCS_PTR_IS_ERR(req)) {
         status = UCS_PTR_STATUS(req);
         ucs_error("ucp_ep_flush_internal completed with error: %s",
@@ -452,8 +458,6 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 
     ucs_trace("ep %p: got remote disconnect, cm_ep %p", ucp_ep, uct_cm_ep);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
-
-    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
@@ -733,21 +737,28 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_lane_index_t cm_lane;
 
-    if (status != UCS_OK) {
-        /* if reject is arrived on server side, then UCT does something wrong */
-        ucs_assert(status != UCS_ERR_REJECTED);
+    if (status == UCS_OK) {
+        uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                          ucp_cm_server_connect_progress,
+                                          ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &prog_id);
+        ucp_worker_signal_internal(ucp_ep->worker);
+    } else if (status == UCS_ERR_CONNECTION_RESET) {
+        /* remote side initiated disconnect before local side has completed
+         * connection establishment, so:
+         * 1) establish connection to complete local flush
+         * 2) handle disconnect same way as close protocol */
+        uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                          ucp_cm_server_connect_progress,
+                                          ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &prog_id);
+        ucp_cm_disconnect_cb(ep, ucp_ep);
+    } else {
         cm_lane = ucp_ep_get_cm_lane(ucp_ep);
         ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                                  ucp_ep->uct_eps[cm_lane], cm_lane, status);
-        return;
     }
-
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_cm_server_connect_progress,
-                                      ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &prog_id);
-    ucp_worker_signal_internal(ucp_ep->worker);
 }
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,

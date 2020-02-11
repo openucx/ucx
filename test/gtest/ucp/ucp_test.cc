@@ -626,7 +626,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
     } else {
         /* throw error if status is not (UCS_OK or UCS_ERR_UNREACHABLE).
          * UCS_ERR_INVALID_PARAM may also return but then the test should fail */
-        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, status) << ucs_status_string(status);
     }
     return status;
 }
