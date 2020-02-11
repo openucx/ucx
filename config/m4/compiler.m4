@@ -166,6 +166,9 @@ AC_DEFUN([DETECT_UARCH],
       *)
         ;;
     esac 
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$ax_cpu = xthunderx2t99])
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$ax_cpu = xthunderxt88])
+    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$ax_cpu = xtsv110])
 ])
 
 
