@@ -64,8 +64,7 @@ public:
     void detect_conn_reset(int fd) {
         // Try to receive something on this socket fd - it has to be failed
         ucs_status_t status = post_recv(fd);
-        ASSERT_TRUE((status == UCS_ERR_IO_ERROR) ||
-                    (status == UCS_ERR_CANCELED));
+        ASSERT_TRUE(status == UCS_ERR_CONNECTION_RESET);
         EXPECT_EQ(0, ucs_socket_is_connected(fd));
     }
 

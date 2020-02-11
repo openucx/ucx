@@ -104,3 +104,14 @@ size_t ucs_iov_get_max()
 
     return max_iov;
 }
+
+size_t ucs_iov_total_length(const struct iovec *iov, size_t iov_cnt)
+{
+    size_t total_length = 0, iov_it;
+
+    for (iov_it = 0; iov_it < iov_cnt; ++iov_it) {
+        total_length += iov[iov_it].iov_len;
+    }
+
+    return total_length;
+}

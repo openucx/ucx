@@ -90,10 +90,10 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
     }
 }
 
-static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg, int io_errno)
+static ucs_status_t uct_tcp_cm_io_err_handler_cb(void *arg,
+                                                 ucs_status_t io_status)
 {
-    return uct_tcp_ep_handle_dropped_connect((uct_tcp_ep_t*)arg,
-                                             io_errno);
+    return uct_tcp_ep_handle_dropped_connect((uct_tcp_ep_t*)arg, io_status);
 }
 
 /* `fmt_str` parameter has to contain "%s" to write event type */
@@ -195,12 +195,13 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t eve
 
     status = ucs_socket_send(ep->fd, pkt_buf, pkt_length,
                              uct_tcp_cm_io_err_handler_cb, ep);
-    if (status != UCS_OK) {
-        uct_tcp_cm_trace_conn_pkt(ep, UCS_LOG_LEVEL_ERROR,
-                                  "unable to send %s to", event);
-    } else {
+    if (status == UCS_OK) {
         uct_tcp_cm_trace_conn_pkt(ep, UCS_LOG_LEVEL_TRACE,
                                   "%s sent to", event);
+    } else {
+        uct_tcp_cm_trace_conn_pkt(ep, ((status == UCS_ERR_CANCELED) ?
+                                       UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR),
+                                  "unable to send %s to", event);
     }
     return status;
 }
