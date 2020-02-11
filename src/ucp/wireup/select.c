@@ -1003,12 +1003,6 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
     return size / time * 1e-5;
 }
 
-int ucp_wireup_is_rsc_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index)
-{
-    return (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) ||
-           (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SELF);
-}
-
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         const ucp_wireup_select_bw_info_t *bw_info,
@@ -1051,13 +1045,6 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[sinfo.rsc_index].dev_index);
         ae                 = &select_params->address->address_list[sinfo.addr_index];
         remote_dev_bitmap &= ~UCS_BIT(ae->dev_index);
-
-        if (ucp_wireup_is_rsc_self_or_shm(ep, sinfo.rsc_index)) {
-            /* special case for SHM: do not try to lookup additional lanes when
-             * SHM transport detected (another transport will be significantly
-             * slower) */
-            break;
-        }
     }
 
     return num_lanes;
@@ -1116,13 +1103,8 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
             bw_info.local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
             bw_info.remote_dev_bitmap &= ~UCS_BIT(select_params->address->
                                                   address_list[addr_index].dev_index);
-            if (ucp_wireup_is_rsc_self_or_shm(ep, rsc_index)) {
-                /* if AM lane is SELF or SHMEM - then do not use more lanes */
-                return UCS_OK;
-            } else {
-                break; /* do not continue searching due to we found
-                          AM lane (and there is only one lane) */
-            }
+            break; /* do not continue searching due to we found
+                      AM lane (and there is only one lane) */
         }
     }
 
