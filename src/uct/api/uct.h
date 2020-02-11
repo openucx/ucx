@@ -924,11 +924,12 @@ struct uct_iface_attr {
     uct_linear_growth_t      latency;      /**< Latency model */
     uint8_t                  priority;     /**< Priority of device */
     size_t                   max_num_eps;  /**< Maximum number of endpoints */
-    unsigned                 dev_num_paths;/**< How many different network paths
-                                                exist on the device used by the
-                                                interface. Endpoints which connect
-                                                to the same remote address but
-                                                use different paths can potentially
+    unsigned                 dev_num_paths;/**< How many network paths can be
+                                                utilized on the device used by
+                                                this interface for optimal
+                                                performance. Endpoints that connect
+                                                to the same remote address but use
+                                                different paths can potentially
                                                 achieve higher total bandwidth
                                                 compared to using only a single
                                                 endpoint. */
@@ -1102,7 +1103,7 @@ struct uct_ep_params {
 
     /**
      * Index of the path which the endpoint should use, must be in the range
-     * 0..@ref uct_iface_attr_t.dev_num_paths - 1.
+     * 0..(@ref uct_iface_attr_t.dev_num_paths - 1).
      */
     unsigned                            path_index;
 };
