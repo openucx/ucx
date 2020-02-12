@@ -461,9 +461,13 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     }
 
-    void init()
-    {
-        test_ucp_tag::init();
+    static uct_device_type_t get_dev_type(ucp_ep_h ep, ucp_rsc_index_t idx) {
+        return ep->worker->context->tl_rscs[idx].tl_rsc.dev_type;
+    }
+
+    static bool lane_shm_or_self(ucp_ep_h ep, ucp_rsc_index_t idx) {
+        uct_device_type_t dev_type = get_dev_type(ep, idx);
+        return (dev_type == UCT_DEVICE_TYPE_SHM) || (dev_type == UCT_DEVICE_TYPE_SELF);
     }
 };
 
@@ -474,7 +478,7 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     bool has_shm_or_self = false;
 
     for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
-        if (ucp_wireup_is_rsc_self_or_shm(ep, idx)) {
+        if (lane_shm_or_self(ep, idx)) {
             has_shm_or_self = true;
         }
 
