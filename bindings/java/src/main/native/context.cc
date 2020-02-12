@@ -10,6 +10,46 @@ extern "C" {
 }
 
 /**
+ * Iterates through entries of java's hash map and apply
+ * ucp_config_modify and ucs_global_opts_set_value to each key value pair.
+ */
+static inline void iterate_java_map(JNIEnv *env, ucp_config_t *config,
+                                    jobject *config_map)
+{
+    jclass c_map = env->GetObjectClass(*config_map);
+    jmethodID id_entrySet =
+        env->GetMethodID(c_map, "entrySet", "()Ljava/util/Set;");
+    jclass c_entryset = env->FindClass("java/util/Set");
+    jmethodID id_iterator =
+        env->GetMethodID(c_entryset, "iterator", "()Ljava/util/Iterator;");
+    jclass c_iterator = env->FindClass("java/util/Iterator");
+    jmethodID id_hasNext = env->GetMethodID(c_iterator, "hasNext", "()Z");
+    jmethodID id_next =
+        env->GetMethodID(c_iterator, "next", "()Ljava/lang/Object;");
+    jclass c_entry = env->FindClass("java/util/Map$Entry");
+    jmethodID id_getKey =
+        env->GetMethodID(c_entry, "getKey", "()Ljava/lang/Object;");
+    jmethodID id_getValue =
+        env->GetMethodID(c_entry, "getValue", "()Ljava/lang/Object;");
+    jobject obj_entrySet = env->CallObjectMethod(*config_map, id_entrySet);
+    jobject obj_iterator = env->CallObjectMethod(obj_entrySet, id_iterator);
+
+    while (env->CallBooleanMethod(obj_iterator, id_hasNext)) {
+        jobject entry = env->CallObjectMethod(obj_iterator, id_next);
+        jstring jstrKey = (jstring)env->CallObjectMethod(entry, id_getKey);
+        jstring jstrValue = (jstring)env->CallObjectMethod(entry, id_getValue);
+        const char *strKey = env->GetStringUTFChars(jstrKey, 0);
+        const char *strValue = env->GetStringUTFChars(jstrValue, 0);
+
+        ucp_config_modify(config, strKey, strValue);
+        ucs_global_opts_set_value(strKey, strValue);
+
+        env->ReleaseStringUTFChars(jstrKey, strKey);
+        env->ReleaseStringUTFChars(jstrValue, strValue);
+    }
+}
+
+/**
  * Bridge method for creating ucp_context from java
  */
 JNIEXPORT jlong JNICALL
@@ -52,10 +92,30 @@ Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls
     ucp_params.request_size = sizeof(struct jucx_context);
     ucp_params.request_init = jucx_request_init;
 
-    ucs_status_t status = ucp_init(&ucp_params, NULL, &ucp_context);
+    ucp_config_t *config = NULL;
+    ucs_status_t status;
+
+    field = env->GetFieldID(jucx_param_class, "config", "Ljava/util/Map;");
+    jobject config_map = env->GetObjectField(jucx_ctx_params, field);
+
+    if (config_map != NULL) {
+        status = ucp_config_read(NULL, NULL, &config);
+        if (status != UCS_OK) {
+            JNU_ThrowExceptionByStatus(env, status);
+        }
+
+        iterate_java_map(env, config, &config_map);
+    }
+
+    status = ucp_init(&ucp_params, config, &ucp_context);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }
+
+    if (config != NULL) {
+        ucp_config_release(config);
+    }
+
     return (native_ptr)ucp_context;
 }
 

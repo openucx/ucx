@@ -40,6 +40,20 @@ public class UcpContextTest {
         UcpContext context = createContext(contextParams);
         closeContext(context);
     }
+
+    @Test
+    public void testConfigMap() {
+        UcpParams contextParams = new UcpParams().requestTagFeature()
+            .setConfig("LOG_LEVEL", "info").setConfig("ZCOPY_THRESH", "1");
+        UcpContext context = createContext(contextParams);
+        closeContext(context);
+
+        // Return back original config
+        contextParams = new UcpParams().requestTagFeature()
+            .setConfig("LOG_LEVEL", "warn").setConfig("ZCOPY_THRESH", "auto");
+        context = createContext(contextParams);
+        closeContext(context);
+    }
     
     @Test(expected = NullPointerException.class)
     public void testCatchJVMSignal() {
