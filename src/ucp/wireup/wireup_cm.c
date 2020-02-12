@@ -748,7 +748,9 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
          * connection establishment, so:
          * 1) establish connection to complete any pending requests from wireup
          *    lane
-         * 2) handle disconnect same way as close protocol */
+         * 2) handle disconnect same way as close protocol
+         * 3) TODO: remove (1) when the EP can be moved to err state to block
+         *          new send operations but still able to flush transport lanes */
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
                                           ucp_cm_server_connect_progress,
                                           ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
