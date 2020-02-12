@@ -940,10 +940,10 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             address->tl_name_csum = *(uint16_t*)ptr;
             ptr = UCS_PTR_TYPE_OFFSET(ptr, address->tl_name_csum);
 
-            address->dev_addr        = (dev_addr_len > 0) ? dev_addr : NULL;
-            address->md_index        = md_index;
-            address->dev_index       = dev_index;
-            address->md_flags        = md_flags;
+            address->dev_addr      = (dev_addr_len > 0) ? dev_addr : NULL;
+            address->md_index      = md_index;
+            address->dev_index     = dev_index;
+            address->md_flags      = md_flags;
             address->dev_num_paths = dev_num_paths;
 
             attr_len  = ucp_address_unpack_iface_attr(worker, &address->iface_attr, ptr);
