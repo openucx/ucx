@@ -532,22 +532,22 @@ ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 }
 
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t
-ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
+ucp_send_request_get_am_bw_lane(ucp_request_t *req)
 {
     ucp_lane_index_t lane;
 
-    /* at least one lane must be initialized */
-    ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
+    lane = ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
+    ucs_assert(lane != UCP_NULL_LANE);
+    return lane;
+}
 
-    lane = (req->send.tag.am_bw_index >= UCP_MAX_LANES) ?
-           UCP_NULL_LANE :
-           ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
-    if (lane != UCP_NULL_LANE) {
-        req->send.tag.am_bw_index++;
-        return lane;
-    } else {
-        req->send.tag.am_bw_index = 1;
-        return ucp_ep_config(req->send.ep)->key.am_bw_lanes[0];
+static UCS_F_ALWAYS_INLINE void
+ucp_send_request_next_am_bw_lane(ucp_request_t *req)
+{
+    ++req->send.tag.am_bw_index;
+    if ((req->send.tag.am_bw_index >= UCP_MAX_LANES) ||
+        (ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index] == UCP_NULL_LANE)) {
+        req->send.tag.am_bw_index = 0;
     }
 }
 

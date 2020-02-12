@@ -64,7 +64,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
     req->send.lane = (!enable_am_bw || (state.offset == 0)) ? /* first part of message must be sent */
                      ucp_ep_get_am_lane(ep) :                 /* via AM lane */
-                     ucp_send_request_get_next_am_bw_lane(req);
+                     ucp_send_request_get_am_bw_lane(req);
     uct_ep         = ep->uct_eps[req->send.lane];
 
     for (;;) {
@@ -113,6 +113,9 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             ucs_assert(state.offset < req->send.state.dt.offset);
             /* If the last segment was sent, return UCS_OK,
              * otherwise - UCS_INPROGRESS */
+            if (enable_am_bw) {
+                ucp_send_request_next_am_bw_lane(req);
+            }
             return ((req->send.state.dt.offset < req->send.length) ?
                     UCS_INPROGRESS : UCS_OK);
         }
@@ -260,7 +263,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
     if (UCP_DT_IS_CONTIG(req->send.datatype)) {
         if (enable_am_bw && req->send.state.dt.offset) {
-            req->send.lane = ucp_send_request_get_next_am_bw_lane(req);
+            req->send.lane = ucp_send_request_get_am_bw_lane(req);
             ucp_send_request_add_reg_lane(req, req->send.lane);
         } else {
             req->send.lane = ucp_ep_get_am_lane(ep);
@@ -346,6 +349,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
                                                status);
                 if (!UCS_STATUS_IS_ERR(status)) {
+                    ucp_send_request_next_am_bw_lane(req);
                     return UCS_OK;
                 }
             }
@@ -363,11 +367,16 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 return UCS_OK;
             }
         }
+
         ucp_request_send_state_advance(req, &state,
                                        UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
                                        status);
-
-        return UCS_STATUS_IS_ERR(status) ? status : UCS_INPROGRESS;
+        if (UCS_STATUS_IS_ERR(status)) {
+            return status;
+        } else {
+            ucp_send_request_next_am_bw_lane(req);
+            return UCS_INPROGRESS;
+        }
     }
 }
 
