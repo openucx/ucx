@@ -173,8 +173,10 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
         tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_worker_is_tl_p2p(worker, rsc_idx)) {
-            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_PATH_INDEX;
             tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
+            tl_ep_params.path_index = ucp_ep_get_path_index(ep, lane_idx);
             status = uct_ep_create(&tl_ep_params, &tl_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */

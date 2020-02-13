@@ -1774,6 +1774,7 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     ucp_lane_index_t proxy_lane;
     ucp_md_index_t dst_md_index;
     ucp_rsc_index_t cmpt_index;
+    unsigned path_index;
     char *p, *endp;
     char *desc_str;
     int prio;
@@ -1790,8 +1791,9 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         } else {
             desc_str = "";
         }
-        snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
-                 lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
+        path_index = key->lanes[lane].path_index;
+        snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d]%s %-*c-> ",
+                 lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
                  context->tl_rscs[rsc_index].md_index, desc_str,
                  20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) + strlen(desc_str)),
                  ' ');

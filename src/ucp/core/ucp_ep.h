@@ -111,6 +111,7 @@ typedef struct ucp_ep_config_key {
                                             otherwise - in which lane the real
                                             transport endpoint is stored */
         ucp_md_index_t     dst_md_index; /* Destination memory domain index */
+        uint8_t            path_index;   /* Device path index */
     } lanes[UCP_MAX_LANES];
 
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
