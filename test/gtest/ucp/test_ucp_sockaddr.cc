@@ -180,27 +180,27 @@ public:
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
                         const struct sockaddr* addr, size_t addrlen)
     {
+        ucs_time_t deadline = ucs::get_deadline();
         ucs_status_t status;
 
         do {
             status = receiver().listen(cb_type, addr, addrlen, get_ep_params());
-        } while (status == UCS_ERR_BUSY);
+        } while ((status == UCS_ERR_BUSY) && (ucs_get_time() < deadline));
 
         if (status == UCS_ERR_UNREACHABLE) {
-            UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
+            UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(addr));
         }
 
-        if (status == UCS_OK) {
-            ucp_listener_attr_t attr;
-            uint16_t            port;
+        ASSERT_UCS_OK(status);
+        ucp_listener_attr_t attr;
+        uint16_t            port;
 
-            attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
-            ASSERT_UCS_OK(ucp_listener_query(receiver().listenerh(), &attr));
-            ASSERT_UCS_OK(ucs_sockaddr_get_port(
-                            (const struct sockaddr *)&attr.sockaddr, &port));
-            m_test_addr.set_port(port);
-            UCS_TEST_MESSAGE << "server listening on " << m_test_addr.to_str();
-        }
+        attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
+        ASSERT_UCS_OK(ucp_listener_query(receiver().listenerh(), &attr));
+        ASSERT_UCS_OK(ucs_sockaddr_get_port(
+                        (const struct sockaddr *)&attr.sockaddr, &port));
+        m_test_addr.set_port(port);
+        UCS_TEST_MESSAGE << "server listening on " << m_test_addr.to_str();
     }
 
     static void scomplete_cb(void *req, ucs_status_t status)
