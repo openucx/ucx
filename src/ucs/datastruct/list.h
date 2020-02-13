@@ -50,6 +50,24 @@ static inline void ucs_list_insert_replace(ucs_list_link_t *prev,
 }
 
 /**
+ * Replace an element in a list with another element.
+ *
+ * @param elem         Element in the list to replace.
+ * @param replacement  New element to insert in place of 'elem'.
+ */
+static inline void ucs_list_replace(ucs_list_link_t *elem,
+                                    ucs_list_link_t *replacement)
+{
+    ucs_list_link_t *prev = elem->prev;
+    ucs_list_link_t *next = elem->next;
+
+    replacement->prev = prev;
+    replacement->next = next;
+    prev->next        = replacement;
+    next->prev        = replacement;
+}
+
+/**
  * Insert an item to a list after another item.
  *
  * @param pos         Item after which to insert.
