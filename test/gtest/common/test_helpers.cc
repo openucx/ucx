@@ -497,7 +497,7 @@ uint16_t get_port() {
     EXPECT_EQ(ret, 0);
     EXPECT_LT(1023, ntohs(ret_addr.sin_port)) ;
 
-    port = ret_addr.sin_port;
+    port = ntohs(ret_addr.sin_port);
     close(sock_fd);
     return port;
 }
@@ -552,12 +552,12 @@ void sock_addr_storage::set_port(uint16_t port) {
 uint16_t sock_addr_storage::get_port() const {
     if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
-        return addr_in->sin_port;
+        return ntohs(addr_in->sin_port);
     } else {
         EXPECT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
-        return addr_in->sin6_port;
+        return ntohs(addr_in->sin6_port);
     }
 }
 
