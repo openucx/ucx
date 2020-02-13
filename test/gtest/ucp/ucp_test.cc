@@ -624,10 +624,13 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
     if (status == UCS_OK) {
         m_listener.reset(listener, ucp_listener_destroy);
     } else {
-        /* throw error if status is not (UCS_OK or UCS_ERR_UNREACHABLE).
+        /* throw error if status is not (UCS_OK or UCS_ERR_UNREACHABLE or
+         * UCS_ERR_BUSY).
          * UCS_ERR_INVALID_PARAM may also return but then the test should fail */
-        EXPECT_EQ(UCS_ERR_UNREACHABLE, status) << ucs_status_string(status);
+        EXPECT_TRUE((status == UCS_ERR_UNREACHABLE) ||
+                    (status == UCS_ERR_BUSY)) << ucs_status_string(status);
     }
+
     return status;
 }
 
