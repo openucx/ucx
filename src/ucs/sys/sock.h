@@ -446,6 +446,16 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
  */
 ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen);
 
+
+/**
+ * Convert the given address family to a string containing its value.
+ *
+ * @param [in]   af          Address family to convert.
+ *
+ * Only IPv4 and IPv6 conversions are supported.
+ */
+const char *ucs_sockaddr_address_family_str(sa_family_t af);
+
 END_C_DECLS
 
 #endif

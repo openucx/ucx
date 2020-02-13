@@ -127,6 +127,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
     char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
     char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]  = {};
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
     struct mlx5_wqe_av mlx5_av;
     ucs_status_t status;
     struct ibv_ah *ah;
@@ -156,7 +157,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                           uct_ib_mlx5_calc_av_sport(dest_qp_num, qp->qp_num));
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio, iface->super.super.config.sl);
-        if (iface->super.super.is_roce_v2) {
+        if (uct_ib_iface_is_roce_v2(&iface->super.super, dev)) {
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
                               iface->super.super.config.traffic_class >> 2);
         }

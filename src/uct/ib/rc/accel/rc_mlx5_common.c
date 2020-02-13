@@ -227,7 +227,7 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     }
 
     ah_attr.is_global     = 1;
-    ah_attr.grh.dgid      = iface->super.super.gid;
+    ah_attr.grh.dgid      = iface->super.super.gid_info.gid;
     ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.port)->lid;
     ah_attr.port_num      = dev->first_port;
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
@@ -297,7 +297,7 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_attr.ah_attr.port_num         = port_num;
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
-    qp_attr.ah_attr.grh.dgid         = iface->super.super.gid;
+    qp_attr.ah_attr.grh.dgid         = iface->super.super.gid_info.gid;
     ret = ibv_modify_qp(qp, &qp_attr,
                         IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
                         IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);

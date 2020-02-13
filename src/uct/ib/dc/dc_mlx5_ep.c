@@ -849,7 +849,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
         sender.ep               = (uint64_t)dc_ep;
-        sender.global.gid       = ib_iface->gid;
+        sender.global.gid       = ib_iface->gid_info.gid;
         sender.global.is_global = dc_ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
 
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,

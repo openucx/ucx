@@ -361,7 +361,7 @@ void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
  * buffer). In this case, the content of the first 20 bytes is undefined." */
 static void uct_ud_iface_calc_gid_len(uct_ud_iface_t *iface)
 {
-    uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid.raw;
+    uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid_info.gid.raw;
 
     /* Make sure that daddr in IPv4 resides in the last 4 bytes in GRH */
     UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) ==

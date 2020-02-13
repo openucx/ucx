@@ -18,15 +18,6 @@
 #include <sched.h>
 
 
-typedef struct {
-    union ibv_gid       gid;
-    struct {
-        uint8_t         major;
-        uint8_t         minor;
-    } roce_version;
-} uct_ib_device_gid_info_t;
-
-
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
 const double uct_ib_qp_rnr_time_ms[] = {
@@ -454,7 +445,6 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     uint8_t required_dev_flags;
     ucs_status_t status;
     union ibv_gid gid;
-    int is_roce_v2;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
@@ -497,13 +487,11 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
 
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
         status = uct_ib_device_query_gid(dev, port_num,
-                                         uct_ib_device_get_ib_gid_index(md), &gid,
-                                         &is_roce_v2);
+                                         uct_ib_device_get_ib_gid_index(md), &gid);
         if (status) {
             return status;
         }
 
-        ucs_assert(is_roce_v2 == 0);
         if (md->subnet_filter != gid.global.subnet_prefix) {
             ucs_trace("%s:%d subnet_prefix does not match",
                       uct_ib_device_name(dev), port_num);
@@ -512,6 +500,26 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     return UCS_OK;
+}
+
+const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver)
+{
+    switch (roce_ver) {
+    case UCT_IB_DEVICE_ROCE_V1:
+        return "RoCE v1";
+    case UCT_IB_DEVICE_ROCE_V1_5:
+        return "RoCE v1.5";
+    case UCT_IB_DEVICE_ROCE_V2:
+        return "RoCE v2";
+    default:
+        return "<unknown RoCE version>";
+    }
+}
+
+const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size)
+{
+    inet_ntop(AF_INET6, gid, str, max_size);
+    return str;
 }
 
 static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
@@ -529,7 +537,7 @@ static sa_family_t uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_ind
     char p[128];
 
     ucs_debug("testing addr_family on gid index %d: %s",
-              gid_index, inet_ntop(AF_INET6, gid, p, sizeof(p)));
+              gid_index, uct_ib_gid_str(gid, p, sizeof(p)));
 
     if (!((raw->s6_addr32[0] | raw->s6_addr32[1]) | addr_last_bits) ||
         uct_ib_device_is_addr_ipv4_mcast(raw, addr_last_bits)) {
@@ -539,9 +547,10 @@ static sa_family_t uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_ind
     }
 }
 
-static ucs_status_t
-uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
-                             unsigned gid_index, uct_ib_device_gid_info_t *info)
+ucs_status_t
+uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
+                             uint8_t port_num, unsigned gid_index,
+                             uct_ib_device_gid_info_t *info)
 {
     int ret;
 
@@ -549,25 +558,25 @@ uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
     struct ibv_exp_gid_attr attr;
 
     attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
-    ret = ibv_exp_query_gid_attr(dev->ibv_context, port_num, gid_index, &attr);
+    ret = ibv_exp_query_gid_attr(ctx, port_num, gid_index, &attr);
     if (ret == 0) {
-        info->gid = attr.gid;
+        info->gid                  = attr.gid;
+        info->gid_index            = gid_index;
+        info->roce_info.addr_family =
+                        uct_ib_device_get_addr_family(&info->gid, gid_index);
         switch (attr.type) {
         case IBV_EXP_IB_ROCE_V1_GID_TYPE:
-            info->roce_version.major = 1;
-            info->roce_version.minor = 0;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
             return UCS_OK;
         case IBV_EXP_ROCE_V1_5_GID_TYPE:
-            info->roce_version.major = 1;
-            info->roce_version.minor = 5;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1_5;
             return UCS_OK;
         case IBV_EXP_ROCE_V2_GID_TYPE:
-            info->roce_version.major = 2;
-            info->roce_version.minor = 0;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V2;
             return UCS_OK;
         default:
             ucs_error("Invalid GID[%d] type on %s:%d: %d",
-                      gid_index, uct_ib_device_name(dev), port_num, attr.type);
+                      gid_index, dev_name, port_num, attr.type);
             return UCS_ERR_IO_ERROR;
         }
     }
@@ -576,31 +585,32 @@ uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
     "/sys/class/infiniband/%s/ports/%d/gid_attrs/types/%d"
     char buf[16];
 
-    ret = ibv_query_gid(dev->ibv_context, port_num, gid_index, &info->gid);
+    ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
         ret = ucs_read_file(buf, sizeof(buf) - 1, 1, UCT_IB_SYSFS_GID_TYPE_FMT,
-                            uct_ib_device_name(dev), port_num, gid_index);
+                            dev_name, port_num, gid_index);
         if (ret > 0) {
             if (!strncmp(buf, "IB/RoCE v1", 10)) {
-                info->roce_version.major = 1;
-                info->roce_version.minor = 0;
+                info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
             } else if (!strncmp(buf, "RoCE v2", 7)) {
-                info->roce_version.major = 2;
-                info->roce_version.minor = 0;
+                info->roce_info.ver = UCT_IB_DEVICE_ROCE_V2;
             } else {
                 ucs_error("failed to parse gid type '%s' (dev=%s port=%d index=%d)",
-                          buf, uct_ib_device_name(dev), port_num, gid_index);
+                          buf, dev_name, port_num, gid_index);
                 return UCS_ERR_INVALID_PARAM;
             }
         } else {
-            info->roce_version.major = 1;
-            info->roce_version.minor = 0;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
         }
+
+        info->roce_info.addr_family =
+                        uct_ib_device_get_addr_family(&info->gid, gid_index);
+        info->gid_index            = gid_index;
         return UCS_OK;
     }
 #endif
     ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
-              uct_ib_device_name(dev), port_num, gid_index);
+              dev_name, port_num, gid_index);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -629,49 +639,53 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     return 1;
 }
 
-static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
-                                                     uint8_t port_num,
-                                                     uint8_t *gid_index)
+ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                      uct_ib_device_gid_info_t *gid_info)
 {
-    static const uct_ib_roce_version_desc_t roce_prio[] = {
-        {2, 0, AF_INET},
-        {2, 0, AF_INET6},
-        {1, 0, AF_INET},
-        {1, 0, AF_INET6}
+    static const uct_ib_roce_version_info_t roce_prio[] = {
+        {UCT_IB_DEVICE_ROCE_V2, AF_INET},
+        {UCT_IB_DEVICE_ROCE_V2, AF_INET6},
+        {UCT_IB_DEVICE_ROCE_V1, AF_INET},
+        {UCT_IB_DEVICE_ROCE_V1, AF_INET6}
     };
     int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
     int priorities_arr_len  = ucs_static_array_size(roce_prio);
-    uct_ib_device_gid_info_t gid_info;
+    uct_ib_device_gid_info_t gid_info_tmp;
     int i, prio_idx;
 
-    /* search for matching GID table entries, accroding to the order defined
+    ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+
+    /* search for matching GID table entries, according to the order defined
      * in priorities array
      */
     for (prio_idx = 0; prio_idx < priorities_arr_len; prio_idx++) {
         for (i = 0; i < gid_tbl_len; i++) {
-            status = uct_ib_device_query_gid_info(dev, port_num, i, &gid_info);
+            status = uct_ib_device_query_gid_info(dev->ibv_context,
+                                                  uct_ib_device_name(dev),
+                                                  port_num, i, &gid_info_tmp);
             if (status != UCS_OK) {
                 goto out;
             }
 
-            if ((roce_prio[prio_idx].roce_major     == gid_info.roce_version.major) &&
-                (roce_prio[prio_idx].roce_minor     == gid_info.roce_version.minor) &&
-                (roce_prio[prio_idx].address_family ==
-                                uct_ib_device_get_addr_family(&gid_info.gid, i)) &&
-                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info.gid, i)) {
+            if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
+                (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
+                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i)) {
 
-                *gid_index = i;
+                gid_info->gid_index = i;
+                gid_info->roce_info = gid_info_tmp.roce_info;
                 goto out_print;
             }
         }
     }
 
-    *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+    gid_info->gid_index             = UCT_IB_MD_DEFAULT_GID_INDEX;
+    gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
+    gid_info->roce_info.addr_family = AF_INET;
 
 out_print:
     ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
-              *gid_index);
+              gid_info->gid_index);
 out:
     return status;
 }
@@ -688,26 +702,6 @@ int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
 int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num)
 {
     return IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_device_port_attr(dev, port_num));
-}
-
-ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
-                                            uint8_t port_num,
-                                            size_t md_config_index,
-                                            uint8_t *gid_index)
-{
-    ucs_status_t status = UCS_OK;
-
-    if (md_config_index == UCS_ULUNITS_AUTO) {
-        if (uct_ib_device_is_port_roce(dev, port_num)) {
-            status = uct_ib_device_set_roce_gid_index(dev, port_num, gid_index);
-        } else {
-            *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
-        }
-    } else {
-        *gid_index = md_config_index;
-    }
-
-    return status;
 }
 
 const char *uct_ib_device_name(uct_ib_device_t *dev)
@@ -902,13 +896,13 @@ int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
 }
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                     unsigned gid_index, union ibv_gid *gid,
-                                     int *is_roce_v2)
+                                     unsigned gid_index, union ibv_gid *gid)
 {
     uct_ib_device_gid_info_t gid_info;
     ucs_status_t status;
 
-    status = uct_ib_device_query_gid_info(dev, port_num, gid_index, &gid_info);
+    status = uct_ib_device_query_gid_info(dev->ibv_context, uct_ib_device_name(dev),
+                                          port_num, gid_index, &gid_info);
     if (status != UCS_OK) {
         return status;
     }
@@ -919,9 +913,7 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    *gid        = gid_info.gid;
-    *is_roce_v2 = uct_ib_device_is_port_roce(dev, port_num) &&
-                  (gid_info.roce_version.major >= 2);
+    *gid = gid_info.gid;
     return UCS_OK;
 }
 
@@ -988,7 +980,7 @@ static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
         if (ah_attr->is_global) {
             snprintf(p, endp - p, " dgid=");
             p += strlen(p);
-            inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
+            uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
             p += strlen(p);
             snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
                      ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
