@@ -31,7 +31,13 @@ SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp \
+	src/ucp
+
+if HAVE_UCG
+SUBDIRS += src/ucg
+endif
+
+SUBDIRS += \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \
