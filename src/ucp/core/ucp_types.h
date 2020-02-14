@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -92,7 +93,8 @@ enum {
     UCP_AM_ID_SINGLE_REPLY      =  25, /* For user defined AM when a reply
                                           is needed */
     UCP_AM_ID_MULTI_REPLY       =  26,
-    UCP_AM_ID_LAST
+    UCP_AM_ID_LAST,
+    UCP_AM_ID_MAX               =  UCT_AM_ID_MAX  /* Total IDs available for pre-registration */
 };
 
 

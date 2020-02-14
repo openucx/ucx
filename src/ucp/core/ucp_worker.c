@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -147,7 +148,11 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
 
     ucs_trace_func("iface=%p is_proxy=%d", wiface->iface, is_proxy);
 
-    for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+    for (am_id = 0; am_id < UCP_AM_ID_MAX; ++am_id) {
+        if (!ucp_am_handlers[am_id].cb) {
+            continue;
+        }
+
         if (!(wiface->attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
@@ -214,7 +219,11 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
             continue;
         }
-        for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+        for (am_id = 0; am_id < UCP_AM_ID_MAX; ++am_id) {
+            if (!ucp_am_handlers[am_id].cb) {
+                continue;
+            }
+
             if (context->config.features & ucp_am_handlers[am_id].features) {
                 (void)uct_iface_set_am_handler(wiface->iface,
                                                am_id, ucp_stub_am_handler,
@@ -231,7 +240,7 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     ucp_worker_h worker = arg;
     ucp_am_tracer_t tracer;
 
-    if (id < UCP_AM_ID_LAST) {
+    if (id < UCP_AM_ID_MAX) {
         tracer = ucp_am_handlers[id].tracer;
         if (tracer != NULL) {
             tracer(worker, type, id, data, length, buffer, max);
