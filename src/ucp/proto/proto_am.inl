@@ -349,7 +349,9 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
                                                status);
                 if (!UCS_STATUS_IS_ERR(status)) {
-                    ucp_send_request_next_am_bw_lane(req);
+                    if (enable_am_bw) {
+                        ucp_send_request_next_am_bw_lane(req);
+                    }
                     return UCS_OK;
                 }
             }
@@ -374,7 +376,9 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         if (UCS_STATUS_IS_ERR(status)) {
             return status;
         } else {
-            ucp_send_request_next_am_bw_lane(req);
+            if (enable_am_bw) {
+                ucp_send_request_next_am_bw_lane(req);
+            }
             return UCS_INPROGRESS;
         }
     }
