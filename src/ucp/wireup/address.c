@@ -924,7 +924,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         dev_addr_len = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
         last_dev     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
         if ((*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_HAVE_PATHS) {
-            ptr         = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+            ptr           = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
             dev_num_paths = *(uint8_t*)ptr;
         } else {
             dev_num_paths = 1;
