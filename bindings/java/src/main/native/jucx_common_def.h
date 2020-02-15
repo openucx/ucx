@@ -100,4 +100,10 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
  */
 jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey);
 
+/**
+ * @brief Creates new jucx tag_msg class.
+ */
+jobject new_tag_msg_instance(JNIEnv *env, ucp_tag_message_h msg_tag,
+                             ucp_tag_recv_info_t *info_tag);
+
 #endif

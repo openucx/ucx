@@ -23,6 +23,8 @@ static jmethodID on_success;
 static jmethodID jucx_request_constructor;
 static jclass ucp_rkey_cls;
 static jmethodID ucp_rkey_cls_constructor;
+static jclass ucp_tag_msg_cls;
+static jmethodID ucp_tag_msg_cls_constructor;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     ucs_debug_disable_signals();
@@ -44,6 +46,9 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     jclass ucp_rkey_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
     ucp_rkey_cls = (jclass) env->NewGlobalRef(ucp_rkey_cls_local);
     ucp_rkey_cls_constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
+    jclass ucp_tag_msg_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpTagMessage");
+    ucp_tag_msg_cls = (jclass) env->NewGlobalRef(ucp_tag_msg_cls_local);
+    ucp_tag_msg_cls_constructor = env->GetMethodID(ucp_tag_msg_cls, "<init>", "(JJJ)V");
     return JNI_VERSION_1_1;
 }
 
@@ -314,4 +319,11 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
 jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey)
 {
     return env->NewObject(ucp_rkey_cls, ucp_rkey_cls_constructor, (native_ptr)rkey);
+}
+
+jobject new_tag_msg_instance(JNIEnv *env, ucp_tag_message_h msg_tag,
+                             ucp_tag_recv_info_t *info_tag)
+{
+    return env->NewObject(ucp_tag_msg_cls, ucp_tag_msg_cls_constructor,
+                         (native_ptr)msg_tag, info_tag->length, info_tag->sender_tag);
 }
