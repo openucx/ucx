@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -337,27 +338,22 @@ UCS_TEST_F(test_datatype, queue_extract_if) {
 
 UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_t pa;
-    uint32_t value;
     int a = 1, b = 2, c = 3, d = 4;
     unsigned index;
 
-    ucs_ptr_array_init(&pa, 3, "ptr_array test");
+    ucs_ptr_array_init(&pa, "ptr_array test");
 
-    index = ucs_ptr_array_insert(&pa, &a, &value);
+    index = ucs_ptr_array_insert(&pa, &a);
     EXPECT_EQ(0u, index);
-    EXPECT_EQ(3u, value);
 
-    index = ucs_ptr_array_insert(&pa, &b, &value);
+    index = ucs_ptr_array_insert(&pa, &b);
     EXPECT_EQ(1u, index);
-    EXPECT_EQ(3u, value);
 
-    index = ucs_ptr_array_insert(&pa, &c, &value);
+    index = ucs_ptr_array_insert(&pa, &c);
     EXPECT_EQ(2u, index);
-    EXPECT_EQ(3u, value);
 
-    index = ucs_ptr_array_insert(&pa, &d, &value);
+    index = ucs_ptr_array_insert(&pa, &d);
     EXPECT_EQ(3u, index);
-    EXPECT_EQ(3u, value);
 
     void *vc;
     int present = ucs_ptr_array_lookup(&pa, 2, vc);
@@ -373,10 +369,10 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5005, vc));
 
-    ucs_ptr_array_remove(&pa, 0, 0);
-    ucs_ptr_array_remove(&pa, 1, 0);
-    ucs_ptr_array_remove(&pa, 2, 0);
-    ucs_ptr_array_remove(&pa, 3, 0);
+    ucs_ptr_array_remove(&pa, 0);
+    ucs_ptr_array_remove(&pa, 1);
+    ucs_ptr_array_remove(&pa, 2);
+    ucs_ptr_array_remove(&pa, 3);
 
     ucs_ptr_array_cleanup(&pa);
 }
@@ -384,19 +380,17 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
 UCS_TEST_F(test_datatype, ptr_array_random) {
     const unsigned count = 10000 / ucs::test_time_multiplier();
     ucs_ptr_array_t pa;
-    uint32_t value;
 
-    ucs_ptr_array_init(&pa, 5, "ptr_array test");
+    ucs_ptr_array_init(&pa, "ptr_array test");
 
     std::map<int, void*> map;
 
     /* Insert phase */
     for (unsigned i = 0; i < count; ++i) {
         void *ptr = malloc(0);
-        unsigned index = ucs_ptr_array_insert(&pa, ptr, &value);
+        unsigned index = ucs_ptr_array_insert(&pa, ptr);
 
         EXPECT_TRUE(map.end() == map.find(index));
-        EXPECT_EQ(5u, value);
         map[index] = ptr;
     }
 
@@ -415,7 +409,7 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
             EXPECT_EQ(ptr, map[index]);
             free(ptr);
 
-            ucs_ptr_array_remove(&pa, index, index * index);
+            ucs_ptr_array_remove(&pa, index);
             EXPECT_FALSE(ucs_ptr_array_lookup(&pa, index, ptr));
 
             map.erase(index);
@@ -424,10 +418,9 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
         int insert_count = ucs::rand() % 10;
         for (int j = 0; j < insert_count; ++j) {
             void *ptr = malloc(0);
-            unsigned index = ucs_ptr_array_insert(&pa, ptr, &value);
+            unsigned index = ucs_ptr_array_insert(&pa, ptr);
 
             EXPECT_TRUE(map.end() == map.find(index));
-            EXPECT_TRUE(index * index == value || 5u == value);
             map[index] = ptr;
         }
     }
@@ -437,32 +430,9 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
     unsigned index;
     ucs_ptr_array_for_each(ptr, index, &pa) {
         EXPECT_EQ(ptr, map[index]);
-        ucs_ptr_array_remove(&pa, index, 0);
+        ucs_ptr_array_remove(&pa, index);
         free(ptr);
     }
-
-    ucs_ptr_array_cleanup(&pa);
-}
-
-UCS_TEST_F(test_datatype, ptr_array_placeholder) {
-    ucs_ptr_array_t pa;
-    uint32_t value;
-    int a = 1;
-    unsigned index;
-
-    ucs_ptr_array_init(&pa, 3, "ptr_array test");
-
-    index = ucs_ptr_array_insert(&pa, &a, &value);
-    EXPECT_EQ(0u, index);
-    EXPECT_EQ(3u, value);
-
-    ucs_ptr_array_remove(&pa, index, 4);
-
-    index = ucs_ptr_array_insert(&pa, &a, &value);
-    EXPECT_EQ(0u, index);
-    EXPECT_EQ(4u, value);
-
-    ucs_ptr_array_remove(&pa, index, 0);
 
     ucs_ptr_array_cleanup(&pa);
 }
@@ -471,12 +441,11 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
                      (ucs::test_time_multiplier() > 1)) {
     const unsigned count = 10000000;
     ucs_ptr_array_t pa;
-    uint32_t value;
 
     ucs_time_t insert_start_time = ucs_get_time();
-    ucs_ptr_array_init(&pa, 0, "ptr_array test");
+    ucs_ptr_array_init(&pa, "ptr_array test");
     for (unsigned i = 0; i < count; ++i) {
-        EXPECT_EQ(i, ucs_ptr_array_insert(&pa, NULL, &value));
+        EXPECT_EQ(i, ucs_ptr_array_insert(&pa, NULL));
     }
 
     ucs_time_t lookup_start_time = ucs_get_time();
@@ -488,7 +457,7 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
 
     ucs_time_t remove_start_time = ucs_get_time();
     for (unsigned i = 0; i < count; ++i) {
-        ucs_ptr_array_remove(&pa, i, 0);
+        ucs_ptr_array_remove(&pa, i);
     }
 
     ucs_time_t end_time = ucs_get_time();
