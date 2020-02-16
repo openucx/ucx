@@ -55,12 +55,24 @@ void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status)
 {
-    cep->client.connect_cb(&cep->super.super, cep->user_data, remote_data, status);
+    uct_cm_ep_client_connect_cb_handle_t connect_handle;
+
+    connect_handle.field_mask  = UCT_CM_EP_CLIENT_CONNECT_CB_HANDLE_REMOTE_DATA |
+                                 UCT_CM_EP_CLIENT_CONNECT_CB_HANDLE_STATUS;
+    connect_handle.remote_data = remote_data;
+    connect_handle.status      = status;
+
+    cep->client.connect_cb(&cep->super.super, cep->user_data, &connect_handle);
 }
 
 void uct_cm_ep_server_connect_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
 {
-    cep->server.connect_cb(&cep->super.super, cep->user_data, status);
+    uct_cm_ep_server_connect_cb_handle_t connect_handle;
+
+    connect_handle.field_mask = UCT_CM_EP_SERVER_CONNECT_CB_HANDLE_STATUS;
+    connect_handle.status     = status;
+
+    cep->server.connect_cb(&cep->super.super, cep->user_data, &connect_handle);
 }
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)

@@ -186,18 +186,21 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
 ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
                                               struct rdma_conn_param *conn_param)
 {
-    uct_rdmacm_priv_data_hdr_t *hdr;
-    ucs_status_t               status;
-    char                       dev_name[UCT_DEVICE_NAME_MAX];
-    ssize_t                    priv_data_ret;
-    char                       ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_rdmacm_priv_data_hdr_t              *hdr;
+    ucs_status_t                            status;
+    char                                    dev_name[UCT_DEVICE_NAME_MAX];
+    ssize_t                                 priv_data_ret;
+    char                                    ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_sockaddr_priv_data_pack_cb_handle_t pack_handle;
 
     uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
 
     /* Pack data to send inside rdmacm's conn_param to the remote peer */
-    hdr           = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
-    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data,
-                                            dev_name, hdr + 1);
+    hdr                    = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
+    pack_handle.field_mask = UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME;
+    pack_handle.dev_name   = dev_name;
+    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, &pack_handle,
+                                            hdr + 1);
 
     if (priv_data_ret < 0) {
         ucs_assert(priv_data_ret > UCS_ERR_LAST);

@@ -108,6 +108,7 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
     uct_tcp_sockcm_priv_data_hdr_t *hdr;
     ssize_t priv_data_ret;
     ucs_status_t status;
+    uct_sockaddr_priv_data_pack_cb_handle_t pack_handle;
 
     /* get interface name associated with the connected client fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, sizeof(ifname_str));
@@ -115,8 +116,10 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
         goto out;
     }
 
-    hdr           = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
-    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, ifname_str,
+    hdr                    = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
+    pack_handle.field_mask = UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME;
+    pack_handle.dev_name   = ifname_str;
+    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, &pack_handle,
                                             hdr + 1);
     if (priv_data_ret < 0) {
         ucs_assert(priv_data_ret > UCS_ERR_LAST);
@@ -143,14 +146,15 @@ out:
 
 static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
 {
-    uct_tcp_sockcm_priv_data_hdr_t *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
-                                          cep->comm_ctx.buf;
-    struct sockaddr_storage remote_dev_addr = {0};
-    socklen_t               remote_dev_addr_len;
-    char peer_str[UCS_SOCKADDR_STRING_LEN];
-    char                    ifname_str[UCT_DEVICE_NAME_MAX];
-    uct_cm_remote_data_t    remote_data;
-    ucs_status_t            status;
+    uct_tcp_sockcm_priv_data_hdr_t       *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
+                                                cep->comm_ctx.buf;
+    struct sockaddr_storage              remote_dev_addr = {0};
+    socklen_t                            remote_dev_addr_len;
+    char                                 peer_str[UCS_SOCKADDR_STRING_LEN];
+    char                                 ifname_str[UCT_DEVICE_NAME_MAX];
+    uct_cm_remote_data_t                 remote_data;
+    ucs_status_t                         status;
+    uct_cm_listener_conn_req_cb_handle_t conn_req_handle;
 
     /* get the local interface name associated with the connected fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, UCT_DEVICE_NAME_MAX);
@@ -173,6 +177,13 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
+    conn_req_handle.field_mask        = UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_LOCAL_DEV_NAME |
+                                        UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_CONN_REQUEST   |
+                                        UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_REMOTE_DATA;
+    conn_req_handle.local_dev_name    = ifname_str;
+    conn_req_handle.conn_request      = cep;
+    conn_req_handle.remote_data       = &remote_data;
+
     ucs_debug("fd %d: remote_data: (field_mask=%zu) dev_addr: %s (length=%zu), "
               "conn_priv_data_length=%zu", cep->fd, remote_data.field_mask,
               ucs_sockaddr_str((const struct sockaddr*)remote_data.dev_addr,
@@ -184,7 +195,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
      * over to its responsibility. */
     ucs_list_del(&cep->list);
     cep->listener->conn_request_cb(&cep->listener->super, cep->listener->user_data,
-                                   ifname_str, cep, &remote_data);
+                                   &conn_req_handle);
 
     return UCS_OK;
 }

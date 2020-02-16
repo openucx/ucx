@@ -1041,8 +1041,9 @@ size_t uct_test::entity::priv_data_do_pack(void *priv_data)
     return priv_data_len;
 }
 
-ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
-                                              void *priv_data)
+ssize_t uct_test::entity::server_priv_data_cb(void *arg,
+                                              uct_sockaddr_priv_data_pack_cb_handle_t
+                                              *pack_handle, void *priv_data)
 {
     const size_t priv_data_len = server_priv_data.length() + 1;
 

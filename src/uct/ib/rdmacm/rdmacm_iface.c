@@ -270,6 +270,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     uct_rdmacm_md_t *rdmacm_md   = (uct_rdmacm_md_t *)iface->super.md;
     unsigned ret_flags           = UCT_RDMACM_PROCESS_EVENT_ACK_EVENT_FLAG;
     uct_rdmacm_ep_t *ep          = NULL;
+    uct_sockaddr_priv_data_pack_cb_handle_t pack_handle;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char dev_name[UCT_DEVICE_NAME_MAX];
     uct_rdmacm_priv_data_hdr_t *hdr;
@@ -321,10 +322,13 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                                                  sizeof(uct_rdmacm_priv_data_hdr_t));
 
             uct_rdmacm_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
-            hdr = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
+
+            hdr                    = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
+            pack_handle.field_mask = UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME;
+            pack_handle.dev_name   = dev_name;
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
-            priv_data_ret = ep->pack_cb(ep->pack_cb_arg, dev_name, hdr + 1);
+            priv_data_ret = ep->pack_cb(ep->pack_cb_arg, &pack_handle, hdr + 1);
             if (priv_data_ret < 0) {
                 ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
                           "private data. status: %s",

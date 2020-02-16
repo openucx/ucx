@@ -231,8 +231,9 @@ protected:
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
-        static ssize_t server_priv_data_cb(void *arg, const char *dev_name,
-                                           void *priv_data);
+        static ssize_t server_priv_data_cb(void *arg,
+                                           uct_sockaddr_priv_data_pack_cb_handle_t
+                                           *pack_handle, void *priv_data);
 
 
         const resource              m_resource;
