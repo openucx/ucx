@@ -55,6 +55,14 @@ enum {
 };
 
 
+typedef enum uct_ib_roce_version {
+    UCT_IB_DEVICE_ROCE_V1,
+    UCT_IB_DEVICE_ROCE_V1_5,
+    UCT_IB_DEVICE_ROCE_V2,
+    UCT_IB_DEVICE_ROCE_ANY
+} uct_ib_roce_version_t;
+
+
 enum {
     UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
     UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
@@ -73,13 +81,17 @@ enum {
  * Flags which specify which address fields are present
  */
 enum {
-    UCT_IB_ADDRESS_FLAG_LID      = UCS_BIT(0),
-    UCT_IB_ADDRESS_FLAG_IF_ID    = UCS_BIT(1),
-    UCT_IB_ADDRESS_FLAG_SUBNET16 = UCS_BIT(2),
-    UCT_IB_ADDRESS_FLAG_SUBNET64 = UCS_BIT(3),
-    UCT_IB_ADDRESS_FLAG_GID  = UCS_BIT(4),
-    UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB = UCS_BIT(5),
-    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(6)
+    /* If set - ETH link layer, else- IB link layer */
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(0),
+    /* Used for ETH link layer */
+    UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(1),
+    /* Used for IB link layer */
+    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(2),
+    /* Used for IB link layer */
+    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(3),
+    /* Used for IB link layer */
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(4),
+    UCT_IB_ADDRESS_FLAG_LAST           = UCS_BIT(5)
 };
 
 
@@ -87,6 +99,10 @@ enum {
  * IB network address
  */
 typedef struct uct_ib_address {
+    /* Using flags from UCT_IB_ADDRESS_FLAG_xx
+     * For ETH link layer, the 4 msb's are used to indicate the RoCE version -
+     * (by shifting the UCT_IB_DEVICE_ROCE_xx values when packing and unpacking
+     * the ib address) */
     uint8_t            flags;
     /* Following fields appear in this order (if specified by flags).
      * The full gid always appears last:
@@ -151,13 +167,21 @@ typedef struct uct_ib_device {
 
 
 /**
- * RoCE version priorities
+ * RoCE version
  */
-typedef struct uct_ib_roce_version_desc {
-    uint8_t     roce_major;
-    uint8_t     roce_minor;
-    sa_family_t address_family;
-} uct_ib_roce_version_desc_t;
+typedef struct uct_ib_roce_version_info {
+    /** RoCE version described by the UCT_IB_DEVICE_ROCE_xx values */
+    uct_ib_roce_version_t ver;
+    /** Address family of the port */
+    sa_family_t           addr_family;
+} uct_ib_roce_version_info_t;
+
+
+typedef struct {
+    union ibv_gid              gid;
+    uint8_t                    gid_index;    /* IB/RoCE GID index to use */
+    uct_ib_roce_version_info_t roce_info;    /* For a RoCE port */
+} uct_ib_device_gid_info_t;
 
 
 extern const double uct_ib_qp_rnr_time_ms[];
@@ -199,17 +223,17 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
 
 
 /**
- * Select the IB gid index to use.
+ * Select the best gid to use and set its information on the RoCE port -
+ * gid index, RoCE version and address family.
  *
- * @param dev                   IB device.
- * @param port_num              Port number.
- * @param md_config_index       Gid index from the md configuration.
- * @param ib_gid_index          Filled with the selected gid index.
+ * @param [in]  dev             IB device.
+ * @param [in]  port_num        Port number.
+ * @param [out] gid_info        Filled with the selected gid index and the
+ *                              port's RoCE version and address family.
  */
-ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
-                                            uint8_t port_num,
-                                            size_t md_config_index,
-                                            uint8_t *ib_gid_index);
+ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
+                                      uint8_t port_num,
+                                      uct_ib_device_gid_info_t *gid_info);
 
 
 /**
@@ -293,9 +317,16 @@ static inline int uct_ib_device_has_pci_atomics(uct_ib_device_t *dev)
               (sizeof(uint32_t) | sizeof(uint64_t)));
 }
 
+const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver);
+
+const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size);
+
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                     unsigned gid_index, union ibv_gid *gid,
-                                     int *is_roce_v2);
+                                     unsigned gid_index, union ibv_gid *gid);
+
+ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
+                                          uint8_t port_num, unsigned gid_index,
+                                          uct_ib_device_gid_info_t *info);
 
 int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,

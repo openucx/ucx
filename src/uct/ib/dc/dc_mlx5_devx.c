@@ -62,7 +62,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
     UCT_IB_MLX5DV_SET(dctc, dctc, tclass, iface->super.super.super.config.traffic_class);
     UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.config.path_mtu);
-    UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.config.gid_index);
+    UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.gid_info.gid_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
 
     iface->rx.dct.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),

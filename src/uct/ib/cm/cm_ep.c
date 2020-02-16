@@ -53,7 +53,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
 {
     uct_cm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_cm_iface_t);
 
-    path->sgid                      = iface->super.gid;
+    path->sgid                      = iface->super.gid_info.gid;
     path->dlid                      = htons(ep->dlid);
     path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
     if (iface->super.config.force_global_addr) {
@@ -86,8 +86,8 @@ static void uct_cm_dump_path(struct ibv_sa_path_rec *path)
     char sgid_buf[256];
     char dgid_buf[256];
 
-    inet_ntop(AF_INET6, &path->dgid, dgid_buf, sizeof(dgid_buf));
-    inet_ntop(AF_INET6, &path->sgid, sgid_buf, sizeof(sgid_buf));
+    uct_ib_gid_str(&path->dgid, dgid_buf, sizeof(dgid_buf));
+    uct_ib_gid_str(&path->sgid, sgid_buf, sizeof(sgid_buf));
 
     ucs_trace_data("slid %d sgid %s dlid %d dgid %s",
                    ntohs(path->slid), sgid_buf, ntohs(path->dlid), dgid_buf);

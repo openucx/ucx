@@ -234,7 +234,8 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
 
             sgid_index = (htonl(grh_av->grh_gid_fl) >> 20) & UCS_MASK(8);
             snprintf(p, endp - p,  " sgix %d dgid %s tc %d]", sgid_index,
-                     inet_ntop(AF_INET6, grh_av->rgid, gid_buf, sizeof(gid_buf)),
+                     uct_ib_gid_str((union ibv_gid *)grh_av->rgid, gid_buf,
+                                    sizeof(gid_buf)),
                      grh_av->tclass);
         } else {
             snprintf(p, endp - p, "]");
