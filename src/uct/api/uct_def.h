@@ -152,6 +152,45 @@ typedef struct uct_iov {
 
 /**
  * @ingroup UCT_CLIENT_SERVER
+ * @brief Client-Server private data pack callback arguments field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_cm_ep_priv_data_pack_args are present, for backward compatibility support.
+ */
+enum uct_cm_ep_priv_data_pack_args_field {
+    /** Enables @ref uct_cm_ep_priv_data_pack_args::dev_name
+     *  Indicates that dev_name field in uct_cm_ep_priv_data_pack_args_t is valid.
+     */
+    UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Arguments to the client-server private data pack callback.
+ *
+ * Used with the client-server API on a connection manager.
+ */
+typedef struct uct_cm_ep_priv_data_pack_args {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_ep_priv_data_pack_args_field.
+     * Fields not specified by this mask will be ignored.
+     */
+    uint64_t                   field_mask;
+
+    /**
+     * Device name. This routine may fill the user's private data according to
+     * the given device name. The device name that is passed to this routine,
+     * corresponds to the dev_name field inside @ref uct_tl_resource_desc_t as
+     * returned from @ref uct_md_query_tl_resources.
+     */
+    char                       dev_name[UCT_DEVICE_NAME_MAX];
+} uct_cm_ep_priv_data_pack_args_t;
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
  * @brief Remote data attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_cm_remote_data are
@@ -212,53 +251,81 @@ typedef struct uct_cm_remote_data {
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Server endpoint's connect callback arguments field mask.
+ * @brief Listener's connection request callback arguments field mask.
  *
  * The enumeration allows specifying which fields in
- * @ref uct_cm_ep_server_connect_cb_handle are present, for backward compatibility
+ * @ref uct_cm_listener_conn_request_args are present, for backward compatibility
  * support.
  */
-enum uct_cm_ep_server_connect_cb_handle_field {
-    /** Enables @ref uct_cm_ep_server_connect_cb_handle::status */
-    UCT_CM_EP_SERVER_CONNECT_CB_HANDLE_STATUS = UCS_BIT(0)
+enum uct_cm_listener_conn_request_args_field {
+    /** Enables @ref uct_cm_listener_conn_request_args::dev_name
+     *  Indicates that dev_name field in uct_cm_listener_conn_request_args_t is
+     *  valid.
+     */
+    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     = UCS_BIT(0),
+
+    /** Enables @ref uct_cm_listener_conn_request_args::conn_request
+     *  Indicates that conn_request field in uct_cm_listener_conn_request_args_t
+     *  is valid.
+     */
+    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST = UCS_BIT(1),
+
+    /** Enables @ref uct_cm_listener_conn_request_args::remote_data
+     *  Indicates that remote_data field in uct_cm_listener_conn_request_args_t
+     *  is valid.
+     */
+    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  = UCS_BIT(2)
 };
 
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Arguments to the server's connect callback.
+ * @brief Arguments to the listener's connection request callback.
  *
+ * The local device name, connection request handle and the data the client sent.
  * Used with the client-server API on a connection manager.
  */
-typedef struct uct_cm_ep_server_connect_cb_handle {
+typedef struct uct_cm_listener_conn_request_args {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_cm_ep_server_connect_cb_handle_field.
+     * @ref uct_cm_listener_conn_request_args_field.
      * Fields not specified by this mask will be ignored.
      */
     uint64_t                   field_mask;
 
     /**
-     * Indicates the client's status.
+     * Local device name which handles the incoming connection request.
      */
-    ucs_status_t               status;
-} uct_cm_ep_server_connect_cb_handle_t;
+    char                       dev_name[UCT_DEVICE_NAME_MAX];
+
+    /**
+     * Connection request handle. Can be passed to this callback from the
+     * transport and will be used by it to accept or reject the connection
+     * request from the client.
+     */
+    uct_conn_request_h         conn_request;
+
+    /**
+     * Remote data from the client.
+     */
+    const uct_cm_remote_data_t *remote_data;
+} uct_cm_listener_conn_request_args_t;
 
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Client endpoint's connect callback arguments field mask.
+ * @brief Field mask flags for client-side connection established callback.
  *
  * The enumeration allows specifying which fields in
- * @ref uct_cm_ep_client_connect_cb_handle are present, for backward compatibility
+ * @ref uct_cm_ep_client_connect_args are present, for backward compatibility
  * support.
  */
-enum uct_cm_ep_client_connect_cb_handle_field {
-    /** Enables @ref uct_cm_ep_client_connect_cb_handle::remote_data */
-    UCT_CM_EP_CLIENT_CONNECT_CB_HANDLE_REMOTE_DATA = UCS_BIT(0),
+enum uct_cm_ep_client_connect_args_field {
+    /** Enables @ref uct_cm_ep_client_connect_args::remote_data */
+    UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA = UCS_BIT(0),
 
-    /** Enables @ref uct_cm_ep_client_connect_cb_handle::status */
-    UCT_CM_EP_CLIENT_CONNECT_CB_HANDLE_STATUS      = UCS_BIT(1)
+    /** Enables @ref uct_cm_ep_client_connect_args::status */
+    UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS      = UCS_BIT(1)
 };
 
 
@@ -268,10 +335,10 @@ enum uct_cm_ep_client_connect_cb_handle_field {
  *
  * Used with the client-server API on a connection manager.
  */
-typedef struct uct_cm_ep_client_connect_cb_handle {
+typedef struct uct_cm_ep_client_connect_args {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_cm_ep_server_connect_cb_handle_field.
+     * @ref uct_cm_ep_server_connect_args_field.
      * Fields not specified by this mask will be ignored.
      */
     uint64_t                   field_mask;
@@ -285,99 +352,44 @@ typedef struct uct_cm_ep_client_connect_cb_handle {
      * Indicates the server's status.
      */
     ucs_status_t               status;
-} uct_cm_ep_client_connect_cb_handle_t;
+} uct_cm_ep_client_connect_args_t;
 
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Listener's connection request callback arguments field mask.
+ * @brief Field mask flags for server-side connection established callback.
  *
  * The enumeration allows specifying which fields in
- * @ref uct_cm_listener_conn_req_cb_handle are present, for backward compatibility
+ * @ref uct_cm_ep_server_connect_args are present, for backward compatibility
  * support.
  */
-enum uct_cm_listener_conn_req_cb_handle_field {
-    /** Enables @ref uct_cm_listener_conn_req_cb_handle::local_dev_name */
-    UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_LOCAL_DEV_NAME = UCS_BIT(0),
-
-    /** Enables @ref uct_cm_listener_conn_req_cb_handle::conn_request */
-    UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_CONN_REQUEST   = UCS_BIT(1),
-
-    /** Enables @ref uct_cm_listener_conn_req_cb_handle::remote_data */
-    UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_REMOTE_DATA    = UCS_BIT(2)
+enum uct_cm_ep_server_connect_args_field {
+    /** Enables @ref uct_cm_ep_server_connect_args::status
+     *  Indicates that status field in uct_cm_ep_server_connect_args_t is valid.
+     */
+    UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS = UCS_BIT(0)
 };
 
 
 /**
  * @ingroup UCT_CLIENT_SERVER
- * @brief Arguments to the listener's connection request callback.
+ * @brief Arguments to the server's connect callback.
  *
- * The local device name, connection request handle and the data the client sent.
  * Used with the client-server API on a connection manager.
  */
-typedef struct uct_cm_listener_conn_req_cb_handle {
+typedef struct uct_cm_ep_server_connect_args {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_cm_listener_conn_req_cb_handle_field.
-     * Fields not specified by this mask will be ignored.
+     * @ref uct_cm_ep_server_connect_args_field.
+     * Fields not specified by this mask should not be accessed by the callback.
      */
     uint64_t                   field_mask;
 
     /**
-     * Device name which handles the incoming connection request.
+     * Indicates the client's status.
      */
-    const char                 *local_dev_name;
-
-    /**
-     * Connection request handle. Can be passed to this callback from the
-     * transport and will be used by it to accept or reject the connection
-     * request from the client.
-     */
-    uct_conn_request_h         conn_request;
-
-    /**
-     * Remote data from the client.
-     */
-    const uct_cm_remote_data_t *remote_data;
-} uct_cm_listener_conn_req_cb_handle_t;
-
-
-/**
- * @ingroup UCT_CLIENT_SERVER
- * @brief Client-Server private data pack callback arguments field mask.
- *
- * The enumeration allows specifying which fields in
- * @ref uct_sockaddr_priv_data_pack_cb_handle are present, for backward
- * compatibility support.
- */
-enum uct_sockaddr_priv_data_pack_cb_handle_field {
-    /** Enables @ref uct_sockaddr_priv_data_pack_cb_handle::dev_name */
-    UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME = UCS_BIT(0)
-};
-
-
-/**
- * @ingroup UCT_CLIENT_SERVER
- * @brief Arguments to the client-server private data pack callback.
- *
- * Used with the client-server API on a connection manager.
- */
-typedef struct uct_sockaddr_priv_data_pack_cb_handle {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_cm_ep_server_connect_cb_handle_field.
-     * Fields not specified by this mask will be ignored.
-     */
-    uint64_t                   field_mask;
-
-    /**
-     * Device name. This routine may fill the user's private data according to
-     * the given device name. The device name that is passed to this routine,
-     * corresponds to the dev_name field inside @ref uct_tl_resource_desc_t as
-     * returned from @ref uct_md_query_tl_resources.
-     */
-    const char                 *dev_name;
-} uct_sockaddr_priv_data_pack_cb_handle_t;
+    ucs_status_t               status;
+} uct_cm_ep_server_connect_args_t;
 
 
 /**
@@ -562,13 +574,13 @@ typedef void
  * @param [in]  listener         Transport listener.
  * @param [in]  arg              User argument for this callback as defined in
  *                               @ref uct_listener_params_t::user_data
- * @param [in]  conn_req_hanlde  Listener's arguments to handle the connection
+ * @param [in]  conn_req_args    Listener's arguments to handle the connection
  *                               request from the client.
  */
 typedef void
-(*uct_listener_conn_request_callback_t)(uct_listener_h listener, void *arg,
-                                        const uct_cm_listener_conn_req_cb_handle_t
-                                        *conn_req_handle);
+(*uct_cm_listener_conn_request_callback_t)(uct_listener_h listener, void *arg,
+                                           const uct_cm_listener_conn_request_args_t
+                                           *conn_req_args);
 
 
 /**
@@ -585,14 +597,14 @@ typedef void
  * Other than communication progress routines, it is allowed to call other UCT
  * communication routines from this callback.
  *
- * @param [in]  ep                 Transport endpoint.
- * @param [in]  arg                User argument for this callback as defined in
- *                                 @ref uct_ep_params_t::user_data
- * @param [in]  connect_cb_handle  Server's connect callback arguments.
+ * @param [in]  ep               Transport endpoint.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_ep_params_t::user_data
+ * @param [in]  connect_args     Server's connect callback arguments.
  */
-typedef void (*uct_ep_server_connect_cb_t)(uct_ep_h ep, void *arg,
-                                           uct_cm_ep_server_connect_cb_handle_t
-                                           *connect_cb_handle);
+typedef void (*uct_cm_ep_server_connect_callback_t)(uct_ep_h ep, void *arg,
+                                                    const uct_cm_ep_server_connect_args_t
+                                                    *connect_args);
 
 
 /**
@@ -607,14 +619,14 @@ typedef void (*uct_ep_server_connect_cb_t)(uct_ep_h ep, void *arg,
  * Other than communication progress routines, it is allowed to call other UCT
  * communication routines from this callback.
  *
- * @param [in]  ep                 Transport endpoint.
- * @param [in]  arg                User argument for this callback as defined in
- *                                 @ref uct_ep_params_t::user_data.
- * @param [in]  connect_cb_handle  Client's connect callback arguments
+ * @param [in]  ep               Transport endpoint.
+ * @param [in]  arg              User argument for this callback as defined in
+ *                               @ref uct_ep_params_t::user_data.
+ * @param [in]  connect_args     Client's connect callback arguments
  */
-typedef void (*uct_ep_client_connect_cb_t)(uct_ep_h ep, void *arg,
-                                           uct_cm_ep_client_connect_cb_handle_t
-                                           *connect_cb_handle);
+typedef void (*uct_cm_ep_client_connect_callback_t)(uct_ep_h ep, void *arg,
+                                                    uct_cm_ep_client_connect_args_t
+                                                    *connect_args);
 
 
 /**
@@ -654,7 +666,7 @@ typedef void (*uct_ep_disconnect_cb_t)(uct_ep_h ep, void *arg);
  * It is allowed to call other UCT communication routines from this callback.
  *
  * @param [in]  arg          User defined argument for this callback.
- * @param [in]  pack_handle  Handle for the the private data packing.
+ * @param [in]  pack_args    Handle for the the private data packing.
  * @param [out] priv_data    User's private data to be passed to the remote side.
  *
  * @return Negative value indicates an error according to @ref ucs_status_t.
@@ -662,9 +674,9 @@ typedef void (*uct_ep_disconnect_cb_t)(uct_ep_h ep, void *arg);
  *         bytes written to the @a priv_data buffer.
  */
 typedef ssize_t
-(*uct_sockaddr_priv_pack_callback_t)(void *arg,
-                                     uct_sockaddr_priv_data_pack_cb_handle_t
-                                     *pack_handle, void *priv_data);
+(*uct_cm_ep_priv_data_pack_callback_t)(void *arg,
+                                       uct_cm_ep_priv_data_pack_args_t *pack_args,
+                                       void *priv_data);
 
 
 /**

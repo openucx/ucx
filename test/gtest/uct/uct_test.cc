@@ -1042,8 +1042,8 @@ size_t uct_test::entity::priv_data_do_pack(void *priv_data)
 }
 
 ssize_t uct_test::entity::server_priv_data_cb(void *arg,
-                                              uct_sockaddr_priv_data_pack_cb_handle_t
-                                              *pack_handle, void *priv_data)
+                                              uct_cm_ep_priv_data_pack_args_t
+                                              *pack_args, void *priv_data)
 {
     const size_t priv_data_len = server_priv_data.length() + 1;
 
@@ -1054,8 +1054,8 @@ ssize_t uct_test::entity::server_priv_data_cb(void *arg,
 void
 uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                       const ucs::sock_addr_storage &remote_addr,
-                                      uct_sockaddr_priv_pack_callback_t pack_cb,
-                                      uct_ep_client_connect_cb_t connect_cb,
+                                      uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                                      uct_cm_ep_client_connect_callback_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
 {
@@ -1170,8 +1170,8 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
                                const ucs::sock_addr_storage &remote_addr,
-                               uct_sockaddr_priv_pack_callback_t pack_cb,
-                               uct_ep_client_connect_cb_t connect_cb,
+                               uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                               uct_cm_ep_client_connect_callback_t connect_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
 {
@@ -1196,7 +1196,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 }
 
 void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                              uct_ep_server_connect_cb_t connect_cb,
+                              uct_cm_ep_server_connect_callback_t connect_cb,
                               uct_ep_disconnect_cb_t disconnect_cb,
                               void *user_data)
 {

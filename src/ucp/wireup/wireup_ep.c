@@ -492,8 +492,8 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 }
 
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
-                                                 uct_sockaddr_priv_data_pack_cb_handle_t
-                                                 *pack_handle, void *priv_data)
+                                                 uct_cm_ep_priv_data_pack_args_t
+                                                 *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_wireup_ep_t *wireup_ep          = arg;
@@ -509,14 +509,9 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     char aux_tls_str[64];
     const char *dev_name;
 
-    if (!(pack_handle->field_mask & UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME)) {
-        ucs_error("Incorrect fields on private data pack callback (0x%lx)",
-                  pack_handle->field_mask);
-        status = UCS_ERR_IO_ERROR;
-        goto err;
-    }
+    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME);
 
-    dev_name = pack_handle->dev_name;
+    dev_name = pack_args->dev_name;
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
                               UCP_ADDRESS_PACK_FLAG_ALL, NULL,

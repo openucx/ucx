@@ -51,7 +51,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_ep_t *ep)
 {
     uct_sockcm_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                uct_sockcm_iface_t);
-    uct_sockaddr_priv_data_pack_cb_handle_t pack_handle;
+    uct_cm_ep_priv_data_pack_args_t pack_args;
     uct_sockcm_conn_param_t conn_param;
     char dev_name[UCT_DEVICE_NAME_MAX];
     ucs_status_t status;
@@ -65,10 +65,10 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_ep_t *ep)
         goto out;
     }
 
-    pack_handle.field_mask = UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME;
-    pack_handle.dev_name   = dev_name;
+    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME;
+    ucs_strncpy_safe(pack_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
 
-    conn_param.length = ep->pack_cb(ep->pack_cb_arg, &pack_handle,
+    conn_param.length = ep->pack_cb(ep->pack_cb_arg, &pack_args,
                                     (void*)conn_param.private_data);
     if (conn_param.length < 0) {
         ucs_error("sockcm client (iface=%p, ep = %p) failed to fill "

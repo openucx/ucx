@@ -10,17 +10,17 @@
  * An TCP listener for incoming connections requests on the server side.
  */
 typedef struct uct_tcp_listener {
-    uct_listener_t                       super;
+    uct_listener_t                          super;
 
-    int                                  listen_fd;
+    int                                     listen_fd;
 
-    uct_tcp_sockcm_t                     *sockcm;
+    uct_tcp_sockcm_t                        *sockcm;
 
     /** Callback to invoke upon receving a connection request from a client */
-    uct_listener_conn_request_callback_t conn_request_cb;
+    uct_cm_listener_conn_request_callback_t conn_request_cb;
 
     /** User's data to be passed as argument to the conn_request_cb */
-    void                                 *user_data;
+    void                                    *user_data;
 } uct_tcp_listener_t;
 
 

@@ -97,8 +97,8 @@ static void ucp_cm_priv_data_pack(ucp_wireup_sockaddr_data_t *sa_data,
 }
 
 static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
-                                          uct_sockaddr_priv_data_pack_cb_handle_t
-                                          *pack_handle, void *priv_data)
+                                          uct_cm_ep_priv_data_pack_args_t
+                                          *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_ep_h ep                         = arg;
@@ -120,14 +120,9 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    if (!(pack_handle->field_mask & UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME)) {
-        ucs_error("Incorrect fields on client private data pack callback (0x%lx)",
-                  pack_handle->field_mask);
-        status = UCS_ERR_IO_ERROR;
-        goto out;
-    }
+    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME);
 
-    dev_name = pack_handle->dev_name;
+    dev_name = pack_args->dev_name;
 
     status = ucp_cm_ep_client_initial_config_get(ep, dev_name, &key);
     if (status != UCS_OK) {
@@ -196,7 +191,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucs_assert(cm_wireup_ep == ucp_ep_get_cm_wireup_ep(ep));
 
     /* Don't pack the device address to reduce address size, it will be
-     * delivered by uct_listener_conn_request_callback_t in
+     * delivered by uct_cm_listener_conn_request_callback_t in
      * uct_cm_remote_data_t */
     status = ucp_address_pack(worker, ep, tl_bitmap,
                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
@@ -322,8 +317,8 @@ ucp_cm_remote_data_check(const uct_cm_remote_data_t *remote_data)
  * Async callback on a client side which notifies that server is connected.
  */
 static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
-                                     uct_cm_ep_client_connect_cb_handle_t
-                                     *connect_cb_handle)
+                                     uct_cm_ep_client_connect_args_t
+                                     *connect_args)
 {
     ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
     ucp_worker_h worker        = ucp_ep->worker;
@@ -332,17 +327,12 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     const uct_cm_remote_data_t *remote_data;
     ucs_status_t status;
 
-    if (!(ucs_test_all_flags(connect_cb_handle->field_mask,
-                             (UCT_CM_EP_CLIENT_CONNECT_CB_HANDLE_REMOTE_DATA |
-                              UCT_CM_EP_CLIENT_CONNECT_CB_HANDLE_STATUS)))) {
-        ucs_error("Incorrect fields on client connect callback (0x%lx)",
-                  connect_cb_handle->field_mask);
-        status = UCS_ERR_IO_ERROR;
-        goto err_out;
-    }
+    ucs_assert(ucs_test_all_flags(connect_args->field_mask,
+                                  (UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
+                                   UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
 
-    remote_data = connect_cb_handle->remote_data;
-    status      = connect_cb_handle->status;
+    remote_data = connect_args->remote_data;
+    status      = connect_args->status;
 
     if (status != UCS_OK) {
         goto err_out;
@@ -584,8 +574,8 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
 }
 
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
-                                   const uct_cm_listener_conn_req_cb_handle_t
-                                   *conn_req_handle)
+                                   const uct_cm_listener_conn_request_args_t
+                                   *conn_req_args)
 {
     ucp_listener_h ucp_listener = arg;
     uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
@@ -594,23 +584,13 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     const uct_cm_remote_data_t *remote_data;
     ucs_status_t status;
 
-    if (!(conn_req_handle->field_mask & UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_CONN_REQUEST)) {
-        ucs_error("No connect request handle provided to the server (0x%lx)",
-                  conn_req_handle->field_mask);
-        return;
-    }
+    ucs_assert(ucs_test_all_flags(conn_req_args->field_mask,
+                                  (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME)));
 
-    conn_request = conn_req_handle->conn_request;
-
-    if (!(ucs_test_all_flags(conn_req_handle->field_mask,
-                             (UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_REMOTE_DATA  |
-                              UCT_CM_LISTENER_CONN_REQ_CB_HANDLE_LOCAL_DEV_NAME)))) {
-        ucs_error("Incorrect fields on server connection request callback (0x%lx)",
-                  conn_req_handle->field_mask);
-        goto err_reject;
-    }
-
-    remote_data  = conn_req_handle->remote_data;
+    conn_request = conn_req_args->conn_request;
+    remote_data  = conn_req_args->remote_data;
 
     status = ucp_cm_remote_data_check(remote_data);
     if (status != UCS_OK) {
@@ -637,7 +617,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_conn_request->listener     = ucp_listener;
     ucp_conn_request->uct.listener = listener;
     ucp_conn_request->uct_req      = conn_request;
-    ucs_strncpy_safe(ucp_conn_request->dev_name, conn_req_handle->local_dev_name,
+    ucs_strncpy_safe(ucp_conn_request->dev_name, conn_req_args->dev_name,
                      UCT_DEVICE_NAME_MAX);
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
@@ -697,8 +677,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 }
 
 static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
-                                          uct_sockaddr_priv_data_pack_cb_handle_t
-                                          *pack_handle, void *priv_data)
+                                          uct_cm_ep_priv_data_pack_args_t
+                                          *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_ep_h ep                         = arg;
@@ -715,9 +695,9 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
 
     tl_bitmap = ucp_ep_get_tl_bitmap(ep);
     /* make sure that all lanes are created on correct device */
-    ucs_assert(pack_handle->field_mask & UCT_SOCKADDR_PRIV_DATA_PACK_HANDLE_DEVICE_NAME);
+    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME);
     ucs_assert(!(tl_bitmap & ~ucp_context_dev_tl_bitmap(worker->context,
-                                                        pack_handle->dev_name)));
+                                                        pack_args->dev_name)));
 
     status = ucp_address_pack(worker, ep, tl_bitmap,
                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
@@ -777,21 +757,17 @@ static unsigned ucp_cm_server_connect_progress(void *arg)
  * Async callback on a server side which notifies that client is connected.
  */
 static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
-                                     uct_cm_ep_server_connect_cb_handle_t
-                                     *connect_cb_handle)
+                                     const uct_cm_ep_server_connect_args_t
+                                     *connect_args)
 {
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_lane_index_t cm_lane;
     ucs_status_t status;
 
-    if (!(connect_cb_handle->field_mask & UCT_CM_EP_SERVER_CONNECT_CB_HANDLE_STATUS)) {
-        ucs_error("Incorrect fields on server connect callback (0x%lx)",
-                  connect_cb_handle->field_mask);
-        status = UCS_ERR_IO_ERROR;
-    } else {
-        status = connect_cb_handle->status;
-    }
+    ucs_assert(connect_args->field_mask & UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS);
+
+    status = connect_args->status;
 
     if (status == UCS_OK) {
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
