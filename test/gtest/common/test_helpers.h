@@ -318,6 +318,8 @@ public:
 
     void set_sock_addr(const struct sockaddr &addr, const size_t size);
 
+    void reset_to_any();
+
     bool operator==(const struct sockaddr_storage &sockaddr) const;
 
     void set_port(uint16_t port);

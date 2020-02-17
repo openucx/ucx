@@ -529,6 +529,29 @@ void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
     m_is_valid = true;
 }
 
+void sock_addr_storage::reset_to_any() {
+    ASSERT_TRUE(m_is_valid);
+
+    if (get_sock_addr_ptr()->sa_family == AF_INET) {
+        struct sockaddr_in sin = {0};
+
+        sin.sin_family      = AF_INET;
+        sin.sin_addr.s_addr = INADDR_ANY;
+        sin.sin_port        = get_port();
+
+        set_sock_addr(*(struct sockaddr*)&sin, sizeof(sin));
+    } else {
+        ASSERT_EQ(get_sock_addr_ptr()->sa_family, AF_INET6);
+        struct sockaddr_in6 sin = {0};
+
+        sin.sin6_family = AF_INET6;
+        sin.sin6_addr   = in6addr_any;
+        sin.sin6_port   = get_port();
+
+        set_sock_addr(*(struct sockaddr*)&sin, sizeof(sin));
+    }
+}
+
 bool
 sock_addr_storage::operator==(const struct sockaddr_storage &sockaddr) const {
     ucs_status_t status;
