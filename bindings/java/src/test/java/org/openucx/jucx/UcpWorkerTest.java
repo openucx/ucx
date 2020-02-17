@@ -10,11 +10,12 @@ import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.*;
 
-public class UcpWorkerTest {
+public class UcpWorkerTest extends UcxTest {
     private static int numWorkers = Runtime.getRuntime().availableProcessors();
 
     @Test
@@ -160,10 +161,43 @@ public class UcpWorkerTest {
         }
 
         assertTrue(request.isCompleted());
-        ep.close();
-        worker1.close();
-        worker2.close();
-        context1.close();
-        context2.close();
+        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
+        closeResources();
+    }
+
+    @Test
+    public void testTagProbe() {
+        UcpParams params = new UcpParams().requestTagFeature();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+
+        UcpWorker worker1 = context1.newWorker(new UcpWorkerParams());
+        UcpWorker worker2 = context2.newWorker(new UcpWorkerParams());
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+
+        UcpTagMessage message = worker1.tagProbeNonBlocking(0, 0, false);
+
+        assertNull(message);
+
+        UcpEndpoint endpoint = worker2.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
+
+        endpoint.sendTaggedNonBlocking(
+            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
+
+        do {
+            worker1.progress();
+            worker2.progress();
+            message = worker1.tagProbeNonBlocking(0, 0, true);
+        } while (message == null);
+
+        assertEquals(UcpMemoryTest.MEM_SIZE, message.getRecvLength());
+        assertEquals(0, message.getSenderTag());
+
+        UcpRequest recv = worker1.recvTaggedMessageNonBlocking(recvBuffer, message, null);
+
+        worker1.progressRequest(recv);
+
+        Collections.addAll(resources, context1, context2, worker1, worker2, endpoint);
     }
 }
