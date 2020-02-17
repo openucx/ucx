@@ -135,8 +135,9 @@ public class UcpEndpointTest extends UcxTest {
             });
 
         worker1.progressRequest(request);
+        worker2.progressRequest(worker2.flushNonBlocking(null));
 
-        assertEquals(dst.asCharBuffer().toString().trim(), UcpMemoryTest.RANDOM_TEXT);
+        assertEquals(UcpMemoryTest.RANDOM_TEXT, dst.asCharBuffer().toString().trim());
 
         Collections.addAll(resources, context2, context1, worker2, worker1, ep);
         closeResources();
