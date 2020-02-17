@@ -379,8 +379,10 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   void *arg)
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_mm_ep_t *ep        = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                              uct_mm_ep_t, arb_group);
+    unsigned *count        = (unsigned*)arg;
     ucs_status_t status;
-    uct_mm_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_mm_ep_t, arb_group);
 
     /* update the local tail with its actual value from the remote peer
      * making sure that the pending sends would use the real tail value */
@@ -396,9 +398,11 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
                    ucs_status_string(status));
 
     if (status == UCS_OK) {
+        (*count)++;
         /* sent successfully. remove from the arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
+        (*count)++;
         /* sent but not completed, keep in the arbiter */
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
