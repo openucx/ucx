@@ -136,6 +136,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     size_t addr_length;
     int qp_attr_mask;
     char dev_name[UCT_DEVICE_NAME_MAX];
+    uct_ib_roce_version_info_t roce_info;
     unsigned address_pack_flags;
 
     /* get the qp attributes in order to modify the qp state.
@@ -147,7 +148,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         ucs_error("rdma_init_qp_attr (id=%p, qp_state=%d) failed: %m",
                   cm_id, qp_attr.qp_state);
         return UCS_ERR_IO_ERROR;
-     }
+    }
 
     if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_attr)) {
         uct_rdmacm_cm_id_to_dev_name(cm_id, dev_name);
@@ -159,6 +160,11 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
         address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_ETH;
+
+        /* pack the remote RoCE version as ANY assuming that rdmacm guarantees
+         * that the remote peer is reachable to the local one */
+        roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
+        roce_info.addr_family = 0;
     } else if (qp_attr.ah_attr.is_global) {
         /* IB global address */
         address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
@@ -178,7 +184,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     }
 
     uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
-                        address_pack_flags, dev_addr);
+                        address_pack_flags, &roce_info, dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;

@@ -378,13 +378,15 @@ err_out:
  */
 static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
 {
-    ucp_ep_h ucp_ep = req->send.ep;
+    ucp_ep_h ucp_ep            = req->send.ep;
+    /* the EP can be closed/destroyed from err callback */
+    ucs_async_context_t *async = &ucp_ep->worker->async;
 
-    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+    UCS_ASYNC_BLOCK(async);
     ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
     ucp_request_put(req);
-    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+    UCS_ASYNC_UNBLOCK(async);
 }
 
 static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
@@ -409,6 +411,8 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         /* the ep is closed by API but close req is not valid yet (checked
          * above), it will be set later from scheduled
          * @ref ucp_ep_close_flushed_callback */
+        ucs_debug("ep %p: ep closed but request is not set, waiting for the flush callback",
+                  ucp_ep);
         return 1;
     }
 
@@ -733,21 +737,33 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_lane_index_t cm_lane;
 
-    if (status != UCS_OK) {
+    if (status == UCS_OK) {
+        uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                          ucp_cm_server_connect_progress,
+                                          ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &prog_id);
+        ucp_worker_signal_internal(ucp_ep->worker);
+    } else if (status == UCS_ERR_CONNECTION_RESET) {
+        /* remote side initiated disconnect before local side has completed
+         * connection establishment, so:
+         * 1) establish connection to complete any pending requests from wireup
+         *    lane
+         * 2) handle disconnect same way as close protocol
+         * 3) TODO: remove (1) when the EP can be moved to err state to block
+         *          new send operations but still able to flush transport lanes */
+        uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                          ucp_cm_server_connect_progress,
+                                          ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &prog_id);
+        ucp_cm_disconnect_cb(ep, ucp_ep);
+    } else {
         /* if reject is arrived on server side, then UCT does something wrong */
         ucs_assert(status != UCS_ERR_REJECTED);
         cm_lane = ucp_ep_get_cm_lane(ucp_ep);
         ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                                  ucp_ep->uct_eps[cm_lane], cm_lane, status);
-        return;
     }
-
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_cm_server_connect_progress,
-                                      ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &prog_id);
-    ucp_worker_signal_internal(ucp_ep->worker);
 }
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,

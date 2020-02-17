@@ -255,7 +255,7 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *grh_end, int is_grh_present)
         return 1;
     }
 
-    local_gid = (char*)iface->super.gid.raw + (16 - iface->config.gid_len);
+    local_gid = (char*)iface->super.gid_info.gid.raw + (16 - iface->config.gid_len);
     dest_gid  = (char*)grh_end - iface->config.gid_len;
 
     if (memcmp(local_gid, dest_gid, iface->config.gid_len)) {

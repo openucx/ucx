@@ -740,3 +740,15 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
 
     return status;
 }
+
+const char *ucs_sockaddr_address_family_str(sa_family_t af)
+{
+    switch (af) {
+    case AF_INET:
+        return "IPv4";
+    case AF_INET6:
+        return "IPv6";
+    default:
+        return "not IPv4 or IPv6";
+    }
+}

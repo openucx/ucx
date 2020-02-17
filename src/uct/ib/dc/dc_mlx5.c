@@ -494,7 +494,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     attr.ah_attr.is_global         = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.grh.hop_limit     = iface->super.super.super.config.hop_limit;
     attr.ah_attr.grh.traffic_class = iface->super.super.super.config.traffic_class;
-    attr.ah_attr.grh.sgid_index    = iface->super.super.super.config.gid_index;
+    attr.ah_attr.grh.sgid_index    = iface->super.super.super.gid_info.gid_index;
     attr.ah_attr.port_num          = iface->super.super.super.config.port_num;
 
     ret = ibv_modify_qp(iface->rx.dct.verbs.qp, &attr, IBV_QP_STATE |
@@ -660,7 +660,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     init_attr.min_rnr_timer    = iface->super.super.config.min_rnr_timer;
     init_attr.tclass           = iface->super.super.super.config.traffic_class;
     init_attr.hop_limit        = iface->super.super.super.config.hop_limit;
-    init_attr.gid_index        = iface->super.super.super.config.gid_index;
+    init_attr.gid_index        = iface->super.super.super.gid_info.gid_index;
     init_attr.inline_size      = iface->super.super.config.rx_inline;
     init_attr.pkey_index       = iface->super.super.super.pkey_index;
     init_attr.create_flags    |= uct_dc_mlx5_iface_ooo_flag(iface,
