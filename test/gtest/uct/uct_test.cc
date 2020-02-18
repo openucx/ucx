@@ -741,11 +741,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
                 reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ucs::get_port();
+            addr->sin_port = ntohs(ucs::get_port());
         } else {
             struct sockaddr_in6 *addr =
                 reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ucs::get_port();
+            addr->sin6_port = ntohs(ucs::get_port());
         }
     }
 
@@ -1253,11 +1253,11 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
                             reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ucs::get_port();
+            addr->sin_port = ntohs(ucs::get_port());
         } else {
             struct sockaddr_in6 *addr =
                             reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ucs::get_port();
+            addr->sin6_port = ntohs(ucs::get_port());
         }
     }
 }

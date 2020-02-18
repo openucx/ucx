@@ -497,7 +497,7 @@ uint16_t get_port() {
     EXPECT_EQ(ret, 0);
     EXPECT_LT(1023, ntohs(ret_addr.sin_port)) ;
 
-    port = ret_addr.sin_port;
+    port = ntohs(ret_addr.sin_port);
     close(sock_fd);
     return port;
 }
@@ -529,27 +529,58 @@ void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
     m_is_valid = true;
 }
 
+void sock_addr_storage::reset_to_any() {
+    ASSERT_TRUE(m_is_valid);
+
+    if (get_sock_addr_ptr()->sa_family == AF_INET) {
+        struct sockaddr_in sin = {0};
+
+        sin.sin_family      = AF_INET;
+        sin.sin_addr.s_addr = INADDR_ANY;
+        sin.sin_port        = get_port();
+
+        set_sock_addr(*(struct sockaddr*)&sin, sizeof(sin));
+    } else {
+        ASSERT_EQ(get_sock_addr_ptr()->sa_family, AF_INET6);
+        struct sockaddr_in6 sin = {0};
+
+        sin.sin6_family = AF_INET6;
+        sin.sin6_addr   = in6addr_any;
+        sin.sin6_port   = get_port();
+
+        set_sock_addr(*(struct sockaddr*)&sin, sizeof(sin));
+    }
+}
+
+bool
+sock_addr_storage::operator==(const struct sockaddr_storage &sockaddr) const {
+    ucs_status_t status;
+    int result = ucs_sockaddr_cmp(get_sock_addr_ptr(),
+                                  (const struct sockaddr*)&sockaddr, &status);
+    ASSERT_UCS_OK(status);
+    return result == 0;
+}
+
 void sock_addr_storage::set_port(uint16_t port) {
     if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
-        addr_in->sin_port = port;
+        addr_in->sin_port = htons(port);
     } else {
         ASSERT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
-
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
-        addr_in->sin6_port = port;
+        addr_in->sin6_port = htons(port);
     }
 }
 
 uint16_t sock_addr_storage::get_port() const {
     if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
-        return addr_in->sin_port;
+        return ntohs(addr_in->sin_port);
     } else {
         EXPECT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
-        return addr_in->sin6_port;
+        return ntohs(addr_in->sin6_port);
     }
 }
 
@@ -563,6 +594,11 @@ ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
     addr.addr    = get_sock_addr_ptr();
     addr.addrlen = m_size;
     return addr;
+}
+
+std::string sock_addr_storage::to_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
 }
 
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {

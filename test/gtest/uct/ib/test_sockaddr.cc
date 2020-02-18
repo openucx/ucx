@@ -743,7 +743,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
     status = ucs_sockaddr_get_port((struct sockaddr*)&attr.sockaddr, &port);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(m_listen_addr.get_port(), htons(port));
+    EXPECT_EQ(m_listen_addr.get_port(), port);
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
