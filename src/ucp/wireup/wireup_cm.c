@@ -120,7 +120,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME);
+    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
 
     dev_name = pack_args->dev_name;
 
@@ -695,7 +695,7 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
 
     tl_bitmap = ucp_ep_get_tl_bitmap(ep);
     /* make sure that all lanes are created on correct device */
-    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME);
+    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
     ucs_assert(!(tl_bitmap & ~ucp_context_dev_tl_bitmap(worker->context,
                                                         pack_args->dev_name)));
 

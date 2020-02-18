@@ -65,7 +65,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_ep_t *ep)
         goto out;
     }
 
-    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME;
+    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
     ucs_strncpy_safe(pack_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
 
     conn_param.length = ep->pack_cb(ep->pack_cb_arg, &pack_args,

@@ -197,7 +197,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
 
     /* Pack data to send inside rdmacm's conn_param to the remote peer */
     hdr                  = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
-    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME;
+    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
     ucs_strncpy_safe(pack_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
     priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, &pack_args,
                                             hdr + 1);

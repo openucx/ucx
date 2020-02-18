@@ -161,7 +161,7 @@ enum uct_cm_ep_priv_data_pack_args_field {
     /** Enables @ref uct_cm_ep_priv_data_pack_args::dev_name
      *  Indicates that dev_name field in uct_cm_ep_priv_data_pack_args_t is valid.
      */
-    UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME = UCS_BIT(0)
+    UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME = UCS_BIT(0)
 };
 
 

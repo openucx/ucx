@@ -324,7 +324,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             uct_rdmacm_cm_id_to_dev_name(ep->cm_id_ctx->cm_id, dev_name);
 
             hdr                  = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
-            pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_CB_ARGS_FIELD_DEVICE_NAME;
+            pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
             ucs_strncpy_safe(pack_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
             /* TODO check the ep's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
