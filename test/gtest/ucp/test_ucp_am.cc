@@ -111,6 +111,8 @@ public:
     }
 
     virtual void init() {
+        modify_config("MAX_EAGER_LANES", "2");
+
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
@@ -120,7 +122,7 @@ protected:
     void do_set_am_handler_realloc_test();
     void do_send_process_data_test(int test_release, uint16_t am_id,
                                    int send_reply);
-    void do_send_process_data_iov_test();
+    void do_send_process_data_iov_test(size_t size);
     void set_handlers(uint16_t am_id);
     void set_reply_handlers();
 };
@@ -202,11 +204,9 @@ void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
     }
 }
 
-void test_ucp_am::do_send_process_data_iov_test()
+void test_ucp_am::do_send_process_data_iov_test(size_t size)
 {
     ucs_status_ptr_t sstatus;
-    size_t iovcnt = 2;
-    size_t size   = 8192;
     size_t index;
     size_t i;
 
@@ -214,26 +214,25 @@ void test_ucp_am::do_send_process_data_iov_test()
     sent_ams = 0;
     release  = 0;
 
-    std::vector<char> b1(size);
-    std::vector<char> b2(size);
-    ucp_dt_iov_t iovec[iovcnt];
+    const size_t iovcnt = 2;
+    std::vector<char> sendbuf(size * iovcnt, 0);
+
+    ucs::fill_random(sendbuf);
 
     set_handlers(0);
 
     for (i = 1; i < size; i *= 2) {
-        for (index = 0; index < i; index++) {
-            b1[index] = i * 2;
-            b2[index] = i * 2;
+        for (size_t iov_it = 0; iov_it < iovcnt; iov_it++) {
+            for (index = 0; index < i; index++) {
+                sendbuf[(iov_it * i) + index] = i * 2;
+            }
         }
 
-        iovec[0].buffer = b1.data();
-        iovec[1].buffer = b2.data();
-
-        iovec[0].length = i;
-        iovec[1].length = i;
+        ucp::data_type_desc_t send_dt_desc(DATATYPE_IOV, sendbuf.data(),
+                                           i * iovcnt, iovcnt);
 
         sstatus = ucp_am_send_nb(receiver().ep(), 0,
-                                 iovec, 2, ucp_dt_make_iov(),
+                                 send_dt_desc.buf(), iovcnt, DATATYPE_IOV,
                                  (ucp_send_callback_t) ucs_empty_function, 0);
         wait(sstatus);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
@@ -274,7 +273,18 @@ UCS_TEST_P(test_ucp_am, send_process_am_release)
 
 UCS_TEST_P(test_ucp_am, send_process_iov_am) 
 {
-    do_send_process_data_iov_test();
+    ucs::detail::message_stream ms("INFO");
+
+    for (unsigned i = 1; i <= 7; ++i) {
+        size_t max = (long)pow(10.0, i);
+        long count = ucs_max((long)(5000.0 / sqrt(max) /
+                                    ucs::test_time_multiplier()), 3);
+        ms << count << "x10^" << i << " " << std::flush;
+        for (long j = 0; j < count; ++j) {
+            size_t size = ucs::rand() % max + 1;
+            do_send_process_data_iov_test(size);
+        }
+    }
 }
 
 UCS_TEST_P(test_ucp_am, set_am_handler_realloc)

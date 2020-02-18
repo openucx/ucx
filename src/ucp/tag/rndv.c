@@ -58,7 +58,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     ucp_worker_h worker              = sreq->send.ep->worker;
     ssize_t packed_rkey_size;
 
-    rndv_rts_hdr->super.tag        = sreq->send.tag.tag;
+    rndv_rts_hdr->super.tag        = sreq->send.msg_proto.tag.tag;
     rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
     rndv_rts_hdr->sreq.ep_ptr      = ucp_request_get_dest_ep_ptr(sreq);
     rndv_rts_hdr->size             = sreq->send.length;
@@ -890,7 +890,7 @@ static size_t ucp_rndv_pack_data(void *dest, void *arg)
     size_t length, offset;
 
     offset        = sreq->send.state.dt.offset;
-    hdr->rreq_ptr = sreq->send.tag.rreq_ptr;
+    hdr->rreq_ptr = sreq->send.msg_proto.tag.rreq_ptr;
     hdr->offset   = offset;
     length        = ucs_min(sreq->send.length - offset,
                             ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr));
@@ -1014,7 +1014,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_single(uct_pending_req_t *self)
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_rndv_data_hdr_t hdr;
 
-    hdr.rreq_ptr = sreq->send.tag.rreq_ptr;
+    hdr.rreq_ptr = sreq->send.msg_proto.tag.rreq_ptr;
     hdr.offset   = 0;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_RNDV_DATA, &hdr, sizeof(hdr),
                                   ucp_rndv_am_zcopy_send_req_complete);
@@ -1025,7 +1025,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_rndv_data_hdr_t hdr;
 
-    hdr.rreq_ptr = sreq->send.tag.rreq_ptr;
+    hdr.rreq_ptr = sreq->send.msg_proto.tag.rreq_ptr;
     hdr.offset   = sreq->send.state.dt.offset;
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_RNDV_DATA,
@@ -1373,7 +1373,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_trace_req(sreq, "using rdnv_data protocol");
 
     /* switch to AM */
-    sreq->send.tag.rreq_ptr = rndv_rtr_hdr->rreq_ptr;
+    sreq->send.msg_proto.tag.rreq_ptr = rndv_rtr_hdr->rreq_ptr;
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         (sreq->send.length >=
@@ -1389,13 +1389,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             ucp_ep_config(ep)->am.max_zcopy) {
             sreq->send.uct.func = ucp_rndv_progress_am_zcopy_single;
         } else {
-            sreq->send.uct.func        = ucp_rndv_progress_am_zcopy_multi;
-            sreq->send.tag.am_bw_index = 1;
+            sreq->send.uct.func              = ucp_rndv_progress_am_zcopy_multi;
+            sreq->send.msg_proto.am_bw_index = 1;
         }
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-        sreq->send.uct.func        = ucp_rndv_progress_am_bcopy;
-        sreq->send.tag.am_bw_index = 1;
+        sreq->send.uct.func              = ucp_rndv_progress_am_bcopy;
+        sreq->send.msg_proto.am_bw_index = 1;
     }
 
 out_send:

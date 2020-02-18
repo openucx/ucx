@@ -1065,8 +1065,9 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
 
-    /* Check if we need active messages, for wireup */
-    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
+    /* Check if we need active message BW lanes */
+    if (!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG |
+                                             UCP_FEATURE_AM)) ||
         (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) ||
         (context->config.ext.max_eager_lanes < 2)) {
         return UCS_OK;

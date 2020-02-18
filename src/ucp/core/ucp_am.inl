@@ -14,6 +14,6 @@ ucp_am_get_short_max(const ucp_request_t *req,
             (req->flags & UCP_REQUEST_FLAG_SYNC) || 
             (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) || 
            ((req->flags & UCP_REQUEST_FLAG_SEND_AM) && 
-            (req->send.am.flags & UCP_AM_SEND_REPLY)) ? 
+            (req->send.msg_proto.am.flags & UCP_AM_SEND_REPLY)) ? 
            -1 : msg_config->max_short; 
 } 
