@@ -18,7 +18,6 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-#include <assert.h>
 #include <errno.h>
 
 
@@ -423,13 +422,14 @@ out:
     return ret;
 }
 
-KHASH_MAP_INIT_INT64(request_ids, int)
+KHASH_MAP_INIT_INT64(request_ids, size_t)
 
 static void show_profile_data_log(profile_data_t *data, options_t *opts,
                                   int thread_idx)
 {
-    profile_thread_data_t *thread   = &data->threads[thread_idx];
-    size_t num_recods               = thread->header->num_records;
+    profile_thread_data_t *thread = &data->threads[thread_idx];
+    size_t num_records            = thread->header->num_records;
+    size_t reqid_ctr              = 1;
     const ucs_profile_record_t **stack[UCS_PROFILE_STACK_MAX * 2];
     const ucs_profile_record_t **scope_ends;
     const ucs_profile_location_t *loc;
@@ -441,7 +441,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
     khash_t(request_ids) reqids;
     int hash_extra_status;
     khiter_t hash_it;
-    int reqid, reqid_ctr = 1;
+    size_t reqid;
 
 #define RECORD_FMT       "%s%10.3f%s%*s"
 #define RECORD_ARG(_ts)  TS_COLOR, time_to_units(data, opts, (_ts)), CLEAR_COLOR, \
@@ -455,7 +455,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                                 basename(loc->file), loc->line, loc->function, \
                                 CLEAR_COLOR)
 
-    scope_ends = calloc(1, sizeof(*scope_ends) * num_recods);
+    scope_ends = calloc(1, sizeof(*scope_ends) * num_records);
     if (scope_ends == NULL) {
         print_error("failed to allocate memory for scope ends");
         return;
@@ -473,7 +473,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
     /* Find the first record with minimal nesting level, which is the base of call stack */
     nesting         = 0;
     min_nesting     = 0;
-    for (rec = thread->records; rec < thread->records + num_recods; ++rec) {
+    for (rec = thread->records; rec < thread->records + num_records; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
@@ -495,7 +495,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
         }
     }
 
-    if (num_recods > 0) {
+    if (num_records > 0) {
         prev_time = thread->records[0].timestamp;
     } else {
         prev_time = 0;
@@ -505,7 +505,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
 
     /* Display records */
     nesting = -min_nesting;
-    for (rec = thread->records; rec < thread->records + num_recods; ++rec) {
+    for (rec = thread->records; rec < thread->records + num_records; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
@@ -553,13 +553,13 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                     reqid = reqid_ctr++;
                     kh_value(&reqids, hash_it) = reqid;
                 }
-                action = "NEW ";
+                action = "NEW";
             } else {
-                assert(reqid_ctr > 1);
                 hash_it = kh_get(request_ids, &reqids, rec->param64);
                 if (hash_it == kh_end(&reqids)) {
                     reqid = 0; /* could not find request */
                 } else {
+                    assert(reqid_ctr > 1);
                     reqid = kh_value(&reqids, hash_it);
                     if (loc->type == UCS_PROFILE_TYPE_REQUEST_FREE) {
                         kh_del(request_ids, &reqids, hash_it);
@@ -571,7 +571,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                     action = "";
                 }
             }
-            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s%s %s{%d}%s",
+            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s%s %s{%zu}%s",
                      RECORD_ARG(rec->timestamp - prev_time),
                      REQ_COLOR, action, loc->name, CLEAR_COLOR,
                      REQ_COLOR, reqid, CLEAR_COLOR);
