@@ -631,6 +631,19 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control)
 
+class test_dc_iface_attrs : public test_rc_iface_attrs {
+public:
+    attr_map_t get_num_iov() {
+        return get_num_iov_mlx5_common(UCT_IB_MLX5_AV_FULL_SIZE);
+    }
+};
+
+UCS_TEST_P(test_dc_iface_attrs, iface_attrs)
+{
+    basic_iov_test();
+}
+
+UCT_DC_INSTANTIATE_TEST_CASE(test_dc_iface_attrs)
 
 class test_dc_fc_deadlock : public test_dc_flow_control {
 public:

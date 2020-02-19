@@ -183,7 +183,10 @@ struct uct_ud_ctl_hdr {
 
 extern ucs_config_field_t uct_ud_iface_config_table[];
 
-ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr);
+ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
+                                uct_iface_attr_t *iface_attr,
+                                size_t am_max_iov, size_t am_max_hdr);
+
 void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);

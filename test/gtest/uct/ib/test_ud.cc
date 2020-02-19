@@ -13,6 +13,7 @@ extern "C" {
 #include <ucs/datastruct/queue.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/ud/base/ud_ep.h>
+#include <uct/ib/ud/verbs/ud_verbs.h>
 }
 
 
@@ -938,3 +939,42 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 #endif
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
+
+#if HAVE_MLX5_HW
+extern "C" {
+#include <uct/ib/mlx5/ib_mlx5.h>
+}
+#endif
+
+class test_ud_iface_attrs : public test_uct_iface_attrs {
+public:
+    attr_map_t get_num_iov() {
+        attr_map_t iov_map;
+#if HAVE_MLX5_HW
+        if (has_transport("ud_mlx5")) {
+            // For am zcopy just small constant number of iovs is allowed
+            // (to preserve some inline space for AM zcopy header)
+            iov_map["am"] = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
+
+        } else
+#endif
+        {
+            EXPECT_TRUE(has_transport("ud_verbs"));
+            uct_ud_verbs_iface_t *iface = ucs_derived_of(m_e->iface(),
+                                                         uct_ud_verbs_iface_t);
+            size_t max_sge = 0;
+            EXPECT_UCS_OK(uct_ud_verbs_qp_max_send_sge(iface, &max_sge));
+            iov_map["am"]  = max_sge;
+        }
+
+        return iov_map;
+    }
+};
+
+UCS_TEST_P(test_ud_iface_attrs, iface_attrs)
+{
+    basic_iov_test();
+}
+
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)
+

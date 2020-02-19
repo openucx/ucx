@@ -158,4 +158,19 @@ public:
 };
 #endif
 
+
+class test_rc_iface_attrs : public test_uct_iface_attrs {
+public:
+    test_rc_iface_attrs() {
+        ucs_status_t status = uct_config_modify(m_iface_config,
+                                                "RC_TM_ENABLE", "y");
+        EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
+    }
+
+    attr_map_t get_num_iov_mlx5_common(size_t av_size);
+
+    attr_map_t get_num_iov();
+};
+
+
 #endif

@@ -159,19 +159,29 @@ enum {
     UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1)
 };
 
+
+#define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
+    ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - ((_av_size) + \
+     sizeof(struct mlx5_wqe_raddr_seg) + sizeof(struct mlx5_wqe_ctrl_seg))) / \
+     sizeof(struct mlx5_wqe_data_seg))
+
+
 #if IBV_HW_TM
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
        (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_tmh))/ \
         sizeof(struct mlx5_wqe_data_seg))
-# else
+#else
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size)   0
 #endif /* IBV_HW_TM  */
+
 
 #define UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) \
    (((_cqe64)->op_own >> 4) == MLX5_CQE_RESP_SEND_IMM)
 
+
 #define UCT_RC_MLX5_TM_IS_SW_RNDV(_cqe64, _imm_data) \
    (ucs_unlikely(UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) && !(_imm_data)))
+
 
 #define UCT_RC_MLX5_CHECK_TAG(_mlx5_common_iface) \
    if (ucs_unlikely((_mlx5_common_iface)->tm.head->next == NULL)) {  \
@@ -607,7 +617,7 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
-                                    size_t max_inline, size_t av_size);
+                                    size_t max_inline, size_t max_tag_eager_iov);
 
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface);

@@ -297,6 +297,24 @@ static inline void uct_ib_destroy_srq(struct ibv_srq *srq)
     }
 }
 
+static inline ucs_status_t uct_ib_qp_max_send_sge(struct ibv_qp *qp,
+                                                  uint32_t *max_send_sge)
+{
+    struct ibv_qp_attr qp_attr;
+    struct ibv_qp_init_attr qp_init_attr;
+    int ret;
+
+    ret = ibv_query_qp(qp, &qp_attr, IBV_QP_CAP, &qp_init_attr);
+    if (ret) {
+        ucs_error("Failed to query UD QP(ret=%d): %m", ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *max_send_sge = qp_attr.cap.max_send_sge;
+
+    return UCS_OK;
+}
+
 typedef struct uct_ib_qpnum {
     uct_ib_uint24_t qp_num;
 } uct_ib_qpnum_t;

@@ -156,7 +156,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov, size_t tag_min_hdr)
+                                size_t am_min_hdr, size_t rma_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -216,20 +216,20 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+    iface_attr->cap.put.max_iov   = rma_max_iov;
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+    iface_attr->cap.get.max_iov   = rma_max_iov;
 
     /* AM */
-    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, tag_min_hdr);
-    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - tag_min_hdr;
+    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, am_min_hdr);
+    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - am_min_hdr;
     iface_attr->cap.am.min_zcopy  = 0;
-    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - tag_min_hdr;
-    iface_attr->cap.am.max_hdr    = am_max_hdr - tag_min_hdr;
+    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - am_min_hdr;
+    iface_attr->cap.am.max_hdr    = am_max_hdr - am_min_hdr;
     iface_attr->cap.am.max_iov    = am_max_iov;
 
     /* Error Handling */
