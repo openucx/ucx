@@ -202,6 +202,9 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
