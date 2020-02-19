@@ -1431,6 +1431,14 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             if (md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) {
                 config->tag.rndv.rkey_ptr_dst_mds |=
                         UCS_BIT(config->key.lanes[lane].dst_md_index);
+
+                if (!(iface_attr->cap.flags & (UCT_IFACE_FLAG_GET_ZCOPY |
+                                               UCT_IFACE_FLAG_PUT_ZCOPY))) {
+                    /* Don't consider RKEY_PTR only TL in RNDV maximum BW
+                     * calculation, since it won't be used for multi-lane
+                     * GET/PUT RNDV operations */
+                    continue;
+                }
             }
 
             /* GET Zcopy */
