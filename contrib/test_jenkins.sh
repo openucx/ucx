@@ -1185,6 +1185,7 @@ test_jucx() {
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=$jucx_port
+		export UCX_MEM_EVENTS=no
 		$MAKE -C bindings/java/src/main/native test
 	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
 		if [ -n "$ifaces" ]
@@ -1221,6 +1222,7 @@ test_jucx() {
 		done
 
 		unset JUCX_TEST_PORT
+		unset UCX_MEM_EVENTS
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
