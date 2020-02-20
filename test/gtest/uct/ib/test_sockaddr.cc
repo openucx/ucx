@@ -135,7 +135,7 @@ public:
     }
 
     static ssize_t client_iface_priv_data_cb(void *arg,
-                                             uct_cm_ep_priv_data_pack_args_t
+                                             const uct_cm_ep_priv_data_pack_args_t
                                              *pack_args, void *priv_data)
     {
         size_t *max_conn_priv = (size_t*)arg;
@@ -435,7 +435,7 @@ protected:
     }
 
     static ssize_t client_cm_priv_data_cb(void *arg,
-                                          uct_cm_ep_priv_data_pack_args_t
+                                          const uct_cm_ep_priv_data_pack_args_t
                                           *pack_args, void *priv_data)
     {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
@@ -528,7 +528,7 @@ protected:
 
     static void
     client_connect_cb(uct_ep_h ep, void *arg,
-                      uct_cm_ep_client_connect_args_t *connect_args) {
+                      const uct_cm_ep_client_connect_args_t *connect_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         const uct_cm_remote_data_t *remote_data;
         ucs_status_t status;

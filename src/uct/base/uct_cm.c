@@ -51,6 +51,33 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
     return UCS_OK;
 }
 
+ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
+                               const uct_cm_ep_priv_data_pack_args_t *pack_args,
+                               void *priv_data, size_t priv_data_max,
+                               size_t *priv_data_ret)
+{
+    ucs_status_t status = UCS_OK;
+    ssize_t ret;
+
+    ret = cep->priv_pack_cb(arg, pack_args, priv_data);
+    if (ret < 0) {
+        ucs_assert(ret > UCS_ERR_LAST);
+        status = (ucs_status_t)ret;
+        ucs_error("private data pack function failed with error: %s",
+                  ucs_status_string(status));
+        goto out;
+    } else if (ret > priv_data_max) {
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        ucs_error("private data pack function returned %zd (max: %zu)",
+                  ret, priv_data_max);
+        goto out;
+    }
+
+    *priv_data_ret = ret;
+out:
+    return status;
+}
+
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status)

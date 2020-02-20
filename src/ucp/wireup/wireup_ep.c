@@ -492,7 +492,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 }
 
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
-                                                 uct_cm_ep_priv_data_pack_args_t
+                                                 const uct_cm_ep_priv_data_pack_args_t
                                                  *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;

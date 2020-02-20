@@ -106,7 +106,7 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
 {
     char ifname_str[UCT_DEVICE_NAME_MAX];
     uct_tcp_sockcm_priv_data_hdr_t *hdr;
-    ssize_t priv_data_ret;
+    size_t priv_data_ret;
     ucs_status_t status;
     uct_cm_ep_priv_data_pack_args_t pack_args;
 
@@ -119,19 +119,12 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
     hdr                  = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
     pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
     ucs_strncpy_safe(pack_args.dev_name, ifname_str, UCT_DEVICE_NAME_MAX);
-    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, &pack_args,
-                                            hdr + 1);
-    if (priv_data_ret < 0) {
-        ucs_assert(priv_data_ret > UCS_ERR_LAST);
-        status = (ucs_status_t)priv_data_ret;
-        ucs_error("tcp_sockcm private data pack function failed with error: %s",
-                  ucs_status_string(status));
-        goto out;
-    } else if (priv_data_ret > (uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len)) {
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        ucs_error("tcp_sockcm private data pack function returned %zd "
-                  "(max: %zu)", priv_data_ret,
-                  uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len);
+
+    status = uct_cm_ep_pack_cb(&cep->super, cep->super.user_data, &pack_args,
+                               hdr + 1,
+                               uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len,
+                               &priv_data_ret);
+    if (status != UCS_OK) {
         goto out;
     }
 

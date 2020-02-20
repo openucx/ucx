@@ -1042,7 +1042,7 @@ size_t uct_test::entity::priv_data_do_pack(void *priv_data)
 }
 
 ssize_t uct_test::entity::server_priv_data_cb(void *arg,
-                                              uct_cm_ep_priv_data_pack_args_t
+                                              const uct_cm_ep_priv_data_pack_args_t
                                               *pack_args, void *priv_data)
 {
     const size_t priv_data_len = server_priv_data.length() + 1;

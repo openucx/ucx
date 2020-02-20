@@ -92,6 +92,11 @@ UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params);
 
+ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
+                               const uct_cm_ep_priv_data_pack_args_t *pack_args,
+                               void *priv_data, size_t priv_data_max,
+                               size_t *priv_data_ret);
+
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status);

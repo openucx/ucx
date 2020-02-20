@@ -175,15 +175,15 @@ typedef struct uct_cm_ep_priv_data_pack_args {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_cm_ep_priv_data_pack_args_field.
-     * Fields not specified by this mask will be ignored.
+     * Fields not specified by this mask should not be accessed by the callback.
      */
     uint64_t                   field_mask;
 
     /**
      * Device name. This routine may fill the user's private data according to
      * the given device name. The device name that is passed to this routine,
-     * corresponds to the dev_name field inside @ref uct_tl_resource_desc_t as
-     * returned from @ref uct_md_query_tl_resources.
+     * corresponds to @ref uct_tl_resource_desc_t::dev_name as returned from
+     * @ref uct_md_query_tl_resources.
      */
     char                       dev_name[UCT_DEVICE_NAME_MAX];
 } uct_cm_ep_priv_data_pack_args_t;
@@ -289,7 +289,7 @@ typedef struct uct_cm_listener_conn_request_args {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_cm_listener_conn_request_args_field.
-     * Fields not specified by this mask will be ignored.
+     * Fields not specified by this mask should not be acceessed by the callback.
      */
     uint64_t                   field_mask;
 
@@ -339,7 +339,7 @@ typedef struct uct_cm_ep_client_connect_args {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_cm_ep_server_connect_args_field.
-     * Fields not specified by this mask will be ignored.
+     * Fields not specified by this mask should not be acceessed by the callback.
      */
     uint64_t                   field_mask;
 
@@ -625,7 +625,7 @@ typedef void (*uct_cm_ep_server_connect_callback_t)(uct_ep_h ep, void *arg,
  * @param [in]  connect_args     Client's connect callback arguments
  */
 typedef void (*uct_cm_ep_client_connect_callback_t)(uct_ep_h ep, void *arg,
-                                                    uct_cm_ep_client_connect_args_t
+                                                    const uct_cm_ep_client_connect_args_t
                                                     *connect_args);
 
 
@@ -675,8 +675,8 @@ typedef void (*uct_ep_disconnect_cb_t)(uct_ep_h ep, void *arg);
  */
 typedef ssize_t
 (*uct_cm_ep_priv_data_pack_callback_t)(void *arg,
-                                       uct_cm_ep_priv_data_pack_args_t *pack_args,
-                                       void *priv_data);
+                                       const uct_cm_ep_priv_data_pack_args_t
+                                       *pack_args, void *priv_data);
 
 
 /**

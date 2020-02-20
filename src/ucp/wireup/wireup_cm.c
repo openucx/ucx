@@ -97,7 +97,7 @@ static void ucp_cm_priv_data_pack(ucp_wireup_sockaddr_data_t *sa_data,
 }
 
 static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
-                                          uct_cm_ep_priv_data_pack_args_t
+                                          const uct_cm_ep_priv_data_pack_args_t
                                           *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
@@ -317,7 +317,7 @@ ucp_cm_remote_data_check(const uct_cm_remote_data_t *remote_data)
  * Async callback on a client side which notifies that server is connected.
  */
 static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
-                                     uct_cm_ep_client_connect_args_t
+                                     const uct_cm_ep_client_connect_args_t
                                      *connect_args)
 {
     ucp_ep_h ucp_ep            = (ucp_ep_h)arg;
@@ -677,7 +677,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 }
 
 static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
-                                          uct_cm_ep_priv_data_pack_args_t
+                                          const uct_cm_ep_priv_data_pack_args_t
                                           *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;

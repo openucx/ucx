@@ -232,7 +232,7 @@ protected:
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
         static ssize_t server_priv_data_cb(void *arg,
-                                           uct_cm_ep_priv_data_pack_args_t
+                                           const uct_cm_ep_priv_data_pack_args_t
                                            *pack_args, void *priv_data);
 
 

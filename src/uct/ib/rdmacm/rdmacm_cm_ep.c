@@ -189,8 +189,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
     uct_rdmacm_priv_data_hdr_t      *hdr;
     ucs_status_t                    status;
     char                            dev_name[UCT_DEVICE_NAME_MAX];
-    ssize_t                         priv_data_ret;
-    char                            ep_str[UCT_RDMACM_EP_STRING_LEN];
+    size_t                          priv_data_ret;
     uct_cm_ep_priv_data_pack_args_t pack_args;
 
     uct_rdmacm_cm_id_to_dev_name(cep->id, dev_name);
@@ -199,22 +198,12 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
     hdr                  = (uct_rdmacm_priv_data_hdr_t*)conn_param->private_data;
     pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
     ucs_strncpy_safe(pack_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
-    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, &pack_args,
-                                            hdr + 1);
 
-    if (priv_data_ret < 0) {
-        ucs_assert(priv_data_ret > UCS_ERR_LAST);
-        status = (ucs_status_t)priv_data_ret;
-        ucs_error("%s: rdma_cm private data pack function failed with error: %s",
-                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-                  ucs_status_string(status));
+    status = uct_cm_ep_pack_cb(&cep->super, cep->super.user_data, &pack_args,
+                               hdr + 1, uct_rdmacm_cm_get_max_conn_priv(),
+                               &priv_data_ret);
 
-        goto err;
-    } else if (priv_data_ret > uct_rdmacm_cm_get_max_conn_priv()) {
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        ucs_error("%s: rdma_cm private data pack function returned %zd "
-                  "(max: %zu)", uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-                  priv_data_ret, uct_rdmacm_cm_get_max_conn_priv());
+    if (status != UCS_OK) {
         goto err;
     }
 

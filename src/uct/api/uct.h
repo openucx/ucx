@@ -129,8 +129,8 @@ BEGIN_C_DECLS
  *      request from a client.
  *      Accept or reject the client's connection request.
  * @ref uct_ep_create
- *      Connect to the client by creating an endpoint in case of accepting its request.
- *      The server creates a new endpoint per every connection request that it accepts.
+ *      Connect to the client by creating an endpoint if the request is accepted.
+ *      The server creates a new endpoint for every connection request that it accepts.
  * @ref uct_cm_ep_priv_data_pack_callback_t
  *      This callback is invoked by the UCT transport to fill auxiliary data in
  *      the connection acknowledgement or reject notification back to the client.
