@@ -147,8 +147,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
-                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
-                                sizeof(uct_rc_mlx5_hdr_t));
+                                sizeof(uct_rc_mlx5_hdr_t),
+                                UCT_RC_MLX5_RMA_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
     if (status != UCS_OK) {
         return status;
     }
@@ -162,7 +162,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->latency.overhead += 60e-9; /* connect packet + cqe */
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
-                                   max_am_inline, UCT_IB_MLX5_AV_FULL_SIZE);
+                                   max_am_inline,
+                                   UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
 
     /* Error handling is not supported with random dci policy
      * TODO: Fix */
@@ -774,7 +775,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
     }
 
     iface->super.super.config.tx_qp_len = iface->tx.dcis[0].txwq.bb_max;
-    uct_ib_iface_set_max_iov(&iface->super.super.super, cap.max_send_sge);
+
     return UCS_OK;
 
 err:
@@ -1206,13 +1207,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     self->tx.available_quota = self->super.super.config.tx_qp_len -
                                ucs_min(self->super.super.config.tx_qp_len, config->quota);
-    /* Set max_iov for put_zcopy and get_zcopy */
-    uct_ib_iface_set_max_iov(&self->super.super.super,
-                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
-                             sizeof(struct mlx5_wqe_raddr_seg) -
-                             sizeof(struct mlx5_wqe_ctrl_seg) -
-                             UCT_IB_MLX5_AV_FULL_SIZE) /
-                             sizeof(struct mlx5_wqe_data_seg));
 
     uct_rc_mlx5_iface_common_prepost_recvs(&self->super);
 

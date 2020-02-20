@@ -1418,3 +1418,31 @@ ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
         return (ucs_status_t)(res >= 0 ? UCS_OK : res);
     }
 }
+
+void test_uct_iface_attrs::init()
+{
+    uct_test::init();
+    m_e = uct_test::create_entity(0);
+    m_entities.push_back(m_e);
+}
+
+void test_uct_iface_attrs::basic_iov_test()
+{
+    attr_map_t max_iov_map = get_num_iov();
+
+    EXPECT_FALSE(max_iov_map.empty());
+
+    if (max_iov_map.find("am")  != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("am"), m_e->iface_attr().cap.am.max_iov);
+    }
+    if (max_iov_map.find("tag") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("tag"), m_e->iface_attr().cap.tag.eager.max_iov);
+    }
+    if (max_iov_map.find("put") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("put"), m_e->iface_attr().cap.put.max_iov);
+    }
+    if (max_iov_map.find("get") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
+    }
+}
+

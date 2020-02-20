@@ -386,6 +386,19 @@ protected:
 std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 
+class test_uct_iface_attrs : public uct_test {
+public:
+    typedef std::map<std::string, size_t> attr_map_t;
+
+    void init();
+    virtual attr_map_t get_num_iov() = 0;
+    void basic_iov_test();
+
+protected:
+    entity *m_e;
+};
+
+
 #define UCT_TEST_IB_TLS \
     rc_mlx5,            \
     rc_verbs,           \

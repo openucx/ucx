@@ -6,6 +6,7 @@
 */
 
 #include "test_rc.h"
+#include <uct/ib/rc/verbs/rc_verbs.h>
 
 
 #define UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
@@ -368,3 +369,70 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif
+
+#if HAVE_MLX5_HW
+extern "C" {
+#include <uct/ib/rc/accel/rc_mlx5_common.h>
+}
+#endif
+
+test_uct_iface_attrs::attr_map_t test_rc_iface_attrs::get_num_iov() {
+    if (has_transport("rc_mlx5")) {
+        return get_num_iov_mlx5_common(0ul);
+    } else {
+        EXPECT_TRUE(has_transport("rc_verbs"));
+        m_e->connect(0, *m_e, 0);
+        uct_rc_verbs_ep_t *ep = ucs_derived_of(m_e->ep(0), uct_rc_verbs_ep_t);
+        uint32_t max_sge;
+        ASSERT_UCS_OK(uct_ib_qp_max_send_sge(ep->qp, &max_sge));
+
+        attr_map_t iov_map;
+        iov_map["put"] = iov_map["get"] = max_sge;
+        iov_map["am"]  = max_sge - 1; // 1 iov reserved for am header
+        return iov_map;
+    }
+}
+
+test_uct_iface_attrs::attr_map_t
+test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
+{
+    attr_map_t iov_map;
+
+#if HAVE_MLX5_HW
+    // For RMA iovs can use all WQE space, remainig from control and
+    // remote address segments (and AV if relevant)
+    size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
+                      (sizeof(struct mlx5_wqe_raddr_seg) +
+                       sizeof(struct mlx5_wqe_ctrl_seg) + av_size)) /
+                     sizeof(struct mlx5_wqe_data_seg);
+
+    iov_map["put"] = iov_map["get"] = rma_iov;
+
+    // For am zcopy just small constant number of iovs is allowed
+    // (to preserve some inline space for AM zcopy header)
+    iov_map["am"]  = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
+
+#if IBV_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(ucs_derived_of(m_e->iface(),
+                                              uct_rc_mlx5_iface_common_t))) {
+        // For TAG eager zcopy iovs can use all WQE space, remainig from control
+        // segment, TMH header (+ inline data segment) and AV (if relevant)
+        iov_map["tag"] = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
+                          (sizeof(struct mlx5_wqe_ctrl_seg) +
+                           sizeof(struct mlx5_wqe_inl_data_seg) +
+                           sizeof(struct ibv_tmh) + av_size)) /
+                         sizeof(struct mlx5_wqe_data_seg);
+    }
+#endif // IBV_HW_TM
+#endif // HAVE_MLX5_HW
+
+    return iov_map;
+}
+
+UCS_TEST_P(test_rc_iface_attrs, iface_attrs)
+{
+    basic_iov_test();
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_iface_attrs)
+
