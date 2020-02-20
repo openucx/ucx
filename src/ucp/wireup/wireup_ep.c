@@ -307,7 +307,9 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
 
     if (flags & UCT_FLUSH_FLAG_CANCEL) {
         if (wireup_ep->aux_ep) {
-            return uct_ep_flush(wireup_ep->aux_ep, flags, comp);
+            uct_ep_flush(wireup_ep->aux_ep, flags, comp);
+            wireup_ep->super.iface.ops.ep_flush =
+                    (uct_ep_flush_func_t)ucs_empty_function_return_success;
         }
         return UCS_OK;
     }

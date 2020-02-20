@@ -53,11 +53,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
 
         /* Start flush operation on UCT endpoint */
-        if (req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) {
-            uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
-                                 UCS_STATUS_PTR(UCS_ERR_CANCELED));
-        }
-        status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
+        status = uct_ep_flush(uct_ep, UCT_FLUSH_FLAG_LOCAL,
                               &req->send.state.uct_comp);
         ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
                   ucs_status_string(status));
@@ -233,6 +229,25 @@ void ucp_ep_flush_remote_completed(ucp_request_t *req)
     }
 }
 
+static void ucp_ep_flush_cancel(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    uct_ep_h uct_ep;
+
+    ucs_trace("ep %p: progress flush req %p, cancel ops on lanes 0x%x", ep, req,
+              req->send.flush.lanes);
+
+    ucs_for_each_bit(lane, req->send.flush.lanes) {
+        uct_ep = ep->uct_eps[lane];
+        uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
+                             UCS_STATUS_PTR(UCS_ERR_CANCELED));
+        status = uct_ep_flush(uct_ep, UCT_FLUSH_FLAG_CANCEL, NULL);
+        assert(status == UCS_OK || status == UCS_INPROGRESS);
+    }
+}
+
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
@@ -278,6 +293,10 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+
+    if (uct_flags & UCT_FLUSH_FLAG_CANCEL) {
+        ucp_ep_flush_cancel(req);
+    }
 
     ucp_ep_flush_progress(req);
 
