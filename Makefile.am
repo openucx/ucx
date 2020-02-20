@@ -26,7 +26,6 @@ dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 \
 					  contrib/ucx_perftest_config/test_types_uct \
 					  contrib/ucx_perftest_config/test_types_ucp \
 					  contrib/ucx_perftest_config/transports
-
 SUBDIRS = \
 	src/ucm \
 	src/ucs \
@@ -34,7 +33,7 @@ SUBDIRS = \
 	src/ucp
 
 if HAVE_UCG
-SUBDIRS += src/ucg
+SUBDIRS += $(UCG_SUBDIR)
 endif
 
 SUBDIRS += \
