@@ -1190,9 +1190,12 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.local_md_flags  = UCT_MD_FLAG_RKEY_PTR;
         bw_info.max_lanes                = 1;
 
-        ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                context->mem_type_access_tls[UCS_MEMORY_TYPE_HOST],
-                                select_ctx);
+        added_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                              context->mem_type_access_tls[UCS_MEMORY_TYPE_HOST],
+                                              select_ctx);
+        if (added_lanes) {
+            return UCS_OK;
+        }
     }
 
     /* First checked RNDV mode has to be a mode specified in config */
