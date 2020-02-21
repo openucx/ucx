@@ -82,40 +82,40 @@ typedef struct ucm_malloc_hook_state {
     /*
      * State of hook installment
      */
-    pthread_mutex_t       install_mutex; /* Protect hooks installation */
-    int                   install_state; /* State of hook installation */
-    int                   installed_events; /* Which events are working */
-    int                   mmap_thresh_set; /* mmap threshold set by user */
-    int                   trim_thresh_set; /* trim threshold set by user */
-    int                   hook_called; /* Our malloc hook was called */
-    size_t                max_freed_size; /* Maximal size released so far */
+    pthread_mutex_t          install_mutex; /* Protect hooks installation */
+    int                      install_state; /* State of hook installation */
+    int                      installed_events; /* Which events are working */
+    int                      mmap_thresh_set; /* mmap threshold set by user */
+    int                      trim_thresh_set; /* trim threshold set by user */
+    int                      hook_called; /* Our malloc hook was called */
+    size_t                   max_freed_size; /* Maximal size released so far */
 
-    ucm_usable_size_func_t usable_size; /* function pointer to get usable size */
+    ucm_usable_size_func_t   usable_size; /* function pointer to get usable size */
 
-    ucm_release_func_t    free; /* function pointer to release memory */
+    ucm_release_func_t       free; /* function pointer to release memory */
 
     /*
      * Track record of which pointers are ours
      */
-    ucs_spinlock_t        lock;       /* Protect heap counters.
+    ucs_recursive_spinlock_t lock; /* Protect heap counters.
                                          Note: Cannot modify events when this lock
                                          is held - may deadlock */
     /* Our heap address range. Used to identify whether a released pointer is ours,
      * or was allocated by the previous heap manager. */
-    void                  *heap_start;
-    void                  *heap_end;
+    void                     *heap_start;
+    void                     *heap_end;
 
     /* Save the pointers that we have allocated with mmap, so when they are
      * released we would know they are ours, despite the fact they are not in the
      * heap address range. */
-    khash_t(mmap_ptrs)   ptrs;
+    khash_t(mmap_ptrs)      ptrs;
 
     /**
      * Save the environment strings we've allocated
      */
-    pthread_mutex_t      env_lock;
-    char                 **env_strs;
-    unsigned             num_env_strs;
+    pthread_mutex_t         env_lock;
+    char                    **env_strs;
+    unsigned                num_env_strs;
 } ucm_malloc_hook_state_t;
 
 
@@ -144,14 +144,14 @@ static void ucm_malloc_mmaped_ptr_add(void *ptr)
     int hash_extra_status;
     khiter_t hash_it;
 
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_lock(&ucm_malloc_hook_state.lock);
 
     hash_it = kh_put(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr,
                      &hash_extra_status);
     ucs_assert_always(hash_extra_status >= 0);
     ucs_assert_always(hash_it != kh_end(&ucm_malloc_hook_state.ptrs));
 
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
 static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
@@ -159,7 +159,7 @@ static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
     khiter_t hash_it;
     int found;
 
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_lock(&ucm_malloc_hook_state.lock);
 
     hash_it = kh_get(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr);
     if (hash_it == kh_end(&ucm_malloc_hook_state.ptrs)) {
@@ -169,7 +169,7 @@ static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
         kh_del(mmap_ptrs, &ucm_malloc_hook_state.ptrs, hash_it);
     }
 
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
     return found;
 }
 
@@ -177,10 +177,10 @@ static int ucm_malloc_is_address_in_heap(void *ptr)
 {
     int in_heap;
 
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_lock(&ucm_malloc_hook_state.lock);
     in_heap = (ptr >= ucm_malloc_hook_state.heap_start) &&
               (ptr < ucm_malloc_hook_state.heap_end);
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
     return in_heap;
 }
 
@@ -551,7 +551,7 @@ out:
 static void ucm_malloc_sbrk(ucm_event_type_t event_type,
                             ucm_event_t *event, void *arg)
 {
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_lock(&ucm_malloc_hook_state.lock);
 
     /* Copy return value from call. We assume the event handler uses a lock. */
     if (ucm_malloc_hook_state.heap_start == (void*)-1) {
@@ -563,7 +563,7 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
               event->sbrk.increment, event->sbrk.result,
               ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
 
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
 static int ucs_malloc_is_ready(int events, const char *title)
@@ -906,6 +906,6 @@ void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh)
 }
 
 UCS_STATIC_INIT {
-    ucs_spinlock_init(&ucm_malloc_hook_state.lock);
+    ucs_recursive_spinlock_init(&ucm_malloc_hook_state.lock, 0);
     kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
 }

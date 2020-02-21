@@ -156,7 +156,7 @@ void jucx_request_init(void *request)
 {
      struct jucx_context *ctx = (struct jucx_context *)request;
      jucx_context_reset(ctx);
-     ucs_spinlock_init(&ctx->lock);
+     ucs_recursive_spinlock_init(&ctx->lock, 0);
 }
 
 JNIEnv* get_jni_env()
@@ -210,13 +210,13 @@ static inline void jucx_call_callback(jobject callback, jobject jucx_request,
 UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, ucs_status_t status)
 {
     struct jucx_context *ctx = (struct jucx_context *)request;
-    ucs_spin_lock(&ctx->lock);
+    ucs_recursive_spin_lock(&ctx->lock);
     if (ctx->jucx_request == NULL) {
         // here because 1 of 2 reasons:
         // 1. progress is in another thread and got here earlier then process_request happened.
         // 2. this callback is inside ucp_tag_recv_nb function.
         ctx->status = status;
-        ucs_spin_unlock(&ctx->lock);
+        ucs_recursive_spin_unlock(&ctx->lock);
         return;
     }
 
@@ -231,7 +231,7 @@ UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, u
     env->DeleteGlobalRef(ctx->jucx_request);
     jucx_context_reset(ctx);
     ucp_request_free(request);
-    ucs_spin_unlock(&ctx->lock);
+    ucs_recursive_spin_unlock(&ctx->lock);
 }
 
 void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info)
@@ -256,7 +256,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
 
     if (UCS_PTR_IS_PTR(request)) {
         struct jucx_context *ctx = (struct jucx_context *)request;
-        ucs_spin_lock(&ctx->lock);
+        ucs_recursive_spin_lock(&ctx->lock);
         if (ctx->status == UCS_INPROGRESS) {
             // request not completed yet, install user callback
             if (callback != NULL) {
@@ -273,7 +273,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
             jucx_context_reset(ctx);
             ucp_request_free(request);
         }
-        ucs_spin_unlock(&ctx->lock);
+        ucs_recursive_spin_unlock(&ctx->lock);
     } else {
         set_jucx_request_completed(env, jucx_request, NULL);
         if (UCS_PTR_IS_ERR(request)) {

@@ -63,7 +63,7 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
 
     /* Only one thread at a time can process mboxes for the iface. After it's done
        then everyone's messages have been drained. */
-    if (!ucs_spin_trylock(&iface->mbox_lock)) {
+    if (!ucs_recursive_spin_trylock(&iface->mbox_lock)) {
         return;
     }
     while(1){
@@ -99,7 +99,7 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
             break;
         }
     }
-    ucs_spin_unlock(&iface->mbox_lock);
+    ucs_recursive_spin_unlock(&iface->mbox_lock);
 }
 
 static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
@@ -222,9 +222,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
     ucs_mpool_cleanup(&self->free_mbox, 1);
     uct_ugni_destroy_cq(self->remote_cq, &self->super.cdm);
 
-    status = ucs_spinlock_destroy(&self->mbox_lock);
+    status = ucs_recursive_spinlock_destroy(&self->mbox_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 }
 
@@ -289,7 +289,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     smsg_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
     smsg_attr.mbox_maxcredit = self->config.smsg_max_credit;
     smsg_attr.msg_maxsize = self->config.smsg_seg_size;
-    status = ucs_spinlock_init(&self->mbox_lock);
+    status = ucs_recursive_spinlock_init(&self->mbox_lock, 0);
     if (UCS_OK != status) {
             goto exit;
     }
@@ -359,7 +359,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
  clean_cq:
     uct_ugni_destroy_cq(self->remote_cq, &self->super.cdm);
  clean_lock:
-    ucs_spinlock_destroy(&self->mbox_lock);
+    ucs_recursive_spinlock_destroy(&self->mbox_lock);
  exit:
     uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");

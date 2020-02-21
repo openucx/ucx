@@ -58,26 +58,26 @@ UCS_TEST_F(test_sys, machine_guid) {
 }
 
 UCS_TEST_F(test_sys, spinlock) {
-    ucs_spinlock_t lock;
+    ucs_recursive_spinlock_t lock;
     pthread_t self;
 
     self = pthread_self();
 
-    ucs_spinlock_init(&lock);
+    ucs_recursive_spinlock_init(&lock, 0);
 
-    ucs_spin_lock(&lock);
-    EXPECT_TRUE(ucs_spin_is_owner(&lock, self));
+    ucs_recursive_spin_lock(&lock);
+    EXPECT_TRUE(ucs_recursive_spin_is_owner(&lock, self));
 
     /* coverity[double_lock] */
-    ucs_spin_lock(&lock);
-    EXPECT_TRUE(ucs_spin_is_owner(&lock, self));
+    ucs_recursive_spin_lock(&lock);
+    EXPECT_TRUE(ucs_recursive_spin_is_owner(&lock, self));
 
-    ucs_spin_unlock(&lock);
-    EXPECT_TRUE(ucs_spin_is_owner(&lock, self));
+    ucs_recursive_spin_unlock(&lock);
+    EXPECT_TRUE(ucs_recursive_spin_is_owner(&lock, self));
 
     /* coverity[double_unlock] */
-    ucs_spin_unlock(&lock);
-    EXPECT_FALSE(ucs_spin_is_owner(&lock, self));
+    ucs_recursive_spin_unlock(&lock);
+    EXPECT_FALSE(ucs_recursive_spin_is_owner(&lock, self));
 }
 
 UCS_TEST_F(test_sys, get_mem_prot) {

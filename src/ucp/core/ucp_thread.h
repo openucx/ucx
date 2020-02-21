@@ -35,7 +35,7 @@ typedef struct ucp_mt_lock {
         /* Lock for multithreading support. Either spinlock or mutex is used at
            at one time. Spinlock is the default option. */
         pthread_mutex_t           mt_mutex;
-        ucs_spinlock_t            mt_spinlock;
+        ucs_recursive_spinlock_t  mt_spinlock;
     } lock;
 } ucp_mt_lock_t;
 
@@ -49,7 +49,7 @@ typedef struct ucp_mt_lock {
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) { \
             pthread_mutex_init(&((_lock_ptr)->lock.mt_mutex), NULL); \
         } else { \
-            ucs_spinlock_init(&((_lock_ptr)->lock.mt_spinlock)); \
+            ucs_recursive_spinlock_init(&((_lock_ptr)->lock.mt_spinlock), 0); \
         } \
     } while (0)
 #define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                                  \
@@ -59,9 +59,9 @@ typedef struct ucp_mt_lock {
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) { \
             pthread_mutex_destroy(&((_lock_ptr)->lock.mt_mutex)); \
         } else { \
-            status = ucs_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock)); \
+            status = ucs_recursive_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock)); \
             if (status != UCS_OK) { \
-                ucs_warn("ucs_spinlock_destroy() failed (%d)", status); \
+                ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status); \
             } \
         } \
     } while (0)
@@ -70,7 +70,7 @@ typedef struct ucp_mt_lock {
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
             pthread_mutex_lock(&((_lock_ptr)->lock.mt_mutex));          \
         } else {                                                        \
-            ucs_spin_lock(&((_lock_ptr)->lock.mt_spinlock));            \
+            ucs_recursive_spin_lock(&((_lock_ptr)->lock.mt_spinlock));  \
         }                                                               \
     }
 #define UCP_THREAD_CS_EXIT(_lock_ptr)                                   \
@@ -78,7 +78,7 @@ typedef struct ucp_mt_lock {
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
             pthread_mutex_unlock(&((_lock_ptr)->lock.mt_mutex));        \
         } else {                                                        \
-            ucs_spin_unlock(&((_lock_ptr)->lock.mt_spinlock));          \
+            ucs_recursive_spin_unlock(&((_lock_ptr)->lock.mt_spinlock));\
         }                                                               \
     }
 

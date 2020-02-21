@@ -286,7 +286,7 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache)
 
     ucs_trace_func("rcache=%s", rcache->name);
 
-    ucs_spin_lock(&rcache->inv_lock);
+    ucs_recursive_spin_lock(&rcache->inv_lock);
     while (!ucs_queue_is_empty(&rcache->inv_q)) {
         entry = ucs_queue_pull_elem_non_empty(&rcache->inv_q,
                                               ucs_rcache_inv_entry_t, queue);
@@ -295,15 +295,15 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache)
          * operations, which could trigger vm_unmapped event which also takes
          * this lock.
          */
-        ucs_spin_unlock(&rcache->inv_lock);
+        ucs_recursive_spin_unlock(&rcache->inv_lock);
 
         ucs_rcache_invalidate_range(rcache, entry->start, entry->end);
 
-        ucs_spin_lock(&rcache->inv_lock);
+        ucs_recursive_spin_lock(&rcache->inv_lock);
 
         ucs_mpool_put(entry); /* Must be done with the lock held */
     }
-    ucs_spin_unlock(&rcache->inv_lock);
+    ucs_recursive_spin_unlock(&rcache->inv_lock);
 }
 
 static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
@@ -329,7 +329,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
 
     ucs_trace_func("%s: event vm_unmapped 0x%lx..0x%lx", rcache->name, start, end);
 
-    ucs_spin_lock(&rcache->inv_lock);
+    ucs_recursive_spin_lock(&rcache->inv_lock);
     entry = ucs_mpool_get(&rcache->inv_mp);
     if (entry != NULL) {
         /* Add region to invalidation list */
@@ -341,7 +341,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
         ucs_error("Failed to allocate invalidation entry for 0x%lx..0x%lx, "
                   "data corruption may occur", start, end);
     }
-    ucs_spin_unlock(&rcache->inv_lock);
+    ucs_recursive_spin_unlock(&rcache->inv_lock);
 }
 
 /* Clear all regions
@@ -671,7 +671,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_free_name;
     }
 
-    status = ucs_spinlock_init(&self->inv_lock);
+    status = ucs_recursive_spinlock_init(&self->inv_lock, 0);
     if (status != UCS_OK) {
         goto err_destroy_rwlock;
     }
@@ -703,9 +703,9 @@ err_destroy_mp:
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_inv_q_lock:
-    spinlock_status = ucs_spinlock_destroy(&self->inv_lock);
+    spinlock_status = ucs_recursive_spinlock_destroy(&self->inv_lock);
     if (spinlock_status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", spinlock_status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", spinlock_status);
     }
 err_destroy_rwlock:
     pthread_rwlock_destroy(&self->lock);
@@ -728,9 +728,9 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 
     ucs_mpool_cleanup(&self->inv_mp, 1);
     ucs_pgtable_cleanup(&self->pgtable);
-    status = ucs_spinlock_destroy(&self->inv_lock);
+    status = ucs_recursive_spinlock_destroy(&self->inv_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
     pthread_rwlock_destroy(&self->lock);
     UCS_STATS_NODE_FREE(self->stats);

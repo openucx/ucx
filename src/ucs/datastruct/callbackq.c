@@ -26,25 +26,25 @@
 
 
 typedef struct ucs_callbackq_priv {
-    ucs_spinlock_t         lock;           /**< Protects adding / removing */
+    ucs_recursive_spinlock_t lock;           /**< Protects adding / removing */
 
-    ucs_callbackq_elem_t   *slow_elems;    /**< Array of slow-path elements */
-    unsigned               num_slow_elems; /**< Number of slow-path elements */
-    unsigned               max_slow_elems; /**< Maximal number of slow-path elements */
-    int                    slow_proxy_id;  /**< ID of slow-path proxy in fast-path array.
-                                                keep track while this moves around. */
+    ucs_callbackq_elem_t     *slow_elems;    /**< Array of slow-path elements */
+    unsigned                 num_slow_elems; /**< Number of slow-path elements */
+    unsigned                 max_slow_elems; /**< Maximal number of slow-path elements */
+    int                      slow_proxy_id;  /**< ID of slow-path proxy in fast-path array.
+                                                  keep track while this moves around. */
 
-    uint64_t               fast_remove_mask; /**< Mask of which fast-path elements
-                                                  should be removed */
-    unsigned               num_fast_elems; /**< Number of fast-path elements */
+    uint64_t                 fast_remove_mask; /**< Mask of which fast-path elements
+                                                    should be removed */
+    unsigned                 num_fast_elems; /**< Number of fast-path elements */
 
     /* Lookup table for callback IDs. This allows moving callbacks around in
      * the arrays, while the user can always use a single ID to remove the
      * callback in O(1).
      */
-    int                    free_idx_id;    /**< Index of first free item in the list */
-    int                    num_idxs;       /**< Size of idxs array */
-    unsigned               *idxs;          /**< ID-to-index lookup */
+    int                      free_idx_id;    /**< Index of first free item in the list */
+    int                      num_idxs;       /**< Size of idxs array */
+    unsigned                 *idxs;          /**< ID-to-index lookup */
 
 } ucs_callbackq_priv_t;
 
@@ -59,12 +59,12 @@ static inline ucs_callbackq_priv_t* ucs_callbackq_priv(ucs_callbackq_t *cbq)
 
 static void ucs_callbackq_enter(ucs_callbackq_t *cbq)
 {
-    ucs_spin_lock(&ucs_callbackq_priv(cbq)->lock);
+    ucs_recursive_spin_lock(&ucs_callbackq_priv(cbq)->lock);
 }
 
 static void ucs_callbackq_leave(ucs_callbackq_t *cbq)
 {
-    ucs_spin_unlock(&ucs_callbackq_priv(cbq)->lock);
+    ucs_recursive_spin_unlock(&ucs_callbackq_priv(cbq)->lock);
 }
 
 static void ucs_callbackq_elem_reset(ucs_callbackq_t *cbq,
@@ -424,7 +424,7 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
         ucs_callbackq_elem_reset(cbq, &cbq->fast_elems[idx]);
     }
 
-    ucs_spinlock_init(&priv->lock);
+    ucs_recursive_spinlock_init(&priv->lock, 0);
     priv->slow_elems        = NULL;
     priv->num_slow_elems    = 0;
     priv->max_slow_elems    = 0;
