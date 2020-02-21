@@ -45,7 +45,7 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq)
 }
 
 ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, uint64_t timer_id,
-                            ucs_time_t interval, ucs_timer_t **removal_hint)
+                            ucs_time_t interval, unsigned *timer_index)
 {
     ucs_status_t status;
     ucs_timer_t *ptr;
@@ -80,14 +80,14 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, uint64_t timer_id,
     ucs_assert(timerq->min_interval != UCS_TIME_INFINITY);
 
     /* Initialize the new timer */
-    ptr = &timerq->timers[timerq->used_cnt++];
+    ptr = &timerq->timers[timerq->used_cnt];
     ptr->expiration = 0; /* will fire the next time sweep is called */
     ptr->interval   = interval;
     ptr->id         = timer_id;
-    if (removal_hint) {
-        *removal_hint = ptr;
+    if (timer_index) {
+        *timer_index = timerq->used_cnt;
     }
-
+    timerq->used_cnt++;
     status = UCS_OK;
 
 out_unlock:
@@ -96,7 +96,7 @@ out_unlock:
 }
 
 ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, uint64_t timer_id,
-                               ucs_timer_t *hint)
+                               unsigned timer_index_hint)
 {
     ucs_status_t status;
     ucs_timer_t *ptr;
@@ -106,11 +106,14 @@ ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, uint64_t timer_id,
     status = UCS_ERR_NO_ELEM;
 
     ucs_spin_lock(&timerq->lock);
-    if (hint && ucs_likely(hint->id == timer_id)) {
-        ucs_assert(hint >= timerq->timers);
-        ucs_assert(hint < timerq->timers + timerq->used_cnt);
-        *hint = timerq->timers[--timerq->used_cnt];
-        goto removal_done;
+
+    if (timer_index_hint < timerq->used_cnt) {
+        ptr = &timerq->timers[timer_index_hint];
+        if (ptr->id == timer_id) {
+            *ptr = timerq->timers[--timerq->used_cnt];
+            status = UCS_OK;
+            goto removal_done;
+        }
     }
 
     timerq->min_interval = UCS_TIME_INFINITY;
@@ -140,7 +143,7 @@ removal_done:
 }
 
 ucs_status_t ucs_timerq_modify(ucs_timer_queue_t *timerq, uint64_t timer_id,
-                               ucs_time_t new_interval)
+                               ucs_time_t new_interval, unsigned timer_index_hint)
 {
     ucs_status_t status;
     ucs_timer_t *ptr;
@@ -151,19 +154,33 @@ ucs_status_t ucs_timerq_modify(ucs_timer_queue_t *timerq, uint64_t timer_id,
     status = UCS_ERR_NO_ELEM;
 
     ucs_spin_lock(&timerq->lock);
+
+    if (timer_index_hint < timerq->used_cnt) {
+        ptr = &timerq->timers[timer_index_hint];
+        if (ptr->id == timer_id) {
+            ptr->expiration += new_interval - ptr->interval;
+            ptr->interval    = new_interval;
+            status           = UCS_OK;
+            if (ucs_likely(timerq->flags & UCS_TIMERQ_FLAG_UNIQUE_IDS)) {
+                goto modification_done;
+            }
+        }
+    }
+
     ptr = timerq->timers;
     while (ptr < timerq->timers + timerq->used_cnt) {
         if (ptr->id == timer_id) {
             ptr->expiration += new_interval - ptr->interval;
             ptr->interval    = new_interval;
+            status           = UCS_OK;
             if (timerq->flags & UCS_TIMERQ_FLAG_UNIQUE_IDS) {
-                return UCS_OK;
+                goto modification_done;
             }
-            status = UCS_OK;
         }
         ptr++;
     }
 
+modification_done:
     ucs_spin_unlock(&timerq->lock);
     return status;
 }

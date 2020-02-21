@@ -402,7 +402,7 @@ static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
                                                   int timer_id)
 {
     ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
-    ucs_timerq_remove(&thread->timerq, timer_id, NULL);
+    ucs_timerq_remove(&thread->timerq, timer_id, 0);
     ucs_async_pipe_push(&thread->wakeup);
     ucs_async_thread_stop();
     return UCS_OK;

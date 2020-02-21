@@ -58,32 +58,33 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq);
  * @param timerq       Timer queue to schedule on.
  * @param timer_id     Timer ID to add.
  * @param interval     Timer interval.
- * @param removal_hint Selected location inside the queue (optional).
+ * @param timer_index  Selected location inside the queue (optional).
  */
 ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, uint64_t timer_id,
-                            ucs_time_t interval, ucs_timer_t **removal_hint);
+                            ucs_time_t interval, unsigned *timer_index);
 
 
 /**
  * Remove a timer.
  *
- * @param timerq     Time queue this timer was scheduled on.
- * @param timer_id   Timer ID to remove.
- * @param hint       Possible location inside the queue (optional)
+ * @param timerq           Time queue this timer was scheduled on.
+ * @param timer_id         Timer ID to remove.
+ * @param timer_index_hint Possible timer location inside the queue (optional)
  */
 ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, uint64_t timer_id,
-                               ucs_timer_t *hint);
+                               unsigned timer_index_hint);
 
 
 /**
  * Modify the interval of a timer.
  *
- * @param timerq       Time queue this timer was scheduled on.
- * @param timer_id     Timer ID to modify.
- * @param new_interval New timer interval.
+ * @param timerq           Time queue this timer was scheduled on.
+ * @param timer_id         Timer ID to modify.
+ * @param new_interval     New timer interval.
+ * @param timer_index_hint Possible timer location inside the queue (optional)
  */
 ucs_status_t ucs_timerq_modify(ucs_timer_queue_t *timerq, uint64_t timer_id,
-                               ucs_time_t new_interval);
+                               ucs_time_t new_interval, unsigned timer_index_hint);
 
 
 /**

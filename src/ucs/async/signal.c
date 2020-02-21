@@ -460,7 +460,7 @@ ucs_async_signal_timerq_add_timer(ucs_async_signal_timer_t *timer, int tid,
     return UCS_OK;
 
 err_remove:
-    ucs_timerq_remove(&timer->timerq, timer_id, NULL);
+    ucs_timerq_remove(&timer->timerq, timer_id, 0);
 err:
     ucs_timer_reset_if_empty(timer);
     return status;
@@ -473,7 +473,7 @@ ucs_async_signal_timerq_remove_timer(ucs_async_signal_timer_t *timer,
 {
     ucs_status_t status;
 
-    status = ucs_timerq_remove(&timer->timerq, timer_id, NULL);
+    status = ucs_timerq_remove(&timer->timerq, timer_id, 0);
     if (status != UCS_OK) {
         return status;
     }
