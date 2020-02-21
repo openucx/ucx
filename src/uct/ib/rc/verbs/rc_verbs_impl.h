@@ -59,22 +59,38 @@ static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t 
 static inline int
 uct_rc_verbs_txcq_get_comp_count(struct ibv_wc *wc, uct_rc_txqp_t *txqp)
 {
-    uint16_t count = 1;
+    uint16_t count;
 
-    if (ucs_likely(wc->wr_id != RC_UNSIGNALED_INF)) {
-        return wc->wr_id + 1;
+    if (ucs_likely(wc->status == IBV_WC_SUCCESS)) {
+        ucs_assert(txqp->unsignaled_store_count != RC_UNSIGNALED_INF);
+        if (ucs_likely(wc->wr_id != RC_UNSIGNALED_INF)) {
+            return wc->wr_id + 1;
+        }
+
+        ucs_assert(txqp->unsignaled_store_count != 0);
+        txqp->unsignaled_store_count--;
+        if (txqp->unsignaled_store_count == 0) {
+            count = txqp->unsignaled_store;
+            txqp->unsignaled_store = 0;
+            return count + 1;
+        }
+
+        return 1;
     }
 
-    ucs_assert(txqp->unsignaled_store != RC_UNSIGNALED_INF);
-    ucs_assert(txqp->unsignaled_store_count != 0);
-
-    txqp->unsignaled_store_count--;
-    if (txqp->unsignaled_store_count == 0) {
-        count += txqp->unsignaled_store;
-        txqp->unsignaled_store = 0;
+    /* error handling for (wc->status != IBV_WC_SUCCESS),
+     * return unsignaled credits from successful WQs and reset counters,
+     * all following WCs will be there and return 1 credit per failed WC */
+    if (txqp->unsignaled_store_count == RC_UNSIGNALED_INF) {
+        return 1;
     }
 
-    return count;
+    count = (wc->wr_id != RC_UNSIGNALED_INF) ? wc->wr_id :
+            txqp->unsignaled_store;
+    txqp->unsignaled_store_count = RC_UNSIGNALED_INF;
+    txqp->unsignaled_store       = RC_UNSIGNALED_INF;
+    txqp->unsignaled             = RC_UNSIGNALED_INF;
+    return count + 1;
 }
 
 static UCS_F_ALWAYS_INLINE void

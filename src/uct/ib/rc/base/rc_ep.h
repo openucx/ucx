@@ -160,7 +160,10 @@ struct uct_rc_txqp {
     uint16_t            unsignaled_store;
     /* If unsignaled was stored several times to aggregative value, let's return
      * credits only when this counter == 0 because it's impossible to return
-     * exact value on each signaled completion */
+     * exact value on each signaled completion,
+     * if it's equal to RC_UNSIGNALED_INF the QP is in error state and first
+     * failed all previous unsignaled WQs have been handled, all following CQEs
+     * will return 1 credit */
     uint16_t            unsignaled_store_count;
     int16_t             available;
     UCS_STATS_NODE_DECLARE(stats)

@@ -50,10 +50,10 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               uint32_t qp_num
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
-    txqp->unsignaled = 0;
-    txqp->unsignaled_store = 0;
+    txqp->unsignaled             = 0;
+    txqp->unsignaled_store       = 0;
     txqp->unsignaled_store_count = 0;
-    txqp->available  = 0;
+    txqp->available              = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
     return UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
@@ -376,6 +376,7 @@ ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
        next operation will be defenitly signaled */
     if (txqp->unsignaled != RC_UNSIGNALED_INF) {
         txqp->unsignaled_store_count++;
+        ucs_assert(txqp->unsignaled_store_count != RC_UNSIGNALED_INF);
         txqp->unsignaled_store += txqp->unsignaled;
         txqp->unsignaled        = RC_UNSIGNALED_INF;
     }
