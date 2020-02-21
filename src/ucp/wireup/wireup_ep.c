@@ -305,14 +305,16 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
-    if (flags & UCT_FLUSH_FLAG_CANCEL) {
-        if (wireup_ep->aux_ep) {
-            uct_ep_flush(wireup_ep->aux_ep, flags, comp);
-            wireup_ep->super.iface.ops.ep_flush =
-                    (uct_ep_flush_func_t)ucs_empty_function_return_success;
-        }
+    if (ucs_unlikely(wireup_ep->flags & UCP_WIREUP_EP_FLAG_CANCELED)) {
         return UCS_OK;
     }
+
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_CANCELED;
+        return (wireup_ep->aux_ep == NULL) ? UCS_OK :
+               uct_ep_flush(wireup_ep->aux_ep, flags, comp);
+    }
+
     return UCS_ERR_NO_RESOURCE;
 }
 

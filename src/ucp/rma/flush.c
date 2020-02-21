@@ -240,6 +240,7 @@ static void ucp_ep_flush_cancel(ucp_request_t *req)
               req->send.flush.lanes);
 
     ucs_for_each_bit(lane, req->send.flush.lanes) {
+        ucs_assert(lane < UCP_MAX_LANES);
         uct_ep = ep->uct_eps[lane];
         uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
                              UCS_STATUS_PTR(UCS_ERR_CANCELED));
