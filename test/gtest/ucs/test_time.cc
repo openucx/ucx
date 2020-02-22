@@ -68,6 +68,7 @@ UCS_TEST_F(test_time, timerq) {
         const ucs_time_t time_base = ucs::rand();
         ucs_timer_t *timer;
         unsigned counter1, counter2;
+        unsigned timer_idx1, timer_idx2;
 
         status = ucs_timerq_init(&timerq, 0);
         ASSERT_UCS_OK(status);
@@ -77,8 +78,8 @@ UCS_TEST_F(test_time, timerq) {
 
         ucs_time_t current_time = time_base;
 
-        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
-        ucs_timerq_add(&timerq, TIMER_ID_2, interval2);
+        ucs_timerq_add(&timerq, TIMER_ID_1, interval1, &timer_idx1);
+        ucs_timerq_add(&timerq, TIMER_ID_2, interval2, &timer_idx2);
 
         EXPECT_FALSE(ucs_timerq_is_empty(&timerq));
         EXPECT_EQ(std::min(interval1, interval2), ucs_timerq_min_interval(&timerq));
@@ -103,7 +104,7 @@ UCS_TEST_F(test_time, timerq) {
          */
         counter1 = 0;
         counter2 = 0;
-        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        status = ucs_timerq_remove(&timerq, TIMER_ID_1, 0);
         ASSERT_UCS_OK(status);
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
@@ -119,7 +120,7 @@ UCS_TEST_F(test_time, timerq) {
         /*
          * Check that after rescheduling, both timers are invoked again
          */
-        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
+        ucs_timerq_add(&timerq, TIMER_ID_1, interval1, NULL);
 
         counter1 = 0;
         counter2 = 0;
@@ -133,9 +134,29 @@ UCS_TEST_F(test_time, timerq) {
         EXPECT_NEAR(test_time / interval1, counter1, 1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);
 
-        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        /*
+         * Check that after making one slower, only one timer is invoked
+         */
+        counter1 = 0;
+        counter2 = 0;
+        status = ucs_timerq_modify(&timerq, TIMER_ID_1, test_time + 1, timer_idx1);
         ASSERT_UCS_OK(status);
-        status = ucs_timerq_remove(&timerq, TIMER_ID_2);
+        status = ucs_timerq_modify(&timerq, TIMER_ID_2, interval2, 0);
+        ASSERT_UCS_OK(status);
+        for (unsigned count = 0; count < test_time; ++count) {
+            ++current_time;
+            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
+                if (timer->id == TIMER_ID_1) ++counter1;
+                if (timer->id == TIMER_ID_2) ++counter2;
+            })
+        }
+        EXPECT_EQ(0u, counter1);
+        EXPECT_NEAR(test_time / interval2, counter2, 1);
+        EXPECT_EQ(interval2, ucs_timerq_min_interval(&timerq));
+
+        status = ucs_timerq_remove(&timerq, TIMER_ID_1, timer_idx1);
+        ASSERT_UCS_OK(status);
+        status = ucs_timerq_remove(&timerq, TIMER_ID_2, timer_idx2 + 100);
         ASSERT_UCS_OK(status);
 
         ucs_timerq_cleanup(&timerq);
