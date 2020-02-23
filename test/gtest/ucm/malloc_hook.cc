@@ -36,6 +36,42 @@ extern "C" {
         _prev = _value;                                \
     }
 
+
+class malloc_hook_test_no_events : public ucs::test {
+protected:
+    virtual ~malloc_hook_test_no_events()
+    {
+    }
+
+    static void empty_event_callback(ucm_event_type_t event_type,
+                                     ucm_event_t *event, void *arg)
+    {
+    }
+
+    virtual void init()
+    {
+        ucs::test::init();
+        m_enable_events = ucm_global_opts.enable_events;
+        ucm_global_opts.enable_events = 0;
+    }
+
+    virtual void cleanup()
+    {
+        ucm_global_opts.enable_events = m_enable_events;
+        ucs::test::cleanup();
+    }
+
+    int m_enable_events;
+};
+
+UCS_TEST_F(malloc_hook_test_no_events, empty_event) {
+    ucs_status_t status;
+    status = ucm_set_event_handler(0, 0, empty_event_callback, NULL);
+    ASSERT_UCS_OK(status);
+    ucm_unset_event_handler(0, empty_event_callback, NULL);
+}
+
+
 template <class T>
 class mhook_thread {
 public:

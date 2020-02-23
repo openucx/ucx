@@ -671,11 +671,11 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
 
     found = 0;
     for (i = 0; i < cfg->count; i++) {
-        if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL)) {
+        if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL) &&
+            !ucs_string_set_contains(avail_names, cfg->names[i])) {
             ucs_string_buffer_appendf(&unavail_strb, "%s'%s'",
-                                      found ? "," : "",
+                                      found++ ? "," : "",
                                       cfg->names[i]);
-            ++found;
         }
     }
 
