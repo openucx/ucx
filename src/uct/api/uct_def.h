@@ -349,7 +349,7 @@ typedef struct uct_cm_ep_client_connect_args {
     const uct_cm_remote_data_t *remote_data;
 
     /**
-     * Indicates the server's status.
+     * Indicates the server's @ref ucs_status_t status.
      */
     ucs_status_t               status;
 } uct_cm_ep_client_connect_args_t;
@@ -386,7 +386,7 @@ typedef struct uct_cm_ep_server_connect_args {
     uint64_t                   field_mask;
 
     /**
-     * Indicates the client's status.
+     * Indicates the client's @ref ucs_status_t status.
      */
     ucs_status_t               status;
 } uct_cm_ep_server_connect_args_t;

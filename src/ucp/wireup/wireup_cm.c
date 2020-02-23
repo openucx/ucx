@@ -120,7 +120,8 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
+    ucs_assert_always(pack_args->field_mask &
+                      UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
 
     dev_name = pack_args->dev_name;
 
@@ -327,9 +328,9 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     const uct_cm_remote_data_t *remote_data;
     ucs_status_t status;
 
-    ucs_assert(ucs_test_all_flags(connect_args->field_mask,
-                                  (UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
-                                   UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
+    ucs_assert_always(ucs_test_all_flags(connect_args->field_mask,
+                                         (UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
+                                          UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
 
     remote_data = connect_args->remote_data;
     status      = connect_args->status;
@@ -584,10 +585,10 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     const uct_cm_remote_data_t *remote_data;
     ucs_status_t status;
 
-    ucs_assert(ucs_test_all_flags(conn_req_args->field_mask,
-                                  (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
-                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
-                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME)));
+    ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
+                                         (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME)));
 
     conn_request = conn_req_args->conn_request;
     remote_data  = conn_req_args->remote_data;
@@ -695,7 +696,8 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
 
     tl_bitmap = ucp_ep_get_tl_bitmap(ep);
     /* make sure that all lanes are created on correct device */
-    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
+    ucs_assert_always(pack_args->field_mask &
+                      UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
     ucs_assert(!(tl_bitmap & ~ucp_context_dev_tl_bitmap(worker->context,
                                                         pack_args->dev_name)));
 
@@ -765,7 +767,8 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
     ucp_lane_index_t cm_lane;
     ucs_status_t status;
 
-    ucs_assert(connect_args->field_mask & UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS);
+    ucs_assert_always(connect_args->field_mask &
+                      UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS);
 
     status = connect_args->status;
 

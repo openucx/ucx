@@ -509,7 +509,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     char aux_tls_str[64];
     const char *dev_name;
 
-    ucs_assert(pack_args->field_mask & UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
+    ucs_assert_always(pack_args->field_mask &
+                      UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
 
     dev_name = pack_args->dev_name;
 
