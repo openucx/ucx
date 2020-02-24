@@ -132,8 +132,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
                     if (sched_group) {
                         ucs_list_del(&dummy_group_head.list);
                     }
-                    /* Break here to keep ptr->next = NULL, otherwise ptr->next
-                       will be set to itself below */
+                    /* Break here to avoid further processing of the group */
                     return;
                 }
             } else if (ptr == tail) {
@@ -218,11 +217,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                                            list);
         ucs_assert(group_head != NULL);
 
-        /* TODO we should disallow group scheduling while the group is being
-         * dispatched: it will allow removing the next statement and reset the
-         * head only in case DESCHED is returned, and also remove the head==NULL
-         * check from ucs_arbiter_group_schedule_nonempty(). Seems only DC is
-         * using this at this moment.
+        /* Reset group head to allow the group to be moved to another arbiter by
+         * the dispatch callback. For example, when a DC endpoint is moved from
+         * waiting-for-DCI arbiter to waiting-for-TX-resources arbiter.
          */
         ucs_arbiter_group_head_reset(group_head);
 
@@ -251,7 +248,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
             if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
                 group_tail = group->tail;
-                 if (group_head == group_tail) {
+                if (group_head == group_tail) {
                     /* Last element */
                     group->tail = NULL; /* Group is empty now */
                     sched_group = 0;

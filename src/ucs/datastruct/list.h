@@ -58,13 +58,7 @@ static inline void ucs_list_insert_replace(ucs_list_link_t *prev,
 static inline void ucs_list_replace(ucs_list_link_t *elem,
                                     ucs_list_link_t *replacement)
 {
-    ucs_list_link_t *prev = elem->prev;
-    ucs_list_link_t *next = elem->next;
-
-    replacement->prev = prev;
-    replacement->next = next;
-    prev->next        = replacement;
-    next->prev        = replacement;
+    ucs_list_insert_replace(elem->prev, elem->next, replacement);
 }
 
 /**
