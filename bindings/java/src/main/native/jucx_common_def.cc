@@ -184,7 +184,12 @@ static inline void call_on_success(jobject callback, jobject request)
 
 static inline void call_on_error(jobject callback, ucs_status_t status)
 {
-    ucs_error("JUCX: send request error: %s", ucs_status_string(status));
+    if (status == UCS_ERR_CANCELED) {
+        ucs_debug("JUCX: Request canceled");
+    } else {
+        ucs_error("JUCX: request error: %s", ucs_status_string(status));
+    }
+
     JNIEnv *env = get_jni_env();
     jclass callback_cls = env->GetObjectClass(callback);
     jmethodID on_error = env->GetMethodID(callback_cls, "onError", "(ILjava/lang/String;)V");
