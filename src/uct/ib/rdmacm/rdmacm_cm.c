@@ -202,6 +202,8 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
     uct_cm_remote_data_t                remote_data;
     ucs_status_t                        status;
     uct_cm_listener_conn_request_args_t conn_req_args;
+    ucs_sock_addr_t                     client_saddr;
+    size_t                              size;
 
     ucs_assert(hdr->status == UCS_OK);
 
@@ -223,11 +225,24 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
-    conn_req_args.field_mask   = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
-                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
-                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA;
-    conn_req_args.conn_request = event;
-    conn_req_args.remote_data  = &remote_data;
+    client_saddr.addr = rdma_get_peer_addr(event->id);
+
+    status = ucs_sockaddr_sizeof(client_saddr.addr, &size);
+    if (status != UCS_OK) {
+        uct_rdmacm_cm_reject(event->id);
+        uct_rdmacm_cm_destroy_id(event->id);
+        return;
+    }
+
+    client_saddr.addrlen = size;
+
+    conn_req_args.field_mask     = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR;
+    conn_req_args.conn_request   = event;
+    conn_req_args.remote_data    = &remote_data;
+    conn_req_args.client_address = client_saddr;
     ucs_strncpy_safe(conn_req_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
 
     listener->conn_request_cb(&listener->super, listener->user_data,

@@ -617,7 +617,7 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
                                           is_server, i);
         if (ret != 0) {
             fprintf(stderr, "%s failed on iteration #%d\n",
-                    (is_server ? "server": "client"), i);
+                    (is_server ? "server": "client"), i + 1);
             goto out;
         }
     }
