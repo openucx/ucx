@@ -24,19 +24,19 @@ struct uct_sockcm_ep_op {
 };
 
 struct uct_sockcm_ep {
-    uct_base_ep_t                      super;
-    uct_sockaddr_priv_pack_callback_t  pack_cb;
-    void                               *pack_cb_arg;
-    uint32_t                           pack_cb_flags;
-    uct_sockcm_ep_conn_state_t         conn_state;
+    uct_base_ep_t                       super;
+    uct_cm_ep_priv_data_pack_callback_t pack_cb;
+    void                                *pack_cb_arg;
+    uint32_t                            pack_cb_flags;
+    uct_sockcm_ep_conn_state_t          conn_state;
 
-    pthread_mutex_t                    ops_mutex;  /* guards ops and status */
-    ucs_queue_head_t                   ops;
-    ucs_status_t                       status;     /* client EP status */
+    pthread_mutex_t                     ops_mutex;  /* guards ops and status */
+    ucs_queue_head_t                    ops;
+    ucs_status_t                        status;     /* client EP status */
 
-    struct sockaddr_storage            remote_addr;
-    uct_worker_cb_id_t                 slow_prog_id;
-    uct_sockcm_ctx_t                   *sock_id_ctx;
+    struct sockaddr_storage             remote_addr;
+    uct_worker_cb_id_t                  slow_prog_id;
+    uct_sockcm_ctx_t                    *sock_id_ctx;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_sockcm_ep_t, uct_ep_t, const uct_ep_params_t *);

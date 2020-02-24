@@ -10,16 +10,16 @@
  * An rdmacm listener for incoming connections requests on the server side.
  */
 typedef struct uct_rdmacm_listener {
-    uct_listener_t                       super;
+    uct_listener_t                          super;
 
     /** The rdmacm id assiciated with the listener */
-    struct rdma_cm_id                    *id;
+    struct rdma_cm_id                       *id;
 
-    /** Callback to invoke upon receving a connection request from a client */
-    uct_listener_conn_request_callback_t conn_request_cb;
+    /** Callback to invoke upon receiving a connection request from a client */
+    uct_cm_listener_conn_request_callback_t conn_request_cb;
 
     /** User's data to be passed as argument to the conn_request_cb */
-    void                                 *user_data;
+    void                                    *user_data;
 } uct_rdmacm_listener_t;
 
 

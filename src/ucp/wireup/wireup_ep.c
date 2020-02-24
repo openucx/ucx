@@ -491,8 +491,9 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     return status;
 }
 
-ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
-                                                void *priv_data)
+ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
+                                                 const uct_cm_ep_priv_data_pack_args_t
+                                                 *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_wireup_ep_t *wireup_ep          = arg;
@@ -506,6 +507,12 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucs_status_t status;
     uint64_t tl_bitmap;
     char aux_tls_str[64];
+    const char *dev_name;
+
+    ucs_assert_always(pack_args->field_mask &
+                      UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
+
+    dev_name = pack_args->dev_name;
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
                               UCP_ADDRESS_PACK_FLAG_ALL, NULL,
