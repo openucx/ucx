@@ -832,7 +832,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
         /* lid in dc_req is in BE already  */
         if (uct_ib_iface_is_roce(ib_iface)) {
-            av.rlid     = htons(UCT_IB_ROCE_UDP_SPORT_BASE);
+            av.rlid     = htons(UCT_IB_ROCE_UDP_SRC_PORT_BASE);
         } else {
             av.rlid     = dc_req->lid | htons(ib_iface->path_bits[0]);
         }

@@ -158,10 +158,12 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, hop_limit), UCS_CONFIG_TYPE_UINT},
 
   {"NUM_PATHS", "auto",
-   "Number of paths to expose for the interface. 'auto' means use "
-   UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " paths\n"
-   "for RoCE LAG devices and 2^LMC paths for InfiniBand fabric. In some\n"
-   "cases using multiple paths can get higher bandwidth overall.",
+   "Number of connections that should be created between a pair of communicating\n"
+   "endpoints for optimal performance. The default value 'auto' behaves according\n"
+   "to the port link layer:\n"
+   " RoCE       - "UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " for LAG port, otherwise - 1.\n"
+   " InfiniBand - As the number of path bits enabled by fabric's LMC value and selected\n"
+   "              by "UCS_CONFIG_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
    ucs_offsetof(uct_ib_iface_config_t, num_paths), UCS_CONFIG_TYPE_ULUNITS},
 
   {"ROCE_PATH_FACTOR", "1",
@@ -523,7 +525,7 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
     if (uct_ib_iface_is_roce(iface)) {
-        ah_attr->dlid          = UCT_IB_ROCE_UDP_SPORT_BASE |
+        ah_attr->dlid          = UCT_IB_ROCE_UDP_SRC_PORT_BASE |
                                  (iface->config.roce_path_factor * path_index);
     } else {
         /* TODO iface->path_bits should be removed and replaced by path_index */
