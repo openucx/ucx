@@ -258,7 +258,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    ucp_rsc_index_t mdi;
+    ucp_md_index_t mdi;
     uct_iov_t iov;
 
     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
